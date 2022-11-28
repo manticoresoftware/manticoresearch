@@ -28,6 +28,14 @@ index rt1
     rt_attr_uint = gid
 }
 
+index rt2
+{
+	type = rt
+	path = <data_path/>/rt2
+	rt_field = title
+	rt_attr_json = j
+}
+
 </config>
 
 <queries><sphinxql>
@@ -93,6 +101,21 @@ SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP 2 BY gid 
 SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC;
 SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC;
 
-</sphinxql></queries>
+</sphinxql>
 
+<!-- regression crash at sort by JSON.field with strings vector at RT with disk chunks -->
+<sphinxql>
+insert into rt2 (id, title, j) values
+	(1, 'test 1', '{i:1, keywords:["АКЦИОНЕРНЫЕ","ОБЩЕСТВА","ПЕРЕЧЕНЬ"]}' ),
+	(2, 'test 2', '{i:2, keywords:["ОБСТАНОВКА","ЭПИДЕМ"]}' ),
+	(3, 'test 3', '{i:3, keywords:["ОБРАЗОВАНИЕ","РЫБОХОЗ","ВЕТ"]}' ),
+    (7, 'test 7', '{i:7, keywords:[]}' );
+
+FLUSH RAMCHUNK rt2;
+
+SELECT id, j.keywords FROM rt2 order by id asc;
+SELECT id, j.keywords FROM rt2 order by j.keywords asc;
+
+</sphinxql>
+</queries>
 </test>

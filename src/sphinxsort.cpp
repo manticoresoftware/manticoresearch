@@ -5179,7 +5179,7 @@ public:
 			int iTotalLen = sphJsonUnpackInt ( &pVal );
 			int iCount = sphJsonUnpackInt ( &pVal );
 
-			CSphFixedVector<BYTE> dBuf ( iTotalLen + 4 ); // data and tail GAP
+			CSphFixedVector<BYTE> dBuf ( iTotalLen + 4 + iCount ); // data and tail GAP and space count
 			BYTE * pDst = dBuf.Begin();
 
 			// head element
@@ -5188,6 +5188,7 @@ public:
 				int iElemLen = sphJsonUnpackInt ( &pVal );
 				memcpy ( pDst, pVal, iElemLen );
 				pDst += iElemLen;
+				pVal += iElemLen;
 			}
 
 			// tail elements separated by space
@@ -5197,6 +5198,7 @@ public:
 				int iElemLen = sphJsonUnpackInt ( &pVal );
 				memcpy ( pDst, pVal, iElemLen );
 				pDst += iElemLen;
+				pVal += iElemLen;
 			}
 
 			int iStrLen = int ( pDst-dBuf.Begin() );

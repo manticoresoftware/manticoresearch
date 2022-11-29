@@ -794,7 +794,7 @@ static void CalcCoeffsRowwise()
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
 	CSphString sPath = "hackernews_10x";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "hackernews_10x", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
@@ -1035,7 +1035,7 @@ static int64_t RunIntersectIterator ( int64_t & iTotalValues, uint64_t & uHash )
 static void CalcCoeffsColumnar()
 {
 	CSphString sPath = "hackernews_col10x";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "hackernews_col10x", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
@@ -1148,7 +1148,7 @@ static CSphQuery CreateFullscanQueryC2_1()
 static void CalcCoeffsColumnar2()
 {
 	CSphString sPath = "synth";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "synth", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
@@ -1251,7 +1251,7 @@ const float COST_INDEX_ITERATOR_INIT = 200.0f;
 static void CalcCoeffsSI()
 {
 	CSphString sPath = "hackernews_10x";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "hackernews_10x", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
@@ -1431,7 +1431,7 @@ static CSphQuery CreateFullscanQueryS2_2()
 static void CalcCoeffsSI2()
 {
 	CSphString sPath = "synth";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "synth", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
@@ -1501,7 +1501,7 @@ static void CalcCoeffsSI3()
 {
 	// this is supposed to be columnar synth
 	CSphString sPath = "synth";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "synth", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
@@ -1546,7 +1546,7 @@ static CSphQuery CreateFullscanQueryL1 ( int iMin, int iMax )
 static void CalcCoeffsLookup()
 {
 	CSphString sPath = "hackernews_10x";
-	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "hackernews_10x", sPath.cstr() );
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );

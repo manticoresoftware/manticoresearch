@@ -2190,7 +2190,7 @@ struct FilesTrait_t
 };
 
 // load index from disk files for cluster use
-static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CSphString& sIndexType, const CSphString & sIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
+static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CSphString& sIndexType, const char * szIndexName, const CSphString & sCluster, FilesTrait_t & tIndexFiles, CSphString & sError )
 {
 	CSphConfigSection hIndex;
 	hIndex.Add ( CSphVariant ( sIndexPath.cstr() ), "path" );
@@ -2199,9 +2199,8 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CS
 	hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
 	hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
 
-	ESphAddIndex eAdd;
-	ServedIndexRefPtr_c pNewServed, pResult;
-	std::tie ( eAdd, pNewServed ) = AddIndex ( sIndexName.cstr(), hIndex, false, true, nullptr, sError );
+	ServedIndexRefPtr_c pResult;
+	auto [ eAdd, pNewServed ]  = AddIndex ( szIndexName, hIndex, false, true, nullptr, sError );
 
 	assert ( eAdd == ADD_NEEDLOAD || eAdd == ADD_ERROR );
 	if ( eAdd != ADD_NEEDLOAD )
@@ -2211,13 +2210,13 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CS
 	pNewServed->m_sCluster = sCluster;
 
 	StrVec_t dWarnings;
-	bool bPrealloc = PreallocNewIndex ( *pNewServed, &hIndex, sIndexName.cstr(), dWarnings, sError );
+	bool bPrealloc = PreallocNewIndex ( *pNewServed, &hIndex, szIndexName, dWarnings, sError );
 	if ( !bPrealloc )
 		return pResult;
 
 	UnlockedHazardIdxFromServed ( *pNewServed )->GetIndexFiles ( tIndexFiles.m_dRef, tIndexFiles.m_dRef );
 	for ( const auto & i : dWarnings )
-		sphWarning ( "index '%s': %s", sIndexName.cstr(), i.cstr() );
+		sphWarning ( "index '%s': %s", szIndexName, i.cstr() );
 
 	pResult = std::move (pNewServed);
 	return pResult;
@@ -2235,7 +2234,7 @@ static bool LoadIndex ( const CSphString& sIndexPath, const CSphString& sIndexTy
 		pIndex->ProhibitSave();
 		pIndex->GetIndexFiles ( tIndexFiles.m_dOld, tIndexFiles.m_dOld );
 
-		auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName, sCluster, tIndexFiles, sError );
+		auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName.cstr(), sCluster, tIndexFiles, sError );
 		if (!pNewIndex)
 			return false;
 
@@ -2243,7 +2242,7 @@ static bool LoadIndex ( const CSphString& sIndexPath, const CSphString& sIndexTy
 		return true;
 	}
 
-	auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName, sCluster, tIndexFiles, sError );
+	auto pNewIndex = LoadNewIndex ( sIndexPath, sIndexType, sIndexName.cstr(), sCluster, tIndexFiles, sError );
 	if ( !pNewIndex )
 		return false;
 

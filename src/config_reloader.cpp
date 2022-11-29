@@ -97,10 +97,10 @@ private:
 	}
 
 	// load fresh local index
-	void LoadNewLocalFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
+	void LoadNewLocalFromConfig ( const CSphString& sIndex, const CSphConfigSection& hIndex )
 	{
 		CSphString sError;
-		auto [eAdd, pFreshLocal] = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
+		auto [ eAdd, pFreshLocal ] = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
 		assert ( eAdd != ADD_DISTR && "internal error: distr index should not be here!" );
 
 		switch ( eAdd )
@@ -160,7 +160,7 @@ private:
 	void LoadLocalFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
 	{
 		if ( !ExistsLocal ( sIndex ) )
-			return LoadNewLocalFromConfig ( sIndex, eType, hIndex );
+			return LoadNewLocalFromConfig ( sIndex, hIndex );
 
 		cServedIndexRefPtr_c pAlreadyServed = GetSnapServed ( sIndex );
 		assert ( pAlreadyServed );
@@ -171,7 +171,7 @@ private:
 				sphWarning ( "index '%s': changing index role plain<>rt<>percolate is possible only with seamless rotation - skip", sIndex.cstr() );
 				return;
 			}
-			return LoadNewLocalFromConfig ( sIndex, eType, hIndex );
+			return LoadNewLocalFromConfig ( sIndex, hIndex );
 		}
 
 		// reload/reconfigure already existing local index of the same type
@@ -181,7 +181,7 @@ private:
 			&& hIndex["path"].strval() != pAlreadyServed->m_sIndexPath;
 
 		if ( bPathChanged )
-			return LoadNewLocalFromConfig ( sIndex, eType, hIndex );
+			return LoadNewLocalFromConfig ( sIndex, hIndex );
 
 		ServedDesc_t tNewDesc;
 		ConfigureLocalIndex ( &tNewDesc, hIndex, false, nullptr );

@@ -75,7 +75,7 @@ static FileAccessSettings_t g_tDummyFASettings;
 class PercolateIndex_c : public PercolateIndex_i
 {
 public:
-	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
+	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
 	~PercolateIndex_c () override;
 
 	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
@@ -188,10 +188,10 @@ private:
 #define PERCOLATE_WORDS_PER_CP 128
 
 /// percolate query index factory
-std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
+std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema )
 {
 	MEMORY ( MEM_INDEX_RT );
-	return std::make_unique<PercolateIndex_c> ( tSchema, sIndexName, sPath );
+	return std::make_unique<PercolateIndex_c> ( std::move ( sIndexName ), std::move ( sPath ), std::move ( tSchema ) );
 }
 
 static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, ESphHitless eHitless )
@@ -719,10 +719,10 @@ static bool TagsMatched ( const VecTraits_T<uint64_t>& dFilter, const VecTraits_
 //////////////////////////////////////////////////////////////////////////
 // percolate index definition
 
-PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
-	: PercolateIndex_i ( sIndexName, sPath )
+PercolateIndex_c::PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema )
+	: PercolateIndex_i { std::move ( sIndexName ), std::move ( sPath ) }
 {
-	m_tSchema = tSchema;
+	m_tSchema = std::move ( tSchema );
 
 	// add id column
 	CSphColumnInfo tCol ( sphGetDocidName () );

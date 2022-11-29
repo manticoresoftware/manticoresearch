@@ -1124,7 +1124,7 @@ enum class MergeSeg_e : BYTE
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 public:
-						RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
+						RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict );
 						~RtIndex_c () final;
 
 	bool				AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
@@ -1320,7 +1320,7 @@ private:
 	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false, bool bBootstrap=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
-	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName=nullptr ) const;
+	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
 	bool						SaveRamChunk ();
 
@@ -1363,7 +1363,7 @@ private:
 	void						DebugCheckRam ( DebugCheckError_i & tReporter );
 	int							DebugCheckDisk ( DebugCheckError_i & tReporter );
 
-	void						SetSchema ( const CSphSchema & tSchema );
+	void						SetSchema ( CSphSchema tSchema );
 
 	void						SetMemLimit ( int64_t iMemLimit );
 	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
@@ -1401,8 +1401,8 @@ private:
 };
 
 
-RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
-	: RtIndex_i ( sIndexName, sPath )
+RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict )
+	: RtIndex_i { std::move ( sIndexName ), std::move ( sPath ) }
 	, m_iSavedTID ( m_iTID )
 	, m_tmSaved ( sphMicroTimer() )
 	, m_bKeywordDict ( bKeywordDict )
@@ -1410,7 +1410,7 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 {
 	MEMORY ( MEM_INDEX_RT );
 
-	SetSchema ( tSchema );
+	SetSchema ( std::move ( tSchema ) );
 	SetMemLimit ( iRamSize );
 
 	auto iTrack = val_from_env ( "MANTICORE_TRACK_RT_ERRORS",-1 );
@@ -3241,7 +3241,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	auto sSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPIDX );
 
 	CSphWriter tWriterSPA;
-	if ( !tWriterSPA.OpenFile ( sSPA.cstr(), sError ) )
+	if ( !tWriterSPA.OpenFile ( sSPA, sError ) )
 		return false;
 
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
@@ -3281,7 +3281,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	std::unique_ptr<SI::Builder_i> pSIdxBuilder;
 	if ( IsSecondaryLibLoaded() )
 	{
-		pSIdxBuilder = CreateIndexBuilder ( m_iRtMemLimit, m_tSchema, sSIdx.cstr(), dSiAttrs, sError );
+		pSIdxBuilder = CreateIndexBuilder ( m_iRtMemLimit, m_tSchema, sSIdx, dSiAttrs, sError );
 		if ( !pSIdxBuilder )
 			return false;
 	}
@@ -4001,7 +4001,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 		if ( fnFnameBuilder )
 			pFilenameBuilder = fnFnameBuilder ( GetName () );
-		pNewChunk = PreallocDiskChunk ( sChunk.cstr (), iChunkID, pFilenameBuilder.get (), dWarnings, m_sLastError );
+		pNewChunk = PreallocDiskChunk ( sChunk, iChunkID, pFilenameBuilder.get (), dWarnings, m_sLastError );
 
 		if ( !dWarnings.IsEmpty() )
 		{
@@ -4123,16 +4123,16 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	return true;
 }
 
-std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * sName ) const
+std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName ) const
 {
 	MEMORY ( MEM_INDEX_DISK );
 
 	// !COMMIT handle errors gracefully instead of dying
-	auto pDiskChunk = sphCreateIndexPhrase ( ( sName ? sName : sChunk ), sChunk );
+	auto pDiskChunk = sphCreateIndexPhrase ( ( szName ? szName : sChunk.cstr() ), sChunk );
 	if ( !pDiskChunk )
 	{
-		sError.SetSprintf ( "disk chunk %s: alloc failed", sChunk );
-		return nullptr;
+		sError.SetSprintf ( "disk chunk %s: alloc failed", sChunk.cstr() );
+		return pDiskChunk;
 	}
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
@@ -4145,7 +4145,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const char * sChunk, i
 
 	if ( !pDiskChunk->Prealloc ( m_bPathStripped, pFilenameBuilder, dWarnings ) )
 	{
-		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk, pDiskChunk->GetLastError().cstr() );
+		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 		pDiskChunk = nullptr;
 	}
 
@@ -4200,7 +4200,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 	DWORD uSettingsVer = rdMeta.GetDword();
 	CSphSchema tSchema;
 	ReadSchema ( rdMeta, tSchema, uSettingsVer );
-	SetSchema ( tSchema );
+	SetSchema ( std::move ( tSchema ) );
 	LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
@@ -4337,7 +4337,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 //	DWORD uSettingsVer = Int ( tBson.ChildByName ( "index_format_version" ) );
 	CSphSchema tSchema;
 	ReadSchemaJson ( tBson.ChildByName ( "schema" ), tSchema );
-	SetSchema ( tSchema );
+	SetSchema ( std::move ( tSchema ) );
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
@@ -4487,7 +4487,7 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 	{
 		int iChunkIndex = m_dChunkNames[iName];
 		CSphString sChunk = GetFilename ( iChunkIndex );
-		auto pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, dWarnings, m_sLastError ) );
+		auto pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk, iChunkIndex, pFilenameBuilder, dWarnings, m_sLastError ) );
 		if ( !pChunk )
 			return false;
 
@@ -8603,7 +8603,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	CSphString sChunk = SphSprintf( "%s.tmp", sFirst.cstr() );
 
 	StrVec_t dWarnings; // FIXME! report warnings
-	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
+	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk, tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
@@ -9568,7 +9568,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	bool bIcuSame = ( tIndexSettings.m_ePreprocessor==tSettings.m_tIndex.m_ePreprocessor );
 	if ( !bIcuSame )
 	{
-		if ( !sphSpawnFilterICU ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr (), sError ) )
+		if ( !sphSpawnFilterICU ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr(), sError ) )
 		{
 			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
 			return true;
@@ -9909,10 +9909,10 @@ bool RtIndex_c::NeedStoreWordID () const
 //////////////////////////////////////////////////////////////////////////
 
 
-std::unique_ptr<RtIndex_i> sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict )
 {
 	MEMORY ( MEM_INDEX_RT );
-	return std::make_unique<RtIndex_c> ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
+	return std::make_unique<RtIndex_c> ( std::move ( sIndexName ), std::move ( sPath ), std::move ( tSchema ), iRamSize, bKeywordDict );
 }
 
 
@@ -10042,9 +10042,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 
 
 
-void RtIndex_c::SetSchema ( const CSphSchema & tSchema )
+void RtIndex_c::SetSchema ( CSphSchema tSchema )
 {
-	m_tSchema = tSchema;
+	m_tSchema = std::move ( tSchema );
 	m_iStride = m_tSchema.GetRowSize();
 	m_uSchemaHash = SchemaFNV ( m_tSchema );
 

@@ -280,7 +280,7 @@ TEST_F ( RT, WeightBoundary )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 32 * 1024 * 1024, RT_INDEX_FILE_NAME, false );
+	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 32 * 1024 * 1024, false );
 
 	// tricky bit
 	// index owns its tokenizer/dict pair, and MAY do whatever it wants
@@ -393,7 +393,7 @@ TEST_F ( RT, RankerFactors )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
+	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 128 * 1024, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "rt", false, 32, nullptr, sError ) );
@@ -579,7 +579,7 @@ TEST_F ( RT, SendVsMerge )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
+	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 128 * 1024, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );

@@ -1062,7 +1062,7 @@ enum ESphExt : BYTE;
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i, public IndexFileBase_c
 {
 public:
-								CSphIndex ( const char * sIndexName, const char * sFilename );
+								CSphIndex ( CSphString sIndexName, CSphString sFilename );
 								~CSphIndex() override;
 
 	const CSphString &			GetLastError() const { return m_sLastError; }
@@ -1177,7 +1177,7 @@ public:
 
 public:
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) = 0;
+	virtual void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) = 0;
 
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpDocids ( FILE * fp ) = 0;
@@ -1296,7 +1296,7 @@ public:
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) override { return true; }
 	bool				AddRemoveField ( bool, const CSphString &, DWORD, CSphString & ) override { return true; }
-	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
+	void				DebugDumpHeader ( FILE *, const CSphString&, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
 	int					DebugCheck ( DebugCheckError_i& ) override { return 0; }
@@ -1357,10 +1357,10 @@ struct SphQueueRes_t : public ISphNoncopyable
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implementation
-std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
+std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( CSphString sIndexName, CSphString sFilename );
 
 /// create template (tokenizer) index implementation
-std::unique_ptr<CSphIndex>		sphCreateIndexTemplate ( const char * szIndexName );
+std::unique_ptr<CSphIndex>		sphCreateIndexTemplate ( CSphString sIndexName );
 
 /// set JSON attribute indexing options
 /// bStrict is whether to stop indexing on error, or just ignore the attribute value

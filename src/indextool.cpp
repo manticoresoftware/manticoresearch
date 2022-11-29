@@ -54,7 +54,7 @@ static void MakeRelativePath ( CSphString & sPath )
 class FilenameBuilder_c : public FilenameBuilder_i
 {
 public:
-					FilenameBuilder_c ( const char * szIndex );
+					FilenameBuilder_c ( CSphString sIndex );
 
 	CSphString		GetFullPath ( const CSphString & sName ) const final;
 
@@ -63,8 +63,8 @@ private:
 };
 
 
-FilenameBuilder_c::FilenameBuilder_c ( const char * szIndex )
-	: m_sIndex ( szIndex )
+FilenameBuilder_c::FilenameBuilder_c ( CSphString sIndex )
+	: m_sIndex ( std::move ( sIndex ) )
 {}
 
 
@@ -921,7 +921,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 
 		CSphString sError;
 		{
-			auto pIndex = sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() );
+			auto pIndex = sphCreateIndexPhrase ( "", tIndex.m_sPath );
 			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_tTargets, sError ) )
 			{
 				fprintf ( stdout, "WARNING: unable to load kill-list for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
@@ -1195,36 +1195,37 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
-	bool bFromJson = !!hConf["index"][sIndex]("from_json");
+	const auto& hIndex = hConf["index"][sIndex];
+	bool bFromJson = !!hIndex("from_json");
 
-	if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
+	if ( hIndex("type") && hIndex["type"]=="rt" )
 	{
 		CSphSchema tSchema;
 		CSphIndexSettings tSettings;
-		if ( bFromJson || sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, tSettings, sError, false, false ) )
-			return sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
+		if ( bFromJson || sphRTSchemaConfigure ( hIndex, tSchema, tSettings, sError, false, false ) )
+			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024, bDictKeywords );
 	} else
 	{
 		StringBuilder_c tPath;
-		tPath << hConf["index"][sIndex]["path"] << ( bRotate ? ".tmp" : nullptr );
-		return sphCreateIndexPhrase ( sIndex.cstr(), tPath.cstr() );
+		tPath << hIndex["path"] << ( bRotate ? ".tmp" : nullptr );
+		return sphCreateIndexPhrase ( std::move ( sIndex ), (CSphString)tPath );
 	}
 
 	return nullptr;
 }
 
-static void PreallocIndex ( const CSphString & sIndex, bool bStripPath, CSphIndex * pIndex )
+static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * pIndex )
 {
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sIndex.cstr() );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.get(), dWarnings ) )
-		sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+		sphDie ( "index '%s': prealloc failed: %s\n", szIndex, pIndex->GetLastError().cstr() );
 
 	for ( const auto & i : dWarnings )
-		fprintf ( stdout, "WARNING: index %s: %s\n", sIndex.cstr(), i.cstr() );
+		fprintf ( stdout, "WARNING: index %s: %s\n", szIndex, i.cstr() );
 }
 
 int main ( int argc, char ** argv )
@@ -1497,7 +1498,7 @@ int main ( int argc, char ** argv )
 
 		pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
-		PreallocIndex ( sIndex, bStripPath, pIndex.get() );
+		PreallocIndex ( sIndex.cstr(), bStripPath, pIndex.get() );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			break;
@@ -1550,8 +1551,8 @@ int main ( int argc, char ** argv )
 			} else
 				fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
 
-			pIndex = sphCreateIndexPhrase ( sIndexName.cstr(), "" );
-			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), g_eCommand==IndextoolCmd_e::DUMPCONFIG );
+			pIndex = sphCreateIndexPhrase ( sIndexName, "" );
+			pIndex->DebugDumpHeader ( stdout, sDumpHeader, g_eCommand==IndextoolCmd_e::DUMPCONFIG );
 			break;
 		}
 
@@ -1572,7 +1573,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "dumping dictionary file '%s'...\n", sDumpDict.cstr() );
 
 				sIndex = sDumpDict.SubString ( 0, sDumpDict.Length()-4 );
-				pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sIndex.cstr() );
+				pIndex = sphCreateIndexPhrase ( sIndex, sIndex );
 
 				if ( !pIndex )
 					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );

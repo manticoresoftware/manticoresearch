@@ -1158,7 +1158,7 @@ public:
 
 using ResultAndIndex_t = std::pair<ESphAddIndex, ServedIndexRefPtr_c>;
 
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError );
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
 bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 
@@ -1176,7 +1176,7 @@ enum class RotateFrom_e : BYTE;
 bool PreloadKlistTarget ( const ServedDesc_t& tServed, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
-void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char* szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );
+void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );
 void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
 
 volatile bool& sphGetSeamlessRotate() noexcept;

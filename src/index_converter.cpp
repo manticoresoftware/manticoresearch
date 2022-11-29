@@ -987,7 +987,7 @@ private:
 
 bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, CSphString & sError )
 {
-	CSphString sSPA = tIndex.GetFilename(SPH_EXT_SPA);
+	CSphString sSPA = tIndex.GetFilename ( SPH_EXT_SPA );
 	CSphAutofile tSPA ( sSPA.cstr(), SPH_O_READ, sError );
 	if ( tSPA.GetFD()==-1 )
 		return false;
@@ -1033,11 +1033,11 @@ bool ConverterPlain_t::WriteLookup ( Index_t & tIndex, CSphString & sError )
 
 	dDocidLookup.Sort ( CmpDocidLookup_fn() );
 
-	CSphString sSPT = tIndex.GetFilename(SPH_EXT_SPT);
+	CSphString sSPT = tIndex.GetFilename ( SPH_EXT_SPT );
 	if ( !::WriteDocidLookup ( sSPT, dDocidLookup, sError ) )
 		return false;
 
-	CSphString sSPHI = tIndex.GetFilename(SPH_EXT_SPHI);
+	CSphString sSPHI = tIndex.GetFilename ( SPH_EXT_SPHI );
 	if ( !tHistogramContainer.Save ( sSPHI, sError ) )
 		return false;
 
@@ -1049,10 +1049,10 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 {
 	CSphWriter tWriterSPA;
 
-	CSphString sSPA = tIndex.GetFilename(SPH_EXT_SPA);
-	CSphString sSPB = tIndex.GetFilename(SPH_EXT_SPB);
+	CSphString sSPA = tIndex.GetFilename ( SPH_EXT_SPA );
+	CSphString sSPB = tIndex.GetFilename ( SPH_EXT_SPB );
 		 
-	if ( !tWriterSPA.OpenFile ( sSPA.cstr(), sError ) )
+	if ( !tWriterSPA.OpenFile ( sSPA, sError ) )
 		return false;
 	
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
@@ -1119,10 +1119,10 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 bool ConverterPlain_t::ConvertDoclist ( Index_t & tIndex, CSphString & sError )
 {
 	CSphWriter tWriterDocs, tWriterSkips;
-	if ( !tWriterDocs.OpenFile ( tIndex.GetFilename(SPH_EXT_SPD).cstr(), sError ) )
+	if ( !tWriterDocs.OpenFile ( tIndex.GetFilename ( SPH_EXT_SPD ), sError ) )
 		return false;
 
-	if ( !tWriterSkips.OpenFile ( tIndex.GetFilename(SPH_EXT_SPE).cstr(), sError ) )
+	if ( !tWriterSkips.OpenFile ( tIndex.GetFilename ( SPH_EXT_SPE ), sError ) )
 		return false;
 
 	CSphAutoreader & tDoclist = tIndex.m_tDoclistFile;
@@ -1246,8 +1246,8 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 	tReaderDict.SeekTo ( 1, 0 );
 
 	CSphWriter tWriterDict;
-	CSphString sDictName = tIndex.GetFilename(SPH_EXT_SPI);
-	tWriterDict.OpenFile ( sDictName.cstr(), sError );
+	CSphString sDictName = tIndex.GetFilename ( SPH_EXT_SPI );
+	tWriterDict.OpenFile ( sDictName, sError );
 	tWriterDict.PutByte ( 1 );
 
 	const SphOffset_t iEndDict = tIndex.m_tWordlist.m_iWordsEnd;
@@ -1461,7 +1461,7 @@ bool ConverterPlain_t::Save ( const CSphVector<SphDocID_t> & dKilled, Index_t & 
 		if ( pRow )
 			dRowmap.BitSet ( *pRow );
 	}
-	CSphString sRowMapName = tIndex.GetFilename(SPH_EXT_SPM);
+	CSphString sRowMapName = tIndex.GetFilename ( SPH_EXT_SPM );
 	CSphWriter tRowMapWriter;
 	if ( !tRowMapWriter.OpenFile ( sRowMapName, sError ) )
 		return false;
@@ -1480,8 +1480,7 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	CSphWriter tWriter;
 	CSphString sError;
 
-	CSphString sName = tIndex.GetFilename(SPH_EXT_SPH);
-	tWriter.OpenFile ( sName.cstr(), sError );
+	tWriter.OpenFile ( tIndex.GetFilename ( SPH_EXT_SPH ), sError );
 
 	// format
 	tWriter.PutDword ( INDEX_MAGIC_HEADER );
@@ -1622,7 +1621,7 @@ bool ConverterPlain_t::WriteKillList ( const Index_t & tIndex, bool bIgnoreKlist
 			dKillList[i] = tIndex.m_tKillList.GetReadPtr()[i];
 	}
 
-	CSphString sName = tIndex.GetFilename(SPH_EXT_SPK);
+	CSphString sName = tIndex.GetFilename ( SPH_EXT_SPK );
 
 	if ( !::WriteKillList ( sName, dKillList.Begin(), dKillList.GetLength(), tIndex.m_tKlistTargets, sError ) )
 		return false;

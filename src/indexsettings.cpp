@@ -666,7 +666,7 @@ bool KillListTargets_c::Parse ( const CSphString & sTargets, const char * szInde
 		else
 			tTarget.m_sIndex = szTargetName;
 
-		if ( tTarget.m_sIndex==szIndexName )
+		if ( tTarget.m_sIndex == szIndexName )
 		{
 			sError.SetSprintf ( "cannot apply kill list to myself: killlist_target=%s\n", sTargets.cstr() );
 			return false;

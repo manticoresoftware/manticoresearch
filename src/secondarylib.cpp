@@ -156,7 +156,7 @@ SI::Index_i * CreateSecondaryIndex ( const char * sFile, CSphString & sError )
 	return pSIdx;
 }
 
-std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const char * sFile, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
 	{
@@ -168,7 +168,7 @@ std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schem
 
 	std::string sTmpError;
 	SI::Settings_t tSettings; // FIXME! use config?
-	std::unique_ptr<SI::Builder_i> pBuilder { g_fnCreateBuilder ( tSettings, tSchema, iMemoryLimit, sFile, sTmpError ) };
+	std::unique_ptr<SI::Builder_i> pBuilder { g_fnCreateBuilder ( tSettings, tSchema, iMemoryLimit, sFile.cstr(), sTmpError ) };
 	if ( !pBuilder )
 		sError = sTmpError.c_str();
 

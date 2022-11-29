@@ -99,7 +99,7 @@ bool AttrMerger_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDst
 
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), pDstIndex->GetTmpFilename ( SPH_EXT_SPIDX ).cstr(), m_dSiAttrs, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), pDstIndex->GetTmpFilename ( SPH_EXT_SPIDX ), m_dSiAttrs, m_sError );
 		if ( !m_pSIdxBuilder )
 			return false;
 	}
@@ -393,7 +393,7 @@ bool SiBuilder_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<R
 	if ( IsSecondaryLibLoaded() )
 	{
 		m_sFilename = tIndex.GetTmpFilename ( SPH_EXT_SPIDX );
-		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, tIndex.GetMatchSchema(), m_sFilename.cstr(), m_dSiAttrs, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, tIndex.GetMatchSchema(), m_sFilename, m_dSiAttrs, m_sError );
 	} else
 	{
 		m_sError = "secondary index library not loaded";

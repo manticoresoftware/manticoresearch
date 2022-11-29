@@ -94,7 +94,7 @@ struct CSphReconfigureSetup
 class RtIndex_i : public CSphIndexStub
 {
 public:
-	RtIndex_i ( const char * sIndexName, const char * sFileName ) : CSphIndexStub ( sIndexName, sFileName ) {}
+	RtIndex_i ( CSphString sIndexName, CSphString sPath ) : CSphIndexStub { std::move ( sIndexName ), std::move ( sPath ) } {}
 
 	/// get internal schema (to use for Add calls)
 	virtual const CSphSchema & GetInternalSchema () const { return m_tSchema; }
@@ -181,7 +181,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 void sphRTSetTestMode ();
 
 /// RT index factory
-std::unique_ptr<RtIndex_i> sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict );
 
 typedef void ProgressCallbackSimple_t ();
 

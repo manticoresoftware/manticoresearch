@@ -736,7 +736,7 @@ void Binlog_c::OpenNewLog ( int iLastState )
 	if ( !iLastState ) // reuse the last binlog since it is empty or useless.
 		::unlink ( sLog.cstr() );
 
-	if ( !m_tWriter.OpenFile ( sLog.cstr(), m_sWriterError ) )
+	if ( !m_tWriter.OpenFile ( sLog, m_sWriterError ) )
 		sphDie ( "failed to create %s: errno=%d, error=%s", sLog.cstr(), errno, strerrorm(errno) );
 
 	// emit header

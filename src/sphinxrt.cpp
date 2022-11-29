@@ -1256,7 +1256,6 @@ private:
 	int64_t						m_iRtMemLimit;
 	int64_t						m_iSoftRamLimit;
 	double						m_fSaveRateLimit { INITIAL_SAVE_RATE_LIMIT };
-	CSphString					m_sPath;
 	bool						m_bPathStripped = false;
 	int							m_iLockFD = -1;
 
@@ -1349,7 +1348,6 @@ private:
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_t & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
 
-	CSphString					MakeChunkName(int iChunkID);
 	void						UnlinkRAMChunk ( const char * szInfo=nullptr );
 	void						WaitRAMSegmentsUnlocked ( bool bAllowOne = false ) const REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -1405,7 +1403,6 @@ private:
 
 RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 	: RtIndex_i ( sIndexName, sPath )
-	, m_sPath ( sPath )
 	, m_iSavedTID ( m_iTID )
 	, m_tmSaved ( sphMicroTimer() )
 	, m_bKeywordDict ( bKeywordDict )
@@ -1458,12 +1455,11 @@ RtIndex_c::~RtIndex_c ()
 
 	if ( m_bIndexDeleted )
 	{
-		CSphString sFile;
-		sFile.SetSprintf ( "%s.meta", m_sPath.cstr() );
+		CSphString sFile = GetFilename ( "meta" );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
+		sFile = GetFilename ( "ram" );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		sFile = GetFilename ( SPH_EXT_SETTINGS );
 		::unlink ( sFile.cstr() );
 	}
 	if ( !bValid )
@@ -3214,11 +3210,11 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 	CSphVector<Checkpoint_t>		m_dCheckpoints;
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	CSphVector<CSphVector<RowID_t>>	m_dRowMaps;
-	const char *					m_szFilename;
+	IndexFileBase_c					m_tFilebase;
 	const ConstRtSegmentSlice_t&	m_tRamSegments;
 
 	SaveDiskDataContext_t ( const char * szFilename, const ConstRtSegmentSlice_t& tSegs )
-		: m_szFilename ( szFilename )
+		: m_tFilebase ( szFilename )
 		, m_tRamSegments ( tSegs )
 	{
 		m_dRowMaps.Reserve ( m_tRamSegments.GetLength() );
@@ -3236,17 +3232,15 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 
 bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const
 {
-	CSphString sSPA, sSPB, sSPT, sSPHI, sSPDS, sSPC, sSIdx;
+	auto sSPA = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPA );
+	auto sSPB = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPB );
+	auto sSPT = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPT );
+	auto sSPHI = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPHI );
+	auto sSPDS = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPDS );
+	auto sSPC = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPC );
+	auto sSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPIDX );
+
 	CSphWriter tWriterSPA;
-
-	sSPA.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPA) );
-	sSPB.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPB) );
-	sSPT.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPT) );
-	sSPHI.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPHI) );
-	sSPDS.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPDS) );
-	sSPC.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPC) );
-	sSIdx.SetSprintf ( "%s%s",	tCtx.m_szFilename, sphGetExt(SPH_EXT_SPIDX) );
-
 	if ( !tWriterSPA.OpenFile ( sSPA.cstr(), sError ) )
 		return false;
 
@@ -3418,17 +3412,13 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 {
 	CSphWriter tWriterHits, tWriterDocs, tWriterSkips;
 
-	CSphString sName;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPP) );
-	if ( !tWriterHits.OpenFile ( sName.cstr(), sError ) )
+	if ( !tWriterHits.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPP ), sError ) )
 		return false;
 
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPD) );
-	if ( !tWriterDocs.OpenFile ( sName.cstr(), sError ) )
+	if ( !tWriterDocs.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPD ), sError ) )
 		return false;
 
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPE) );
-	if ( !tWriterSkips.OpenFile ( sName.cstr(), sError ) )
+	if ( !tWriterSkips.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPE ), sError ) )
 		return false;
 
 	tWriterHits.PutByte(1);
@@ -3689,9 +3679,7 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 
 bool RtIndex_c::WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError ) // static
 {
-	CSphString sName;
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt(SPH_EXT_SPM) );
-
+	CSphString sName = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPM );
 	return ::WriteDeadRowMap ( sName, tCtx.m_iDocinfo, sError );
 }
 
@@ -3734,9 +3722,8 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 		return false;
 
 	CSphWriter tWriterDict;
-	CSphString sSPI;
-	sSPI.SetSprintf ( "%s%s", szFilename, sphGetExt ( SPH_EXT_SPI ) );
-		
+	CSphString sSPI = IndexFileBase_c { szFilename }.GetFilename ( SPH_EXT_SPI );
+
 	if ( !tWriterDict.OpenFile ( sSPI.cstr(), sError ) )
 		return false;
 
@@ -3792,7 +3779,7 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	JsonEscapedBuilder sJson;
 	IndexWriteHeader ( tCtx, tWriteHeader, sJson, m_bKeywordDict, true );
 
-	sName.SetSprintf ( "%s%s", tCtx.m_szFilename, sphGetExt ( SPH_EXT_SPH ) );
+	sName = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPH );
 	CSphWriter wrHeaderJson;
 	if ( !wrHeaderJson.OpenFile ( sName, sError ) )
 		return false;
@@ -3816,9 +3803,8 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 		return;
 
 	// write new meta
-	CSphString sMeta, sMetaNew;
-	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
-	sMetaNew.SetSprintf ( "%s.meta.new", m_sPath.cstr() );
+	auto sMeta = GetFilename ( "meta" );
+	auto sMetaNew = GetFilename ( "meta.new" );
 
 	CSphString sError;
 
@@ -3988,7 +3974,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	MEMORY ( MEM_INDEX_RT );
 
 	int iChunkID = m_tChunkID.MakeChunkId ( m_tRtChunks );
-	auto sChunk = MakeChunkName ( iChunkID );
+	auto sChunk = GetFilename ( iChunkID );
 
 	// as we're going to switch fiber, we need to freeze reliable stat and m_iTID (as they could change)
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
@@ -4168,8 +4154,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const char * sChunk, i
 
 RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+	CSphString sMeta = GetFilename ( "meta" );
 
 	m_sLastError = "";
 
@@ -4307,8 +4292,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 
 	using namespace bson;
 
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+	CSphString sMeta = GetFilename ( "meta" );
 
 	CSphVector<BYTE> dData;
 	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
@@ -4449,7 +4433,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 bool RtIndex_c::LoadMetaImpl ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
 	// check if we have a meta file (kinda-header)
-	CSphString sMeta = SphSprintf( "%s.meta", m_sPath.cstr() );
+	CSphString sMeta = GetFilename ( "meta" );
 
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
@@ -4485,7 +4469,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i* pFilenameBuilder, bool bStripPath,
 	if ( !szDumpPath )
 		return false;
 
-	CSphString sMeta = SphSprintf ( "%s.meta", m_sPath.cstr() );
+	CSphString sMeta = GetFilename ( "meta" );
 	CSphString sDestPath = SphSprintf ( "%s%s", szDumpPath, "index.meta" );
 	CSphString sError;
 	if ( !CopyFile ( sMeta, sDestPath, sError ) )
@@ -4502,8 +4486,7 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 	ARRAY_FOREACH ( iName, m_dChunkNames )
 	{
 		int iChunkIndex = m_dChunkNames[iName];
-		CSphString sChunk;
-		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunkIndex );
+		CSphString sChunk = GetFilename ( iChunkIndex );
 		auto pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, dWarnings, m_sLastError ) );
 		if ( !pChunk )
 			return false;
@@ -4543,8 +4526,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	m_bPreallocPassedOk = false;
 
-	CSphString sLock;
-	sLock.SetSprintf ( "%s.lock", m_sPath.cstr() );
+	CSphString sLock = GetFilename ( "lock" );
 	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
 	if ( m_iLockFD<0 )
 	{
@@ -4568,8 +4550,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		return false;
 
 
-	CSphString sMutableFile;
-	sMutableFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+	CSphString sMutableFile = GetFilename ( SPH_EXT_SETTINGS );
 	m_tMutableSettings.m_iMemLimit = m_iRtMemLimit; // to avoid overriding value from meta by default value, if no settings provided
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
 		return false;
@@ -4714,9 +4695,8 @@ bool RtIndex_c::SaveRamChunk ()
 
 	MEMORY ( MEM_INDEX_RT );
 
-	CSphString sChunk, sNewChunk;
-	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
-	sNewChunk.SetSprintf ( "%s.ram.new", m_sPath.cstr() );
+	CSphString sChunk = GetFilename ( "ram" );
+	CSphString sNewChunk = GetFilename ( "ram.new" );
 
 	CSphWriter wrChunk;
 	if ( !wrChunk.OpenFile ( sNewChunk, m_sLastError ) )
@@ -4753,8 +4733,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 {
 	MEMORY ( MEM_INDEX_RT );
 
-	CSphString sChunk;
-	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
+	CSphString sChunk = GetFilename ( "ram" );
 
 	if ( !sphIsReadable ( sChunk.cstr(), &m_sLastError ) )
 		return true;
@@ -5744,7 +5723,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 		int iChunk = dChunks.GetFirst (  [&] ( int & v ) { return m_iCheckChunk==v; }  );
 		if ( iChunk==-1 )
 		{
-			tReporter.Fail ( "failed to find disk chunk %s.%d, disk chunks total %d", m_sPath.cstr(), m_iCheckChunk, m_dChunkNames.GetLength() );
+			tReporter.Fail ( "failed to find disk chunk %s.%d, disk chunks total %d", GetFilebase(), m_iCheckChunk, m_dChunkNames.GetLength() );
 			return 1;
 		}
 
@@ -5756,8 +5735,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 	ARRAY_FOREACH ( i, dChunks )
 	{
 		int iChunk = dChunks[i];
-		CSphString sChunk;
-		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
+		CSphString sChunk = GetFilename ( iChunk );
 		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", dChunks[i], i, m_dChunkNames.GetLength() );
 
 		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.get(), dWarnings, m_sLastError );
@@ -7995,7 +7973,7 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 		assert ( pSeg );
 		auto pBuilder = CreateColumnarBuilderRT ( tNewSchema );
 
-		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, m_sPath, sError ) )
+		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, GetFilebase(), sError ) )
 			return false;
 
 		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
@@ -8037,7 +8015,7 @@ void RtIndex_c::AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSph
 		const CSphRowitem* pDocinfo = pWSeg->m_dRows.begin();
 		dSPB.Reserve ( pWSeg->m_dBlobs.GetLength() / 2 );		// reserve half of our current blobs, just in case
 		if ( !Alter_AddRemoveRowwiseAttr ( tOldSchema, tNewSchema, pDocinfo, pRSeg->m_uRows, pWSeg->m_dBlobs.begin(), *pSPAWriteWrapper, *pSPBWriteWrapper, bAdd, sAttrName ) )
-			sphWarning ( "%s attribute to %s: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), sError.cstr() );
+			sphWarning ( "%s attribute to %s: %s", bAdd ? "adding" : "removing", GetFilebase(), sError.cstr() );
 		pWSeg->m_dRows.SwapData(dSPA);
 		if ( bBlob || bBlobsModified )
 			pWSeg->m_dBlobs.SwapData(dSPB);
@@ -8145,7 +8123,7 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	for ( auto& pChunk : tGuard.m_dDiskChunks )
 		if ( !pChunk->CastIdx().AddRemoveField ( bAdd, sFieldName, uFieldFlags, sError ) )
-			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), pChunk->Cidx().m_iChunk, sError.cstr() );
+			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", GetFilebase(), pChunk->Cidx().m_iChunk, sError.cstr() );
 
 	if ( bAdd )
 		AddFieldToRamchunk ( sFieldName, uFieldFlags, tOldSchema, tNewSchema );
@@ -8217,7 +8195,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	for ( auto& pChunk : tGuard.m_dDiskChunks )
 		if ( !pChunk->CastIdx().AddRemoveAttribute ( bAdd, tNewCtx, sError ) )
-			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), pChunk->Cidx().m_iChunk, sError.cstr() );
+			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", GetFilebase(), pChunk->Cidx().m_iChunk, sError.cstr() );
 
 	bool bColumnar = bAdd ? tNewSchema.GetAttr ( tNewCtx.m_sName.cstr() )->IsColumnar() : tOldSchema.GetAttr ( tNewCtx.m_sName.cstr() )->IsColumnar();
 	if ( bColumnar )
@@ -8238,13 +8216,6 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 //////////////////////////////////////////////////////////////////////////
 // MAGIC CONVERSIONS
 //////////////////////////////////////////////////////////////////////////
-
-CSphString RtIndex_c::MakeChunkName ( int iChunkID )
-{
-	CSphString sChunk;
-	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunkID );
-	return sChunk;
-}
 
 // ClientSession_c::Execute->HandleMysqlAttach->AttachDiskIndex
 bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFatal, StrVec_t & dWarnings, CSphString & sError )
@@ -8303,7 +8274,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 
 	// rename that source index to our last chunk
 	int iChunk = m_tChunkID.MakeChunkId ( m_tRtChunks );
-	auto eRenamed = pIndex->RenameEx ( MakeChunkName ( iChunk ) );
+	auto eRenamed = pIndex->RenameEx ( GetFilename ( iChunk ) );
 	switch (eRenamed)
 	{
 	case RE_FATAL: // not just failed, but also rollback wasn't success. Source index is damaged!
@@ -8357,8 +8328,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 // kill RAM chunk file
 void RtIndex_c::UnlinkRAMChunk ( const char* szInfo )
 {
-	CSphString sFile;
-	sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
+	CSphString sFile = GetFilename ( "ram" );
 	if ( ::unlink ( sFile.cstr() ) && errno != ENOENT && szInfo )
 		sphWarning ( "rt: %s failed to unlink %s: (errno=%d, error=%s)", szInfo, sFile.cstr(), errno, strerrorm ( errno ) );
 }
@@ -8609,10 +8579,6 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	const CSphIndex& tChunkB = pChunkB->Cidx();
 	CSphString sFirst = tChunkA.GetFilebase();
 
-	// fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
-	CSphString sProcessed;
-	sProcessed.SetSprintf ( "%s.tmp", sFirst.cstr() );
-
 	ConstDiskChunkRefPtr_t pChunk;
 
 	// note: klist for merged chunk will be attached during merge at the moment of copying alive rows.
@@ -8634,8 +8600,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 		pFilenameBuilder = fnFnameBuilder ( GetName() );
 
 	// prealloc new (optimized) chunk
-	CSphString sChunk;
-	sChunk.SetSprintf ( "%s.tmp", sFirst.cstr() );
+	CSphString sChunk = SphSprintf( "%s.tmp", sFirst.cstr() );
 
 	StrVec_t dWarnings; // FIXME! report warnings
 	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk.cstr(), tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
@@ -8656,7 +8621,7 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 	CSphIndex& tChunk = pChunk->CastIdx(); // const breakage is ok since we don't yet published the index
 	// prepare new chunk to publish
 	int iResID = m_tChunkID.MakeChunkId ( m_tRtChunks );
-	auto sNewchunk = MakeChunkName ( iResID );
+	auto sNewchunk = GetFilename ( iResID );
 	tChunk.m_iChunk = iResID;
 
 	// rename merged disk chunk to valid chunk name
@@ -9737,17 +9702,17 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 
 void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* pParentFilenameBuilder ) const
 {
-	auto fnAddFile = [this, &dFiles] ( const char* szExt ) {
-		auto sFile = SphSprintf ( "%s%s", m_sPath.cstr(), szExt );
-		if ( sphIsReadable ( sFile.cstr() ) )
+	auto fnAddFile = [this, &dFiles] ( const auto tExt ) {
+		auto sFile = GetFilename ( tExt );
+		if ( sphIsReadable ( sFile ) )
 			dFiles.Add ( std::move ( sFile ) );
 	};
 
-	fnAddFile ( ".meta" );
-	fnAddFile ( ".ram" );
+	fnAddFile ( "meta" );
+	fnAddFile ( "ram" );
 
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
-		fnAddFile ( sphGetExt ( SPH_EXT_SETTINGS ) );
+		fnAddFile ( SPH_EXT_SETTINGS );
 
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { nullptr };
 	if ( !pParentFilenameBuilder && GetIndexFilenameBuilder() )
@@ -9808,7 +9773,7 @@ bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
 		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
 	}
 
-	CSphString sPathOnly = GetPathOnly(m_sPath);
+	CSphString sPathOnly = GetPathOnly ( GetFilebase() );
 	for ( const auto & i : dExtFiles )
 	{
 		CSphString sDest;

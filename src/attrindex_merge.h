@@ -15,17 +15,18 @@
 #include "sphinx.h"
 #include "indexformat.h"
 
-class AttrMerger_i
+class AttrMerger_c
 {
+	class Impl_c;
+	std::unique_ptr<Impl_c> m_pImpl;
+
 public:
-	AttrMerger_i () {}
-	virtual ~AttrMerger_i() {}
+	AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs );
+	~AttrMerger_c();
 
-	virtual bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex ) = 0;
-	virtual bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, DWORD uAlive ) = 0;
-	virtual bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader ) = 0;
-
-	static AttrMerger_i * Create ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs );
+	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
+	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, DWORD uAlive );
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
 
 bool SiRecreate ( MergeCb_c & tMonitor, const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, CSphString & sFile, CSphString & sError );

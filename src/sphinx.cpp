@@ -6597,17 +6597,17 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	// merging attributes
 	{
-		std::unique_ptr<AttrMerger_i> pAttrMerger ( AttrMerger_i::Create ( tMonitor, sError, iTotalDocs ) );
-		if ( !pAttrMerger->Prepare ( pSrcIndex, pDstIndex ) )
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs };
+		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
-		if ( !pAttrMerger->CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
 			return false;
 
-		if ( !bCompress && !pAttrMerger->CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+		if ( !bCompress && !tAttrMerger.CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
 			return false;
 
-		if ( !pAttrMerger->FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
 	}
 

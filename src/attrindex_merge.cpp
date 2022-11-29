@@ -19,7 +19,7 @@
 #include "secondarylib.h"
 #include "attrindex_merge.h"
 
-class AttrMerger_c : public AttrMerger_i
+class AttrMerger_c::Impl_c
 {
 	AttrIndexBuilder_c						m_tMinMax;
 	HistogramContainer_c					m_tHistograms;
@@ -44,25 +44,18 @@ private:
 	bool CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
 
 public:
-	AttrMerger_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
 	{}
 
-	~AttrMerger_c() override {}
-
-	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex ) override;
-	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive ) override;
-	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader ) override;
+	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
+	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader );
 };
 
-AttrMerger_i * AttrMerger_i::Create ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
-{
-	return new AttrMerger_c ( tMonitor, sError, iTotalDocs );
-}
-
-bool AttrMerger_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
+bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
 	auto sSPA = pDstIndex->GetTmpFilename ( SPH_EXT_SPA );
 	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
@@ -114,7 +107,7 @@ bool AttrMerger_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDst
 }
 
 
-bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
+bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
 {
 	assert ( !tIndex.GetRawAttrs() );
 	assert ( tIndex.GetMatchSchema().GetAttr ( 0 ).IsColumnar() );
@@ -160,7 +153,7 @@ bool AttrMerger_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const 
 	return true;
 }
 
-bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )
+bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )
 {
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
@@ -228,7 +221,7 @@ bool AttrMerger_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTrai
 }
 
 
-bool AttrMerger_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
+bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
 {
 	if ( !uAlive )
 		return true;
@@ -242,7 +235,7 @@ bool AttrMerger_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<
 }
 
 
-bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader )
+bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader )
 {
 	m_tMinMax.FinishCollect();
 	assert ( m_tResultRowID==m_iTotalDocs );
@@ -297,6 +290,31 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHea
 
 	return WriteDeadRowMap ( pDstIndex->GetTmpFilename ( SPH_EXT_SPM ), m_tResultRowID, m_sError );
 }
+
+
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs ) }
+{}
+
+AttrMerger_c::~AttrMerger_c() = default;
+
+bool AttrMerger_c::Prepare ( const CSphIndex* pSrcIndex, const CSphIndex* pDstIndex )
+{
+	return m_pImpl->Prepare ( pSrcIndex, pDstIndex );
+}
+
+bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
+{
+	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
+}
+
+bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader )
+{
+	return m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader );
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 
 
 class SiBuilder_c

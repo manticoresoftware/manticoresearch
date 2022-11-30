@@ -194,7 +194,7 @@ protected:
 
 	int				m_iFD = -1;
 	int				m_iPoolUsed = 0;
-	BYTE *			m_pBuffer = nullptr;
+	std::unique_ptr<BYTE[]>	m_pBuffer = nullptr;
 	BYTE *			m_pPool = nullptr;
 	bool			m_bOwnFile = false;
 	SphOffset_t	*	m_pSharedOffset = nullptr;

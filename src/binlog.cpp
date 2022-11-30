@@ -217,7 +217,7 @@ void BinlogWriter_c::ResetCrc ()
 void BinlogWriter_c::HashCollected ()
 {
 	assert ( m_iLastCrcPos<=m_iPoolUsed );
-	m_uCRC = sphCRC32 ( m_pBuffer + m_iLastCrcPos, m_iPoolUsed - m_iLastCrcPos, m_uCRC );
+	m_uCRC = sphCRC32 ( m_pBuffer.get() + m_iLastCrcPos, m_iPoolUsed - m_iLastCrcPos, m_uCRC );
 	m_iLastCrcPos = m_iPoolUsed;
 }
 

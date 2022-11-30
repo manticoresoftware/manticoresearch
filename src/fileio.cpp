@@ -568,7 +568,7 @@ void CSphWriter::SetBufferSize ( int iBufferSize )
 	if ( iBufferSize!=m_iBufferSize )
 	{
 		m_iBufferSize = Max ( iBufferSize, 262144 );
-		SafeDeleteArray ( m_pBuffer );
+		m_pBuffer = nullptr;
 	}
 }
 
@@ -589,10 +589,10 @@ bool CSphWriter::OpenFile ( const CSphString & sName, int iOpenFlags, CSphString
 	m_pError = &sErrorBuffer;
 
 	if ( !m_pBuffer )
-		m_pBuffer = new BYTE [ m_iBufferSize ];
+		m_pBuffer = std::make_unique<BYTE[]> ( m_iBufferSize );
 
 	m_iFD = ::open ( m_sName.cstr(), iOpenFlags, 0644 );
-	m_pPool = m_pBuffer;
+	m_pPool = m_pBuffer.get();
 	m_iPoolUsed = 0;
 	m_iPos = 0;
 	m_iDiskPos = 0;
@@ -611,11 +611,11 @@ void CSphWriter::SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CS
 	m_bOwnFile = false;
 
 	if ( !m_pBuffer )
-		m_pBuffer = new BYTE [ m_iBufferSize ];
+		m_pBuffer = std::make_unique<BYTE[]> ( m_iBufferSize );
 
 	m_iFD = tAuto.GetFD();
 	m_sName = tAuto.GetFilename();
-	m_pPool = m_pBuffer;
+	m_pPool = m_pBuffer.get();
 	m_iPoolUsed = 0;
 	m_iPos = 0;
 	m_iDiskPos = 0;
@@ -628,7 +628,6 @@ void CSphWriter::SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CS
 CSphWriter::~CSphWriter()
 {
 	CloseFile();
-	SafeDeleteArray ( m_pBuffer );
 }
 
 
@@ -656,14 +655,14 @@ void CSphWriter::UnlinkFile()
 		::unlink ( m_sName.cstr() );
 		m_sName = "";
 	}
-	SafeDeleteArray ( m_pBuffer );
+	m_pBuffer.reset();
 }
 
 
 void CSphWriter::UpdatePoolUsed()
 {
-	if ( m_pPool-m_pBuffer > m_iPoolUsed )
-		m_iPoolUsed = m_pPool-m_pBuffer;
+	if ( m_pPool-m_pBuffer.get() > m_iPoolUsed )
+		m_iPoolUsed = m_pPool- m_pBuffer.get();
 }
 
 
@@ -724,12 +723,12 @@ void CSphWriter::Flush()
 		}
 	}
 
-	if ( !sphWriteThrottled ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), *m_pError ) )
+	if ( !sphWriteThrottled ( m_iFD, m_pBuffer.get(), m_iPoolUsed, m_sName.cstr(), *m_pError ) )
 		m_bError = true;
 
 	m_iDiskPos += m_iPoolUsed;
 	m_iPoolUsed = 0;
-	m_pPool = m_pBuffer;
+	m_pPool = m_pBuffer.get();
 
 	if ( m_pSharedOffset )
 		*m_pSharedOffset = m_iDiskPos;
@@ -790,7 +789,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos, bool bTruncate )
 		// m_iPoolUsed should be always in sync with m_iPos
 		// or it breaks seek back at cidxHit
 		m_iPoolUsed = (int)( iPos - m_iDiskPos );
-		m_pPool = m_pBuffer + m_iPoolUsed;
+		m_pPool = m_pBuffer.get() + m_iPoolUsed;
 	} else
 	{
 		Flush();
@@ -799,7 +798,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos, bool bTruncate )
 		if ( bTruncate )
 			sphTruncate(m_iFD);
 
-		m_pPool = m_pBuffer;
+		m_pPool = m_pBuffer.get();
 		m_iPoolUsed = 0;
 		m_iDiskPos = iPos;
 	}

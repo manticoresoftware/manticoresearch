@@ -6551,6 +6551,11 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	BuildHeader_t tBuildHeader ( pDstIndex->m_tStats );
 
+	// merging attributes is separate complete stage; files are finally prepared after it.
+	// however, if interrupt is requested after that stage - we need list of the files
+	// to gracefully unlink them.
+	StrVec_t dDeleteOnInterrupt;
+
 	// merging attributes
 	{
 		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs };
@@ -6563,13 +6568,16 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !bCompress && !tAttrMerger.CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
 			return false;
 
-		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader, &dDeleteOnInterrupt ) )
 			return false;
 	}
 
+	// unlink prepared attribute files on exit, if any
+	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt] { dDeleteOnInterrupt.for_each ( [] ( const auto& sFile ) { ::unlink ( sFile.cstr() ); } ); } );
+
 	const CSphIndex_VLN* pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
 	CSphAutofile tTmpDict ( pDstIndex->GetFilename("spi.tmp"), SPH_O_NEW, sError, true ); // that is huge file with bins
-	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError );
+	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError, true );
 
 	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || tMonitor.NeedStop() )
 		return false;
@@ -6625,6 +6633,10 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
 	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
+
+	// we're done; clean all deferred deletes
+	tDict.SetPersistent();
+	dDeleteOnInterrupt.Reset();
 
 	return true;
 }

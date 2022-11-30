@@ -39,9 +39,17 @@ class AttrMerger_c::Impl_c
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
 
+	CSphVector<ESphExt> 					m_dCreatedFiles;
+
 private:
 	bool CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
 	bool CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
+	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
+	{
+		m_dCreatedFiles.Add ( eExt );
+		assert ( pIdx );
+		return  pIdx->GetTmpFilename ( eExt );
+	}
 
 public:
 	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
@@ -52,25 +60,25 @@ public:
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
-	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader );
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles );
 };
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
-	auto sSPA = pDstIndex->GetTmpFilename ( SPH_EXT_SPA );
+	auto sSPA = GetTmpFilename ( pDstIndex, SPH_EXT_SPA );
 	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
 		return false;
 
 	if ( pDstIndex->GetMatchSchema().HasBlobAttrs() )
 	{
-		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), pDstIndex->GetTmpFilename ( SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
+		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
 		if ( !m_pBlobRowBuilder )
 			return false;
 	}
 
 	if ( pDstIndex->GetDocstore() )
 	{
-		m_pDocstoreBuilder = CreateDocstoreBuilder ( pDstIndex->GetTmpFilename ( SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_sError );
+		m_pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( pDstIndex, SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_sError );
 		if ( !m_pDocstoreBuilder )
 			return false;
 
@@ -85,14 +93,14 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( pDstIndex->GetMatchSchema().HasColumnarAttrs() )
 	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), pDstIndex->GetSettings(), pDstIndex->GetTmpFilename ( SPH_EXT_SPC ), m_sError );
+		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), pDstIndex->GetSettings(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_sError );
 		if ( !m_pColumnarBuilder )
 			return false;
 	}
 
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), pDstIndex->GetTmpFilename ( SPH_EXT_SPIDX ), m_dSiAttrs, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_sError );
 		if ( !m_pSIdxBuilder )
 			return false;
 	}
@@ -235,7 +243,7 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader )
+bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
 {
 	m_tMinMax.FinishCollect();
 	assert ( m_tResultRowID==m_iTotalDocs );
@@ -244,7 +252,7 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 	tBuildHeader.m_iTotalBytes = m_iTotalBytes;
 
 	m_dDocidLookup.Sort ( CmpDocidLookup_fn() );
-	if ( !WriteDocidLookup ( pDstIndex->GetTmpFilename ( SPH_EXT_SPT ), m_dDocidLookup, m_sError ) )
+	if ( !WriteDocidLookup ( GetTmpFilename ( pDstIndex, SPH_EXT_SPT ), m_dDocidLookup, m_sError ) )
 		return false;
 
 	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() )
@@ -272,7 +280,7 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 		return false;
 	}
 
-	if ( !m_tHistograms.Save ( pDstIndex->GetTmpFilename ( SPH_EXT_SPHI ), m_sError ) )
+	if ( !m_tHistograms.Save ( GetTmpFilename ( pDstIndex, SPH_EXT_SPHI ), m_sError ) )
 		return false;
 
 	if ( !CheckDocsCount ( m_tResultRowID, m_sError ) )
@@ -288,7 +296,13 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 		return false;
 	}
 
-	return WriteDeadRowMap ( pDstIndex->GetTmpFilename ( SPH_EXT_SPM ), m_tResultRowID, m_sError );
+	if ( !WriteDeadRowMap ( GetTmpFilename ( pDstIndex, SPH_EXT_SPM ), m_tResultRowID, m_sError ) )
+		return false;
+
+	if ( pCreatedFiles )
+		m_dCreatedFiles.for_each ( [pCreatedFiles, pDstIndex] ( auto eExt ) { pCreatedFiles->Add ( pDstIndex->GetTmpFilename ( eExt ) ); } );
+
+	return true;
 }
 
 
@@ -308,9 +322,9 @@ bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<R
 	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
 }
 
-bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader )
+bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
 {
-	return m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader );
+	return m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
 }
 
 

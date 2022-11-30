@@ -8580,7 +8580,6 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 
 	const CSphIndex& tChunkA = pChunkA->Cidx();
 	const CSphIndex& tChunkB = pChunkB->Cidx();
-	CSphString sFirst = tChunkA.GetFilebase();
 
 	ConstDiskChunkRefPtr_t pChunk;
 
@@ -8589,13 +8588,9 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	{
 		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
 			sError = "interrupted because of shutdown";
-		sphWarning ( "rt %s: index %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", sFirst.cstr(), sError.cstr() );
+		sphWarning ( "rt %s: index %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", tChunkA.GetFilebase(), sError.cstr() );
 		return pChunk;
 	}
-
-	// check forced exit after long operation
-	if ( tProgress.GetMergeCb().NeedStop() )
-		return pChunk;
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
@@ -8603,7 +8598,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 		pFilenameBuilder = fnFnameBuilder ( GetName() );
 
 	// prealloc new (optimized) chunk
-	CSphString sChunk = SphSprintf( "%s.tmp", sFirst.cstr() );
+	CSphString sChunk = tChunkA.GetFilename ( "tmp" );
 
 	StrVec_t dWarnings;
 	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk, tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );

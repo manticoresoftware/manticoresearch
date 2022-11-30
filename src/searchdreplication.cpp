@@ -4034,7 +4034,7 @@ private:
 		if ( !bRestart && m_iFile==iFile )
 			return true;
 
-		if ( !m_pMerge.get() )
+		if ( !m_pMerge )
 		{
 			sError.SetSprintf ( "missed write state" );
 			return false;

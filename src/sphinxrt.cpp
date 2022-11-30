@@ -8605,8 +8605,9 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	// prealloc new (optimized) chunk
 	CSphString sChunk = SphSprintf( "%s.tmp", sFirst.cstr() );
 
-	StrVec_t dWarnings; // FIXME! report warnings
+	StrVec_t dWarnings;
 	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk, tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
+	dWarnings.for_each ( [] ( const auto& sWarning ) { sphWarning ( "PreallocDiskChunk warning: %s", sWarning.cstr() ); } );
 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable

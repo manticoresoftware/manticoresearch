@@ -183,7 +183,10 @@ bool CSphSource_PgSQL::IterateStart ( CSphString & sError )
 		m_dIsColumnBool[i] = false;
 
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
-		m_dIsColumnBool [ m_tSchema.GetAttr(i).m_iIndex ] = ( m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BOOL );
+	{
+		if ( m_tSchema.GetAttr(i).m_iIndex >=0 )
+			m_dIsColumnBool [ m_tSchema.GetAttr(i).m_iIndex ] = ( m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BOOL );
+	}
 
 	return true;
 }

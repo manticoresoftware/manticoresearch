@@ -58,10 +58,7 @@ int CSphAutofile::Open ( const CSphString & sName, int iMode, CSphString & sErro
 	if ( m_iFD<0 )
 		sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerrorm(errno) );
 	else
-	{
 		m_bTemporary = bTemp; // only if we managed to actually open it
-		m_bWouldTemporary = true; // if a shit happen - we could delete the file.
-	}
 
 	return m_iFD;
 }
@@ -79,14 +76,12 @@ void CSphAutofile::Close()
 	m_iFD = -1;
 	m_sFilename = "";
 	m_bTemporary = false;
-	m_bWouldTemporary = false;
 }
 
-void CSphAutofile::SetTemporary()
+void CSphAutofile::SetPersistent()
 {
-	m_bTemporary = m_bWouldTemporary;
+	m_bTemporary = false;
 }
-
 
 const char * CSphAutofile::GetFilename() const
 {
@@ -627,7 +622,13 @@ void CSphWriter::SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CS
 
 CSphWriter::~CSphWriter()
 {
-	CloseFile();
+	if ( m_bUnlinkNonClosed && m_bOwnFile )
+	{
+		if ( m_iFD >= 0 )
+			::close ( m_iFD );
+		::unlink ( m_sName.cstr() );
+	} else
+		CloseFile();
 }
 
 
@@ -641,21 +642,8 @@ void CSphWriter::CloseFile ( bool bTruncate )
 		if ( m_bOwnFile )
 			::close ( m_iFD );
 		m_iFD = -1;
+		m_bUnlinkNonClosed = m_bError;
 	}
-}
-
-void CSphWriter::UnlinkFile()
-{
-	if ( m_bOwnFile )
-	{
-		if ( m_iFD>=0 )
-			::close ( m_iFD );
-
-		m_iFD = -1;
-		::unlink ( m_sName.cstr() );
-		m_sName = "";
-	}
-	m_pBuffer.reset();
 }
 
 

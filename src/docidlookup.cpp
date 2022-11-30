@@ -517,35 +517,28 @@ CSphVector<RowidIterator_i *> CreateLookupIterator ( CSphVector<SecondaryIndexIn
 
 //////////////////////////////////////////////////////////////////////////
 
-DocidLookupWriter_c::DocidLookupWriter_c ( DWORD nDocs )
-	: m_nDocs ( nDocs )
+DocidLookupWriter_c::DocidLookupWriter_c ( CSphWriter& tWriter, DWORD nDocs )
+	: m_tWriter { tWriter }
+	, m_nDocs ( nDocs )
 {}
 
 
-bool DocidLookupWriter_c::Open ( const CSphString & sFilename, CSphString & sError )
+void DocidLookupWriter_c::Start()
 {
-	assert ( !m_pWriter );
-	m_pWriter = std::make_unique<CSphWriter>();
+	m_tWriter.PutDword ( m_nDocs );
+	m_tWriter.PutDword ( DOCS_PER_LOOKUP_CHECKPOINT );
 
-	if ( !m_pWriter->OpenFile ( sFilename, sError ) )
-		return false;
-
-	m_pWriter->PutDword ( m_nDocs );
-	m_pWriter->PutDword ( DOCS_PER_LOOKUP_CHECKPOINT );
-
-	m_tCheckpointStart = m_pWriter->GetPos();
-	m_pWriter->PutOffset ( 0 );	// reserve space for max docid
+	m_tCheckpointStart = m_tWriter.GetPos();
+	m_tWriter.PutOffset ( 0 );	// reserve space for max docid
 
 	int nCheckpoints = (m_nDocs+DOCS_PER_LOOKUP_CHECKPOINT-1)/DOCS_PER_LOOKUP_CHECKPOINT;
 	m_dCheckpoints.Reset ( nCheckpoints );
-	for ( int i = 0; i < nCheckpoints; i++ )
+	for ( int i = 0; i < nCheckpoints; ++i )
 	{
 		// reserve space for checkpoints
-		m_pWriter->PutOffset(0);
-		m_pWriter->PutOffset(0);
+		m_tWriter.PutOffset(0);
+		m_tWriter.PutOffset(0);
 	}
-
-	return true;
 }
 
 
@@ -556,36 +549,36 @@ void DocidLookupWriter_c::AddPair ( const DocidRowidPair_t & tPair )
 	if ( !(m_iProcessed % DOCS_PER_LOOKUP_CHECKPOINT) )
 	{
 		m_dCheckpoints[m_iCheckpoint].m_tBaseDocID = tPair.m_tDocID;
-		m_dCheckpoints[m_iCheckpoint].m_tOffset = m_pWriter->GetPos();
-		m_iCheckpoint++;
+		m_dCheckpoints[m_iCheckpoint].m_tOffset = m_tWriter.GetPos();
+		++m_iCheckpoint;
 
 		// no need to store docid for 1st entry
-		m_pWriter->PutDword ( tPair.m_tRowID );
 	}
 	else
 	{
-		m_pWriter->ZipOffset ( (uint64_t)tPair.m_tDocID-(uint64_t)m_tLastDocID );
-		m_pWriter->PutDword ( tPair.m_tRowID );
+		m_tWriter.ZipOffset ( (uint64_t)tPair.m_tDocID-(uint64_t)m_tLastDocID );
 	}
 
+	m_tWriter.PutDword ( tPair.m_tRowID );
+
 	m_tLastDocID = tPair.m_tDocID;
-	m_iProcessed++;
+	++m_iProcessed;
 }
 
 
 bool DocidLookupWriter_c::Finalize ( CSphString & sError )
 {
-	m_pWriter->Flush();
-	m_pWriter->SeekTo ( m_tCheckpointStart );
-	m_pWriter->PutOffset ( m_tLastDocID );
+	m_tWriter.Flush();
+	m_tWriter.SeekTo ( m_tCheckpointStart );
+	m_tWriter.PutOffset ( m_tLastDocID );
 	for ( const auto & i : m_dCheckpoints )
 	{
-		m_pWriter->PutOffset ( i.m_tBaseDocID );
-		m_pWriter->PutOffset ( i.m_tOffset );
+		m_tWriter.PutOffset ( i.m_tBaseDocID );
+		m_tWriter.PutOffset ( i.m_tOffset );
 	}
 
-	m_pWriter->CloseFile();
-	if ( m_pWriter->IsError() )
+	m_tWriter.CloseFile();
+	if ( m_tWriter.IsError() )
 	{
 		sError = "error writing .SPT";
 		return false;
@@ -594,27 +587,19 @@ bool DocidLookupWriter_c::Finalize ( CSphString & sError )
 	return true;
 }
 
-
-CSphWriter & DocidLookupWriter_c::GetWriter()
-{
-	assert ( m_pWriter );
-	return *m_pWriter;
-}
-
-
 bool WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError )
 {
-	DocidLookupWriter_c tWriter ( dLookup.GetLength() );
-	if ( !tWriter.Open ( sFilename, sError ) )
+	CSphWriter tfWriter;
+	if ( !tfWriter.OpenFile ( sFilename, sError ) )
 		return false;
+
+	DocidLookupWriter_c tWriter ( tfWriter, dLookup.GetLength() );
+	tWriter.Start();
 
 	for ( const auto & i : dLookup )
 		tWriter.AddPair(i);
 
-	if ( !tWriter.Finalize ( sError ) )
-		return false;
-
-	return true;
+	return tWriter.Finalize ( sError );
 }
 
 //////////////////////////////////////////////////////////////////////////

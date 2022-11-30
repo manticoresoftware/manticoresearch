@@ -149,7 +149,6 @@ class BlobRowBuilder_File_c : public BlobRowBuilder_Base_c
 {
 public:
 							BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked );
-							~BlobRowBuilder_File_c() override;
 
 	bool					Setup ( const CSphString & sFile, CSphString & sError );
 
@@ -159,7 +158,6 @@ public:
 
 private:
 	CSphWriter				m_tWriter;
-	bool					m_bDeleteFile {true};
 	SphOffset_t				m_tSpaceForUpdates {0};
 };
 
@@ -195,13 +193,6 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 			break;
 		}
 	}
-}
-
-
-BlobRowBuilder_File_c::~BlobRowBuilder_File_c()
-{
-	if ( m_bDeleteFile )
-		m_tWriter.UnlinkFile();
 }
 
 
@@ -245,6 +236,9 @@ SphOffset_t BlobRowBuilder_File_c::Flush()
 		case BLOB_ROW_LEN_DWORD:
 			m_tWriter.PutDword(uTotalLen);
 			break;
+
+		default:
+			break;
 		}	
 	}
 
@@ -270,7 +264,7 @@ bool BlobRowBuilder_File_c::Done ( CSphString & sError )
 	SphOffset_t tTotalSize = m_tWriter.GetPos();
 	SeekAndPutOffset ( m_tWriter, 0, tTotalSize );
 	m_tWriter.SeekTo ( tTotalSize + m_tSpaceForUpdates, true );
-	m_tWriter.CloseFile();
+	m_tWriter.CloseFile(); // closing file implies it will NOT be unlinked
 
 	if ( m_tWriter.IsError() )
 	{
@@ -278,7 +272,6 @@ bool BlobRowBuilder_File_c::Done ( CSphString & sError )
 		return false;
 	}
 
-	m_bDeleteFile = false;
 	return true;
 }
 

@@ -4270,43 +4270,6 @@ bool LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_
 }
 
 
-class DeleteOnFail_c : public ISphNoncopyable
-{
-public:
-	DeleteOnFail_c() : m_bShitHappened ( true )
-	{}
-	~DeleteOnFail_c()
-	{
-		if ( m_bShitHappened )
-		{
-			ARRAY_FOREACH ( i, m_dWriters )
-				m_dWriters[i]->UnlinkFile();
-
-			ARRAY_FOREACH ( i, m_dAutofiles )
-				m_dAutofiles[i]->SetTemporary();
-		}
-	}
-	void AddWriter ( CSphWriter * pWr )
-	{
-		if ( pWr )
-			m_dWriters.Add ( pWr );
-	}
-	void AddAutofile ( CSphAutofile * pAf )
-	{
-		if ( pAf )
-			m_dAutofiles.Add ( pAf );
-	}
-	void AllIsDone()
-	{
-		m_bShitHappened = false;
-	}
-private:
-	bool	m_bShitHappened;
-	CSphVector<CSphWriter*> m_dWriters;
-	CSphVector<CSphAutofile*> m_dAutofiles;
-};
-
-
 bool CSphIndex_VLN::Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer )
 {
 	CSphBitvec dQueryMvas ( m_tSchema.GetAttrsCount() );
@@ -4891,12 +4854,12 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 	if ( !nBlocks )
 		return true;
 
-	DocidLookupWriter_c tWriter ( (DWORD)m_tStats.m_iTotalDocuments );
-	if ( !tWriter.Open ( GetFilename ( SPH_EXT_SPT ), m_sLastError ) )
+	CSphWriter tfWriter;
+	if ( !tfWriter.OpenFile ( GetFilename ( SPH_EXT_SPT ), m_sLastError ) )
 		return false;
 
-	DeleteOnFail_c tWatchdog;
-	tWatchdog.AddWriter ( &tWriter.GetWriter() );
+	DocidLookupWriter_c tWriter ( tfWriter, (DWORD)m_tStats.m_iTotalDocuments );
+	tWriter.Start();
 
 	RawVector_T<CSphBin> dBins;
 	SphOffset_t iSharedOffset = -1;
@@ -4962,7 +4925,6 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 	// clean up readers
 	dBins.Reset();
 
-	tWatchdog.AllIsDone();
 	tProgress.m_iDocids = tProgress.m_iDocidsTotal;
 	tProgress.PhaseEnd();
 	return true;
@@ -5357,10 +5319,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	const bool bGotPrevIndex = tPrevAttrs.Init ( m_sKeepAttrs, m_dKeepAttrs, m_tSchema );
 
 	// create temp files
-	CSphString sFileSPP = m_bInplaceSettings ? GetFilename ( SPH_EXT_SPP ) : GetFilename ( "tmp1" );
-
 	CSphAutofile fdLock ( GetFilename ( "tmp0" ), SPH_O_NEW, m_sLastError, true );
-	CSphAutofile fdHits ( sFileSPP, SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
+	CSphAutofile fdHits ( ( m_bInplaceSettings ? GetFilename ( SPH_EXT_SPP ) : GetFilename ( "tmp1" ) ), SPH_O_NEW, m_sLastError, true );
 	CSphAutofile fdTmpLookup ( GetFilename ( "tmp2" ), SPH_O_NEW, m_sLastError, true );
 
 	CSphWriter tWriterSPA;
@@ -5369,11 +5329,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// write to temp file because of possible --keep-attrs option which loads prev index
 	if ( bHaveNonColumnarAttrs && !tWriterSPA.OpenFile ( GetTmpFilename ( SPH_EXT_SPA ), m_sLastError ) )
 		return 0;
-
-	DeleteOnFail_c dFileWatchdog;
-
-	if ( m_bInplaceSettings )
-		dFileWatchdog.AddAutofile ( &fdHits );
 
 	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 )
 		return 0;
@@ -5979,7 +5934,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	ARRAY_FOREACH ( i, dSources )
 		dSources[i]->PostIndex ();
 
-	dFileWatchdog.AllIsDone();
+	if ( m_bInplaceSettings )
+		fdHits.SetPersistent();
 	return 1;
 } // NOLINT function length
 

@@ -2675,8 +2675,7 @@ int main ( int argc, char ** argv )
 				sphWarning ( "output-dir failed '%s', skipped", sError.cstr() );
 				continue;
 			}
-
-			tDir.UnlinkFile();
+			// tDir will be unlinked as non-closed
 
 			sIndexOut.SetSprintf ( "%s/%s", legacy::g_sOutDir.cstr(), sIndexFile.cstr() );
 		} else

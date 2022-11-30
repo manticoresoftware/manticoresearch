@@ -1584,6 +1584,7 @@ TEST ( functions, Writer )
 		tWrDef.OpenFile ( sTmpWriteout, sErr );
 		tWrDef.PutBytes ( pData, WRITE_OUT_DATA_SIZE );
 		tWrDef.PutByte ( 0xff );
+		tWrDef.CloseFile();
 	}
 	{
 		CSphWriter tWr;
@@ -1591,6 +1592,7 @@ TEST ( functions, Writer )
 		tWr.OpenFile ( sTmpWriteout, sErr );
 		tWr.PutBytes ( pData, WRITE_OUT_DATA_SIZE );
 		tWr.PutByte ( 0xff );
+		tWr.CloseFile();
 	}
 	unlink ( sTmpWriteout.cstr () );
 	delete[] pData;

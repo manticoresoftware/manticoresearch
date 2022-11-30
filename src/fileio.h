@@ -27,7 +27,7 @@ public:
 
 	int				Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
 	void			Close ();
-	void			SetTemporary(); ///< would be set if a shit happened and the file is not actual.
+	void 			SetPersistent(); ///< would unset 'temporary' flag, if any - so that file will not be unlinked
 	int				GetFD () const { return m_iFD; }
 	const char *	GetFilename () const;
 	SphOffset_t		GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError );
@@ -39,7 +39,6 @@ protected:
 	int			m_iFD = -1;					///< my file descriptor
 	CSphString	m_sFilename;				///< my file name
 	bool		m_bTemporary = false;		///< whether to unlink this file on Close()
-	bool		m_bWouldTemporary = false;	///< backup of the m_bTemporary
 };
 
 
@@ -156,7 +155,7 @@ public:
 class CSphWriter : ISphNoncopyable
 {
 public:
-	virtual			~CSphWriter ();
+	virtual			~CSphWriter ();		///< if error flag is set, or if file is not closed by CloseFile, it will be automatically deleted (unlinked).
 
 	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
 
@@ -164,7 +163,6 @@ public:
 	bool			OpenFile ( const CSphString & sName, int iOpenFlags, CSphString & sError );
 	void			SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CSphString & sError );
 	void			CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
-	void			UnlinkFile (); /// some shit happened (outside) and the file is no more actual.
 
 	void			PutByte ( BYTE uValue );
 	void			PutBytes ( const void * pData, int64_t iSize );
@@ -200,6 +198,7 @@ protected:
 	SphOffset_t	*	m_pSharedOffset = nullptr;
 	int				m_iBufferSize = 262144;
 
+	bool 			m_bUnlinkNonClosed = true;		///  if no success CloseFile() called, file should be unlinked on destroy.
 	bool			m_bError = false;
 	CSphString *	m_pError = nullptr;
 

@@ -3610,6 +3610,9 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	}
 
 	tCtx.m_tDocsOffset = tWriterDocs.GetPos();
+	tWriterHits.CloseFile();
+	tWriterDocs.CloseFile();
+	tWriterSkips.CloseFile();
 	return true;
 }
 

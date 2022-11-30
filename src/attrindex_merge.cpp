@@ -117,7 +117,7 @@ bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex
 
 	int iChunk = tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	AT_SCOPE_EXIT( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID )
 	{
 		if ( dRowMap[tRowID] == INVALID_ROWID )
@@ -168,7 +168,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 
 	int iChunk = tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
 		if ( dRowMap[tRowID] == INVALID_ROWID )
@@ -208,7 +208,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 		if ( m_pDocstoreBuilder )
 			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
 
-		if ( m_pSIdxBuilder.get() )
+		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
 			BuilderStoreAttrs ( pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
@@ -350,7 +350,7 @@ bool SiBuilder_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const V
 
 	int iChunk = tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID<tRows; ++tRowID )
 	{
@@ -383,7 +383,7 @@ bool SiBuilder_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTrait
 
 	int iChunk = tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	auto _ = AtScopeExit ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID<tRows; ++tRowID, pRow += iStride )
 	{

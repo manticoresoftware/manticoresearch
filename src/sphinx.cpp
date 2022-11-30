@@ -5494,7 +5494,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( pColumnarBuilder )
 				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pColumnarBuilder.get(), tColumnarAttrs );
 
-			if ( pCidxBuilder.get() )
+			if ( pCidxBuilder )
 			{
 				pCidxBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
 				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pCidxBuilder.get(), tSIAttrs );
@@ -5729,7 +5729,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	if ( pCidxBuilder.get() )
+	if ( pCidxBuilder )
 	{
 		tProgress.PhaseBegin ( CSphIndexProgress::PHASE_SI_BUILD );
 		tProgress.Show();

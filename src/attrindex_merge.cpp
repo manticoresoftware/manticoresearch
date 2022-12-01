@@ -290,7 +290,7 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 		m_pDocstoreBuilder->Finalize();
 
 	std::string sError;
-	if ( m_pSIdxBuilder.get() && !m_pSIdxBuilder->Done ( sError ) )
+	if ( m_pSIdxBuilder && !m_pSIdxBuilder->Done ( sError ) )
 	{
 		m_sError = sError.c_str();
 		return false;

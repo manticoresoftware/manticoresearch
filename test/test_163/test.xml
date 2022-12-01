@@ -373,24 +373,24 @@ INSERT INTO `test_table` VALUES
 	select *, bigint(idd1) b, min( bigint(idd1)) c, 1 as gr from main GROUP BY gr;
 
 	<!-- empty result set with count(*) -->
-	select count(*) from count2 where id in (1,2); show meta;
-	select *, count(*) from count2 where id in (1,2); show meta;
-	select count(*) from count1, count2 where id in (1,2); show meta;
-	select count(*) from count2, count1 where id in (1,2); show meta;
-	select *, count(*) from count1, count2 where id in (1,2); show meta;
-	select *, count(*) from count2, count1 where id in (1,2); show meta;
-	select idd, count(*) from count1, count2 where id in (1,2); show meta;
-	select idd, count(*) from count2, count1 where id in (1,2); show meta;
-	select *, count(*) from count1, count2 where id in (100); show meta;
-	select idd, count(*) from count2, count1 where id in (100); show meta;
-	select count(*) from dist_count1 where id in (1,2); show meta;
-	select count(*) from dist_count2 where id in (1,2); show meta;
-	select *, count(*) from dist_count1 where id in (1,2); show meta;
-	select *, count(*) from dist_count2 where id in (1,2); show meta;
-	select idd, count(*) from dist_count1 where id in (1,2); show meta;
-	select idd, count(*) from dist_count2 where id in (10,11); show meta;
-	select *, count(*) from dist_count1 where id in (100); show meta;
-	select idd, count(*) from dist_count2 where id in (100); show meta;
+	select count(*) from count2 where id in (1,2); show meta like 'total%';
+	select *, count(*) from count2 where id in (1,2); show meta like 'total%';
+	select count(*) from count1, count2 where id in (1,2); show meta like 'total%';
+	select count(*) from count2, count1 where id in (1,2); show meta like 'total%';
+	select *, count(*) from count1, count2 where id in (1,2); show meta like 'total%';
+	select *, count(*) from count2, count1 where id in (1,2); show meta like 'total%';
+	select idd, count(*) from count1, count2 where id in (1,2); show meta like 'total%';
+	select idd, count(*) from count2, count1 where id in (1,2); show meta like 'total%';
+	select *, count(*) from count1, count2 where id in (100); show meta like 'total%';
+	select idd, count(*) from count2, count1 where id in (100); show meta like 'total%';
+	select count(*) from dist_count1 where id in (1,2); show meta like 'total%';
+	select count(*) from dist_count2 where id in (1,2); show meta like 'total%';
+	select *, count(*) from dist_count1 where id in (1,2); show meta like 'total%';
+	select *, count(*) from dist_count2 where id in (1,2); show meta like 'total%';
+	select idd, count(*) from dist_count1 where id in (1,2); show meta like 'total%';
+	select idd, count(*) from dist_count2 where id in (10,11); show meta like 'total%';
+	select *, count(*) from dist_count1 where id in (100); show meta like 'total%';
+	select idd, count(*) from dist_count2 where id in (100); show meta like 'total%';
 
 	<!-- empty result set with constant columns -->
 	select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2;

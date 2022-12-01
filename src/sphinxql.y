@@ -1359,6 +1359,11 @@ index_or_table:
 	| TOK_TABLE
 	;
 
+indexes_or_tables:
+	TOK_INDEXES
+	| TOK_TABLES
+	;
+
 //////////////////////////////////////////////////////////////////////////
 
 set_stmt:
@@ -1403,7 +1408,7 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
 		}
-	| TOK_SET TOK_INDEX identidx TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
+	| TOK_SET index_or_table identidx TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $5, SET_INDEX_UVAR );
 			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
@@ -1741,7 +1746,7 @@ isolation_level:
 ////////////////////////////////////////////////////////////
 
 attach_index:
-	TOK_ATTACH TOK_INDEX identidx TOK_TO TOK_RTINDEX identidx opt_with_truncate
+	TOK_ATTACH index_or_table identidx TOK_TO rtindex identidx opt_with_truncate
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
@@ -1761,7 +1766,7 @@ opt_with_truncate:
 //////////////////////////////////////////////////////////////////////////
 
 flush_rtindex:
-	TOK_FLUSH TOK_RTINDEX identidx
+	TOK_FLUSH rtindex identidx
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
@@ -1860,7 +1865,7 @@ opt_with_reconfigure:
 
 optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
-		TOK_INDEX identidx opt_option_clause
+		index_or_table identidx opt_option_clause
 			{
 				pParser->ToString ( pParser->m_pStmt->m_sIndex, $4 );
 			}
@@ -1971,7 +1976,7 @@ opt_reload_index_from:
 	;
 
 reload_index:
-	TOK_RELOAD TOK_INDEX identidx opt_reload_index_from
+	TOK_RELOAD index_or_table identidx opt_reload_index_from
 		{
 			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);
@@ -1979,7 +1984,7 @@ reload_index:
 	;
 
 reload_indexes:
-	TOK_RELOAD TOK_INDEXES
+	TOK_RELOAD indexes_or_tables
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_RELOAD_INDEXES;

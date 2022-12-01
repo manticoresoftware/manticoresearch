@@ -910,7 +910,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			KEY_REMOVED, NULL },
 	{ "seamless_rotate",		0, NULL },
-	{ "preopen_indexes",		0, NULL },
+	{ "preopen_indexes",		KEY_DEPRECATED, "preopen_tables" },
 	{ "unlink_old",				0, NULL },
 	{ "ondisk_dict_default",	KEY_REMOVED, NULL },
 	{ "attr_flush_period",		0, NULL },
@@ -997,6 +997,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "optimize_cutoff",		0, nullptr },
 	{ "secondary_indexes",		0, nullptr },
 	{ "accurate_aggregation",	0, nullptr },
+	{ "preopen_tables",			0, nullptr },
 	{ NULL,						0, NULL }
 };
 

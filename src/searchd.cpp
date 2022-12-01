@@ -18737,7 +18737,13 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
-	MutableIndexSettings_c::GetDefaults().m_bPreopen = hSearchd.GetBool ( "preopen_indexes" );
+
+	// FIXME!!! remove depricated preopen_indexes
+	if ( hSearchd.Exists ( "preopen_tables" ) )
+		MutableIndexSettings_c::GetDefaults().m_bPreopen = hSearchd.GetBool ( "preopen_tables" );
+	else
+		MutableIndexSettings_c::GetDefaults().m_bPreopen = hSearchd.GetBool ( "preopen_indexes" );
+
 	sphSetUnlinkOld ( hSearchd.GetBool ( "unlink_old" ) );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit" );
 
@@ -19567,7 +19573,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT ( "-c", "--config" )	szCmdConfigFile = argv[++i];
 		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
 		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
-		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] );
+		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] ); // FIXME!!! remove depricated cli option
+		OPT ( "-t", "--table" )		dOptIndexes.Add ( argv[++i] );
 #if _WIN32
 		OPT1 ( "--servicename" )	++i; // it's valid but handled elsewhere
 #endif

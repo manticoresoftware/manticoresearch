@@ -2497,7 +2497,7 @@ int main ( int argc, char ** argv )
 
 			sConfig = argv[i];
 
-		} else if ( strcmp ( argv[i], "-i" )==0 || strcmp ( argv[i], "--index" )==0 )
+		} else if ( strcmp ( argv[i], "-i" )==0 || strcmp ( argv[i], "--index" )==0 || strcmp ( argv[i], "-t" )==0 || strcmp ( argv[i], "--table" )==0 )
 		{
 			if ( ++i>=argc )
 				sphDie ( "index name requires an argument" );

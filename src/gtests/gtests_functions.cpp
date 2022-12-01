@@ -2993,7 +2993,7 @@ struct HistCase_t
 	const char * m_sRef = nullptr;
 };
 
-static std::unique_ptr<Histogram_i> PopulateHist ( const HistCase_t & tCase )
+static std::unique_ptr<Histogram_i> PopulateHist ( const HistCase_t & tCase, bool bFinalize = true )
 {
 	std::unique_ptr<Histogram_i> pHist = CreateHistogram ( "dyn", SPH_ATTR_FLOAT, tCase.m_iSize );
 
@@ -3006,7 +3006,8 @@ static std::unique_ptr<Histogram_i> PopulateHist ( const HistCase_t & tCase )
 		}
 	}
 
-	pHist->Finalize();
+	if ( bFinalize )
+		pHist->Finalize();
 
 	return pHist;
 }
@@ -3037,7 +3038,7 @@ TEST ( functions, histogram )
 		HistCase_t tCase;
 		tCase.m_iLoop = 1;
 		tCase.m_iSize = 10;
-		std::unique_ptr<Histogram_i> pHist = PopulateHist ( tCase );
+		std::unique_ptr<Histogram_i> pHist = PopulateHist ( tCase, false );
 		for ( int i=0; i<20; i++)
 			pHist->Insert ( sphF2DW ( 10.0f ) );
 
@@ -3050,7 +3051,7 @@ TEST ( functions, histogram )
 
 		HistogramRset_t tRes;
 		pHist->EstimateRsetSize ( tFilter, tRes );
-		ASSERT_EQ( tRes.m_iTotal, 3 );
+		ASSERT_EQ( tRes.m_iTotal, 20 );
 	}
 }
 

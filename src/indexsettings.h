@@ -443,7 +443,7 @@ const char * FileAccessName ( FileAccess_e eValue );
 FileAccess_e ParseFileAccess ( CSphString sVal );
 
 int			ParseKeywordExpansion ( const char * sValue );
-void		SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
+void		SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sSettingsFile );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
 
 // combine per-index and per-attribute engine settings

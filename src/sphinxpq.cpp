@@ -75,7 +75,7 @@ static FileAccessSettings_t g_tDummyFASettings;
 class PercolateIndex_c : public PercolateIndex_i
 {
 public:
-	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
+	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
 	~PercolateIndex_c () override;
 
 	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
@@ -188,10 +188,10 @@ private:
 #define PERCOLATE_WORDS_PER_CP 128
 
 /// percolate query index factory
-std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
+std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema )
 {
 	MEMORY ( MEM_INDEX_RT );
-	return std::make_unique<PercolateIndex_c> ( tSchema, sIndexName, sPath );
+	return std::make_unique<PercolateIndex_c> ( std::move ( sIndexName ), std::move ( sPath ), std::move ( tSchema ) );
 }
 
 static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, ESphHitless eHitless )
@@ -719,10 +719,10 @@ static bool TagsMatched ( const VecTraits_T<uint64_t>& dFilter, const VecTraits_
 //////////////////////////////////////////////////////////////////////////
 // percolate index definition
 
-PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
-	: PercolateIndex_i ( sIndexName, sPath )
+PercolateIndex_c::PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema )
+	: PercolateIndex_i { std::move ( sIndexName ), std::move ( sPath ) }
 {
-	m_tSchema = tSchema;
+	m_tSchema = std::move ( tSchema );
 
 	// add id column
 	CSphColumnInfo tCol ( sphGetDocidName () );
@@ -746,10 +746,9 @@ PercolateIndex_c::~PercolateIndex_c ()
 
 	if ( m_bIndexDeleted )
 	{
-		CSphString sFile;
-		sFile.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+		CSphString sFile = GetFilename ( "meta" );
 		::unlink ( sFile.cstr() );
-		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		sFile = GetFilename ( SPH_EXT_SETTINGS );
 		::unlink ( sFile.cstr() );
 	}
 }
@@ -1589,12 +1588,9 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		return;
 
 	CSphString sError;
-	char sFile[SPH_MAX_FILENAME_LEN];
-	const char * sFiles[] = { ".meta", ".ram" };
-	for ( const char * sName : sFiles )
+	for ( const char * szExt : { "meta", "ram" } )
 	{
-		snprintf ( sFile, sizeof ( sFile ), "%s%s", m_sFilename.cstr (), sName );
-		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
+		CSphAutofile fdRT ( GetFilename ( szExt ), SPH_O_READ, sError );
 		int64_t iFileSize = fdRT.GetSize ();
 		if ( iFileSize>0 )
 			pRes->m_iDiskUse += iFileSize; // that uses disk, but not occupies
@@ -2042,7 +2038,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		}
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
-		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, m_sIndexName.cstr(), true, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( CSphWriter& tWriter ) {
+		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, GetName(), true, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( CSphWriter& tWriter ) {
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
@@ -2077,7 +2073,7 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 			break;
 
 		default:
-			sphWarning ( "index %s: unsupported command %d", m_sIndexName.cstr(), (int)pCmd->m_eCommand );
+			sphWarning ( "index %s: unsupported command %d", GetName(), (int)pCmd->m_eCommand );
 		}
 	}
 
@@ -2464,14 +2460,14 @@ void PercolateIndex_c::PostSetupUnl()
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
 	if ( GetIndexFilenameBuilder() )
 	{
-		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
 		if ( pFilenameBuilder )
 			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
 	}
 
 	// hitless
 	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
-		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		sphWarning ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 
 	m_pQueries->ReserveGap( m_dLoadedQueries.GetLength () );
 
@@ -2493,7 +2489,7 @@ void PercolateIndex_c::PostSetupUnl()
 				continue;
 			}
 		}
-		sphWarning ( "index '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_iQUID );
+		sphWarning ( "index '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", GetName(), i, tQuery.m_iQUID );
 	}
 	m_dLoadedQueries.Reset ( 0 );
 
@@ -2539,7 +2535,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	DWORD uMinFormatVer = 8;
 	if ( uVersion < uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2561,7 +2557,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
 	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
 	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
-		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
 
 	if ( bStripPath )
 	{
@@ -2576,10 +2572,10 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
-		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2649,7 +2645,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	DWORD uMinFormatVer = 9;
 	if ( uVersion < uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, m_sFilename.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2672,7 +2668,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
 	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
 	if ( m_tSettings.m_uAotFilterMask != uPrevAot )
-		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
 
 	if ( bStripPath )
 	{
@@ -2687,10 +2683,10 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 		return LOAD_E::GeneralError_e;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
-		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2776,8 +2772,7 @@ bool PercolateIndex_c::LoadMeta ( const CSphString& sMeta, bool bStripPath, File
 
 bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
 {
-	CSphString sLock;
-	sLock.SetSprintf ( "%s.lock", m_sFilename.cstr() );
+	CSphString sLock = GetFilename ( "lock" ); // notice: .lock vs .spl
 	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
 	if ( m_iLockFD < 0 )
 	{
@@ -2791,8 +2786,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 		return false;
 	}
 
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+	CSphString sMeta = GetFilename ( "meta" );
 
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
@@ -2803,9 +2797,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	if ( !LoadMeta ( sMeta, bStripPath, pFilenameBuilder, dWarnings ) )
 		return false;
 
-	CSphString sMutableFile;
-	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
-	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
+	CSphString sMutableFile = GetFilename ( SPH_EXT_SETTINGS );
+	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
 		return false;
 
 	m_tmSaved = sphMicroTimer();
@@ -2821,9 +2814,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		return;
 
 	// write new meta
-	CSphString sMeta, sMetaNew;
-	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
-	sMetaNew.SetSprintf ( "%s.meta.new", m_sFilename.cstr() );
+	CSphString sMeta = GetFilename("meta");
+	CSphString sMetaNew = GetFilename ( "meta.new" );
 
 	CSphString sError;
 	JsonEscapedBuilder sNewMeta;
@@ -2855,7 +2847,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 			sNewMeta << *pQuery;
 	}
 
-	Binlog::NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
+	Binlog::NotifyIndexFlush ( GetName(), m_iTID, bShutdown );
 
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
@@ -2876,7 +2868,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
 
-	SaveMutableSettings ( m_tMutableSettings, m_sFilename );
+	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 }
 
 
@@ -2974,7 +2966,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	CSphString sTmp;
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
-	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(),
+	return CreateReconfigure ( GetName(), IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(),
 		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), GetMemLimit(),
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
@@ -2982,7 +2974,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 // fixme? Retire this, then SaveIndexSettings/SaveTokenizersettings/SaveDictionarySettings for plain CSphWriter, only json left
 void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
 {
-	Binlog::Commit(Binlog::RECONFIGURE,&m_iTID,m_sIndexName.cstr(),false,[&tSetup] (CSphWriter& tWriter) {
+	Binlog::Commit(Binlog::RECONFIGURE,&m_iTID,GetName(),false,[&tSetup] (CSphWriter& tWriter) {
 		// reconfigure data
 		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
 		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );
@@ -3057,9 +3049,7 @@ void PercolateIndex_c::ForceRamFlush ( const char * szReason )
 	int64_t tmSave = tmNow - tmStart;
 
 	sphInfo ( "percolate: index %s: saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
-		"time delta=%d sec, took=%d.%03d sec)"
-		, m_sIndexName.cstr(), szReason, iWasTID, m_iTID
-		, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+		"time delta=%d sec, took=%d.%03d sec)", GetName(), szReason, iWasTID, m_iTID, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
 bool PercolateIndex_c::ForceDiskChunk()
@@ -3262,14 +3252,13 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 
 void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra, const FilenameBuilder_i* pParentFilenamebuilder ) const
 {
-	CSphString sPath;
-	sPath.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+	CSphString sPath = GetFilename("meta");
 	if ( sphIsReadable ( sPath ) )
 		dFiles.Add ( sPath );
 
 	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
 	{
-		sPath.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+		sPath = GetFilename ( SPH_EXT_SETTINGS );
 		if ( sphIsReadable ( sPath ) )
 			dFiles.Add ( sPath );
 	}
@@ -3277,7 +3266,7 @@ void PercolateIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExtra, const
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder { nullptr };
 	if ( !pParentFilenamebuilder && GetIndexFilenameBuilder() )
 	{
-		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
 		pParentFilenamebuilder = pFilenameBuilder.get();
 	}
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentFilenamebuilder, dExtra );

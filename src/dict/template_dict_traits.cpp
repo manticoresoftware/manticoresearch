@@ -617,7 +617,7 @@ void TemplateDictTraits_c::SweepWordformContainers ( const CSphVector<CSphSavedF
 	}
 }
 
-CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* sIndex )
+CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex )
 {
 	uint64_t uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	for ( CSphWordforms *pContainer : m_dWordformContainers )
@@ -632,10 +632,10 @@ CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSp
 
 			CSphString sAllFiles;
 			ConcatReportStrings ( dErrorReport, sAllFiles );
-			sphWarning ( "index '%s': wordforms file '%s' is shared with index '%s', but tokenizer settings are different",	sIndex,	sAllFiles.cstr(), pContainer->m_sIndexName.cstr() );
+			sphWarning ( "index '%s': wordforms file '%s' is shared with index '%s', but tokenizer settings are different",	szIndex,	sAllFiles.cstr(), pContainer->m_sIndexName.cstr() );
 		}
 
-	CSphWordforms* pContainer = LoadWordformContainer ( dFileInfos, pEmbedded, pTokenizer, sIndex );
+	CSphWordforms* pContainer = LoadWordformContainer ( dFileInfos, pEmbedded, pTokenizer, szIndex );
 	if ( pContainer )
 		m_dWordformContainers.Add ( pContainer );
 
@@ -916,13 +916,13 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 }
 
 
-CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* sIndex )
+CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* szIndex )
 {
 	// allocate it
 	auto pContainer = std::make_unique<CSphWordforms>();
 	pContainer->m_dFiles = dFileInfos;
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
-	pContainer->m_sIndexName = sIndex;
+	pContainer->m_sIndexName = szIndex;
 
 	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
 	const CSphTokenizerSettings& tSettings = pMyTokenizer->GetSettings();
@@ -979,7 +979,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 			CSphString sError;
 			if ( !rdWordforms.Open ( szFile, sError ) )
 			{
-				sphWarning ( "index '%s': %s", sIndex, sError.cstr() );
+				sphWarning ( "index '%s': %s", szIndex, sError.cstr() );
 				return nullptr;
 			}
 
@@ -993,7 +993,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 }
 
 
-bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* sIndex )
+bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex )
 {
 	if ( pEmbedded )
 	{
@@ -1010,7 +1010,7 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 				if ( tFile.Collect ( sFile.cstr() ) )
 					m_dWFFileInfos.Add ( tFile );
 				else
-					sphWarning ( "index '%s': wordforms file '%s' not found", sIndex, sFile.cstr() );
+					sphWarning ( "index '%s': wordforms file '%s' not found", szIndex, sFile.cstr() );
 			}
 	}
 
@@ -1019,12 +1019,12 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 
 	SweepWordformContainers ( m_dWFFileInfos );
 
-	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &( pEmbedded->m_dWordforms ) : nullptr, pTokenizer, sIndex );
+	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &( pEmbedded->m_dWordforms ) : nullptr, pTokenizer, szIndex );
 	if ( m_pWordforms )
 	{
 		++m_pWordforms->m_iRefCount;
 		if ( m_pWordforms->m_bHavePostMorphNF && !m_dMorph.GetLength() )
-			sphWarning ( "index '%s': wordforms contain post-morphology normal forms, but no morphology was specified", sIndex );
+			sphWarning ( "index '%s': wordforms contain post-morphology normal forms, but no morphology was specified", szIndex );
 	}
 
 	return !!m_pWordforms;

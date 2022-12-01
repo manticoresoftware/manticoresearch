@@ -32,20 +32,20 @@ struct DocidLookupCheckpoint_t
 class DocidLookupWriter_c
 {
 public:
-	explicit		DocidLookupWriter_c ( DWORD nDocs );
+					DocidLookupWriter_c ( CSphWriter& tWriter, DWORD nDocs );
 
-	bool			Open ( const CSphString & sFilename, CSphString & sError );
+	void			Start();
 	void			AddPair ( const DocidRowidPair_t & tPair );
 	bool			Finalize ( CSphString & sError );
-	CSphWriter &	GetWriter();
 
 private:
 	static const int DOCS_PER_LOOKUP_CHECKPOINT = 64;
 
+	CSphWriter&		m_tWriter;
+	DWORD			m_nDocs;
+
 	int				m_iProcessed {0};
 	int				m_iCheckpoint {0};
-	DWORD			m_nDocs {0};
-	std::unique_ptr<CSphWriter>	m_pWriter;
 	SphOffset_t		m_tCheckpointStart {0};
 	DocID_t			m_tLastDocID {0};
 	CSphFixedVector<DocidLookupCheckpoint_t> m_dCheckpoints {0};

@@ -217,7 +217,7 @@ void BinlogWriter_c::ResetCrc ()
 void BinlogWriter_c::HashCollected ()
 {
 	assert ( m_iLastCrcPos<=m_iPoolUsed );
-	m_uCRC = sphCRC32 ( m_pBuffer + m_iLastCrcPos, m_iPoolUsed - m_iLastCrcPos, m_uCRC );
+	m_uCRC = sphCRC32 ( m_pBuffer.get() + m_iLastCrcPos, m_iPoolUsed - m_iLastCrcPos, m_uCRC );
 	m_iLastCrcPos = m_iPoolUsed;
 }
 
@@ -736,7 +736,7 @@ void Binlog_c::OpenNewLog ( int iLastState )
 	if ( !iLastState ) // reuse the last binlog since it is empty or useless.
 		::unlink ( sLog.cstr() );
 
-	if ( !m_tWriter.OpenFile ( sLog.cstr(), m_sWriterError ) )
+	if ( !m_tWriter.OpenFile ( sLog, m_sWriterError ) )
 		sphDie ( "failed to create %s: errno=%d, error=%s", sLog.cstr(), errno, strerrorm(errno) );
 
 	// emit header

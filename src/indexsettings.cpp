@@ -666,7 +666,7 @@ bool KillListTargets_c::Parse ( const CSphString & sTargets, const char * szInde
 		else
 			tTarget.m_sIndex = szTargetName;
 
-		if ( tTarget.m_sIndex==szIndexName )
+		if ( tTarget.m_sIndex == szIndexName )
 		{
 			sError.SetSprintf ( "cannot apply kill list to myself: killlist_target=%s\n", sTargets.cstr() );
 			return false;
@@ -2411,19 +2411,17 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
 }
 
-void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath )
+void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sSettingsFile )
 {
 	CSphString sBuf;
 	if ( !tSettings.Save ( sBuf ) ) // no need to save in case settings were set from config
 		return;
 
 	CSphString sError;
-	CSphString sMutableNew, sMutable;
-	sMutableNew.SetSprintf ( "%s%s.new", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
-	sMutable.SetSprintf ( "%s%s", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ) );
+	CSphString sSettingsFileNew = SphSprintf ( "%s.new", sSettingsFile.cstr() );
 
 	CSphWriter tWriter;
-	if ( !tWriter.OpenFile ( sMutableNew, sError ) )
+	if ( !tWriter.OpenFile ( sSettingsFileNew, sError ) )
 		sphDie ( "failed to serialize mutable settings: %s", sError.cstr() ); // !COMMIT handle this gracefully
 
 	tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
@@ -2436,9 +2434,8 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 	}
 
 	// rename
-	if ( sph::rename ( sMutableNew.cstr(), sMutable.cstr() ) )
-		sphDie ( "failed to rename mutable settings(src=%s, dst=%s, errno=%d, error=%s)",
-			sMutableNew.cstr(), sMutable.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
+	if ( sph::rename ( sSettingsFileNew.cstr(), sSettingsFile.cstr() ) )
+		sphDie ( "failed to rename mutable settings(src=%s, dst=%s, errno=%d, error=%s)", sSettingsFileNew.cstr(), sSettingsFile.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 }
 
 

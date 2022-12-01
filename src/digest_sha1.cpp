@@ -257,7 +257,7 @@ void WriterWithHash_c::Flush()
 	assert ( !m_bHashDone ); // can't do anything with already finished hash
 	if ( m_iPoolUsed>0 )
 	{
-		m_pHasher->Update ( m_pBuffer, m_iPoolUsed );
+		m_pHasher->Update ( m_pBuffer.get(), m_iPoolUsed );
 		CSphWriter::Flush();
 	}
 }

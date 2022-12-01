@@ -1297,7 +1297,7 @@ MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * 
 {
 	MultiAgentDescRefPtr_c pRes;
 	CSphVector<AgentDesc_t *> tMirrors;
-	auto dFree = AtScopeExit ( [&tMirrors] { tMirrors.Apply( [] ( AgentDesc_t * pMirror ) { SafeDelete ( pMirror ); } ); } );
+	AT_SCOPE_EXIT ( [&tMirrors] { tMirrors.for_each( [] ( auto * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
 	WarnInfo_c tWI ( szIndexName, szAgent, pWarnings );
 

@@ -2689,6 +2689,9 @@ inline bool IsLtLib()
 #endif
 
 #define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED 1
+#if !_WIN32
+// #define BOOST_STACKTRACE_USE_ADDR2LINE 1
+#endif
 #include <boost/stacktrace.hpp>
 
 void sphBacktrace ( int iFD, bool bSafe )

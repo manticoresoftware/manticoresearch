@@ -43,7 +43,7 @@ DictRefPtr_c GetStatelessDict ( const DictRefPtr_c& pDict )
 
 ///////////////////////////////////////////////////////////////////////
 
-void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* sIndex, bool bStripFile, FilenameBuilder_i* pFilenameBuilder, CSphString& sError )
+void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* szIndex, bool bStripFile, FilenameBuilder_i* pFilenameBuilder, CSphString& sError )
 {
 	assert ( pTokenizer );
 
@@ -76,5 +76,5 @@ void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, c
 			dWordformFiles[i] = pFilenameBuilder->GetFullPath ( tSettings.m_dWordforms[i] );
 	}
 
-	pDict->LoadWordforms ( pFilenameBuilder ? dWordformFiles : tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : nullptr, pTokenizer, sIndex );
+	pDict->LoadWordforms ( pFilenameBuilder ? dWordformFiles : tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : nullptr, pTokenizer, szIndex );
 }

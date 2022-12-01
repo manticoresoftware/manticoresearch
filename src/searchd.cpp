@@ -14480,7 +14480,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 }
 
 // fwd
-static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
+static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
 
 void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
@@ -14499,7 +14499,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		pCmd->m_tReconfigure->m_bChangeSchema = true;
 	}
 
-	if ( bReconfigure && !PrepareReconfigure ( sIndex, *pCmd->m_tReconfigure, sError ) )
+	if ( bReconfigure && !PrepareReconfigure ( sIndex.cstr(), *pCmd->m_tReconfigure, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -15082,7 +15082,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 
 void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 {
-	tOut.PutString ( pIndex->GetFilename () );
+	tOut.PutString ( pIndex->GetFilebase () );
 
 	auto & tStats = pIndex->GetStats ();
 	tOut.PutNumAsString ( tStats.m_iTotalDocuments );
@@ -15417,9 +15417,9 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 }
 
 
-static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, CSphString & sWarning, CSphString & sError )
+static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, CSphString & sWarning, CSphString & sError )
 {
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sIndex.cstr() );
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 
 	// fixme: report warnings
 	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
@@ -15429,13 +15429,13 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 
 	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, tSettings.m_tIndex, sError, !tSettings.m_bChangeSchema, false ) )
 	{
-		sError.SetSprintf ( "failed to parse index '%s' schema, error: '%s'", sIndex.cstr(), sError.cstr() );
+		sError.SetSprintf ( "failed to parse index '%s' schema, error: '%s'", szIndex, sError.cstr() );
 		return false;
 	}
 
-	if ( !tSettings.m_tIndex.Setup ( hIndex, sIndex.cstr(), sWarning, sError ) )
+	if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
 	{
-		sError.SetSprintf ( "failed to parse index '%s' settings, error: '%s'", sIndex.cstr(), sError.cstr() );
+		sError.SetSprintf ( "failed to parse index '%s' settings, error: '%s'", szIndex, sError.cstr() );
 		return false;
 	}
 
@@ -15445,7 +15445,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 }
 
 
-static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
+static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
 {
 	CSphConfig hCfg;
 	if ( !ParseConfig ( &hCfg, g_sConfigFile.cstr () ) )
@@ -15460,14 +15460,14 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 		return false;
 	}
 
-	if ( !hCfg["index"].Exists ( sIndex ) )
+	if ( !hCfg["index"].Exists ( szIndex ) )
 	{
-		sError.SetSprintf ( "failed to find index '%s' in config file '%s'; using previous settings", sIndex.cstr(), g_sConfigFile.cstr () );
+		sError.SetSprintf ( "failed to find index '%s' in config file '%s'; using previous settings", szIndex, g_sConfigFile.cstr () );
 		return false;
 	}
 
 	CSphString sWarning;
-	return PrepareReconfigure ( sIndex, hCfg["index"][sIndex], tSettings, sWarning, sError );
+	return PrepareReconfigure ( szIndex, hCfg["index"][szIndex], tSettings, sWarning, sError );
 }
 
 // ALTER RTINDEX/TABLE <idx> RECONFIGURE
@@ -15484,11 +15484,11 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		return;
 	}
 
-	const CSphString & sIndex = tStmt.m_sIndex;
+	const char * szIndex = tStmt.m_sIndex.cstr();
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", sIndex.cstr() );
+		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", szIndex );
 		return;
 	}
 
@@ -15496,7 +15496,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	CSphReconfigureSettings tSettings;
 	CSphReconfigureSetup tSetup;
 
-	if ( !PrepareReconfigure ( sIndex, tSettings, sError ) )
+	if ( !PrepareReconfigure ( szIndex, tSettings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -15687,7 +15687,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	}
 
 	StrVec_t dBackupFiles;
-	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilename() );
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
 	if ( !SubstituteExternalIndexFiles ( dOldExternalFiles, tContainer.GetFiles(), sIndexPath, dBackupFiles, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15696,7 +15696,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
-	if ( !PrepareReconfigure ( tStmt.m_sIndex, tContainer.AsCfg(), tSettings, sWarning, sError ) )
+	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, sWarning, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -15758,7 +15758,7 @@ ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, 
 	if ( g_bSeamlessRotate )
 	{
 		pRes->SetStatsFrom ( *pSource );
-		auto pIdx = sphCreateIndexPhrase ( sIndex.cstr(), pRes->m_sIndexPath.cstr() );
+		auto pIdx = sphCreateIndexPhrase ( sIndex, pRes->m_sIndexPath );
 		pIdx->m_iExpansionLimit = g_iExpansionLimit;
 		pIdx->SetMutableSettings ( pRes->m_tSettings );
 		pIdx->SetGlobalIDFPath ( pRes->m_sGlobalIDFPath );
@@ -16869,7 +16869,7 @@ bool ApplyKilllistsMyAndToMe ( CSphIndex* pIdx, const char* szIndex, CSphString&
 // tServed here might be one of:
 // 1. Not yet served, and with .new ext. Need to be rotated, then loaded from scratch
 // 2. Not yet served, need to be loaded from scratch
-// 3. Served, but with now with .new. Need to be rotated, then loaded and and need to be rotated
+// 3. Served, but with now with .new. Need to be rotated, then loaded and need to be rotated
 bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSphString& sError )
 {
 	assert ( tServed.m_eType == IndexType_e::PLAIN );
@@ -17092,7 +17092,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	//////////////////
 	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
 	if ( tCheck.RotateFromNew() )
-		pNewIndex->SetBase ( IndexFiles_c::MakePath ( ".new", pNewServed->m_sIndexPath ) );
+		pNewIndex->SetFilebase ( IndexFiles_c::MakePath ( ".new", pNewServed->m_sIndexPath ) );
 
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
@@ -17130,7 +17130,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 		{
 			RIdx_c pOldIdx { pServed };
 			pNewIndex->m_iTID = pOldIdx->m_iTID;
-			pServed->SetUnlink ( pOldIdx->GetFilename() );
+			pServed->SetUnlink ( pOldIdx->GetFilebase() );
 		}
 	}
 
@@ -17482,11 +17482,11 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
-		pIdx = sphCreateIndexRT ( tSchema, szIndexName, pServed->m_tSettings.m_iMemLimit, pServed->m_sIndexPath.cstr(), bWordDict );
+		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit, bWordDict );
 		pServed->m_eType = IndexType_e::RT;
 	} else
 	{
-		pIdx = CreateIndexPercolate ( tSchema, szIndexName, pServed->m_sIndexPath.cstr() );
+		pIdx = CreateIndexPercolate ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ) );
 		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
 
@@ -17520,7 +17520,7 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 
 	// try to create index
 	pServed->m_sIndexPath = hIndex["path"].strval ();
-	auto pIdx = sphCreateIndexPhrase ( szIndexName, pServed->m_sIndexPath.cstr() );
+	auto pIdx = sphCreateIndexPhrase ( szIndexName, pServed->m_sIndexPath );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );
@@ -19012,11 +19012,9 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 // ServiceMain -> ConfigureAndPreloadOnStartup -> ConfigureAndPreloadConfiglessIndexes -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
 // from any another thread:
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError )
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t& dWarnings, CSphString& sError )
 {
-	ESphAddIndex eAdd;
-	ServedIndexRefPtr_c pJustLoadedLocal;
-	std::tie ( eAdd, pJustLoadedLocal ) = AddIndex ( sIndexName, hIndex, true, false, nullptr, sError );
+	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
 	switch ( eAdd )
@@ -19024,7 +19022,7 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	case ADD_NEEDLOAD:
 	{
 		assert ( pJustLoadedLocal );
-		fprintf ( stdout, "precaching index '%s'\n", sIndexName );
+		fprintf ( stdout, "precaching index '%s'\n", szIndexName );
 		fflush ( stdout );
 
 		IndexFiles_c dJustAddedFiles ( pJustLoadedLocal->m_sIndexPath );
@@ -19032,24 +19030,24 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 		if ( dJustAddedFiles.HasAllFiles ( ".new" ) )
 		{
 			WIdx_c WFake { pJustLoadedLocal }; // as RotateIndexGreedy wants w-locked
-			if ( RotateIndexGreedy ( *pJustLoadedLocal, sIndexName, sError ) )
+			if ( RotateIndexGreedy ( *pJustLoadedLocal, szIndexName, sError ) )
 			{
-				if ( !FixupAndLockIndex ( *pJustLoadedLocal, UnlockedHazardIdxFromServed ( *pJustLoadedLocal ), &hIndex, sIndexName, dWarnings, sError ) )
+				if ( !FixupAndLockIndex ( *pJustLoadedLocal, UnlockedHazardIdxFromServed ( *pJustLoadedLocal ), &hIndex, szIndexName, dWarnings, sError ) )
 					return ADD_ERROR;
 			} else
 			{
 				dWarnings.Add ( sError );
-				if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, sIndexName, dWarnings, sError ) )
+				if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
 					return ADD_ERROR;
 			}
-		} else if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, sIndexName, dWarnings, sError ) )
+		} else if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
 			return ADD_ERROR;
 	}
 	// no break
 	case ADD_SERVED:
 	{
 		// finally add the index to the hash of enabled.
-		g_pLocalIndexes->Add ( pJustLoadedLocal, sIndexName );
+		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
 
 		if ( !pJustLoadedLocal->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustLoadedLocal->m_sGlobalIDFPath, sError ) )
 			dWarnings.Add ( "global IDF unavailable - IGNORING" );
@@ -19077,19 +19075,19 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 		for ( const auto& tIndex : hConf["index"] )
 		{
 			const CSphConfigSection & hIndex = tIndex.second;
-			const char * sIndexName = tIndex.first.cstr();
+			const char * szIndexName = tIndex.first.cstr();
 
-			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs ) { return rhs.EqN ( sIndexName ); } ) )
+			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs ) { return rhs.EqN ( szIndexName ); } ) )
 				continue;
 
 			StrVec_t dWarnings;
 			CSphString sError;
-			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, sIndexName, dWarnings, sError );
+			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, szIndexName, dWarnings, sError );
 			for ( const auto & i : dWarnings )
-				sphWarning ( "index '%s': %s", sIndexName, i.cstr() );
+				sphWarning ( "index '%s': %s", szIndexName, i.cstr() );
 
 			if ( eAdd==ADD_ERROR )
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+				sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 
 			iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
 			iCounter +=  ( eAdd== ADD_NEEDLOAD ? 1 : 0 );

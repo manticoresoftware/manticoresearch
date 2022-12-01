@@ -41,9 +41,7 @@ struct CSphBin
 
 protected:
 	ESphHitless m_eMode;
-	int m_iSize = 0;
-
-	BYTE* m_dBuffer = nullptr;
+	CSphFixedVector<BYTE> m_dBuffer {0};
 	BYTE* m_pCurrent = nullptr;
 	int m_iLeft = 0;
 	int m_iDone = 0;
@@ -68,7 +66,6 @@ public:
 
 public:
 	explicit CSphBin ( ESphHitless eMode = SPH_HITLESS_NONE, bool bWordDict = false );
-	~CSphBin();
 
 	static int CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase );
 	void Init ( int iFD, SphOffset_t* pSharedOffset, const int iBinSize );

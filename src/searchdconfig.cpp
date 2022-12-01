@@ -99,7 +99,7 @@ static void MakeRelativePath ( CSphString & sPath )
 class FilenameBuilder_c : public FilenameBuilder_i
 {
 public:
-					explicit FilenameBuilder_c ( const char * szIndex );
+					explicit FilenameBuilder_c ( CSphString sIndex );
 
 	CSphString		GetFullPath ( const CSphString & sName ) const final;
 
@@ -108,8 +108,8 @@ private:
 };
 
 
-FilenameBuilder_c::FilenameBuilder_c ( const char * szIndex )
-	: m_sIndex ( szIndex )
+FilenameBuilder_c::FilenameBuilder_c ( CSphString sIndex )
+	: m_sIndex ( std::move ( sIndex ) )
 {}
 
 
@@ -874,10 +874,9 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 }
 
 
-static std::unique_ptr<CSphIndex> TryToPreallocRt ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
+static std::unique_ptr<CSphIndex> TryToPreallocRt ( CSphString sIndex, CSphString sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
 {
-	CSphSchema tSchemaStub;
-	auto pRT = sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true );
+	auto pRT = sphCreateIndexRT ( std::move ( sIndex ), std::move ( sNewIndexPath ), CSphSchema {}, 32 * 1024 * 1024, true );
 	if ( !pRT->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pRT->GetLastError().cstr() );
@@ -890,8 +889,7 @@ static std::unique_ptr<CSphIndex> TryToPreallocRt ( const CSphString & sIndex, c
 
 static std::unique_ptr<CSphIndex> TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
 {
-	CSphSchema tSchemaStub;
-	auto pPQ = CreateIndexPercolate ( tSchemaStub, sIndex.cstr(), sNewIndexPath.cstr() );
+	auto pPQ = CreateIndexPercolate ( sIndex, sNewIndexPath, CSphSchema{} );
 	if ( !pPQ->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pPQ->GetLastError().cstr() );

@@ -445,10 +445,10 @@ void CSphDictKeywords::DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict,
 {
 	m_iTmpFD = tTempDict.GetFD();
 	m_wrTmpDict.CloseFile();
-	m_wrTmpDict.SetFile ( tTempDict, NULL, m_sWriterError );
+	m_wrTmpDict.SetFile ( tTempDict, nullptr, m_sWriterError );
 
 	m_wrDict.CloseFile();
-	m_wrDict.SetFile ( tDict, NULL, m_sWriterError );
+	m_wrDict.SetFile ( tDict, nullptr, m_sWriterError );
 	m_wrDict.PutByte ( 1 );
 
 	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK * (int)sizeof ( DictKeyword_t ) ); // can't use less than 1 chunk
@@ -957,10 +957,10 @@ const char* CSphDictKeywords::HitblockGetKeyword ( SphWordID_t uWordID )
 
 ///////////////////////////////////////////////////////////////////////
 
-DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError )
+DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* szIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError )
 {
 	DictRefPtr_c pDict { new CSphDictKeywords() };
-	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, pFilenameBuilder, sError );
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, szIndex, bStripFile, pFilenameBuilder, sError );
 	// might be empty due to wrong morphology setup
 	if ( pDict )
 		pDict->SetSkiplistBlockSize ( iSkiplistBlockSize );

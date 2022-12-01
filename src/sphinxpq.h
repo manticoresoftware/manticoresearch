@@ -88,7 +88,7 @@ class StoredQuery_i;
 class PercolateIndex_i : public RtIndex_i
 {
 public:
-	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : RtIndex_i ( sIndexName, sFileName ) {}
+	PercolateIndex_i ( CSphString sIndexName, CSphString sPath ) : RtIndex_i { std::move ( sIndexName ), std::move ( sPath ) } {}
 	virtual bool	MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 
 	virtual std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
@@ -98,7 +98,7 @@ public:
 };
 
 /// percolate query index factory
-std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
+std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
 void FixPercolateSchema ( CSphSchema & tSchema );
 
 using CreateQueryParser_fn = std::unique_ptr<QueryParser_i> ( bool bJson );

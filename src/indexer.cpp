@@ -907,7 +907,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 
-bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources, FILE * fpDumpRows )
+bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const CSphConfigType & hSources, FILE * fpDumpRows )
 {
 	// check index type
 	bool bPlain = true;
@@ -918,7 +918,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		if ( sType!="plain" && sType!="distributed" && sType!="rt" && sType!="template" && sType!="percolate" )
 		{
-			fprintf ( stdout, "ERROR: index '%s': unknown type '%s'; fix your config file.\n", sIndexName, sType.cstr() );
+			fprintf ( stdout, "ERROR: index '%s': unknown type '%s'; fix your config file.\n", szIndexName, sType.cstr() );
 			fflush ( stdout );
 			return false;
 		}
@@ -927,7 +927,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	{
 		if ( !g_bQuiet && !g_bIgnoreNonPlain )
 		{
-			fprintf ( stdout, "WARNING: skipping non-plain index '%s'...\n", sIndexName );
+			fprintf ( stdout, "WARNING: skipping non-plain index '%s'...\n", szIndexName );
 			fflush ( stdout );
 		}
 		return g_bIgnoreNonPlain;
@@ -936,14 +936,14 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// progress bar
 	if ( !g_bQuiet )
 	{
-		fprintf ( stdout, "indexing index '%s'...\n", sIndexName );
+		fprintf ( stdout, "indexing index '%s'...\n", szIndexName );
 		fflush ( stdout );
 	}
 
 	// check config
 	if ( !hIndex("path") )
 	{
-		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sIndexName );
+		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", szIndexName );
 		return false;
 	}
 
@@ -952,11 +952,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	CSphIndexSettings tSettings;
 	{
 		CSphString sWarning, sError;
-		if ( !tSettings.Setup ( hIndex, sIndexName, sWarning, sError ) )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+		if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
+			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 
 		if ( !sWarning.IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	///////////////////
@@ -968,13 +968,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		CSphString sWarning;
 		tTokSettings.Setup ( hIndex, sWarning );
 		if ( !sWarning.IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	{
 		CSphString sWarning;
 		if ( !sphCheckTokenizerICU ( tSettings, tTokSettings, sWarning ) )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	CSphDictSettings tDictSettings;
@@ -982,25 +982,25 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		CSphString sWarning;
 		tDictSettings.Setup ( hIndex, nullptr, sWarning );
 		if ( !sWarning.IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	StrVec_t dWarnings;
 	CSphString sError;
 	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
 	if ( !pTokenizer )
-		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+		sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 
 	// enable sentence indexing on tokenizer
 	// (not in Create() because search time tokenizer does not care)
 	bool bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
 	if ( bIndexSP )
 		if ( !pTokenizer->EnableSentenceIndexing ( sError ) )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 
 	if ( hIndex("index_zones") )
 		if ( !pTokenizer->EnableZoneIndexing ( sError ) )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 
 	DictRefPtr_c pDict;
 
@@ -1013,15 +1013,15 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			Tokenizer::AddPluginFilterTo ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
 			// need token_filter that just passes init phase in case stopwords or wordforms will be loaded
 			if ( !sError.IsEmpty() )
-				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+				sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 		}
 
 		// multiforms filter
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
+			? sphCreateDictionaryKeywords ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
 		if ( !pDict )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 
 		MutableIndexSettings_c tMutableSettings;
 		tMutableSettings.Load ( hIndex, false, nullptr );
@@ -1030,13 +1030,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( tSettings.m_bIndexExactWords && !bNeedExact )
 		{
 			tSettings.m_bIndexExactWords = false;
-			fprintf ( stdout, "WARNING: index '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", sIndexName );
+			fprintf ( stdout, "WARNING: index '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
 		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && ( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
 		{
 			tSettings.m_bIndexExactWords = true;
-			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", sIndexName );
+			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
 		}
 
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
@@ -1044,7 +1044,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		// bigram filter
 		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
 		if ( !sError.IsEmpty() )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
 
 		// aot filter
 		if ( tSettings.m_uAotFilterMask )
@@ -1057,9 +1057,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
 	if ( !sError.IsEmpty () )
-		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+		fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sError.cstr() );
 
-	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
+	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, szIndexName, sError ) )
 		sphDie ( "%s", sError.cstr() );
 
 	// boundary
@@ -1106,10 +1106,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	} else
 	{
 		if ( bIndexSP )
-			sphWarning ( "index '%s': index_sp=1 requires html_strip=1 to index paragraphs", sIndexName );
+			sphWarning ( "index '%s': index_sp=1 requires html_strip=1 to index paragraphs", szIndexName );
 
 		if ( hIndex("index_zones") )
-			sphDie ( "index '%s': index_zones requires html_strip=1", sIndexName );
+			sphDie ( "index '%s': index_zones requires html_strip=1", szIndexName );
 	}
 
 	// parse all sources
@@ -1120,7 +1120,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	{
 		if ( !hSources ( pSourceName->cstr() ) )
 		{
-			fprintf ( stdout, "ERROR: index '%s': source '%s' not found.\n", sIndexName, pSourceName->cstr() );
+			fprintf ( stdout, "ERROR: index '%s': source '%s' not found.\n", szIndexName, pSourceName->cstr() );
 			continue;
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
@@ -1150,13 +1150,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 	if ( bSpawnFailed )
 	{
-		fprintf ( stdout, "ERROR: index '%s': failed to configure some of the sources, will not index.\n", sIndexName );
+		fprintf ( stdout, "ERROR: index '%s': failed to configure some of the sources, will not index.\n", szIndexName );
 		return false;
 	}
 
 	if ( !dSources.GetLength() )
 	{
-		fprintf ( stdout, "ERROR: index '%s': no valid sources configured; skipping.\n", sIndexName );
+		fprintf ( stdout, "ERROR: index '%s': no valid sources configured; skipping.\n", szIndexName );
 		return false;
 	}
 
@@ -1186,7 +1186,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateStart ( sError ) )
 			{
 				if ( !sError.IsEmpty() )
-					fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
+					fprintf ( stdout, "ERROR: index '%s': %s\n", szIndexName, sError.cstr() );
 				continue;
 			}
 
@@ -1196,12 +1196,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 				while ( dSources[i]->IterateHits ( sError ) );
 				if ( !sError.IsEmpty() )
 				{
-					fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
+					fprintf ( stdout, "ERROR: index '%s': %s\n", szIndexName, sError.cstr() );
 					sError = "";
 				}
 			}
 			if ( !sError.IsEmpty() )
-				fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
+				fprintf ( stdout, "ERROR: index '%s': %s\n", szIndexName, sError.cstr() );
 		}
 
 		tDict->Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
@@ -1218,7 +1218,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		auto pIndex = sphCreateIndexPhrase ( sIndexName, sIndexPath.cstr() );
+		auto pIndex = sphCreateIndexPhrase ( szIndexName, sIndexPath );
 		assert ( pIndex );
 
 		// check lock file
@@ -1230,7 +1230,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 		{
-			fprintf ( stdout, "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", sIndexName );
+			fprintf ( stdout, "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
 		}
 
 		if ( bInplaceEnable )
@@ -1257,10 +1257,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		if ( !bOK )
-			fprintf ( stdout, "ERROR: index '%s': %s.\n", sIndexName, pIndex->GetLastError().cstr() );
+			fprintf ( stdout, "ERROR: index '%s': %s.\n", szIndexName, pIndex->GetLastError().cstr() );
 
 		if ( !pIndex->GetLastWarning().IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s.\n", sIndexName, pIndex->GetLastWarning().cstr() );
+			fprintf ( stdout, "WARNING: index '%s': %s.\n", szIndexName, pIndex->GetLastWarning().cstr() );
 
 		pIndex->Unlock ();
 	}
@@ -1304,7 +1304,7 @@ static bool RenameIndexFiles ( const char * szPath, const char * szName, CSphInd
 	if ( bRotate )
 		sTo << ".new";
 
-	pIndex->SetBase ( sFrom.cstr() );
+	pIndex->SetFilebase ( sFrom.cstr() );
 	if ( !pIndex->Rename ( sTo.cstr() ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom.cstr(), sTo.cstr(), pIndex->GetLastError().cstr() );
@@ -1340,8 +1340,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	}
 
 	// do the merge
-	auto pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
-	auto pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );
+	auto pSrc = sphCreateIndexPhrase ( "", hSrc["path"].strval() );
+	auto pDst = sphCreateIndexPhrase ( "", hDst["path"].strval() );
 	assert ( pSrc );
 	assert ( pDst );
 	{
@@ -1435,8 +1435,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 
 		// write klist with targets but without klist itself
 		// that will affect the order of index load on rotation, but no actual klist will be applied
-		CSphString sSrcKlist;
-		sSrcKlist.SetSprintf ( "%s.tmp%s", pSrc->GetFilename(), sphGetExt(SPH_EXT_SPK) );
+		CSphString sSrcKlist = pSrc->GetTmpFilename ( SPH_EXT_SPK );
 		if ( !WriteKillList ( sSrcKlist, nullptr, 0, tTargets, sError ) )
 			sphDie ( "failed to modify klist target in index '%s': %s", sSrc, sError.cstr() );
 	}

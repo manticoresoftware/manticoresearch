@@ -80,20 +80,20 @@ CSphString IndexFiles_c::FatalMsg ( const char * sMsg )
 CSphString IndexFiles_c::FullPath ( const char * szExt, const CSphString& sSuffix, const CSphString& sBase )
 {
 	StringBuilder_c sResult;
-	sResult << (sBase.IsEmpty() ? m_sFilename : sBase) << sSuffix << szExt;
-	return sResult.cstr();
+	sResult << (sBase.IsEmpty() ? GetFilebase() : sBase) << sSuffix << szExt;
+	return (CSphString)sResult;
 }
 
 CSphString IndexFiles_c::MakePath ( const char* szSuffix, const CSphString& sBase )
 {
 	StringBuilder_c sResult;
 	sResult << sBase << szSuffix;
-	return sResult.cstr();
+	return (CSphString)sResult;
 }
 
 CSphString IndexFiles_c::MakePath ( const char * szSuffix )
 {
-	return MakePath ( szSuffix, m_sFilename );
+	return MakePath ( szSuffix, GetFilebase() );
 }
 
 bool IndexFiles_c::HasAllFiles ( const char * sType )

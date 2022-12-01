@@ -43,6 +43,7 @@
 #include "sphinxdefs.h"
 #include "schema/locator.h"
 #include "schema/schema.h"
+#include "indexfilebase.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1055,11 +1056,13 @@ namespace SI
 	class Index_i;
 }
 
+enum ESphExt : BYTE;
+
 /// generic fulltext index interface
-class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
+class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i, public IndexFileBase_c
 {
 public:
-								CSphIndex ( const char * sIndexName, const char * sFilename );
+								CSphIndex ( CSphString sIndexName, CSphString sFilename );
 								~CSphIndex() override;
 
 	const CSphString &			GetLastError() const { return m_sLastError; }
@@ -1106,12 +1109,6 @@ public:
 
 	/// precache everything which needs to be precached
 	virtual void				Preread () = 0;
-
-	/// set new index base path
-	void SetBase ( CSphString sNewBase )
-	{
-		m_sFilename = std::move ( sNewBase );
-	}
 
 	/// set new index base path, and physically rename index files too
 	enum RenameResult_e { RE_OK, RE_FAIL, RE_FATAL };
@@ -1180,7 +1177,7 @@ public:
 
 public:
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) = 0;
+	virtual void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) = 0;
 
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpDocids ( FILE * fp ) = 0;
@@ -1195,16 +1192,14 @@ public:
 	virtual int					DebugCheck ( DebugCheckError_i& ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
-	/// getter for name
+	/// getter for name. Notice, const char* returned as it is mostly used for printing name
 	const char *				GetName () const { return m_sIndexName.cstr(); }
 
-	void						SetName ( const char * sName ) { m_sIndexName = sName; }
-
-	/// get for the base file name
-	const char *				GetFilename () const { return m_sFilename.cstr(); }
+	void						SetName ( CSphString sNewName ) { m_sIndexName = std::move ( sNewName ); }
 
 	/// get actual index files list
 	virtual void				GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const {}
+
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphVector<SphAttr_t> BuildDocList () const;
@@ -1259,8 +1254,9 @@ protected:
 
 	int							m_iMaxCachedDocs = 0;
 	int							m_iMaxCachedHits = 0;
-	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages.
-	CSphString					m_sFilename;
+
+private:
+	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages. Use GetName()!
 
 public:
 	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
@@ -1300,7 +1296,7 @@ public:
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) override { return true; }
 	bool				AddRemoveField ( bool, const CSphString &, DWORD, CSphString & ) override { return true; }
-	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
+	void				DebugDumpHeader ( FILE *, const CSphString&, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
 	int					DebugCheck ( DebugCheckError_i& ) override { return 0; }
@@ -1361,10 +1357,10 @@ struct SphQueueRes_t : public ISphNoncopyable
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implementation
-std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
+std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( CSphString sIndexName, CSphString sFilename );
 
 /// create template (tokenizer) index implementation
-std::unique_ptr<CSphIndex>		sphCreateIndexTemplate ( const char * szIndexName );
+std::unique_ptr<CSphIndex>		sphCreateIndexTemplate ( CSphString sIndexName );
 
 /// set JSON attribute indexing options
 /// bStrict is whether to stop indexing on error, or just ignore the attribute value

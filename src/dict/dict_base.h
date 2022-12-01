@@ -82,7 +82,7 @@ public:
 	virtual void WriteStopwords ( JsonEscapedBuilder& tOut ) const = 0;
 
 	/// load wordforms from a given list of files
-	virtual bool LoadWordforms ( const StrVec_t&, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* sIndex ) = 0;
+	virtual bool LoadWordforms ( const StrVec_t&, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex ) = 0;
 
 	/// write wordforms to a file
 	virtual void WriteWordforms ( CSphWriter& tWriter ) const = 0;
@@ -201,16 +201,16 @@ public:
 };
 
 
-void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* sIndex, bool bStripFile, FilenameBuilder_i* pFilenameBuilder, CSphString& sError );
+void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* szIndex, bool bStripFile, FilenameBuilder_i* pFilenameBuilder, CSphString& sError );
 
 /// returns pDict, if stateless. Or it's clone, if not
 DictRefPtr_c GetStatelessDict ( const DictRefPtr_c& pDict );
 
 /// CRC32/FNV64 dictionary factory
-DictRefPtr_c sphCreateDictionaryCRC ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError );
+DictRefPtr_c sphCreateDictionaryCRC ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* szIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError );
 
 /// keyword-storing dictionary factory
-DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError );
+DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* szIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError );
 
 /// exact dict
 void SetupExactDict ( DictRefPtr_c& pDict );

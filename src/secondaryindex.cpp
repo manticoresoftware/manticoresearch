@@ -1233,14 +1233,6 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 }
 
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const char * sFile, CSphString & sError )
-{
-	common::Schema_t tSISchema;
-	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
-	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, sError );
-}
-
-
 static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISchema, CSphVector<PlainOrColumnar_t> & dDstAttrs )
 {
 	int iColumnar = 0;
@@ -1259,8 +1251,15 @@ static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISc
 	}
 }
 
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema& tSchema, CSphBitvec& tSIAttrs, const CSphString& sFile, CSphString& sError )
+{
+	common::Schema_t tSISchema;
+	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
+	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, sError );
+}
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const char * sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
+
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	CSphBitvec tSIAttrs ( tSchema.GetAttrsCount() );

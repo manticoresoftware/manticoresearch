@@ -14,10 +14,11 @@
 
 #include "sphinxstd.h"
 #include "sphinxint.h"
+#include "indexfilebase.h"
 
 #include <utility>
 
-enum ESphExt {
+enum ESphExt : BYTE {
 	SPH_EXT_SPH,
 	SPH_EXT_SPA,
 	SPH_EXT_SPB,
@@ -52,15 +53,11 @@ struct IndexFileExt_t
 CSphVector<IndexFileExt_t>	sphGetExts();
 const char*					sphGetExt ( ESphExt eExt );
 
-class CSphIndex;
-CSphString GetExt ( ESphExt eExt, bool bTemp, const CSphIndex * pIndex );
-
 /// encapsulates all common actions over index files in general (copy/rename/delete etc.)
-class IndexFiles_c : public ISphNoncopyable
+class IndexFiles_c : public IndexFileBase_c
 {
 	DWORD		m_uVersion = INDEX_FORMAT_VERSION;
 	CSphString	m_sIndexName;	// used for information purposes (logs)
-	CSphString	m_sFilename;	// prefix (i.e. folder + index name, excluding extensions)
 	CSphString	m_sLastError;
 	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
 	CSphString FullPath ( const char * szExt, const CSphString& sSuffix = "", const CSphString& sBase = "" );
@@ -69,19 +66,12 @@ class IndexFiles_c : public ISphNoncopyable
 public:
 	IndexFiles_c() = default;
 	explicit IndexFiles_c ( CSphString sBase, const char* sIndex=nullptr, DWORD uVersion = INDEX_FORMAT_VERSION )
-		: m_uVersion ( uVersion )
-		, m_sFilename { std::move(sBase) }
+		: IndexFileBase_c { std::move ( sBase ) }
+		, m_uVersion ( uVersion )
 	{
 		if ( sIndex )
 			SetName ( sIndex );
 	}
-
-	inline void SetBase ( CSphString sNewBase )
-	{
-		m_sFilename = std::move(sNewBase);
-	}
-
-	inline const CSphString& GetBase() const { return m_sFilename; }
 
 	inline const char * ErrorMsg () const { return m_sLastError.cstr(); }
 	inline bool IsFatal() const { return m_bFatal; }

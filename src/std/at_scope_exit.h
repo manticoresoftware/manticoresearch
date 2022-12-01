@@ -47,7 +47,7 @@ AtScopeExit_T<ACTION> AtScopeExit ( ACTION&& action )
 	return AtScopeExit_T<ACTION> { std::forward<ACTION> ( action ) };
 }
 
-#define AT_SCOPE_EXIT( action ) auto SPH_UID ( tAtExit ) = AtScopeExit ( action )
+#define AT_SCOPE_EXIT( ... ) auto SPH_UID ( tAtExit ) = AtScopeExit ( __VA_ARGS__ )
 #define AT_SCOPE_FN( action, exit_action ) action; AT_SCOPE_EXIT ( exit_action )
 #define AT_SCOPE( action, exit_action ) AT_SCOPE_FN ( action, [&] { exit_action; } )
 #define SCOPED_CHANGE( name, on_enter, on_exit ) AT_SCOPE_FN ( name on_enter, [&name] { name on_exit; } )

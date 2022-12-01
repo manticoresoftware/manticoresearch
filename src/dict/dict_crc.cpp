@@ -94,10 +94,10 @@ void DiskDictTraits_c::DictEndEntries ( SphOffset_t iDoclistOffset )
 
 //////////////////////////////////////////////////////////////////////////
 
-DictRefPtr_c sphCreateDictionaryCRC ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError )
+DictRefPtr_c sphCreateDictionaryCRC ( const CSphDictSettings& tSettings, const CSphEmbeddedFiles* pFiles, const TokenizerRefPtr_c& pTokenizer, const char* szIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i* pFilenameBuilder, CSphString& sError )
 {
 	DictRefPtr_c pDict { new CSphDictCRC<CRCALGO::FNV64> };
-	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, pFilenameBuilder, sError );
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, szIndex, bStripFile, pFilenameBuilder, sError );
 	// might be empty due to wrong morphology setup
 	if ( pDict )
 		pDict->SetSkiplistBlockSize ( iSkiplistBlockSize );

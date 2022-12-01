@@ -408,7 +408,7 @@ DiskIndexChecker_c::Impl_c::Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tRe
 bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 {
 	CSphAutoreader tHeaderReader;
-	if ( !tHeaderReader.Open ( GetFilename(SPH_EXT_SPH), sError ) )
+	if ( !tHeaderReader.Open ( GetFilename ( SPH_EXT_SPH ), sError ) )
 		return false;
 
 	const char * szHeader = tHeaderReader.GetFilename().cstr();
@@ -449,7 +449,7 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	if ( !m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI).cstr(), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
+	if ( !m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
 		return false;
 
 	// FIXME! add more header checks
@@ -517,7 +517,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ).cstr(), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
+	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
 		return false;
 
 	// FIXME! add more header checks
@@ -532,7 +532,7 @@ bool DiskIndexChecker_c::Impl_c::OpenFiles ()
 	if ( !ReadHeader ( sError ) )
 		return m_tReporter.Fail ( "error reading index header: %s", sError.cstr() );
 
-	if ( !m_tDictReader.Open ( GetFilename(SPH_EXT_SPI), sError ) )
+	if ( !m_tDictReader.Open ( GetFilename ( SPH_EXT_SPI ), sError ) )
 		return m_tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
@@ -1662,9 +1662,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocstore()
 
 CSphString DiskIndexChecker_c::Impl_c::GetFilename ( ESphExt eExt ) const
 {
-	CSphString sRes;
-	sRes.SetSprintf ( "%s%s", m_tIndex.GetFilename(), sphGetExt(eExt) );
-	return sRes;
+	return m_tIndex.GetFilename ( eExt );
 }
 
 /// public interface

@@ -28,7 +28,7 @@ public:
 	void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) final;
 	void WriteStopwords ( CSphWriter& tWriter ) const final;
 	void WriteStopwords ( JsonEscapedBuilder& tOut ) const final;
-	bool LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* sIndex ) final;
+	bool LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex ) final;
 	void WriteWordforms ( CSphWriter& tWriter ) const final;
 	void WriteWordforms ( JsonEscapedBuilder& tOut ) const final;
 	const CSphWordforms* GetWordforms() final { return m_pWordforms; }
@@ -64,8 +64,8 @@ private:
 	CSphWordforms* m_pWordforms = nullptr;
 	static CSphVector<CSphWordforms*> m_dWordformContainers;
 
-	CSphWordforms* GetWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* sIndex );
-	CSphWordforms* LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* sIndex );
+	CSphWordforms* GetWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* szIndex );
+	CSphWordforms* LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* szIndex );
 
 	int InitMorph ( const char* szMorph, int iLength, CSphString& sError );
 	int AddMorph ( int iMorph ); ///< helper that always returns ST_OK

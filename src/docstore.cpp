@@ -1044,10 +1044,7 @@ bool DocstoreBuilder_c::Init ( CSphString & sError )
 	if ( !m_pCompressor )
 		return false;
 
-	if ( !m_tWriter.OpenFile ( m_sFilename, sError ) )
-		return false;
-
-	return true;
+	return m_tWriter.OpenFile ( m_sFilename, sError );
 }
 
 

@@ -187,6 +187,10 @@ bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
 void			SetGroupingInUtcSort ( bool bGroupingInUtc );
+int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema );
+
+void			SetAccurateAggregationDefault ( bool bEnabled );
+bool			GetAccurateAggregationDefault();
 
 std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
 

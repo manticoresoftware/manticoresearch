@@ -266,14 +266,151 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 }
 
 //////////////////////////////////////////////////////////////////////////
+class DocIdCheck_i
+{
+public:
+	virtual							~DocIdCheck_i() = default;
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
+	virtual void					Init() {};
+	virtual void					DisableRewinding() = 0;
+	virtual std::pair<bool,bool>	Check ( uint64_t uValue ) = 0;
+};
+
+
+class DocIdCheck_c : public DocIdCheck_i
+{
+public:
+	DocIdCheck_c ( uint64_t uValue, std::shared_ptr<LookupReaderIterator_c> & pReader )
+		: m_uValue ( uValue )
+		, m_pReader ( pReader )
+	{}
+
+	 void		DisableRewinding() override { m_bCanRewind = false; }
+
+protected:
+	static constexpr uint64_t MIN_NEG = uint64_t(INT64_MIN);
+
+	uint64_t	m_uValue;
+	bool		m_bCanRewind = true;
+	bool		m_bRewound = false;
+	std::shared_ptr<LookupReaderIterator_c> m_pReader;
+};
+
+template <bool EQ>
+class GtPos_T : public DocIdCheck_c
+{
+	using DocIdCheck_c::DocIdCheck_c;
+
+public:
+	void Init() override
+	{
+		if ( m_bCanRewind )
+			m_pReader->HintDocID(m_uValue);
+	}
+
+	std::pair<bool,bool> Check ( uint64_t uValue ) override
+	{
+		if ( uValue >= MIN_NEG )
+			return { false, true };
+
+		if_const ( EQ )
+			return { uValue >= m_uValue, false };
+
+		return {  uValue > m_uValue, false };
+	}
+};
+
+template <bool EQ>
+class LtPos_T : public DocIdCheck_c
+{
+	using DocIdCheck_c::DocIdCheck_c;
+
+public:
+	std::pair<bool,bool> Check ( uint64_t uValue ) override
+	{
+		if_const ( EQ )
+		{
+			if ( uValue <= m_uValue ) return { true, false };
+		}
+		else
+			if ( uValue < m_uValue ) return { true, false };
+
+		if ( uValue < MIN_NEG )
+		{
+			if ( m_bCanRewind && !m_bRewound )
+			{
+				m_bRewound = true;
+				m_pReader->HintDocID(MIN_NEG);
+			}
+
+			return { false, false };
+		}
+
+		return { true, false };
+	}
+};
+
+
+template <bool EQ>
+class GtNeg_T : public DocIdCheck_c
+{
+	using DocIdCheck_c::DocIdCheck_c;
+
+public:
+	inline std::pair<bool,bool> Check ( uint64_t uValue ) override
+	{
+		if ( uValue < MIN_NEG )
+			return { true, false };
+
+		if ( m_bCanRewind && !m_bRewound && uValue>=MIN_NEG )
+		{
+			m_pReader->HintDocID(m_uValue);
+			m_bRewound = true;
+			return { false, false };
+		}
+
+		if_const ( EQ )
+			return { uValue >= m_uValue, false };
+
+		return { uValue > m_uValue, false };
+	}
+};
+
+template <bool EQ>
+class LtNeg_T : public DocIdCheck_c
+{
+	using DocIdCheck_c::DocIdCheck_c;
+
+public:
+	void Init() override
+	{
+		if ( m_bCanRewind )
+			m_pReader->HintDocID(MIN_NEG);
+	}
+
+	inline std::pair<bool,bool> Check ( uint64_t uValue ) override
+	{
+		if ( uValue < MIN_NEG )
+			return { false, false };
+
+		if_const ( EQ )
+		{
+			if ( uValue <= m_uValue ) return { true, false };
+		}
+		else
+			if ( uValue < m_uValue ) return { true, false };
+
+		return { false, true };
+	}
+};
+
+template <bool ROWID_LIMITS, bool BITMAP>
 class RowidIterator_LookupRange_T : public CachedIterator_T<BITMAP>
 {
 	using BASE = CachedIterator_T<BITMAP>;
 
 public:
-						RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries = nullptr );
+						RowidIterator_LookupRange_T ( std::shared_ptr<LookupReaderIterator_c> & pReader, DocIdCheck_i * pCheck1, DocIdCheck_i * pCheck2, int64_t iRsetEstimate, DWORD uTotalDocs, const RowIdBoundaries_t * pBoundaries = nullptr );
 
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override { return m_iProcessed; }
@@ -282,34 +419,36 @@ public:
 protected:
 	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
-	LookupReaderIterator_c m_tLookupReader;
-	DocID_t				m_tMinValue {0};
-	DocID_t				m_tMaxValue {0};
 	bool				m_bFirstTime = true;
+	std::shared_ptr<LookupReaderIterator_c> m_pReader;
+	std::unique_ptr<DocIdCheck_i> m_pCheck1;
+	std::unique_ptr<DocIdCheck_i> m_pCheck2;
 
-private:
-	bool				Fill();
+	virtual bool		Fill();
 };
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
-RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>::RowidIterator_LookupRange_T ( DocID_t tMinValue, DocID_t tMaxValue, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
+template <bool ROWID_LIMITS, bool BITMAP>
+RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::RowidIterator_LookupRange_T ( std::shared_ptr<LookupReaderIterator_c> & pReader, DocIdCheck_i * pCheck1, DocIdCheck_i * pCheck2, int64_t iRsetEstimate, DWORD uTotalDocs, const RowIdBoundaries_t * pBoundaries )
 	: BASE ( iRsetEstimate, uTotalDocs )
-	, m_tLookupReader ( pDocidLookup )
-	, m_tMinValue ( tMinValue )
-	, m_tMaxValue ( tMaxValue )
+	, m_pReader ( pReader )
+	, m_pCheck1 ( pCheck1 )
+	, m_pCheck2 ( pCheck2 )
 {
-	if_const ( !OPEN_LEFT )
-		m_tLookupReader.HintDocID ( tMinValue );
-
 	if ( pBoundaries )
 		m_tBoundaries = *pBoundaries;
 }
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
-bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	if ( m_bFirstTime )
 	{
+		if ( m_pCheck1 )
+			m_pCheck1->Init();
+
+		if ( m_pCheck2 )
+			m_pCheck2->Init();
+
 		m_bFirstTime = false;
 		if ( !Fill() )
 			return false;
@@ -318,8 +457,8 @@ bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGH
 	return BASE::ReturnRowIdChunk(dRowIdBlock);
 }
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
-bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>::Fill()
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::Fill()
 {
 	DocID_t tLookupDocID = 0;
 	RowID_t tLookupRowID = INVALID_ROWID;
@@ -328,15 +467,29 @@ bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGH
 	RowID_t * pRowIdMax = pRowIdStart + BASE::m_dCollected.GetLength()-1;
 	RowID_t * pRowID = pRowIdStart;
 
-	while ( pRowID<pRowIdMax && m_tLookupReader.Read ( tLookupDocID, tLookupRowID ) )
+	while ( pRowID<pRowIdMax && m_pReader->Read ( tLookupDocID, tLookupRowID ) )
 	{
 		m_iProcessed++;
 
-		if ( !OPEN_LEFT && ( tLookupDocID < m_tMinValue || ( !HAS_EQUAL_MIN && tLookupDocID==m_tMinValue ) ) )
-			continue;
+		if ( m_pCheck1 )
+		{
+			auto [ bAccept, bBreak ] = m_pCheck1->Check(tLookupDocID);
+			if ( bBreak )
+				break;
 
-		if ( !OPEN_RIGHT && ( tLookupDocID > m_tMaxValue || ( !HAS_EQUAL_MAX && tLookupDocID==m_tMaxValue ) ) )
-			break;
+			if ( !bAccept )
+				continue;
+		}
+
+		if ( m_pCheck2 )
+		{
+			auto [ bAccept, bBreak ] = m_pCheck2->Check(tLookupDocID);
+			if ( bBreak )
+				break;
+
+			if ( !bAccept )
+				continue;
+		}
 
 		if ( ROWID_LIMITS )
 		{
@@ -352,38 +505,34 @@ bool RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGH
 
 //////////////////////////////////////////////////////////////////////////
 
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
-class RowidIterator_LookupRangeExclude_T : public RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>
+template <bool ROWID_LIMITS, bool BITMAP>
+class RowidIterator_LookupRangeExclude_T : public RowidIterator_LookupRange_T<ROWID_LIMITS, BITMAP>
 {
-	using BASE = RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>;
+	using BASE = RowidIterator_LookupRange_T<ROWID_LIMITS, BITMAP>;
+	using BASE::BASE;
 
-public:
-			RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries );
-
-	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
+protected:
+	bool	Fill() override;
 
 private:
-	bool	m_bLeft {true};
+	void	Add ( RowID_t tLookupRowID );
 };
 
-
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
-RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>::RowidIterator_LookupRangeExclude_T ( DocID_t tMinValue, DocID_t tMaxValue, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
-	: RowidIterator_LookupRange_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP> ( tMinValue, tMaxValue, iRsetEstimate, uTotalDocs, pDocidLookup, pBoundaries )
+template <bool ROWID_LIMITS, bool BITMAP>
+void RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Add ( RowID_t tLookupRowID )
 {
-	if ( OPEN_LEFT && !OPEN_RIGHT )
-		this->m_tLookupReader.HintDocID ( this->m_tMaxValue );
-
-	m_bLeft = OPEN_RIGHT || ( !OPEN_LEFT && !OPEN_RIGHT ); 
+	if ( ROWID_LIMITS )
+	{
+		if ( tLookupRowID>=BASE::m_tBoundaries.m_tMinRowID && tLookupRowID<=BASE::m_tBoundaries.m_tMaxRowID )
+			BASE::Add(tLookupRowID);
+	}
+	else
+		BASE::Add(tLookupRowID);
 }
 
-
-template <bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT, bool ROWID_LIMITS, bool BITMAP>
-bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT,ROWID_LIMITS,BITMAP>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Fill()
 {
-	if_const ( OPEN_LEFT && OPEN_RIGHT )
-		return false;
-
 	DocID_t tLookupDocID = 0;
 	RowID_t tLookupRowID = INVALID_ROWID;
 
@@ -391,43 +540,38 @@ bool RowidIterator_LookupRangeExclude_T<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OP
 	RowID_t * pRowIdMax = pRowIdStart + BASE::m_dCollected.GetLength()-1;
 	RowID_t * pRowID = pRowIdStart;
 
-	while ( pRowID<pRowIdMax && BASE::m_tLookupReader.Read ( tLookupDocID, tLookupRowID ) )
+	while ( pRowID<pRowIdMax && ( BASE::m_pCheck1 || BASE::m_pCheck2 ) && BASE::m_pReader->Read ( tLookupDocID, tLookupRowID ) )
 	{
 		BASE::m_iProcessed++;
 
-		if ( m_bLeft )
+		if ( BASE::m_pCheck1 )
 		{
-			// use everything ending with m_tMinValue
-			if ( tLookupDocID > BASE::m_tMinValue || ( HAS_EQUAL_MIN && tLookupDocID==BASE::m_tMinValue ) )
-			{
-				// switch to right interval
-				if_const ( !OPEN_LEFT && !OPEN_RIGHT )
-				{
-					m_bLeft = false;
-					this->m_tLookupReader.HintDocID ( this->m_tMaxValue );
-					continue;
-				}
+			auto [ bAccept, bBreak ] = BASE::m_pCheck1->Check(tLookupDocID);
+			if ( bBreak )
+				BASE::m_pCheck1.reset();
 
-				return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
+			if ( bAccept )
+			{
+				Add ( tLookupRowID );
+				continue;
 			}
 		}
-		else
-		{
-			// use everything starting from m_tMaxValue
-			if ( tLookupDocID < BASE::m_tMaxValue || ( HAS_EQUAL_MAX && tLookupDocID==BASE::m_tMaxValue ) )
-				continue;
-		}
 
-		if ( ROWID_LIMITS )
+		if ( BASE::m_pCheck2 )
 		{
-			if ( tLookupRowID>=BASE::m_tBoundaries.m_tMinRowID && tLookupRowID<=BASE::m_tBoundaries.m_tMaxRowID )
-				*pRowID++ = tLookupRowID;
+			auto [ bAccept, bBreak ] = BASE::m_pCheck2->Check(tLookupDocID);
+			if ( bBreak )
+				BASE::m_pCheck2.reset();
+
+			if ( bAccept )
+			{
+				Add ( tLookupRowID );
+				continue;
+			}
 		}
-		else
-			*pRowID++ = tLookupRowID;
 	}
 
-	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
+	return BASE::Finalize();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -437,9 +581,69 @@ static bool NeedBitmapStorage ( int64_t iRsetSize, DWORD uTotalDocs )
 	return float(iRsetSize)/uTotalDocs > 0.05f;
 }
 
+
+static DocIdCheck_i * CreateCheckGt ( int64_t iMinValue, bool bHasEqualMin, std::shared_ptr<LookupReaderIterator_c> & pReader )
+{
+	int iIndex = ( iMinValue>=0 ? 1 : 0 )*2 + ( bHasEqualMin ? 1 : 0 );
+	uint64_t uVal = uint64_t(iMinValue);
+	switch ( iIndex )
+	{
+	case 0: return new GtNeg_T<false> ( uVal, pReader );
+	case 1: return new GtNeg_T<true>  ( uVal, pReader );
+	case 2: return new GtPos_T<false> ( uVal, pReader );
+	case 3: return new GtPos_T<true>  ( uVal, pReader );
+	default: return nullptr;
+	}
+}
+
+
+static DocIdCheck_i * CreateCheckLt ( int64_t iMaxValue, bool bHasEqualMax, std::shared_ptr<LookupReaderIterator_c> & pReader )
+{
+	int iIndex = ( iMaxValue>=0 ? 1 : 0 )*2 + ( bHasEqualMax ? 1 : 0 );
+	uint64_t uVal = uint64_t(iMaxValue);
+	switch ( iIndex )
+	{
+	case 0: return new LtNeg_T<false> ( uVal, pReader );
+	case 1: return new LtNeg_T<true>  ( uVal, pReader );
+	case 2: return new LtPos_T<false> ( uVal, pReader );
+	case 3:	return new LtPos_T<true>  ( uVal, pReader );
+	default: return nullptr;
+	}
+}
+
 #define DECL_CREATEVALUES( _, n, params ) case n: return new RowidIterator_LookupValues_T<!!( n & 2 ), !!( n & 1 )> params;
-#define DECL_CREATERANGEEX( _, n, params ) case n: return new RowidIterator_LookupRangeExclude_T<!!( n & 32 ), !!( n & 16 ), !!( n & 8 ), !!( n & 4 ), !!( n & 2 ), !!( n & 1 )> params;
-#define DECL_CREATERANGE( _, n, params ) case n: return new RowidIterator_LookupRange_T<!!( n & 32 ), !!( n & 16 ), !!( n & 8 ), !!( n & 4 ), !!( n & 2 ), !!( n & 1 )> params;
+
+static RowidIterator_i * CreateRowidLookupRange ( std::shared_ptr<LookupReaderIterator_c> & pReader, DocIdCheck_i * pCheck1, DocIdCheck_i * pCheck2, int64_t iRsetEstimate, DWORD uTotalDocs, const RowIdBoundaries_t * pBoundaries, bool bBitmap )
+{
+	int iIndex = ( pBoundaries ? 1 : 0 )*2 + ( bBitmap ? 1 : 0 );
+	switch ( iIndex )
+	{
+	case 0: return new RowidIterator_LookupRange_T<false, false> ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	case 1: return new RowidIterator_LookupRange_T<false, true>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	case 2: return new RowidIterator_LookupRange_T<true, false>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	case 3: return new RowidIterator_LookupRange_T<true, true>   ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	default:
+		assert ( 0 && "Internal error" );
+		return nullptr;
+	}
+}
+
+
+static RowidIterator_i * CreateRowidLookupRangeExclude ( std::shared_ptr<LookupReaderIterator_c> & pReader, DocIdCheck_i * pCheck1, DocIdCheck_i * pCheck2, int64_t iRsetEstimate, DWORD uTotalDocs, const RowIdBoundaries_t * pBoundaries, bool bBitmap )
+{
+	int iIndex = ( pBoundaries ? 1 : 0 )*2 + ( bBitmap ? 1 : 0 );
+	switch ( iIndex )
+	{
+	case 0: return new RowidIterator_LookupRangeExclude_T<false, false> ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	case 1: return new RowidIterator_LookupRangeExclude_T<false, true>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	case 2: return new RowidIterator_LookupRangeExclude_T<true, false>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	case 3: return new RowidIterator_LookupRangeExclude_T<true, true>   ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	default:
+		assert ( 0 && "Internal error" );
+		return nullptr;
+	}
+}
+
 
 static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilter, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 {
@@ -463,21 +667,25 @@ static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilt
 
 	case SPH_FILTER_RANGE:
 		{
-			int iIndex = tFilter.m_bHasEqualMin * 32 + tFilter.m_bHasEqualMax * 16 + tFilter.m_bOpenLeft * 8 + tFilter.m_bOpenRight * 4 + !!pBoundaries * 2 + bBitmap;
+			auto pReader = std::make_shared<LookupReaderIterator_c>(pDocidLookup);
+			
 			if ( tFilter.m_bExclude )
-				switch ( iIndex )
+			{
+				DocIdCheck_i * pCheck1 = tFilter.m_bOpenLeft ? nullptr : CreateCheckLt ( tFilter.m_iMinValue, !tFilter.m_bHasEqualMin, pReader );
+				DocIdCheck_i * pCheck2 = tFilter.m_bOpenRight ? nullptr : CreateCheckGt ( tFilter.m_iMaxValue, !tFilter.m_bHasEqualMax, pReader );
+				if ( pCheck1 && pCheck2 )
 				{
-					BOOST_PP_REPEAT ( 64, DECL_CREATERANGEEX, ( tFilter.m_iMinValue, tFilter.m_iMaxValue, iRsetEstimate, uTotalDocs, pDocidLookup, pBoundaries ) )
-					default: assert ( 0 && "Internal error" ); return nullptr;
+					pCheck1->DisableRewinding();
+					pCheck2->DisableRewinding();
 				}
-			else
-				switch ( iIndex )
-				{
-					BOOST_PP_REPEAT ( 64, DECL_CREATERANGE, ( tFilter.m_iMinValue, tFilter.m_iMaxValue, iRsetEstimate, uTotalDocs, pDocidLookup, pBoundaries ) )
-					default: assert ( 0 && "Internal error" ); return nullptr;
-				}
+
+				return CreateRowidLookupRangeExclude ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries, bBitmap );
+			}
+
+			DocIdCheck_i * pCheck1 = tFilter.m_bOpenLeft ? nullptr : CreateCheckGt ( tFilter.m_iMinValue, tFilter.m_bHasEqualMin, pReader );
+			DocIdCheck_i * pCheck2 = tFilter.m_bOpenRight ? nullptr : CreateCheckLt ( tFilter.m_iMaxValue, tFilter.m_bHasEqualMax, pReader );
+			return CreateRowidLookupRange ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries, bBitmap ); 
 		}
-		break;
 
 	default:
 		break;

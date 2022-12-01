@@ -32,6 +32,13 @@ index test
 	source	= test
 	path	= <data_path/>/test
 }
+
+index rt
+{
+	type			= rt
+	rt_field		= body
+	path			= <data_path/>/rt
+}
 </config>
 
 <db_create>
@@ -90,6 +97,27 @@ INSERT INTO test_table (id, text) VALUES
 
 	select * from test where id&lt;0;
 	select * from test where id=0;
+
+	insert into rt values ( 50000000000, 'five' );
+	insert into rt values ( 50000000001, 'five+1' );
+	insert into rt values ( 60000000000, 'six' );
+	insert into rt values ( 60000000001, 'six+1' );
+	insert into rt values ( 9223372036854775806, 'max -1' );
+	insert into rt values ( 9223372036854775807, 'max' );
+	insert into rt values ( 9223372036854775808, 'max +1' );
+	insert into rt values ( -1, '-1');
+	insert into rt values ( -9223372036854775808, 'min');
+	insert into rt values ( 0, 'zero');
+
+	select * from rt order by id asc;
+	select * from rt where id&lt;0 order by id asc;
+	select * from rt where id&lt;-1 order by id asc;
+
+	flush ramchunk rt;
+
+	select * from rt order by id asc;
+	select * from rt where id&lt;0 order by id asc;
+	select * from rt where id&lt;-1 order by id asc;
 </sphinxql>
 </queries>
 

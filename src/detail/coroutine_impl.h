@@ -36,7 +36,10 @@ void ClonableCtx_T<REFCONTEXT, CONTEXT, IS_ORDERED>::LimitConcurrency ( int iDis
 
 	auto iContexts = iDistThreads - 1; // one context is always clone-free
 	if ( !iContexts )
+	{
+		m_bSingle = true;
 		return;
+	}
 
 	m_dChildrenContexts.Reset ( iContexts );
 	m_dJobsOrder.Reset ( iContexts );

@@ -490,8 +490,11 @@ struct CSphQuery
 	bool			m_bLowPriority = false;		///< set low thread priority for this query
 	DWORD			m_uDebugFlags = 0;
 	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion
-	int				m_iPseudoThresh = 0;
-	int				m_iMaxMatchThresh = 0;
+
+	bool			m_bAccurateAggregation = false;		///< setting via options
+	bool			m_bExplicitAccurateAggregation = false; ///< whether anything was set via options
+
+	int				m_iMaxMatchThresh = 16384;
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
@@ -1090,7 +1093,7 @@ public:
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
-	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries ) const;
+	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const;
 	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 
 public:
@@ -1340,6 +1343,7 @@ struct SphQueueSettings_t
 	bool						m_bNeedDocids = false;
 	std::function<int64_t (const CSphString &)> m_fnGetCountDistinct;
 	bool						m_bEnableFastDistinct = false;
+	bool						m_bForceSingleThread = false;
 
 	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr )
 		: m_tSchema ( tSchema )

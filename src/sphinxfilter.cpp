@@ -1460,7 +1460,7 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 }
 
 
-static bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError )
+bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError )
 {
 	assert ( tCtx.m_pSchema );
 	const ISphSchema & tSchema = *tCtx.m_pSchema;

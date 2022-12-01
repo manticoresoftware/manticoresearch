@@ -499,9 +499,7 @@ int HistogramStreamed_T<T>::LerpCounter ( int iBucket, T tVal ) const
 	float fLerp = (float)tDistL / (float)tDist;
 	assert ( fLerp>=0.0f && fLerp<=1.0f );
 
-	int iCount = int ( fLerp * tBucketL.m_iCount + ( 1.0f - fLerp ) * tBucketR.m_iCount );
-
-	return iCount;
+	return int ( fLerp * tBucketR.m_iCount + ( 1.0f - fLerp ) * tBucketL.m_iCount );
 }
 
 template<typename T>
@@ -568,7 +566,11 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 		int iItemsCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );
 		CSphFixedVector<SphAttr_t> dHashes ( iItemsCount );
 		for ( int i=0; i<iItemsCount; i++ )
-			dHashes[i] = sphCRC32 ( tFilter.m_dStrings[i].scstr() );
+		{
+			const CSphString & sStr = tFilter.m_dStrings[i];
+			int iLen = sStr.Length();
+			dHashes[i] = iLen ? LibcCIHash_fn::Hash ( (const BYTE*)sStr.cstr(), iLen ) : 0;
+		}
 
 		// clean up duplicates and string collisions
 		dHashes.Sort();
@@ -915,8 +917,10 @@ std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAtt
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_BOOL:
 	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_STRING:
 		return CreateHistogram ( sAttr, HISTOGRAM_STREAMED_UINT32, iSize );
+
+	case SPH_ATTR_STRING:
+		return CreateHistogram ( sAttr, HISTOGRAM_STREAMED_INT64, iSize );
 
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_BIGINT:

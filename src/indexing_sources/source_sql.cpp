@@ -431,10 +431,6 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 		if ( !sCol0 ) sCol0 = "(null)";
 		if ( !sCol1 ) sCol1 = "(null)";
 
-		if ( m_tMinID<=0 )
-			LOC_ERROR ( "sql_query_range: min_id='%s': must be positive 32/64-bit unsigned integer", sCol0 );
-		if ( m_tMaxID<=0 )
-			LOC_ERROR ( "sql_query_range: max_id='%s': must be positive 32/64-bit unsigned integer", sCol1 );
 		if ( m_tMinID>m_tMaxID )
 			LOC_ERROR2 ( "sql_query_range: min_id='%s', max_id='%s': min_id must be less than max_id", sCol0, sCol1 );
 	}
@@ -445,10 +441,6 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 	{
 		if ( !HookQueryRange ( m_tParams.m_sHookQueryRange.cstr(), &m_tMinID, &m_tMaxID ) )
 			LOC_ERROR ( "hook_query_range: runtime error %s when running external hook", strerror(errno) );
-		if ( m_tMinID<=0 )
-			LOC_ERROR ( "hook_query_range: min_id=" INT64_FMT ": must be positive 32/64-bit unsigned integer", m_tMinID );
-		if ( m_tMaxID<=0 )
-			LOC_ERROR ( "hook_query_range: max_id=" INT64_FMT ": must be positive 32/64-bit unsigned integer", m_tMaxID );
 		if ( m_tMinID>m_tMaxID )
 			LOC_ERROR2 ( "hook_query_range: min_id=" INT64_FMT ", max_id=" INT64_FMT ": min_id must be less than max_id", m_tMinID, m_tMaxID );
 	}

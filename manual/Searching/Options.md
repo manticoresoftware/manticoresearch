@@ -121,23 +121,6 @@ Integer. Max found matches threshold. The value is selected automatically if not
 
 In case Manticore cannot calculate the exact matching documents count you will see `total_relation: gte` in the query [meta information](../Profiling_and_monitoring/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise you'll get `total_relation: eq`.
 
-### disable_ps_threshold
-Integer. Disables pseudo sharding when the number of unique values of a groupby attribute is greater than the threshold. Default is 65536.
-
-When a groupby query is executed, Manticore estimates the number of unique values of groupby attribute using secondary indexes. If that number is greater than the threshold,
-pseudo sharding is disabled in order to increase accuracy of count() and aggregates. Loss of accuracy may occur because pseudo sharding runs queries in several threads,
-each thread getting `max_matches` groups which are merged later. If there are a lot of unique groupby values, each thread may get its own set of groups, and groups present in
-other threads may not make it to `max_matches`. This may be avoided by increasing `max_matches`, but increasing `max_matches` with pseudo_sharding enabled leads to increased
-memory consumption.
-
-Setting `disable_ps_threshold` to a value significantly higher than the default may result in disabling pseudo sharding when you have way too many unique values.
-The more unique values you have the higher is the chance of getting inaccurate results in case one of the pseudo shards just doesn't return a group at all, 
-because after sorting it appears to be on a place greater than the `max_matches` limit.
-
-If `disable_ps_threshold` is set too low, you'll disable pseudo sharding too early and the performance will be suboptimal.
-
-See also [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), which can affect the behavior of the `max_matches` option.
-
 ### expand_keywords
 `0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
@@ -194,7 +177,7 @@ Integer. Sets the threshold that `max_matches` can be increased to. Default is 1
 
 Manticore may increase `max_matches` to improve groupby and/or aggregation accuracy when `pseudo_sharding` is enabled and if it detects that the number of unique values
 of groupby attribute is less than this threshold. Loss of accuracy may occur when pseudo sharding executes the query in several threads or RT index performs
-parallel searches in disk chunks. See [disable_ps_threshold](../Searching/Options.md#disable_ps_threshold) for more details.
+parallel searches in disk chunks.
 
 If the number of unique values of groupby attribute is less than the treshold, `max_matches` will be set to this number. Otherwise, default `max_matches` will be used.
 
@@ -260,8 +243,6 @@ The result set is in both cases the same; picking one option or the other may ju
 ### threads
 Limits max number of threads to use for current query processing. Default - no limit (the query can occupy all [threads](../Server_settings/Searchd.md#threads) as defined globally).
 For batch of queries the option must be attached to the very first query in the batch, and it is then applied when working queue is created and then is effective for the whole batch. This option has same meaning as option [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query), but applied only to the current query or batch of queries.
-
-See [disable_ps_threshold](../Searching/Options.md#disable_ps_threshold), which can affect the behavior of the `threads` option.
 
 ### token_filter
 Quoted, colon-separated of `library name:plugin name:optional string of settings`. Query-time token filter gets created on search each time full-text invoked by every index involved and let you implement a custom tokenizer that makes tokens according to custom rules.

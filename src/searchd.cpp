@@ -5195,6 +5195,8 @@ private:
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
 
+	CSphVector<std::pair<int,bool>>		m_dSplits;
+
 	StringBuilder_c						m_sError;
 private:
 	bool							ParseSysVar();
@@ -5211,10 +5213,10 @@ private:
 	int								CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
-	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const;
+	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const;
 	cServedIndexRefPtr_c			CheckIndexSelectable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
-	void							CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits );
+	void							CalcSplits ( int iConcurrency );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5489,7 +5491,7 @@ void SearchHandler_c::OnRunFinished()
 		tResult.m_iMatches = tResult.GetLength();
 }
 
-SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, ISphExprHook * pHook ) const
+SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
 	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile );
 	tQS.m_bComputeItems = true;
@@ -5499,6 +5501,7 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
 	tQS.m_fnGetCountDistinct = [pIndex]( const CSphString & sAttr ){ return pIndex->GetCountDistinct(sAttr); };
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
+	tQS.m_bForceSingleThread = bForceSingleThread;
 	return tQS;
 }
 
@@ -5507,7 +5510,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 {
 	int iValidSorters = 0;
 
-	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dNQueries.First ().m_iMaxMatches, pHook );
+	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dNQueries.First ().m_iMaxMatches, m_dSplits.First().second, pHook );
 	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra, m_pProfile );
 
 	m_dNQueries.First().m_bZSlist = tQueueRes.m_bZonespanlist;
@@ -5534,7 +5537,7 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 		CSphQuery & tQuery = m_dNQueries[iQuery];
 
 		// create queue
-		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches, pHook );
+		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches, m_dSplits.First().second, pHook );
 		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile );
 		if ( !pSorter )
 			continue;
@@ -5711,11 +5714,16 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 }
 
 
-void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSplits )
+void SearchHandler_c::CalcSplits ( int iConcurrency )
 {
-	// dSplits should already be initialized with 1s
 	if ( !g_bSplit )
+	{
+		// let's set the 'force single thread' flag for all indexes to make sure max_matches won't be increased when it is not necessary
+		for ( auto & i : m_dSplits )
+			i = { 1, true };
+
 		return;
+	}
 
 	if ( !iConcurrency )
 		iConcurrency = g_iThreads;
@@ -5739,8 +5747,21 @@ void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSpl
 		if ( !pIndex )
 			continue;
 
+		CSphVector<int64_t> dCountDistinct { m_dNQueries.GetLength() };
+		dCountDistinct.Fill(-1);
+		ARRAY_FOREACH ( i, dCountDistinct )
+		{
+			auto & tQuery = m_dNQueries[i];
+			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, RIdx_c(pIndex)->GetMatchSchema() );
+			if ( iGroupby>=0 )
+			{
+				auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
+				dCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct(sAttr);
+			}
+		}
+
 		SplitData_t & tSplitData = dSplitData[iLocal];
-		int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries );
+		int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct, iConcurrency, m_dSplits[iLocal].second );
 		if ( iMetric==-1 )
 		{
 			iSingleSplits++;
@@ -5762,7 +5783,7 @@ void SearchHandler_c::CalcSplits ( int iConcurrency, CSphFixedVector<int> & dSpl
 			if ( !tSplitData.m_bEnabled )
 				continue;
 
-			dSplits[i] = Max ( (int)round ( double(tSplitData.m_iMetric) / iTotalMetric * iLeft ), 1 );
+			m_dSplits[i].first = Max ( (int)round ( double(tSplitData.m_iMetric) / iTotalMetric * iLeft ), 1 );
 		}
 	}
 }
@@ -5934,8 +5955,8 @@ void SearchHandler_c::RunLocalSearches ()
 
 	GlobalSorters_c tGlobalSorters ( m_dNQueries, dLocalIndexes );
 
-	CSphFixedVector<int> dSplits { iNumLocals };
-	dSplits.Fill(1);
+	m_dSplits.Resize(iNumLocals);
+	m_dSplits.Fill ( { 1, false } );
 
 	CSphFixedVector<int> dOrder { iNumLocals };
 	for ( int i = 0; i<iNumLocals; ++i )
@@ -5962,7 +5983,7 @@ void SearchHandler_c::RunLocalSearches ()
 			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
 		} ) );
 
-		CalcSplits ( pDispatcher->GetConcurrency(), dSplits );
+		CalcSplits ( pDispatcher->GetConcurrency() );
 	}
 
 //	for ( int iOrder : dOrder )
@@ -6052,7 +6073,7 @@ void SearchHandler_c::RunLocalSearches ()
 				bool bCanBeCloned = dSorters.all_of ( []( auto * pSorter ){ return pSorter ? pSorter->CanBeCloned() : true; } );
 
 				// fixme: previous calculations are wrong; we are not splitting the query if we are using non-clonable sorters
-				tMultiArgs.m_iSplit = bCanBeCloned ? dSplits[iLocal] : 1;
+				tMultiArgs.m_iSplit = bCanBeCloned ? m_dSplits[iLocal].first : 1;
 				tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
 
 				dNAggrResults.First().m_tIOStats.Start ();
@@ -10477,7 +10498,6 @@ private:
 
 	bool		String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf );
 
-	bool		CheckDocId ( const CSphColumnInfo & tCol, SphAttr_t tAttr );
 	bool		CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
 	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
@@ -10526,18 +10546,6 @@ bool AttributeConverter_c::String2JsonPack ( char * pStr, CSphVector<BYTE> & dBu
 			m_sWarning.SetSprintf ( "%s; %s", m_sWarning.cstr(), m_sError.cstr() );
 
 		m_sError = "";
-	}
-
-	return true;
-}
-
-
-bool AttributeConverter_c::CheckDocId ( const CSphColumnInfo & tCol, SphAttr_t tAttr )
-{
-	if ( &tCol==m_pDocId && tAttr<0 )
-	{
-		m_sError.SetSprintf ( "'id' column is " INT64_FMT ". Must be positive.", tAttr );
-		return false;
 	}
 
 	return true;
@@ -10677,7 +10685,6 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 			m_tDoc.SetAttr ( tLoc, tAttr );
 	}
 
-	if ( !CheckDocId ( tCol, tAttr ) )				return false;
 	if ( !CheckStrings ( tCol, tVal, iCol, iRow ) )	return false;
 	if ( !CheckJson ( tCol, tVal ) )				return false;
 
@@ -13792,6 +13799,10 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		{
 			SetSecondaryIndexDefault ( !!tStmt.m_iSetValue );
 
+		} else if ( tStmt.m_sSetName=="accurate_aggregation" )
+		{
+			SetAccurateAggregationDefault ( !!tStmt.m_iSetValue );
+
 		} else if ( tStmt.m_sSetName == "threads_ex" )
 		{
 			if ( !THREAD_EX_NEEDS_VIP || tSess.GetVip() )
@@ -14793,6 +14804,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", g_bSplit ? "1" : "0" );
 	dTable.MatchTuplet ( "secondary_indexes", GetSecondaryIndexDefault() ? "1" : "0" );
+	dTable.MatchTuplet ( "accurate_aggregation", GetAccurateAggregationDefault() ? "1" : "0" );
 	dTable.MatchTupletFn ( "threads_ex_effective", [] {
 		StringBuilder_c tBuf;
 		auto x = GetEffectiveBaseDispatcherTemplate();
@@ -18909,6 +18921,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
 
 	SetSecondaryIndexDefault ( bGotSecondary );
+	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	g_sConfigPath = sphGetCwd();
 }
 

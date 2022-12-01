@@ -479,114 +479,6 @@ void RowidIterator_Union_T<RowidIterator_i,false>::AddDesc ( CSphVector<Iterator
 
 /////////////////////////////////////////////////////////////////////
 
-template <typename T, bool ROWID_LIMITS>
-class RowidIterator_UnionBitmap_T : public RowidIterator_Base_T<T, ROWID_LIMITS>
-{
-	using BASE = RowidIterator_Base_T<T, ROWID_LIMITS>;
-
-public:
-				RowidIterator_UnionBitmap_T ( T ** ppIterators, int iNumIterators, RowID_t tNumDocs, const RowIdBoundaries_t * pBoundaries = nullptr );
-
-	bool		HintRowID ( RowID_t tRowID ) override { m_tBit = tRowID; return true; }
-	bool		GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
-	int64_t		GetNumProcessed() const override { return m_iTotalProcessed; }
-	void		SetCutoff ( int iCutoff ) override {} // bitmap can't do cutoff by design
-	bool		WasCutoffHit() const override { return false; }
-	void		AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override;
-
-private:
-	BitVec_T<uint64_t> m_tBitmap;
-	IteratorDesc_t m_tDesc;
-	RowID_t		m_tBit = 0;
-	RowID_t		m_tMinRowID = 0;
-	int64_t		m_iTotalProcessed = 0;
-
-	void		StoreIteratorDesc();
-};
-
-template <typename T, bool ROWID_LIMITS>
-RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::RowidIterator_UnionBitmap_T ( T ** ppIterators, int iNumIterators, RowID_t tNumDocs, const RowIdBoundaries_t * pBoundaries )
-	: BASE ( ppIterators, iNumIterators, pBoundaries )
-{
-	if ( pBoundaries )
-	{
-		m_tBitmap.Init ( pBoundaries->m_tMaxRowID-pBoundaries->m_tMinRowID+1 );
-		m_tMinRowID = pBoundaries->m_tMinRowID;
-	}
-	else
-		m_tBitmap.Init(tNumDocs);
-
-	for ( auto & i : BASE::m_dIterators )
-		while ( i.WarmupDocs() )
-			while ( i.m_pRowID < i.m_pRowIDMax )
-			{
-				m_tBitmap.BitSet ( *i.m_pRowID - m_tMinRowID );
-				i.m_pRowID++;
-			}
-
-	StoreIteratorDesc();
-
-	for ( auto & i : BASE::m_dIterators )
-	{
-		m_iTotalProcessed += i.m_pIterator->GetNumProcessed();
-		i.m_pIterator.reset();
-	}
-}
-
-template <typename T, bool ROWID_LIMITS>
-bool RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
-{
-	RowID_t * pRowIdStart = BASE::m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + BASE::m_dCollected.GetLength()-1;
-	RowID_t * pRowID = pRowIdStart;
-	int iTotal = m_tBitmap.GetSize();
-
-	while ( pRowID<pRowIdMax && m_tBit<iTotal )
-	{
-		m_tBit = m_tBitmap.Scan(m_tBit);
-		if ( m_tBit>=iTotal )
-			break;
-
-		*pRowID++ = m_tBit + m_tMinRowID;
-		m_tBit++;
-	}
-
-	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
-}
-
-template <typename T, bool ROWID_LIMITS>
-void RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
-{
-	// first desc is enough
-	dDesc.Add(m_tDesc);
-}
-
-template <typename T, bool ROWID_LIMITS>
-void RowidIterator_UnionBitmap_T<T, ROWID_LIMITS>::StoreIteratorDesc()
-{
-	std::vector<common::IteratorDesc_t> dDesc;
-	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
-	m_tDesc = { dDesc[0].m_sAttr.c_str(), dDesc[0].m_sType.c_str() };
-}
-
-template <>
-void RowidIterator_UnionBitmap_T<RowidIterator_i, true>::StoreIteratorDesc()
-{
-	CSphVector<IteratorDesc_t> dDesc;
-	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
-	m_tDesc = { dDesc[0].m_sAttr, dDesc[0].m_sType };
-}
-
-template <>
-void RowidIterator_UnionBitmap_T<RowidIterator_i, false>::StoreIteratorDesc()
-{
-	CSphVector<IteratorDesc_t> dDesc;
-	BASE::m_dIterators[0].m_pIterator->AddDesc(dDesc);
-	m_tDesc = { dDesc[0].m_sAttr, dDesc[0].m_sType };
-}
-
-/////////////////////////////////////////////////////////////////////
-
 template <bool ROWID_LIMITS>
 class RowidIterator_Wrapper_T : public RowidIterator_i
 {
@@ -807,6 +699,10 @@ static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo,
 			dSIInfo[i].m_eForce = SecondaryIndexType_e::ANALYZER;
 
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::ANALYZER );
+
+		// this belongs in the CBO, but for now let's just remove the option to evaluate FILTER if ANALYZER is present
+		// as ANALYZERs are always faster than FILTERs
+		dSIInfo[i].m_dCapabilities.RemoveValue ( SecondaryIndexType_e::FILTER );
 	}
 }
 
@@ -1073,8 +969,8 @@ private:
 	RowIdBoundaries_t						m_tRowidBounds;
 	const CSphFilterSettings *				m_pRowIdFilter = nullptr;
 
-	bool				CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter );
-	RowidIterator_i *	CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize );
+	bool				CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize );
+	RowidIterator_i *	CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter );
 };
 
 
@@ -1090,16 +986,19 @@ SIIteratorCreator_c::SIIteratorCreator_c ( const SI::Index_i * pSIIndex, CSphVec
 {}
 
 
-bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter )
+bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize )
 {
 	common::RowidRange_t tRange { m_tRowidBounds.m_tMinRowID, m_tRowidBounds.m_tMaxRowID };
+
+	if ( m_iCutoff>=0 )
+		iRsetSize = Min ( iRsetSize, m_iCutoff );
 
 	bool bCreated = false;
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
 	std::string sError;
 	if ( ToColumnarFilter ( tColumnarFilter, tFilter, m_eCollation, m_tSchema, sWarning ) )
-		bCreated = m_pSIIndex->CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, sError );
+		bCreated = m_pSIIndex->CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, m_uRowsCount, iRsetSize, m_iCutoff, sError );
 	else
 		sphWarning ( "secondary index %s: %s", tFilter.m_sAttrName.cstr(), sWarning.cstr() );
 
@@ -1123,7 +1022,7 @@ bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_
 }
 
 
-RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize )
+RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter )
 {
 	RowidIterator_i * pIt = nullptr;
 	if ( !dFilterIt.size() )
@@ -1137,28 +1036,10 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 	}
 	else
 	{
-		const size_t BITMAP_ITERATOR_THRESH = 16;
-		const float	BITMAP_RATIO_THRESH = 0.002;
-
-		if ( m_iCutoff>=0 )
-			iRsetSize = Min ( iRsetSize, m_iCutoff );
-
-		/// fixme! account for cutoff here
-		float fRsetRatio = float ( iRsetSize ) / m_uRowsCount;
-		if ( dFilterIt.size()>BITMAP_ITERATOR_THRESH && fRsetRatio >= BITMAP_RATIO_THRESH )
-		{
-			if ( m_pRowIdFilter )
-				pIt = new RowidIterator_UnionBitmap_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), m_uRowsCount, &m_tRowidBounds );
-			else
-				pIt = new RowidIterator_UnionBitmap_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size(), m_uRowsCount );
-		}
+		if ( m_pRowIdFilter )
+			pIt = new RowidIterator_Union_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), &m_tRowidBounds );
 		else
-		{
-			if ( m_pRowIdFilter )
-				pIt = new RowidIterator_Union_T<common::BlockIterator_i,true> ( &dFilterIt[0], (int)dFilterIt.size(), &m_tRowidBounds );
-			else
-				pIt = new RowidIterator_Union_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size() );
-		}
+			pIt = new RowidIterator_Union_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size() );
 	}
 
 	if ( tFilter.m_bExclude )
@@ -1181,10 +1062,10 @@ CSphVector<RowidIterator_i *> SIIteratorCreator_c::Create()
 		int64_t iRsetSize = tSIInfo.m_iRsetEstimate;
 		const CSphFilterSettings & tFilter = m_dFilters[i];
 		std::vector<common::BlockIterator_i *> dFilterIt;
-		if ( !CreateSIIterators ( dFilterIt, tFilter ) )
+		if ( !CreateSIIterators ( dFilterIt, tFilter, iRsetSize ) )
 			continue;
 		
-		RowidIterator_i * pIt = CreateRowIdIteratorFromSI ( dFilterIt, tFilter, iRsetSize );
+		RowidIterator_i * pIt = CreateRowIdIteratorFromSI ( dFilterIt, tFilter );
 		dRes.push_back ( { pIt, iRsetSize } );
 		tSIInfo.m_bCreated = true;
 	}

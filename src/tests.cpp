@@ -577,7 +577,10 @@ static float GetEstimatedCost ( CSphQuery & tQuery, CSphIndex * pIndex, Secondar
 		dSIInfo[i].m_eType = eType;
 	}
 
-	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->Debug_GetSI(), tQuery.m_eCollation, tQuery.m_iCutoff, tStats.m_iTotalDocuments );
+	bool bImplicitCutoff;
+	int iCutoff;
+	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, {} );
+	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->GetColumnar(), pIndex->Debug_GetSI(), tQuery.m_eCollation, iCutoff, tStats.m_iTotalDocuments, 1 );
 	std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dSIInfo, tCtx ) );
 	return pEstimate->CalcQueryCost();
 }
@@ -678,6 +681,7 @@ static void ForceLookup( CSphQuery & tQuery, const char * szName )
 static CSphQuery CreateFullscanQuery ()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	return tQuery;
@@ -687,6 +691,7 @@ static CSphQuery CreateFullscanQuery ()
 static CSphQuery CreateFullscanQuery1()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 	{
 		auto & tFilter = tQuery.m_dFilters.Add();
@@ -704,6 +709,7 @@ static CSphQuery CreateFullscanQuery1()
 static CSphQuery CreateFullscanQuery2()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 	{
 		auto & tFilter = tQuery.m_dFilters.Add();
@@ -721,6 +727,7 @@ static CSphQuery CreateFullscanQuery2()
 static CSphQuery CreateFullscanQuery3()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 	{
 		auto & tFilter = tQuery.m_dFilters.Add();
@@ -755,6 +762,7 @@ static CSphQuery CreateFullscanQuery3()
 static CSphQuery CreateFullscanQuery4()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 	{
 		auto & tFilter = tQuery.m_dFilters.Add();
@@ -878,6 +886,7 @@ static void CalcCoeffsRowwise()
 static CSphQuery CreateFullscanQueryC1()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"comment_ranking","comment_ranking"} );
 	tQuery.m_sSortBy = "story_comment_count asc";
 
@@ -897,6 +906,7 @@ static CSphQuery CreateFullscanQueryC1()
 static CSphQuery CreateFullscanQueryC1b()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -915,6 +925,7 @@ static CSphQuery CreateFullscanQueryC1b()
 static CSphQuery CreateFullscanQueryC2()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -933,6 +944,7 @@ static CSphQuery CreateFullscanQueryC2()
 static CSphQuery CreateFullscanQueryC3()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1042,9 +1054,6 @@ static void CalcCoeffsColumnar()
 
 	pIndex->Preread();
 
-	auto tStats = pIndex->GetStats();
-	int64_t iTotalDocs = tStats.m_iTotalDocuments;
-
 	const int REPEATS = 20;
 
 	float fCostOfPush = 0.0f;
@@ -1129,6 +1138,7 @@ static void CalcCoeffsColumnar()
 static CSphQuery CreateFullscanQueryC2_1()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1141,6 +1151,26 @@ static CSphQuery CreateFullscanQueryC2_1()
 	}
 
 	ForceColumnar ( tQuery, "a_mva" );
+	return tQuery;
+}
+
+
+static CSphQuery CreateFullscanQueryC2_2()
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_sAttrName = "a_int";
+		tFilter.m_iMinValue = 100;
+		tFilter.m_bOpenRight = true;
+		tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+	}
+
+	ForceColumnar ( tQuery, "a_int" );
 	return tQuery;
 }
 
@@ -1165,12 +1195,126 @@ static void CalcCoeffsColumnar2()
 
 		PrintStats ( "Columnar fullscan, mva filter of 2 values", iTime, fEstimatedCost, uHash );
 	}
+
+	{
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryC2_2();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, 100 );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
+
+		PrintStats ( "Columnar fullscan, nonselective int filter; generic encoding", iTime, fEstimatedCost, uHash );
+	}
+}
+
+
+static CSphQuery CreateFullscanQueryC3_1()
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_STRING;
+		tFilter.m_sAttrName = "pickup_boroname";
+		tFilter.m_dStrings.Add("0");
+		tFilter.m_bExclude = true;
+	}
+
+	ForceColumnar ( tQuery, "pickup_boroname" );
+	return tQuery;
+}
+
+
+static CSphQuery CreateFullscanQueryC3_2()
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_sAttrName = "id";
+		tFilter.m_iMinValue = 1000;
+		tFilter.m_bOpenRight = true;
+	}
+
+	ForceColumnar ( tQuery, "id" );
+	return tQuery;
+}
+
+
+static CSphQuery CreateFullscanQueryC3_3()
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_STRING;
+		tFilter.m_sAttrName = "pickup_ntaname";
+		tFilter.m_dStrings.Add("Upper West Side");
+		tFilter.m_bExclude = true;
+	}
+
+	ForceColumnar ( tQuery, "pickup_ntaname" );
+	return tQuery;
+}
+
+
+static void CalcCoeffsColumnar3()
+{
+	CSphString sPath = "taxi1";
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "taxi1", sPath.cstr() );
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
+		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+
+	pIndex->Preread();
+
+	{
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryC3_1();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, 10 );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
+
+		PrintStats ( "Columnar fullscan, string(hash) filter of 1 value; table encoding", iTime, fEstimatedCost, uHash );
+	}
+
+	{
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryC3_2();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, 10 );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
+
+		PrintStats ( "Columnar fullscan, int range filter; generic encoding", iTime, fEstimatedCost, uHash );
+	}
+
+	{
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryC3_3();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, 10 );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::ANALYZER );
+
+		PrintStats ( "Columnar fullscan, string(hash) filter of 1 value; table encoding", iTime, fEstimatedCost, uHash );
+	}
 }
 
 
 static CSphQuery CreateFullscanQueryS1 ( int iValue )
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1189,6 +1333,7 @@ static CSphQuery CreateFullscanQueryS1 ( int iValue )
 static CSphQuery CreateFullscanQueryS2()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1209,6 +1354,7 @@ static CSphQuery CreateFullscanQueryS2()
 static CSphQuery CreateFullscanQueryS3 ( int iMin, int iMax )
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1228,6 +1374,7 @@ static CSphQuery CreateFullscanQueryS3 ( int iMin, int iMax )
 static CSphQuery CreateFullscanQueryS4()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1338,7 +1485,7 @@ static void CalcCoeffsSI()
 		int64_t iTime = 0;
 		uint64_t uHash = SPH_FNV64_SEED;
 
-		CSphQuery tQuery = CreateFullscanQueryS3 ( 0, 10 );
+		CSphQuery tQuery = CreateFullscanQueryS3 ( 0, 5 );
 		int64_t iRangeValues = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
@@ -1348,7 +1495,7 @@ static void CalcCoeffsSI()
 		float fNLogN = iRangeValues*log2f(iRangeValues);
 		float fCoeff = fNLogN/fUnionCost;
 
-		PrintStats ( "SI fullscan, range filter of 10 values (queue union)", iTime, fEstimatedCost, uHash );
+		PrintStats ( "SI fullscan, range filter of 5 values (queue union)", iTime, fEstimatedCost, uHash );
 		printf ( "\tunion coeff=%.3f, values=%d\n", fCoeff, (int)iRangeValues );
 	}
 
@@ -1357,7 +1504,7 @@ static void CalcCoeffsSI()
 		int64_t iTime = 0;
 		uint64_t uHash = SPH_FNV64_SEED;
 
-		CSphQuery tQuery = CreateFullscanQueryS3 ( 25, 35 );
+		CSphQuery tQuery = CreateFullscanQueryS3 ( 25, 30 );
 		int64_t iRangeValues = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
@@ -1367,7 +1514,7 @@ static void CalcCoeffsSI()
 		float fNLogN = iRangeValues*log2f(iRangeValues);
 		float fCoeff = fNLogN/fUnionCost;
 
-		PrintStats ( "SI fullscan, range filter of 10 values (queue union)", iTime, fEstimatedCost, uHash );
+		PrintStats ( "SI fullscan, range filter of 5 values (queue union)", iTime, fEstimatedCost, uHash );
 		printf ( "\tunion coeff=%.3f, values=%d\n", fCoeff, (int)iRangeValues );
 	}
 
@@ -1376,7 +1523,7 @@ static void CalcCoeffsSI()
 		int64_t iTime = 0;
 		uint64_t uHash = SPH_FNV64_SEED;
 
-		CSphQuery tQuery = CreateFullscanQueryS3 ( 50, 60 );
+		CSphQuery tQuery = CreateFullscanQueryS3 ( 50, 55 );
 		int64_t iRangeValues = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
 		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
 
@@ -1386,7 +1533,7 @@ static void CalcCoeffsSI()
 		float fNLogN = iRangeValues*log2f(iRangeValues);
 		float fCoeff = fNLogN/fUnionCost;
 
-		PrintStats ( "SI fullscan, range filter of 10 values (queue union)", iTime, fEstimatedCost, uHash );
+		PrintStats ( "SI fullscan, range filter of 5 values (queue union)", iTime, fEstimatedCost, uHash );
 		printf ( "\tunion coeff=%.3f, values=%d\n", fCoeff, (int)iRangeValues );
 	}
 }
@@ -1395,6 +1542,7 @@ static void CalcCoeffsSI()
 static CSphQuery CreateFullscanQueryS2_1()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1413,6 +1561,7 @@ static CSphQuery CreateFullscanQueryS2_1()
 static CSphQuery CreateFullscanQueryS2_2()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1481,6 +1630,7 @@ static void CalcCoeffsSI2()
 static CSphQuery CreateFullscanQueryS3_1()
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1522,10 +1672,51 @@ static void CalcCoeffsSI3()
 }
 
 
+static CSphQuery CreateFullscanQueryS4_1()
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_dItems.Add ( {"id","id"} );
+
+	{
+		auto & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_STRING;
+		tFilter.m_sAttrName = "pickup_ntaname";
+		tFilter.m_dStrings.Add("Upper West Side");
+	}
+
+	ForceSI ( tQuery, "pickup_ntaname" );
+	return tQuery;
+}
+
+static void CalcCoeffsSI4()
+{
+	CSphString sPath = "taxi6";
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( "taxi", sPath.cstr() );
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
+		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+
+	pIndex->Preread();
+
+	{
+		const int REPEATS = 100;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFullscanQueryS4_1();
+		RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::INDEX );
+
+		PrintStats ( "SI fullscan, string filter of 1 value", iTime, fEstimatedCost, uHash );
+	}
+}
+
 
 static CSphQuery CreateFullscanQueryL1 ( int iMin, int iMax )
 {
 	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
 	tQuery.m_dItems.Add ( {"id","id"} );
 
 	{
@@ -1669,9 +1860,11 @@ int main ()
 	CalcCoeffsRowwise();
 	CalcCoeffsColumnar();
 	CalcCoeffsColumnar2();
+	CalcCoeffsColumnar3();
 	CalcCoeffsSI();
 	CalcCoeffsSI2();
-	CalcCoeffsSI3();	
+	CalcCoeffsSI3();
+	CalcCoeffsSI4();
 	CalcCoeffsLookup();
 #endif
 

@@ -49,7 +49,9 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 
 	std::string sError; // fixme! report errors
 	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(), sError );
-	m_iColumnarCol = pColumnar->GetAttributeId ( m_sAttrName.cstr() );
+	columnar::AttrInfo_t tAttrInfo;
+	if ( pColumnar->GetAttrInfo ( m_sAttrName.cstr(), tAttrInfo ) )
+		m_iColumnarCol = tAttrInfo.m_iId;
 }
 
 

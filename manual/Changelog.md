@@ -21,7 +21,6 @@
 
   If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_an_index/Compacting_an_index.md#Optimizing-clustered-indexes) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
 * `SHOW SETTINGS`
-* `disable_ps_threshold`
 * `max_matches_increase_threshold`
 
 ### Packaging

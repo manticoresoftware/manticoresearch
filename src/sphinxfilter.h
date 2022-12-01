@@ -297,4 +297,6 @@ struct RowIdBoundaries_t
 
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
+bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
+
 #endif // _sphinxfilter_

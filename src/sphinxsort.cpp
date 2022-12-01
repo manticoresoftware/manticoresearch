@@ -34,6 +34,19 @@
 #include <sys/time.h>
 #endif
 
+static bool g_bAccurateAggregation = false;
+
+void SetAccurateAggregationDefault ( bool bEnabled )
+{
+	g_bAccurateAggregation = bEnabled;
+}
+
+
+bool GetAccurateAggregationDefault()
+{
+	return g_bAccurateAggregation;
+}
+
 
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
 {
@@ -4755,9 +4768,8 @@ private:
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
-	int		GetGroupbyAttrIndex() const;
-	int		GetGroupDistinctAttrIndex() const;
-	int		GetAttrIndex ( const CSphString & sName ) const;
+	int		GetGroupbyAttrIndex() const			{ return GetAliasedAttrIndex ( m_tQuery.m_sGroupBy, m_tQuery, *m_pSorterSchema ); }
+	int		GetGroupDistinctAttrIndex() const	{ return GetAliasedAttrIndex ( m_tQuery.m_sGroupDistinct, m_tQuery, *m_pSorterSchema ); }
 
 	ISphMatchSorter *	SpawnQueue();
 	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
@@ -5519,44 +5531,6 @@ void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
 		if ( tDep.m_eStage>tExprCol.m_eStage )
 			tDep.m_eStage = tExprCol.m_eStage;
 	}
-}
-
-
-int QueueCreator_c::GetAttrIndex ( const CSphString & sName ) const
-{
-	assert ( m_pSorterSchema );
-	auto & tSchema = *m_pSorterSchema;
-
-	int iGroupBy = tSchema.GetAttrIndex ( sName.cstr() );
-	if ( iGroupBy>=0 )
-		return iGroupBy;
-
-	// try aliased groupby attr (facets)
-	ARRAY_FOREACH ( i, m_tQuery.m_dItems )
-		if ( m_tQuery.m_sGroupBy==m_tQuery.m_dItems[i].m_sExpr )
-		{
-			iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_dItems[i].m_sAlias.cstr() );
-			break;
-
-		} else if ( m_tQuery.m_sGroupBy==m_tQuery.m_dItems[i].m_sAlias )
-		{
-			iGroupBy = tSchema.GetAttrIndex ( m_tQuery.m_dItems[i].m_sExpr.cstr() );
-			break;
-		}
-
-		return iGroupBy;
-}
-
-
-int QueueCreator_c::GetGroupbyAttrIndex() const
-{
-	return GetAttrIndex ( m_tQuery.m_sGroupBy );
-}
-
-
-int QueueCreator_c::GetGroupDistinctAttrIndex() const
-{
-	return GetAttrIndex ( m_tQuery.m_sGroupDistinct );
 }
 
 
@@ -6492,17 +6466,15 @@ int QueueCreator_c::ReduceMaxMatches() const
 int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 {
 	assert ( m_bGotGroupby );
-	if ( m_tQuery.m_bExplicitMaxMatches )
+	if ( m_tQuery.m_bExplicitMaxMatches || m_tSettings.m_bForceSingleThread )
 		return iMaxMatches;
 
 	int iGroupbyAttr = GetGroupbyAttrIndex();
 	if ( iGroupbyAttr<0 )
 		return iMaxMatches;
 
-	const int MAX_MAXMATCHES=16384;
-	int iMaxMaxMatches = m_tQuery.m_iMaxMatchThresh ? m_tQuery.m_iMaxMatchThresh : MAX_MAXMATCHES;
 	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
-	if ( iCountDistinct>iMaxMaxMatches )
+	if ( iCountDistinct > m_tQuery.m_iMaxMatchThresh )
 		return iMaxMatches;
 
 	return Max ( iCountDistinct, iMaxMatches );
@@ -6680,6 +6652,26 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 			|| IsGroupbyMagic ( sExpr );
 	});
 }
+
+
+int GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema )
+{
+	int iAttr = tSchema.GetAttrIndex ( sAttr.cstr() );
+	if ( iAttr>=0 )
+		return iAttr;
+
+	// try aliased groupby attr (facets)
+	ARRAY_FOREACH ( i, tQuery.m_dItems )
+	{
+		if ( sAttr==tQuery.m_dItems[i].m_sExpr )
+			return tSchema.GetAttrIndex ( tQuery.m_dItems[i].m_sAlias.cstr() );
+		else if ( sAttr==tQuery.m_dItems[i].m_sAlias )
+			return tSchema.GetAttrIndex ( tQuery.m_dItems[i].m_sExpr.cstr() );
+	}
+
+	return iAttr;
+}
+
 
 static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<ISphMatchSorter*> & dSorters, const VecTraits_T<QueueCreator_c> & dCreators,	const VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes )
 {

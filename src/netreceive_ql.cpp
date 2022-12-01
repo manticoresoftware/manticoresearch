@@ -26,16 +26,13 @@ namespace { // c++ way of 'static'
 // encodes Mysql Length-coded binary
 BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
 {
-	if ( iValue<0 )
-		return pOutput;
-
-	if ( iValue<251 )
+	if ( iValue>=0 && iValue<251 )
 	{
 		*pOutput++ = (BYTE)iValue;
 		return pOutput;
 	}
 
-	if ( iValue<=0xFFFF )
+	if ( iValue>=0 && iValue<=0xFFFF )
 	{
 		*pOutput++ = (BYTE)'\xFC'; // 252
 		*pOutput++ = (BYTE)iValue;
@@ -43,7 +40,7 @@ BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
 		return pOutput;
 	}
 
-	if ( iValue<=0xFFFFFF )
+	if ( iValue>=0 && iValue<=0xFFFFFF )
 	{
 		*pOutput++ = (BYTE)'\xFD'; // 253
 		*pOutput++ = (BYTE)iValue;

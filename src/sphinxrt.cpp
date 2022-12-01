@@ -6772,6 +6772,67 @@ void SorterSchemaTransform_c::Transform ( ISphMatchSorter * pSorter, const RtGua
 }
 
 
+static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t & tGuard )
+{
+	if ( tQuery.m_sGroupBy.IsEmpty() )
+		return -1;
+
+	int64_t iMaxCountDistinct = -1;
+	for ( auto & i : tGuard.m_dDiskChunks )
+	{
+		int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, i->Cidx().GetMatchSchema() );
+		if ( iGroupby>=0 )
+		{
+			int64_t iCountDistinct = i->Cidx().GetCountDistinct ( i->Cidx().GetMatchSchema().GetAttr(iGroupby).m_sName );
+			if ( iCountDistinct==-1 )
+				return -1;	// if one of the chunks doesn't have that info, we can't calculate max
+
+			iMaxCountDistinct = Max ( iCountDistinct, iMaxCountDistinct );
+		}
+	}
+
+	return iMaxCountDistinct;
+}
+
+
+static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard, int iConcurrency )
+{
+	int64_t iMaxCountDistinct = CalcMaxCountDistinct ( tQuery, tGuard );
+
+	dSplits.Resize(iJobs);
+	dSplits.Fill(1);
+
+	int iSingleSplit = 0;
+	int64_t iTotalMetric = 0;
+	CSphVector<int64_t> dMetrics { iJobs };
+	ARRAY_FOREACH ( i, dMetrics )
+	{
+		bool bForceSingleThread = false;
+		dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 }, { &iMaxCountDistinct, 1 }, iConcurrency, bForceSingleThread );
+		if ( bForceSingleThread )
+			return false;
+
+		if ( dMetrics[i]>0 )
+			iTotalMetric += dMetrics[i];
+		else
+			iSingleSplit++;
+	}
+
+	// we have more free threads than disk chunks; makes sense to apply pseudo_sharding
+	if ( tArgs.m_iSplit>iJobs )
+	{
+		int iLeft = tArgs.m_iSplit - iSingleSplit;
+		assert(iLeft>=0);
+
+		ARRAY_FOREACH ( i, dSplits )
+			if ( dMetrics[i]>0 )
+				dSplits[i] = Max ( (int)round ( double ( dMetrics[i] ) / iTotalMetric * iLeft ), 1 );
+	}
+
+	return true;
+}
+
+
 static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tResult, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard, VecTraits_T<ISphMatchSorter *> & dSorters, QueryProfile_c * pProfiler, bool bGotLocalDF, const SmallStringHash_T<int64_t> * pLocalDocs, int64_t iTotalDocs, const char * szIndexName, SorterSchemaTransform_c & tSSTransform, int64_t tmMaxTimer )
 {
 	// counter of tasks we will issue now
@@ -6787,38 +6848,19 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	// the context
 	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t, Threads::ECONTEXT::ORDERED> tClonableCtx { dSorters, tResult };
 	auto pDispatcher = Dispatcher::Make ( iJobs, tQuery.m_iCouncurrency, tDispatch, tClonableCtx.IsSingle() );
-	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
-
-	auto iStart = sphMicroTimer();
-	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
 
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	IntVec_t dSplits {iJobs};
-	dSplits.Fill(1);
-	if ( tArgs.m_iSplit>iJobs )
-	{
-		// we have more free threads than disk chunks; makes sense to apply pseudo_sharding
-		int iSingleSplit = 0;
-		int64_t iTotalMetric = 0;
-		CSphVector<int64_t> dMetrics { iJobs };
-		ARRAY_FOREACH ( i, dMetrics )
-		{
-			dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 } );
-			if ( dMetrics[i]>0 )
-				iTotalMetric += dMetrics[i];
-			else
-				iSingleSplit++;
-		}
+	int iThreads = pDispatcher->GetConcurrency();
+	if ( !CalcDiskChunkSplits ( dSplits, iJobs, tQuery, tArgs, tGuard, iThreads ) )
+		iThreads = 1;
 
-		int iLeft = tArgs.m_iSplit - iSingleSplit;
-		assert(iLeft>=0);
+	tClonableCtx.LimitConcurrency(iThreads);
 
-		ARRAY_FOREACH ( i, dSplits )
-			if ( dMetrics[i]>0 )
-				dSplits[i] = Max ( (int)round ( double ( dMetrics[i] ) / iTotalMetric * iLeft ), 1 );
-	}
+	auto iStart = sphMicroTimer();
+	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
 
 	std::atomic<bool> bInterrupt {false};
 	auto CheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };

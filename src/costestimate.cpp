@@ -26,16 +26,16 @@ public:
 private:
 	static constexpr float SCALE = 1.0f/1000000.0f;
 
-	static constexpr float COST_PUSH					= 12.5f;
+	static constexpr float COST_PUSH					= 6.0f;
 	static constexpr float COST_FILTER					= 8.5f;
-	static constexpr float COST_COLUMNAR_FILTER			= 1.5f;
+	static constexpr float COST_COLUMNAR_FILTER			= 6.0f;
 	static constexpr float COST_INTERSECT				= 5.0f;
 	static constexpr float COST_INDEX_READ_SINGLE		= 1.0f;
-	static constexpr float COST_INDEX_READ_DENSE_BITMAP	= 30.0f;
-	static constexpr float COST_INDEX_READ_SPARSE		= 700.0f;
-	static constexpr float COST_INDEX_UNION_COEFF		= 0.7f;
-	static constexpr float COST_LOOKUP_READ				= 33.0f;
-	static constexpr float COST_INDEX_ITERATOR_INIT		= 200.0f;
+	static constexpr float COST_INDEX_READ_DENSE_BITMAP	= 1.5f;
+	static constexpr float COST_INDEX_READ_SPARSE		= 30.0f;
+	static constexpr float COST_INDEX_UNION_COEFF		= 4.0f;
+	static constexpr float COST_LOOKUP_READ				= 7.0f;
+	static constexpr float COST_INDEX_ITERATOR_INIT		= 150.0f;
 
 	const CSphVector<SecondaryIndexInfo_t> &	m_dSIInfo;
 	const SelectIteratorCtx_t &					m_tCtx;
@@ -55,6 +55,7 @@ private:
 	float	CalcIndexCost() const;
 	float	CalcFilterCost ( bool bFromIterator, float fDocsAfterIndexes ) const;
 	float	CalcAnalyzerCost() const;
+	float	CalcMTCost ( float fCost ) const;
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const;
@@ -73,8 +74,7 @@ CostEstimate_c::CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInf
 bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const
 {
 	// this needs to be in sync with iterator construction code
-	const size_t BITMAP_ITERATOR_THRESH = 16;
-	const float	BITMAP_RATIO_THRESH = 0.002;
+	const size_t BITMAP_ITERATOR_THRESH = 8;
 
 	bool bFitsIteratorThresh = false;
 	if ( tFilter.m_eType==SPH_FILTER_RANGE )
@@ -90,8 +90,8 @@ bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64
 	if ( m_tCtx.m_iCutoff>=0 )
 		iRsetSize = Min ( iRsetSize, m_tCtx.m_iCutoff );
 
-	float fRsetRatio = float ( iRsetSize ) / m_tCtx.m_iTotalDocs;
-	return bFitsIteratorThresh && fRsetRatio >= BITMAP_RATIO_THRESH;
+	const int QUEUE_RSET_THRESH = 4096;
+	return bFitsIteratorThresh && iRsetSize>QUEUE_RSET_THRESH;
 }
 
 
@@ -113,7 +113,8 @@ bool CostEstimate_c::IsWideRange ( const CSphFilterSettings & tFilter ) const
 
 static bool IsSingleValueFilter ( const CSphFilterSettings & tFilter )
 {
-	return tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1;
+	return  ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1 ) ||
+			( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength()==1 );
 }
 
 
@@ -141,12 +142,10 @@ float CostEstimate_c::CalcIndexCost() const
 		const auto & tFilter = m_tCtx.m_dFilters[i];
 		if ( HasSeveralSIIterators(tFilter) )
 		{
-			if ( !NeedBitmapUnion ( tFilter, iDocs ) )
-				fCost += Cost_IndexUnionQueue(iDocs);
-
-			// we fetch real number of iterators from PGM only when we suspect that the query may have a lot of iterators
-			// otherwise we just try to guess
 			uNumIterators = CalcNumSIIterators ( tFilter, iDocs );
+
+			if ( uNumIterators>1 && !NeedBitmapUnion ( tFilter, iDocs ) )
+				fCost += Cost_IndexUnionQueue(iDocs);
 		}
 
 		if ( uNumIterators )
@@ -230,19 +229,69 @@ float CostEstimate_c::CalcAnalyzerCost() const
 		if ( tSIInfo.m_eType!=SecondaryIndexType_e::ANALYZER )
 			continue;
 
+		assert ( m_tCtx.m_pColumnar );
+		columnar::AttrInfo_t tAttrInfo;
+		bool bHasHash = false;
+		if ( m_tCtx.m_pColumnar->GetAttrInfo ( tFilter.m_sAttrName.cstr(), tAttrInfo ) )
+			bHasHash = tAttrInfo.m_bHasHash;
+
 		float fFilterComplexity = CalcGetFilterComplexity ( tSIInfo, tFilter );
 		int64_t iDocs = tSIInfo.m_iRsetEstimate;
 
-		// minmax tree eval
-		fCost += Cost_Filter ( m_tCtx.m_iTotalDocs/1024*1.33f, fFilterComplexity );
+		// filters that process but reject values are 2x faster
+		float fAcceptCoeff = std::min ( float(tSIInfo.m_iRsetEstimate)/m_tCtx.m_iTotalDocs, 1.0f ) / 2.0f + 0.5f;
+		float fTotalCoeff = fFilterComplexity*tAttrInfo.m_fComplexity*fAcceptCoeff;
 
-		// the idea is that minmax rejects most docs and 50% of the remaining docs are filtered out
-		fCost += Cost_ColumnarFilter ( Min ( iDocs*2, m_tCtx.m_iTotalDocs ), fFilterComplexity );
+		if ( bHasHash )
+		{
+			// strings with prebuilt hashes don't have minmax, so we scan the whole index
+			fCost += Cost_ColumnarFilter ( m_tCtx.m_iTotalDocs, fTotalCoeff );
+		}
+		else
+		{
+			// minmax tree eval
+			const int MINMAX_NODE_SIZE = 1024;
+			int iMatchingNodes = ( iDocs + MINMAX_NODE_SIZE - 1 ) / MINMAX_NODE_SIZE;
+			int iTreeLevels = sphLog2 ( m_tCtx.m_iTotalDocs );
+			fCost += Cost_Filter ( iMatchingNodes*iTreeLevels, fFilterComplexity );
+
+			// the idea is that minmax rejects most docs and 50% of the remaining docs are filtered out
+			fCost += Cost_ColumnarFilter ( Min ( iDocs*2, m_tCtx.m_iTotalDocs ), fTotalCoeff );
+		}
 	}
 
 	return fCost;
 }
 
+
+float CostEstimate_c::CalcMTCost ( float fCost ) const
+{
+	if ( m_tCtx.m_iThreads==1 )
+		return fCost;
+
+	int iMaxThreads = sphCpuThreadsCount();
+
+	const float fKPerf = 0.16f;
+	const float fBPerf = 1.38f;
+
+	float fMaxPerfCoeff = fKPerf*iMaxThreads + fBPerf;
+	float fMinCost = fCost/fMaxPerfCoeff;
+
+	if ( m_tCtx.m_iThreads==iMaxThreads )
+		return fMinCost;
+
+	const float fX1 = 1.0f;
+	float fX2 = iMaxThreads;
+	float fY1 = fCost;
+	float fY2 = fMinCost;
+
+	float fA = ( fY2-fY1 ) / ( 1.0f/float(sqrt(fX2)) - 1.0f/float(sqrt(fX1)) );
+	float fB = fY1 - fA / float(sqrt(fX1));
+	float fX = m_tCtx.m_iThreads;
+	float fY = fA/float(sqrt(fX)) + fB;
+
+	return fY;
+}
 
 
 uint32_t CostEstimate_c::CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const
@@ -347,21 +396,29 @@ float CostEstimate_c::CalcQueryCost()
 
 	fCost += Cost_Push ( iDocsToPush );
 
+	if ( iNumAnalyzers || iNumFilters )
+	{
+		assert(!iNumIndexes); // SI always run in a single thread
+		fCost = CalcMTCost(fCost);
+	}
+
 	return fCost;
 }
 
 /////////////////////////////////////////////////////////////////////
 
-SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> &	dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs )
+SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs, int iThreads )
 	: m_dFilters ( dFilters )
 	, m_dFilterTree ( dFilterTree )
 	, m_dHints ( dHints )
 	, m_tSchema ( tSchema )
 	, m_pHistograms ( pHistograms )
+	, m_pColumnar ( pColumnar )
 	, m_pSI ( pSI )
 	, m_eCollation ( eCollation )
 	, m_iCutoff ( iCutoff )
 	, m_iTotalDocs ( iTotalDocs )
+	, m_iThreads ( iThreads )
 {}
 
 

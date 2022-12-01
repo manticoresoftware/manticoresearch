@@ -528,8 +528,7 @@ public:
 	columnar::Iterator_i *					CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
 	std::vector<common::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<common::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
 
-	int				GetAttributeId ( const std::string & sName ) const override;
-	common::AttrType_e GetType ( const std::string & sName ) const override;
+	bool			GetAttrInfo ( const std::string & sName, columnar::AttrInfo_t & tInfo ) const override;
 	bool			EarlyReject ( const std::vector<common::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
 	bool			IsFilterDegenerate ( const common::Filter_t & tFilter ) const override { return false; }
 
@@ -597,17 +596,17 @@ columnar::Iterator_i * ColumnarRT_c::CreateIterator ( const std::string & sName,
 }
 
 
-int ColumnarRT_c::GetAttributeId ( const std::string & sName ) const
+bool ColumnarRT_c::GetAttrInfo ( const std::string & sName, columnar::AttrInfo_t & tInfo ) const
 {
 	auto * pFound = m_hAttrs ( sName.c_str() );
-	return pFound ? pFound->second : -1;
-}
+	if ( !pFound )
+		return false;
 
+	tInfo.m_iId = pFound->second;
+	tInfo.m_eType = pFound->first->GetType();
+	tInfo.m_bHasHash = false;
 
-common::AttrType_e ColumnarRT_c::GetType ( const std::string & sName ) const
-{
-	auto * pFound = m_hAttrs ( sName.c_str() );
-	return pFound ? pFound->first->GetType() : common::AttrType_e::NONE;
+	return true;
 }
 
 

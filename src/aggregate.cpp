@@ -93,7 +93,9 @@ public:
 		{
 			std::string sError; // FIXME! report errors
 			m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttr.cstr(), sError );
-			m_eType = pColumnar->GetType ( m_sAttr.cstr() );
+			columnar::AttrInfo_t tAttrInfo;
+			if ( pColumnar->GetAttrInfo ( m_sAttr.cstr(), tAttrInfo ) )
+				m_eType = tAttrInfo.m_eType;
 		}
 		else
 			m_pIterator.reset();

@@ -95,7 +95,7 @@ libs in case of implicit configuration.
 distribute the library itself (so, no galera module - no replication). But sometimes you may need to explicitly disable it. Say, if you
 want to build static binary which by desing can't load any libraries, so that even presence of call to 'dlopen' function inside daemon
 will cause link error.
-- **WITH_RE2** - build with using RE2 regular expression library. It is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and [regexp_filter](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+- **WITH_RE2** - build with using RE2 regular expression library. It is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and [regexp_filter](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
   feature.
 - **WITH_RE2_FORCE_STATIC** - download sources of RE2, compile them and link with them statically, so that final binaries will not depend on
 presence of shared `RE2` library in your system.

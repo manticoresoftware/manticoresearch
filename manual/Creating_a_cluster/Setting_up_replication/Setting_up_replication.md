@@ -52,7 +52,7 @@ For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `T
 
 All write statements for HTTP interface to a cluster's table should set `cluster` property along with `table` name. An error will be triggered otherwise.
 
-[Auto ID](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) generated for a table in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
+[Auto ID](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) generated for a table in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
 
 <!-- intro -->
 ##### SQL:

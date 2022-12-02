@@ -546,7 +546,7 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 <!-- end -->
 <!-- example mva -->
 ##### Grouping by MVA (multi-value attributes)
-Manticore supports grouping by [MVA](../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
+Manticore supports grouping by [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
@@ -741,7 +741,7 @@ class SearchResponse {
 
 <!-- example json -->
 ##### Grouping by a JSON node
-If you have a field of type [JSON](../Creating_an_index/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
+If you have a field of type [JSON](../Creating_a_table/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
 ```sql
 create table products(title text, meta json);
 insert into products values(0,'nike','{"color":"red"}'),(0,'adidas','{"color":"red"}'),(0,'puma','{"color":"green"}');

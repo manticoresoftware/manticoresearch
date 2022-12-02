@@ -204,7 +204,7 @@ Selects whether `limit`, `limit_words` and `limit_snippets` work as individual l
 #### around
 How much words to pick around each matching keywords block. Default is 5.
 #### use_boundaries
-Whether to additionally break snippets by phrase boundary characters, as configured in table settings with [phrase_boundary](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) directive. Default is 0 (don't use boundaries).
+Whether to additionally break snippets by phrase boundary characters, as configured in table settings with [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) directive. Default is 0 (don't use boundaries).
 #### weight_order
 Whether to sort the extracted snippets in order of relevance (decreasing weight), or in order of appearance in the document (increasing position). Default is 0 (don't use weight order).
 #### force_all_words
@@ -1913,7 +1913,7 @@ Most options are the same as in the [HIGHLIGHT() function](../Searching/Highligh
 The following options can be used to highlight text stored in separate files:
 
 #### load_files
-Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents invoke snippets generation in a distributed table, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
+Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents invoke snippets generation in a distributed table, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
 
 #### load_files_scattered
 Works only with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents and the main server will merge all non-erroneous results. E.g. if one agent of the distributed table has `file1.txt`, another agent has `file2.txt` and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.

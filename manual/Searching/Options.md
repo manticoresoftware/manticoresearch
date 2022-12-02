@@ -104,7 +104,7 @@ POST /search
 Supported options are:
 
 ### agent_query_timeout
-Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_query_timeout).
+Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout).
 
 ### boolean_simplify
 `0` or `1` (`0` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
@@ -122,7 +122,7 @@ Integer. Max found matches threshold. The value is selected automatically if not
 In case Manticore cannot calculate the exact matching documents count you will see `total_relation: gte` in the query [meta information](../Profiling_and_monitoring/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise you'll get `total_relation: eq`.
 
 ### expand_keywords
-`0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
+`0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
 ### field_weights
 Named integer list (per-field user weights for ranking).
@@ -133,7 +133,7 @@ SELECT ... OPTION field_weights=(title=10, body=3)
 ```
 
 ### global_idf
-Use global statistics (frequencies) from the [global_idf](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf) file for IDF computations.
+Use global statistics (frequencies) from the [global_idf](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#global_idf) file for IDF computations.
 
 ### idf
 Quoted, comma-separated list of IDF computation flags. Known flags are:
@@ -192,7 +192,7 @@ Sets maximum search query time, in milliseconds. Must be a non-negative integer.
 Integer. Max predicted search time, see [predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs).
 
 ### morphology
-`none` allows to replace all query terms with their exact forms if table was built with [index_exact_words](../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. Useful to prevent stemming or lemmatizing query terms.
+`none` allows to replace all query terms with their exact forms if table was built with [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. Useful to prevent stemming or lemmatizing query terms.
 
 ### not_terms_only_allowed
 <!-- example not_terms_only_allowed -->

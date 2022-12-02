@@ -560,7 +560,7 @@ Maximum width of the `Info` column can be limited by specifying the `columns=N` 
 
 By default, queries are shown in their original format. When the `format=sphinxql` option is specified, the queries will be shown in SQL format regardless of protocol through which they were executed.
 
-`format=all` displays all threads, otherwise idling and system threads are hidden (e.g. those busy with [OPTIMIZE](../Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-TABLE))
+`format=all` displays all threads, otherwise idling and system threads are hidden (e.g. those busy with [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE))
 
 <!-- intro -->
 ##### SQL:

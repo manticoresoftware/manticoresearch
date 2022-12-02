@@ -2,23 +2,23 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
-* [CREATE TABLE LIKE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) - Creates table using another one as a template
-* [DESCRIBE](Listing_indexes.md#DESCRIBE) - Prints out table's field list and their types
+* [CREATE TABLE](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
+* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE) - Creates table using another one as a template
+* [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
 * [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuild-secondary-index) - Updates/recovers secondary indexes
-* [DROP TABLE IF EXISTS](Deleting_an_index.md#Deleting-a-table) - Deletes table [if it exists]
-* [SHOW TABLES](Listing_indexes.md#SHOW-TABLES) - Shows tables list
-* [SHOW CREATE TABLE](Listing_indexes.md#SHOW-CREATE-TABLE) - Shows SQL command how to create the table
-* [SHOW TABLE STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) - Shows information about current table status
-* [SHOW TABLE SETTINGS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_SETTINGS.md) - Shows table settings
+* [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
+* [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
+* [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
+* [SHOW TABLE STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
+* [SHOW TABLE SETTINGS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
 
 ##### Data management
-* [INSERT](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Adds new documents
+* [INSERT](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
 * [REPLACE](Updating_documents/REPLACE.md) - Replaces existing documents with new ones
 * [UPDATE](Updating_documents/UPDATE.md) - Does in-place update in documents
 * [DELETE](Deleting_documents.md) - Deletes documents
-* [TRUNCATE TABLE](Emptying_an_index.md) - Deletes all documents from table
+* [TRUNCATE TABLE](Emptying_a_table.md) - Deletes all documents from table
 
 ##### SELECT
 * [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Searches
@@ -36,18 +36,18 @@
 * [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS.md) - Shows warnings from the latest query
 
 ##### Flushing misc things
-* [FLUSH ATTRIBUTES](Securing_and_compacting_an_index/Flushing_attributes.md) - Forces flushing updated attributes to disk
-* [FLUSH HOSTNAMES](Securing_and_compacting_an_index/Flushing_hostnames.md) - Renews IPs associates to agent host names
+* [FLUSH ATTRIBUTES](Securing_and_compacting_a_table/Flushing_attributes.md) - Forces flushing updated attributes to disk
+* [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Renews IPs associates to agent host names
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Initiates reopen of searchd log and query log files (similar to USR1)
 
 ##### Real-time table optimization
-* [FLUSH RAMCHUNK](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
-* [FLUSH RTINDEX](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_disk.md#FLUSH-RTINDEX) - Flushes real-time table RAM chunk to disk
-* [OPTIMIZE TABLE](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
+* [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
+* [FLUSH RTINDEX](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-RTINDEX) - Flushes real-time table RAM chunk to disk
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
 ##### Importing to a real-time table
-* [ATTACH TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) - Moves data from a plain table to a real-time table
-* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) - Imports previously created RT or PQ table into a server running in the RT mode
+* [ATTACH TABLE](Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) - Moves data from a plain table to a real-time table
+* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Imports previously created RT or PQ table into a server running in the RT mode
 
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
@@ -56,8 +56,8 @@
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 
 ##### Plain table rotate
-* [RELOAD TABLE](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-TABLE) - Rotates a plain table
-* [RELOAD TABLES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-TABLES) - Rotates all plain tables
+* [RELOAD TABLE](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates a plain table
+* [RELOAD TABLES](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates all plain tables
 
 ##### Transactions
 * [BEGIN](Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Begins a transaction
@@ -85,19 +85,19 @@
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP
 * [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
-* [/insert](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Inserts a document into a real-time table
-* [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
+* [/insert](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
+* [/pq/idx/doc](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
 * [/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
 * [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time table
-* [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-table) - Replaces a PQ rule in a percolate table
+* [/pq/idx/doc/N?refresh=1](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
 * [/delete](Deleting_documents.md) - Deletes a document in a table
-* [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents).
+* [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
 * [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
 
 ### Common things
-* [data types](Creating_an_index/Data_types.md)
-* [engine](Creating_an_index/Data_types.md#How-to-switch-between-the-storages)
+* [data types](Creating_a_table/Data_types.md)
+* [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
 * [real-time mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
@@ -107,88 +107,88 @@
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
 * [attr_update_reserve](Updating_documents/UPDATE.md#attr_update_reserve)
-* [bigram_freq_words](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [bigram_index](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
-* [blend_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
-* [blend_mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
-* [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
-* [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)
-* [docstore_block_size](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_block_size)
-* [docstore_compression](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_compression)
-* [docstore_compression_level](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_compression_level)
-* [embedded_limit](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
-* [exceptions](Creating_an_index/NLP_and_tokenization/Exceptions.md#exceptions)
+* [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [exceptions](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
-* [hitless_words](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
-* [html_index_attrs](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
-* [html_remove_elements](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
-* [html_strip](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
-* [ignore_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
-* [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)
-* [index_field_lengths](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
-* [index_sp](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
-* [index_token_filter](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
-* [index_zones](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
-* [infix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
-* [inplace_enable](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#inplace_enable)
-* [inplace_hit_gap](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#inplace_hit_gap)
-* [inplace_reloc_factor](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#inplace_reloc_factor)
-* [inplace_write_factor](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#inplace_write_factor)
-* [killlist_target](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target)
-* [max_substring_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
-* [min_infix_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
-* [min_prefix_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
-* [min_stemming_len](Creating_an_index/NLP_and_tokenization/Morphology.md#min_stemming_len)
-* [min_word_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
+* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [html_index_attrs](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [html_remove_elements](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [html_strip](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [ignore_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [index_exact_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [index_sp](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [index_zones](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [infix_fields](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [max_substring_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [min_infix_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [min_prefix_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [min_stemming_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [min_word_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [morphology](Searching/Options.md#morphology)
-* [morphology_skip_fields](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
-* [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-* [ngram_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
-* [overshort_step](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
-* [path](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#path)
-* [phrase_boundary](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
-* [phrase_boundary_step](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
-* [prefix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
-* [preopen](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#preopen)
-* [read_buffer_docs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_docs)
-* [read_buffer_hits](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_hits)
-* [regexp_filter](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
-* [stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
-* [stopword_step](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
-* [stopwords_unstemmed](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
-* [type](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#type)
-* [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms)
+* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [prefix_fields](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [stopwords](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [stopword_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [wordforms](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 
 ##### Plain table settings
-* [source](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source)
-* [stored_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields)
-* [stored_only_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_only_fields)
-* [columnar_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs)
+* [source](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [stored_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [stored_only_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [columnar_attrs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 
 ##### Distributed table settings
-* [local](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)
-* [agent](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent)
-* [agent_connect_timeout](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_connect_timeout)
-* [agent_blackhole](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_blackhole)
-* [agent_persistent](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_persistent)
+* [local](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
+* [agent](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
+* [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
+* [agent_blackhole](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
+* [agent_persistent](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
 * [agent_query_timeout](Searching/Options.md#agent_query_timeout)
-* [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count)
+* [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
 * [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy)
-* [mirror_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#mirror_retry_count)
+* [mirror_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
 
 ##### RT table settings
-* [rt_attr_bigint](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bigint)
-* [rt_attr_bool](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bool)
-* [rt_attr_float](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_float)
-* [rt_attr_json](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_json)
-* [rt_attr_multi_64](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi_64)
-* [rt_attr_multi](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_multi)
-* [rt_attr_string](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_string)
-* [rt_attr_timestamp](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_timestamp)
-* [rt_attr_uint](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint)
-* [rt_field](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field)
-* [rt_mem_limit](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_mem_limit)
+* [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_string](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_timestamp](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_uint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_field](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 
 ## Full-text search operators
 * [OR](Searching/Full_text_matching/Operators.md#OR-operator)
@@ -311,44 +311,44 @@ To be put to section `common {}` in configuration file:
 * [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - What to do if JSON format errors are found
 * [plugin_dir](Server_settings/Common.md#plugin_dir) - Location for the dynamic libraries and UDFs
 
-## [Indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments)
-`indexer` is a tool to create [plain tables](Adding_data_from_external_storages/Plain_indexes_creation.md)
+## [Indexer](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
+`indexer` is a tool to create [plain tables](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
 
 ##### Indexer settings in configuration file
 To be put to section `indexer {}` in configuration file:
-* [lemmatizer_cache](Adding_data_from_external_storages/Plain_indexes_creation.md#lemmatizer_cache) - Lemmatizer cache size
-* [max_file_field_buffer](Adding_data_from_external_storages/Plain_indexes_creation.md#max_file_field_buffer) - Maximum file field adaptive buffer size
-* [max_iops](Adding_data_from_external_storages/Plain_indexes_creation.md#max_iops) - Maximum indexation I/O operations per second
-* [max_iosize](Adding_data_from_external_storages/Plain_indexes_creation.md#max_iosize) - Maximum allowed I/O operation size
-* [max_xmlpipe2_field](Adding_data_from_external_storages/Plain_indexes_creation.md#max_xmlpipe2_field) - Maximum allowed field size for XMLpipe2 source type
-* [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit) - Indexing RAM usage limit
-* [on_file_field_error](Adding_data_from_external_storages/Plain_indexes_creation.md#on_file_field_error) - How to handle IO errors in file fields
-* [write_buffer](Adding_data_from_external_storages/Plain_indexes_creation.md#write_buffer) - Write buffer size
-* [ignore_non_plain](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) - To ignore warnings about non-plain tables
+* [lemmatizer_cache](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lemmatizer cache size
+* [max_file_field_buffer](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum file field adaptive buffer size
+* [max_iops](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum indexation I/O operations per second
+* [max_iosize](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed I/O operation size
+* [max_xmlpipe2_field](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed field size for XMLpipe2 source type
+* [mem_limit](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexing RAM usage limit
+* [on_file_field_error](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - How to handle IO errors in file fields
+* [write_buffer](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Write buffer size
+* [ignore_non_plain](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - To ignore warnings about non-plain tables
 
 ##### Indexer start parameters
 ```bash
 indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 ```
-* [--all](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Rebuilds all tables from the config
-* [--buildstops](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed.
-* [--buildfreqs](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Adds the quantity present in the table for --buildstops
-* [--config, -c](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Path to configuration file
-* [--dump-rows](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Dumps rows fetched by SQL source(s) into the specified file
-* [--help](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Lists all the parameters
-* [--keep-attrs](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Allows to reuse existing attributes on reindexing
-* [--keep-attrs-names](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Allows to specify attributes to reuse from the existing table
-* [--merge-dst-range](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Runs the filter range given upon merging
-* [--merge-killlists](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Changes the way kill lists are processed when merging tables
-* [--merge](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Merges two plain tables into one
-* [--nohup](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Indexer won't send SIGHUP if this option is on
-* [--noprogress](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Prevents displaying progress details
-* [--print-queries](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Prints out SQL queries that indexer sends to the database
-* [--print-rt ](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Outputs data fetched from sql source(s) as INSERTs to a real-time table
-* [--quiet](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Prevents displaying anything
-* [--rotate](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Forces tables rotation after all the tables are built
-* [--sighup-each](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Forces rotation of each table after it's built
-* [-v](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Shows indexer version
+* [--all](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Rebuilds all tables from the config
+* [--buildstops](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed.
+* [--buildfreqs](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Adds the quantity present in the table for --buildstops
+* [--config, -c](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Path to configuration file
+* [--dump-rows](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Dumps rows fetched by SQL source(s) into the specified file
+* [--help](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lists all the parameters
+* [--keep-attrs](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows to reuse existing attributes on reindexing
+* [--keep-attrs-names](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows to specify attributes to reuse from the existing table
+* [--merge-dst-range](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Runs the filter range given upon merging
+* [--merge-killlists](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Changes the way kill lists are processed when merging tables
+* [--merge](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Merges two plain tables into one
+* [--nohup](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexer won't send SIGHUP if this option is on
+* [--noprogress](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents displaying progress details
+* [--print-queries](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prints out SQL queries that indexer sends to the database
+* [--print-rt ](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Outputs data fetched from sql source(s) as INSERTs to a real-time table
+* [--quiet](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents displaying anything
+* [--rotate](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Forces tables rotation after all the tables are built
+* [--sighup-each](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Forces rotation of each table after it's built
+* [-v](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Shows indexer version
 
 ## Table converter from Manticore v2 / Sphinx v2
 `index_converter` is a tool for converting tables created with Sphinx/Manticore Search 2.x to Manticore Search 3.x table format.
@@ -374,28 +374,28 @@ To be put to section `searchd {}` in configuration file:
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - Specifies how table's doclists file is accessed
   * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Specifies how table's hitlists file is accessed
   * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Specifies how search server will access table's plain attributes
-  * [agent_connect_timeout](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_connect_timeout) - Remote agent connection timeout
+  * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Remote agent connection timeout
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
-  * [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) - Specifies how many times Manticore will try to connect and query remote agents
-  * [agent_retry_delay](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_delay) - Specifies the delay before retrying to query a remote agent in case it fails
+  * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies how many times Manticore will try to connect and query remote agents
+  * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Specifies the delay before retrying to query a remote agent in case it fails
   * [attr_flush_period](Updating_documents/UPDATE.md#attr_flush_period) - Defines time period between flushing updated attributes to disk
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - Binary log files path
-  * [client_timeout](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#client_timeout) - Maximum time to wait between requests when using persistent connections
+  * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum time to wait between requests when using persistent connections
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale
   * [collation_server](Server_settings/Searchd.md#collation_server) - Default server collation
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29))
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Maximum size of document blocks from document storage that are held in memory
-  * [expansion_limit](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Maximum number of expanded keywords for a single wildcard
+  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words) - Maximum number of expanded keywords for a single wildcard
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Turns on using UTC timezone where grouping time fields
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Agent mirror statistics window size
   * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Interval between agent mirror pings
-  * [hostname_lookup](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#hostname_lookup) - Hostnames renew strategy
+  * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Hostnames renew strategy
   * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Defines how many "jobs" can be in the queue at the same time
   * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path, that searchd will listen on
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
-  * [listen_tfo](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#listen_tfo) - Allows TCP_FASTOPEN flag for all listeners
+  * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Allows TCP_FASTOPEN flag for all listeners
   * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the amount of queries per batch
   * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum amount of active connections
@@ -410,7 +410,7 @@ To be put to section `searchd {}` in configuration file:
   * [net_workers](Server_settings/Searchd.md#net_workers) - Number of network threads
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for requests from clients
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
-  * [persistent_connections_limit](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#persistent_connections_limit) - Maximum number of simultaneous persistent connections to remote persistent agents
+  * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
   * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
   * [preopen_indexes](Server_settings/Searchd.md#preopen_tables) - Whether to forcibly preopen all tables on startup
@@ -422,8 +422,8 @@ To be put to section `searchd {}` in configuration file:
   * [query_log_format](Server_settings/Searchd.md#query_log_format) - Query log format
   * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - Prevents logging too fast queries
   * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - Query log file permissions mode
-  * [read_buffer_docs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_docs) - Per-keyword read buffer size for document lists
-  * [read_buffer_hits](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_hits) - Per-keyword read buffer size for hit lists
+  * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Per-keyword read buffer size for document lists
+  * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Per-keyword read buffer size for hit lists
   * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Unhinted read size
   * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - How often Manticore flush real-time tables' RAM chunks to disk
   * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Maximum number of I/O operations (per second) that real-time chunks merging thread is allowed to do
@@ -433,7 +433,7 @@ To be put to section `searchd {}` in configuration file:
   * [server_id](Server_settings/Searchd.md#server_id) - Server identifier used as a seed to generate a unique document ID
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` timeout
   * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 hash of the password required to invoke `shutdown` command from VIP SQL connection
-  * [snippets_file_prefix](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#snippets_file_prefix) - Prefix to prepend to the local file names when generating snippets in `load_files` mode
+  * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Prefix to prepend to the local file names when generating snippets in `load_files` mode
   * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Path to file where current SQL state will be serialized
   * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Maximum time to wait between requests from a mysql client
   * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - Path to SSL Certificate Authority certificate file

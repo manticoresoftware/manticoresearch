@@ -8,13 +8,13 @@ Manticore Search is an [open-source database](https://github.com/manticoresoftwa
 #### Powerful and fast full-text searching which works fine for small and big datasets
   * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> and over 20 ranking factors
   * Custom ranking
-  * [Stemming](Creating_an_index/NLP_and_tokenization/Morphology.md)
-  * [Lemmatization](Creating_an_index/NLP_and_tokenization/Morphology.md)
-  * [Stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md)
-  * [Synonyms](Creating_an_index/NLP_and_tokenization/Exceptions.md)
-  * [Wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md)
-  * [Advanced tokenization at character and word level](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md)
-  * [Proper Chinese segmentation](Creating_an_index/NLP_and_tokenization/CJK.md)
+  * [Stemming](Creating_a_table/NLP_and_tokenization/Morphology.md)
+  * [Lemmatization](Creating_a_table/NLP_and_tokenization/Morphology.md)
+  * [Stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
+  * [Synonyms](Creating_a_table/NLP_and_tokenization/Exceptions.md)
+  * [Wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md)
+  * [Advanced tokenization at character and word level](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
+  * [Proper Chinese segmentation](Creating_a_table/NLP_and_tokenization/CJK.md)
   * [Text highlighting](Searching/Highlighting.md)
 
 #### Modern MPP architecture
@@ -57,7 +57,7 @@ Manticore `indexer` tool and rich configuration syntax helps to sync existing da
 You can integrate Manticore Search with MySQL/MariaDB server via a [FEDERATED engine](Extensions/FEDERATED.md) or use Manticore through [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
 
 #### Stream filtering
-Manticore has a special table type called "[percolate](Creating_an_index/Local_indexes/Percolate_index.md)" which implements search in reverse when you table your queries rather than data. It's an extremely powerful tool for full-text data stream filtering: just put all your queries in the table, process your data stream by sending each batch of documents to Manticore Search and you'll get only those back that match some of your stored queries.
+Manticore has a special table type called "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" which implements search in reverse when you table your queries rather than data. It's an extremely powerful tool for full-text data stream filtering: just put all your queries in the table, process your data stream by sending each batch of documents to Manticore Search and you'll get only those back that match some of your stored queries.
 
 # Possible applications:
 Manticore's possible applications are not limited by, but include:

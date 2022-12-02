@@ -1,6 +1,6 @@
 # Load balancing
 
-Load balancing is turned on by default for any [distributed table](../../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) using [mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md). By default queries are distributed randomly among the mirrors. To change this behaviour you can use [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md).
+Load balancing is turned on by default for any [distributed table](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) using [mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md). By default queries are distributed randomly among the mirrors. To change this behaviour you can use [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md).
 
 ## ha_strategy
 

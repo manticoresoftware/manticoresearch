@@ -2,9 +2,9 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../Updating_documents/REPLACE.md).
+UPDATE changes [row-wise](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages).
+Attribute updates are supported for RT, PQ and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 
 **Note that document id cannot be updated.**
@@ -833,7 +833,7 @@ In rare cases Manticore's built-in query analyzer can be wrong in understanding 
 
 ## Updates via HTTP JSON
 
-Updates using HTTP JSON protocol are performed via the `/update` endpoint. The syntax is similar to the [/insert endpoint](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
+Updates using HTTP JSON protocol are performed via the `/update` endpoint. The syntax is similar to the [/insert endpoint](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but this time the `doc` property is mandatory.
 
 The server will respond with a JSON object stating if the operation was successful or not.
 

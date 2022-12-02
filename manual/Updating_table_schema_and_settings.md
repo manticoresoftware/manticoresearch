@@ -24,7 +24,7 @@ It supports adding one field at a time for RT tables. Supported data types are:
 * `text indexed` / `string indexed` - full-text indexed field, indexed only (the original value is not stored in docstore)
 * `text indexed attribute` / `string indexed attribute` - full text indexed field + string attribute (not storing the original value in docstore)
 * `text stored` / `string stored` - the value will be only stored in docstore, not full-text indexed, not a string attribute
-* adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
+* adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
 
 #### Important notes:
 * ❗It's recommended to **backup table files** before `ALTER`ing it to avoid data corruption in case of a sudden power interruption or other similar issues.
@@ -222,7 +222,7 @@ mysql> show meta;
 ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER` can also reconfigure an RT table in the [plain mode](Creating_an_index/Local_indexes.md#Defining-table-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the table header, so that new documents are tokenized using the updated full-text settings.
+`ALTER` can also reconfigure an RT table in the [plain mode](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the table header, so that new documents are tokenized using the updated full-text settings.
 
 <!-- request Example -->
 ```sql

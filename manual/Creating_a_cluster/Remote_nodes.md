@@ -1,6 +1,6 @@
 # Adding a distributed table with remote agents
 
-Please read the article about [distributed tables](../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) for general overview of distributed tables. Here we focus on using a distributed table as a basis for creating a cluster of Manticore instances.
+Please read the article about [distributed tables](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) for general overview of distributed tables. Here we focus on using a distributed table as a basis for creating a cluster of Manticore instances.
 <!-- example conf dist 1 -->
 Here we have split the data over 4 servers, each serving one of the shards. If one of the servers fails, our distributed table will still work, but we would miss the results from the failed shard.
 

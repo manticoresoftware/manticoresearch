@@ -14,14 +14,14 @@ If you want to use the Manticore folder instead, the table files need to be move
 ## Sphinx 2.x / Manticore 2.x -> Manticore 3.x
 Upgrading from Sphinx / Manticore 2.x to 3.x is not straightforward, because the table storage engine received a massive upgrade and the new searchd can't load older tables and upgrade them to new format on-the-fly.
 
-Manticore Search 3 got a redesigned table storage. Tables created with Manticore/Sphinx 2.x cannot be loaded by Manticore Search 3 without a [conversion](../Installation/Migration_from_Sphinx.md#index_converter). Because of the 4GB limitation, a real-time table in 2.x could still have several disk chunks after an optimize operation. After upgrading to 3.x, these tables can now be optimized to 1-disk chunk with the usual [OPTIMIZE](../Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-TABLE) command. Index files also changed. The only component that didn't get any structural changes is the `.spp` file (hitlists). `.sps` (strings/json) and `.spm` (MVA) are now held by `.spb` (var-length attributes). The new format has an `.spm` file present, but it's used for row map (previously it was dedicated for MVA attributes). The new extensions added are `.spt` (docid lookup), `.sphi` ( secondary index histograms), `.spds` (document storage). In case you are using scripts that manipulate table files, they should be adapted for the new file extensions.
+Manticore Search 3 got a redesigned table storage. Tables created with Manticore/Sphinx 2.x cannot be loaded by Manticore Search 3 without a [conversion](../Installation/Migration_from_Sphinx.md#index_converter). Because of the 4GB limitation, a real-time table in 2.x could still have several disk chunks after an optimize operation. After upgrading to 3.x, these tables can now be optimized to 1-disk chunk with the usual [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) command. Index files also changed. The only component that didn't get any structural changes is the `.spp` file (hitlists). `.sps` (strings/json) and `.spm` (MVA) are now held by `.spb` (var-length attributes). The new format has an `.spm` file present, but it's used for row map (previously it was dedicated for MVA attributes). The new extensions added are `.spt` (docid lookup), `.sphi` ( secondary index histograms), `.spds` (document storage). In case you are using scripts that manipulate table files, they should be adapted for the new file extensions.
 
 The upgrade procedure may differ depending on your setup (number of servers in the cluster, whether you have HA or not etc.), but in general it's about creating new 3.x table versions and replacing your existing ones with them along with replacing older 2.x binaries with the new ones.
 
 There are two special requirements to take care:
 
-* Real-time tables need to be flushed using [FLUSH RAMCHUNK](../Securing_and_compacting_an_index/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK)
-* Plain tables with kill-lists require adding a new directive in table configuration (see [killlist_target](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target))
+* Real-time tables need to be flushed using [FLUSH RAMCHUNK](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK)
+* Plain tables with kill-lists require adding a new directive in table configuration (see [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target))
 
 Manticore Search 3 includes a new tool - [index_converter](../Installation/Migration_from_Sphinx.md#index_converter) - that can convert Sphinx 2.x / Manticore 2.x tables to 3.x format. `index_converter` comes in a separate package which should be installed first. Using the convert tool create 3.x versions of your tables. `index_converter` can write the new files in the existing data folder and backup the old files or it can write the new files to a chosen folder.
 
@@ -40,11 +40,11 @@ If you have a spare box (like a testing or staging server), you can do there fir
 There have been no changes made on how clients should connect to the engine or any change in querying mode or queries behavior.
 
 ## kill-lists in Sphinx / Manticore 2.x vs Manticore 3.x
-[Kill-lists](../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md) have been redesigned in Manticore Search 3. In previous versions kill-lists were applied on the result set provided by each previous searched table on query time.
+[Kill-lists](../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md) have been redesigned in Manticore Search 3. In previous versions kill-lists were applied on the result set provided by each previous searched table on query time.
 
 Thus In 2.x the table order at query time mattered. For example if a delta table had a kill-list in order to apply it against the main table the order had to be main, delta (either in a distributed table or in the FROM clause).
 
-In Manticore 3 kill-lists are applied to a table when it's loaded during searchd startup or gets rotated. New directive [killlist_target](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) in table configuration specifies target tables and defines which doc ids from the source table should be used for suppression. These can be ids from the defined kill-list, actual doc ids of the table or the both.
+In Manticore 3 kill-lists are applied to a table when it's loaded during searchd startup or gets rotated. New directive [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target) in table configuration specifies target tables and defines which doc ids from the source table should be used for suppression. These can be ids from the defined kill-list, actual doc ids of the table or the both.
 
 Documents from the kill-lists are deleted from the target tables, they are not returned in results even if the search doesn't include the table that provided the kill-lists. Because of that the order of tables for searching does not matter any more. Now delta,main and main,delta will provide the same results.
 
@@ -104,14 +104,14 @@ $ index_converter --config /home/myuser/manticore.conf --all --output-dir /new/p
 
 #### Convert kill lists
 
-A special case is for tables containing kill-lists. As the behaviour of how kill-lists works has changed (see [killlist_target](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target)), the delta table should know which are the target tables for applying the kill-lists. There are 3 ways to have a converted table ready for setting targeted tables for applying kill-lists:
+A special case is for tables containing kill-lists. As the behaviour of how kill-lists works has changed (see [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)), the delta table should know which are the target tables for applying the kill-lists. There are 3 ways to have a converted table ready for setting targeted tables for applying kill-lists:
 
 * Use `-–killlist-target` when converting a table
   ```ini
   $ index_converter --config /home/myuser/manticore.conf --index deltaindex --killlist-target mainindex:kl
   ```
 * Add killlist_target in the configuration before doing the conversion
-* use [ALTER ... KILLIST_TARGET](../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md#killlist_target) command after conversion
+* use [ALTER ... KILLIST_TARGET](../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) command after conversion
 
 #### Complete list of index_converter options
 

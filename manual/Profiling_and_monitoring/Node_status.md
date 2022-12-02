@@ -167,7 +167,7 @@ SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` displays the statistic of [remote agents](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent) or of a distributed table. It includes the values like the age of the last request, last answer, the number of different kind of errors and successes, etc. Statistic is shown for every agent for last 1, 5 and 15 intervals, each of them of [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) seconds.
+`SHOW AGENT STATUS` displays the statistic of [remote agents](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) or of a distributed table. It includes the values like the age of the last request, last answer, the number of different kind of errors and successes, etc. Statistic is shown for every agent for last 1, 5 and 15 intervals, each of them of [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) seconds.
 
 <!-- intro -->
 ##### SQL:

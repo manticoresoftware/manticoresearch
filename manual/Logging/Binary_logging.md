@@ -1,11 +1,11 @@
 # Binary logging
 
-Binary logging is a recovery mechanism for [Real-Time](../Creating_an_index/Local_indexes/Real-time_index.md) table data and also for attributes updates of plain tables that would otherwise only be stored in RAM until flush. With binary logs enabled, `searchd` writes every given transaction to the binlog file, and uses that for recovery after an unclean shutdown. On clean shutdown, RAM chunks are saved to disk, and then all the binlog files are unlinked.
+Binary logging is a recovery mechanism for [Real-Time](../Creating_a_table/Local_tables/Real-time_table.md) table data and also for attributes updates of plain tables that would otherwise only be stored in RAM until flush. With binary logs enabled, `searchd` writes every given transaction to the binlog file, and uses that for recovery after an unclean shutdown. On clean shutdown, RAM chunks are saved to disk, and then all the binlog files are unlinked.
 
 ## Disabling binary logging
 
 Binary logging is enabled by default. The default location for `binlog.*` files in Linux is `/var/lib/manticore/data/`.
-In the [RT mode](../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) the binary logs are saved in the `data_dir` folder, unless specifed differently.
+In the [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) the binary logs are saved in the `data_dir` folder, unless specifed differently.
 
 Binary logging can be disabled by setting `binlog_path` to empty:
 

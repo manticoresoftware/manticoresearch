@@ -8,8 +8,8 @@ This is where a traditional search is not a good fit, since would assume perform
 
 Google Alerts, AlertHN, Bloomberg Terminal and other systems that let their users to subscribe to something use a similar technology.
 
-> * See [percolate](../Creating_an_index/Local_indexes/Percolate_index.md) about how to create a PQ table.
-> * See [Adding rules to a percolate table](../Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
+> * See [percolate](../Creating_a_table/Local_tables/Percolate_table.md) about how to create a PQ table.
+> * See [Adding rules to a percolate table](../Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
 
 ### Performing a percolate query with CALL PQ
 
@@ -33,7 +33,7 @@ You can perform a percolate query via SQL or JSON interfaces as well as using pr
 | Return all info about matching query | 1 as query (0 by default) |  Enabled by default | Enabled by default |
 | Skip invalid JSON | 1 as skip_bad_json (0 by default)  | Not available | Not available  |
 | Extended info in [SHOW META](../Profiling_and_monitoring/SHOW_META.md) | 1 as verbose (0 by default)  | Not available  | Not available |
-| Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-percolate-tables-%28DPQ-tables%29)) | 1 as shift (0 by default)  | Not available  | Not available |
+| Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)) | 1 as shift (0 by default)  | Not available  | Not available |
 
 <!-- example create percolate -->
 To demonstrate how it works here are few examples. Let's create a PQ table with 2 fields:

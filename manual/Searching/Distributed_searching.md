@@ -8,7 +8,7 @@ Partitioning is done manually. You should:
 
 * setup several instances of Manticore on different servers
 * put different parts of your dataset to different instances
-* configure a special [distributed table](../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) on some of the `searchd` instances
+* configure a special [distributed table](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) on some of the `searchd` instances
 * and route your queries to the distributedtable
 
 This kind of table only contains references to other local and remote tables - so it could not be directly reindexed, and you should reindex those tables which it references instead.

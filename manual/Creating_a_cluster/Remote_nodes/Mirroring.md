@@ -1,6 +1,6 @@
 # Mirroring
 
-[Agent](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent) mirrors can be used interchangeably when processing a search query. Manticore instance (can be multiple) hosting the distributed table where the mirrored agents are defined keeps track of mirror status (alive or dead) and response times, and does automatic failover and load balancing based on that.
+[Agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) mirrors can be used interchangeably when processing a search query. Manticore instance (can be multiple) hosting the distributed table where the mirrored agents are defined keeps track of mirror status (alive or dead) and response times, and does automatic failover and load balancing based on that.
 
 ## Agent mirrors
 

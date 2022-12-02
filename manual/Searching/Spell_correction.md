@@ -34,7 +34,7 @@ CALL SUGGEST(word, table [,options])
 options: N as option_name[, M as another_option, ...]
 ```
 
-These commands provide for a given word all suggestions from the dictionary. They work only on tables with [infixing](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
+These commands provide for a given word all suggestions from the dictionary. They work only on tables with [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
 
 If the first parameter is not a single word, but multiple, then:
 * `CALL QSUGGEST` will return suggestions only for the **last** word, ignoring the rest

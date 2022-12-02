@@ -1,8 +1,8 @@
 # Deleting documents
 
 Deleting is only supported for:
-* [real-time](Creating_an_index/Local_indexes/Real-time_index.md) tables,
-* [percolate](Creating_an_index/Local_indexes/Percolate_index.md) tables
+* [real-time](Creating_a_table/Local_tables/Real-time_table.md) tables,
+* [percolate](Creating_a_table/Local_tables/Percolate_table.md) tables
 * distributed tables that contain only RT tables as agents
 
 You can delete existing rows (documents) from an existing table based on ID or conditions.
@@ -14,7 +14,7 @@ SQL response for successful operation will show the number of rows deleted.
 
 `json/delete` is an HTTP endpoint for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
 
-To delete all documents from a table it's recommended to use instead the [table truncation](Emptying_an_index.md) as it's a much faster operation.
+To delete all documents from a table it's recommended to use instead the [table truncation](Emptying_a_table.md) as it's a much faster operation.
 
 <!-- intro -->
 ##### SQL:

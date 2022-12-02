@@ -8193,12 +8193,6 @@ private:
 
 class Expr_Regex_c final : public Expr_ArgVsSet_T<int>
 {
-protected:
-	uint64_t m_uFilterHash = SPH_FNV64_SEED;
-#if WITH_RE2
-	RE2 *	m_pRE2 = nullptr;
-#endif
-
 public:
 	Expr_Regex_c ( ISphExpr * pAttr, ISphExpr * pString )
 		: Expr_ArgVsSet_T ( pAttr )
@@ -8206,15 +8200,11 @@ public:
 		CSphMatch tTmp;
 		const BYTE * sVal = nullptr;
 		int iLen = pString->StringEval ( tTmp, &sVal );
+		m_sRegex = CSphString ( (const char*)sVal, iLen );
 		if ( iLen )
 			m_uFilterHash = sphFNV64 ( sVal, iLen );
 
-#if WITH_RE2
-		re2::StringPiece tBuf ( (const char *)sVal, iLen );
-		RE2::Options tOpts;
-		tOpts.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
-		m_pRE2 = new RE2 ( tBuf, tOpts );
-#endif
+		SetupRE2();
 	}
 
 #if WITH_RE2
@@ -8258,14 +8248,33 @@ public:
 		return new Expr_Regex_c ( *this );
 	}
 
-private:
-		Expr_Regex_c ( const Expr_Regex_c& rhs )
-		: Expr_ArgVsSet_T ( rhs )
-		, m_uFilterHash ( rhs.m_uFilterHash )
+protected:
+	CSphString	m_sRegex;
+	uint64_t	m_uFilterHash = SPH_FNV64_SEED;
 #if WITH_RE2
-		, m_pRE2 ( rhs.m_pRE2)
+	RE2 *		m_pRE2 = nullptr;
 #endif
-		{}
+
+	void SetupRE2()
+	{
+#if WITH_RE2
+		SafeDelete(m_pRE2);
+
+		re2::StringPiece tBuf ( m_sRegex.cstr(), m_sRegex.Length() );
+		RE2::Options tOpts;
+		tOpts.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
+		m_pRE2 = new RE2 ( tBuf, tOpts );
+#endif
+	}
+
+private:
+	Expr_Regex_c ( const Expr_Regex_c & rhs )
+		: Expr_ArgVsSet_T ( rhs )
+		, m_sRegex ( rhs.m_sRegex )
+		, m_uFilterHash ( rhs.m_uFilterHash )
+	{
+		SetupRE2();
+	}
 };
 
 

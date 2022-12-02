@@ -24,6 +24,7 @@ source test
 	<sql_settings/>
 	sql_query_pre		= set names utf8
 	sql_query			= select * from test_table
+	sql_field_string	= content
 	sql_file_field 		= file_field
 }
 
@@ -99,6 +100,8 @@ select * from test where match('file2');
 select * from test where match('fx-35');
 select * from test where match('fx35');
 select * from test where match('car');
+
+select *, regex(content,'.*21.*') from test where match('car');
 
 <!-- regression crash of indexer on indexing large data passed regexp_filter -->
 select * from test_large where match('color');

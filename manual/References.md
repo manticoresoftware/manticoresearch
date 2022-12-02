@@ -413,7 +413,7 @@ To be put to section `searchd {}` in configuration file:
   * [persistent_connections_limit](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#persistent_connections_limit) - Maximum number of simultaneous persistent connections to remote persistent agents
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
   * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
-  * [preopen_indexes](Server_settings/Searchd.md#preopen_indexes) - Whether to forcibly preopen all tables on startup
+  * [preopen_indexes](Server_settings/Searchd.md#preopen_tables) - Whether to forcibly preopen all tables on startup
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Maximum RAM allocated for cached result sets
   * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Minimum wall time threshold for a query result to be cached

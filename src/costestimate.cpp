@@ -396,11 +396,8 @@ float CostEstimate_c::CalcQueryCost()
 
 	fCost += Cost_Push ( iDocsToPush );
 
-	if ( iNumAnalyzers || iNumFilters )
-	{
-		assert(!iNumIndexes); // SI always run in a single thread
+	if ( !iNumIndexes ) // SI always run in a single thread
 		fCost = CalcMTCost(fCost);
-	}
 
 	return fCost;
 }

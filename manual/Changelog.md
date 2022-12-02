@@ -5,9 +5,9 @@
 ### Major Changes
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases. Integrated it with [secondary indexes](../Server_settings/Searchd.md#secondary_indexes)
 * `ALTER TABLE <table name> REBUILD SECONDARY`
-* New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_an_index/Backup_and_restore.md)
+* New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_a_table/Backup_and_restore.md)
 * Added `KILL`
-* Added [FREEZE/UNFREEZE](../Securing_and_compacting_an_index/Freezing_a_table.md) to prepare a real-time/plain table for a backup
+* Added [FREEZE/UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup
 * Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time
 * Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 
@@ -19,7 +19,7 @@
   - run the instance. Manticore will load up the tables with a warning.
   - run `ALTER TABLE <table name> REBUILD SECONDARY` for each index to rebuild secondary indexes.
 
-  If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_an_index/Compacting_an_index.md#Optimizing-clustered-indexes) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
+  If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
 * `SHOW SETTINGS`
 * `max_matches_increase_threshold`
 
@@ -122,9 +122,9 @@ Released: May 18th 2022
 
 * **⚠️ BREAKING CHANGE**: [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default. If you want to disable it make sure you add `pseudo_sharding = 0` to section `searchd` of your Manticore configuration file.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
-* [Fast fetching](../Creating_an_index/Data_types.md#fast_fetch) for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especially if there are many fields in the schema.
+* [Fast fetching](../Creating_a_table/Data_types.md#fast_fetch) for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especially if there are many fields in the schema.
 * **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
-* **⚠️ BREAKING CHANGE**: All full-text fields are now [stored](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) by default. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
+* **⚠️ BREAKING CHANGE**: All full-text fields are now [stored](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields) by default. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
 ### Minor changes
@@ -147,7 +147,7 @@ Released: May 18th 2022
 * Increased `AVG()` accuracy: previously Manticore used `float` internally for aggregations, now it uses `double` which increases the accuracy significantly.
 * Improved support for JDBC MySQL driver.
 * `DEBUG malloc_stats` support for [jemalloc](https://github.com/jemalloc/jemalloc).
-* [optimize_cutoff](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
+* [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) is now available as a per-table setting which can be set when you CREATE or ALTER a table.
 * **⚠️ BREAKING CHANGE**: [query_log_format](../Server_settings/Searchd.md#query_log_format) is now **`sphinxql` by default**. If you are used to `plain` format you need to add `query_log_format = plain` to your configuration file.
 * Significant memory consumption improvements: Manticore consumes significantly less RAM now in case of long and intensive insert/replace/optimize workload in case stored fields are used.
 * [shutdown_timeout](../Server_settings/Searchd.md#shutdown_timeout) default value was increased from 3 seconds to 60 seconds.
@@ -155,7 +155,7 @@ Released: May 18th 2022
 * [Commit 1da6dbec](https://github.com/manticoresoftware/manticoresearch/commit/1da6dbec) disabled saving a new disk chunk on loading an index (e.g. on searchd startup).
 * [Issue #746](https://github.com/manticoresoftware/manticoresearch/issues/746) Support for glibc >= 2.34.
 * [Issue #784](https://github.com/manticoresoftware/manticoresearch/issues/784) count 'VIP' connections separately from usual (non-VIP). Previously VIP connections were counted towards the `max_connections` limit, which could cause "maxed out" error for non-VIP connections. Now VIP connections are not counted towards the limit. Current number of VIP connections can be also seen in `SHOW STATUS` and `status`.
-* [ID](../Creating_an_index/Data_types.md#Document-ID) can now be specified explicitly.
+* [ID](../Creating_a_table/Data_types.md#Document-ID) can now be specified explicitly.
 * [Issue #687](https://github.com/manticoresoftware/manticoresearch/issues/687) support zstd compression for mysql proto
 
 ### ⚠️ Other minor breaking changes
@@ -312,7 +312,7 @@ sys	0m0.047s
 *  [optimize_cutoff](Server_settings/Searchd.md#optimize_cutoff) is now available as a configuration option in section `searchd`. It's useful when you want to limit the RT chunks count in all your indexes to a particular number globally.
 * [Commit 00874743](https://github.com/manticoresoftware/manticoresearch/commit/00874743823eaf43e2a09a088392fd7e0a617f47) accurate [count(distinct ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) and [FACET ... distinct](Searching/Faceted_search.md#Faceting-without-duplicates) over several local physical indexes (real-time/plain) with identical fields set/order.
 * [PR #598](https://github.com/manticoresoftware/manticoresearch/pull/598) bigint support for `YEAR()` and other timestamp functions.
-* [Commit 8e85d4bc](https://github.com/manticoresoftware/manticoresearch/commit/8e85d4bce596cc88f9d9615ea243a27e4afde0f7) Adaptive [rt_mem_limit](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_mem_limit). Previously Manticore Search was collecting exactly up to `rt_mem_limit` of data before saving a new disk chunk to disk, and while saving was still collecting up to 10% more (aka double-buffer) to minimize possible insert suspension. If that limit was also exhausted, adding new documents was blocked until the disk chunk was fully saved to disk. The new adaptive limit is built on the fact that we have [auto-optimize](Server_settings/Searchd.md#auto_optimize) now, so it's not a big deal if disk chunks do not fully respect `rt_mem_limit` and start flushing a disk chunk earlier. So, now we collect up to 50% of `rt_mem_limit` and save that as a disk chunk. Upon saving we look at the statistics (how much we've saved, how many new documents have arrived while saving) and recalculate the initial rate which will be used next time. For example, if we saved 90 million documents, and another 10 million docs arrived while saving, the rate is 90%, so we know that next time we can collect up to 90% of `rt_mem_limit` before starting flushing another disk chunk. The rate value is calculated automatically from 33.3% to 95%.
+* [Commit 8e85d4bc](https://github.com/manticoresoftware/manticoresearch/commit/8e85d4bce596cc88f9d9615ea243a27e4afde0f7) Adaptive [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit). Previously Manticore Search was collecting exactly up to `rt_mem_limit` of data before saving a new disk chunk to disk, and while saving was still collecting up to 10% more (aka double-buffer) to minimize possible insert suspension. If that limit was also exhausted, adding new documents was blocked until the disk chunk was fully saved to disk. The new adaptive limit is built on the fact that we have [auto-optimize](Server_settings/Searchd.md#auto_optimize) now, so it's not a big deal if disk chunks do not fully respect `rt_mem_limit` and start flushing a disk chunk earlier. So, now we collect up to 50% of `rt_mem_limit` and save that as a disk chunk. Upon saving we look at the statistics (how much we've saved, how many new documents have arrived while saving) and recalculate the initial rate which will be used next time. For example, if we saved 90 million documents, and another 10 million docs arrived while saving, the rate is 90%, so we know that next time we can collect up to 90% of `rt_mem_limit` before starting flushing another disk chunk. The rate value is calculated automatically from 33.3% to 95%.
 * [Issue #628](https://github.com/manticoresoftware/manticoresearch/issues/628) [unpack_zlib](Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md#unpack_zlib) for PostgreSQL source. Thank you, [Dmitry Voronin](https://github.com/dimv36) for the [contribution](https://github.com/manticoresoftware/manticoresearch/pull/630).
 * [Commit 6d54cf2b](https://github.com/manticoresoftware/manticoresearch/commit/6d54cf2b319b131970c29410cc21abcbdf8083b1) `indexer -v` and `--version`. Previously you could still see indexer's version, but `-v`/`--version` were not supported.
 * [Issue #662](https://github.com/manticoresoftware/manticoresearch/issues/662) infinit mlock limit by default when Manticore is started via systemd.
@@ -412,7 +412,7 @@ sys     0m0.001s
 - [Issue #621](https://github.com/manticoresoftware/manticoresearch/issues/621) - expose errors from RE2
 - more accurate [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) for distributed indexes consisting of local plain indexes
 - [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) to remove duplicates when you do faceted search
-- [exact form modifier](Searching/Full_text_matching/Operators.md#Exact-form-modifier) doesn't require [morphology](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology) now and works for indexes with [infix/prefix](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#Wildcard-searching-settings) search enabled
+- [exact form modifier](Searching/Full_text_matching/Operators.md#Exact-form-modifier) doesn't require [morphology](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) now and works for indexes with [infix/prefix](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) search enabled
 
 ### Breaking changes
 - the new version can read older indexes, but the older versions can't read Manticore 4's indexes
@@ -461,14 +461,14 @@ sys     0m0.001s
 **Maintenance release before Manticore 4**
 
 ### Major new features
-- Support for [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for plain indexes. New setting [columnar_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs) for plain indexes
+- Support for [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for plain indexes. New setting [columnar_attrs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) for plain indexes
 - Support for [Ukrainian Lemmatizer](https://github.com/manticoresoftware/lemmatizer-uk)
 - Fully revised histograms. When building an index Manticore also builds histograms for each field in it, which it then uses for faster filtering. In 3.6.0 the algorithm was fully revised and you can get a higher performance if you have a lot of data and do a lot of filtering.
 
 ### Minor changes
 - tool `manticore_new_cluster [--force]` useful for restarting a replication cluster via systemd
-- [--drop-src](Adding_data_from_external_storages/Adding_data_from_indexes/Merging_indexes.md#Merging-indexes) for `indexer --merge`
-- [new mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) `blend_mode='trim_all'`
+- [--drop-src](Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md#Merging-tables) for `indexer --merge`
+- [new mode](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) `blend_mode='trim_all'`
 - added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
 - [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
 - [FORCE/IGNORE INDEX(id)](Updating_documents/UPDATE.md#FORCE-and-IGNORE-INDEX) for SELECT/UPDATE
@@ -529,11 +529,11 @@ status of the query, not the server status
 
 ### New Features
 - New Python, Javascript and Java clients are generally available now and are well documented in this manual.
-- automatic drop of a disk chunk of a real-time index. This optimization enables dropping a disk chunk automatically when [OPTIMIZing](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX) a real-time index when the chunk is obviously not needed any more (all the documents are suppressed). Previously it still required merging, now the chunk can be just dropped instantly. The [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option is ignored, i.e. even if nothing is actually merged an obsoleted disk chunk gets removed. This is useful in case you maintain retention in your index and delete older documents. Now compacting such indexes will be faster.
+- automatic drop of a disk chunk of a real-time index. This optimization enables dropping a disk chunk automatically when [OPTIMIZing](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) a real-time index when the chunk is obviously not needed any more (all the documents are suppressed). Previously it still required merging, now the chunk can be just dropped instantly. The [cutoff](Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) option is ignored, i.e. even if nothing is actually merged an obsoleted disk chunk gets removed. This is useful in case you maintain retention in your index and delete older documents. Now compacting such indexes will be faster.
 - [standalone NOT](Searching/Options.md#not_terms_only_allowed) as an option for SELECT
 
 ### Minor Changes
-- [Issue #453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer.ignore_non_plain=1](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `ignore_non_plain=1` you'll get a warning and a respective exit code.
+- [Issue #453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer.ignore_non_plain=1](Adding_data_from_external_storages/Plain_tables_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `ignore_non_plain=1` you'll get a warning and a respective exit code.
 - [SHOW PLAN ... OPTION format=dot](Profiling_and_monitoring/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) and [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) enable visualization of full-text query plan execution. Useful for understanding complex queries.
 
 ### Deprecations
@@ -556,18 +556,18 @@ status of the query, not the server status
 
 ### New features
 
-* OPTIMIZE reduces disk chunks to a number of chunks ( default is `2* No. of cores`) instead of a single one. The optimal number of chunks can be controlled by [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option.
+* OPTIMIZE reduces disk chunks to a number of chunks ( default is `2* No. of cores`) instead of a single one. The optimal number of chunks can be controlled by [cutoff](Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) option.
 * NOT operator can be now used standalone. By default it is disabled since accidental single NOT queries can be slow. It can be enabled by setting new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
 * New setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
 Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.md#threads) overriding the global `max_threads_per_query`.
-* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md).
+* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md).
 * HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP-JSON)/[grouping](Searching/Grouping.md) by new query node `aggs`.
 
 ### Minor changes
 
 * If no replication listen directive is declared, the engine will try to use ports after the defined 'sphinx' port, up to 200.
 * `listen=...:sphinx` needs to be explicit set for SphinxSE connections or SphinxAPI clients.
-* [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`.
+* [SHOW INDEX STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`.
 * SQL command `status` now outputs `Queue\Threads` and `Tasks\Threads`.
 
 ### Deprecations:
@@ -623,7 +623,7 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 
 * The same port [can now be used](Server_settings/Searchd.md#listen) for http, https and binary API (to accept connections from a remote Manticore instance). `listen = *:mysql` is still required for connections via mysql protocol. Manticore now detects automatically the type of client trying to connect to it except for MySQL (due to restrictions of the protocol).
 
-* In RT mode a field can now be [text and string attribute](Creating_an_index/Data_types.md#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331).
+* In RT mode a field can now be [text and string attribute](Creating_a_table/Data_types.md#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331).
 
   In [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode) it's called `sql_field_string`. Now it's available in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode) for real-time indexes too. You can use it as shown in the example:
 
@@ -657,7 +657,7 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 * Filter operator [`in`](Searching/Filters.md#Set-filters) is now available via HTTP JSON interface.
 * [`expressions`](Searching/Expressions.md#expressions) in HTTP JSON.
 * [You can now change `rt_mem_limit` on the fly](https://github.com/manticoresoftware/manticoresearch/issues/344) in RT mode, i.e. can do `ALTER ... rt_mem_limit=<new value>`.
-* You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK.md): `chinese`, `japanese` and `korean`.
+* You can now use [separate CJK charset tables](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology): `chinese`, `japanese` and `korean`.
 * [thread_stack](Server_settings/Searchd.md#thread_stack) now limits maximum thread stack, not initial.
 * Improved `SHOW THREADS` output.
 * Display progress of long `CALL PQ` in `SHOW THREADS`.
@@ -666,7 +666,7 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
-* [`INSERT INTO PQ VALUES()`](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
+* [`INSERT INTO PQ VALUES()`](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
 * [`allow_empty=0`](Searching/Highlighting.md#allow_empty) is a new default in highlighting via HTTP JSON interface.
 * Only absolute paths are allowed for external files (stopwords, exceptions etc.) in `CREATE TABLE`/`ALTER TABLE`.
 
@@ -1167,7 +1167,7 @@ development libraries.
 ## Version 2.7.2 GA, 27 August 2018
 ### Improvements
 * compatibility with MySQL 8 clients
-* [TRUNCATE](Emptying_an_index.md) WITH RECONFIGURE
+* [TRUNCATE](Emptying_a_table.md) WITH RECONFIGURE
 * retired memory counter on SHOW STATUS for RT indexes
 * global cache of multi agents
 * improved IOCP on Windows
@@ -1286,7 +1286,7 @@ development libraries.
 * new full-text matching operator NOTNEAR/N
 * LIMIT for SELECT on percolate indexes
 * [expand_keywords](Searching/Options.md#expand_keywords) can accept 'start','exact' (where 'star,exact' has same effect as '1')
-* ranged-main-query for  [joined fields](Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_joined_field) which uses the ranged query defined by sql_query_range
+* ranged-main-query for  [joined fields](Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#sql_joined_field) which uses the ranged query defined by sql_query_range
 
 ### Bugfixes
 * [Commit 72dcf66](https://github.com/manticoresoftware/manticoresearch/commit/72dcf669744e9b7d636dfc213d24df85ab301f6b) fixed crash on searching ram segments; deadlock on save disk chunk with double buffer; deadlock on save disk chunk during optimize
@@ -1302,11 +1302,11 @@ development libraries.
 ## Version 2.6.1 GA, 26 January 2018
 ### Improvements
 * [agent_retry_count](Server_settings/Searchd.md#agent_retry_count) in case of agents with mirrors gives the value of retries per mirror instead of per agent, the total retries per agent being agent_retry_count\*mirrors.
-* [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) can now be specified per index, overriding global value. An alias [mirror_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#mirror_retry_count) is added.
+* [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) can now be specified per index, overriding global value. An alias [mirror_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#mirror_retry_count) is added.
 * a retry_count can be specified in agent definition and the value represents retries per agent
 * Percolate Queries are now in HTTP JSON API at [/json/pq](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).
 * Added -h and -v options (help and version) to executables
-* [morphology_skip_fields](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology_skip_fields) support for Real-Time indexes
+* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) support for Real-Time indexes
 
 ### Bugfixes
 * [Commit a40b079](https://github.com/manticoresoftware/manticore/commit/a40b0793feff65e40d10062568d9847c08d10f57) fixed ranged-main-query to correctly work with sql_range_step when used at MVA field
@@ -1338,7 +1338,7 @@ In this release we've changed internal protocol used by masters and agents to sp
 ## Version 2.5.1, 23 November 2017
 ### Features and improvements
 * JSON queries on [HTTP API protocol](Connecting_to_the_server/HTTP.md). Supported search, insert, update, delete, replace operations. Data manipulation commands can be also bulked, also there are some limitations currently as MVA and JSON attributes can't be used for inserts, replaces or updates.
-* [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-INDEXES) command
+* [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) command
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) command
 * [SHOW THREADS](Profiling_and_monitoring/SHOW_THREADS.md) can show progress of optimize, rotation or flushes.
 * GROUP N BY work correctly with MVA attributes

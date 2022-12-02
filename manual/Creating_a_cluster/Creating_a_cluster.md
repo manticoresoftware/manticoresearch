@@ -1,7 +1,7 @@
 # Manticore cluster
 
 Manticore Search is a highly distributed system and consists of all the needed components to allow you build a highly available and scalable setup of a database for search: 
-* [distributed index](../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) allowing sharding
+* [distributed table](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) allowing sharding
   * [Mirroring](../Creating_a_cluster/Remote_nodes/Mirroring.md) for high availability
   * [Load balancing](../Creating_a_cluster/Remote_nodes/Load_balancing.md) for high scalability
 * [Replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for data safety

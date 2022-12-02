@@ -1,16 +1,16 @@
-# Updating index schema
+# Updating table schema
 
-## Updating index schema in RT mode
+## Updating table schema in RT mode
 
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE index ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
 
-ALTER TABLE index DROP COLUMN column_name
+ALTER TABLE table DROP COLUMN column_name
 ```
 
-It supports adding one field at a time for RT indexes. Supported data types are:
+It supports adding one field at a time for RT tables. Supported data types are:
 * `int` - integer attribute
 * `timestamp` - timestamp attribute
 * `bigint` - big integer attribute
@@ -24,16 +24,16 @@ It supports adding one field at a time for RT indexes. Supported data types are:
 * `text indexed` / `string indexed` - full-text indexed field, indexed only (the original value is not stored in docstore)
 * `text indexed attribute` / `string indexed attribute` - full text indexed field + string attribute (not storing the original value in docstore)
 * `text stored` / `string stored` - the value will be only stored in docstore, not full-text indexed, not a string attribute
-* adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages)
+* adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
 
 #### Important notes:
-* ❗It's recommended to **backup index files** before `ALTER`ing it to avoid data corruption in case of a sudden power interruption or other similar issues.
-* Querying an index is impossible while a column is being added.
+* ❗It's recommended to **backup table files** before `ALTER`ing it to avoid data corruption in case of a sudden power interruption or other similar issues.
+* Querying a table is impossible while a column is being added.
 * Newly created attribute's values are set to 0.
-* `ALTER` will not work for distributed indexes and indexes without any attributes.
-* `DROP COLUMN` will fail if an index has only one field.
+* `ALTER` will not work for distributed tables and tables without any attributes.
+* `DROP COLUMN` will fail if a table has only one field.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
-* Adding/dropping full-text field is only supported in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
+* Adding/dropping full-text field is only supported in the [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
 
 <!-- request Example -->
 ```sql
@@ -127,16 +127,16 @@ mysql> desc rt;
 
 <!-- end -->
 
-## Updating index FT settings in RT mode
+## Updating table FT settings in RT mode
 
 <!-- example ALTER FT -->
 
 ```sql
-ALTER TABLE index ft_setting='value'[, ft_setting2='value']
+ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-You can also use `ALTER` to modify full-text settings of your index in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode). Just remember that it doesn't affect existing documents, it only affects new ones. Take a look at the example where we:
-* create an index with a full-text field and `charset_table` that allows only 3 searchable characters: `a`, `b` and `c`.
+You can also use `ALTER` to modify full-text settings of your table in the [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode). Just remember that it doesn't affect existing documents, it only affects new ones. Take a look at the example where we:
+* create a table with a full-text field and `charset_table` that allows only 3 searchable characters: `a`, `b` and `c`.
 * then we insert document 'abcd' and find it by query `abcd`, the `d` just gets ignored since it's not in the `charset_table` array
 * then we understand, that we want `d` to be searchable too, so we add it with help of `ALTER`
 * but the same query `where match('abcd')` still says it searched by `abc`, because the existing document remembers previous contents of `charset_table`
@@ -215,18 +215,18 @@ mysql> show meta;
 
 <!-- end -->
 
-## Updating index FT settings in plain mode
+## Updating table FT settings in plain mode
 
 <!-- example ALTER RECONFIGURE -->
 ```sql
-ALTER TABLE index RECONFIGURE
+ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER` can also reconfigure an RT index in [plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the index header, so that new documents are tokenized using the updated full-text settings.
+`ALTER` can also reconfigure an RT table in the [plain mode](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the table header, so that new documents are tokenized using the updated full-text settings.
 
 <!-- request Example -->
 ```sql
-mysql> show index rt settings;
+mysql> show table rt settings;
 +---------------+-------+
 | Variable_name | Value |
 +---------------+-------+
@@ -237,7 +237,7 @@ mysql> show index rt settings;
 mysql> alter table rt reconfigure;
 Query OK, 0 rows affected (0.00 sec)
 
-mysql> show index rt settings;
+mysql> show table rt settings;
 +---------------+----------------------+
 | Variable_name | Value                |
 +---------------+----------------------+
@@ -254,7 +254,7 @@ mysql> show index rt settings;
 ALTER TABLE table REBUILD SECONDARY
 ```
 
-`ALTER` can also be used to rebuild secondary indexes in a given table. Sometimes a secondary index can be disabled for the whole index or for one/multiple attributes in it:
+`ALTER` can also be used to rebuild secondary indexes in a given table. Sometimes a secondary index can be disabled for the whole table or for one/multiple attributes in it:
 * On `UPDATE` of an attribute: in this case its secondary index gets disabled.
 * In case Manticore loads a table with old formatted secondary indexes: in this case secondary indexes will be disabled for the whole table.
 

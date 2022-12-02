@@ -1,15 +1,15 @@
 # Execution of fetch queries
 
-With all the SQL drivers, indexing generally works as follows.
+With all the SQL drivers, building a plain table generally works as follows.
 
 * connection to the database is established;
-* pre query as `sql_query_pre`  is   executed to perform any necessary initial setup, such as setting per-connection encoding with MySQL;
-* main query as `sql_query` is executed and the rows it returns are indexed;
+* pre query as `sql_query_pre`  is executed to perform any necessary initial setup, such as setting per-connection encoding with MySQL;
+* main query as `sql_query` is executed and the rows it returns are processed;
 * post-query as `sql_query_post` is executed to perform any necessary cleanup;
 * connection to the database is closed;
-* indexer does the sorting phase (to be pedantic, index-type specific post-processing);
+* indexer does the sorting phase (to be pedantic, table-type specific post-processing);
 * connection to the database is established again;
-* post-index query  as `sql_query_post_index` is executed to perform any necessary final cleanup;
+* post-processing query  as `sql_query_post_index` is executed to perform any necessary final cleanup;
 * connection to the database is closed again.
 
 Example of a source fetching data from MYSQL:
@@ -43,7 +43,7 @@ index myindex {
 ## sql_query
 
 This is the query which is used to retrieve documents from SQL server. There can be only one sql_query declared and it's mandatory to have one.
-See also [Indexing fetched data](../../Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#Indexing-fetched-data)
+See also [Processing fetched data](../../Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#Processing-fetched-data)
 
 ## sql_query_pre
 
@@ -69,11 +69,11 @@ sql_query_pre = SET SESSION query_cache_type=OFF
 
 Post-fetch query. Optional, default value is empty.
 
-This query is executed immediately after sql_query completes successfully. When post-fetch query produces errors, they are reported as warnings, but indexing is *not* terminated. It's result set is ignored. Note that indexing is not yet completed at the point when this query gets executed, and further indexing still may fail. Therefore, any permanent updates should not be done from here. For instance, updates on helper table that permanently change the last successfully indexed ID should not be run from post-fetch query; they should be run from post-index query instead.
+This query is executed immediately after sql_query completes successfully. When post-fetch query produces errors, they are reported as warnings, but indexing is *not* terminated. It's result set is ignored. Note that indexing is not yet completed at the point when this query gets executed, and further indexing still may fail. Therefore, any permanent updates should not be done from here. For instance, updates on helper table that permanently change the last successfully indexed ID should not be run from `sql_query_post` query; they should be run from `sql_query_post_index` query instead.
 
 ## sql_query_post_index
 
-Post-index query. Optional, default value is empty.
+Post-processing query. Optional, default value is empty.
 
 This query is executed when indexing is fully and successfully completed. If this query produces errors, they are reported as warnings, but indexing is not terminated. It's result set is ignored. `$maxid` macro can be used in its text; it will be expanded to maximum document ID which was actually fetched from the database during indexing. If no documents were indexed, `$maxid` will be expanded to 0.
 
@@ -83,4 +83,4 @@ sql_query_post_index = REPLACE INTO counters ( id, val ) \
     VALUES ( 'max_indexed_id', $maxid )
 ```
 
-The difference between post-query and post-index query is in that post-query is run immediately when Manticore received all the documents, but further indexing may still fail for some other reason. On the contrary, by the time the post-index query gets executed, it is guaranteed that the indexing was successful. Database connection is dropped and re-established because sorting phase can be very lengthy and would just timeout otherwise.
+The difference between `sql_query_post` and `sql_query_post_index` is in that `sql_query_post` is run immediately when Manticore received all the documents, but further indexing may still fail for some other reason. On the contrary, by the time the `sql_query_post_index` query gets executed, it is guaranteed that the table was created successfully. Database connection is dropped and re-established because sorting phase can be very lengthy and would just timeout otherwise.

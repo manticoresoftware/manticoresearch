@@ -20,7 +20,7 @@ The coordinates can be stored as degrees or radians.
 
 To find out the distance between two points the [GEODIST()](../Functions/Geo_spatial_functions.md#GEODIST%28%29) function can be used. `GEODIST` requires two pairs of coordinates as first four parameters.
 
-A 5th parameter in a simplified JSON format can configure certain aspects of the function. By default, `GEODIST` expects coordinates to be in radians, but `in=degrees` can be added to allow using degrees at input. The coordinates for which we perform the geo distance must have same time (degrees or radians) as the ones stored in the index, otherwise results will be misleading.
+The 5th parameter in a simplified JSON format can configure certain aspects of the function. By default, `GEODIST` expects coordinates to be in radians, but `in=degrees` can be added to allow using degrees at input. The coordinates for which we perform the geo distance must have same time (degrees or radians) as the ones stored in the table, otherwise results will be misleading.
 
 The calculated distance is by default in meters, but with `out` option it can be transformed to kilometers, feets or miles. Lastly, by default a calculation method called `adaptive` is used. An alternative method based on `haversine` algorithm is available, however this one is slower and less precise.
 

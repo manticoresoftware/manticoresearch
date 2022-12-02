@@ -113,4 +113,4 @@ The calling sequence of the other functions is fixed, though. Namely,
 
 * `testfunc_init()` is called once when initializing the query. It can return a non-zero code to indicate a failure; in that case query will be terminated, and the error message from the `error_message` buffer will be returned.
 * `testfunc()` is called for every eligible row (see above), whenever Manticore needs to compute the UDF value. It can also indicate an (internal) failure error by writing a non-zero byte value to `error_flag`. In that case, it is guaranteed that will no more be called for subsequent rows, and a default return value of 0 will be substituted. Manticore might or might not choose to terminate such queries early, neither behavior is currently guaranteed.
-* `testfunc_deinit()` is called once when the query processing (in a given index shard) ends.
+* `testfunc_deinit()` is called once when the query processing (in a given table shard) ends.

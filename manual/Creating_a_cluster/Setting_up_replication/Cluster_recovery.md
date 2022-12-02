@@ -8,7 +8,7 @@ However it comes with its challenges. Below let's look at what will happen in th
 
 Node A is stopped as usual. The other nodes receive "normal shutdown" message from node A. The cluster size is reduced and a quorum re-calculation is issued.
 
-After node A gets started as usual, it joins the cluster nodes. Node A will not serve any write transaction until the join is complete and it's fully synchronized with the cluster. If a writeset cache on donor node B or C (which can be controlled with a Galera cluster's option [gcache.size](https://galeracluster.com/library/documentation/galera-parameters.html#gcache-size)) still has all transactions missed at node A, node A will receive a fast incremental state transfer ([IST](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-ist)), that is, a transfer of only missed transactions. Otherwise, a snapshot state transfer ([SST](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-sst)) will start, that is, a transfer of index files.
+After node A gets started as usual, it joins the cluster nodes. Node A will not serve any write transaction until the join is complete and it's fully synchronized with the cluster. If a writeset cache on donor node B or C (which can be controlled with a Galera cluster's option [gcache.size](https://galeracluster.com/library/documentation/galera-parameters.html#gcache-size)) still has all transactions missed at node A, node A will receive a fast incremental state transfer ([IST](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-ist)), that is, a transfer of only missed transactions. Otherwise, a snapshot state transfer ([SST](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-sst)) will start, that is, a transfer of table files.
 
 ### Case 2
 
@@ -24,7 +24,7 @@ The problem now is how to initialize the cluster. It's important that on a clean
 
 It is important that this node starts first to form the cluster. To bootstrap a cluster the server should be started on this node with flag [--new-cluster](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). On Linux you can also run `manticore_new_cluster` which will start Manticore in `--new-cluster` mode via systemd.
 
-If another node starts first and bootstraps the cluster, then the most advanced node joins that cluster, performs full SST and receives an index file where some transactions are missed in comparison with the index files it got before. That is why it is important to start first the node which was shut down last, it should have flag `safe_to_bootstrap: 1` in [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md).
+If another node starts first and bootstraps the cluster, then the most advanced node joins that cluster, performs full SST and receives a table file where some transactions are missed in comparison with the table files it got before. That is why it is important to start first the node which was shut down last, it should have flag `safe_to_bootstrap: 1` in [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md).
 
 ### Case 4
 

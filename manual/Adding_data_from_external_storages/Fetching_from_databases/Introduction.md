@@ -1,6 +1,6 @@
 # Introduction
 
-Using plain indexes, Manticore Search can fetch data from databases using specialized drivers or ODBC. Current drivers include:
+Using plain tables, Manticore Search can fetch data from databases using specialized drivers or ODBC. Current drivers include:
 
 * `mysql` - for MySQL/MariaDB/Percona MySQL databases
 * `pgsql` - for PostgreSQL database

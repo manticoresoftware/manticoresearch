@@ -19,7 +19,7 @@ There are the following classes of the variables:
 3.  global user variable: `set global @var_name = (value)`
 4.  global distributed variable: `set index dist_index_name global @var_name = (value)`
 
-Global user variables are shared between concurrent sessions. Currently, the only supported value type is the list of BIGINTs, and these variables can only be used along with IN() for filtering purpose. The intended usage scenario is uploading huge lists of values to `searchd` (once) and reusing them (many times) later, saving on network overheads. Global user variables might be either transferred to all agents of distributed index or set locally in case of local index defined at distributed index. Example:
+Global user variables are shared between concurrent sessions. Currently, the only supported value type is the list of BIGINTs, and these variables can only be used along with IN() for filtering purpose. The intended usage scenario is uploading huge lists of values to `searchd` (once) and reusing them (many times) later, saving on network overheads. Global user variables might be either transferred to all agents of distributed table or set locally in case of local table defined at distributed table. Example:
 
 ```sql
 // in session 1

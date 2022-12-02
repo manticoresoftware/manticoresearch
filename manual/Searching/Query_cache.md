@@ -18,13 +18,13 @@ Query cache works as follows. When it's enabled, *every* full-text search result
 
 Note how the query cache impact on RAM is thus *not* limited by `qcache_max_bytes`! If you run, say, 10 concurrent queries, each of them matching upto 1M matches (after filters), then the peak temporary RAM use will be in the 40 MB to 240 MB range, even if in the end the queries are quick enough and do not get cached.
 
-Queries can then use cache when the index, the full-text query (ie.`MATCH()` contents), and the ranker are all a match, and filters are compatible. Meaning:
+Queries can then use cache when the table, the full-text query (ie.`MATCH()` contents), and the ranker are all a match, and filters are compatible. Meaning:
 
 *   The full-text part within `MATCH()` must be a bytewise match. Add a single extra space, and that is now a different query where the query cache is concerned.
 *   The ranker (and its parameters if any, for user-defined rankers) must be a bytewise match.
 *   The filters must be a superset of the original filters. That is, you can add extra filters and still hit the cache. (In this case, the extra filters will be applied to the cached result.) But if you remove one, that will be a new query again.
 
-Cache entries expire with TTL, and also get invalidated on index rotation, or on `TRUNCATE`, or on `ATTACH`. Note that at the moment entries are **not** invalidated on arbitrary RT index writes! So a cached query might be returning older results for the duration of its TTL.
+Cache entries expire with TTL, and also get invalidated on table rotation, or on `TRUNCATE`, or on `ATTACH`. Note that at the moment entries are **not** invalidated on arbitrary RT table writes! So a cached query might be returning older results for the duration of its TTL.
 
 Current cache status can be inspected with in [SHOW STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-STATUS) through the `qcache_XXX` variables:
 

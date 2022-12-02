@@ -1,11 +1,11 @@
 # Deleting documents
 
 Deleting is only supported for:
-* [real-time](Creating_an_index/Local_indexes/Real-time_index.md) indexes,
-* [percolate](Creating_an_index/Local_indexes/Percolate_index.md) indexes
-* distributed indexes that contain only RT indexes as agents
+* [real-time](Creating_a_table/Local_tables/Real-time_table.md) tables,
+* [percolate](Creating_a_table/Local_tables/Percolate_table.md) tables
+* distributed tables that contain only RT tables as agents
 
-You can delete existing rows (documents) from an existing index based on ID or conditions.
+You can delete existing rows (documents) from an existing table based on ID or conditions.
 
 <!-- example delete 1 -->
 Deleting documents is supported via SQL and HTTP interfaces.
@@ -14,7 +14,7 @@ SQL response for successful operation will show the number of rows deleted.
 
 `json/delete` is an HTTP endpoint for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
 
-To delete all documents from an index it's recommended to use instead the [index truncation](Emptying_an_index.md) as it's a much faster operation.
+To delete all documents from a table it's recommended to use instead the [table truncation](Emptying_a_table.md) as it's a much faster operation.
 
 <!-- intro -->
 ##### SQL:
@@ -22,10 +22,10 @@ To delete all documents from an index it's recommended to use instead the [index
 <!-- request SQL -->
 
 ```sql
-DELETE FROM index WHERE where_condition
+DELETE FROM table WHERE where_condition
 ```
 
-* `index` is a name of the index from which the row should be deleted.
+* `table` is a name of the table from which the row should be deleted.
 * `where_condition` for SQL has the same syntax as in the [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement.
 
 <!-- request HTTP -->
@@ -47,12 +47,12 @@ POST /delete -d '
 
 * `id` for JSON is the row `id` which should be deleted.
 * `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
-* `cluster` for JSON is cluster name property and should be set along with `index` property to delete a row from an index which is inside a [replication cluster](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
+* `cluster` for JSON is cluster name property and should be set along with `table` property to delete a row from a table which is inside a [replication cluster](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
 
 <!-- end -->
 
 <!-- example delete 2 -->
-In this example we are deleting all documents that match full-text query `dummy` from index named `test`:
+In this example we are deleting all documents that match full-text query `dummy` from table named `test`:
 
 
 <!-- intro -->
@@ -193,7 +193,7 @@ class DeleteResponse {
 <!-- end -->
 
 <!-- example delete 3 -->
-Here - deleting a document with `id` 100 from index named `test`:
+Here - deleting a document with `id` 100 from table named `test`:
 
 
 <!-- intro -->
@@ -315,7 +315,7 @@ class DeleteResponse {
 <!-- example delete 4 -->
 Manticore SQL allows to use complex conditions for the `DELETE` statement.
 
-For example here we are deleting documents that match full-text query `dummy` and have attribute `mva1` with a value greater than 206 or `mva1` values 100 or 103 from index named `test`:
+For example here we are deleting documents that match full-text query `dummy` and have attribute `mva1` with a value greater than 206 or `mva1` values 100 or 103 from table named `test`:
 
 
 <!-- intro -->
@@ -347,7 +347,7 @@ Query OK, 4 rows affected (0.00 sec)
 <!-- end -->
 
 <!-- example delete 5 -->
-Here is an example of deleting documents in cluster `nodes4`'s index `test`:
+Here is an example of deleting documents in cluster `nodes4`'s table `test`:
 
 
 <!-- intro -->

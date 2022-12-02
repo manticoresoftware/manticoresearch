@@ -8,12 +8,12 @@ This is where a traditional search is not a good fit, since would assume perform
 
 Google Alerts, AlertHN, Bloomberg Terminal and other systems that let their users to subscribe to something use a similar technology.
 
-> * See [percolate](../Creating_an_index/Local_indexes/Percolate_index.md) about how to create a PQ index.
-> * See [Adding rules to a percolate index](../Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
+> * See [percolate](../Creating_a_table/Local_tables/Percolate_table.md) about how to create a PQ table.
+> * See [Adding rules to a percolate table](../Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
 
 ### Performing a percolate query with CALL PQ
 
-The key thing you need to remember about percolate queries is that you already have your search queries in the index. What you need to provide is documents **to check if any of them match any of the stored rules**.
+The key thing you need to remember about percolate queries is that you already have your search queries in the table. What you need to provide is documents **to check if any of them match any of the stored rules**.
 
 You can perform a percolate query via SQL or JSON interfaces as well as using programming language clients. The SQL way gives more flexibility while via the HTTP it's simpler and gives all you mostly need. The below table can help you understand the differences.
 
@@ -33,10 +33,10 @@ You can perform a percolate query via SQL or JSON interfaces as well as using pr
 | Return all info about matching query | 1 as query (0 by default) |  Enabled by default | Enabled by default |
 | Skip invalid JSON | 1 as skip_bad_json (0 by default)  | Not available | Not available  |
 | Extended info in [SHOW META](../Profiling_and_monitoring/SHOW_META.md) | 1 as verbose (0 by default)  | Not available  | Not available |
-| Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-percolate-indexes-%28DPQ-indexes%29)) | 1 as shift (0 by default)  | Not available  | Not available |
+| Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)) | 1 as shift (0 by default)  | Not available  | Not available |
 
 <!-- example create percolate -->
-To demonstrate how it works here are few examples. Let's create a PQ index with 2 fields:
+To demonstrate how it works here are few examples. Let's create a PQ table with 2 fields:
 
 * title (text)
 * color (string)
@@ -1405,12 +1405,12 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 ##### I want higher performance of a percolate query
 Percolate queries were made with high throughput and big data volume in mind, so there are few things how you can optimize your performance in case you are looking for lower latency and higher throughput.
 
-There are two modes of distribution of a percolate index and how a percolate query can work against it:
+There are two modes of distribution of a percolate table and how a percolate query can work against it:
 
-* **Sparsed. Default.** When it is good: too many documents, PQ indexes are mirrored. The batch of documents you pass will be split into parts according to the number of agents, so each of the nodes will receive and process only a part of the documents from your request. It will be beneficial when your set of documents is quite big, but the set of queries stored in the pq index is quite small. Assuming that all the hosts are mirrors Manticore will split your set of documents and distribute the chunks among the mirrors. Once the agents are done with the queries it will collect and merge all the results and return final query set as if it comes from one solid index. You can use [replication](../References.md#Replication) to help the process.
-* **Sharded**. When it is good: too many PQ rules, the rules are split among PQ indexes. The whole documents set will be broad-casted to all indexes of the distributed PQ index without any initial documents split. It is beneficial when you push relatively small set of documents, but the number of stored queries is huge. So in this case it is more appropriate to store just part of PQ rules on each node and then merge the results returned from the nodes that process one and the same set of documents against different sets of PQ rules. This mode has to be explicitly set since first of all it implies multiplication of network payload and secondly it expects indexes with different PQ which [replication](../References.md#Replication) cannot do out of the box.
+* **Sparsed. Default.** When it is good: too many documents, PQ tables are mirrored. The batch of documents you pass will be split into parts according to the number of agents, so each of the nodes will receive and process only a part of the documents from your request. It will be beneficial when your set of documents is quite big, but the set of queries stored in the pq table is quite small. Assuming that all the hosts are mirrors Manticore will split your set of documents and distribute the chunks among the mirrors. Once the agents are done with the queries it will collect and merge all the results and return final query set as if it comes from one solid table. You can use [replication](../References.md#Replication) to help the process.
+* **Sharded**. When it is good: too many PQ rules, the rules are split among PQ tables. The whole documents set will be broad-casted to all tables of the distributed PQ table without any initial documents split. It is beneficial when you push relatively small set of documents, but the number of stored queries is huge. So in this case it is more appropriate to store just part of PQ rules on each node and then merge the results returned from the nodes that process one and the same set of documents against different sets of PQ rules. This mode has to be explicitly set since first of all it implies multiplication of network payload and secondly it expects tables with different PQ which [replication](../References.md#Replication) cannot do out of the box.
 
-Let's assume you have index `pq_d2` which is defined as:
+Let's assume you have table `pq_d2` which is defined as:
 
 ``` ini
 index pq_d2
@@ -1643,7 +1643,7 @@ class SearchResponse {
 
 <!-- example call_pq_example -->
 
-And you fire `CALL PQ` to the distributed index with a couple of docs.
+And you fire `CALL PQ` to the distributed table with a couple of docs.
 
 
 <!-- intro -->
@@ -1893,7 +1893,7 @@ class SearchResponse {
 ```
 <!-- end -->
 
-That was an example of the default **sparsed** mode. To demonstrate the **sharded** mode let's create a distributed PQ index consisting of 2 local PQ indexes and add 2 documents to "products1" and 1 document to "products2":
+That was an example of the default **sparsed** mode. To demonstrate the **sharded** mode let's create a distributed PQ table consisting of 2 local PQ tables and add 2 documents to "products1" and 1 document to "products2":
 ```sql
 create table products1(title text, color string) type='pq';
 create table products2(title text, color string) type='pq';
@@ -1905,7 +1905,7 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 ```
 
 <!-- example sharded -->
-Now if you add `'sharded' as mode` to `CALL PQ` it will send the documents to all the agents indexes (in this case just local indexes, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
+Now if you add `'sharded' as mode` to `CALL PQ` it will send the documents to all the agents tables (in this case just local tables, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
 
 <!-- intro -->
 SQL:

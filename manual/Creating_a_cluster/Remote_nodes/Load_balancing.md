@@ -1,6 +1,6 @@
 # Load balancing
 
-Load balancing is turned on by default for any [distributed index](../../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) using [mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md). By default queries are distributed randomly among the mirrors. To change this behaviour you can use [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md).
+Load balancing is turned on by default for any [distributed table](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) using [mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md). By default queries are distributed randomly among the mirrors. To change this behaviour you can use [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md).
 
 ## ha_strategy
 
@@ -8,9 +8,9 @@ Load balancing is turned on by default for any [distributed index](../../Creatin
 ha_strategy = {random|nodeads|noerrors|roundrobin}
 ```
 
-Agent mirror selection strategy for load balancing. Optional, default is random.
+Agent mirror selection strategy for load balancing. Optional, default is `random`.
 
-The strategy used for mirror selection, or in other words, choosing a specific [agent mirror](../../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in a distributed index. Essentially, this directive controls how exactly master does the load balancing between the configured mirror agent nodes. The following strategies are implemented:
+The strategy used for mirror selection, or in other words, choosing a specific [agent mirror](../../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in a distributed table. Essentially, this directive controls how exactly master does the load balancing between the configured mirror agent nodes. The following strategies are implemented:
 
 ### Simple random balancing
 
@@ -50,7 +50,7 @@ The rationale here is, once the **observed latencies** stabilize, the **latency 
 
 <!-- example conf balancing 2 -->
 #### nodeads
-Latency-weighted probabilities, but dead mirrors are excluded from the selection. "Dead" mirror is defined as a mirror that resulted in multiple hard errors (eg. network failure, or no answer, etc) in a row. 
+Latency-weighted probabilities, but dead mirrors are excluded from the selection. "Dead" mirror is defined as a mirror that resulted in multiple hard errors (eg. network failure, or no answer, etc) in a row.
 
 <!-- intro -->
 ##### Example:
@@ -100,7 +100,7 @@ ha_period_karma = 2m
 
 `ha_period_karma` defines agent mirror statistics window size, in seconds (or time suffixed). Optional, default is 60.
 
-For a distributed index with agent mirrors in it, server tracks several different per-mirror counters. These counters are then used for failover and balancing. (Server picks the best mirror to use based on the counters.) Counters are accumulated in blocks of `ha_period_karma` seconds.
+For a distributed table with agent mirrors in it, server tracks several different per-mirror counters. These counters are then used for failover and balancing. (Server picks the best mirror to use based on the counters.) Counters are accumulated in blocks of `ha_period_karma` seconds.
 
 After beginning a new block, master may still use the accumulated values from the previous one, until the new one is half full. Thus, any previous history stops affecting the mirror choice after 1.5 times ha_period_karma seconds at most.
 
@@ -114,6 +114,6 @@ ha_ping_interval = 3s
 
 `ha_ping_interval` defines interval between agent mirror pings, in milliseconds (or time suffixed). Optional, default is 1000.
 
-For a distributed index with agent mirrors in it, server sends all mirrors a ping command during the idle periods. This is to track the current agent status (alive or dead, network roundtrip, etc). The interval between such pings is defined by this directive. 
+For a distributed table with agent mirrors in it, server sends all mirrors a ping command during the idle periods. This is to track the current agent status (alive or dead, network roundtrip, etc). The interval between such pings is defined by this directive.
 
 To disable pings, set ha_ping_interval to 0.

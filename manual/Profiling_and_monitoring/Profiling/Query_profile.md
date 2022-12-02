@@ -70,13 +70,13 @@ A list of states may (and will) vary over time, as we refine the states. Here's 
 * `unknown`: generic catch-all state. Accounts for both not-yet-instrumented code, or just small miscellaneous tasks that do not really belong in any other state, but are too small to deserve their own state.
 * `net_read`: reading the query from the network (that is, the application).
 * `io`: generic file IO time.
-* `dist_connect`: connecting to remote agents in the distributed index case.
+* `dist_connect`: connecting to remote agents in the distributed table case.
 * `sql_parse`: parsing the SQL syntax.
 * `dict_setup`: dictionary and tokenizer setup.
 * `parse`: parsing the full-text query syntax.
 * `transforms`: full-text query transformations (wildcard and other expansions, simplification, etc).
 * `init`: initializing the query evaluation.
-* `open`: opening the index files.
+* `open`: opening the table files.
 * `read_docs`: IO time spent reading document lists.
 * `read_hits`: IO time spent reading keyword positions.
 * `get_docs`: computing the matching documents.
@@ -84,8 +84,8 @@ A list of states may (and will) vary over time, as we refine the states. Here's 
 * `filter`: filtering the full-text matches.
 * `rank`: computing the relevance rank.
 * `sort`: sorting the matches.
-* `finalize`: finalizing the per-index search result set (last stage expressions, etc).
-* `dist_wait`: waiting for the remote results from the agents in the distributed index case.
+* `finalize`: finalizing the per-table search result set (last stage expressions, etc).
+* `dist_wait`: waiting for the remote results from the agents in the distributed table case.
 * `aggregate`: aggregating multiple result sets.
 * `net_write`: writing the result set to the network.
 

@@ -55,7 +55,7 @@ The aggregation requires to set a `size` for the size of the result set group.
 ### Just Grouping
 Grouping is very simple - just add "GROUP BY smth" to the end of your `SELECT` query. The something can be:
 
-* any non-full-text field from the index: integer, float, string, MVA (multi-value attribute)
+* any non-full-text field from the table: integer, float, string, MVA (multi-value attribute)
 * or if you used an alias in the `SELECT` list - you can GROUP BY it too
 
 You can omit any [aggregation functions](../Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will work too:
@@ -546,7 +546,7 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 <!-- end -->
 <!-- example mva -->
 ##### Grouping by MVA (multi-value attributes)
-Manticore supports grouping by [MVA](../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
+Manticore supports grouping by [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
@@ -741,7 +741,7 @@ class SearchResponse {
 
 <!-- example json -->
 ##### Grouping by a JSON node
-If you have a field of type [JSON](../Creating_an_index/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
+If you have a field of type [JSON](../Creating_a_table/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
 ```sql
 create table products(title text, meta json);
 insert into products values(0,'nike','{"color":"red"}'),(0,'adidas','{"color":"red"}'),(0,'puma','{"color":"green"}');
@@ -942,7 +942,7 @@ In the example you can see that if we GROUP BY major and show both `COUNT(*)` an
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
-**`COUNT(DISTINCT)` against a distributed index or a real-time index consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed index consisting of local plain or real-time indexes with the same schema (identical set/order of fields, but may be different tokenization settings).
+**`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may be different tokenization settings).
 
 <!-- intro -->
 ##### Example:

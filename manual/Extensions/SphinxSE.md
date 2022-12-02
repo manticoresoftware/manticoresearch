@@ -111,16 +111,16 @@ Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, o
 
 Special "virtual" attributes names can also be bound to SphinxSE columns. `_sph_` needs to be used instead of `@` for that. For instance,  to obtain the values of `@groupby`, `@count`, or `@distinct` virtualattributes, use `_sph_groupby`, `_sph_count` or `_sph_distinct` column names, respectively.
 
-`CONNECTION` string parameter can be used to specify default searchd host, port and indexes for queries issued using this table. If no  connection string is specified in `CREATE TABLE`, index name "\*" (i.e. search all indexes) and localhost:9312 are assumed. Connection string syntax is as follows:
+`CONNECTION` string parameter is to be used to specify Manticore host, port and table. If no  connection string is specified in `CREATE TABLE`, table name `*` (i.e. search all tables) and `localhost:9312` are assumed. The connection string syntax is as follows:
 
 ```
-CONNECTION="sphinx://HOST:PORT/INDEXNAME"
+CONNECTION="sphinx://HOST:PORT/TABLENAME"
 ```
 
 You can change the default connection string later:
 
 ```sql
-mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
+mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWTABLENAME";
 ```
 
 You can also override all these parameters per-query.
@@ -136,7 +136,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ```
 * offset - offset into result set, default is 0;
 * limit - amount of matches to retrieve from result set, default is 20;
-* index - names of the indexes to search:
+* index - names of the tables to search:
 ```sql
 ... WHERE query='test;index=test1;';
 ... WHERE query='test;index=test1,test2,test3;';
@@ -192,7 +192,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ```sql
 ... WHERE query='test;groupby=attr:country_id;distinct=site_id';
 ```
-* indexweights - comma-separated list of index names and weights to use when searching through several indexes:
+* indexweights - comma-separated list of table names and weights to use when searching through several tables:
 ```sql
 ... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
 ```
@@ -372,7 +372,7 @@ CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'sphinx.so';
 
 Function name *must* be sphinx_snippets, you can not use an arbitrary name. Function arguments are as follows:
 
-**Prototype:** function sphinx_snippets ( document, index, words, \[options\] );
+**Prototype:** function sphinx_snippets ( document, table, words [, options] );
 
 Document and words arguments can be either strings or table columns. Options must be specified like this: `'value' AS option_name`. For a list of supported options, refer to [Highlighting section](../Searching/Highlighting.md). The only UDF-specific additional option is named `sphinx` and lets you specify searchd location (host and port).
 

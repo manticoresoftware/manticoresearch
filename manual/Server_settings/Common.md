@@ -5,7 +5,7 @@ lemmatizer_base
 
 Lemmatizer dictionaries base path. Optional, default is /usr/share/manticore.
 
-Our lemmatizer implementation (see [Morphology](../Creating_an_index/NLP_and_tokenization/Morphology.md) for a discussion of what lemmatizers are) is dictionary driven. lemmatizer\_base directive configures the base dictionary path. File names are hardcoded and specific to a given lemmatizer; the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained from the Manticore website (<https://manticoresearch.com/install/#other-downloads>).
+Our lemmatizer implementation (see [Morphology](../Creating_a_table/NLP_and_tokenization/Morphology.md) for a discussion of what lemmatizers are) is dictionary driven. lemmatizer\_base directive configures the base dictionary path. File names are hardcoded and specific to a given lemmatizer; the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained from the Manticore website (<https://manticoresearch.com/install/#other-downloads>).
 
 Example:
 
@@ -16,7 +16,7 @@ lemmatizer_base = /usr/share/manticore/
 progressive_merge
 ------------------
 
-When merging real-time index disk chunks, do it from smaller to bigger ones. It makes merging faster with lower read/write amplification. Enabled by default. If disabled, chunks are merged from first to last created.
+When merging real-time table disk chunks, do it from smaller to bigger ones. It makes merging faster with lower read/write amplification. Enabled by default. If disabled, chunks are merged from first to last created.
 
 json_autoconv_keynames
 ------------------------

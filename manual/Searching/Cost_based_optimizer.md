@@ -7,7 +7,7 @@ The following options are currently supported:
    * filters over document ids: `WHERE id = `, `WHERE id in (...)`
 2. **Columnar analyzer**. Can be used instead of a plain filter on a columnar attribute. It still does a scan of every value and tests it against the filter, but it is heavily optimized and is usually noticeably faster than the default approach.
 3. **Secondary indexes**. Secondary indexes are generated for all attributes by default. It uses [PGM index](https://pgm.di.unipi.it/) together with the built-in Manticore's inverted index to retrieve the list of row ids corresponding to a value or a range of values.
-The secondary indexes are stored in files `.spidx` per index.
+The secondary indexes are stored in files `.spidx`.
 
 Manticore uses query cost-based optimizer (CBO) to decide which path to take.
 

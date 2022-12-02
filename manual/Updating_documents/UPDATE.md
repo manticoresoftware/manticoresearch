@@ -2,9 +2,9 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified index with new values. Note that you can't update contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../Updating_documents/REPLACE.md).
+UPDATE changes [row-wise](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ and plain indexes. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages).
+Attribute updates are supported for RT, PQ and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 
 **Note that document id cannot be updated.**
@@ -595,7 +595,7 @@ class UpdateResponse {
 
 <!-- example cluster update -->
 
-When using replication, index name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP you should set a `cluster` property. See [setting up replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more info.
+When using replication, the table name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP you should set a `cluster` property. See [setting up replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more info.
 
 ```json
 {
@@ -693,7 +693,7 @@ class UpdateResponse {
 Here is the syntax for the SQL `UPDATE` statement:
 
 ```sql
-UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]] [FORCE|IGNORE INDEX(id)]
+UPDATE table SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]] [FORCE|IGNORE INDEX(id)]
 ```
 
 
@@ -825,15 +825,15 @@ OPTION <optionname>=<value> [ , ... ]
 
 The options are the same as for [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for `UPDATE` statement you can use these options:
 
-*   'ignore_nonexistent_columns' - If set to **1** points that the update will silently ignore any warnings about trying to update a column which is not exists in current index schema. Default value is  **0**.
+*   'ignore_nonexistent_columns' - If set to **1** points that the update will silently ignore any warnings about trying to update a column which is not exists in current table schema. Default value is  **0**.
 *   'strict' - this option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will end in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0 if multiple properties are updated and some are not allowed, the `UPDATE` will not end in error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` are not permitted, the command will end in an error even with strict=0.
 
 ### FORCE and IGNORE INDEX
-In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `UPDATE ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it.
+In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether a table by id should be used or not. It can cause poor performance of queries like `UPDATE ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the secondary index. `IGNORE INDEX(id)` will force ignore it.
 
 ## Updates via HTTP JSON
 
-Updates using HTTP JSON protocol are performed via the `/update` endpoint. The syntax is similar to the [/insert endpoint](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
+Updates using HTTP JSON protocol are performed via the `/update` endpoint. The syntax is similar to the [/insert endpoint](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but this time the `doc` property is mandatory.
 
 The server will respond with a JSON object stating if the operation was successful or not.
 
@@ -912,7 +912,7 @@ The query syntax is the same as in the [/search endpoint](../Searching/Full_text
 FLUSH ATTRIBUTES
 ```
 
-Flushes all in-memory attribute updates in all the active disk indexes to disk. Returns a tag that identifies the result on-disk state (basically, a number of actual disk attribute saves performed since the server startup).
+Flushes all in-memory attribute updates in all the active disk tables to disk. Returns a tag that identifies the result on-disk state (basically, a number of actual disk attribute saves performed since the server startup).
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1147,7 +1147,7 @@ attr_update_reserve=size
 ```
 
 <!-- example attr_update_reserve -->
-`attr_update_reserve` is a per-index setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
+`attr_update_reserve` is a per-table setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
 
 When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the `.spb` file. But if the updated string is longer, updates are written to the end of the `.spb` file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
 

@@ -773,7 +773,7 @@ class SearchResponse {
 ## Profiling without running a query
 
 <!-- Example Explain_query -->
-The SQL statement `EXPLAIN QUERY` allows displaying the execution tree of a provided full-text query without running an actual search query on the index.
+The SQL statement `EXPLAIN QUERY` allows displaying the execution tree of a provided full-text query without running an actual search query on the table.
 
 
 

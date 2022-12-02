@@ -66,7 +66,7 @@ POST /search
 
 <!-- example must_not -->
 ### must
-Queries and filters specified in the `must` section must match the documents. If several fulltext queries or filters are specified, all of them. This is the equivalent of `AND` queries in SQL. Note, if you want to match against an array ([multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times and if only all the queried values are found in the array the result will be positive, e.g.:
+Queries and filters specified in the `must` section must match the documents. If several fulltext queries or filters are specified, all of them. This is the equivalent of `AND` queries in SQL. Note, if you want to match against an array ([multi-value attribute](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times and if only all the queried values are found in the array the result will be positive, e.g.:
 
 ```json
 "must": [
@@ -82,7 +82,7 @@ Note also, it may be better in terms of performance to use:
 (see details below).
 
 ### should
-Queries and filters specified in the `should` section should match the documents. If some queries are specified in `must` or `must_not`, `should` queries are ignored. On the other hand, if there are no queries other than `should`, then at least one of these queries must match a document for it to match the bool query. This is the equivalent of `OR` queries. Note, if you want to match against an array ([multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times, e.g.:
+Queries and filters specified in the `should` section should match the documents. If some queries are specified in `must` or `must_not`, `should` queries are ignored. On the other hand, if there are no queries other than `should`, then at least one of these queries must match a document for it to match the bool query. This is the equivalent of `OR` queries. Note, if you want to match against an array ([multi-value attribute](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times, e.g.:
 
 ```json
 "should": [
@@ -293,7 +293,7 @@ POST /search
 <!-- end -->
 
 <!-- example equals_any -->
-Filter `equals` can be applied to a [multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) and you can use:
+Filter `equals` can be applied to a [multi-value attribute](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) and you can use:
 * `any()` which will be positive if the attribute has at least one value which equals to the queried value;
 * `all()` which will be positive if the attribute has a single value and it equals to the queried value
 
@@ -331,7 +331,7 @@ POST /search
 <!-- end -->
 
 <!-- example set_any -->
-When applied to a [multi-value attribute](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29) you can use:
+When applied to a [multi-value attribute](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) you can use:
 * `any()` (equivalent to no function) which will be positive if there's at least one match between the attribute values and the queried values;
 * `all()` which will be positive if all the attribute values are in the queried set
 

@@ -20,9 +20,9 @@ SELECT * FROM test WHERE tags ALL('foo', 'bar', 'fake');
 SELECT * FROM test WHERE tags NOT ALL('true', 'text', 'tag');
 ```
 
-Here assumed that index 'test' has string attribute 'tags' with set of words (tags), separated by whitespace. If all of the words enumerated as arguments of [ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29) present in the attribute, filter matches. Optional 'NOT' inverses the logic. For example, attr containing 'buy iphone cheap' will be matched by `ALL('cheap', 'iphone')`, but will not match `ALL('iphone', '5s')`.
+Here assumed that table 'test' has string attribute 'tags' with set of words (tags), separated by whitespace. If all of the words enumerated as arguments of [ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29) present in the attribute, filter matches. Optional 'NOT' inverses the logic. For example, attr containing 'buy iphone cheap' will be matched by `ALL('cheap', 'iphone')`, but will not match `ALL('iphone', '5s')`.
 
-This filter internally uses doc-by-doc matching, so in case of full scan query it might be very slow. It is intended originally for attributes which are not indexed, like calculated expressions or tags in pq indexes.
+This filter internally uses doc-by-doc matching, so in case of full scan query it might be very slow. It is intended originally for attributes which are not indexed, like calculated expressions or tags in pq tables.
 
 if you like such filtering and want to use it in production, consider the solution to put the 'tags' attribute as full-text field, and then use FT operator `match()` which will invoke full-text indexed search.       
 

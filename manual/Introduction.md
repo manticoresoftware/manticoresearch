@@ -8,13 +8,13 @@ Manticore Search is an [open-source database](https://github.com/manticoresoftwa
 #### Powerful and fast full-text searching which works fine for small and big datasets
   * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> and over 20 ranking factors
   * Custom ranking
-  * [Stemming](Creating_an_index/NLP_and_tokenization/Morphology.md)
-  * [Lemmatization](Creating_an_index/NLP_and_tokenization/Morphology.md)
-  * [Stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md)
-  * [Synonyms](Creating_an_index/NLP_and_tokenization/Exceptions.md)
-  * [Wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md)
-  * [Advanced tokenization at character and word level](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md)
-  * [Proper Chinese segmentation](Creating_an_index/NLP_and_tokenization/CJK.md)
+  * [Stemming](Creating_a_table/NLP_and_tokenization/Morphology.md)
+  * [Lemmatization](Creating_a_table/NLP_and_tokenization/Morphology.md)
+  * [Stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
+  * [Synonyms](Creating_a_table/NLP_and_tokenization/Exceptions.md)
+  * [Wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md)
+  * [Advanced tokenization at character and word level](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
+  * [Proper Chinese segmentation](Creating_a_table/NLP_and_tokenization/CJK.md)
   * [Text highlighting](Searching/Highlighting.md)
 
 #### Modern MPP architecture
@@ -33,7 +33,7 @@ The native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol
 To provide more programmatic way to manage your data and schemas Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) protocol. It is very similar to the one from Elasticsearch.
 
 #### Declarative and imperative schema management
-You can create / update / delete indexes online as well as providing schemas in a configuration file.
+You can create / update / delete tables online as well as providing schemas in a configuration file.
 
 #### Power of C++
 Being written fully in C++, Manticore Search starts fast and doesn't take much RAM. Low-level optimizations give good performance.
@@ -57,14 +57,14 @@ Manticore `indexer` tool and rich configuration syntax helps to sync existing da
 You can integrate Manticore Search with MySQL/MariaDB server via a [FEDERATED engine](Extensions/FEDERATED.md) or use Manticore through [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
 
 #### Stream filtering
-Manticore has a special index type called "[percolate](Creating_an_index/Local_indexes/Percolate_index.md)" which implements search in reverse when you index your queries rather than data. It's an extremely powerful tool for full-text data stream filtering: just put all your queries in the index, process your data stream by sending each batch of documents to Manticore Search and you'll get only those back that match some of your stored queries.
+Manticore has a special table type called "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" which implements search in reverse when you table your queries rather than data. It's an extremely powerful tool for full-text data stream filtering: just put all your queries in the table, process your data stream by sending each batch of documents to Manticore Search and you'll get only those back that match some of your stored queries.
 
 # Possible applications:
 Manticore's possible applications are not limited by, but include:
 
   * [Full-text search](https://play.manticoresearch.com/fulltextintro/)
     * when used with small data volume you can benefit from powerful full-text search syntax and low RAM consumption (as little as 7-8 megabytes)
-    * when used with big data you can benefit from Manticore's high availability capabilities and ability to serve very large indexes, each taking hundreds of gigabytes of RAM
+    * when used with big data you can benefit from Manticore's high availability capabilities and ability to serve very large tables, each taking hundreds of gigabytes of RAM
   * OLAP: using Manicore Search + [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), you can handle terabytes of data on a single or multiple servers for data analysis
   * [Faceted search](https://play.manticoresearch.com/faceting/)
   * [Geo-spatial search](https://play.manticoresearch.com/geosearch/)

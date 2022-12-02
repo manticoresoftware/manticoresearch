@@ -2,7 +2,7 @@
 
 ## indextool
 
-`indextool` is a helper tool used to dump miscellaneous information about a physical index. The general usage is:
+`indextool` is a helper tool used to dump miscellaneous information about a physical table (not `template` or `distributed`). The general usage is:
 
 ```sql
 indextool <command> [options]
@@ -19,25 +19,25 @@ The commands are as follows:
 
 *   `--checkconfig` just loads and verifies the config file to check if it's valid, without syntax errors.
 *   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps. Additional parameter `--skip-uniq` will skip unique (df=1) words.
-*   `--build-infixes INDEXNAME` build infixes for an existing dict=keywords index (upgrades .sph, .spi in place). You can use this option for legacy index files that already use dict=keywords, but now need to support infix searching too; updating the index files with indextool may prove easier or faster than regenerating them from scratch with indexer.
-*   `--dumpheader FILENAME.sph` quickly dumps the provided index header file without touching any other index files or even the configuration file. The report provides a breakdown of all the index settings, in particular the entire attribute and field list.
-*   `--dumpconfig FILENAME.sph` dumps the index definition from the given index header file in (almost) compliant `sphinx.conf` file format.
-*   `--dumpheader INDEXNAME` dumps index header by index name with looking up the header path in the configuration file.
+*   `--build-infixes INDEXNAME` build infixes for an existing dict=keywords table (upgrades .sph, .spi in place). You can use this option for legacy table files that already use dict=keywords, but now need to support infix searching too; updating the table files with indextool may prove easier or faster than regenerating them from scratch with indexer.
+*   `--dumpheader FILENAME.sph` quickly dumps the provided table header file without touching any other table files or even the configuration file. The report provides a breakdown of all the table settings, in particular the entire attribute and field list.
+*   `--dumpconfig FILENAME.sph` dumps the table definition from the given table header file in (almost) compliant `sphinx.conf` file format.
+*   `--dumpheader INDEXNAME` dumps table header by table name with looking up the header path in the configuration file.
 *   `--dumpdict INDEXNAME` dumps dictionary. Additional `-stats` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used for creation of IDF files.
-*   `--dumpdocids INDEXNAME` dumps document IDs by index name.
-*   `--dumphitlist INDEXNAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as text.
-*   `--dumphitlist INDEXNAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as internal numeric ID.
-*   `--docextract IDX DOCID` runs usual index check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document. Then all of the words are placed in the order according to their fields and positions, and result is printed, grouping by field.
+*   `--dumpdocids INDEXNAME` dumps document IDs by table name.
+*   `--dumphitlist INDEXNAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as text.
+*   `--dumphitlist INDEXNAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as internal numeric ID.
+*   `--docextract IDX DOCID` runs usual table check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document. Then all of the words are placed in the order according to their fields and positions, and result is printed, grouping by field.
 *   `--fold INDEXNAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
-*   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the index header.
+*   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given table, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the table header.
 *   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `--skip-uniq` will skip unique (df=1) words.
 *   `--morph INDEXNAME` applies morphology to the given stdin and prints the result to stdout.
-*   `--check INDEXNAME` checks the index data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT indexes, RAM and disk chunks. Additional options:
+*   `--check INDEXNAME` checks the table data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT tables, RAM and disk chunks. Additional options:
     - `--check-id-dups` checks if there are duplicate ids
-    - `--check-disk-chunk CHUNK_NAME` checks only specific disk chunk of an RT index. The argument is a disk chunk numeric extension of the RT index to check.
-*   `--strip-path` strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc). This is useful for checking indexes built on another machine with possibly different path layouts.
-*   `--rotate` works only with `--check` and defines whether to check index waiting for rotation, i.e. with .new extension. This is useful when you want to check your index before actually using it.
-*   `--apply-killlists` loads and applies kill-lists for all indexes listed in the config file. Changes are saved in .SPM files. Kill-list files (.SPK) are deleted. This can be useful if you want to move applying indexes from server startup to indexing stage.
+    - `--check-disk-chunk CHUNK_NAME` checks only specific disk chunk of an RT table. The argument is a disk chunk numeric extension of the RT table to check.
+*   `--strip-path` strips the path names from all the file names referenced from the table (stopwords, wordforms, exceptions, etc). This is useful for checking tables built on another machine with possibly different path layouts.
+*   `--rotate` works only with `--check` and defines whether to check table waiting for rotation, i.e. with .new extension. This is useful when you want to check your table before actually using it.
+*   `--apply-killlists` loads and applies kill-lists for all tables listed in the config file. Changes are saved in .SPM files. Kill-list files (.SPK) are deleted. This can be useful if you want to move applying tables from server startup to indexing stage.
 
 ## spelldump
 
@@ -73,7 +73,7 @@ zoning > zoning
 
 ## wordbreaker
 
-`wordbreaker` is used to split compound words, as usual in URLs, into its component words. For example, this tool can split "lordoftherings" into its four component words, or `http://manofsteel.warnerbros.com` into "man of steel warner bros". This helps searching, without requiring prefixes or infixes: searching for "sphinx" wouldn't match "sphinxsearch" but if you break the compound word and index the separate components, you'll get a match without the costs of prefix and infix larger index files.
+`wordbreaker` is used to split compound words, as usual in URLs, into its component words. For example, this tool can split "lordoftherings" into its four component words, or `http://manofsteel.warnerbros.com` into "man of steel warner bros". This helps searching, without requiring prefixes or infixes: searching for "sphinx" wouldn't match "sphinxsearch" but if you break the compound word and index the separate components, you'll get a match without the costs of prefix and infix larger full-text index files.
 
 Examples of its usage are:
 
@@ -91,4 +91,3 @@ indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.con
 ```
 
 which will write the 100,000 most frequent words, along with their counts, from myindex into dict.txt. The output file is a text file, so you can edit it by hand, if need be, to add or remove words.
-

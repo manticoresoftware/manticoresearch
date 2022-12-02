@@ -6,7 +6,7 @@ Autocomplete (or word completion) is a feature in which an application predicts 
 
 There are few ways how you can do autocomplete in Manticore:
 ##### Autocomplete a sentence
-To autocomplete a sentence you can use [infixed search](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len). You can find endings of a document's field by providing its beginning and:
+To autocomplete a sentence you can use [infixed search](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len). You can find endings of a document's field by providing its beginning and:
 
 * using [full-text operators](../Searching/Full_text_matching/Operators.md) `*` to match anything it substitutes
 * and optionally `^` to start from the beginning of the field
@@ -23,26 +23,26 @@ There is an [article about it in our blog](https://manticoresearch.com/2020/03/3
 In some cases all you need is just autocomplete a single word or a couple of words. In this case you can use `CALL KEYWORDS`.
 
 ### CALL KEYWORDS
-`CALL KEYWORDS` is available via the SQL interface and provides a way to check how keywords are tokenized or to retrieve the tokenized forms of particular keywords. If the index enables [infixes](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) it allows to quickly find possible endings for given keywords which makes it possible for use for autocomplete.
+`CALL KEYWORDS` is available via the SQL interface and provides a way to check how keywords are tokenized or to retrieve the tokenized forms of particular keywords. If the table enables [infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) it allows to quickly find possible endings for given keywords which makes it possible for use for autocomplete.
 
-This is a good alternative to just general infixed search as it provides higher performance since all it needs for work is index' dictionary, not the documents themselves.
+This is a good alternative to just general infixed search as it provides higher performance since all it needs for work is table's dictionary, not the documents themselves.
 
 ### General syntax
 <!-- example keywords -->
 ```sql
-CALL KEYWORDS(text, index [, options])
+CALL KEYWORDS(text, table [, options])
 ```
-`CALL KEYWORDS` statement splits text into keywords. It returns tokenized and normalized forms of the keywords, and, optionally, keyword statistics. It also returns the position of each keyword in the query and all forms of tokenized keywords in case the index enables [lemmatizers](../Creating_an_index/NLP_and_tokenization/Morphology.md).
+`CALL KEYWORDS` statement splits text into keywords. It returns tokenized and normalized forms of the keywords, and, optionally, keyword statistics. It also returns the position of each keyword in the query and all forms of tokenized keywords in case the table enables [lemmatizers](../Creating_a_table/NLP_and_tokenization/Morphology.md).
 
 | Parameter | Description |
 | - | - |
 | text | Text to break down to keywords |
-| index | Name of the index from which to take the text processing settings |  
+| table | Name of the table from which to take the text processing settings |  
 | 0/1 as stats | Show statistics of keywords, default is 0 |
 | 0/1 as fold_wildcards | Fold wildcards, default is 0 |
 | 0/1 as fold_lemmas | Fold morphological lemmas, default is 0 |
 | 0/1 as fold_blended | Fold blended words, default is 0 |
-| N as expansion_limit | Override [expansion_limit](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) defined in the server configuration, default is 0 (use value from the configuration) |
+| N as expansion_limit | Override [expansion_limit](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) defined in the server configuration, default is 0 (use value from the configuration) |
 | docs/hits as sort_mode | Sort output results by either 'docs' or 'hits'. Default no sorting |
 
 The examples show how it works if assuming the user is trying to get an autocomplete for "my cat ...". So on the application side all you need to do is to suggest the user the endings from the column "normalized" for each new word. It often makes sense to sort by hits or docs using `'hits' as sort_mode` or `'docs' as sort_mode`.
@@ -96,7 +96,7 @@ MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 ```
 <!-- end -->
 <!-- example bigram -->
-There is a nice trick how you can improve the above algorithm - use [bigram_index](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index). When you have it enabled for the index what you get in it is not just a single word, but each pair of words standing one after another indexed as a separate token.
+There is a nice trick how you can improve the above algorithm - use [bigram_index](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index). When you have it enabled for the table what you get in it is not just a single word, but each pair of words standing one after another indexed as a separate token.
 
 This allows to predict not just the current word's ending, but the next word too which is especially beneficial for the purpose of autocomplete.
 
@@ -164,4 +164,4 @@ MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 ```
 <!-- end -->
 
-`CALL KEYWORDS` supports distributed indexes so no matter how big your data set you can benefit from using it.
+`CALL KEYWORDS` supports distributed tables so no matter how big your data set you can benefit from using it.

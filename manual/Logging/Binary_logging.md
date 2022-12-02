@@ -1,11 +1,11 @@
 # Binary logging
 
-Binary logs are essentially a recovery mechanism for [Real-Time](../Creating_an_index/Local_indexes/Real-time_index.md) index data and also of attributes updates of plain indexes that would otherwise only be stored in RAM until flush. With binary logs enabled, `searchd` writes every given transaction to the binlog file, and uses that for recovery after an unclean shutdown. On clean shutdown, RAM chunks are saved to disk, and then all the binlog files are unlinked.
+Binary logging is a recovery mechanism for [Real-Time](../Creating_a_table/Local_tables/Real-time_table.md) table data and also for attributes updates of plain tables that would otherwise only be stored in RAM until flush. With binary logs enabled, `searchd` writes every given transaction to the binlog file, and uses that for recovery after an unclean shutdown. On clean shutdown, RAM chunks are saved to disk, and then all the binlog files are unlinked.
 
 ## Disabling binary logging
 
 Binary logging is enabled by default. The default location for `binlog.*` files in Linux is `/var/lib/manticore/data/`.
-In [RT mode](../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) the binary logs are saved in the `data_dir` folder, unless specifed differently.
+In the [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) the binary logs are saved in the `data_dir` folder, unless specifed differently.
 
 Binary logging can be disabled by setting `binlog_path` to empty:
 
@@ -15,7 +15,7 @@ searchd {
     binlog_path = # disable logging
 ...
 ```
-Disabling binary logging improves performance for Real-Time indexes, but puts their data at risk.
+Disabling binary logging improves performance for Real-Time tables, but puts their data at risk.
 
 The directive can be used to set a custom path:
 
@@ -28,10 +28,10 @@ searchd {
 
 ## Operations
 
-When logging is enabled, every transaction committed  into RT index gets written into a log file. Logs are then automatically replayed on startup after an unclean shutdown, recovering the logged changes.
+When logging is enabled, every transaction committed  into RT table gets written into a log file. Logs are then automatically replayed on startup after an unclean shutdown, recovering the logged changes.
 
 ### Log size
-During normal operation, a new binlog file will be opened every time when `binlog_max_log_size` limit is reached. Older, already closed binlog files are kept until all of the transactions stored in them (from all indexes) are flushed as a disk chunk. Setting the limit to 0 pretty much prevents binlog from being unlinked at all while `searchd` is running; however, it will still be unlinked on clean shutdown. By default, there is no limit of the log file size.
+During normal operation, a new binlog file will be opened every time when `binlog_max_log_size` limit is reached. Older, already closed binlog files are kept until all of the transactions stored in them (from all tables) are flushed as a disk chunk. Setting the limit to 0 pretty much prevents binlog from being unlinked at all while `searchd` is running; however, it will still be unlinked on clean shutdown. By default, there is no limit of the log file size.
 
 ```ini
 binlog_max_log_size = 16M
@@ -62,7 +62,7 @@ On recovery after an unclean shutdown, binlogs are replayed and all logged trans
 
 ### Flushing RT RAM chunks
 
-Intensive updating of a small RT index that fully fits into a RAM chunk will lead to an ever-growing binlog that can never be unlinked until clean shutdown. Binlogs are essentially append-only deltas against the last known good saved state on disk, and unless RAM chunk gets saved, they can not be unlinked. An ever-growing binlog is not very good for disk use and crash recovery time. To avoid this, you can configure `searchd to perform a periodic RAM chunk flush to fix that problem using `rt_flush_period`directive. With periodic flushes enabled, `searchd` will keep a separate thread, checking whether RT indexes RAM chunks need to be written back to disk. Once that happens, the respective binlogs can be (and are) safely unlinked.
+Intensive updating of a small RT table that fully fits into a RAM chunk will lead to an ever-growing binlog that can never be unlinked until clean shutdown. Binlogs are essentially append-only deltas against the last known good saved state on disk, and unless RAM chunk gets saved, they can not be unlinked. An ever-growing binlog is not very good for disk use and crash recovery time. To avoid this, you can configure `searchd to perform a periodic RAM chunk flush to fix that problem using `rt_flush_period`directive. With periodic flushes enabled, `searchd` will keep a separate thread, checking whether RT tables RAM chunks need to be written back to disk. Once that happens, the respective binlogs can be (and are) safely unlinked.
 
 ```ini
 searchd {

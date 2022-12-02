@@ -8,8 +8,8 @@ The output format is `cluster_name_variable_name` `variable_value`. Most of them
 
 * cluster_name - [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) of the cluster
 * node_state - current state of the node: `closed`, `destroyed`, `joining`, `donor`, `synced`
-* indexes_count - number of indexes managed by the cluster
-* indexes - list of index names managed by the cluster
+* indexes_count - number of tables managed by the cluster
+* indexes - list of table names managed by the cluster
 * nodes_set - list of nodes in the cluster defined with cluster `CREATE`, `JOIN` or `ALTER UPDATE` commands
 * nodes_view - actual list of nodes in cluster which this node sees
 

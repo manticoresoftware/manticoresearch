@@ -59,7 +59,7 @@ RAND(seed) function returns a random float between 0..1. Optionally can accept `
 * constant integer
 * or integer attribute's name
 
-If you use the `seed` take into account that it resets `rand()`'s starting point separately for each plain index / RT disk / RAM chunk / pseudo shard, so queries to a distributed index in any form can return multiple identical random values.
+If you use the `seed` take into account that it resets `rand()`'s starting point separately for each plain table / RT disk / RAM chunk / pseudo shard, so queries to a distributed table in any form can return multiple identical random values.
 
 ### SIN()
 Returns the sine of the argument.

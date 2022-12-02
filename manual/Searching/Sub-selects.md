@@ -28,7 +28,7 @@ The outer select allows only `ORDER BY` and `LIMIT` clauses. Sub-selects queries
 
     In the initial query the `slow_rank()` UDF is computed for the entire match result set. With SELECT sub-queries only `fast_rank()` is computed for the entire match result set, while `slow_rank()` is only computed for a limited set.
 
-2. The second case comes handy for large result set coming from a distributed index.
+2. The second case comes handy for large result set coming from a distributed table.
 
     For this query:
 

@@ -487,7 +487,7 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 
 ### Faceting without duplicates
 
-If you need to remove duplicates from the buckets FACET returns you can use `DISTINCT field_name` where `field_name` is the field by which you want to do the deduplication. It can be also `id` (and it is by default) if you make a FACET query against a distributed index and are not sure you have unique ids in the indexes (the indexes should local and have the same schema).
+If you need to remove duplicates from the buckets FACET returns you can use `DISTINCT field_name` where `field_name` is the field by which you want to do the deduplication. It can be also `id` (and it is by default) if you make a FACET query against a distributed table and are not sure you have unique ids in the tables (the tables should be local and have the same schema).
 
 If you have multiple FACET declarations in your query `field_name` should be the same in all of them.
 

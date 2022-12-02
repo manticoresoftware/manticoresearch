@@ -58,7 +58,7 @@ You can also download individual .deb files from [our site](https://manticoresea
 
 ### More packages you may need
 #### For indexer
-Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
+Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
 
 ```bash
 $ sudo -u manticore indexer
@@ -99,7 +99,7 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-Note that you only need libraries for the types of storages you're going to use. So if you plan to index only from mysql then you might need to install only the MySQL library (in the above case `libmysqlclient20`).
+Note that you only need libraries for the types of storages you're going to use. So if you plan to build tables only from mysql then you might need to install only the MySQL library (in the above case `libmysqlclient20`).
 
 Finally install the needed packages:
 

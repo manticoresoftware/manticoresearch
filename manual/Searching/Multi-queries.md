@@ -8,7 +8,7 @@ Generally, it all boils down to performance. First, by sending requests to Manti
 
 ⛔ When not to use multi-queries?
 
-Multi-queries require all the search queries in a batch to be independent, and sometimes they aren't. That is, sometimes query B is based on query A results, and so can only be set up after executing query A. For instance, you might want to display results from a secondary index if and only if there were no results found in a primary index. Or maybe just specify offset into 2nd result set based on the amount of matches in the 1st result set. In that case, you will have to use separate queries (or separate batches).
+Multi-queries require all the search queries in a batch to be independent, and sometimes they aren't. That is, sometimes query B is based on query A results, and so can only be set up after executing query A. For instance, you might want to display results from a secondary index if and only if there were no results found in a primary table. Or maybe just specify offset into 2nd result set based on the amount of matches in the 1st result set. In that case, you will have to use separate queries (or separate batches).
 
 <!-- example multi-query 1 -->
 You can run multiple search queries with SQL by just separating them with a semicolon. When Manticore receives a query formatted like that from a client all the inter-statement optimizations will be applied.

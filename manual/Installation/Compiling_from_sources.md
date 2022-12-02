@@ -95,7 +95,7 @@ libs in case of implicit configuration.
 distribute the library itself (so, no galera module - no replication). But sometimes you may need to explicitly disable it. Say, if you
 want to build static binary which by desing can't load any libraries, so that even presence of call to 'dlopen' function inside daemon
 will cause link error.
-- **WITH_RE2** - build with using RE2 regular expression library. It is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and [regexp_filter](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+- **WITH_RE2** - build with using RE2 regular expression library. It is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and [regexp_filter](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
   feature.
 - **WITH_RE2_FORCE_STATIC** - download sources of RE2, compile them and link with them statically, so that final binaries will not depend on
 presence of shared `RE2` library in your system.
@@ -114,36 +114,36 @@ segmentation. It is in game when morplology like `icu_chinese` in use.
 - **WITH_ZLIB** - used by indexer to work with compressed columns from mysql. Used by daemon to provide support of compressed mysql protocol.
 - **WITH_ODBC** - used by indexer to support indexing sources from ODBC providers (they're typically UnixODBC and iODBC). On MS Windows ODBC is
 the proper way to work witn MS SQL sources, so indexing of `MSSQL` also implies this flag.
-- **DL_ODBC** - don't link with ODBC library. If ODBC is linked, but not available, you can't start `indexer` tool even if you want to index something not related to ODBC. This option asks indexer to load the library in runtime only when you want to deal with ODBC source.
-- **ODBC_LIB** - name of ODBC library file. Indexer will try to load that file when you want to index ODBC source. That option is written automatically from available ODBC shared library investigation. You can also override that name on runtime, providing environment variable `ODBC_LIB` with proper path to alternative library before running indexer.
+- **DL_ODBC** - don't link with ODBC library. If ODBC is linked, but not available, you can't start `indexer` tool even if you want to process something not related to ODBC. This option asks indexer to load the library in runtime only when you want to deal with ODBC source.
+- **ODBC_LIB** - name of ODBC library file. Indexer will try to load that file when you want to process ODBC source. That option is written automatically from available ODBC shared library investigation. You can also override that name on runtime, providing environment variable `ODBC_LIB` with proper path to alternative library before running indexer.
 - **WITH_EXPAT** - used by indexer to support indexing xmlpipe sources.
 - **DL_EXPAT** - don't link with EXPAT library. If EXPAT is linked, but not available, you can't start `indexer` tool
-  even if you want to index something not related to xmlpipe. This option asks indexer to load the library in runtime only
+  even if you want to process something not related to xmlpipe. This option asks indexer to load the library in runtime only
   when you want to deal with xmlpipe source.
-- **EXPAT_LIB** - name of EXPAT library file. Indexer will try to load that file when you want to index xmlpipe source. That
+- **EXPAT_LIB** - name of EXPAT library file. Indexer will try to load that file when you want to process xmlpipe source. That
   option is written automatically from available EXPAT shared library investigation. You can also override that name on
   runtime, providing environment variable `EXPAT_LIB` with proper path to alternative library before running indexer.
 - **WITH_ICONV** - for support different encodings when indexing xmlpipe sources with indexer.
 - **DL_ICONV** - don't link with iconv library. If iconv is linked, but not available, you can't start `indexer` tool
-    even if you want to index something not related to xmlpipe. This option asks indexer to load the library in runtime
+    even if you want to process something not related to xmlpipe. This option asks indexer to load the library in runtime
     only when you want to deal with xmlpipe source.
-- **ICONV_LIB** - name of iconv library file. Indexer will try to load that file when you want to index xmlpipe source.
+- **ICONV_LIB** - name of iconv library file. Indexer will try to load that file when you want to process xmlpipe source.
   That option is written automatically from available iconv shared library investigation. You can also override that
   name on runtime, providing environment variable `ICONV_LIB` with proper path to alternative library before running
   indexer.
 - **WITH_MYSQL** - used by indexer to support indexing mysql sources.
 - **DL_MYSQL** - don't link with mysql library. If mysql is linked, but not available, you can't start `indexer` tool
-  even if you want to index something not related to mysql. This option asks indexer to load the library in runtime
+  even if you want to process something not related to mysql. This option asks indexer to load the library in runtime
   only when you want to deal with mysql source.
-- **MYSQL_LIB** - name of mysql library file. Indexer will try to load that file when you want to index mysql source.
+- **MYSQL_LIB** - name of mysql library file. Indexer will try to load that file when you want to process mysql source.
   That option is written automatically from available mysql shared library investigation. You can also override that
   name on runtime, providing environment variable `MYSQL_LIB` with proper path to alternative library before running
   indexer.
 - **WITH_POSTGRESQL** - used by indexer to support indexing postgresql sources.
 - **DL_POSTGRESQL** - don't link with postgresql library. If postgresql is linked, but not available, you can't start `indexer` tool
-  even if you want to index something not related to postgresql. This option asks indexer to load the library in runtime
+  even if you want to process something not related to postgresql. This option asks indexer to load the library in runtime
   only when you want to deal with postgresql source.
-- **POSTGRESQL_LIB** - name of postgresql library file. Indexer will try to load that file when you want to index
+- **POSTGRESQL_LIB** - name of postgresql library file. Indexer will try to load that file when you want to process
   postgresql source.
   That option is written automatically from available postgresql shared library investigation. You can also override that
   name on runtime, providing environment variable `POSTGRESQL_LIB` with proper path to alternative library before running
@@ -210,7 +210,7 @@ At the end of configuration you may see what is available and will be used in th
 
 ```
 -- Enabled features compiled in:
- * Galera, replication of indexes
+ * Galera, replication of tables
  * re2, a regular expression library
  * stemmer, stemming library (Snowball)
  * icu, International Components for Unicode
@@ -330,7 +330,7 @@ in one and same build folder, changing only `--config` param.
 ## External dependencies
 
 Some libraries should be available if you want to use them.
-- for indexing (`indexer` tool): `expat`, `iconv`, `mysql`, `odbc`, `postgresql`. Without them, you could only index
+- for indexing (`indexer` tool): `expat`, `iconv`, `mysql`, `odbc`, `postgresql`. Without them, you could only process
   `tsv` and `csv` sources.
 - for serving queries (`searchd` daemon): `openssl` might be necessary.
 - for all (required, mandatory!) we need Boost library. Minimal version is 1.61.0, however we build the binaries with fresher 1.75.0.

@@ -1,6 +1,6 @@
 # Setting up replication
 
-Write transaction (any result of `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently replication is supported for `percolate` and `rt` indexes in Linux an MacOS. Manticore Search packages for Windows do not provide replication support.
+Write transaction (any result of `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently replication is supported for `percolate` and `rt` tables in Linux an MacOS. Manticore Search packages for Windows do not provide replication support.
 
 Manticore's replication is based on [Galera library](https://github.com/codership/galera) and features the following:
 
@@ -25,7 +25,7 @@ If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) d
 
 ## Replication cluster
 
-Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on per-index basis, meaning that one index can be assigned to only one cluster. There is no restriction on how many indexes a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate or real-time index belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
+Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on per-table basis, meaning that one table can be assigned to only one cluster. There is no restriction on how many tables a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate or real-time table belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
 
 In most cases you [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) with `CREATE CLUSTER <cluster name>` and [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) with `JOIN CLUSTER <cluster name> at 'host:port'`, but in rare cases you may want to fine-tune the behaviour of `CREATE/JOIN CLUSTER`. The options are:
 
@@ -35,7 +35,7 @@ Specifies cluster name. Should be unique.
 
 ### path
 
-Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](../../Server_settings/Searchd.md#data_dir). Should be specified in the form of a path to an existing directory relative to the [data_dir](../../Server_settings/Searchd.md#data_dir).
+Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming tables from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](../../Server_settings/Searchd.md#data_dir). Should be specified in the form of a path to an existing directory relative to the [data_dir](../../Server_settings/Searchd.md#data_dir).
 
 ### nodes
 
@@ -48,11 +48,11 @@ Other options that are passed over directly to Galera replication plugin as desc
 ## Write statements
 
 <!-- example write statements 1 -->
-For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that change the content of a cluster's index should use `cluster_name:index_name` expression in place of an index name to make sure the change is propagated to all replicas in the cluster. An error will be triggered otherwise.
+For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that change the content of a cluster's table should use `cluster_name:index_name` expression in place of a table name to make sure the change is propagated to all replicas in the cluster. An error will be triggered otherwise.
 
-All write statements for HTTP interface to a cluster's index should set `cluster` property along with `index` name. An error will be triggered otherwise.
+All write statements for HTTP interface to a cluster's table should set `cluster` property along with `table` name. An error will be triggered otherwise.
 
-[Auto ID](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) generated for an index in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
+[Auto ID](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) generated for a table in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
 
 <!-- intro -->
 ##### SQL:
@@ -139,7 +139,7 @@ indexApi.delete(deleteRequest);
 ## Read statements
 
 <!-- example write statements 2 -->
-Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can use either regular index names not prepended with a cluster name or `cluster_name:index_name`. In this case `cluster_name` is just ignored.
+Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can use either regular table names not prepended with a cluster name or `cluster_name:index_name`. In this case `cluster_name` is just ignored.
 
 In HTTP endpoint `json/search` you can specify `cluster` property if you like, but can also omit it.
 
@@ -227,7 +227,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Replication and cluster
 
 <!-- example replication and cluster 1 -->
-To use replication define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the config. Define [data_dir](../../Server_settings/Searchd.md#data_dir) folder for incoming indexes.
+To use replication define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the config. Define [data_dir](../../Server_settings/Searchd.md#data_dir) folder for incoming tables.
 
 
 <!-- intro -->
@@ -245,7 +245,7 @@ searchd {
 <!-- end -->
 
 <!-- example replication and cluster 2 -->
-Create a cluster at the server that has local indexes that need to be replicated
+Create a cluster at the server that has local tables that need to be replicated
 
 
 <!-- intro -->
@@ -303,7 +303,7 @@ utilsApi.sql("CREATE CLUSTER posts");
 <!-- end -->
 
 <!-- example replication and cluster 3 -->
-Add these local indexes to cluster
+Add these local tables to cluster
 
 
 <!-- intro -->
@@ -380,7 +380,7 @@ utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 <!-- end -->
 
 <!-- example replication and cluster 4 -->
-All other nodes that want replica of cluster's indexes should join cluster as
+All other nodes that want replica of cluster's tables should join cluster as
 
 
 <!-- intro -->
@@ -440,7 +440,7 @@ utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 <!-- end -->
 
 <!-- example replication and cluster 5 -->
-When running queries for SQL prepend the index name with the cluster name `posts:` or use `cluster` property for HTTP request object.
+When running queries for SQL prepend the table name with the cluster name `posts:` or use `cluster` property for HTTP request object.
 
 
 <!-- intro -->
@@ -511,4 +511,4 @@ sqlresult = indexApi.insert(newdoc);
 ```
 <!-- end -->
 
-Now all such queries that modify indexes in the cluster are replicated to all nodes in the cluster.
+Now all such queries that modify tables in the cluster are replicated to all nodes in the cluster.

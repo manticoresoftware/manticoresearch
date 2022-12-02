@@ -1,19 +1,19 @@
 # Transactions
 
-Manticore supports basic transactions when performing deleting and insertion into real-time and percolate indexes. That is: each change to an index is first saved into an internal changeset, and then is actually committed to the index. By default each command is wrapped into an individual automatic transaction, making it transparent: you just 'insert' something, and can see the inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and committing transactions manually.
+Manticore supports basic transactions when performing deleting and insertion into real-time and percolate tables. That is: each change to a table is first saved into an internal changeset, and then is actually committed to the table. By default each command is wrapped into an individual automatic transaction, making it transparent: you just 'insert' something, and can see the inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and committing transactions manually.
 
 Transactions are supported for the following commands:
-* [INSERT](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md)
+* [INSERT](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
 * [REPLACE](Updating_documents/REPLACE.md)
 * [DELETE](Deleting_documents.md)
 
 Transactions are not supported for:
 * UPDATE (which is [different](Updating_documents/REPLACE_vs_UPDATE.md) from the REPLACE in that it does in-place attribute update).
-* ALTER - for [updating index schema](Updating_table_schema_and_settings.md)
-* TRUNCATE - for [emptying a real-time index](Emptying_an_index.md)
-* ATTACH - for [attaching a plain index to a real-time index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md)
-* CREATE - [for creating an index](Creating_an_index/Local_indexes.md)
-* DROP - [for deleting an index](Deleting_an_index.md)
+* ALTER - for [updating table schema](Updating_table_schema_and_settings.md)
+* TRUNCATE - for [emptying a real-time table](Emptying_a_table.md)
+* ATTACH - for [attaching a plain table to a real-time table](Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
+* CREATE - [for creating a table](Creating_a_table/Local_tables.md)
+* DROP - [for deleting a table](Deleting_a_table.md)
 
 Please also note, that transactions in Manticore do not aim to provide isolation. The idea of transactions in Manticore is to let you accumulate a number of writes and run them at once at commit or rollback them all if needed. Transactions are integrated with [binary log](Logging/Binary_logging.md) which gives durability and consistency.
 
@@ -23,9 +23,9 @@ Please also note, that transactions in Manticore do not aim to provide isolation
 SET AUTOCOMMIT = {0 | 1}
 ```
 
-`SET AUTOCOMMIT` controls the autocommit mode in the active session. `AUTOCOMMIT` is set to 1 by default. With default you have not to care about transactions, since every statement that performs any changes on any index is implicitly wrapped into separate transaction. Setting it to 0 allows you to manage transactions manually. I.e., they will not be visible until you explicitly commit them.
+`SET AUTOCOMMIT` controls the autocommit mode in the active session. `AUTOCOMMIT` is set to 1 by default. With default you have not to care about transactions, since every statement that performs any changes on any table is implicitly wrapped into separate transaction. Setting it to 0 allows you to manage transactions manually. I.e., they will not be visible until you explicitly commit them.
 
-Transactions are limited to a single RT or percolate index, and also limited in size. They are atomic, consistent, overly isolated, and durable. Overly isolated means that the changes are not only invisible to the concurrent transactions but even to the current session itself.
+Transactions are limited to a single RT or percolate table, and also limited in size. They are atomic, consistent, overly isolated, and durable. Overly isolated means that the changes are not only invisible to the concurrent transactions but even to the current session itself.
 
 
 ## BEGIN, COMMIT, and ROLLBACK

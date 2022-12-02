@@ -4,56 +4,56 @@ The below settings are to be used in section `searchd` in the configuration file
 
 ### access_plain_attrs
 
-Instance-wide defaults for [access_plain_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `mmap_preread`.
+Instance-wide defaults for [access_plain_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Optional, default value is `mmap_preread`.
 
-This directive lets you specify the default value of [access_plain_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_plain_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables served by this instance of searchd. Per-table directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### access_blob_attrs
 
-Instance-wide defaults for [access_blob_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `mmap_preread`.
+Instance-wide defaults for [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Optional, default value is `mmap_preread`.
 
-This directive lets you specify the default value of [access_blob_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables served by this instance of searchd. Per-table directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### access_doclists
 
-Instance-wide defaults for [access_doclists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `file`.
+Instance-wide defaults for [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Optional, default value is `file`.
 
-This directive lets you specify the default value of [access_doclists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables served by this instance of searchd. Per-table directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### access_hitlists
 
-Instance-wide defaults for [access_hitlists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `file`.
+Instance-wide defaults for [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Optional, default value is `file`.
 
-This directive lets you specify the default value of [access_hitlists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables served by this instance of searchd. Per-table directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### agent_connect_timeout
 
-Instance-wide default for [agent_connect_timeout](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_connect_timeout) parameter.
+Instance-wide default for [agent_connect_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) parameter.
 
 
 ### agent_query_timeout
 
-Instance-wide defaults for [agent_query_timeout](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_query_timeout) parameter. Can be overridden per-query using `OPTION agent_query_timeout=XXX` clause.
+Instance-wide defaults for [agent_query_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout) parameter. Can be overridden per-query using `OPTION agent_query_timeout=XXX` clause.
 
 
 ### agent_retry_count
 
-Integer, specifies how many times manticore will try to connect and query remote agents in distributed index before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using `OPTION retry_count=XXX` clause. If the per-query option exists, it will override the one specified in config.
+Integer, specifies how many times manticore will try to connect and query remote agents through a distributed table before reporting a fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using `OPTION retry_count=XXX` clause. If the per-query option exists, it will override the one specified in config.
 
-Note, that if you use [agent mirrors](../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in definition of your distributed index, then before each connect attempt the server will select a different mirror, according to the selected [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). In this case `agent_retry_count` will be aggregated for all mirrors in a set.
+Note, that if you use [agent mirrors](../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in definition of your distributed table, then before each connect attempt the server will select a different mirror, according to the selected [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). In this case `agent_retry_count` will be aggregated for all mirrors in a set.
 
 For example, if you have 10 mirrors and have set `agent_retry_count=5`, then the server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors (in case of option `ha_strategy = roundrobin` it will be actually so).
 
-At the same time the value provided as `retry_count` option of [agent](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent) serves as an absolute limit. In other words, `[retry_count=2]` option in the agent definition means always at most 2 tries, no matter if you have 1 or 10 mirrors specified for the agent.
+At the same time the value provided as `retry_count` option of [agent](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) serves as an absolute limit. In other words, `[retry_count=2]` option in the agent definition means always at most 2 tries, no matter if you have 1 or 10 mirrors specified for the agent.
 
 
 ### agent_retry_delay
 
-Integer, in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Specifies the delay sphinx rest before retrying to query a remote agent in case it fails. The value has sense only if non-zero [agent_retry_count](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) or non-zero per-query `retry_count` specified. Default is 500. This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
+Integer, in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Specifies the delay sphinx rest before retrying to query a remote agent in case it fails. The value has sense only if non-zero [agent_retry_count](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md) or non-zero per-query `retry_count` specified. Default is 500. This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
 
 
 ### attr_flush_period
@@ -79,10 +79,10 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ### auto_optimize
 
 <!-- example conf auto_optimize -->
-Disables or throttles automatic [OPTIMIZE](../Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX).
+Disables or throttles automatic [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE).
 
-Since Manticore 4 indexes compaction happens automatically. You can change it with help of the setting `auto_optimize` by changing it to:
-* 0 to disable automatic indexes compaction (you can still call `OPTIMIZE` manually)
+Since Manticore 4 tables compaction happens automatically. You can change it with help of the setting `auto_optimize` by changing it to:
+* 0 to disable automatic tables compaction (you can still call `OPTIMIZE` manually)
 * 1 to enable it explicitly
 * N to enable it, but let OPTIMIZE start as soon as the number of disk chunks is greater than `# of CPU cores * 2 * N`
 
@@ -114,7 +114,7 @@ This directive controls how frequently will binary log be flushed to OS and sync
 *  1, flush and sync every transaction. Worst performance, but every committed transaction data is guaranteed to be saved.
 *  2, flush every transaction, sync every second. Good performance, and every committed transaction is guaranteed to be saved in case of server crash. However, in case of OS/hardware crash up to 1 second worth of committed transactions can be lost.
 
-For those familiar with MySQL and InnoDB, this directive is entirely similar to `innodb_flush_log_at_trx_commit`. In most cases, the default hybrid mode 2 provides a nice balance of speed and safety, with full RT index data protection against server crashes, and some protection against hardware ones.
+For those familiar with MySQL and InnoDB, this directive is entirely similar to `innodb_flush_log_at_trx_commit`. In most cases, the default hybrid mode 2 provides a nice balance of speed and safety, with full RT table data protection against server crashes, and some protection against hardware ones.
 
 
 <!-- intro -->
@@ -152,11 +152,11 @@ binlog_max_log_size = 16M
 <!-- example conf binlog_path -->
 Binary log (aka transaction log) files path. Optional, default is build-time configured data directory (`/var/lib/manticore/data/binlog.*` in Linux).
 
-Binary logs are used for crash recovery of RT index data, and also for attributes updates of plain disk indices that would otherwise only be stored in RAM until flush. When logging is enabled, every transaction COMMIT-ted into RT index gets written into a log file. Logs are then automatically replayed on startup after an unclean shutdown, recovering the logged changes.
+Binary logs are used for crash recovery of RT table data, and also for attributes updates of plain disk indices that would otherwise only be stored in RAM until flush. When logging is enabled, every transaction COMMIT-ted into an RT table gets written into a log file. Logs are then automatically replayed on startup after an unclean shutdown, recovering the logged changes.
 
 `binlog_path` directive specifies the binary log files location. It should contain just the path; `searchd` will create and unlink multiple `binlog.*` files in the directory as necessary (binlog data, metadata, and lock files, etc).
 
-Empty value disables binary logging. That improves performance, but puts RT index data at risk.
+Empty value disables binary logging. That improves performance, but puts the RT table data at risk.
 
 
 <!-- intro -->
@@ -229,8 +229,8 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-When specified, enables the [real-time mode](../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your indexes, binary log and everything else needed for the proper functioning of Manticore Search in this mode.
-Indexation of [plain indexes](../Creating_an_index/Local_indexes/Plain_index.md) is not allowed when the `data_dir` is specified. Read more about the difference between the RT mode and the plain mode in [this section](../Read_this_first.md#Real-time-index-vs-plain-index).
+When specified, enables the [real-time mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your tables, binary log and everything else needed for the proper functioning of Manticore Search in this mode.
+Indexation of [plain tables](../Creating_a_table/Local_tables/Plain_table.md) is not allowed when the `data_dir` is specified. Read more about the difference between the RT mode and the plain mode in [this section](../Read_this_first.md#Real-time-table-vs-plain-table).
 
 <!-- intro -->
 ##### Example:
@@ -266,7 +266,7 @@ docstore_cache_size = 8m
 <!-- example conf expansion_limit -->
 The maximum number of expanded keywords for a single wildcard. Optional, default is 0 (no limit).
 
-When doing substring searches against indexes built with `dict = keywords` enabled, a single wildcard may potentially result in thousands and even millions of matched keywords (think of matching 'a\*' against the entire Oxford dictionary). This directive lets you limit the impact of such expansions. Setting `expansion_limit = N` restricts expansions to no more than N of the most frequent matching keywords (per each wildcard in the query).
+When doing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands and even millions of matched keywords (think of matching 'a\*' against the entire Oxford dictionary). This directive lets you limit the impact of such expansions. Setting `expansion_limit = N` restricts expansions to no more than N of the most frequent matching keywords (per each wildcard in the query).
 
 
 <!-- intro -->
@@ -292,7 +292,7 @@ By default all 'group by time' expressions (like group by day, week,  month and 
 <!-- example conf ha_period_karma -->
 Agent mirror statistics window size, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 60.
 
-For a distributed index with agent mirrors in it (see more in [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md),  master tracks several different per-mirror counters. These counters are then used for failover and balancing. (Master picks the best mirror to use based on the counters.) Counters are accumulated in blocks of `ha_period_karma` seconds.
+For a distributed table with agent mirrors in it (see more in [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md),  master tracks several different per-mirror counters. These counters are then used for failover and balancing. (Master picks the best mirror to use based on the counters.) Counters are accumulated in blocks of `ha_period_karma` seconds.
 
 After beginning a new block, master may still use the accumulated values from the previous one, until the new one is half full. Thus, any previous history stops affecting the mirror choice after 1.5 times ha_period_karma seconds at most.
 
@@ -315,7 +315,7 @@ ha_period_karma = 2m
 <!-- example conf ha_ping_interval -->
 Interval between agent mirror pings, in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 1000.
 
-For a distributed index with agent mirrors in it (see more in [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)), master sends all mirrors a ping command during the idle periods. This is to track the current agent status (alive or dead, network roundtrip, etc). The interval between such pings is defined by this directive. To disable pings, set ha_ping_interval to 0.
+For a distributed table with agent mirrors in it (see more in [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)), master sends all mirrors a ping command during the idle periods. This is to track the current agent status (alive or dead, network roundtrip, etc). The interval between such pings is defined by this directive. To disable pings, set ha_ping_interval to 0.
 
 
 <!-- intro -->
@@ -337,7 +337,7 @@ Hostnames renew strategy. By default, IP addresses of agent host names are cache
 
 Defines how many "jobs" can be in the queue at the same time. Unlimited by default.
 
-In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
+In most cases "job" means one query to a single local table (plain table or a disk chunk of a real-time table), i.e. if you have a distributed table consisting of 2 local tables or a real-time table which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
 
 ### listen_backlog
 
@@ -380,7 +380,7 @@ If you specify a port number, but not an address, `searchd` will listen on all n
 You can also specify a protocol handler (listener) to be used for connections on this socket. The listeners are:
 
 * **Not specified** - Manticore will accept connections at this port from:
-  - other Manticore agents (i.e. a remote distributed index)
+  - other Manticore agents (i.e. a remote distributed table)
   - clients via HTTP and HTTPS
 * `mysql` - MySQL protocol for connections from MySQL clients. Note:
   - Compressed protocol is also supported.
@@ -451,7 +451,7 @@ This setting allows TCP_FASTOPEN flag for all listeners. By default it is manage
 
 For general knowledge about TCP Fast Open extension please consult with [Wikipedia](https://en.wikipedia.org/wiki/TCP_Fast_Open). Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
 
-In practice using TFO in many situation may optimize client-agent network efficiency as if [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) are in play, but without holding active connections, and also without limitation for the maximum num of connections.
+In practice using TFO in many situation may optimize client-agent network efficiency as if [persistent agents](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md) are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 
 On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability', not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7 (for server side). Windows supports it from some build of Windows 10. Another (FreeBSD, MacOS) also in game.
 
@@ -498,7 +498,7 @@ max_batch_queries = 256
 ### max_connections
 
 <!-- example max_connections -->
-Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection). VIP connections are not counted towards the limit.
+Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed tables. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection). VIP connections are not counted towards the limit.
 
 <!-- request Example -->
 ```ini
@@ -510,7 +510,7 @@ max_connections = 10
 ### max_threads_per_query
 
 <!-- example max_threads_per_query -->
-Instance-wide limit of threads one operation can use. By default appropriate operations can occupy all CPU cores, leaving no room for other operations. Let's say, `call pq` against considerably big percolate index can utilize all threads for tens of seconds. Setting `max_threads_per_query` to, say, half of [threads](../Server_settings/Searchd.md#threads) will ensure that you can run couple of such `call pq` in parallel.
+Instance-wide limit of threads one operation can use. By default appropriate operations can occupy all CPU cores, leaving no room for other operations. Let's say, `call pq` against considerably big percolate table can utilize all threads for tens of seconds. Setting `max_threads_per_query` to, say, half of [threads](../Server_settings/Searchd.md#threads) will ensure that you can run couple of such `call pq` in parallel.
 
 You can also set this setting as a session or a global variable during the runtime.
 
@@ -563,7 +563,7 @@ max_filter_values = 16384
 ### max_open_files
 
 <!-- example conf max_open_files -->
-Maximum num of files which allowed to be opened by server. Note that serving big fragmented rt-indexes may require this limit to be high. Say, if every disk chunk occupy dozen of files, rt-index from 1000 chunks will suppose to have thousand dozens of files keep opened simultaneously. So, one time you may face the error 'Too many open files' somewhere in logs. In this case try to manipulate with this option, it may help to solve the problem.
+Maximum num of files which allowed to be opened by server. Note that serving big fragmented rt-tables may require this limit to be high. Say, if every disk chunk occupy dozen of files, rt-table from 1000 chunks will suppose to have thousand dozens of files keep opened simultaneously. So, one time you may face the error 'Too many open files' somewhere in logs. In this case try to manipulate with this option, it may help to solve the problem.
 
 Apart this value (so called 'soft limit') there is also 'hard limit', which can't be exceed by the option.
 
@@ -707,7 +707,7 @@ not_terms_only_allowed = 1
 ### optimize_cutoff
 
 <!-- example conf optimize_cutoff -->
-Sets default index compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
+Sets default table compaction threshold. Read more here - [Number of optimized disk chunks](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks). Can be overridden with per-query option [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks). Can be changed dynamically via [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
 
 <!-- intro -->
 ##### Example:
@@ -722,7 +722,7 @@ optimize_cutoff = 4
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting an agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However in some cases it makes sense to limit # of such persistent connections. This directive defines the number. It affects the number of connections to each agent's host across all distributed indexes.
+The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md). Each time connecting an agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However in some cases it makes sense to limit # of such persistent connections. This directive defines the number. It affects the number of connections to each agent's host across all distributed tables.
 
 It is reasonable to set the value equal or less than [max_connections](../Server_settings/Searchd.md#max_connections) option of the agent's config.
 
@@ -742,7 +742,7 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 <!-- example conf pid_file -->
 `searchd` process ID file name. Mandatory.
 
-PID file will be re-created (and locked) on startup. It will contain head server process ID while the server is running, and it will be unlinked on server shutdown. It's mandatory because Manticore uses it internally for a number of things: to check whether there already is a running instance of `searchd`; to stop `searchd`; to notify it that it should rotate the indexes. Can also be used for different external automation scripts.
+PID file will be re-created (and locked) on startup. It will contain head server process ID while the server is running, and it will be unlinked on server shutdown. It's mandatory because Manticore uses it internally for a number of things: to check whether there already is a running instance of `searchd`; to stop `searchd`; to notify it that it should rotate the tables. Can also be used for different external automation scripts.
 
 
 <!-- intro -->
@@ -806,14 +806,14 @@ Of course, this is not a hard limit on the actual time spent (it is, however, a 
 No two server makes and models are identical, so `predicted_time_costs` directive lets you configure the costs for the model above. For convenience, they are integers, counted in nanoseconds.(The limit in max_predicted_time is counted in milliseconds, and having to specify cost values as 0.000128 ms instead of 128 ns is somewhat more error prone.) It is not necessary to specify all 4 costs at once, as the missed one will take the default values. However, we strongly suggest to specify all of them, for readability.
 
 
-### preopen_indexes
+### preopen_tables
 
-<!-- example conf preopen_indexes -->
-Whether to forcibly preopen all indexes on startup. Optional, default is 1 (preopen everything).
+<!-- example conf preopen_tables -->
+Whether to forcibly preopen all tables on startup. Optional, default is 1 (preopen everything).
 
-When set to 1, this directive overrides and enforces [preopen](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on all indexes. They will be preopened, no matter what is the per-index `preopen` setting. When set to 0, per-index settings can take effect. (And they default to 0.)
+When set to 1, this directive overrides and enforces [preopen](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Other-performance-related-settings) on all tables. They will be preopened, no matter what is the per-table `preopen` setting. When set to 0, per-table settings can take effect. (And they default to 0.)
 
-Pre-opened indexes avoid races between search queries and rotations that can cause queries to fail occasionally. They also make `searchd` use more file handles. In most scenarios it's therefore preferred and recommended to preopen indexes.
+Pre-opened tables avoid races between search queries and rotations that can cause queries to fail occasionally. They also make `searchd` use more file handles. In most scenarios it's therefore preferred and recommended to preopen tables.
 
 <!-- intro -->
 ##### Example:
@@ -821,20 +821,20 @@ Pre-opened indexes avoid races between search queries and rotations that can cau
 <!-- request Example -->
 
 ```ini
-preopen_indexes = 1
+preopen_tables = 1
 ```
 <!-- end -->
 
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Enables pseudo-sharding for search queries to plain and real-time indexes, no matter if they are queried directly or through a distributed index. Any search query to a local index will be automatically parallelized to up to `searchd.threads` # of threads.
+Enables pseudo-sharding for search queries to plain and real-time tables, no matter if they are queried directly or through a distributed table. Any search query to a local table will be automatically parallelized to up to `searchd.threads` # of threads.
 
 Note that if your worker threads are already busy, because you have:
 * high query concurrency
 * physical sharding of any kind:
-  - distributed index of multiple plain/real-time indexes
-  - real-time index consisting of too many disk chunks
+  - distributed table of multiple plain/real-time tables
+  - real-time table consisting of too many disk chunks
 
 then the pseudo-sharding may not bring any positive effect and in some cases can even cause slight throughput decrease. If you are looking for a higher throughput rather than lower latency it's recommended to disable it.
 
@@ -939,7 +939,7 @@ Per-keyword read buffer size for document lists. Optional, default is 256K, mini
 
 For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control the document list buffer size. Bigger buffer size might increase per-query RAM use, but possibly decrease IO time. Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
 
-You may also want to set [read_buffer_docs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_docs) on per-index basis; that value will override anything set on server's config level.
+You may also want to set [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) on per-table basis; that value will override anything set on server's config level.
 
 
 <!-- intro -->
@@ -960,7 +960,7 @@ Per-keyword read buffer size for hit lists. Optional, default is 256K, minimal i
 
 For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control the hit list buffer size. Bigger buffer size might increase per-query RAM use, but possibly decrease IO time. Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
 
-You may also want to set [read_buffer_hits](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_hits) on per-index basis; that valuewill override anything set on server's config level.
+You may also want to set [read_buffer_hits](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_hits) on per-table basis; that valuewill override anything set on server's config level.
 
 <!-- intro -->
 ##### Example:
@@ -994,9 +994,9 @@ read_unhinted = 32K
 ### rt_flush_period
 
 <!-- example conf rt_flush_period -->
-RT indexes RAM chunk flush check period, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 10 hours.
+RT tables RAM chunk flush check period, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 10 hours.
 
-Actively updated RT indexes that however fully fit in RAM chunks can result in ever-growing binlogs, impacting disk use and crash recovery time. With this directive the search server performs periodic flush checks, and eligible RAM chunks can get saved, enabling consequential binlog cleanup. See [Binary logging](../Logging/Binary_logging.md) for more details.
+Actively updated RT tables that however fully fit in RAM chunks can result in ever-growing binlogs, impacting disk use and crash recovery time. With this directive the search server performs periodic flush checks, and eligible RAM chunks can get saved, enabling consequential binlog cleanup. See [Binary logging](../Logging/Binary_logging.md) for more details.
 
 <!-- intro -->
 ##### Example:
@@ -1048,26 +1048,26 @@ rt_merge_maxiosize = 1M
 ### seamless_rotate
 
 <!-- example conf seamless_rotate -->
-Prevents `searchd` stalls while rotating indexes with huge amounts of data to precache. Optional, default is 1 (enable seamless rotation). On Windows systems seamless rotation is disabled by default.
+Prevents `searchd` stalls while rotating tables with huge amounts of data to precache. Optional, default is 1 (enable seamless rotation). On Windows systems seamless rotation is disabled by default.
 
-Indexes may contain some data that needs to be precached in RAM. At the moment, `.spa`, `.spb`, `.spi` and `.spm` files are fully precached (they contain attribute data, blob attribute data, keyword index and killed row map, respectively.) Without seamless rotate, rotating an index tries to use as little RAM as possible and works as follows:
+Tables may contain some data that needs to be precached in RAM. At the moment, `.spa`, `.spb`, `.spi` and `.spm` files are fully precached (they contain attribute data, blob attribute data, keyword table and killed row map, respectively.) Without seamless rotate, rotating a table tries to use as little RAM as possible and works as follows:
 
 1. new queries are temporarily rejected (with "retry" error code);
 2. `searchd` waits for all currently running queries to finish;
-3. old index is deallocated and its files are renamed;
-4. new index files are renamed and required RAM is allocated;
-5. new index attribute and dictionary data is preloaded to RAM;
-6. `searchd` resumes serving queries from new index.
+3. old table is deallocated and its files are renamed;
+4. new table files are renamed and required RAM is allocated;
+5. new table attribute and dictionary data is preloaded to RAM;
+6. `searchd` resumes serving queries from new table.
 
 However, if there's a lot of attribute or dictionary data, then preloading step could take noticeable time - up to several minutes in case of preloading 1-5+ GB files.
 
 With seamless rotate enabled, rotation works as follows:
 
-1. new index RAM storage is allocated;
-2. new index attribute and dictionary data is asynchronously preloaded to RAM;
-3. on success, old index is deallocated and both indexes' files are renamed;
-4. on failure, new index is deallocated;
-5. at any given moment, queries are served either from old or new index copy.
+1. new table RAM storage is allocated;
+2. new table attribute and dictionary data is asynchronously preloaded to RAM;
+3. on success, old table is deallocated and both tables' files are renamed;
+4. on failure, new table is deallocated;
+5. at any given moment, queries are served either from old or new table copy.
 
 Seamless rotate comes at the cost of higher **peak** memory usage during the rotation (because both old and new copies of `.spa/.spb/.spi/.spm` data need to be in RAM while preloading new copy). Average usage stays the same.
 
@@ -1120,7 +1120,7 @@ server_id = 1
 <!-- example conf shutdown_timeout -->
 `searchd --stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 60 seconds.
 
-When you run `searchd --stopwait` your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. `searchd --stopwait` will wait up to `shutdown_time` seconds for server to finish its jobs. Suitable time depends on your index size and load.
+When you run `searchd --stopwait` your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. `searchd --stopwait` will wait up to `shutdown_time` seconds for server to finish its jobs. Suitable time depends on your table size and load.
 
 
 <!-- intro -->
@@ -1309,8 +1309,8 @@ subtree_hits_cache = 16M
 <!-- example threads -->
 Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this number of OS threads on start, and they perform all jobs inside the daemon such as executing queries, creating snippets, etc. Some operations may be split into sub-tasks and executed in parallel, for example:
 
-* Search in a real-time index
-* Search in a distributed index consisting of local indexes
+* Search in a real-time table
+* Search in a distributed table consisting of local tables
 * Percolate query call
 * and others
 
@@ -1351,7 +1351,7 @@ thread_stack = 8M
 ### unlink_old
 
 <!-- example conf unlink_old -->
-Whether to unlink .old index copies on successful rotation. Optional, default is 1 (do unlink).
+Whether to unlink .old table copies on successful rotation. Optional, default is 1 (do unlink).
 
 
 <!-- intro -->

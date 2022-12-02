@@ -84,4 +84,4 @@ To remove a node from a replication cluster you need to:
 2. remove info about the cluster in `<data_dir>/manticore.json` (`/var/lib/manticore/manticore.json` in most cases) on the node you've stopped
 3. run `ALTER CLUSTER cluster_name UPDATE nodes` on any other node
 
-After this the other nodes will forget about the detached node and the node will forget about the cluster. It won't impact indexes neither in the cluster nor on the detached node.
+After this the other nodes will forget about the detached node and the node will forget about the cluster. It won't impact tables neither in the cluster nor on the detached node.

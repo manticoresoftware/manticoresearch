@@ -167,7 +167,7 @@ SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` displays the statistic of [remote agents](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent) or of a distributed index. It includes the values like the age of the last request, last answer, the number of different kind of errors and successes, etc. Statistic is shown for every agent for last 1, 5 and 15 intervals, each of them of [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) seconds.
+`SHOW AGENT STATUS` displays the statistic of [remote agents](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) or of a distributed table. It includes the values like the age of the last request, last answer, the number of different kind of errors and successes, etc. Statistic is shown for every agent for last 1, 5 and 15 intervals, each of them of [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) seconds.
 
 <!-- intro -->
 ##### SQL:
@@ -773,9 +773,9 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
  warning=}
 ```
 <!-- end -->
-<!-- example show agent index status -->
+<!-- example show agent table status -->
 
-Finally, you can check the status of the agents in a specific distributed index. It can be done with a `SHOW AGENT index_name STATUS` statement. That statement shows the index HA status (i.e. whether or not it uses agent mirrors at all), and then the mirror information (specifically: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect).
+Finally, you can check the status of the agents in a specific distributed table. It can be done with a `SHOW AGENT index_name STATUS` statement. That statement shows the table HA status (i.e. whether or not it uses agent mirrors at all), and then the mirror information (specifically: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect).
 
 <!-- intro -->
 ##### SQL:

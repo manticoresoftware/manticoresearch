@@ -44,7 +44,7 @@ You can also download standalone rpm files [from our site](https://manticoresear
 
 ### More packages you may need
 #### For indexer
-If you plan to use [indexer](../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external sources, you'll need to make sure you have installed corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
+If you plan to use [indexer](../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external sources, you'll need to make sure you have installed corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
@@ -56,7 +56,7 @@ In CentOS Stream 8 you may need to run:
 dnf install mariadb-connector-c
 ```
 
-if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` trying to build a plain index from MySQL.
+if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` trying to build a plain table from MySQL.
 
 #### Ukrainian lemmatizer
 The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**

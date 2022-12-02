@@ -129,7 +129,7 @@ lrwxrwxrwx. 1 root root 27 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1
 
 ### Uploading your data
 
-To fix your bug developers often need to reproduce it locally. To do it they need your configuration file, index files, binlog (if present), sometimes data to index (like data from external storages or XML/CSV files) and queries.
+To fix your bug developers often need to reproduce it locally. To do it they need your configuration file, table files, binlog (if present), sometimes source data (like data from external storages or XML/CSV files) and queries.
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). In case it's too big or the data is sensitive feel free to upload it to our write-only FTP server:
 

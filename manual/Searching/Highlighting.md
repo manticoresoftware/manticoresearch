@@ -204,7 +204,7 @@ Selects whether `limit`, `limit_words` and `limit_snippets` work as individual l
 #### around
 How much words to pick around each matching keywords block. Default is 5.
 #### use_boundaries
-Whether to additionally break snippets by phrase boundary characters, as configured in index settings with [phrase_boundary](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) directive. Default is 0 (don't use boundaries).
+Whether to additionally break snippets by phrase boundary characters, as configured in table settings with [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) directive. Default is 0 (don't use boundaries).
 #### weight_order
 Whether to sort the extracted snippets in order of relevance (decreasing weight), or in order of appearance in the document (increasing position). Default is 0 (don't use weight order).
 #### force_all_words
@@ -212,11 +212,11 @@ Ignores length limit until the result includes all the keywords. Default is 0 (d
 #### start_snippet_id
 Specifies the starting value of `%SNIPPET_ID%` macro (that gets detected and expanded in `before_match`, `after_match` strings). Default is 1.
 #### html_strip_mode
-HTML stripping mode setting. Defaults to `index`, which means that index settings will be used. The other values are `none` and `strip`, that forcibly skip or apply stripping irregardless of index settings; and `retain`, that retains HTML markup and protects it from highlighting. The `retain` mode can only be used when highlighting full documents and thus requires that no snippet size limits are set. String, allowed values are `none`, `strip`, `index`, and `retain`.
+HTML stripping mode setting. Defaults to `index`, which means that table settings will be used. The other values are `none` and `strip`, that forcibly skip or apply stripping irregardless of table settings; and `retain`, that retains HTML markup and protects it from highlighting. The `retain` mode can only be used when highlighting full documents and thus requires that no snippet size limits are set. String, allowed values are `none`, `strip`, `index`, and `retain`.
 #### allow_empty
 Allows empty string to be returned as highlighting result when no snippets could be generated in the current field (no keywords match, or no snippets fit the limit). By default, the beginning of original text would be returned instead of an empty string. Default is 0 (don't allow empty result).
 #### snippet_boundary
-Ensures that snippets do not cross a sentence, paragraph, or zone boundary (when used with an index that has the respective indexing settings enabled). String, allowed values are `sentence`, `paragraph`, and `zone`.
+Ensures that snippets do not cross a sentence, paragraph, or zone boundary (when used with a table that has the respective indexing settings enabled). String, allowed values are `sentence`, `paragraph`, and `zone`.
 #### emit_zones
 Emits an HTML tag with an enclosing zone name before each snippet. Default is 0 (don't emit zone names).
 #### force_snippets
@@ -1870,18 +1870,18 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example CALL SNIPPETS -->
 
-`CALL SNIPPETS` statement builds a snippet from provided data and query using specified index settings. It can't access built-in document storage, that's why it's recommended to use [HIGHLIGHT() function](../Searching/Highlighting.md) instead.
+`CALL SNIPPETS` statement builds a snippet from provided data and query using specified table settings. It can't access built-in document storage, that's why it's recommended to use [HIGHLIGHT() function](../Searching/Highlighting.md) instead.
 
 The syntax is:
 
 ```sql
-CALL SNIPPETS(data, index, query[, opt_value AS opt_name[, ...]])
+CALL SNIPPETS(data, table, query[, opt_value AS opt_name[, ...]])
 ```
 
 #### data
 `data` is the source data to extract a snippet from. It can be a single string, or the list of the strings enclosed in curly brackets.
-#### index
-`index` is the name of the index from which to take the text processing settings.
+#### table
+`table` is the name of the table from which to take the text processing settings.
 #### query
 `query` is the full-text query to build snippets for.
 #### opt_value and opt_name
@@ -1913,10 +1913,10 @@ Most options are the same as in the [HIGHLIGHT() function](../Searching/Highligh
 The following options can be used to highlight text stored in separate files:
 
 #### load_files
-Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents invoke snippets generation in a distributed index, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
+Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents invoke snippets generation in a distributed table, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
 
 #### load_files_scattered
-Works only with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents and the main server will merge all non-erroneous results. E.g. if one agent of the distributed index has `file1.txt`, another agent has `file2.txt` and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
+Works only with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents and the main server will merge all non-erroneous results. E.g. if one agent of the distributed table has `file1.txt`, another agent has `file2.txt` and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
 
 If `load_files` options is also enabled, request will return an error if any of the files is not available anywhere. Otherwise (if `load_files` is not enabled) it will just return empty strings for all absent files. Searchd does not pass this flag to agents, so agents do not generate a critical error if the file does not exist. If you want to be sure that all source files are loaded, set both `load_files_scattered` and `load_files` to 1. If the absence of some source files on some agent is not critical, set only `load_files_scattered` to 1.
 

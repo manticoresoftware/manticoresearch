@@ -7,7 +7,7 @@
 `BM25F(k1,b, {field=weight, ...})` returns precise `BM25F()` and `index_field_lengths` to be enabled. Requires `expr` ranker. `k` and `b` parameters must be float.
 
 ### EXIST()
-Replaces non-existent columns with default values. It returns either a value of an attribute specified by 'attr-name', or 'default-value' if that attribute does not exist. It does not support STRING or MVA attributes. This function is handy when you are searching through several indexes with different schemas.
+Replaces non-existent columns with default values. It returns either a value of an attribute specified by 'attr-name', or 'default-value' if that attribute does not exist. It does not support STRING or MVA attributes. This function is handy when you are searching through several tables with different schemas.
 
 ```sql
 SELECT *, EXIST('gid', 6) as cnd FROM i1, i2 WHERE cnd>5

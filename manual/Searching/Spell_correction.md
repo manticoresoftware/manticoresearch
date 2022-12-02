@@ -28,13 +28,13 @@ Manticore provides commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used 
 
 They are both available via SQL only and the general syntax is:
 ```sql
-CALL QSUGGEST(word, index [,options])
-CALL SUGGEST(word, index [,options])
+CALL QSUGGEST(word, table [,options])
+CALL SUGGEST(word, table [,options])
 
 options: N as option_name[, M as another_option, ...]
 ```
 
-These commands provide for a given word all suggestions from the dictionary. They work only on indexes with [infixing](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
+These commands provide for a given word all suggestions from the dictionary. They work only on tables with [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
 
 If the first parameter is not a single word, but multiple, then:
 * `CALL QSUGGEST` will return suggestions only for the **last** word, ignoring the rest
@@ -53,7 +53,7 @@ That's the only difference between them. Several options are supported for custo
 | result_line | alternate mode to display the data by returning all suggests, distances and docs each per one row | 0 |
 | non_char | do not skip dictionary words with non alphabet symbols | 0 (skip such words) |
 
-To show how it works let's create an index and add few documents into it.
+To show how it works let's create a table and add few documents into it.
 
 ```sql
 create table products(title text) min_infix_len='2';

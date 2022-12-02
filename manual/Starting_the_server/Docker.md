@@ -4,7 +4,7 @@ The image is based on [current release of Manticore package](https://manticorese
 
 [comment]: # (the below should be in sync with https://github.com/manticoresoftware/docker/blob/master/README.md)
 
-The default configuration includes a sample Real-Time index and listens on the default ports:
+The default configuration includes a sample Real-Time table and listens on the default ports:
 
   * `9306` for connections from a MySQL client
   * `9308` for connections via HTTP
@@ -25,13 +25,13 @@ docker run --name manticore --rm -d manticoresearch/manticore && docker exec -it
 
 When you exit from the mysql client it stops and removes the container, so **use it only for testing / sandboxing purposes**. See below how to use it in production.
 
-The image comes with a sample index which can be loaded like this:
+The image comes with a sample table which can be loaded like this:
 
 ```sql
 mysql> source /sandbox.sql
 ```
 
-Also the mysql client has in history several sample queries that you can run on the above index, just use Up/Down keys in the client to see and run them.
+Also the mysql client has in history several sample queries that you can run on the above table, just use Up/Down keys in the client to see and run them.
 
 ## Production use
 
@@ -221,7 +221,7 @@ It's recommended to overwrite the default ulimits of docker for the Manticore in
  --ulimit nofile=65536:65536
 ```
 
-For best performance, index components can be mlocked into memory. When Manticore is run under Docker, the instance requires additional privileges to allow memory locking. The following options must be added when running the instance:
+For best performance, table components can be "mlocked" into memory. When Manticore is run under Docker, the instance requires additional privileges to allow memory locking. The following options must be added when running the instance:
 
 ```bash
   --cap-add=IPC_LOCK --ulimit memlock=-1:-1
@@ -229,13 +229,13 @@ For best performance, index components can be mlocked into memory. When Manticor
 
 ## Configuring Manticore Search with Docker
 
-If you want to run Manticore with your custom config containing indexes definition you will need to mount the configuration to the instance:
+If you want to run Manticore with your custom config containing tables definition you will need to mount the configuration to the instance:
 
 ```bash
 docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data/:/var/lib/manticore -p 127.0.0.1:9306:9306 -d manticoresearch/manticore
 ```
 
-Take into account that Manticore search inside the container is run under user `manticore`. Performing operations with index files (like creating or rotating plain indexes) should be also done under `manticore`. Otherwise the files will be created under `root` and the search daemon won't have rights to open them. For example here is how you can rotate all indexes:
+Take into account that Manticore search inside the container is run under user `manticore`. Performing operations with table files (like creating or rotating plain tables) should be also done under `manticore`. Otherwise the files will be created under `root` and the search daemon won't have rights to open them. For example here is how you can rotate all tables:
 
 ```bash
 docker exec -it manticore gosu manticore indexer --all --rotate

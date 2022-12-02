@@ -1,6 +1,6 @@
 # MATCH
 
-The `MATCH` clause allows to perform  full-text searches in text fields. The query string at input is [tokenized](../../Creating_an_index/NLP_and_tokenization/Data_tokenization.md) using same settings applied to the text during indexing. In addition to tokenization of input text, the query string supports a number of [full-text operators](../../Searching/Full_text_matching/Operators.md) that allow enforcing different rules on how keywords should provide a valid match.
+The `MATCH` clause allows to perform  full-text searches in text fields. The query string at input is [tokenized](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md) using same settings applied to the text during indexing. In addition to tokenization of input text, the query string supports a number of [full-text operators](../../Searching/Full_text_matching/Operators.md) that allow enforcing different rules on how keywords should provide a valid match.
 
 The full-text match clauses can be combined with attribute [filters](../../Searching/Filters.md) as an AND boolean. **OR relation between full-text matches and attribute filters are not supported**.
 

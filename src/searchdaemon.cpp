@@ -15,8 +15,9 @@
 
 #include "sphinxstd.h"
 #include "searchdaemon.h"
-#include "optional.h"
 #include "coroutine.h"
+
+#include <optional>
 
 #if _WIN32
 	#define USE_PSI_INTERFACE 1

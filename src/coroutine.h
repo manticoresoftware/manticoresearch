@@ -11,11 +11,11 @@
 #pragma once
 
 #include "threadutils.h"
-#include "optional.h"
 #include "mini_timer.h"
 
 #include <atomic>
 #include <chrono>
+#include <optional>
 
 // note: we not yet link to boost::fiber, so just inclusion of some of it's header is enough.
 // Once we do link - add searching of that component into Cmake, than m.b. remove this comment as redundant
@@ -150,7 +150,7 @@ template <typename REFCONTEXT, typename CONTEXT, ECONTEXT IS_ORDERED>
 class ClonableCtx_T
 {
 	REFCONTEXT m_dParentContext;
-	CSphFixedVector<Optional_T<CONTEXT>> m_dChildrenContexts {0};
+	CSphFixedVector<std::optional<CONTEXT>> m_dChildrenContexts {0};
 	CSphFixedVector<int> m_dJobsOrder {0};
 
 	std::atomic<int> m_iTasks {0};	// each call to CloneNewContext() increases value

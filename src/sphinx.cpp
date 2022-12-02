@@ -2021,7 +2021,7 @@ int CSphIndex::UpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphSt
 
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
-	TlsMsg::Err(); // reset error
+	TlsMsg::ResetErr(); // reset error
 	return {};
 }
 
@@ -7006,7 +7006,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 
 CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 {
-	TlsMsg::Err(); // clean err
+	TlsMsg::ResetErr(); // clean err
 	CSphVector<SphAttr_t> dResult;
 	if ( !m_iDocinfo )
 		return dResult;

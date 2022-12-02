@@ -5571,13 +5571,12 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 	return false;
 }
 
-Optional_T<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )
+std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )
 {
-	Optional_T<CSphString> sResult;
 	assert ( pDesc );
 	if ( !pDesc->m_sCluster.IsEmpty() )
-		sResult.emplace ( pDesc->m_sCluster );
-	return sResult;
+		return pDesc->m_sCluster;
+	return {};
 }
 
 // command to all remote nodes at cluster to get actual nodes list

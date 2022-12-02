@@ -57,8 +57,9 @@ std::enable_if_t<ORD == ECONTEXT::ORDERED, std::pair<REFCONTEXT, int>> ClonableC
 	auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_relaxed );
 
 	auto& tCtx = m_dChildrenContexts[iMyIdx];
-	tCtx.emplace_once ( m_dParentContext );
-	return { (REFCONTEXT)tCtx.get(), iMyIdx + 1 };
+	if ( !tCtx )
+		tCtx.emplace ( m_dParentContext );
+	return { (REFCONTEXT)tCtx.value(), iMyIdx + 1 };
 }
 
 // called once per coroutine, when it really has to process something
@@ -75,8 +76,9 @@ std::enable_if_t<ORD == ECONTEXT::UNORDERED, std::pair<REFCONTEXT, int>> Clonabl
 
 	--iMyIdx; // make it back 0-based
 	auto& tCtx = m_dChildrenContexts[iMyIdx];
-	tCtx.emplace_once ( m_dParentContext );
-	return { (REFCONTEXT)tCtx.get(), iMyIdx + 1 };
+	if ( !tCtx )
+		tCtx.emplace ( m_dParentContext );
+	return { (REFCONTEXT)tCtx.value(), iMyIdx + 1 };
 }
 
 // set (optionally) 'weight' of a job; ForAll will iterate jobs according to ascending weights
@@ -126,7 +128,7 @@ std::enable_if_t<ORD == ECONTEXT::ORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, IS
 	for ( auto i : dOrder )
 	{
 		assert ( m_dChildrenContexts[i] );
-		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].get();
+		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].value();
 		fnProcess ( tCtx );
 	}
 }
@@ -149,7 +151,7 @@ std::enable_if_t<ORD == ECONTEXT::UNORDERED> ClonableCtx_T<REFCONTEXT, CONTEXT, 
 	for ( auto i : dOrder )
 	{
 		assert ( m_dChildrenContexts[i] );
-		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].get();
+		auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].value();
 		fnProcess ( tCtx );
 	}
 }

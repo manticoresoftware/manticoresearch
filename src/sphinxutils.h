@@ -295,18 +295,20 @@ using CSphConfigType = SmallStringHash_T < CSphConfigSection >;
 /// config (hash of section types)
 using CSphConfig = SmallStringHash_T < CSphConfigType >;
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs=nullptr );
+/// load or run (she-bang) given file. Return content and flag whether it was changed since last load
+std::pair<bool, CSphVector<char>> FetchAndCheckIfChanged ( const CSphString& sFilename );
 
 /////////////////////////////////////////////////////////////////////////////
 
 /// Provided or default config file
-const char *	sphGetConfigFile ( const char * sHint = nullptr );
+const char *	sphGetConfigFile ( const char * szHint = nullptr );
 
 /// load config file (will die inside if an error happened)
-CSphConfig		sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, const char ** ppActualConfig=nullptr );
+CSphConfig		sphLoadConfig ( const char * szPathToConfigFile, bool bTraceToStdout, const char ** pszPathToActualConfig=nullptr );
+CSphConfig		sphLoadConfigWithoutIndexes ( const char* szPathToConfigFile, bool bTraceToStdout );
 
 /// load config file into provided hConfig (on error hConfig is unchanged)
-bool			ParseConfig ( CSphConfig* pConfig, const char* sFileName, const char* pBuffer = nullptr );
+bool			ParseConfig ( CSphConfig* pConfig, CSphString sFileName, const VecTraits_T<char>& dData );
 
 enum ESphLogLevel : BYTE
 {
@@ -486,8 +488,10 @@ namespace TlsMsg
 	// put error from string, then return false
 	bool Err( const CSphString& sMsg );
 
-	// clear current state and return builder for user manipulations
+	// return builder for user manipulations
 	StringBuilder_c& Err();
+
+	void ResetErr();
 
 	// return last error
 	const char* szError();

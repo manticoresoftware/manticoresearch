@@ -15,6 +15,8 @@ set ( GTESTS_SRC
 		gtests_searchd.cpp
 		gtests_filter.cpp
 		gtests_searchdaemon.cpp
+		gtests_stringbuilder.cpp
+		gtests_strfmt.cpp
 		gtests_pqstuff.cpp
 		gtests_json.cpp
 		gtests_threadstuff.cpp )

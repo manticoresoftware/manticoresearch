@@ -12,7 +12,7 @@
 
 #include "sphinxstd.h"
 #include "threadutils.h"
-#include "optional.h"
+#include <optional>
 
 /*
  * Lowest info came from thread. It includes low details as thread name, thread ID and basic profile statistic.
@@ -44,7 +44,7 @@
 struct PublicThreadDesc_t
 {
 	int					m_iThreadID		= -1;		///< OS thread id
-	Optional_T<int64_t>	m_tmStart;					///< when did the current request start?
+	std::optional<int64_t>	m_tmStart;				///< when did the current request start?
 	int64_t 			m_tmLastJobStartTimeUS = -1;///< time where I've done something useful
 	int64_t				m_tmLastJobDoneTimeUS = -1;	///< time where I've done something useful
 	int64_t				m_tmTotalWorkedTimeUS = -1;	///< total time I've worked on useful tasks

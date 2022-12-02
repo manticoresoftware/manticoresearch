@@ -1262,7 +1262,7 @@ int main ( int argc, char ** argv )
 	bool bStats = false;
 	bool bSkipUnique = false;
 	CSphString sDumpDict;
-	bool bQuiet = false;
+	bool bTraceToStdout = true;
 	bool bRotate = false;
 	bool bCheckIdDups = false;
 	int iCheckChunk = -1;
@@ -1273,7 +1273,7 @@ int main ( int argc, char ** argv )
 	{
 		// handle argless options
 		if ( argv[i][0]!='-' ) break;
-		OPT ( "-q", "--quiet" )		{ bQuiet = true; continue; }
+		OPT ( "-q", "--quiet" )		{ bTraceToStdout = false; continue; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; continue; }
 		OPT1 ( "--checkconfig" )	{ SetCmd ( IndextoolCmd_e::CHECKCONFIG ); continue; }
 		OPT1 ( "--rotate" )			{ bRotate = true; continue; }
@@ -1368,7 +1368,7 @@ int main ( int argc, char ** argv )
 		}
 	}
 
-	if ( !bQuiet )
+	if ( bTraceToStdout )
 		ShowVersion();
 
 	if ( i!=argc )
@@ -1387,7 +1387,7 @@ int main ( int argc, char ** argv )
 	sphCollationInit ();
 	SetupLemmatizerBase();
 
-	auto hConf = sphLoadConfig ( sOptConfig, bQuiet, true );
+	auto hConf = sphLoadConfigWithoutIndexes ( sOptConfig, bTraceToStdout );
 
 	// can't reuse the code from searchdconfig, using a simplified version here
 	LoadJsonConfig ( hConf, sOptConfig );

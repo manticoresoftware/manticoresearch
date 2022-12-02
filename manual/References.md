@@ -42,7 +42,7 @@
 
 ##### Real-time table optimization
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
-* [FLUSH RTINDEX](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-RTINDEX) - Flushes real-time table RAM chunk to disk
+* [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Flushes real-time table RAM chunk to disk
 * [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
 ##### Importing to a real-time table

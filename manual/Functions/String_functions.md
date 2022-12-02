@@ -34,7 +34,7 @@ SELECT REGEX(content, '(?i)box') FROM test;
 ```
 
 ### SNIPPET()
-`SNIPPET()` can be used to highlight search results in a given text. The first two arguments are: the text to highlight, and a query. It's possible to pass [options](../Searching/Highlighting.md#Highlighting-options) to the function as the third, fourth and so on arguments. `SNIPPET()` can fetch the text to use in highlighting from index itself. The first argument in this case should be field name:
+`SNIPPET()` can be used to highlight search results in a given text. The first two arguments are: the text to highlight, and a query. It's possible to pass [options](../Searching/Highlighting.md#Highlighting-options) to the function as the third, fourth and so on arguments. `SNIPPET()` can fetch the text to use in highlighting from the table itself. The first argument in this case should be field name:
 
 ```sql         
 SELECT SNIPPET(body, QUERY()) FROM myIndex WHERE MATCH('my.query')   

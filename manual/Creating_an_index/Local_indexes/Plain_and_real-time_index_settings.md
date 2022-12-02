@@ -1,35 +1,35 @@
-# Plain and real-time index settings
+# Plain and real-time table settings
 
 <!-- example config -->
-## Defining index schema in a configuration file
+## Defining table schema in a configuration file
 
 ```ini
-index <index_name>[:<parent index name>] {
+index <index_name>[:<parent table name>] {
 ...
 }
 ```
 
 <!-- intro -->
-##### Example of a plain index in a configuration file
+##### Example of a plain table in a configuration file
 <!-- request Plain -->
 
 ```ini
-index <index_name> {
+index <table name> {
   type = plain
-  path = /path/to/index
+  path = /path/to/table
   source = <source_name>
   source = <another source_name>
   [stored_fields = <comma separated list of full-text fields that should be stored, all are stored by default, can be empty>]
 }
 ```
 <!-- intro -->
-##### Example of a real-time index in a configuration file
+##### Example of a real-time table in a configuration file
 <!-- request Real-time -->
 
 ```ini
-index <index name> {
+index <table name> {
   type = rt
-  path = /path/to/index
+  path = /path/to/table
 
   rt_field = <full-text field name>
   rt_field = <another full-text field name>
@@ -55,13 +55,13 @@ index <index name> {
   [stored_fields = <comma separated list of full-text fields that should be stored, all are stored by default, can be empty>]
 
   [rt_mem_limit = <RAM chunk max size, default 128M>]
-  [optimize_cutoff = <max number of RT index disk chunks>]
+  [optimize_cutoff = <max number of RT table disk chunks>]
 
 }
 ```
 <!-- end -->
 
-### Common plain and real-time indexes settings
+### Common plain and real-time tables settings
 
 #### type
 
@@ -71,19 +71,19 @@ type = plain
 type = rt
 ```
 
-Index type: "plain" or "rt" (real-time)
+Table type: "plain" or "rt" (real-time)
 
 Value: **plain** (default), rt
 
 #### path
 
 ```ini
-path = path/to/index
+path = path/to/table
 ```
 
-Absolute or relative path without extension where to store the index or where to look for it
+Absolute or relative path without extension where to store the table or where to look for it
 
-Value: path to the index, **mandatory**
+Value: path to the table, **mandatory**
 
 #### stored_fields
 
@@ -93,11 +93,11 @@ stored_fields = title, content
 
 <!-- example stored_fields -->
 
-By default when an index is defined in a configuration file, full-text fields' original content is both indexed and stored. This setting lets you specify the fields that should have their original values stored.
+By default when a table is defined in a configuration file, full-text fields' original content is both indexed and stored. This setting lets you specify the fields that should have their original values stored.
 
 Value: comma separated list of **full-text** fields that should be stored. Empty value (i.e. `stored_fields = `) disables storing original values for all the fields.
 
-Note, in case of a real-time index the fields listed in `stored_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
+Note, in case of a real-time table the fields listed in `stored_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
 
 Note also, that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` can be only used for full-text fields.
 
@@ -181,9 +181,9 @@ index products {
 stored_only_fields = title,content
 ```
 
-List of fields that will be stored in the index, but will not be indexed. Similar to [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in `stored_only_fields` it is only stored, not indexed and can't be searched with full-text queries. It can only be returned with search results.
+List of fields that will be stored in the table, but will not be indexed. Similar to [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in `stored_only_fields` it is only stored, not indexed and can't be searched with full-text queries. It can only be returned with search results.
 
-Value: comma separated list of fields that should be stored only, not indexed. Default is empty. Note, in case of a real-time index the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
+Value: comma separated list of fields that should be stored only, not indexed. Default is empty. Note, in case of a real-time table the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_field).
 
 Note also, that you don't need to list attributes in `stored_only_fields`, since their original values are stored anyway. If to compare `stored_only_fields` to string attributes the former (stored field):
 * is stored on disk and doesn't require memory
@@ -195,11 +195,11 @@ The latter (string attribute) is:
 * stored uncompressed
 * can be used for sorting, grouping, filtering and anything else you want to do with attributes.
 
-### Real-time index settings:
+### Real-time table settings:
 
 #### optimize_cutoff
 
-Max number of RT index disk chunks. Read more [here](../../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks).
+Max number of RT table disk chunks. Read more [here](../../Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks).
 
 #### rt_field
 
@@ -310,38 +310,38 @@ rt_mem_limit = 512M
 
 RAM chunk size limit. Optional, default is 128M.
 
-RT index keeps some data in memory ("RAM chunk") and also maintains a number of on-disk indexes ("disk chunks"). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT index will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
+RT table keeps some data in memory ("RAM chunk") and also maintains a number of on-disk tables ("disk chunks"). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT table will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
-The limit is pretty strict: RT index never allocates more memory than it’s limited to. The memory is not preallocated either, hence, specifying 512 MB limit and only inserting 3 MB of data should result in allocating 3 MB, not 512 MB.
+The limit is pretty strict: RT table never allocates more memory than it’s limited to. The memory is not preallocated either, hence, specifying 512 MB limit and only inserting 3 MB of data should result in allocating 3 MB, not 512 MB.
 
-The `rt_mem_limit` is never exceeded, but the actual RAM chunk can be significantly lower than the limit. Real-time index learns by your data insertion pace and adapts the actual limit to decrease RAM consumption and increase data write speed. How it works:
+The `rt_mem_limit` is never exceeded, but the actual RAM chunk can be significantly lower than the limit. Real-time table learns by your data insertion pace and adapts the actual limit to decrease RAM consumption and increase data write speed. How it works:
 * By default RAM chunk size is 50% of `rt_mem_limit`. It's called "`rt_mem_limit` rate".
 * As soon as RAM chunk accumulates `rt_mem_limit * rate` data (50% of `rt_mem_limit` by default) Manticore starts saving the RAM chunk as a new disk chunk.
 * While a new disk chunk is being saved, Manticore checks how many new/replaced documents have appeared.
 * Upon saving a new disk chunk we update the `rt_mem_limit` rate.
 * The rate is reset to 50% as soon as you restart the searchd.
 
-For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see index's current rate in [SHOW INDEX <idx> STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md).
+For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see table's current rate in [SHOW TABLE <idx> STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md).
 
 ##### How to change rt_mem_limit and optimize_cutoff
 
-In RT mode the RAM chunk size limit and max number of disk chunks can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 gigabyte for index 't' run query `ALTER TABLE t rt_mem_limit='1G'`. To change max number of chunks - `ALTER TABLE t optimize_cutoff='5'`.
+In the RT mode RAM chunk size limit and max number of disk chunks can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 gigabyte for table 't' run query `ALTER TABLE t rt_mem_limit='1G'`. To change max number of chunks - `ALTER TABLE t optimize_cutoff='5'`.
 
-In plain mode `rt_mem_limit` and `optimize_cutoff` can be changed so:
+In the plain mode `rt_mem_limit` and `optimize_cutoff` can be changed so:
 
-* change the value in index configuration
+* change the value in the table configuration
 * run `ALTER TABLE <index_name> RECONFIGURE`
 
 ##### Important notes about RAM chunks
 
-* RT index is quite similar to a [distributed](../../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md#Creating-a-local-distributed-index) index consisting of multiple local indexes. The local indexes are called "disk chunks".
+* RT table is quite similar to a [distributed](../../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md#Creating-a-local-distributed-table) table consisting of multiple local tables. The local tables are called "disk chunks".
 * RAM chunk internally consists of multiple "segments".
-* While disk chunks are stored on disk, the segments of RAM chunk are special RAM-only "indexes".
-* Any transaction you make to a real-time index generates a new segment. RAM chunk segments are merged after each transaction commit. Therefore it is beneficial to do bulk INSERTs of hundreds/thousands documents rather than hundreds/thousands different inserts with 1 document to avoid the overhead from merging RAM chunk segments.
+* While disk chunks are stored on disk, the segments of RAM chunk are special RAM-only "tables".
+* Any transaction you make to a real-time table generates a new segment. RAM chunk segments are merged after each transaction commit. Therefore it is beneficial to do bulk INSERTs of hundreds/thousands documents rather than hundreds/thousands different inserts with 1 document to avoid the overhead from merging RAM chunk segments.
 * When the number of segments gets greater than 32, the segments get merged, so the count is not greater than 32.
-* RT index always has a single RAM-chunk (may be empty) and one or multiple disk chunks.
+* RT table always has a single RAM-chunk (may be empty) and one or multiple disk chunks.
 * Merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore `rt_mem_limit`).
-* Number of disk chunks depends on the amount of data in the index and `rt_mem_limit` setting.
+* Number of disk chunks depends on the amount of data in the table and `rt_mem_limit` setting.
 * Searchd flushes RAM chunk to disk (not as a disk chunk, just persists) on shutdown and periodically according to [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period). Flushing several gigabytes to disk may take some time.
 * Large RAM chunk will put more pressure on the storage:
   - when flushing the RAM chunk to disk into the `.ram` file
@@ -350,7 +350,7 @@ In plain mode `rt_mem_limit` and `optimize_cutoff` can be changed so:
 * RAM chunk may be performing slightly slower than a disk chunk.
 * Even though a RAM chunk doesn't take more memory than `rt_mem_limit` Manticore itself can take more in some cases, e.g. if you begin a transaction to insert data and don't commit it for some time, then the data you have already transmitted within the transaction to Manticore is kept in memory.
 
-### Plain index settings:
+### Plain table settings:
 
 #### source
 
@@ -360,9 +360,9 @@ source = srcpart2
 source = srcpart3
 ```
 
-Specifies document source to get documents from when the current index is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](../../Adding_data_from_external_storages/Plain_indexes_creation.md)
+Specifies document source to get documents from when the current table is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](../../Adding_data_from_external_storages/Plain_indexes_creation.md)
 
-Value: name of the source to build the index from, **mandatory**. Can be multiple records.
+Value: name of the source to build the table from, **mandatory**. Can be multiple records.
 
 #### killlist_target
 
@@ -370,7 +370,7 @@ Value: name of the source to build the index from, **mandatory**. Can be multipl
 killlist_target = main:kl
 ```
 
-Sets the index(es) that the kill-list will be applied to. Suppresses matches in the targeted index that are updated or deleted in the current index. In `:kl` mode the documents to suppress are taken from the [kill-list](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md). In `:id` mode all document ids from the current index are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
+Sets the table(s) that the kill-list will be applied to. Suppresses matches in the targeted table that are updated or deleted in the current table. In `:kl` mode the documents to suppress are taken from the [kill-list](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md). In `:id` mode all document ids from the current table are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
 
 Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
 
@@ -387,7 +387,7 @@ You can do `columnar_attrs = *` to store fields of all supported data types in t
 
 `id` is also supported.
 
-### Creating a real-time index online via CREATE TABLE
+### Creating a real-time table online via CREATE TABLE
 
 <!-- example rt_mode -->
 ##### General syntax of CREATE TABLE
@@ -415,7 +415,7 @@ Read [more about data types here](../../Creating_an_index/Data_types.md).
 | [bit(n)](../../Creating_an_index/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_uint) | N is the max number of bits to keep  |   |
 
 <!-- intro -->
-##### Examples of creating a real-time index via CREATE TABLE
+##### Examples of creating a real-time table via CREATE TABLE
 <!-- request SQL -->
 
 ```sql
@@ -441,35 +441,35 @@ create table ... engine='columnar';
 create table ... engine='rowwise';
 ```
 
-Changes default [attribute storage](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the index. Can be overridden by specifying `engine` [separately for each attribute](../../Creating_an_index/Data_types.md#How-to-switch-between-the-storages).
+Changes default [attribute storage](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the table. Can be overridden by specifying `engine` [separately for each attribute](../../Creating_an_index/Data_types.md#How-to-switch-between-the-storages).
 
-See [columnar_attrs](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs) on how to enable columnar storage for a plain index.
+See [columnar_attrs](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs) on how to enable columnar storage for a plain table.
 
 Values:
-* columnar - enables columnar storage for all index attributes except for [json](../../Creating_an_index/Data_types.md#JSON)
-* **rowwise (default)** - doesn't change anything, i.e. makes Manticore use the traditional row-wise storage for the index
+* columnar - enables columnar storage for all table attributes except for [json](../../Creating_an_index/Data_types.md#JSON)
+* **rowwise (default)** - doesn't change anything, i.e. makes Manticore use the traditional row-wise storage for the table
 
 
 # Other settings
-The following settings are similar for both real-time and plain index in either mode: whether specified in a configuration file or online via `CREATE` or `ALTER` command.
+The following settings are similar for both real-time and plain table in either mode: whether specified in a configuration file or online via `CREATE` or `ALTER` command.
 
 ## Performance related
 
-### Accessing index files
-Manticore uses two access modes to read index data - seek+read and mmap.
+### Accessing table files
+Manticore uses two access modes to read table data - seek+read and mmap.
 
 In seek+read mode the server performs system call `pread` to read document lists and keyword positions, i.e. `*.spd` and `*.spp` files. Internal read buffers are used to optimize reading. The size of these buffers can be tuned with options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). There is also option [preopen](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#preopen) that allows to control how Manticore opens files at start.
 
-In the mmap access mode the search server just maps index's file into memory with `mmap` system call and OS caches file contents by itself. Options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock index's data in memory via `mlock` privileged call which prevents swapping out the cached data to disk by OS.
+In the mmap access mode the search server just maps table's file into memory with `mmap` system call and OS caches file contents by itself. Options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock table's data in memory via `mlock` privileged call which prevents swapping out the cached data to disk by OS.
 
 To control what access mode will be used **access_plain_attrs**, **access_blob_attrs**, **access_doclists** and **access_hitlists** options are available with the following values:
 
 | Value | Description |
 | - | - |
-| file | server reads index file from disk with seek+read using internal buffers on file access |
-| mmap | server maps index file into memory and OS caches up its contents on file access |
-| mmap_preread | server maps index file into memory and a background thread reads it once to warm up the cache |
-| mlock | server maps index file into memory and then issues mlock system call to cache up the file contents and lock it into memory to prevent it being swapped out |
+| file | server reads the table files from disk with seek+read using internal buffers on file access |
+| mmap | server maps the table files into memory and OS caches up its contents on file access |
+| mmap_preread | server maps the table files into memory and a background thread reads it once to warm up the cache |
+| mlock | server maps the table files into memory and then executes the mlock() system call to cache up the file contents and lock it into memory to prevent it being swapped out |
 
 
 | Setting | Values | Description |
@@ -481,7 +481,7 @@ To control what access mode will be used **access_plain_attrs**, **access_blob_a
 
 Here is a table which can help you select your desired mode:
 
-| index part |	keep it on disk |	keep it in memory |	cached in memory on server start | lock it in memory |
+| table part |	keep it on disk |	keep it in memory |	cached in memory on server start | lock it in memory |
 | - | - | - | - | - |
 | plain attributes in [row-wise](../../Creating_an_index/Data_types.md#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
 | row-wise string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
@@ -523,7 +523,7 @@ Value: size, default **128k**.
 docstore_block_size = 32k
 ```
 
-Size of the block of documents used by document storage. Optional, default is 16kb. When stored_fields or stored_only_fields are specified, original document text is stored inside the index. To use less disk space, documents are compressed. To get more efficient disk access and better compression ratios on small documents, documents are concatenated into blocks. When indexing, documents are collected until their total size reaches the threshold. After that, this block of documents is compressed. This option can be used to get better compression ratio (by increasing block size) or to get faster access to document text (by decreasing block size).
+Size of the block of documents used by document storage. Optional, default is 16kb. When stored_fields or stored_only_fields are specified, original document text is stored inside the table. To use less disk space, documents are compressed. To get more efficient disk access and better compression ratios on small documents, documents are concatenated into blocks. When indexing, documents are collected until their total size reaches the threshold. After that, this block of documents is compressed. This option can be used to get better compression ratio (by increasing block size) or to get faster access to document text (by decreasing block size).
 
 Value: size, default **16k**.
 
@@ -553,7 +553,7 @@ Value: 1-12 (default **9**).
 preopen = 1
 ```
 
-This option tells searchd that it should pre-open all index files on startup (or rotation) and keep them open while it runs. Currently, the default mode is not to pre-open the files. Pre-opened indexes take a few (currently 2) file descriptors per index. However, they save on per-query open() calls; and also they are invulnerable to subtle race conditions that may happen during index rotation under high load. On the other hand, when serving many indexes (100s to 1000s), it still might be desired to open them on per-query basis in order to save file descriptors
+This option tells searchd that it should pre-open all table files on startup (or rotation) and keep them open while it runs. Currently, the default mode is not to pre-open the files. Pre-opened tables take a few (currently 2) file descriptors per table. However, they save on per-query open() calls; and also they are invulnerable to subtle race conditions that may happen during table rotation under high load. On the other hand, when serving many tables (100s to 1000s), it still might be desired to open them on per-query basis in order to save file descriptors
 
 Value: **0** (default), 1.
 
@@ -577,7 +577,7 @@ Per-keyword read buffer size for hit lists. The higher the value the higher per-
 
 Value: size, default **256k**, min 8k.
 
-### Plain index disk footprint settings
+### Plain table disk footprint settings
 
 #### inplace_enable
 
@@ -587,11 +587,11 @@ Value: size, default **256k**, min 8k.
 inplace_enable = {0|1}
 ```
 
-Whether to enable in-place index inversion. Optional, default is 0 (use separate temporary files).
+Whether to enable in-place table inversion. Optional, default is 0 (use separate temporary files).
 
-`inplace_enable` greatly reduces indexing disk footprint for a plain index, at a cost of slightly slower indexing (it uses around 2x less disk, but yields around 90-95% the original performance).
+`inplace_enable` greatly reduces indexing disk footprint for a plain table, at a cost of slightly slower indexing (it uses around 2x less disk, but yields around 90-95% the original performance).
 
-Indexing involves two major phases. The first phase collects, processes, and partially sorts documents by keyword, and writes the intermediate result to temporary files (.tmp\*). The second phase fully sorts the documents, and creates the final index files. Thus, rebuilding a production index on the fly involves around 3x peak disk footprint: 1st copy for the intermediate temporary files, 2nd copy for newly constructed copy, and 3rd copy for the old index that will be serving production queries in the meantime. (Intermediate data is comparable in size to the final index.) That might be too much disk footprint for big data collections, and `inplace_enable` allows to reduce it. When enabled, it reuses the temporary files, outputs the final data back to them, and renames them on completion. However, this might require additional temporary data chunk relocation, which is where the performance impact comes from.
+Indexing involves two major phases. The first phase collects, processes, and partially sorts documents by keyword, and writes the intermediate result to temporary files (.tmp\*). The second phase fully sorts the documents, and creates the final table files. Thus, rebuilding a production table on the fly involves around 3x peak disk footprint: 1st copy for the intermediate temporary files, 2nd copy for newly constructed copy, and 3rd copy for the old table that will be serving production queries in the meantime. (Intermediate data is comparable in size to the final table.) That might be too much disk footprint for big data collections, and `inplace_enable` allows to reduce it. When enabled, it reuses the temporary files, outputs the final data back to them, and renames them on completion. However, this might require additional temporary data chunk relocation, which is where the performance impact comes from.
 
 This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
 

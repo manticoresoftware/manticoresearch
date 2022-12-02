@@ -1,7 +1,7 @@
 # Deleting a replication cluster 
 
 <!-- example deleting a replication cluster  1 -->
-Delete statement removes a cluster specified with [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name). The cluster gets removed from all the nodes, but its indexes are left intact and become active local non-replicated indexes.
+Delete statement removes a cluster specified with [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name). The cluster gets removed from all the nodes, but its tables are left intact and become active local non-replicated tables.
 
 
 <!-- intro -->

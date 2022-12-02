@@ -1,6 +1,6 @@
-# Emptying an index
+# Emptying a table
 
-The index can be emptied with a `TRUNCATE TABLE` SQL statement or with a `truncate()` PHP client function.
+The table can be emptied with a `TRUNCATE TABLE` SQL statement or with a `truncate()` PHP client function.
 
 Here is the syntax for the SQL statement:
 
@@ -10,9 +10,9 @@ TRUNCATE TABLE index_name [WITH RECONFIGURE]
 
 <!-- example truncate -->
 
-When this statement is executed, it clears the RT index completely. It disposes the in-memory data, unlinks all the index data files, and releases the associated binary logs.
+When this statement is executed, it clears the RT table completely. It disposes the in-memory data, unlinks all the table data files, and releases the associated binary logs.
 
-An index can also be emptied with `DELETE FROM index WHERE id>0`, but it's not recommended as it's much slower than `TRUNCATE`.
+A table can also be emptied with `DELETE FROM index WHERE id>0`, but it's not recommended as it's much slower than `TRUNCATE`.
 
 <!-- intro -->
 ##### SQL:
@@ -106,13 +106,13 @@ utilsApi.sql("TRUNCATE TABLE products");
 
 <!-- end -->
 
-One of the possible uses of this command is before [attaching an index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md).
+One of the possible uses of this command is before [attaching a table](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md).
 
 <!-- example truncate with RECONFIGURE -->
 
-When `RECONFIGURE` option is used new tokenization, morphology, and other text processing settings specified in the config take effect after the index gets cleared. In case the [schema declaration](Creating_an_index/Data_types.md) in config is different from the index schema the new schema from config got applied after index get cleared.
+When `RECONFIGURE` option is used new tokenization, morphology, and other text processing settings specified in the config take effect after the table gets cleared. In case the [schema declaration](Creating_an_index/Data_types.md) in config is different from the table schema the new schema from config got applied after table get cleared.
 
-With this option clearing and reconfiguring an index becomes one atomic operation.
+With this option clearing and reconfiguring a table becomes one atomic operation.
 
 <!-- intro -->
 ##### SQL:

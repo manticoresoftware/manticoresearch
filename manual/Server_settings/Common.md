@@ -16,7 +16,7 @@ lemmatizer_base = /usr/share/manticore/
 progressive_merge
 ------------------
 
-When merging real-time index disk chunks, do it from smaller to bigger ones. It makes merging faster with lower read/write amplification. Enabled by default. If disabled, chunks are merged from first to last created.
+When merging real-time table disk chunks, do it from smaller to bigger ones. It makes merging faster with lower read/write amplification. Enabled by default. If disabled, chunks are merged from first to last created.
 
 json_autoconv_keynames
 ------------------------

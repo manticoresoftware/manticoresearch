@@ -1,25 +1,25 @@
-# Creating a distributed index
+# Creating a distributed table
 
-Manticore supports **distributed indexes**. They look like usual plain or real-time indexes, but internally they are just a 'proxy', or named collection of another child indexes used for actual searching. When a query is directed at such index, it is distributed among all indexes in the collection. Server collects responses of the queries and processes them as necessary:
+Manticore supports **distributed tables**. They look like usual plain or real-time tables, but internally they are just a 'proxy', or named collection of another child tables used for actual searching. When a query is directed at such table, it is distributed among all tables in the collection. Server collects responses of the queries and processes them as necessary:
 
 * applies sorting
 * recalculates final values of aggregates, etc
 
-From the client's standpoint it looks transparent, as if you just queried any single index.
+From the client's standpoint it looks transparent, as if you just queried any single table.
 
-Distributed indexes can be composed from any other indexes fitting your requirements
+Distributed tables can be composed from any other tables fitting your requirements
 
-* local storage indexes ([plain index](../../Creating_an_index/Local_indexes/Plain_index.md), [Real-Time](../../Creating_an_index/Local_indexes/Real-time_index.md))
-* [remote indexes](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md)
-* combined local storage and remote indexes
-* [percolate indexes](../../Creating_an_index/Local_indexes/Percolate_index.md) (local, remote and combinations)
+* local storage tables ([plain table](../../Creating_an_index/Local_indexes/Plain_index.md), [Real-Time](../../Creating_an_index/Local_indexes/Real-time_index.md))
+* [remote tables](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md)
+* combined local storage and remote tables
+* [percolate tables](../../Creating_an_index/Local_indexes/Percolate_index.md) (local, remote and combinations)
 * single local and several remotes or any other combinations
 
-Nesting distributed indexes is supported by declaring them with `agent` (even if they are on the same machine). Distributed indexes cannot be declared with `local` and they will be ignored.
+Nesting distributed tables is supported by declaring them with `agent` (even if they are on the same machine). Distributed tables cannot be declared with `local` and they will be ignored.
 
-Percolate and template indexes should not be mixed with plain and/or RT indexes.
+Percolate and template tables should not be mixed with plain and/or RT tables.
 
-Distributed index is defined by type 'distributed' in the configuration file or via SQL clause `CREATE TABLE`
+Distributed table is defined by type 'distributed' in the configuration file or via SQL clause `CREATE TABLE`
 
 #### In a configuration file
 
@@ -43,11 +43,11 @@ CREATE TABLE distributed_index type='distributed' local='local_index' agent='127
 
 #### Children
 
-Either way the key component of a distributed index is a list of children (the indexes it points to).
+Either way the key component of a distributed table is a list of children (the tables it points to).
 
-* Lines, starting with `local =` enumerate local indexes, served in the same server. Several local indexes may be written as several `local =` lines, or combined into one list, separated by commas.
-* Lines, starting with `agent =` enumerate remote indexes, served anywhere. Each line represents one agent, or endpoint.
+* Lines, starting with `local =` enumerate local tables, served in the same server. Several local tables may be written as several `local =` lines, or combined into one list, separated by commas.
+* Lines, starting with `agent =` enumerate remote tables, served anywhere. Each line represents one agent, or endpoint.
 
 Each agent can include several external locations and options specifying how to work with them.
 
-Note, that for remotes the server knows nothing about the type of the index, and it may cause errors, if, say, you issue `CALL PQ` to remote 'foo' which is not a percolate index. 
+Note that for remotes the server knows nothing about the type of the table, and it may cause errors, if, say, you issue `CALL PQ` to remote 'foo' which is not a percolate table. 

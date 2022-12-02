@@ -63,18 +63,18 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 * `sphinx:schema` - Optional element, must either occur as the very first child of sphinx:docset, or never occur at all. Declares the document schema.     Contains field and attribute declarations. If present, overrides     per-source settings from the configuration file.
 * `sphinx:field` - `Optional element, child of sphinx:schema. Declares a full-text field. Known attributes are:
     *   "name", specifies the XML element name that will be treated as a full-text field in the subsequent documents.
-    *   "attr", specifies whether to also index this field as a string. Possible value is "string".
+    *   "attr", specifies whether to also table this field as a string. Possible value is "string".
 * `sphinx:attr` - Optional element, child of sphinx:schema. Declares an attribute. Known attributes are:
     *   "name", specifies the element name that should be treated as an attribute in the subsequent documents.
     *   "type", specifies the attribute type. Possible values are "int", "bigint", "timestamp", "bool", "float", "multi" and "json".
     *   "bits", specifies the bit size for "int" attribute type. Valid  values are 1 to 32.
     *   "default", specifies the default value for this attribute that should be used if the attribute's element is not present in the document.
 * `sphinx:document` - Mandatory element, must be a child of sphinx:docset. Contains arbitrary other elements with field and attribute values to be indexed, as declared either using sphinx:field and sphinx:attr elements or in the configuration file. The only known attribute is "id" that must contain the unique integer document ID.
-* `sphinx:killlist` -  Optional element, child of sphinx:docset. Contains a number of "id" elements whose contents are document IDs to be put into a kill-list of the index. The kill-list is used in multi-index searches to suppress documents found in other indexes of the search
+* `sphinx:killlist` -  Optional element, child of sphinx:docset. Contains a number of "id" elements whose contents are document IDs to be put into a kill-list of the table. The kill-list is used in multi-table searches to suppress documents found in other tables of the search
 
 ## Data definition in source configuration
 
-If the XML doesn't define a schema, the data types of indexes elements must be defined in the source configuration.
+If the XML doesn't define a schema, the data types of tables elements must be defined in the source configuration.
 
 * `xmlpipe_field` -  declares a `text` field.
 * `xmlpipe_field_string` - declares a text field/string attribute. The column will be both indexed as a text field but also stored as a string attribute.

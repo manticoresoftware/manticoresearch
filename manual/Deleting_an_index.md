@@ -1,12 +1,12 @@
-# Deleting an index
+# Deleting a table
 
 <!-- example drop -->
 
-Deleting an index is performed in 2 steps:
-1. Index is cleared (similar to [TRUNCATE](Emptying_an_index.md))
-2. All index files are removed from the index folder. All the external index files that were used by the index (such as wordforms, extensions or stopwords) are also deleted. Note that these external files are copied to index folder when `CREATE TABLE` is used, so the original files specified in `CREATE TABLE` will not be deleted.
+Deleting a table is performed in 2 steps internally:
+1. Table is cleared (similar to [TRUNCATE](Emptying_an_index.md))
+2. All table files are removed from the table folder. All the external table files that were used by the table (such as wordforms, extensions or stopwords) are also deleted. Note that these external files are copied to the table folder when `CREATE TABLE` is used, so the original files specified in `CREATE TABLE` will not be deleted.
 
-Deleting an index is possible only when the server is running in RT mode. It is possible to delete RT indexes, PQ indexes and distributed indexes.
+Deleting a table is possible only when the server is running in the RT mode. It is possible to delete RT tables, PQ tables and distributed tables.
 
 <!-- intro -->
 ##### SQL:
@@ -109,9 +109,9 @@ DROP TABLE [IF EXISTS] index_name
 
 <!-- example drop-if-exists -->
 
-When deleting an index via SQL, adding `IF EXISTS` can be used to delete the index only if it exists. If you try to delete a non-existing index with the `IF EXISTS` option, nothing happens.
+When deleting a table via SQL, adding `IF EXISTS` can be used to delete the table only if it exists. If you try to delete a non-existing table with the `IF EXISTS` option, nothing happens.
 
-When deleting an index via PHP, you can add an optional `silent` parameter which works the same as `IF EXISTS`.
+When deleting a table via PHP, you can add an optional `silent` parameter which works the same as `IF EXISTS`.
 
 <!-- intro -->
 ##### SQL:

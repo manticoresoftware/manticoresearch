@@ -14,4 +14,4 @@ Very common words can have some unwanted effects on searching, mostly because of
 
 A more advanced blacklisting is [bigrams](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index), which allows creating a special token between a 'bigram' (common) word and an uncommon word. This can speed up several times when common words are used in phrase searches. 
 
-In case of indexing HTML content, it's desired to not index also the HTML tags, as they can introduce a lot of 'noise' in the index. [HTML stripping](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#Stripping-HTML-tags) can be used and can be configured to strip, but index certain tag attributes or completely ignore content of certain HTML elements.
+In case of indexing HTML content, it's important to not index the HTML tags, as they can introduce a lot of 'noise' in the index. [HTML stripping](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#Stripping-HTML-tags) can be used and can be configured to strip, but index certain tag attributes or completely ignore content of certain HTML elements.

@@ -8,7 +8,7 @@ Short summary of the differences from [wordforms](../../Creating_an_index/NLP_an
 | - | - |
 | Case sensitive | Case insensitive |
 | Can use special characters that are not in [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) | Fully obey [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) |
-| Underperform on huge dictionaries | Designed to handle millions of entries | 
+| Underperform on huge dictionaries | Designed to handle millions of entries |
 
 ## exceptions
 
@@ -17,8 +17,8 @@ exceptions = path/to/exceptions.txt
 ```
 
 <!-- example exceptions -->
-Tokenizing exceptions file. Optional, default is empty. 
-In RT mode only absolute paths are allowed.
+Tokenizing exceptions file. Optional, default is empty.
+In the RT mode only absolute paths are allowed.
 
 The expected file format is also plain text, with one line per exception, and the line format is as follows:
 
@@ -52,7 +52,7 @@ Whitespace in the map-from tokens list matters, but its amount does not. Any amo
 
 Exceptions also allow to capture special characters (that are exceptions from general [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) rules; hence the name). Assume that you generally do not want to treat '+' as a valid character, but still want to be able search for some exceptions from this rule such as 'C++'. The sample above will do just that, totally independent of what characters are in the table and what are not.
 
-Exceptions are applied to raw incoming document and query data during indexing and searching respectively. Therefore, when it comes to a [plain index](../../Creating_an_index/Local_indexes/Plain_index.md) to pick up changes in the file it's required to reindex and restart `searchd`.
+Exceptions are applied to raw incoming document and query data during indexing and searching respectively. Therefore, when it comes to a [plain table](../../Creating_an_index/Local_indexes/Plain_index.md) to pick up changes in the file it's required to reindex and restart `searchd`.
 
 <!-- request SQL -->
 
@@ -107,7 +107,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/
 ```ini
 index products {
   exceptions = /usr/local/manticore/data/exceptions.txt
-  
+
   type = rt
   path = idx
   rt_field = title

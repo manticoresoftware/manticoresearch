@@ -55,7 +55,7 @@ The aggregation requires to set a `size` for the size of the result set group.
 ### Just Grouping
 Grouping is very simple - just add "GROUP BY smth" to the end of your `SELECT` query. The something can be:
 
-* any non-full-text field from the index: integer, float, string, MVA (multi-value attribute)
+* any non-full-text field from the table: integer, float, string, MVA (multi-value attribute)
 * or if you used an alias in the `SELECT` list - you can GROUP BY it too
 
 You can omit any [aggregation functions](../Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will work too:
@@ -942,7 +942,7 @@ In the example you can see that if we GROUP BY major and show both `COUNT(*)` an
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
-**`COUNT(DISTINCT)` against a distributed index or a real-time index consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed index consisting of local plain or real-time indexes with the same schema (identical set/order of fields, but may be different tokenization settings).
+**`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may be different tokenization settings).
 
 <!-- intro -->
 ##### Example:

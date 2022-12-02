@@ -1,10 +1,8 @@
-# Listing indexes
+# Listing tables
 
-Manticore Search has a single level of hierarchy of indexes.
+Manticore Search has a single level of hierarchy of tables.
 
 There is no concept of grouping tables in databases like in other DBMS. Still, Manticore accepts `SHOW DATABASES` statements for interoperability with SQL dialect, but the statement doesn't return anything.
-
-While the data collections in Manticore are called indexes, the statement that displays them is `SHOW TABLES` for compatibility with miscellaneous SQL clients.
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -15,7 +13,7 @@ General syntax:
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` statement enumerates all currently active indexes along with their types. Existing index types are `local`, `distributed`, `rt`, `percolate` and `template`.
+`SHOW TABLES` statement enumerates all currently active tables along with their types. Existing table types are `local`, `distributed`, `rt`, `percolate` and `template`.
 
 
 <!-- intro -->
@@ -110,7 +108,7 @@ utilsApi.sql("SHOW TABLES")
 <!-- end -->
 
 <!-- example Example_2 -->
-Optional LIKE clause is supported for filtering indexes by name.
+Optional LIKE clause is supported for filtering tables by name.
 
 
 <!-- intro -->
@@ -288,9 +286,9 @@ f text indexed stored
 ```
 <!-- end -->
 
-### Percolate index schemas
+### Percolate table schemas
 
-If you apply `DESC` statement to a percolate index it will show the outer index schema, i.e. the schema of stored queries. It's static and the same for all local pq indexes:
+If you apply `DESC` statement to a percolate table it will show the outer table schema, i.e. the schema of stored queries. It's static and the same for all local percolate tables:
 
 ```sql
 mysql> DESC pq;
@@ -306,7 +304,7 @@ mysql> DESC pq;
 ```
 
 If you're looking for an expected document schema use
-`DESC <pq index name> table`:
+`DESC <pq table name> table`:
 
 ```sql
 mysql> DESC pq TABLE;

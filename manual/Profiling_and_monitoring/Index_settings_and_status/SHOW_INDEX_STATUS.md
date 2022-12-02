@@ -1,34 +1,34 @@
-# SHOW INDEX STATUS
+# SHOW TABLE STATUS
 
-<!-- example SHOW INDEX STATUS -->
+<!-- example SHOW TABLE STATUS -->
 
-`SHOW INDEX STATUS` is an SQL statement that displays various per-index statistics.
+`SHOW TABLE STATUS` is an SQL statement that displays various per-table statistics.
 
 The syntax is:
 
 ```sql
-SHOW INDEX index_name STATUS
+SHOW TABLE index_name STATUS
 ```
 
 Displayed statistics include:
 
 * `index_type`: for now that is one of `disk`, `rt`, `percolate`, `template`, and `distributed`.
 * `indexed_documents` and `indexed_bytes`: number of indexed documents and their text size in bytes, respectively.
-* `field_tokens_XXX`: sums of per-field lengths (in tokens) over the entire index (that is used internally in `BM25A` and `BM25F` functions for ranking purposes). Only available for indexes built with `index_field_lengths=1`.
-* `ram_bytes`: total size (in bytes) of RAM-resident index portion.
-* `disk_bytes`: total size (in bytes) of all index files.
+* `field_tokens_XXX`: sums of per-field lengths (in tokens) over the entire table (that is used internally in `BM25A` and `BM25F` functions for ranking purposes). Only available for tables built with `index_field_lengths=1`.
+* `ram_bytes`: total size (in bytes) of RAM-resident table portion.
+* `disk_bytes`: total size (in bytes) of all table files.
 * `disk_mapped`: total size of file mappings.
 * `disk_mapped_cached`: total size of file mappings actually cached in RAM.
 * `disk_mapped_doclists` and `disk_mapped_cached_doclists`: part of the total and cached mappings belonging to document lists.
-* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of the total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown separately since they're usually huge (say, about 90% size of the whole index).
-* `killed_documents` and `killed_rate`: the first one indicates the number of deleted documents and the rate of deleted/indexed. Technically deletion of a document just means that the document gets suppressed in search output, but physically it still persists in an index and will be purged only after merging/optimizing the index.
-* `ram_chunk`: size of RAM chunk of real-time or percolate index.
+* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of the total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown separately since they're usually huge (say, about 90% size of the whole table).
+* `killed_documents` and `killed_rate`: the first one indicates the number of deleted documents and the rate of deleted/indexed. Technically deletion of a document just means that the document gets suppressed in search output, but physically it still persists in a table and will be purged only after merging/optimizing the table.
+* `ram_chunk`: size of RAM chunk of real-time or percolate table.
 * `ram_chunk_segments_count`: RAM chunk internally consists of segments, usually there are no more than 32 of them. This line shows the current count.
-* `disk_chunks`: number of disk chunks of the real-time index.
-* `mem_limit`: actual value of `rt_mem_limit` for the index.
+* `disk_chunks`: number of disk chunks of the real-time table.
+* `mem_limit`: actual value of `rt_mem_limit` for the table.
 * `mem_limit_rate`: the rate after which the ram chunk will be flushed as a disk chunk, e.g. if `rt_mem_limit` is 128M and the rate is 50%, a new disk chunk will be saved as soon as the ram chunk exceeds 64M.
 * `ram_bytes_retired`: represents size of garbage in RAM chunks (for example, deleted or replaced documents not yet finally wiped away).
-* `tid` and `tid_saved`: represent the state of saving the index (real-time or percolate only). `tid` gets increased with each change (transaction). `tid_saved` shows max `tid` of the state saved in a RAM chunk in '<index>.ram' file. When the numbers are different, some changes exist only in RAM and also backed by binlog (if enabled). Performing 'flush rtindex' or scheduling periodical flushing causes these changes to be saved. After flushing the binlog gets cleared, and the `tid_saved` represents the actual new state.
+* `tid` and `tid_saved`: represent the state of saving the table (real-time or percolate only). `tid` gets increased with each change (transaction). `tid_saved` shows max `tid` of the state saved in a RAM chunk in '<table>.ram' file. When the numbers are different, some changes exist only in RAM and also backed by binlog (if enabled). Performing 'flush rtindex' or scheduling periodical flushing causes these changes to be saved. After flushing the binlog gets cleared, and the `tid_saved` represents the actual new state.
 * `query_time_*`: query execution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
 * `found_rows_*`: statistics of rows found by queries; provided for last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
 
@@ -37,7 +37,7 @@ Displayed statistics include:
 <!-- request SQL -->
 
 ```sql
-mysql> SHOW INDEX statistic STATUS;
+mysql> SHOW TABLE statistic STATUS;
 ```
 
 <!-- response SQL -->
@@ -118,7 +118,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('SHOW INDEX statistic STATUS')
+utilsApi.sql('SHOW TABLE statistic STATUS')
 ```
 <!-- response Python -->
 
@@ -154,7 +154,7 @@ utilsApi.sql('SHOW INDEX statistic STATUS')
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('SHOW INDEX statistic STATUS');
+res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 ```
 <!-- response Javascript -->
 
@@ -190,7 +190,7 @@ res = await utilsApi.sql('SHOW INDEX statistic STATUS');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("SHOW INDEX statistic STATUS");
+utilsApi.sql("SHOW TABLE statistic STATUS");
 
 ```
 <!-- response Java -->

@@ -1,6 +1,6 @@
 # Wildcard searching settings
 
-Wildcard searching is a common text search type. In Manticore it is performed at dictionary level. By default, both plain and RT indexes use a dictionary type called [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). In this mode words are stored as they are, so the size of the index is not affected by enabling wildcarding. When a wildcard search is performed, in the dictionary a lookup is made to find all possible expansions of the wildcarded word. This expansion can be problematic in terms of computation at query time in cases where the expanded word can provide lots of expansions or expansions that have huge hitlists. The penalties are higher in case of infixes, where wildcard is added at the start and end of the words. [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) is to be used to avoid such problems. 
+Wildcard searching is a common text search type. In Manticore it is performed at dictionary level. By default, both plain and RT tables use a dictionary type called [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). In this mode words are stored as they are, so the size of the table is not affected by enabling wildcarding. When a wildcard search is performed, in the dictionary a lookup is made to find all possible expansions of the wildcarded word. This expansion can be problematic in terms of computation at query time in cases where the expanded word can provide lots of expansions or expansions that have huge hitlists. The penalties are higher in case of infixes, where wildcard is added at the start and end of the words. [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) is to be used to avoid such problems. 
 
 ## min_prefix_len
 
@@ -16,7 +16,7 @@ Prefixes allow to implement wildcard searching by `wordstart*` wildcards.
 
 For instance, if you index word "example" with min_prefix_len=3 you will be able to find it by "exa", "exam", "examp", "exampl" prefixes along with the word itself. 
 
-Be aware that in case of [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc min_prefix_len will also affect index size as each word expansion will be stored additionally.
+Be aware that in case of [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc min_prefix_len will also affect full-text index size as each word expansion will be stored additionally.
 
 Manticore can differentiate perfect word matches from prefix matches and rank the former higher if you conform the following conditions:
 * [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
@@ -251,9 +251,9 @@ max_substring_len = length
 
 Maximum substring (either prefix or infix) length to index. Optional, default is 0 (do not limit indexed substrings). Applies to [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only.
 
-By default, substring (either prefix or infix) indexing in the [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) will index **all** possible substrings as separate keywords. That might result in an overly large index. So this directive lets you limit the impact of substring indexing by skipping too-long substrings (which, chances are, will never get searched for anyway).
+By default, substring (either prefix or infix) indexing in the [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) will index **all** possible substrings as separate keywords. That might result in an overly large full-text index. So this directive lets you limit the impact of substring indexing by skipping too-long substrings (which, chances are, will never get searched for anyway).
 
-For example, a test index of 10,000 blog posts takes this much disk space depending on the settings:
+For example, a test table of 10,000 blog posts takes this much disk space depending on the settings:
 * 6.4 MB baseline (no substrings)
 * 24.3 MB (3.8x) with min_prefix_len = 3
 * 22.2 MB (3.5x) with min_prefix_len = 3, max_substring_len = 8
@@ -262,7 +262,7 @@ For example, a test index of 10,000 blog posts takes this much disk space depend
 * 84.6 MB (13.2x) with min_infix_len = 3, max_substring_len = 8
 * 70.7 MB (11.0x) with min_infix_len = 3, max_substring_len = 6
 
-So in this test limiting the max substring length saved us 10-15% on the index size.
+So in this test limiting the max substring length saved us 10-15% on the table size.
 
 There is no performance impact associated with substring length when using dict=keywords mode, so this directive is not applicable and intentionally forbidden in that case. If required, you can still limit the length of a substring that you search for in the application code.
 
@@ -294,7 +294,7 @@ Expands keywords with their exact forms (i.e. the forms of the keywords before a
 * `star` - augment the keyword by adding `*` around it.  `running` will become `(running | *running*)`
 Optional, default is 0 (do not expand keywords).
 
-Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows: if the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of the keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words) enabled, exact form is also added. 
+Queries against tables with `expand_keywords` feature enabled are internally expanded as follows: if the table was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of the keyword itself and a respective prefix or infix (keyword  with stars). If the table was built with both stemming and [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words) enabled, exact form is also added. 
 
 <!-- intro -->
 ##### SQL:

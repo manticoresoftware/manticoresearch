@@ -1,1 +1,1 @@
-# Creating an index
+# Creating a table

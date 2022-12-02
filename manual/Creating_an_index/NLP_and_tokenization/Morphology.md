@@ -279,7 +279,7 @@ index_exact_words = {0|1}
 
 Whether to index the original keywords along with the stemmed/remapped versions. Optional, default is 0 (do not index).
 
-When enabled, `index_exact_words` forces indexation to put the raw keywords in the index along with the stemmed versions. That, in turn, enables [exact form operator](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language to work. This impacts the index size and the indexing time. However, searching performance is not impacted at all.
+When enabled, `index_exact_words` forces indexation to put the raw keywords in the full-text index along with the stemmed versions. That, in turn, enables [exact form operator](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language to work. This impacts the full-text index size and the indexing time. However, searching performance is not impacted at all.
 
 <!-- request SQL -->
 

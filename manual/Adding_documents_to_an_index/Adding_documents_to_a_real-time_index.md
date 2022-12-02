@@ -1,15 +1,15 @@
-# Adding documents to a real-time index
+# Adding documents to a real-time table
 
-> If you are looking for information about adding documents to a plain index please read section about [adding data from external storages](../Adding_data_from_external_storages/Plain_indexes_creation.md).
+> If you are looking for information about adding documents to a plain table please read section about [adding data from external storages](../Adding_data_from_external_storages/Plain_indexes_creation.md).
 
 <!-- example insert -->
-Adding documents in a real-time manner is only supported for [Real-Time](../Creating_an_index/Local_indexes/Real-time_index.md) and [percolate](../Creating_an_index/Local_indexes/Percolate_index.md) indexes. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into an existing index with provided field values.
+Adding documents in a real-time manner is only supported for [Real-Time](../Creating_an_index/Local_indexes/Real-time_index.md) and [percolate](../Creating_an_index/Local_indexes/Percolate_index.md) tables. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into an existing table with provided field values.
 
-You can insert a single or [multiple documents](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents) with values for all fields of the index or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
+You can insert a single or [multiple documents](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents) with values for all fields of the table or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
 
 Expressions are currently not supported in `INSERT` and the values should be explicitly specified.
 
-The ID field/value can be omitted as RT and PQ indexes support [auto-id](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../Updating_documents/REPLACE.md) for that.
+The ID field/value can be omitted as RT and PQ tables support [auto-id](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../Updating_documents/REPLACE.md) for that.
 
 Note, when you use the HTTP JSON protocol node `doc` is mandatory, all the values should be provided inside it.
 
@@ -19,7 +19,7 @@ Note, when you use the HTTP JSON protocol node `doc` is mandatory, all the value
 General syntax:
 
 ```sql
-INSERT INTO <index name> [(column, ...)]
+INSERT INTO <table name> [(column, ...)]
 VALUES (value, ...)
 [, (...)]
 ```
@@ -173,7 +173,7 @@ sqlresult = indexApi.insert(newdoc);
 
 ## Auto ID
 <!-- example autoid -->
-There is an auto ID generation functionality for column ID of documents inserted or replaced into an real-time or a [Percolate index](../Creating_an_index/Local_indexes/Percolate_index.md). The generator produces a unique ID of a document with some guarantees and should not be considered an auto-incremented ID.
+There is an auto ID generation functionality for column ID of documents inserted or replaced into an real-time or a [Percolate table](../Creating_an_index/Local_indexes/Percolate_index.md). The generator produces a unique ID of a document with some guarantees and should not be considered an auto-incremented ID.
 
 The value of ID generated is guaranteed to be unique under the following conditions:
 * [server_id](../Server_settings/Searchd.md#server_id) value of the current server is in range of 0 to 127 and is unique among nodes in the cluster or it uses the default value generated from MAC address as a seed
@@ -187,7 +187,7 @@ The auto ID generator creates 64 bit integer for a document ID and uses the foll
 
 This schema allows to be sure that the generated ID is unique among all nodes at the cluster and that data inserted into different cluster nodes does not create collisions between the nodes.
 
-That is why the first ID from the generator used for auto ID is NOT 1 but a larger number. Also documents stream inserted into an index might have not sequential ID values if inserts into other indexes happen between the calls as the ID generator is single in the server and shared between all its indexes.
+That is why the first ID from the generator used for auto ID is NOT 1 but a larger number. Also documents stream inserted into a table might have not sequential ID values if inserts into other tables happen between the calls as the ID generator is single in the server and shared between all its tables.
 
 <!-- intro -->
 ##### SQL:
@@ -297,10 +297,10 @@ sqlresult = indexApi.insert(newdoc);
 
 <!-- example bulk_insert -->
 ## Bulk adding documents
-You can insert into a real-time index not just a single document, but as many as you want. It's ok to insert into a real-time index in batches of tens of thousands of documents. What's important to know in this case:
+You can insert into a real-time table not just a single document, but as many as you want. It's ok to insert into a real-time table in batches of tens of thousands of documents. What's important to know in this case:
 * the larger the batch the higher is the latency of each insert operation
 * the larger the batch the higher indexation speed you can expect
-* each batch insert operation is considered a single [transaction](../Transactions.md) with atomicity guarantee, so you will either have all the new documents in the index at once or in case of a failure none of them will be added
+* each batch insert operation is considered a single [transaction](../Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or in case of a failure none of them will be added
 * you might want to increase [max_packet_size](../Server_settings/Searchd.md#max_packet_size) value to allow bigger batches
 
 <!-- intro -->
@@ -310,10 +310,10 @@ You can insert into a real-time index not just a single document, but as many as
 For bulk insert just provide more documents in brackets after VALUES(). The syntax is:
 
 ```sql
-INSERT INTO <index name>[(column1, column2, ...)] VALUES ()[,(value1,[value2, ...])]
+INSERT INTO <table name>[(column1, column2, ...)] VALUES ()[,(value1,[value2, ...])]
 ```
 
-Optional column name list lets you explicitly specify values for some of the columns present in the index. All the other columns will be filled with their default values (0 for scalar types, empty string for string types).
+Optional column name list lets you explicitly specify values for some of the columns present in the table. All the other columns will be filled with their default values (0 for scalar types, empty string for string types).
 
 For example:
 
@@ -362,7 +362,7 @@ POST /bulk
 }
 ```
 
-Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different indexes, however transactions are possible only over single index, so if you specify more, manticore will collect operations directed to one index into single txn, and when index changes, it will commit collected and start new transaction over new index.
+Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different tables, however transactions are possible only over single table, so if you specify more, manticore will collect operations directed to one table into single txn, and when table changes, it will commit collected and start new transaction over new table.
 
 ```json
 POST /bulk

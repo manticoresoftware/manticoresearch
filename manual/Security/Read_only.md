@@ -1,6 +1,6 @@
 # Read-only mode
 
-Read-only mode for connection disables any index and global modifications. So, queries like `create`, `drop`, all kinds of `alter`, `attach`, `optimize`, data modifications queries, such as `insert`, `replace`, `delete`, `update` and others will all be rejected. Changing daemon-wide settings via `SET GLOBAL` is also not possible in this mode.
+Read-only mode for connection disables any table or global modifications. So, queries like `create`, `drop`, all kinds of `alter`, `attach`, `optimize`, data modifications queries, such as `insert`, `replace`, `delete`, `update` and others will all be rejected. Changing daemon-wide settings via `SET GLOBAL` is also not possible in this mode.
 
 You still can perform all search operations, generate snippets and run `CALL PQ` queries. Also, you can modify local (connection-wide) settings.
 

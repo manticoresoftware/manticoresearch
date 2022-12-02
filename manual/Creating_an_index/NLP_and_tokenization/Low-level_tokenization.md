@@ -7,7 +7,7 @@ To do that properly Manticore needs to know:
 * what characters are letters and what are not
 * what letters should be folded to other letters
 
-This can be configured on a per-index basis using [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies the array that maps letter characters to their case folded versions (or any other characters if you like). The characters that are not in the array are considered to be non-letters and will be treated as word separators when indexing or searching through this index.
+This can be configured on a per-table basis using [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies the array that maps letter characters to their case folded versions (or any other characters if you like). The characters that are not in the array are considered to be non-letters and will be treated as word separators when indexing or searching through this table.
 
 The default character set is `non_cjk` and includes [most languages](../../Creating_an_index/NLP_and_tokenization/Supported_languages.md).
 
@@ -1065,17 +1065,17 @@ dict = {keywords|crc}
 <!-- example dict -->
 The keywords dictionary type. Known values are 'crc' and 'keywords'. Optional, default is 'keywords'.
 
-Keywords dictionary mode (dict=keywords), (greatly) reduces indexing impact and enable substring searches on huge collections. That mode is supported both for plain and RT indexes.
+Keywords dictionary mode (dict=keywords), (greatly) reduces indexing impact and enable substring searches on huge collections. That mode is supported both for plain and RT tables.
 
 CRC dictionaries never store the original keyword text in the index. Instead, keywords are replaced with their control sum value (calculated using FNV64) both when searching and indexing, and that value is used internally in the index.
 
-That approach has two drawbacks. First, there is a chance of control sum collision between several pairs of different keywords, growing quadratically with the number of unique keywords in the index. However, it is not a big concern as a chance of a single FNV64 collision in a dictionary of 1 billion entries is approximately 1:16, or 6.25 percent. And most dictionaries will be much more compact that a billion keywords, as a typical spoken human language has in the region of 1 to 10 million word forms.) Second, and more importantly, substring searches are not directly possible with control sums. Manticore alleviated that by pre-indexing all the possible substrings as separate keywords (see [min_prefix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). That actually has an added benefit of matching substrings in the quickest way possible. But at the same time pre-indexing all substrings grows the index size a lot (factors of 3-10x and even more would not be unusual) and impacts the indexing time respectively, rendering substring searches on big indexes rather impractical.
+That approach has two drawbacks. First, there is a chance of control sum collision between several pairs of different keywords, growing quadratically with the number of unique keywords in the index. However, it is not a big concern as a chance of a single FNV64 collision in a dictionary of 1 billion entries is approximately 1:16, or 6.25 percent. And most dictionaries will be much more compact that a billion keywords, as a typical spoken human language has in the region of 1 to 10 million word forms.) Second, and more importantly, substring searches are not directly possible with control sums. Manticore alleviated that by pre-indexing all the possible substrings as separate keywords (see [min_prefix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). That actually has an added benefit of matching substrings in the quickest way possible. But at the same time pre-indexing all substrings increases the index size a lot (factors of 3-10x and even more would not be unusual) and impacts the indexing time respectively, rendering substring searches on big indexes rather impractical.
 
 Keywords dictionary fixes both these drawbacks. It stores the keywords in the index and performs search-time wildcard expansion. For example, a search for a 'test\*'prefix could internally expand to 'test|tests|testing' query based on the dictionary contents. That expansion is fully transparent to the application, except that the separate per-keyword statistics for all the actually matched keywords would now also be reported.
 
 For substring (infix) search extended wildcards may be used. Special symbols like '?' and '%' are supported along with substring (infix) search (e.g. "t?st\*","run%","\*abc\*"). Note, however, these wildcards work only with dict=keywords, and not elsewhere.
 
-Indexing with keywords dictionary should be 1.1x to 1.3x slower compared to regular, non-substring indexing - but times faster compared to substring indexing (either prefix or infix). Index size should only be slightly bigger that than of the regular non-substring index, with a 1..10% percent total difference. Regular keyword searching time must be very close or identical across all three discussed index kinds (CRC non-substring, CRC substring, keywords). Substring searching time can vary greatly depending on how many actual keywords match the given substring (in other words, into how many keywords does the search term expand). The maximum number of keywords matched is restricted by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
+Indexing with keywords dictionary should be 1.1x to 1.3x slower compared to regular, non-substring indexing - but times faster compared to substring indexing (either prefix or infix). Index size should only be slightly bigger that than of the regular non-substring table, with a 1..10% percent total difference. Regular keyword searching time must be very close or identical across all three discussed index kinds (CRC non-substring, CRC substring, keywords). Substring searching time can vary greatly depending on how many actual keywords match the given substring (in other words, into how many keywords does the search term expand). The maximum number of keywords matched is restricted by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 
 Essentially, keywords and CRC dictionaries represent the two different trade-off substring searching decisions. You can choose to either sacrifice indexing time and index size in favor of top-speed worst-case searches (CRC dictionary), or only slightly impact indexing time but sacrifice worst-case searching time when the prefix expands into very many keywords (keywords dictionary).
 
@@ -1153,9 +1153,9 @@ embedded_limit = size
 <!-- example embedded_limit -->
 Embedded exceptions, wordforms, or stop words file size limit. Optional, default is 16K.
 
-When you create an index the above mentioned files can be either saved externally along with the index or embedded directly into the index. Files sized under `embedded_limit` get stored into the index. For bigger files, only the file names are stored. This also simplifies moving index files to a different machine; you may get by just copying a single file.
+When you create a table the above mentioned files can be either saved externally along with the table or embedded directly into the table. Files sized under `embedded_limit` get stored into the table. For bigger files, only the file names are stored. This also simplifies moving table files to a different machine; you may get by just copying a single file.
 
-With smaller files, such embedding reduces the number of the external files on which the index depends, and helps maintenance. But at the same time it makes no sense to embed a 100 MB wordforms dictionary into a tiny delta index. So there needs to be a size threshold, and `embedded_limit` is that threshold.
+With smaller files, such embedding reduces the number of the external files on which the table depends, and helps maintenance. But at the same time it makes no sense to embed a 100 MB wordforms dictionary into a tiny delta table. So there needs to be a size threshold, and `embedded_limit` is that threshold.
 
 <!-- request CONFIG -->
 
@@ -1180,11 +1180,11 @@ global_idf = /path/to/global.idf
 <!-- example global_idf -->
 The path to a file with global (cluster-wide) keyword IDFs. Optional, default is empty (use local IDFs).
 
-On a multi-index cluster, per-keyword frequencies are quite likely to differ across different indexes. That means that when the ranking function uses TF-IDF based values, such as BM25 family of factors, the results might be ranked slightly differently depending on what cluster node they reside.
+On a multi-table cluster, per-keyword frequencies are quite likely to differ across different tables. That means that when the ranking function uses TF-IDF based values, such as BM25 family of factors, the results might be ranked slightly differently depending on what cluster node they reside.
 
-The easiest way to fix that issue is to create and utilize a global frequency dictionary, or a global IDF file for short. This directive lets you specify the location of that file. It is suggested (but not required) to use an .idf extension. When the IDF file is specified for a given index *and* [OPTION global_idf](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf) is set to 1, the engine will use the keyword frequencies and collection documents counts from the global_idf file, rather than just the local index. That way, IDFs and the values that depend on them will stay consistent across the cluster.
+The easiest way to fix that issue is to create and utilize a global frequency dictionary, or a global IDF file for short. This directive lets you specify the location of that file. It is suggested (but not required) to use an .idf extension. When the IDF file is specified for a given table *and* [OPTION global_idf](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf) is set to 1, the engine will use the keyword frequencies and collection documents counts from the global_idf file, rather than just the local table. That way, IDFs and the values that depend on them will stay consistent across the cluster.
 
-IDF files can be shared across multiple indexes. Only a single copy of an IDF file will be loaded by `searchd`, even when many indexes refer to that file. Should the contents of an IDF file change, the new contents can be loaded with a SIGHUP.
+IDF files can be shared across multiple tables. Only a single copy of an IDF file will be loaded by `searchd`, even when many tables refer to that file. Should the contents of an IDF file change, the new contents can be loaded with a SIGHUP.
 
 You can build an .idf file using [indextool](../../Miscellaneous_tools.md#indextool) utility, by dumping dictionaries using `--dumpdict dict.txt --stats` switch first, then converting those to .idf format using `--buildidf`, then merging all the .idf files across cluster using `--mergeidf`.
 
@@ -1266,7 +1266,7 @@ By default, Manticore full-text index stores not only a list of matching documen
 
 `hitless_words` lets you create indexes that either do not have positional information (hitlists) at all, or skip it for specific keywords.
 
-Hitless index will generally use less space than the respective regular index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.  
+Hitless index will generally use less space than the respective regular full-text index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.  
 
 If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase.
 
@@ -1346,7 +1346,7 @@ index_field_lengths = {0|1}
 ```
 
 <!-- example index_field_lengths -->
-Enables computing and storing of field lengths (both per-document and average per-index values) into the index. Optional, default is 0 (do not compute and store).
+Enables computing and storing of field lengths (both per-document and average per-index values) into the full-text index. Optional, default is 0 (do not compute and store).
 
 When `index_field_lengths` is set to 1 Manticore will:
 * create a respective length attribute for every full-text field, sharing the same name but with `__len` suffix
@@ -1425,9 +1425,9 @@ index_token_filter = my_lib.so:custom_blend:chars=@#&
 ```
 
 <!-- example index_token_filter -->
-Index-time token filter for index. Optional, default is empty.
+Index-time token filter for full-text indexing. Optional, default is empty.
 
-Index-time token filter gets created by indexer on indexing source data into a plain index or by RT index on processing `INSERT` or `REPLACE` statements and lets you implement a custom tokenizer that makes tokens according to custom rules. The plugins are defined as `library name:plugin name:optional string of settings`.
+Index-time token filter gets created by indexer on indexing source data into a plain table or by RT table on processing `INSERT` or `REPLACE` statements and lets you implement a custom tokenizer that makes tokens according to custom rules. The plugins are defined as `library name:plugin name:optional string of settings`.
 
 <!-- request SQL -->
 

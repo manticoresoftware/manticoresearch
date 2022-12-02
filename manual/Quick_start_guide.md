@@ -157,9 +157,9 @@ UtilsApi utilsApi = new UtilsApi(client);
 <!-- end -->
 
 <!-- example create -->
-## Create an index
+## Create a table
 
-Let's now create an index called "products" with 2 fields:
+Let's now create a table called "products" with 2 fields:
 * title - full-text field which will contain our product's title
 * price - of type "float"
 
@@ -238,7 +238,7 @@ utilsApi.sql("create table products(title text, price float) morphology='stem_en
 <!-- example insert -->
 ## Add documents
 
-Let's now add few documents to the index:
+Let's now add few documents to the table:
 
 <!-- intro -->
 ##### SQL:
@@ -389,7 +389,7 @@ indexApi.insert(newdoc);
 <!-- example search -->
 ## Search
 
-Let's find one of the documents. The query we will use is 'remove hair'. As you can see it finds document with title 'Pet Hair Remover Glove' and highlights 'Hair remover' in it even though the query has "remove", not "remover". This is because when we created the index we turned on using English stemming (`morphology "stem_en"`).
+Let's find one of the documents. The query we will use is 'remove hair'. As you can see it finds document with title 'Pet Hair Remover Glove' and highlights 'Hair remover' in it even though the query has "remove", not "remover". This is because when we created the table we turned on using English stemming (`morphology "stem_en"`).
 
 <!-- intro -->
 ##### SQL:

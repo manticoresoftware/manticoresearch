@@ -20,11 +20,11 @@ Attributes are non-full-text values associated with each document that can be us
 
 It is often desired to process full-text search results based not only on matching document ID and its rank, but on a number of other per-document values as well. For instance, one might need to sort news search results by date and then relevance, or search through products within specified price range, or limit blog search to posts made by selected users, or group results by month. To do that efficiently, Manticore enables not only full-text fields, but additional attributes to each document. It's then possible to use them to filter, sort, or group full-text matches or search only by attributes.
 
-The attributes, unlike full-text fields, are not full-text indexed. They are stored in the index, but it is not possible to search them as full-text.
+The attributes, unlike full-text fields, are not full-text indexed. They are stored in the table, but it is not possible to search them as full-text.
 
 <!-- example attributes or fields -->
 
-A good example for attributes would be a forum posts index. Assume that only title and content fields need to be full-text searchable - but that sometimes it is also required to limit search to a certain author or a sub-forum (ie. search only those rows that have some specific values of author_id or forum_id); or to sort matches by post_date column; or to group matching posts by month of the post_date and calculate per-group match counts.
+A good example for attributes would be a forum posts table. Assume that only title and content fields need to be full-text searchable - but that sometimes it is also required to limit search to a certain author or a sub-forum (ie. search only those rows that have some specific values of author_id or forum_id); or to sort matches by post_date column; or to group matching posts by month of the post_date and calculate per-group match counts.
 
 <!-- intro -->
 ##### SQL:
@@ -245,14 +245,14 @@ With **the columnar storage**:
 
 The columnar storage was designed to handle large data volume that does not fit into RAM, so the recommendations are:
 * if you have enough memory for all your attributes you will benefit from the row-wise storage
-* otherwise the columnar storage can still give you decent performance with much lower memory footprint which will allow you to store much more documents in your index
+* otherwise the columnar storage can still give you decent performance with much lower memory footprint which will allow you to store much more documents in your table
 
 ### How to switch between the storages
 
-The traditional row-wise storage is default, so if you want everything to be stored in a row-wise fashion you don't need to do anything when you create an index.
+The traditional row-wise storage is default, so if you want everything to be stored in a row-wise fashion you don't need to do anything when you create a table.
 
 To enable the columnar storage you need to:
-* specify `engine='columnar'` in [CREATE TABLE](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-index-online-via-CREATE-TABLE) to make all attributes of the index columnar. Then if you want to keep a specific attribute row-wise you need to add `engine='rowwise'` when you declare it. For example:
+* specify `engine='columnar'` in [CREATE TABLE](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) to make all attributes of the table columnar. Then if you want to keep a specific attribute row-wise you need to add `engine='rowwise'` when you declare it. For example:
 ```sql
 create table idx(title text, type int, price float engine='rowwise') engine='columnar'
 ```
@@ -264,7 +264,7 @@ or
 ```sql
 create table idx(title text, type int, price float engine='columnar') engine='rowwise';
 ```
-* in [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) you need to list attributes you want to be columnar in [columnar_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs).
+* in the [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) you need to list attributes you want to be columnar in [columnar_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs).
 
 
 Below is the list of data types supported by Manticore Search:
@@ -342,9 +342,9 @@ Specifying at least one property overrides all the default ones (see below), i.e
 
 <!-- example working with text -->
 
-Text (just `text` or `text/string indexed`) data type forms the full-text part of the index. Text fields are indexed and can be searched for keywords.
+Text (just `text` or `text/string indexed`) data type forms the full-text part of the table. Text fields are indexed and can be searched for keywords.
 
-Text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations etc. Eventually a full-text index (a special data structure that enables quick searches for a keyword) gets built from that text.
+Text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations etc. Eventually a full-text table (a special data structure that enables quick searches for a keyword) gets built from that text.
 
 Full-text fields can only be used in `MATCH()` clause and cannot be used for sorting or aggregation. Words are stored in an inverted index along with references to the fields they belong and positions in the field. This allows to search a word inside each field and to use advanced operators like proximity. By default the original text of the fields is both indexed and stored in document storage. It means that the original text can be returned with the query results and it can be used in [search result highlighting](../Searching/Highlighting.md).
 
@@ -500,7 +500,7 @@ index products
 
 <!-- example for field naming  -->
 
-Fields are named, and you can limit your searches to a single field (e.g. search through "title" only) or a subset of fields (eg. to "title" and "abstract" only). Manticore index format generally supports up to 256 fields.
+Fields are named, and you can limit your searches to a single field (e.g. search through "title" only) or a subset of fields (eg. to "title" and "abstract" only). Manticore table format generally supports up to 256 full-text fields.
 
 <!-- intro -->
 ##### SQL:
@@ -1352,7 +1352,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for creating json -->
 
-This data type allows storing JSON objects for schema-less data. It is not supported by the columnar storage, but since you can combine the both storages in the same index you can have it stored in the traditional storage instead.
+This data type allows storing JSON objects for schema-less data. It is not supported by the columnar storage, but since you can combine the both storages in the same table you can have it stored in the traditional storage instead.
 
 <!-- intro -->
 ##### SQL:
@@ -2204,7 +2204,7 @@ When you use the columnar storage you can specify the following properties for t
 <!-- example fast_fetch -->
 ### fast_fetch
 
-By default Manticore Columnar storage stores all attributes not only in columnar fashion, but in a special docstore row by row which enables fast execution of queries like `SELECT * FROM ...` especially when you are fetching lots of records at once. But if you are sure you don't need it or want to save disk space you can disable it by specifying `fast_fetch='0'` when you create a table. Or if you are defining an index in a config use `columnar_no_fast_fetch` as shown in the following example.
+By default Manticore Columnar storage stores all attributes not only in columnar fashion, but in a special docstore row by row which enables fast execution of queries like `SELECT * FROM ...` especially when you are fetching lots of records at once. But if you are sure you don't need it or want to save disk space you can disable it by specifying `fast_fetch='0'` when you create a table or (if you are defining a table in a config) use `columnar_no_fast_fetch` as shown in the following example.
 
 <!-- request RT mode -->
 ```sql

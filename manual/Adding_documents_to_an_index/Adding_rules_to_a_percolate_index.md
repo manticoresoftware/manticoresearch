@@ -1,13 +1,13 @@
-# Adding rules to a percolate index
+# Adding rules to a percolate table
 
 <!-- example -->
-In a [percolate index](../Creating_an_index/Local_indexes/Percolate_index.md) are stored documents that are percolate query rules and have to follow the exact schema of 4 fields:
+In a [percolate table](../Creating_an_index/Local_indexes/Percolate_index.md) are stored documents that are percolate query rules and have to follow the exact schema of 4 fields:
 
 | field | type | description |
 | - | - | - |
 | id | bigint | PQ rule identifier (if omitted, will be assigned automatically) |
-| query | string | full-text query (can be empty) compatible with the [percolate index](../Creating_an_index/Local_indexes/Percolate_index.md) |
-| filters | string | additional filters by non-full-text fields (can be empty) compatible with the [percolate index](../Creating_an_index/Local_indexes/Percolate_index.md) |
+| query | string | full-text query (can be empty) compatible with the [percolate table](../Creating_an_index/Local_indexes/Percolate_index.md) |
+| filters | string | additional filters by non-full-text fields (can be empty) compatible with the [percolate table](../Creating_an_index/Local_indexes/Percolate_index.md) |
 | tags   | string | string with one or many comma-separated tags, which may be used to selectively show/delete saved queries |
 
 Any other field names are not supported and will trigger an error.
@@ -36,7 +36,7 @@ SELECT * FROM pq;
 <!-- intro -->
 ##### HTTP
 <!-- request HTTP -->
-There are two way you can add a percolate query into a percolate index:
+There are two way you can add a percolate query into a percolate table:
 * query in JSON /search compatible format, described at [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
 PUT /pq/pq_index/doc/1
@@ -115,7 +115,7 @@ newstoredquery = new HashMap<String,Object>(){{
         put("tags",new String[] {"Loius Vuitton"});
     }});
 }};
-newdoc.index("test_pq").id(2L).setDoc(doc); 
+newdoc.index("test_pq").id(2L).setDoc(doc);
 indexApi.insert(newdoc);
 ```
 
@@ -262,7 +262,7 @@ newstoredquery = new HashMap<String,Object>(){{
         put("tags",new String[] {"Loius Vuitton"});
     }});
 }};
-newdoc.index("test_pq").setDoc(doc); 
+newdoc.index("test_pq").setDoc(doc);
 indexApi.insert(newdoc);
 ```
 
@@ -296,7 +296,7 @@ SELECT * FROM pq;
 <!-- end -->
 
 <!-- example replace -->
-## Replacing rules in a PQ index
+## Replacing rules in a PQ table
 
 To replace an existing PQ rule with a new one in SQL just use a regular [REPLACE](../Updating_documents/REPLACE.md) command. There's a special syntax `?refresh=1` to replace a PQ rule **defined in JSON mode** via HTTP JSON interface.
 
@@ -328,7 +328,7 @@ mysql> select * from pq;
 
 <!-- request HTTP -->
 ```json
-GET /pq/pq/doc/2810823411335430149 
+GET /pq/pq/doc/2810823411335430149
 {
   "took": 0,
   "timed_out": false,
@@ -360,7 +360,7 @@ PUT /pq/pq/doc/2810823411335430149?refresh=1 -d '{
   }
 }'
 
-GET /pq/pq/doc/2810823411335430149 
+GET /pq/pq/doc/2810823411335430149
 {
   "took": 0,
   "timed_out": false,

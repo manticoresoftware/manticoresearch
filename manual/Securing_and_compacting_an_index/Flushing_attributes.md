@@ -4,7 +4,7 @@
 FLUSH ATTRIBUTES
 ```
 
-Flushes all in-memory attribute updates in all the active disk indexes to disk. Returns a tag that identifies the result on-disk state (basically, a number of actual disk attribute saves performed since the server startup).
+Flushes all in-memory attribute updates in all the active disk tables to disk. Returns a tag that identifies the result on-disk state (basically, a number of actual disk attribute saves performed since the server startup).
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;

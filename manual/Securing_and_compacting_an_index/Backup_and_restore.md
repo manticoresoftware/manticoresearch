@@ -1,14 +1,12 @@
 # Backup and restore
 
-It is vital to back up your tables to recover them later and be up and running again in case problems occur, such as system crashes, hardware failure, or data corruption / loss by any reason. Backups are also essential as a safeguard before upgrading Manticore Search to a new version which introduces index format change and can also be used to transfer your data to another system when you want to migrate to a new server.
+It is vital to back up your tables to recover them later and be up and running again in case problems occur, such as system crashes, hardware failure, or data corruption / loss by any reason. Backups are also essential as a safeguard before upgrading Manticore Search to a new version which introduces table format change and can also be used to transfer your data to another system when you want to migrate to a new server.
 
-`manticore-backup` which is a part of Manticore Search [official packages](https://manticoresearch.com/install/) can help you automate backing up tables of a Manticore instance running in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) and feel safe in case of any outages or crashes.
+`manticore-backup` which is a part of Manticore Search [official packages](https://manticoresearch.com/install/) can help you automate backing up tables of a Manticore instance running in the [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) and feel safe in case of any outages or crashes.
 
 ### Installation
 
 **If you followed [the official installation instructions](https://manticoresearch.com/install/) you should have already everything installed and don't need to worry.** Otherwise, [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 or [manticore-executor](https://github.com/manticoresoftware/executor) which is a part of package `manticore-extra` and you need to make sure either of them is available.
-
-⚠️ Note, support of Windows for `manticore-backup` is still in progress. You can use the tool on any `Linux` distribution or `macOS`.
 
 
 ### How to use

@@ -297,7 +297,7 @@ SHOW META LIKE 'multiplier';
 <!-- end -->
 
 
-## SHOW META for PQ indexes
+## SHOW META for PQ tables
 
 <!-- example show meta PQ -->
 
@@ -307,9 +307,9 @@ SHOW META LIKE 'multiplier';
  
 * `Total` - total time spent on matching the document(s)
 * `Queries matched `- how many stored queries match the document(s)
-* `Document matches` - how many documents matched the queries stored in the index
-* `Total queries stored` - number of queries stored in the index
-* `Term only queries` - how many queries in the index have terms. The rest of the queries have extended query syntax.
+* `Document matches` - how many documents matched the queries stored in the table
+* `Total queries stored` - number of queries stored in the table
+* `Term only queries` - how many queries in the table have terms. The rest of the queries have extended query syntax.
 
 <!-- intro -->
 ##### SQL:

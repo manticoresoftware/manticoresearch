@@ -61,13 +61,13 @@ SELECT * FROM t1 WHERE query='SELECT * FROM movies WHERE MATCH (\'pie\')';
 ```
 <!-- end -->
 
-The only fixed mapping is `query` column. It is mandatory and must be the only column with an index attached.
+The only fixed mapping is `query` column. It is mandatory and must be the only column with a table attached.
 
-The Manticore index that is linked via `FEDERATED` **must** be an index with storage (plain or RealTime).
+The Manticore table that is linked via `FEDERATED` **must** be a physical table (plain or real-time).
 
-FEDERATED table should have columns with same names as remote Manticore index attributes as will be bound to attributes provided in Manticore result set by name, however might map not all attributes but only some of them. Arbitrary expression from query select list which name "hides" index attribute will be used at result set.
+The FEDERATED table should have columns with the same names as a remote Manticore table attributes as it will be bound to the attributes provided in Manticore result set by name, however it might map not all attributes, but only some of them.
 
-Manticore server identifies query from FEDERATED client by user name "FEDERATED". `CONNECTION` string parameter should be used to specify searchd host, SQL port and indexes for queries issued using this table. Connection string syntax is as follows:
+Manticore server identifies query from a FEDERATED client by user name "FEDERATED". `CONNECTION` string parameter is to be used to specify Manticore host, SQL port and tables for queries coming through the connection. The connection string syntax is as follows:
 
 ```ini
 CONNECTION="mysql://FEDERATED@HOST:PORT/DB/INDEXNAME"
@@ -82,7 +82,7 @@ Only `SELECT` statement is supported, not `INSERT`, `REPLACE`, `UPDATE`, `DELETE
 One **very important** note that it is **much** more efficient to allow Manticore to perform sorting, filtering and slicing the result set than to raise max matches count and use WHERE, ORDER BY and LIMIT clauses on MySQL side. This is for two reasons. First, Manticore does a number of optimizations and performs better than MySQL on these tasks. Second, less data would need to be packed by searchd, transferred and unpacked between Manticore and MySQL.
 
 <!-- example federated join -->
-JOINs can be performed between FEDERATED table and other MySQL tables. This can be used to retrieve information that is not stored in the Manticore index.
+JOINs can be performed between FEDERATED table and other MySQL tables. This can be used to retrieve information that is not stored in a Manticore table.
 
 
 <!-- intro -->

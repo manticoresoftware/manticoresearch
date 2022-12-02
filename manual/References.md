@@ -3,22 +3,22 @@
 ### SQL commands
 ##### Schema management
 * [CREATE TABLE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
-* [CREATE TABLE LIKE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-index-online-via-CREATE-TABLE) - Creates table using another one as a template
+* [CREATE TABLE LIKE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) - Creates table using another one as a template
 * [DESCRIBE](Listing_indexes.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
 * [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuild-secondary-index) - Updates/recovers secondary indexes
-* [DROP TABLE IF EXISTS](Deleting_an_index.md#Deleting-an-index) - Deletes table [if it exists]
+* [DROP TABLE IF EXISTS](Deleting_an_index.md#Deleting-a-table) - Deletes table [if it exists]
 * [SHOW TABLES](Listing_indexes.md#SHOW-TABLES) - Shows tables list
 * [SHOW CREATE TABLE](Listing_indexes.md#SHOW-CREATE-TABLE) - Shows SQL command how to create the table
-* [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) - Shows information about current table status
-* [SHOW INDEX SETTINGS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_SETTINGS.md) - Shows index settings
+* [SHOW TABLE STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) - Shows information about current table status
+* [SHOW TABLE SETTINGS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_SETTINGS.md) - Shows table settings
 
 ##### Data management
 * [INSERT](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Adds new documents
 * [REPLACE](Updating_documents/REPLACE.md) - Replaces existing documents with new ones
 * [UPDATE](Updating_documents/UPDATE.md) - Does in-place update in documents
 * [DELETE](Deleting_documents.md) - Deletes documents
-* [TRUNCATE TABLE](Emptying_an_index.md) - Deletes all documents from index
+* [TRUNCATE TABLE](Emptying_an_index.md) - Deletes all documents from table
 
 ##### SELECT
 * [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Searches
@@ -40,24 +40,24 @@
 * [FLUSH HOSTNAMES](Securing_and_compacting_an_index/Flushing_hostnames.md) - Renews IPs associates to agent host names
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Initiates reopen of searchd log and query log files (similar to USR1)
 
-##### Real-time index optimization
+##### Real-time table optimization
 * [FLUSH RAMCHUNK](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
-* [FLUSH RTINDEX](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_disk.md#FLUSH-RTINDEX) - Flushes real-time index RAM chunk to disk
-* [OPTIMIZE INDEX](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX) - Enqueues real-time index for optimization
+* [FLUSH RTINDEX](Securing_and_compacting_an_index/Flushing_RAM_chunk_to_disk.md#FLUSH-RTINDEX) - Flushes real-time table RAM chunk to disk
+* [OPTIMIZE TABLE](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
-##### Importing to a real-time index
-* [ATTACH INDEX](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) - Moves data from a plain index to a real-time index
-* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) - Imports previously created RT or PQ index into a server running in RT mode
+##### Importing to a real-time table
+* [ATTACH TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) - Moves data from a plain table to a real-time table
+* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) - Imports previously created RT or PQ table into a server running in the RT mode
 
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
-* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Adds/deletes an index to a replication cluster
+* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Adds/deletes a table to a replication cluster
 * [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Changes replication cluster settings
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 
-##### Plain index rotate
-* [RELOAD INDEX](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-INDEX) - Rotates a plain index
-* [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-INDEXES) - Rotates all plain indexes
+##### Plain table rotate
+* [RELOAD TABLE](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-TABLE) - Rotates a plain table
+* [RELOAD TABLES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-TABLES) - Rotates all plain tables
 
 ##### Transactions
 * [BEGIN](Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Begins a transaction
@@ -85,15 +85,15 @@
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP
 * [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
-* [/insert](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Inserts a document into a real-time index
-* [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Adding-rules-to-a-percolate-index) - Inserts a PQ rule into a percolate index
-* [/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time index
-* [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time index
-* [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-index) - Replaces a PQ rule in a percolate index
-* [/delete](Deleting_documents.md) - Deletes a document in an index
+* [/insert](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md) - Inserts a document into a real-time table
+* [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
+* [/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
+* [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time table
+* [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-table) - Replaces a PQ rule in a percolate table
+* [/delete](Deleting_documents.md) - Deletes a document in a table
 * [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
-* [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate index
+* [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
 
 ### Common things
 * [data types](Creating_an_index/Data_types.md)
@@ -101,7 +101,7 @@
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
 * [real-time mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
-##### Common index settings
+##### Common table settings
 * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
@@ -160,13 +160,13 @@
 * [type](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#type)
 * [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms)
 
-##### Plain index settings
+##### Plain table settings
 * [source](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source)
 * [stored_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields)
 * [stored_only_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_only_fields)
 * [columnar_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#columnar_attrs)
 
-##### Distributed index settings
+##### Distributed table settings
 * [local](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)
 * [agent](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent)
 * [agent_connect_timeout](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_connect_timeout)
@@ -177,7 +177,7 @@
 * [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy)
 * [mirror_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#mirror_retry_count)
 
-##### RT index settings
+##### RT table settings
 * [rt_attr_bigint](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bigint)
 * [rt_attr_bool](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_bool)
 * [rt_attr_float](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_attr_float)
@@ -305,14 +305,14 @@
 ## Common settings in configuration file
 To be put to section `common {}` in configuration file:
 * [lemmatizer_base](Server_settings/Common.md#lemmatizer_base) - Lemmatizer dictionaries base path
-* [progressive_merge](Server_settings/Common.md#progressive_merge) - Defines order of merging disk chunks in a real-time index
+* [progressive_merge](Server_settings/Common.md#progressive_merge) - Defines order of merging disk chunks in a real-time table
 * [json_autoconv_keynames](Server_settings/Common.md#json_autoconv_keynames) - Whether and how to auto-convert key names within JSON attributes
 * [json_autoconv_numbers](Server_settings/Common.md#json_autoconv_numbers) - Automatically detects and converts possible JSON strings that represent numbers into numeric attributes
 * [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - What to do if JSON format errors are found
 * [plugin_dir](Server_settings/Common.md#plugin_dir) - Location for the dynamic libraries and UDFs
 
 ## [Indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments)
-`indexer` is a tool to create [plain indexes](Adding_data_from_external_storages/Plain_indexes_creation.md)
+`indexer` is a tool to create [plain tables](Adding_data_from_external_storages/Plain_indexes_creation.md)
 
 ##### Indexer settings in configuration file
 To be put to section `indexer {}` in configuration file:
@@ -324,56 +324,56 @@ To be put to section `indexer {}` in configuration file:
 * [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit) - Indexing RAM usage limit
 * [on_file_field_error](Adding_data_from_external_storages/Plain_indexes_creation.md#on_file_field_error) - How to handle IO errors in file fields
 * [write_buffer](Adding_data_from_external_storages/Plain_indexes_creation.md#write_buffer) - Write buffer size
-* [ignore_non_plain](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) - To ignore warnings about non-plain indexes
+* [ignore_non_plain](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) - To ignore warnings about non-plain tables
 
 ##### Indexer start parameters
 ```bash
 indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 ```
-* [--all](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Rebuilds all indexes from the config
-* [--buildstops](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed.
-* [--buildfreqs](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Adds the quantity present in the index for --buildstops
+* [--all](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Rebuilds all tables from the config
+* [--buildstops](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed.
+* [--buildfreqs](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Adds the quantity present in the table for --buildstops
 * [--config, -c](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Path to configuration file
 * [--dump-rows](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Dumps rows fetched by SQL source(s) into the specified file
 * [--help](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Lists all the parameters
 * [--keep-attrs](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Allows to reuse existing attributes on reindexing
-* [--keep-attrs-names](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Allows to specify attributes to reuse from the existing index
+* [--keep-attrs-names](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Allows to specify attributes to reuse from the existing table
 * [--merge-dst-range](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Runs the filter range given upon merging
-* [--merge-killlists](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Changes the way kill lists are processed when merging indexes
-* [--merge](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Merges two plain indexes into one
+* [--merge-killlists](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Changes the way kill lists are processed when merging tables
+* [--merge](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Merges two plain tables into one
 * [--nohup](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Indexer won't send SIGHUP if this option is on
 * [--noprogress](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Prevents displaying progress details
 * [--print-queries](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Prints out SQL queries that indexer sends to the database
-* [--print-rt ](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Outputs data fetched from sql source(s) as INSERTs to a real-time index
+* [--print-rt ](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Outputs data fetched from sql source(s) as INSERTs to a real-time table
 * [--quiet](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Prevents displaying anything
-* [--rotate](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Forces indexes rotation after all the indexes are built
-* [--sighup-each](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Forces rotation of each index after it's built
+* [--rotate](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Forces tables rotation after all the tables are built
+* [--sighup-each](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Forces rotation of each table after it's built
 * [-v](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) - Shows indexer version
 
-## Index converter from Manticore v2 / Sphinx v2
-`index_converter` is a tool for converting indexes created with Sphinx/Manticore Search 2.x to Manticore Search 3.x index format.
+## Table converter from Manticore v2 / Sphinx v2
+`index_converter` is a tool for converting tables created with Sphinx/Manticore Search 2.x to Manticore Search 3.x table format.
 ```bash
 index_converter {--config /path/to/config|--path}
 ```
-##### Index converter start parameters
-* [--config, -c](Installation/Migration_from_Sphinx.md#index_converter) - Path to indexes configuration file
-* [--index](Installation/Migration_from_Sphinx.md#index_converter) - Specifies which index should be converted
-* [--path](Installation/Migration_from_Sphinx.md#index_converter) - Defines path containing index(es) instead of the configuration file
-* [--strip-path](Installation/Migration_from_Sphinx.md#index_converter) - Strips path from filenames referenced by index
+##### Table converter start parameters
+* [--config, -c](Installation/Migration_from_Sphinx.md#index_converter) - Path to tables configuration file
+* [--index](Installation/Migration_from_Sphinx.md#index_converter) - Specifies which table should be converted
+* [--path](Installation/Migration_from_Sphinx.md#index_converter) - Defines path containing table(s) instead of the configuration file
+* [--strip-path](Installation/Migration_from_Sphinx.md#index_converter) - Strips path from filenames referenced by table
 * [--large-docid](Installation/Migration_from_Sphinx.md#index_converter) - Allows to convert documents with ids larger than 2^63
 * [--output-dir](Installation/Migration_from_Sphinx.md#index_converter) - Writes the new files in a chosen folder
-* [--all](Installation/Migration_from_Sphinx.md#index_converter) - Converts all indexes from the configuration file / path
-* [--killlist-target](Installation/Migration_from_Sphinx.md#index_converter) - Sets the target indexes for which kill-lists will be applied
+* [--all](Installation/Migration_from_Sphinx.md#index_converter) - Converts all tables from the configuration file / path
+* [--killlist-target](Installation/Migration_from_Sphinx.md#index_converter) - Sets the target tables for which kill-lists will be applied
 
 ## [Searchd](Starting_the_server/Manually.md)
 `searchd` is a Manticore server.
 
 ##### Searchd settings in a configuration file
 To be put to section `searchd {}` in configuration file:
-  * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Specifies how index's blob attributes file is accessed
-  * [access_doclists](Server_settings/Searchd.md#access_doclists) - Specifies how index's doclists file is accessed
-  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Specifies how index's hitlists file is accessed
-  * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Specifies how search server will access index's plain attributes
+  * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Specifies how table's blob attributes file is accessed
+  * [access_doclists](Server_settings/Searchd.md#access_doclists) - Specifies how table's doclists file is accessed
+  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Specifies how table's hitlists file is accessed
+  * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Specifies how search server will access table's plain attributes
   * [agent_connect_timeout](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_connect_timeout) - Remote agent connection timeout
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
   * [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) - Specifies how many times Manticore will try to connect and query remote agents
@@ -413,8 +413,8 @@ To be put to section `searchd {}` in configuration file:
   * [persistent_connections_limit](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#persistent_connections_limit) - Maximum number of simultaneous persistent connections to remote persistent agents
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
   * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
-  * [preopen_indexes](Server_settings/Searchd.md#preopen_indexes) - Whether to forcibly preopen all indexes on startup
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time indexes
+  * [preopen_indexes](Server_settings/Searchd.md#preopen_indexes) - Whether to forcibly preopen all tables on startup
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Maximum RAM allocated for cached result sets
   * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Minimum wall time threshold for a query result to be cached
   * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Expiration period for a cached result set
@@ -425,10 +425,10 @@ To be put to section `searchd {}` in configuration file:
   * [read_buffer_docs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_docs) - Per-keyword read buffer size for document lists
   * [read_buffer_hits](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#read_buffer_hits) - Per-keyword read buffer size for hit lists
   * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Unhinted read size
-  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - How often Manticore flush real-time indexes' RAM chunks to disk
+  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - How often Manticore flush real-time tables' RAM chunks to disk
   * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Maximum number of I/O operations (per second) that real-time chunks merging thread is allowed to do
   * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Maximum size of an I/O operation that real-time chunks merging thread is allowed to do
-  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Prevents searchd stalls while rotating indexes with huge amounts of data to precache
+  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Prevents searchd stalls while rotating tables with huge amounts of data to precache
   * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - Enables using secondary indexes for search queries
   * [server_id](Server_settings/Searchd.md#server_id) - Server identifier used as a seed to generate a unique document ID
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` timeout
@@ -442,7 +442,7 @@ To be put to section `searchd {}` in configuration file:
   * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Maximum common subtree document cache size
   * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Maximum common subtree hit cache size, per-query
   * [thread_stack](Server_settings/Searchd.md#thread_stack) - Maximum stack size for a job
-  * [unlink_old](Server_settings/Searchd.md#unlink_old) - Whether to unlink .old index copies on successful rotation
+  * [unlink_old](Server_settings/Searchd.md#unlink_old) - Whether to unlink .old table copies on successful rotation
   * [watchdog](Server_settings/Searchd.md#watchdog) - Whether to enable or disable Manticore server watchdog
 
 ##### Searchd start parameters
@@ -454,9 +454,9 @@ searchd [OPTIONS]
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Enables saving core dump on crash
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables CPU time reporting
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes Manticore service from Microsoft Management Console and other places where the services are registered
-* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Forbids the server to serve any incoming connection until pre-reading of the index files completes
+* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Forbids the server to serve any incoming connection until pre-reading of the table files completes
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Lists all the parameters
-* [--index](Starting_the_server/Manually.md#searchd-command-line-options) - Forces serving only the specified index
+* [--index](Starting_the_server/Manually.md#searchd-command-line-options) - Forces serving only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service into Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
 * [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [listen](Server_settings/Searchd.md#listen) from the configuration file
@@ -473,19 +473,19 @@ searchd [OPTIONS]
 * [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Queries running search to return its status
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Stops Manticore server
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Stops Manticore server gracefully
-* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Strips path names from all the file names referenced from the index
+* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Strips path names from all the file names referenced from the table
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - shows version information
 
 ##### Searchd environment variables
 * [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - enables detailed logging while searchd is shutting down
 
 ## [Indextool](Miscellaneous_tools.md#indextool)
-Miscellaneous index maintenance functionality useful for troubleshooting.
+Miscellaneous table maintenance functionality useful for troubleshooting.
 ```bash
 indextool <command> [options]
 ```
 ##### Indextool start parameters
-Used to dump miscellaneous debug information about the physical index
+Used to dump miscellaneous debug information about the physical table
 ```bash
 indextool <command> [options]
 ```
@@ -495,24 +495,24 @@ indextool <command> [options]
 * [-v](Miscellaneous_tools.md#indextool) - Shows version information
 * [Indextool](Miscellaneous_tools.md#indextool) - Verifies configuration file
 * [--buildidf](Miscellaneous_tools.md#indextool) - Builds IDF file from one or several dictionary dumps
-* [--build-infixes](Miscellaneous_tools.md#indextool) - Build infixes for an existing dict=keywords index
-* [--dumpheader](Miscellaneous_tools.md#indextool) - Quickly dumps the provided index header file
-* [--dumpconfig](Miscellaneous_tools.md#indextool) - Dumps index definition from the given index header file in almost compliant manticore.conf file format
-* [--dumpheader](Miscellaneous_tools.md#indextool) - Dumps index header by index name with looking up the header path in the configuration file
-* [--dumpdict](Miscellaneous_tools.md#indextool) - Dumps index dictionary
-* [--dumpdocids](Miscellaneous_tools.md#indextool) - Dumps document IDs by index name
-* [--dumphitlist](Miscellaneous_tools.md#indextool) - Dumps all occurrences of the given keyword/id in the given index
-* [--docextract](Miscellaneous_tools.md#indextool) - Runs index check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document
-* [--fold](Miscellaneous_tools.md#indextool) - Tests tokenization based on index's settings
-* [--htmlstrip](Miscellaneous_tools.md#indextool) - Filters STDIN using HTML stripper settings for the given index
+* [--build-infixes](Miscellaneous_tools.md#indextool) - Build infixes for an existing dict=keywords table
+* [--dumpheader](Miscellaneous_tools.md#indextool) - Quickly dumps the provided table header file
+* [--dumpconfig](Miscellaneous_tools.md#indextool) - Dumps table definition from the given table header file in almost compliant manticore.conf file format
+* [--dumpheader](Miscellaneous_tools.md#indextool) - Dumps table header by table name with looking up the header path in the configuration file
+* [--dumpdict](Miscellaneous_tools.md#indextool) - Dumps table dictionary
+* [--dumpdocids](Miscellaneous_tools.md#indextool) - Dumps document IDs by table name
+* [--dumphitlist](Miscellaneous_tools.md#indextool) - Dumps all occurrences of the given keyword/id in the given table
+* [--docextract](Miscellaneous_tools.md#indextool) - Runs table check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document
+* [--fold](Miscellaneous_tools.md#indextool) - Tests tokenization based on table's settings
+* [--htmlstrip](Miscellaneous_tools.md#indextool) - Filters STDIN using HTML stripper settings for the given table
 * [--mergeidf](Miscellaneous_tools.md#indextool) - Merges several .idf files into a single one
 * [--morph](Miscellaneous_tools.md#indextool) - Applies morphology to the given STDIN and prints the result to stdout
-* [--check](Miscellaneous_tools.md#indextool) - Checks the index data files for consistency
+* [--check](Miscellaneous_tools.md#indextool) - Checks the table data files for consistency
 * [--check-id-dups](Miscellaneous_tools.md#indextool) - Checks if there are duplicate ids
-* [--check-disk-chunk](Miscellaneous_tools.md#indextool) - Checks one disk chunk of an RT index
-* [--strip-path](Miscellaneous_tools.md#indextool) - Strips path names from all the file names referenced from the index
-* [--rotate](Miscellaneous_tools.md#indextool) - Defines whether to check index waiting for rotation in `--check`
-* [--apply-killlists](Miscellaneous_tools.md#indextool) - Applies kill-lists for all indexes listed in the configuration file
+* [--check-disk-chunk](Miscellaneous_tools.md#indextool) - Checks one disk chunk of an RT table
+* [--strip-path](Miscellaneous_tools.md#indextool) - Strips path names from all the file names referenced from the table
+* [--rotate](Miscellaneous_tools.md#indextool) - Defines whether to check table waiting for rotation in `--check`
+* [--apply-killlists](Miscellaneous_tools.md#indextool) - Applies kill-lists for all tables listed in the configuration file
 
 ## [Wordbreaker](Miscellaneous_tools.md#wordbreaker)
 Splits compound words into components.

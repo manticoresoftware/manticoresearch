@@ -130,14 +130,14 @@ class SuccessResponse {
 ```
 <!-- end -->
 
-`REPLACE` is supported for RT and PQ indexes.
+`REPLACE` is supported for RT and PQ tables.
 
-The old document is not removed from the index, it is only marked as deleted. Because of this the index size grows until index chunks are merged and documents marked as deleted in these chunks are not included in the chunk created as a result of merge. You can force chunk merge by using [OPTIMIZE statement](../Securing_and_compacting_an_index/Compacting_an_index.md).
+The old document is not removed from the table, it is only marked as deleted. Because of this the table size grows until table chunks are merged and documents marked as deleted in these chunks are not included in the chunk created as a result of merge. You can force chunk merge by using [OPTIMIZE statement](../Securing_and_compacting_an_index/Compacting_an_index.md).
 
 The syntax of the `REPLACE` statement is identical to [INSERT syntax](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md):
 
 ```sql
-REPLACE INTO index [(column1, column2, ...)]
+REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```

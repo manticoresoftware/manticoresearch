@@ -1,9 +1,9 @@
-# Adding and removing an index from a replication cluster 
+# Adding and removing a table from a replication cluster 
 
-<!-- example adding and removing an index from a replication cluster 1 -->
-`ALTER CLUSTER <cluster_name> ADD <index_name>` adds an existing local index to the cluster. The node which receives the ALTER query sends the index to the other nodes in the cluster. All the local indexes with the same name on the other nodes of the cluster get replaced with the new index.
+<!-- example adding and removing a table from a replication cluster 1 -->
+`ALTER CLUSTER <cluster_name> ADD <table_name>` adds an existing local table to the cluster. The node which receives the ALTER query sends the table to the other nodes in the cluster. All the local tables with the same name on the other nodes of the cluster get replaced with the new table.
 
-After the index is replicated, write statements can be performed on any node but index name must be prefixed with the cluster name like `INSERT INTO <clusterName>:<indexName>`.
+After the table is replicated, write statements can be performed on any node but table name must be prefixed with the cluster name like `INSERT INTO <clusterName>:<table_name>`.
 
 
 <!-- intro -->
@@ -76,10 +76,10 @@ utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 
 <!-- end -->
 
-<!-- example adding and removing an index from a replication cluster 2 -->
-`ALTER CLUSTER <cluster_name> DROP <index_name>` forgets about a local index, i.e., it doesn't remove the index files on the nodes but just makes it an active non-replicated index.
+<!-- example adding and removing a table from a replication cluster 2 -->
+`ALTER CLUSTER <cluster_name> DROP <table_name>` forgets about a local table, i.e., it doesn't remove the table files on the nodes but just makes it an active non-replicated table.
 
-After an index is removed from a cluster, it becomes a 'local' index and write statements must use just the index name as `INSERT INTO <indexName>`, without the cluster prefix.
+After a table is removed from a cluster, it becomes a 'local' table and write statements must use just the table name as `INSERT INTO <table_name>`, without the cluster prefix.
 
 
 <!-- intro -->

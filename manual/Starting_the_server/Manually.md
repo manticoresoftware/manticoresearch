@@ -63,9 +63,9 @@ $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
     $ searchd --port 9313
     ```
 * `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allow you to specify not only the port, but full path, as IP address and port, or Unix-domain socket path, that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number or just a port number or Unix socket path. If you specify port number, but not the address searchd will listen on all network interfaces. Unix path is identified by a leading slash. As the last param you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
-* `--force-preread` forbids the server to serve any incoming connection until prereading of index files completes. By default, at startup the server accepts connections while index files are lazy loaded into memory. This opens extends the behavior and makes it wait until the files are loaded.
-* `--index <index>` (or `-i <index>` for short) forces this instance of `searchd`  to only serve the specified index. Like `--port`, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself.
-* `--strip-path` strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc). This is useful for picking up indexes built on another machine with possibly different path layouts.
+* `--force-preread` forbids the server to serve any incoming connection until prereading of table files completes. By default, at startup the server accepts connections while table files are lazy loaded into memory. This opens extends the behavior and makes it wait until the files are loaded.
+* `--index <table>` (or `-i <table>` for short) forces this instance of `searchd`  to only serve the specified table. Like `--port`, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself.
+* `--strip-path` strips the path names from all the file names referenced from the table (stopwords, wordforms, exceptions, etc). This is useful for picking up tables built on another machine with possibly different path layouts.
 * `--replay-flags=<OPTIONS>` switch can be used to specify a list of extra binary log replay options. The supported options are:
     * `accept-desc-timestamp`, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error).
     * `ignore-open-errors`, ignore missing binlog files (the default behavior is to exit with an error).
@@ -97,7 +97,7 @@ If you want to have the I/O stats every time you start `searchd`, you need to sp
 C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
    --config C:\Manticore\manticore.conf --iostats
 ```
-* `--delete` removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with `--install`. Note, this does not uninstall the software or delete the indexes. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or until `searchd` is called with `--stop`). If the service was installed with a custom name (with `--servicename`), the same name will need to be specified with `--servicename` when calling to uninstall. Example:
+* `--delete` removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with `--install`. Note, this does not uninstall the software or delete the tables. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or until `searchd` is called with `--stop`). If the service was installed with a custom name (with `--servicename`), the same name will need to be specified with `--servicename` when calling to uninstall. Example:
 ```bat
 C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --delete
 ```
@@ -115,7 +115,7 @@ C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
 `searchd` supports a number of signals:
 
 * SIGTERM - Initiates a clean shutdown. New queries will not be handled, but queries that are already started will not be forcibly interrupted.
-* SIGHUP - Initiates indexes rotation. Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors.
+* SIGHUP - Initiates tables rotation. Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors.
 * SIGUSR1 - Forces reopen of searchd log and query log files, letting you implement log file rotation.
 
 ## Environment variables

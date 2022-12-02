@@ -1,8 +1,8 @@
-# Plain indexes creation
+# Plain tables creation
 
-Plain indexes are indexes that are created one-time by fetching data at creation from one or several sources. A plain index is immutable as documents cannot be added or deleted during it's lifespan. It is only possible to update values of numeric attributes (including MVA). Refreshing the data is only possible by recreating the whole index.
+Plain tables are tables that are created one-time by fetching data at creation from one or several sources. A plain table is immutable as documents cannot be added or deleted during it's lifespan. It is only possible to update values of numeric attributes (including MVA). Refreshing the data is only possible by recreating the whole table.
 
-Plain indexes are available only in [Plain mode](../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29) and their definition is made of an index declaration and one or several source declarations. The data gathering and index creation is not made by the `searchd` server, but by the auxiliary tool `indexer`.
+Plain tables are available only in the [Plain mode](../Creating_an_index/Local_indexes.md#Defining-table-schema-in-config-%28Plain mode%29) and their definition is made of a table declaration and one or several source declarations. The data gathering and table creation is not made by the `searchd` server, but by the auxiliary tool `indexer`.
 
 **Indexer** is a command line tool that can be called directly from the command line or from shell scripts.
 
@@ -10,9 +10,9 @@ It can accept a number of arguments when called, but there are also several sett
 
 In the typical scenario, indexer does the following:
 * fetches the data from the source
-* builds the plain index
-* writes the index files
-* (optional) informs search server about the new index which triggers index rotation
+* builds the plain table
+* writes the table files
+* (optional) informs search server about the new table which triggers table rotation
 
 ## Indexer tool  
 General syntax for `indexer` is as follows:
@@ -21,21 +21,21 @@ General syntax for `indexer` is as follows:
 indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 ```
 
-An important thing to keep in mind when creating indexes with `indexer` is that the generated index files must be made with permissions that allow `searchd` to read, write and even delete them. In case of Linux official packages `searchd` runs under `manticore` user. In this case `indexer` must also run under `manticore` user:
+An important thing to keep in mind when creating tables with `indexer` is that the generated table files must be made with permissions that allow `searchd` to read, write and even delete them. In case of Linux official packages `searchd` runs under `manticore` user. In this case `indexer` must also run under `manticore` user:
 
 ```shell
 sudo -u manticore indexer ...
 ```
 
-If you are running `searchd` (Manticore Search server) differently you might need to omit `sudo -u manticore`, just make sure that the user under which your `searchd` instance is running has read/write permissions to your indexes that you generate using `indexer`.
+If you are running `searchd` (Manticore Search server) differently you might need to omit `sudo -u manticore`, just make sure that the user under which your `searchd` instance is running has read/write permissions to your tables that you generate using `indexer`.
 
-Essentially you would list the different possible indexes (that you would later make available to search) in `manticore.conf`, so when calling `indexer`, as a minimum you need to be telling it what index (or indexes) you want to index. If `manticore.conf` contained details on 2 indexes, `mybigindex` and `mysmallindex`, you could do the following:
+Essentially you would list the different possible tables (that you would later make available to search) in `manticore.conf`, so when calling `indexer`, as a minimum you need to be telling it what table (or tables) you want to process. If `manticore.conf` contained details on 2 tables, `mybigindex` and `mysmallindex`, you could do the following:
 
 ```shell
 sudo -u manticore indexer mysmallindex mybigindex
 ```
 
-Wildcarding on index names is also supported. The following wildcard tokens can be used:
+Wildcarding on table names is also supported. The following wildcard tokens can be used:
 * `?` matches any single character
 * `*` matches any count of any characters
 * `%` matches none or any single character
@@ -56,13 +56,13 @@ The exit codes are as follows:
 sudo -u manticore indexer --config /home/myuser/manticore.conf myindex
 ```
 
-* `--all` tells `indexer` to update every index listed in `manticore.conf` instead of listing individual indexes. This would be useful in small configurations or cron-kind or maintenance jobs where the entire index set will get rebuilt each day or week or whatever period is best. Please note that since `--all` tries to update all found indexes in the configuration, it will issue a warning if encounters RealTime indexes and the exit code of the command will be `1` not `0` even if the plain indexes finished without issue. Example usage:
+* `--all` tells `indexer` to update every table listed in `manticore.conf` instead of listing individual tables. This would be useful in small configurations or cron-kind or maintenance jobs where the entire table set will get rebuilt each day or week or whatever period is best. Please note that since `--all` tries to update all found tables in the configuration, it will issue a warning if encounters RealTime tables and the exit code of the command will be `1` not `0` even if the plain tables finished without issue. Example usage:
 
 ```shell
 sudo -u manticore indexer --config /home/myuser/manticore.conf --all
 ```
 
-* `--rotate` is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. `--rotate` creates a second index, parallel to the first (in the same place, simply including `.new` in the filenames). Once complete, `indexer` notifies `searchd` via sending the `SIGHUP` signal, and the `searchd` will attempt to rename the indexes (renaming the existing ones to include `.old` and renaming the `.new` to replace them), and then will start serving from the newer files. Depending on the setting of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) there may be a slight delay in being able to search the newer indexes. In case multiple indexes are rotated at once which are chained by [killlist_target](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) relations rotation will start with the indexes that are not targets and finish with the ones at the end of target chain. Example usage:
+* `--rotate` is used for rotating tables. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. `--rotate` creates a second table, parallel to the first (in the same place, simply including `.new` in the filenames). Once complete, `indexer` notifies `searchd` via sending the `SIGHUP` signal, and the `searchd` will attempt to rename the tables (renaming the existing ones to include `.old` and renaming the `.new` to replace them), and then will start serving from the newer files. Depending on the setting of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) there may be a slight delay in being able to search the newer tables. In case multiple tables are rotated at once which are chained by [killlist_target](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) relations rotation will start with the tables that are not targets and finish with the ones at the end of target chain. Example usage:
 
 ```shell
 sudo -u manticore indexer --rotate --all
@@ -80,51 +80,51 @@ sudo -u manticore indexer --rotate --all --quiet
 sudo -u manticore indexer --rotate --all --noprogress
 ```
 
-* `--buildstops <outputfile.text> <N>` reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note, it does not update the index in question, it simply processes the data **as if** it were indexing, including running queries defined with [sql_query_pre](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) or [sql_query_post](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). `outputfile.txt` will contain the list of words, one per line, sorted by frequency with most frequent first, and `N` specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with `--buildfreqs`, below. Example:
+* `--buildstops <outputfile.text> <N>` reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the table. Note, it does not update the table in question, it simply processes the data **as if** it were indexing, including running queries defined with [sql_query_pre](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) or [sql_query_post](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). `outputfile.txt` will contain the list of words, one per line, sorted by frequency with most frequent first, and `N` specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the table, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with `--buildfreqs`, below. Example:
 
 ```shell
 sudo -u manticore indexer myindex --buildstops word_freq.txt 1000
 ```
 
-This would produce a document in the current directory, `word_freq.txt` with the 1,000 most common words in 'myindex', ordered by most common first. Note that the file will pertain to the last index indexed when specified with multiple indexes or `--all` (i.e. the last one listed in the configuration file)
-* `--buildfreqs` works with `--buildstops` (and is ignored if `--buildstops` is not specified). As `--buildstops` provides the list of words used within the index, `--buildfreqs` adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean…" features where you need to know how much more common a given word compared to another, similar one. Example:
+This would produce a document in the current directory, `word_freq.txt` with the 1,000 most common words in 'myindex', ordered by most common first. Note that the file will pertain to the last table indexed when specified with multiple tables or `--all` (i.e. the last one listed in the configuration file)
+* `--buildfreqs` works with `--buildstops` (and is ignored if `--buildstops` is not specified). As `--buildstops` provides the list of words used within the table, `--buildfreqs` adds the quantity present in the table, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean…" features where you need to know how much more common a given word compared to another, similar one. Example:
 
 ```shell
 sudo -u manticore indexer myindex --buildstops word_freq.txt 1000 --buildfreqs
 ```
 
-This would produce the `word_freq.txt` as above, however after each word would be the number of times it occurred in the index in question.
-* `--merge <dst-index> <src-index>` is used for physically merging indexes together, for example if you have a [main+delta scheme](../Creating_an_index/Local_indexes/Plain_index.md#Main+delta), where the main index rarely changes, but the delta index is rebuilt frequently, and `--merge` would be used to combine the two. The operation moves from right to left - the contents of `src-index` get examined and physically combined with the contents of `dst-index` and the result is left in `dst-index`. In pseudo-code, it might be expressed as: `dst-index += src-index` An example:
+This would produce the `word_freq.txt` as above, however after each word would be the number of times it occurred in the table in question.
+* `--merge <dst-table> <src-table>` is used for physically merging tables together, for example if you have a [main+delta scheme](../Creating_an_index/Local_indexes/Plain_index.md#Main+delta), where the main table rarely changes, but the delta table is rebuilt frequently, and `--merge` would be used to combine the two. The operation moves from right to left - the contents of `src-table` get examined and physically combined with the contents of `dst-table` and the result is left in `dst-table`. In pseudo-code, it might be expressed as: `dst-table += src-table` An example:
 
 ```shell
 sudo -u manticore indexer --merge main delta --rotate
 ```
 
-In the above example, where the main is the master, rarely modified index, and the delta is more frequently modified one, you might use the above to call `indexer` to combine the contents of the delta into the main index and rotate the indexes.
-* `--merge-dst-range <attr> <min> <max>` runs the filter range given upon merging. Specifically, as the merge is applied to the destination index (as part of `--merge`, and is ignored if `--merge` is not specified), `indexer` will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index. This could be used for example, in an index where there is a 'deleted' attribute, where 0 means 'not deleted'. Such an index could be merged with:
+In the above example, where the main is the master, rarely modified table, and the delta is more frequently modified one, you might use the above to call `indexer` to combine the contents of the delta into the main table and rotate the tables.
+* `--merge-dst-range <attr> <min> <max>` runs the filter range given upon merging. Specifically, as the merge is applied to the destination table (as part of `--merge`, and is ignored if `--merge` is not specified), `indexer` will also filter the documents ending up in the destination table, and only documents will pass through the filter given will end up in the final table. This could be used for example, in a table where there is a 'deleted' attribute, where 0 means 'not deleted'. Such a table could be merged with:
 
 ```shell
 sudo -u manticore indexer --merge main delta --merge-dst-range deleted 0 0
 ```
 
-Any documents marked as deleted (value 1) would be removed from the newly-merged destination index. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final index.
-* `--merge-killlists` (and its shorter alias `--merge-klists`) changes the way kill lists are processed when merging indexes. By default, both kill lists get discarded after a merge. That supports the most typical main+delta merge scenario. With this option enabled, however, kill lists from both indexes get concatenated and stored into the destination index. Note that a source (delta) index kill list will be used to suppress rows from a destination (main) index at all times.
-* `--keep-attrs` allows to reuse existing attributes on reindexing. Whenever the index is rebuilt, each new document id is checked for presence in the "old" index, and if it already exists, its attributes are transferred to the "new" index; if not found, attributes from the new index are used. If the user has updated attributes in the index, but not in the actual source used for the index, all updates will be lost when reindexing; using –keep-attrs enables saving the updated attribute values from the previous index. It is possible to specify a path for index files to used instead of reference path from config:
+Any documents marked as deleted (value 1) would be removed from the newly-merged destination table. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final table.
+* `--merge-killlists` (and its shorter alias `--merge-klists`) changes the way kill lists are processed when merging tables. By default, both kill lists get discarded after a merge. That supports the most typical main+delta merge scenario. With this option enabled, however, kill lists from both tables get concatenated and stored into the destination table. Note that a source (delta) table kill list will be used to suppress rows from a destination (main) table at all times.
+* `--keep-attrs` allows to reuse existing attributes on reindexing. Whenever the table is rebuilt, each new document id is checked for presence in the "old" table, and if it already exists, its attributes are transferred to the "new" table; if not found, attributes from the new table are used. If the user has updated attributes in the table, but not in the actual source used for the table, all updates will be lost when reindexing; using –keep-attrs enables saving the updated attribute values from the previous table. It is possible to specify a path for table files to used instead of reference path from config:
 
 ```shell
 sudo -u manticore indexer myindex --keep-attrs=/path/to/index/files
 ```
 
-* `--keep-attrs-names=<attributes list>` allows to specify attributes to reuse from existing index on reindexing. By default all attributes from existed index reused at new "index":
+* `--keep-attrs-names=<attributes list>` allows to specify attributes to reuse from existing table on reindexing. By default all attributes from existing table are reused in the new table:
 
 ```shell
-sudo -u manticore indexer myindex --keep-attrs=/path/to/index/files --keep-attrs-names=update,state
+sudo -u manticore indexer myindex --keep-attrs=/path/to/table/files --keep-attrs-names=update,state
 ```
 
-* `--dump-rows <FILE>` dumps rows fetched by SQL source(s) into the specified file, in a MySQL compatible syntax. Resulting dumps are the exact representation of data as received by `indexer` and help to repeat indexing-time issues. The command performs fetching from the source and creates both index files and the dump file.
-* `--print-rt <rt_index> <index>` outputs fetched data from source as INSERTs for a real-time index. The first lines of the dump will contain the real-time fields and attributes (as a reflection of the plain index fields and attributes). The command performs fetching from the source and creates both index files and the dump output. The command can be used as `sudo -u manticore indexer -c manticore.conf --print-rt indexrt indexplain > dump.sql`. Only sql-based sources are supported. MVAs are not supported.
-* `--sighup-each` is useful when you are rebuilding many big indexes, and want each one rotated into `searchd` as soon as possible. With `--sighup-each`, `indexer` will send the SIGHUP signal to searchd after successfully completing work on each index. (The default behavior is to send a single SIGHUP after all the indexes are built).
-* `--nohup` is useful when you want to check your index with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on. Index files are renamed to .tmp. Use indextool to rename index files to .new and rotate it. Example usage:
+* `--dump-rows <FILE>` dumps rows fetched by SQL source(s) into the specified file, in a MySQL compatible syntax. Resulting dumps are the exact representation of data as received by `indexer` and help to repeat indexing-time issues. The command performs fetching from the source and creates both table files and the dump file.
+* `--print-rt <rt_index> <table>` outputs fetched data from source as INSERTs for a real-time table. The first lines of the dump will contain the real-time fields and attributes (as a reflection of the plain table fields and attributes). The command performs fetching from the source and creates both table files and the dump output. The command can be used as `sudo -u manticore indexer -c manticore.conf --print-rt indexrt indexplain > dump.sql`. Only sql-based sources are supported. MVAs are not supported.
+* `--sighup-each` is useful when you are rebuilding many big tables, and want each one rotated into `searchd` as soon as possible. With `--sighup-each`, `indexer` will send the SIGHUP signal to searchd after successfully completing work on each table. (The default behavior is to send a single SIGHUP after all the tables are built).
+* `--nohup` is useful when you want to check your table with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on. Table files are renamed to .tmp. Use indextool to rename table files to .new and rotate it. Example usage:
 
 ```shell
 sudo -u manticore indexer --rotate --nohup myindex
@@ -226,8 +226,8 @@ on_file_field_error = skip_document
 ```
 
 How to handle IO errors in file fields. Optional, default is `ignore_field`.
-When there is a problem indexing a file referenced by a file field ([sql_file_field](../Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_file_field)), `indexer` can either index the document, assuming empty content in this particular field, or skip the document, or fail indexing entirely. `on_file_field_error` directive controls that behavior. The values it takes are:
-* `ignore_field`, index the current document without field;
+When there is a problem indexing a file referenced by a file field ([sql_file_field](../Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_file_field)), `indexer` can either process the document, assuming empty content in this particular field, or skip the document, or fail indexing entirely. `on_file_field_error` directive controls that behavior. The values it takes are:
+* `ignore_field`, process the current document without field;
 * `skip_document`, skip the current document but continue indexing;
 * `fail_index`, fail indexing with an error message.
 
@@ -241,7 +241,7 @@ Note that with `on_file_field_error = skip_document` documents will only be igno
 write_buffer = 4M
 ```    
 
-Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final index files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](../Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
+Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final table files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](../Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
 
 #### ignore_non_plain
 
@@ -249,4 +249,4 @@ Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to wr
 ignore_non_plain = 1
 ```
 
-`ignore_non_plain` lets you completely ignore warnings about skipping non-plain indexes. 0 (not ignoring) by default.
+`ignore_non_plain` lets you completely ignore warnings about skipping non-plain tables. 0 (not ignoring) by default.

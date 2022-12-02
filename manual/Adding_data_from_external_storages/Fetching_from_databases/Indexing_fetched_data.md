@@ -1,4 +1,4 @@
-# Indexing fetched data
+# Processing fetched data
 
 By default the first column from the result set of `sql_query` is indexed as the document id.
 
@@ -40,7 +40,7 @@ Plain attributes only allow to attach 1 value per each document. However, there 
 
 The MVA can take the values from a column (like the rest of the data types) - in this case the column in the result set must provide a string with multiple integer values separated by comma -  or by running a separate query to get the values.
 
-In case of query the engine runs the query, group by result by ids and will attach the values to their corresponding documents in the index. Values with an id not found in the index are discarded.  
+In case of query the engine runs the query, group by result by ids and will attach the values to their corresponding documents in the table. Values with an id not found in the table are discarded.  
 
 The declaration format is as follows (backslashes are for clarity only; everything can be declared in a single line as well):
 
@@ -103,7 +103,7 @@ sql_field_string = name
 
 Declares a file based field.
 
-This directive makes indexer interpret field contents as a file name, and load and index the referred file. Files larger than max_file_field_buffer in size are skipped. Any errors during the file loading (IO errors, missed limits, etc) will be reported as indexing warnings and will not early terminate the indexing. No content will be indexed for such files.
+This directive makes indexer interpret field contents as a file name, and load and process the referred file. Files larger than max_file_field_buffer in size are skipped. Any errors during the file loading (IO errors, missed limits, etc) will be reported as indexing warnings and will not early terminate the indexing. No content will be indexed for such files.
 
 ```ini
 sql_file_field = field_name
@@ -123,8 +123,8 @@ sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' | 'ranged-quer
 where
 
 * FIELD-NAME is a joined/payload field name
-* QUERY is an SQL query that must fetch values to index
-* RANGE-QUERY is an optional SQL query that fetches a range of values to index
+* QUERY is an SQL query that must fetch values for further processing
+* RANGE-QUERY is an optional SQL query that fetches a range of values to process
 
 *Joined fields* let you avoid JOIN and/or GROUP_CONCAT statements in the main document fetch query (sql_query). This can be useful when SQL-side JOIN is slow, or needs to be offloaded on Manticore side, or simply to emulate MySQL-specific `GROUP_CONCAT` functionality in case your database server does not support it.
 
@@ -149,7 +149,7 @@ When using ``ranged-main-query`` query then omit the ``ranged-query`` and it wil
 
 The payload query must return exactly 3 columns: document ID; keyword; and integer payload value. Document IDs can be duplicate, but they **must** be in ascending order. Payloads must be unsigned integers within 24-bit range, ie. from 0 to 16777215. For reference, payloads are currently internally stored as in-field keyword positions, but that is not guaranteed and might change in the future.
 
-Currently, the only method to account for payloads is to use `SPH_RANK_PROXIMITY_BM25` ranker. On indexes with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
+Currently, the only method to account for payloads is to use `SPH_RANK_PROXIMITY_BM25` ranker. On tables with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
 
 Example:
 

@@ -1,17 +1,17 @@
-# Remote indexes
+# Remote tables
 
-Remote indexes are represented by [agent](../../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) in the definition of a distributed index.
-Any number of locals and agents may be combined in a distributed index. If no locals provided, it will be purely remote index, which serves just as a proxy. For example, you may have a frontend Manticore instance which listens on a number of ports and serves different protocols, and then just redirects queries to backends that accept connections only via Manticore's internal binary protocol with, perhaps, persistent connections to avoid a connection establishing overhead.
-Despite the fact, that such distributed index doesn't serve local indexes itself, it still consumes machine resources, since it still needs to make final calculations such as merging results and calculating final aggregated values. 
+Remote tables are represented by the prefix [agent](../../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) in the definition of a distributed table.
+Any number of locals and agents may be combined in a distributed table. If no locals provided, it will be purely remote table, which serves just as a proxy. For example, you may have a frontend Manticore instance which listens on a number of ports and serves different protocols, and then just redirects queries to backends that accept connections only via Manticore's internal binary protocol with, perhaps, persistent connections to avoid a connection establishing overhead.
+Despite the fact, that such distributed table doesn't serve local tables itself, it still consumes machine resources, since it still needs to make final calculations such as merging results and calculating final aggregated values. 
 
 ## agent
 
 ```ini
-agent = address1 [ | address2 [...] ][:index-list]
-agent = address1[:index-list [ | address2[:index-list [...] ] ] ]
+agent = address1 [ | address2 [...] ][:table-list]
+agent = address1[:table-list [ | address2[:table-list [...] ] ] ]
 ```
 
-`agent` directive declares remote agents that are searched every time when the enclosing distributed index is searched. The agents are, essentially, pointers to networked indexes. The value specifies address, and also can additionally specify multiple alternatives (agent mirrors) for either the address only, or the address and index list:
+`agent` directive declares remote agents that are searched every time when the enclosing distributed table is searched. The agents are, essentially, pointers to networked tables. The value specifies address, and also can additionally specify multiple alternatives (agent mirrors) for either the address only, or the address and table list:
 
 In both cases the address specification must be one of the following:
 
@@ -20,20 +20,20 @@ address = hostname[:port] # eg. server2:9312
 address = /absolute/unix/socket/path # eg. /var/run/manticore2.sock
 ```
 
-`hostname` is the remote host name, `port` is the remote TCP port number, `index-list` is a comma-separated list of index names, and square brackets [] designate an optional clause.
+`hostname` is the remote host name, `port` is the remote TCP port number, `table-list` is a comma-separated list of table names, and square brackets [] designate an optional clause.
 
-When index name is omitted, it is assumed the same index as the one where this line is defined. I.e. when defining agents for distributed index 'mycoolindex' you can just point the address, and it is assumed to query 'mycoolindex' index on agent's endpoints.
+When table name is omitted, it is assumed the same table as the one where this line is defined. I.e. when defining agents for distributed table 'mycoolindex' you can just point the address, and it is assumed to query 'mycoolindex' table on agent's endpoints.
 
 When port number is omitted, it is assumed that it is **9312**. However when it's defined, but invalid (say, port 70000), it will skip such agent.
 
-In other words, you can point every single agent to one or more remote indexes, residing on one or more networked servers. There are absolutely no restrictions on the pointers. To point out a couple important things, the host can be localhost, and the remote index can be a distributed index in turn, all that is legal. That enables a bunch of very different usage modes:
+In other words, you can point every single agent to one or more remote tables, residing on one or more networked servers. There are absolutely no restrictions on the pointers. To point out a couple important things, the host can be localhost, and the remote table can be a distributed table in turn, all that is legal. That enables a bunch of very different usage modes:
 * sharding over multiple agent servers, and creating an arbitrary cluster topology
 * sharding over multiple agent servers, mirrored for HA/LB (High Availability and Load Balancing) purposes
-* sharding within localhost, to utilize multiple cores (however, it is simpler just to use multiple local indexes)
+* sharding within localhost, to utilize multiple cores (however, it is simpler just to use multiple local tables)
 
 All agents are searched in parallel. Index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (see [threads](../../Server_settings/Searchd.md#threads) setting). The master has no remote control over that.
 
-Note, agent internally executes a query ignoring option `LIMIT`, since each agent can have different indexes and it is a client responsibility to apply the limit to the final result set. That's the reason why the query to a physical index differs from the query to a distributed index when viewing them in the query logs. It can't be just a full copy of the original query in order to provide correct results in such a case:
+Note, agent internally executes a query ignoring option `LIMIT`, since each agent can have different tables and it is a client responsibility to apply the limit to the final result set. That's the reason why the query to a physical table differs from the query to a distributed table when viewing them in the query logs. It can't be just a full copy of the original query in order to provide correct results in such a case:
 
 * We make `SELECT ... LIMIT 10, 10`
 * We have 2 agents 
@@ -41,7 +41,7 @@ Note, agent internally executes a query ignoring option `LIMIT`, since each agen
 
 If we just broadcast the original `LIMIT 10, 10` query it will receive 0 documents from the 2nd agent, but `LIMIT 10,10` should return documents 10-20 from the resulting set as you may not care about each agent in particular. That's why we need to send the query to the agents with broader limits and the upper bound in this case is `max_matches`.
 
-For example, imagine we have table `dist` which refers to remote index `user`.
+For example, imagine we have table `dist` which refers to remote table `user`.
 
 Then if client sends this query:
 
@@ -55,33 +55,33 @@ the query will be converted to:
 SELECT * FROM user LIMIT 0,1000
 ```
 
-and sent to the remote index `user`. `1000` here is the default `max_matches`. Once the distributed index receives the result it will apply `LIMIT 10,10` to it and return the requested 10 documents.
+and sent to the remote table `user`. `1000` here is the default `max_matches`. Once the distributed table receives the result it will apply `LIMIT 10,10` to it and return the requested 10 documents.
 
 The value can additionally enumerate per agent options such as:
-* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (replaces index-wide `ha_strategy` for particular agent)
-* `conn` - `pconn`, persistent (same as `agent_persistent` on index-wide declaration)
+* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (replaces table-wide `ha_strategy` for particular agent)
+* `conn` - `pconn`, persistent (same as `agent_persistent` on table-wide declaration)
 * `blackhole` `0`,`1` (same as [agent_blackhole](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_blackhole) agent declaration)
 * `retry_count` - integer (same as [agent_retry_count](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) , but the provided value will not be multiplied to the number of mirrors)
 
 ```ini
-agent = address1:index-list[[ha_strategy=value, conn=value, blackhole=value]]
+agent = address1:table-list[[ha_strategy=value, conn=value, blackhole=value]]
 ```
 
 Example:
 
 ```ini
 # config on box1
-# sharding an index over 3 servers
+# sharding a table over 3 servers
 agent = box2:9312:shard1
 agent = box3:9312:shard2
 
 # config on box2
-# sharding an index over 3 servers
+# sharding a table over 3 servers
 agent = box1:9312:shard2
 agent = box3:9312:shard3
 
 # config on box3
-# sharding an index over 3 servers
+# sharding a table over 3 servers
 agent = box1:9312:shard1
 agent = box2:9312:shard3
 
@@ -137,7 +137,7 @@ After connection, `searchd` will wait at most this much time for remote queries 
 
 ## agent_retry_count
 
-Integer `agent_retry_count` specifies how many times Manticore will try to connect and query remote agents in distributed index before reporting fatal query error. It works the same way as `agent_retry_count` in section "searchd" of the configuration file, but defines the value for a particular index.
+Integer `agent_retry_count` specifies how many times Manticore will try to connect and query remote agents in a distributed table before reporting a fatal query error. It works the same way as `agent_retry_count` in section "searchd" of the configuration file, but defines the value for a particular table.
 
 ## mirror_retry_count
 
@@ -148,10 +148,10 @@ Integer `agent_retry_count` specifies how many times Manticore will try to conne
 These options manage overall behaviour regarding remote agents. They are to be specified in **searchd section of the configuration file** and define defaults for the whole Manticore instance.
 
 * `agent_connect_timeout` - instance-wide defaults for `agent_connect_timeout` parameter. 
-* `agent_query_timeout` - instance-wide defaults for `agent_query_timeout` parameter. The last defined in distributed (network) indexes, or also may be overridden per-query using a setting of the same name.
-* `agent_retry_count` integer, specifies how many times manticore will try to connect and query remote agents in distributed index before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using 'OPTION retry_count=XXX' clause. If per-query option exists, it will override the one specified in config.
+* `agent_query_timeout` - instance-wide defaults for `agent_query_timeout` parameter. The last defined in distributed (network) tables, or also may be overridden per-query using a setting of the same name.
+* `agent_retry_count` integer, specifies how many times manticore will try to connect and query remote agents in a distributed table before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using 'OPTION retry_count=XXX' clause. If per-query option exists, it will override the one specified in config.
 
-Note, that if you use **agent mirrors** in definition of your distributed index, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) specified. In this case [agent_retry_count](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) will be aggregated for all mirrors in a set.
+Note, that if you use **agent mirrors** in definition of your distributed table, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) specified. In this case [agent_retry_count](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) will be aggregated for all mirrors in a set.
 
 For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors (in case of option `ha_strategy = roundrobin` it will be actually exactly 5 times per mirror).
 
@@ -193,13 +193,13 @@ For Linux system server checks variable `/proc/sys/net/ipv4/tcp_fastopen` and be
 persistent_connections_limit = 29 # assume that each host of agents has max_connections = 30 (or 29).
 ```
 
-`persistent_connections_limit` defines maximum # of simultaneous persistent connections to remote persistent agents. This is instance-wide option and has to be defined in searchd config section. Each time connecting an agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However in some cases it makes sense to limit # of such persistent connections. This directive defines the number. It affects the number of connections to each agent's host across all distributed indexes.
+`persistent_connections_limit` defines maximum # of simultaneous persistent connections to remote persistent agents. This is instance-wide option and has to be defined in searchd config section. Each time connecting an agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However in some cases it makes sense to limit # of such persistent connections. This directive defines the number. It affects the number of connections to each agent's host across all distributed tables.
 
 It is reasonable to set the value equal or less than [max_connections](../../Server_settings/Searchd.md#max_connections) option of the agent's config.
 
 ## Distributed snippets creation
 
-One special case of a distributed index is a single local + multiple remotes. It is solely used for [distributed snippets creation](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-snippets-creation), when snippets are sourced from files. In this case the local may be a 'template' index, since it is used just to provide settings for tokenization when building snippets.
+One special case of a distributed table is a single local + multiple remotes. It is solely used for [distributed snippets creation](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-snippets-creation), when snippets are sourced from files. In this case the local may be a 'template' table, since it is used just to provide settings for tokenization when building snippets.
 
 ### snippets_file_prefix
 
@@ -211,12 +211,12 @@ snippets_file_prefix = /mnt/common/server1/
 
 Head about [CALL SNIPPETS](../../Searching/Highlighting.md) to learn more about distributed snippets creation.
 
-## Distributed percolate indexes (DPQ indexes)
+## Distributed percolate tables (DPQ tables)
 
-You can construct a distributed index from several [percolate](../../Creating_an_index/Local_indexes/Percolate_index.md) indexes. The syntax is absolutely the same as for other distributed indexes. It can include several `local` indexes as well as several `agents`.
+You can construct a distributed table from several [percolate](../../Creating_an_index/Local_indexes/Percolate_index.md) tables. The syntax is absolutely the same as for other distributed tables. It can include several `local` tables as well as several `agents`.
 
-For DPQ the operations of listing stored queries and searching through them ([CALL PQ](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)) are transparent and works as if all the indexes were one solid local index. However data manipulation statements such as `insert`, `replace`, `truncate` are not available.
+For DPQ the operations of listing stored queries and searching through them ([CALL PQ](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)) are transparent and works as if all the tables were one solid local table. However data manipulation statements such as `insert`, `replace`, `truncate` are not available.
 
-If you mention a non-percolate index among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq index (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ indexes with it's own non-pq strings, so be aware of the confusion! `CALL PQ` to such wrong agent will definitely trigger an error.
+If you mention a non-percolate table among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq table (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ tables with it's own non-pq strings, so be aware of the confusion! `CALL PQ` to such wrong agent will definitely trigger an error.
 
-Read more about [making queries to a distribute percolate index](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).
+Read more about [making queries to a distribute percolate table](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).

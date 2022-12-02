@@ -45,15 +45,14 @@ FREEZE t;
 
 The column `file` provides paths to the table's files inside [data_dir](../Server_settings/Searchd.md#data_dir) of the running instance. The column `normalized` shows absolute paths of the same files. If you want to back up a table it's safe to just copy the provided files with no other preparations.
 
-When a table is frozen, you can't perform `UPDATE` queries on it; they will fail with the error message `index is locked now,
-try again later`.
+When a table is frozen, you can't perform `UPDATE` queries on it; they will fail with the error message `index is locked now, try again later`.
 
 Also, `DELETE` and `REPLACE` queries have some limitations while the table is frozen:
 * If `DELETE` affects a document stored in a current RAM chunk - it is allowed.
 * If `DELETE` affects a document in a disk chunk, but it was already deleted before - it is allowed.
 * If `DELETE` is going to change an actual disk chunk - it will wait until the table is unfrozen.
 
-Manual `FLUSH` of a RAM chunk of a frozen index will report 'success', however no actual save will happen.
+Manual `FLUSH` of a RAM chunk of a frozen table will report 'success', however no actual save will happen.
 
 `DROP`/`TRUNCATE` of a frozen table **is** allowed, since such operation is not implicit. We assume that if you truncate or drop a table - you don't need it backed up anyway, therefore it should not have been frozen in the first place.
 

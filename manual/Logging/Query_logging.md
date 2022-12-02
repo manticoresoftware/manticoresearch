@@ -33,7 +33,7 @@ With `plain` log format Manticore logs all successfully executed search queries 
 The log format is as follows:
 
 ```
-[query-date] real-time wall-time [match-mode/filters-count/sort-mode total-matches (offset,limit) @groupby-attr] [index-name] query
+[query-date] real-time wall-time [match-mode/filters-count/sort-mode total-matches (offset,limit) @groupby-attr] [table-name] query
 ```
 
 * real-time is the time from start till finish of the query
@@ -67,7 +67,7 @@ If Manticore was started with `--iostats` (ot it was enabled via `SET GLOBAL ios
 
 where:
 * `ios` - number of file I/O operations carried out;
-* `kb` - amount of data in kilobytes read from the index files;
+* `kb` - amount of data in kilobytes read from the table files;
 * `ioms` - time spent on I/O operations.
 
 

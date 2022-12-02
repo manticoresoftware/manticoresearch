@@ -1,8 +1,8 @@
-# Creating a local distributed index
+# Creating a local distributed table
 
 <!-- example local_dist -->
 
-A distributed index in Manticore Search doesn't hold any data. Instead it acts as a 'master node' to proxy the demanded query to other indexes and provide merged results from the responses it receives from the 'node' indexes. A distributed index can connect to local indexes or indexes located on other servers. The simplest example of a distributed index looks so:
+A distributed table in Manticore Search doesn't hold any data. Instead it acts as a 'master node' to proxy the demanded query to other tables and provide merged results from the responses it receives from the 'node' tables. A distributed table can connect to local tables or tables located on other servers. The simplest example of a distributed table looks so:
 
 
 <!-- intro -->

@@ -19,7 +19,7 @@
   - run the instance. Manticore will load up the tables with a warning.
   - run `ALTER TABLE <table name> REBUILD SECONDARY` for each index to rebuild secondary indexes.
 
-  If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_an_index/Compacting_an_index.md#Optimizing-clustered-indexes) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
+  If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_an_index/Compacting_an_index.md#Optimizing-clustered-tables) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
 * `SHOW SETTINGS`
 * `max_matches_increase_threshold`
 
@@ -467,7 +467,7 @@ sys     0m0.001s
 
 ### Minor changes
 - tool `manticore_new_cluster [--force]` useful for restarting a replication cluster via systemd
-- [--drop-src](Adding_data_from_external_storages/Adding_data_from_indexes/Merging_indexes.md#Merging-indexes) for `indexer --merge`
+- [--drop-src](Adding_data_from_external_storages/Adding_data_from_indexes/Merging_indexes.md#Merging-tables) for `indexer --merge`
 - [new mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) `blend_mode='trim_all'`
 - added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
 - [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
@@ -529,7 +529,7 @@ status of the query, not the server status
 
 ### New Features
 - New Python, Javascript and Java clients are generally available now and are well documented in this manual.
-- automatic drop of a disk chunk of a real-time index. This optimization enables dropping a disk chunk automatically when [OPTIMIZing](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX) a real-time index when the chunk is obviously not needed any more (all the documents are suppressed). Previously it still required merging, now the chunk can be just dropped instantly. The [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option is ignored, i.e. even if nothing is actually merged an obsoleted disk chunk gets removed. This is useful in case you maintain retention in your index and delete older documents. Now compacting such indexes will be faster.
+- automatic drop of a disk chunk of a real-time index. This optimization enables dropping a disk chunk automatically when [OPTIMIZing](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-TABLE) a real-time index when the chunk is obviously not needed any more (all the documents are suppressed). Previously it still required merging, now the chunk can be just dropped instantly. The [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option is ignored, i.e. even if nothing is actually merged an obsoleted disk chunk gets removed. This is useful in case you maintain retention in your index and delete older documents. Now compacting such indexes will be faster.
 - [standalone NOT](Searching/Options.md#not_terms_only_allowed) as an option for SELECT
 
 ### Minor Changes
@@ -1338,7 +1338,7 @@ In this release we've changed internal protocol used by masters and agents to sp
 ## Version 2.5.1, 23 November 2017
 ### Features and improvements
 * JSON queries on [HTTP API protocol](Connecting_to_the_server/HTTP.md). Supported search, insert, update, delete, replace operations. Data manipulation commands can be also bulked, also there are some limitations currently as MVA and JSON attributes can't be used for inserts, replaces or updates.
-* [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-INDEXES) command
+* [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-TABLES) command
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) command
 * [SHOW THREADS](Profiling_and_monitoring/SHOW_THREADS.md) can show progress of optimize, rotation or flushes.
 * GROUP N BY work correctly with MVA attributes

@@ -14,6 +14,7 @@
 ### Minor changes
 * Queries with stateful UDFs are now forced to be executed in a single thread
 * Refactoring of task/scheduler system as a prerequisite for parallel chunks merging
+* **⚠️ BREAKING CHANGE**: Columnar storage format has been changed. You need to rebuild those indexes that have columnar attributes. 
 * **⚠️ BREAKING CHANGE**: Secondary indexes file format has got changed, so if you are using secondary indexes for searching and have `searchd.secondary_indexes = 1` in your configuration file, be aware that the new Manticore version **will skip loading the tables that have secondary indexes**. It's recommended to:
   - before you upgrade change `searchd.secondary_indexes` to 0 in the configuration file
   - run the instance. Manticore will load up the tables with a warning.

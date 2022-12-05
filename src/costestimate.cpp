@@ -336,19 +336,17 @@ float CostEstimate_c::CalcQueryCost()
 	int iNumAnalyzers = 0;
 	int iNumIndexes = 0;
 
-	ARRAY_FOREACH ( i, m_dSIInfo )
+	for ( const auto & i : m_dSIInfo )
 	{
-		const auto & tSIInfo = m_dSIInfo[i];
-		const auto & tFilter = m_tCtx.m_dFilters[i];
-		if ( tFilter.m_sAttrName=="@rowid" )
+		if ( !i.m_dCapabilities.GetLength() )
 			continue;
 
-		int64_t iDocs = tSIInfo.m_iRsetEstimate;
+		int64_t iDocs = i.m_iRsetEstimate;
 		float fIndexProbability = float(iDocs) / m_tCtx.m_iTotalDocs;
 
-		if ( tSIInfo.m_eType==SecondaryIndexType_e::LOOKUP ||
-			 tSIInfo.m_eType==SecondaryIndexType_e::ANALYZER ||
-			 tSIInfo.m_eType==SecondaryIndexType_e::INDEX )
+		if ( i.m_eType==SecondaryIndexType_e::LOOKUP ||
+			 i.m_eType==SecondaryIndexType_e::ANALYZER ||
+			 i.m_eType==SecondaryIndexType_e::INDEX )
 		{
 			fDocsAfterIndexes *= fIndexProbability;
 			iToIntersect++;
@@ -356,7 +354,7 @@ float CostEstimate_c::CalcQueryCost()
 
 		fDocsAfterFilters *= fIndexProbability;
 
-		switch ( tSIInfo.m_eType )
+		switch ( i.m_eType )
 		{
 		case SecondaryIndexType_e::LOOKUP:
 			iDocsToReadLookup += iDocs; 

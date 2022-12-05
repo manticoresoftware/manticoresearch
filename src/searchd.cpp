@@ -6072,7 +6072,8 @@ void SearchHandler_c::RunLocalSearches ()
 				bool bCanBeCloned = dSorters.all_of ( []( auto * pSorter ){ return pSorter ? pSorter->CanBeCloned() : true; } );
 
 				// fixme: previous calculations are wrong; we are not splitting the query if we are using non-clonable sorters
-				tMultiArgs.m_iSplit = bCanBeCloned ? m_dSplits[iLocal].first : 1;
+				tMultiArgs.m_iThreads = bCanBeCloned ? m_dSplits[iLocal].first : 1;
+				tMultiArgs.m_iTotalThreads = pDispatcher->GetConcurrency();
 				tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
 
 				dNAggrResults.First().m_tIOStats.Start ();

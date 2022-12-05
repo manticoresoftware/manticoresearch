@@ -887,7 +887,8 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	int64_t									m_iTotalDocs = 0;
 	bool									m_bModifySorterSchemas = true;
 	bool									m_bFinalizeSorters = true;
-	int										m_iSplit = 1;
+	int										m_iThreads = 1;
+	int										m_iTotalThreads = 1;
 
 	CSphMultiQueryArgs ( int iIndexWeight );
 };

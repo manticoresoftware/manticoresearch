@@ -561,8 +561,12 @@ static bool NextSet ( CSphVector<int> & dSet, const CSphVector<SecondaryIndexInf
 {
 	for ( int i = 0; i < dSet.GetLength(); i++ )
 	{
+		int iNumCapabilities = dSecondaryIndexes[i].m_dCapabilities.GetLength();
+		if ( !iNumCapabilities )
+			continue;
+
 		dSet[i]++;
-		if ( dSet[i] >= dSecondaryIndexes[i].m_dCapabilities.GetLength() )
+		if ( dSet[i] >= iNumCapabilities )
 			dSet[i] = 0;
 		else
 			return true;
@@ -716,6 +720,14 @@ static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
 		}
 }
 
+
+static void DisableRowidFilters ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	ARRAY_FOREACH ( i, dSIInfo )
+		if ( tCtx.m_dFilters[i].m_sAttrName=="@rowid" )
+			dSIInfo[i].m_dCapabilities.Resize(0);
+}
+
 /////////////////////////////////////////////////////////////////////
 
 CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost )
@@ -724,7 +736,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 
 	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_dFilters.GetLength() );
 	ARRAY_FOREACH ( i, dSIInfo )
-		dSIInfo[i].m_dCapabilities.Add ( tCtx.m_dFilters[i].m_sAttrName=="@rowid" ? SecondaryIndexType_e::NONE : SecondaryIndexType_e::FILTER );
+		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::FILTER );
 
 	// no iterators with OR queries
 	if ( !tCtx.m_dFilterTree.IsEmpty() || !tCtx.m_pHistograms )
@@ -734,6 +746,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	MarkAvailableSI ( dSIInfo, tCtx );
 	MarkAvailableAnalyzers ( dSIInfo, tCtx );
 	ForceSI(dSIInfo);
+	DisableRowidFilters ( dSIInfo, tCtx );
 
 	CSphVector<int> dCapabilities ( dSIInfo.GetLength() );
 	CSphVector<int> dBest ( dSIInfo.GetLength() );
@@ -744,7 +757,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	for ( int iTry = 0; iTry < MAX_TRIES; iTry++ )
 	{
 		for ( int i = 0; i < dCapabilities.GetLength(); i++ )
-			dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities[dCapabilities[i]];
+			dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities.GetLength() ? dSIInfo[i].m_dCapabilities[dCapabilities[i]] : SecondaryIndexType_e::NONE;
 
 		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfo, tCtx ) );
 
@@ -760,7 +773,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	}
 
 	for ( int i = 0; i < dBest.GetLength(); i++ )
-		dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities[dBest[i]];
+		dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities.GetLength() ? dSIInfo[i].m_dCapabilities[dBest[i]] : SecondaryIndexType_e::NONE;
 
 	return dSIInfo;
 }

@@ -6798,7 +6798,7 @@ static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery
 	dSplits.Resize(iJobs);
 	dSplits.Fill(1);
 
-	int iSingleSplit = 0;
+	int iNumSingleThreads = 0;
 	int64_t iTotalMetric = 0;
 	CSphVector<int64_t> dMetrics { iJobs };
 	ARRAY_FOREACH ( i, dMetrics )
@@ -6811,13 +6811,13 @@ static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery
 		if ( dMetrics[i]>0 )
 			iTotalMetric += dMetrics[i];
 		else
-			iSingleSplit++;
+			iNumSingleThreads++;
 	}
 
 	// we have more free threads than disk chunks; makes sense to apply pseudo_sharding
-	if ( tArgs.m_iSplit>iJobs )
+	if ( tArgs.m_iThreads>iJobs )
 	{
-		int iLeft = tArgs.m_iSplit - iSingleSplit;
+		int iLeft = tArgs.m_iThreads - iNumSingleThreads;
 		assert(iLeft>=0);
 
 		ARRAY_FOREACH ( i, dSplits )
@@ -6903,7 +6903,8 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			tMultiArgs.m_bLocalDF = bGotLocalDF;
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
-			tMultiArgs.m_iSplit = dSplits[iChunk];
+			tMultiArgs.m_iThreads = dSplits[iChunk];
+			tMultiArgs.m_iTotalThreads = iThreads;
 
 			// we use sorters in both disk chunks and ram chunks,
 			// that's why we don't want to move to a new schema before we searched ram chunks

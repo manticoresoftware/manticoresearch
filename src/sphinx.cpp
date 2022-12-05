@@ -7849,6 +7849,11 @@ static void RecreateFilters ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, 
 RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters ) const
 {
 	float fCost = FLT_MAX;
+
+	// In order to maintain some consistency with GetPseudoShardingMetrics we need to do one of the following:
+	// a. Run this with the number of docs in this pseudo_chunk and one thread
+	// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetrics
+	// For now we use approach b) as it is simpler
 	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
 	CSphVector<SecondaryIndexInfo_t> dSIInfo = SelectIterators ( tSelectIteratorCtx, fCost );
 
@@ -8002,7 +8007,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters holds pointers to those settings
-	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iSplit, dModifiedFilters ) );
+	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dModifiedFilters ) );
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );
 
@@ -10417,6 +10422,7 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
 			tMultiArgs.m_bModifySorterSchemas = false;
+			tMultiArgs.m_iTotalThreads = tArgs.m_iTotalThreads;
 
 			CSphQuery tQueryWithExtraFilter = tQuery;
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iJob, iJobs );
@@ -10472,7 +10478,7 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	dSorters.Reserve ( dAllSorters.GetLength() );
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p ) { if ( p ) dSorters.Add(p); });
 
-	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iSplit ), 1 );
+	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iThreads ), 1 );
 	int64_t iTotalDocs = tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments;
 	bool bOk = RunSplitQuery ( this, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, GetName(), iSplit, tmMaxTimer );
 	if ( !bOk )
@@ -10499,7 +10505,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
 
-	if ( tArgs.m_iSplit>1 )
+	if ( tArgs.m_iThreads>1 )
 		return SplitQuery ( tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
 	MEMORY ( MEM_DISK_QUERY );

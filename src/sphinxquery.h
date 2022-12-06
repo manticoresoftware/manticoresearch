@@ -358,7 +358,7 @@ protected:
 	virtual bool	NeedTrailingSeparator() { return true; }
 
 private:
-	XQNode_t *		SweepNulls ( XQNode_t * pNode );
+	XQNode_t *		SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed );
 	bool			FixupNots ( XQNode_t * pNode );
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
@@ -391,6 +391,7 @@ int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
+bool	IsAllowOnlyNot();
 
 CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 

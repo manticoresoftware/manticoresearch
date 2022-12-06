@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "exprtraits.h"
 #include "searchdexpr.h"
 #include "sphinxexcerpt.h"
 #include "sphinxutils.h"
@@ -222,7 +223,7 @@ public:
 
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
-	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) final;
+	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) override;
 	bool		IsDataPtrAttr () const final { return true; }
 
 protected:
@@ -341,6 +342,7 @@ public:
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override;
 	ISphExpr *	Clone() const override;
+	uint64_t	GetHash ( const ISphSchema & tSchema, uint64_t uPrevHash, bool & bDisable ) override;
 };
 
 
@@ -446,6 +448,12 @@ int Expr_Snippet_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr )
 }
 
 
+uint64_t Expr_Snippet_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_Snippet_c");
+	return CALC_DEP_HASHES();
+}
+
 ISphExpr * Expr_Snippet_c::Clone () const
 {
 	return new Expr_Snippet_c ( *this );
@@ -462,6 +470,7 @@ public:
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
 	ISphExpr *	Clone() const final;
+	uint64_t	GetHash ( const ISphSchema & tSchema, uint64_t uPrevHash, bool & bDisable ) override;
 
 private:
 	DocstoreSession_c::InfoDocID_t	m_tSession;
@@ -650,6 +659,11 @@ CSphVector<FieldSource_t> Expr_Highlight_c::RearrangeFetchedFields ( const Docst
 	}
 
 	return dAllFields;
+}
+uint64_t Expr_Highlight_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_Highlight_c");
+	return CALC_DEP_HASHES();
 }
 
 

@@ -213,11 +213,11 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
 		sphinxql_debug.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
-		pollable_event.cpp netfetch.cpp searchdbuddy.cpp)
+		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp)
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
-target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra )
+target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra nlohmann_json::nlohmann_json )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
 
 if (WITH_CURL)

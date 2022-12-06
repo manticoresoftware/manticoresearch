@@ -3833,7 +3833,7 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 				continue;
 		}
 
-		if ( tAttr.m_sName.cstr()[0]!='@' && !dAttrs.BinarySearch(i) )
+		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !dAttrs.BinarySearch(i) )
 			dAttrsInSchema.Add(i);
 	}
 
@@ -4579,7 +4579,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		const CSphColumnInfo & tCol = m_tRes.m_tSchema.GetAttr(iCol);
 
 		assert ( !tCol.m_sName.IsEmpty() );
-		bool bMagic = ( *tCol.m_sName.cstr()=='@' );
+		bool bMagic = ( IsGroupbyMagic ( tCol.m_sName ) || IsSortStringInternal ( tCol.m_sName ) );
 
 		if ( !bMagic && tCol.m_pExpr )
 		{
@@ -7206,6 +7206,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+		for ( const auto & tLocal : m_dLocal )
+			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
 
 	/////////////////////////////////
@@ -10600,7 +10602,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -13755,6 +13757,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			memcpy ( g_sLogFilter, tStmt.m_sSetValue.cstr(), iLen );
 			g_sLogFilter[iLen] = '\0';
 			g_iLogFilterLen = iLen;
+		} else if ( tStmt.m_sSetName=="log_http_filter" )
+		{
+			SetLogHttpFilter ( tStmt.m_sSetValue );
+
+		} else if ( tStmt.m_sSetName=="log_management" )
+		{
+			SetLogManagement ( !!tStmt.m_iSetValue );
+
 		} else if ( tStmt.m_sSetName=="net_wait" )
 		{
 			g_tmWaitUS = tStmt.m_iSetValue * 1000LL;
@@ -20024,6 +20034,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();
+	SetupCompatHttp();
 
 	gStats().m_uStarted = (DWORD)time(NULL);
 

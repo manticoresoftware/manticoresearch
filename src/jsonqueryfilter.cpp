@@ -11,6 +11,7 @@
 #include "jsonqueryfilter.h"
 
 #include "sphinxint.h"
+#include <time.h>
 
 static const char * g_szFilter = "_@filter_";
 
@@ -263,6 +264,9 @@ bool IsFilter ( const JsonObj_c & tJson )
 	if ( sName=="geo_distance" )
 		return true;
 
+	if ( sName=="exists" )
+		return true;
+
 	return false;
 }
 
@@ -316,6 +320,7 @@ private:
 	std::unique_ptr<FilterTreeNode_t>	ConstructFilter ( const JsonObj_c & tJson, CSphVector<CSphQueryItem> & dQueryItems );
 	std::unique_ptr<FilterTreeNode_t>	ConstructEqualsFilter ( const JsonObj_c & tJson );
 	std::unique_ptr<FilterTreeNode_t>	ConstructRangeFilter ( const JsonObj_c & tJson );
+	std::unique_ptr<FilterTreeNode_t>	ConstructExistsFilter ( const JsonObj_c & tJson );
 
 	JsonObj_c GetFilterColumn ( const JsonObj_c & tJson );
 };
@@ -358,12 +363,11 @@ static int CreateFilterTree ( std::unique_ptr<FilterTreeNode_t> & pRoot, CSphVec
 }
 
 
-static void ConcatTrees ( std::unique_ptr<FilterTreeNode_t> & pLeft, std::unique_ptr<FilterTreeNode_t> & pRight, bool bOr )
+static void ConcatTrees ( std::unique_ptr<FilterTreeNode_t> & pLeft, std::unique_ptr<FilterTreeNode_t> & pRight )
 {
 	auto pRoot = std::make_unique<FilterTreeNode_t>();
 	pRoot->m_pLeft  = std::move(pLeft);
 	pRoot->m_pRight = std::move(pRight);
-	pRoot->m_bOr = bOr;
 	pLeft = std::move(pRoot);
 }
 
@@ -437,7 +441,7 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 	}
 
 	bool bOk = false;
-	std::unique_ptr<FilterTreeNode_t> pMustTreeRoot, pShouldTreeRoot, pMustNotTreeRoot;
+	std::unique_ptr<FilterTreeNode_t> pMustTreeRoot, pShouldTreeRoot, pMustNotTreeRoot, pFilterTreeRoot;
 	CSphVector<CSphQueryItem> dMustQI, dShouldQI, dMustNotQI;
 
 	for ( const auto & tClause : tBool )
@@ -449,7 +453,7 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 			std::tie ( bOk, pMustTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustQI, false );
 			if ( !bOk )
 				return { false, nullptr };
-		}
+		} 
 		else if ( sName=="should" )
 		{
 			std::tie ( bOk, pShouldTreeRoot ) = ConstructBoolNodeFilters ( tClause, dShouldQI, true );
@@ -461,22 +465,41 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 			std::tie ( bOk, pMustNotTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustNotQI, false );
 			if ( !bOk )
 				return { false, nullptr };
-		}
-		else
+		} else if ( sName=="filter" )
+		{
+			std::tie ( bOk, pFilterTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustQI, false );
+			if ( !bOk )
+				return { false, nullptr };
+		} else if ( sName=="minimum_should_match" ) // FIXME!!! add to should as option
+		{
+			continue;
+		} else
 		{
 			m_sError.SetSprintf ( "unknown bool query type: \"%s\"", sName.cstr() );
 			return { false, nullptr };
 		}
 	}
 
+	if ( pFilterTreeRoot )
+	{
+		if ( pMustTreeRoot )
+			ConcatTrees ( pMustTreeRoot, pFilterTreeRoot );
+		else
+			pMustTreeRoot = std::move ( pFilterTreeRoot );
+	}
+
 	if ( pMustNotTreeRoot )
 	{
 		// fixme! this may not work as expected; better add a NOT node
-		WalkTree ( pMustNotTreeRoot, []( auto & pNode ) { if ( pNode->m_pFilter ) pNode->m_pFilter->m_bExclude=true; } );
-		ConcatTrees ( pMustTreeRoot, pMustNotTreeRoot, false );
+		WalkTree ( pMustNotTreeRoot, []( auto & pNode ) { if ( pNode->m_pFilter ) pNode->m_pFilter->m_bExclude = !pNode->m_pFilter->m_bExclude; } );
 
 		for ( auto & i : dMustNotQI )
 			dMustQI.Add(i);
+
+		if ( pMustTreeRoot )
+			ConcatTrees ( pMustTreeRoot, pMustNotTreeRoot );
+		else
+			pMustTreeRoot = std::move ( pMustNotTreeRoot );
 	}
 
 	if ( pMustTreeRoot )
@@ -547,8 +570,8 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 
 				if ( tRes.second )
 					dAdded.push_back ( std::move(tRes.second) );
-			}
-			else if ( IsFilter(tItem) )
+
+			} else if ( IsFilter(tItem) )
 			{
 				auto pFilter = ConstructFilter ( tItem, dQueryItems );
 				if ( !pFilter )
@@ -695,6 +718,53 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructGeoFilter ( 
 }
 
 
+std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructExistsFilter ( const JsonObj_c & tJson )
+{
+	JsonObj_c tColumn = GetFilterColumn(tJson);
+	if ( !tColumn )
+		return nullptr;
+
+	auto pFilterNode = std::make_unique<FilterTreeNode_t>();
+	pFilterNode->m_pFilter = std::make_unique<CSphFilterSettings>();
+	auto & tFilter = *pFilterNode->m_pFilter;
+
+	const char sFieldName[] = "field";
+	bool bFieldType = ( strncmp ( tColumn.Name(), sFieldName, sizeof(sFieldName) )==0 );
+	
+	// that is non standard extension from compart mode filter fixup
+	const char sAttrName[] = "attr";
+	bool bAttrType = false;
+	if ( !bFieldType )
+		bAttrType = ( strncmp ( tColumn.Name(), sAttrName, sizeof(sAttrName) )==0 );
+
+	if ( !bFieldType && !bAttrType )
+	{
+		m_sError = "exists filter should have only one field element";
+		return nullptr;
+	}
+
+	if ( !tColumn.IsStr() )
+	{
+		m_sError = "exists filter expects string value";
+		return nullptr;
+	}
+
+	if ( bFieldType )
+	{
+		tFilter.m_sAttrName.SetSprintf ( "%s_len", tColumn.SzVal() );
+		tFilter.m_eType = SPH_FILTER_VALUES;
+		tFilter.m_dValues.Add ( 0 );
+		tFilter.m_bExclude = true;
+	} else
+	{
+		tFilter.m_sAttrName.SetSprintf ( "length(%s)!=0", tColumn.SzVal() );
+		tFilter.m_eType = SPH_FILTER_EXPRESSION;
+	}
+
+
+	return pFilterNode;
+}
+
 std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructFilter ( const JsonObj_c & tJson, CSphVector<CSphQueryItem> & dQueryItems )
 {
 	CSphString sName = tJson.Name();
@@ -709,6 +779,9 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructFilter ( con
 
 	if ( sName=="geo_distance" )
 		return ConstructGeoFilter ( tJson, dQueryItems );
+
+	if ( sName=="exists" )
+		return ConstructExistsFilter ( tJson );
 
 	m_sError.SetSprintf ( "unknown filter type: %s", sName.cstr() );
 	return nullptr;
@@ -738,7 +811,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructEqualsFilter
 	if ( !tColumn )
 		return nullptr;
 
-	if ( !tColumn.IsNum() && !tColumn.IsStr() )
+	if ( !tColumn.IsNum() && !tColumn.IsStr() && !tColumn.IsArray() )
 	{
 		m_sError = "\"equals\" filter expects numeric or string values";
 		return nullptr;
@@ -764,6 +837,33 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructEqualsFilter
 		tFilter.m_bHasEqualMin = true;
 		tFilter.m_bHasEqualMax = true;
 		tFilter.m_bExclude = false;
+	} else if ( tColumn.IsArray() )
+	{
+		int iSize = tColumn.Size();
+		if ( iSize )
+		{
+			if ( tColumn[0].IsStr() )
+			{
+				tFilter.m_eType = SPH_FILTER_STRING_LIST;
+				tFilter.m_dStrings.Resize ( iSize );
+			} else
+			{
+				tFilter.m_eType = SPH_FILTER_VALUES;
+				tFilter.m_dValues.Resize ( iSize );
+			}
+		}
+
+		for ( int i=0; i<iSize; i++ )
+		{
+			const JsonObj_c tVal = tColumn[i];
+			if ( tFilter.m_eType==SPH_FILTER_STRING_LIST )
+			{
+				tFilter.m_dStrings[i] = tVal.StrVal();
+			} else
+			{
+				tFilter.m_dValues[i] = tVal.IntVal();
+			}
+		}
 	} else
 	{
 		tFilter.m_eType = SPH_FILTER_STRING;
@@ -814,18 +914,47 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 		return nullptr;
 	}
 
+	int iLessVal = -1;
+	int iGreaterVal = -1;
 	if ( ( bLess && !tLess.IsNum() ) || ( bGreater && !tGreater.IsNum() ) )
 	{
-		m_sError = "range filter expects numeric values";
-		return nullptr;
+		JsonObj_c tDateFormat = tColumn.GetStrItem ( "format", m_sError, true );
+		if ( tDateFormat && tDateFormat.StrVal()=="strict_date_optional_time" )
+		{
+			if ( bLess )
+				iLessVal = GetUTC ( tLess.StrVal(), CompatDateFormat() );
+			if ( bGreater )
+				iGreaterVal = GetUTC ( tGreater.StrVal(), CompatDateFormat() );
+		}
+
+		if ( ( bLess && iLessVal==-1 && tLess.IsStr() && tLess.SzVal() && strcmp ( tLess.SzVal(), "now" )==0 )
+			|| ( bGreater && iGreaterVal==-1  && tGreater.IsStr() && tGreater.SzVal() && strcmp ( tGreater.SzVal(), "now" )==0 ) )
+		{
+			if ( bLess && iLessVal==-1 )
+				iLessVal = (int) time ( nullptr );
+			if ( bGreater && iGreaterVal )
+				iGreaterVal = (int) time ( nullptr );
+		}
+
+		if ( ( bLess && iLessVal==-1 ) || ( bGreater && iGreaterVal==-1) )
+		{
+			m_sError = "range filter expects numeric values";
+			return nullptr;
+		}
+	} else
+	{
+		if ( bLess && tLess.IsInt() )
+			iLessVal = tLess.IntVal();
+		if ( bGreater && tGreater.IntVal() )
+			iGreaterVal = tGreater.IntVal();
 	}
 
-	bool bIntFilter = ( !bLess || tLess.IsInt() ) && ( !bGreater || tGreater.IsInt() );
+	bool bIntFilter = ( ( !bLess || tLess.IsInt() || tLess.IsStr() ) && ( !bGreater || tGreater.IsInt() || tGreater.IsStr() ) );
 
 	if ( bLess )
 	{
 		if ( bIntFilter )
-			tFilter.m_iMaxValue = tLess.IntVal();
+			tFilter.m_iMaxValue = iLessVal;
 		else
 			tFilter.m_fMaxValue = tLess.FltVal();
 
@@ -835,7 +964,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 	if ( bGreater )
 	{
 		if ( bIntFilter )
-			tFilter.m_iMinValue = tGreater.IntVal();
+			tFilter.m_iMinValue = iGreaterVal;
 		else
 			tFilter.m_fMinValue = tGreater.FltVal();
 

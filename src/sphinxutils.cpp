@@ -29,6 +29,9 @@
 #include <execinfo.h>
 #endif
 
+#include <sstream>
+#include <iomanip>
+
 #if _WIN32
 #include <io.h> // for ::open on windows
 #include <dbghelp.h>
@@ -442,6 +445,22 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
 
 //	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
+}
+
+bool HasWildcard ( const char * sVal )
+{
+	if ( !sVal || !*sVal )
+		return false;
+
+	while ( *sVal )
+	{
+		if ( *sVal=='*' || *sVal=='?' || *sVal=='%' )
+			return true;
+
+		sVal++;
+	}
+
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -3464,4 +3483,15 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 	return iNew;
 }
 
+
+int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
+{
+	std::tm tTM = {};
+	std::stringstream sTimeStream (  sTime.cstr() );
+	sTimeStream >> std::get_time ( &tTM, sFormat.cstr() );
+	if ( sTimeStream.fail() )
+		return -1;
+
+	return std::mktime ( &tTM );
+}
 

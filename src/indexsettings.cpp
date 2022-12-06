@@ -698,13 +698,13 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 		m_dStoredFields.Add("*");
 	else
 	{
-		sphSplit ( m_dStoredFields, sFields.cstr() );
+		sphSplit ( m_dStoredFields, sFields.cstr(), ", " );
 		m_dStoredFields.Uniq();
 	}
 
 	sFields = hIndex.GetStr ( "stored_only_fields" );
 	sFields.ToLower();
-	sphSplit ( m_dStoredOnlyFields, sFields.cstr() );
+	sphSplit ( m_dStoredOnlyFields, sFields.cstr(), ", " );
 	m_dStoredOnlyFields.Uniq();
 }
 
@@ -1836,7 +1836,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( sphIsInternalAttr ( tAttr.m_sName ) )
+		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
 
 		if ( tAttr.m_sName==sphGetDocidName() && ( tAttr.m_eEngine==AttrEngine_e::DEFAULT && ( !tAttr.IsColumnar() || (tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED ) ) ) )

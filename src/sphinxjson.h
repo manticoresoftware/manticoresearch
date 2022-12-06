@@ -450,6 +450,8 @@ public:
 	void			AddItem ( const char * szName, JsonObj_c & tObj );
 	void			AddItem ( JsonObj_c & tObj );
 	void			DelItem ( const char * szName );
+	void			ReplaceItem ( int iIndex, JsonObj_c & tObj );
+	JsonObj_c		Clone () const;
 
 	int				Size() const;
 	JsonObj_c		GetItem ( const char * szName ) const;

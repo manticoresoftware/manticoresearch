@@ -326,7 +326,7 @@ one_index:
 only_one_index:
 	one_index
 		{
-			pParser->ToString (pParser->m_pStmt->m_sIndex, $1);
+			pParser->SetIndex ($1);
 		}
 	;
 

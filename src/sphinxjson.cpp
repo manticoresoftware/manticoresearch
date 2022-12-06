@@ -1712,7 +1712,7 @@ JsonObj_c JsonObj_c::GetStrItem ( const char * szName, CSphString & sError, bool
 
 	if ( tChild.StrVal().IsEmpty() && !bIgnoreMissing )
 	{
-		sError.SetSprintf ( R"("%s"property empty)", szName );
+		sError.SetSprintf ( R"("%s" property empty)", szName );
 		return JsonNull;
 	}
 
@@ -1985,6 +1985,23 @@ JsonObj_c JsonObj_c::begin() const
 JsonObj_c JsonObj_c::end() const
 {
 	return JsonNull;
+}
+
+void JsonObj_c::ReplaceItem ( int iIndex, JsonObj_c & tObj )
+{
+	assert ( m_pRoot );
+	assert ( cJSON_IsArray ( m_pRoot ) );
+	assert ( iIndex<cJSON_GetArraySize ( m_pRoot ) );
+	cJSON_ReplaceItemInArray ( m_pRoot, iIndex, tObj.Leak() );
+}
+
+JsonObj_c JsonObj_c::Clone () const
+{
+	if ( !m_pRoot )
+		return JsonNull;
+
+	JsonObj_c tNew ( cJSON_Duplicate ( m_pRoot, true ) );
+	return tNew;
 }
 
 //////////////////////////////////////////////////////////////////////////

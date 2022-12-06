@@ -1259,7 +1259,7 @@ static bool IsGroupby ( const CSphString & s )
 		|| IsSortJsonInternal(s);
 }
 
-static bool IsGroupbyMagic ( const CSphString & s )
+bool IsGroupbyMagic ( const CSphString & s )
 {
 	return IsGroupby ( s ) || IsCount ( s );
 }

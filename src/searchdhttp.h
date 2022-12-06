@@ -81,23 +81,6 @@ private:
 
 void HttpBuildReply ( CSphVector<BYTE>& dData, ESphHttpStatus eCode, Str_t sReply, bool bHtml );
 
-enum ESphHttpEndpoint : BYTE {
-	SPH_HTTP_ENDPOINT_INDEX,
-	SPH_HTTP_ENDPOINT_SQL,
-	SPH_HTTP_ENDPOINT_JSON_SEARCH,
-	SPH_HTTP_ENDPOINT_JSON_INDEX,
-	SPH_HTTP_ENDPOINT_JSON_CREATE,
-	SPH_HTTP_ENDPOINT_JSON_INSERT,
-	SPH_HTTP_ENDPOINT_JSON_REPLACE,
-	SPH_HTTP_ENDPOINT_JSON_UPDATE,
-	SPH_HTTP_ENDPOINT_JSON_DELETE,
-	SPH_HTTP_ENDPOINT_JSON_BULK,
-	SPH_HTTP_ENDPOINT_PQ,
-	SPH_HTTP_ENDPOINT_CLI,
-
-	SPH_HTTP_ENDPOINT_TOTAL
-};
-
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
 class CharStream_c
@@ -134,3 +117,6 @@ class Bson_c;
 }
 
 void ConverJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
+
+using SplitAction_fn = std::function<void(const char *, int)>;
+void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction);

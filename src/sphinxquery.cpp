@@ -35,6 +35,11 @@ void AllowOnlyNot ( bool bAllowed )
 	g_bOnlyNotAllowed = bAllowed;
 }
 
+bool IsAllowOnlyNot()
+{
+	return g_bOnlyNotAllowed;
+}
+
 //////////////////////////////////////////////////////////////////////////
 void XQParseHelper_c::SetString ( const char * szString )
 {
@@ -140,7 +145,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 		while ( pPtr<pLastPtr )
 		{
 			// accumulate field name, while we can
-			if ( sphIsAlpha(*pPtr) )
+			if ( sphIsAlpha(*pPtr) || *pPtr=='.' )
 			{
 				if ( !pFieldStart )
 					pFieldStart = pPtr;
@@ -341,7 +346,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 {
 	FixupDestForms ();
 	DeleteNodesWOFields ( pRoot );
-	pRoot = SweepNulls ( pRoot );
+	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
 	FixupNulls ( pRoot );
 
@@ -380,7 +385,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 }
 
 
-XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode )
+XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed )
 {
 	if ( !pNode )
 		return NULL;
@@ -405,7 +410,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode )
 	// sweep op node
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 	{
-		pNode->m_dChildren[i] = SweepNulls ( pNode->m_dChildren[i] );
+		pNode->m_dChildren[i] = SweepNulls ( pNode->m_dChildren[i], bOnlyNotAllowed );
 		if ( pNode->m_dChildren[i]==NULL )
 		{
 			pNode->m_dChildren.Remove ( i-- );
@@ -428,7 +433,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode )
 		pNode->m_dChildren.Reset ();
 		pRet->m_pParent = pNode->m_pParent;
 		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
-		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT )
+		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
 		{
 			pRet->SetOp ( SPH_QUERY_NULL );
 			ARRAY_FOREACH ( i, pRet->m_dChildren )
@@ -442,7 +447,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode )
 
 		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
 		SafeDelete ( pNode );
-		return SweepNulls ( pRet );
+		return SweepNulls ( pRet, bOnlyNotAllowed );
 	}
 
 	// done

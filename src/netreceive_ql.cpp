@@ -15,6 +15,7 @@
 #include "searchdssl.h"
 #include "compressed_zlib_mysql.h"
 #include "compressed_zstd_mysql.h"
+#include "searchdbuddy.h"
 
 extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
@@ -538,6 +539,8 @@ public:
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
 	{
+		m_bError = true;
+		m_sError = sError;
 		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, FromSz(sError), iErr );
 	}
 
@@ -808,8 +811,7 @@ public:
 };
 
 
-bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
-		QueryProfile_c * pProfile, AsyncNetBuffer_c* pBuf )
+static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
 	auto& tSess = session::Info();
 	assert ( pBuf );
@@ -858,8 +860,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen,
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
 			tSess.SetTaskState ( TaskState_e::QUERY );
-			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
-			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
+			bKeepProfile = ProcessSqlQueryBuddy ( myinfo::UnsafeDescription(), uPacketID, tOut );
 		}
 		break;
 
@@ -1076,4 +1077,9 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf.get() ) );
 	} while ( tSess.GetPersistent() );
+}
+
+RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, ISphOutputBuffer * pOut )
+{
+	return new SqlRowBuffer_c ( pPacketID, pOut );
 }

@@ -47,6 +47,7 @@ enum class Cmd_e : BYTE
 	WAIT_STATUS,
 	META,
 	TRACE,
+	CURL,
 
 	INVALID_CMD
 };

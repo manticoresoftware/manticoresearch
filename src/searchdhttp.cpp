@@ -23,6 +23,7 @@
 #include "networking_daemon.h"
 #include "client_session.h"
 #include "tracer.h"
+#include "searchdbuddy.h"
 
 #define LOG_COMPONENT_HTTP ""
 #define LOG_LEVEL_HTTP false
@@ -36,23 +37,6 @@ static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial C
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 extern CSphString g_sStatusVersion;
-
-enum ESphHttpEndpoint : BYTE {
-	SPH_HTTP_ENDPOINT_INDEX,
-	SPH_HTTP_ENDPOINT_SQL,
-	SPH_HTTP_ENDPOINT_JSON_SEARCH,
-	SPH_HTTP_ENDPOINT_JSON_INDEX,
-	SPH_HTTP_ENDPOINT_JSON_CREATE,
-	SPH_HTTP_ENDPOINT_JSON_INSERT,
-	SPH_HTTP_ENDPOINT_JSON_REPLACE,
-	SPH_HTTP_ENDPOINT_JSON_UPDATE,
-	SPH_HTTP_ENDPOINT_JSON_DELETE,
-	SPH_HTTP_ENDPOINT_JSON_BULK,
-	SPH_HTTP_ENDPOINT_PQ,
-	SPH_HTTP_ENDPOINT_CLI,
-
-	SPH_HTTP_ENDPOINT_TOTAL
-};
 
 
 struct Endpoint_t
@@ -92,22 +76,6 @@ ESphHttpEndpoint StrToHttpEndpoint ( const CSphString& sEndpoint )
 
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
-class CharStream_c
-{
-protected:
-	bool m_bDone = false;
-
-public:
-	virtual ~CharStream_c() = default;
-
-	// return next chunk of data
-	virtual Str_t Read() = 0;
-
-	// return all available data
-	virtual Str_t ReadAll() = 0;
-
-	inline bool Eof() const { return m_bDone; }
-};
 
 /// stub - returns feed string
 class BlobStream_c final: public CharStream_c
@@ -117,6 +85,9 @@ class BlobStream_c final: public CharStream_c
 public:
 	explicit BlobStream_c ( const CSphString& sData )
 		: m_sData { FromStr ( sData ) }
+	{}
+	explicit BlobStream_c ( const Str_t & sData )
+		: m_sData ( sData )
 	{}
 
 	Str_t Read() final
@@ -137,6 +108,11 @@ public:
 		return sData;
 	}
 };
+
+CharStream_c * CreateBlobStream ( const Str_t & sData )
+{
+	return new BlobStream_c ( sData );
+}
 
 /// stream with known content length and no special massage over socket
 class RawSocketStream_c final : public CharStream_c
@@ -225,7 +201,7 @@ private:
 	{
 		assert ( pParser->data );
 		auto pThis = static_cast<ChunkedSocketStream_c*> ( pParser->data );
-		return pThis->ParserBody ( { sAt, iLen } );
+		return pThis->ParserBody ( { sAt, (int)iLen } );
 	}
 
 	static int cbMessageComplete ( http_parser* pParser )
@@ -518,7 +494,7 @@ void StoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
 	hOptions.Add ( std::move ( sRawBody ), "raw_query" );
 }
 
-void HttpRequestParser_c::ParseList ( Str_t sData )
+void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 {
 	HTTPINFO << "ParseList with " << sData.second << " bytes '" << sData << "'";
 
@@ -542,7 +518,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData )
 			{
 				Str_t sVal { sLast, int ( sCur - sLast ) };
 				UriPercentReplace ( sVal );
-				m_hOptions.Add ( sVal, sName );
+				hOptions.Add ( sVal, sName );
 				sLast = sCur + 1;
 				sName = dEmptyStr;
 				break;
@@ -557,7 +533,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData )
 
 	Str_t sVal { sLast, int ( sCur - sLast ) };
 	UriPercentReplace ( sVal );
-	m_hOptions.Add ( sVal, sName );
+	hOptions.Add ( sVal, sName );
 }
 
 inline int HttpRequestParser_c::ParserUrl ( Str_t sData )
@@ -604,7 +580,24 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 		Str_t sRawGetQuery { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len };
 		if ( m_eType == HTTP_GET )
 			StoreRawQuery ( m_hOptions, sRawGetQuery );
-		ParseList ( sRawGetQuery );
+		ParseList ( sRawGetQuery, m_hOptions );
+	}
+
+	CSphString sFullURL;
+	if ( ( tUri.field_set & uPath )!=0 && ( tUri.field_set & uQuery )!=0 )
+	{
+		const char * sStart = sData.first + tUri.field_data[UF_PATH].off;
+		const char * sEnd = sData.first + tUri.field_data[UF_QUERY].off + tUri.field_data[UF_QUERY].len;
+		sFullURL.SetBinary ( sStart, sEnd-sStart );
+		m_hOptions.Add ( sFullURL, "full_url" );
+	} else if ( ( tUri.field_set & uPath )!=0 )
+	{
+		const char * sPath = sData.first + tUri.field_data[UF_PATH].off;
+		int iPathLen = tUri.field_data[UF_PATH].len;
+
+		// URL should be split fully to point to proper endpoint 
+		sFullURL.SetBinary ( sPath, iPathLen );
+		m_hOptions.Add ( sFullURL, "full_url" );
 	}
 }
 
@@ -684,21 +677,21 @@ int HttpRequestParser_c::cbParserUrl ( http_parser* pParser, const char* sAt, si
 {
 	assert ( pParser->data );
 	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
-	return pThis->ParserUrl ( { sAt, iLen } );
+	return pThis->ParserUrl ( { sAt, (int)iLen } );
 }
 
 int HttpRequestParser_c::cbParserHeaderField ( http_parser* pParser, const char* sAt, size_t iLen )
 {
 	assert ( pParser->data );
 	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
-	return pThis->ParserHeaderField ( { sAt, iLen } );
+	return pThis->ParserHeaderField ( { sAt, (int)iLen } );
 }
 
 int HttpRequestParser_c::cbParserHeaderValue ( http_parser* pParser, const char* sAt, size_t iLen )
 {
 	assert ( pParser->data );
 	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
-	return pThis->ParserHeaderValue ( { sAt, iLen } );
+	return pThis->ParserHeaderValue ( { sAt, (int)iLen } );
 }
 
 int HttpRequestParser_c::cbParseHeaderCompleted ( http_parser* pParser )
@@ -723,7 +716,7 @@ int HttpRequestParser_c::cbMessageComplete ( http_parser* pParser )
 
 int HttpRequestParser_c::cbMessageStatus ( http_parser* pParser, const char* sAt, size_t iLen )
 {
-	HTTPINFO << "cbMessageStatus with '" << Str_t {sAt,iLen} << "'";
+	HTTPINFO << "cbMessageStatus with '" << Str_t { sAt, (int)iLen } << "'";
 	return 0;
 }
 
@@ -731,7 +724,7 @@ int HttpRequestParser_c::cbParserBody ( http_parser* pParser, const char* sAt, s
 {
 	assert ( pParser->data );
 	auto pThis = static_cast<HttpRequestParser_c*> ( pParser->data );
-	return pThis->ParserBody ( { sAt, iLen } );
+	return pThis->ParserBody ( { sAt, (int)iLen } );
 }
 
 static const char * g_sIndexPage =
@@ -869,6 +862,18 @@ void HttpErrorReporter_c::ErrorEx ( MysqlErrors_e /*iErr*/, const char * sError 
 //////////////////////////////////////////////////////////////////////////
 // all the handlers for http queries
 
+void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData )
+{
+	if ( bNeedHttpResponse )
+		HttpBuildReply ( dData, eStatus, sResult, false );
+	else
+	{
+		dData.Resize ( 0 );
+		dData.Append ( sResult );
+	}
+}
+
+
 class HttpHandler_c
 {
 public:
@@ -886,12 +891,19 @@ public:
 		return m_dData;
 	}
 
+	const CSphString & GetError () const
+	{
+		return m_sError;
+	}
+
 protected:
 	bool				m_bNeedHttpResponse {false};
 	CSphVector<BYTE>	m_dData;
+	CSphString			m_sError;
 
 	void ReportError ( const char * szError, ESphHttpStatus eStatus )
 	{
+		m_sError = szError;
 		if ( m_bNeedHttpResponse )
 			sphHttpErrorReply ( m_dData, eStatus, szError );
 		else
@@ -903,50 +915,35 @@ protected:
 
 	void FormatError ( ESphHttpStatus eStatus, const char * sError, ... )
 	{
-		char sBuf[1024] = {0};
 		va_list ap;
-
 		va_start ( ap, sError );
-		int iPrinted = vsnprintf ( sBuf, sizeof(sBuf), sError, ap );
+		m_sError.SetSprintfVa ( sError, ap );
 		va_end ( ap );
 
-		iPrinted = Max ( 0, iPrinted );
-		iPrinted = Min ( iPrinted, (int)sizeof(sBuf)-1 );
-		sBuf[iPrinted] = '\0';
-
 		if ( m_bNeedHttpResponse )
-			sphHttpErrorReply ( m_dData, eStatus, sBuf );
+			sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
 		else
 		{
-			m_dData.Resize ( iPrinted );
-			memcpy ( m_dData.Begin(), sBuf, iPrinted );
+			int iLen = m_sError.Length();
+			m_dData.Resize ( iLen+1 );
+			memcpy ( m_dData.Begin(), m_sError.cstr(), iLen );
+			m_dData[iLen] = '\0';
 		}
 	}
 
 	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
 	{
-		BuildReply ( FromStr ( sResult ), eStatus );
+		ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
 	}
 
 	void BuildReply ( const char* szResult, ESphHttpStatus eStatus )
 	{
-		BuildReply ( FromSz( szResult ), eStatus );
+		ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
 	}
 
 	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
 	{
-		BuildReply ( (Str_t)sResult, eStatus );
-	}
-
-	void BuildReply ( Str_t sResult, ESphHttpStatus eStatus )
-	{
-		if ( m_bNeedHttpResponse )
-			HttpBuildReply ( m_dData, eStatus, sResult, false );
-		else
-		{
-			m_dData.Resize ( 0 );
-			m_dData.Append ( sResult );
-		}
+		ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
 	}
 
 	// check whether given served index is exist and has requested type
@@ -1199,6 +1196,30 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 	};
 }
 
+static MysqlColumnType_e GetTypeName ( const CSphString& sType )
+{
+	if ( sType=="decimal")
+		return MYSQL_COL_DECIMAL;
+
+	if ( sType == "long" )
+		return MYSQL_COL_LONG;
+
+	if ( sType == "float" )
+		return MYSQL_COL_FLOAT;
+
+	if ( sType == "double" )
+		return MYSQL_COL_DOUBLE;
+
+	if ( sType == "long long" )
+		return MYSQL_COL_LONGLONG;
+
+	if ( sType == "string" )
+		return MYSQL_COL_STRING;
+
+	assert (false && "Unknown column");
+	return MYSQL_COL_STRING;
+}
+
 JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eType )
 {
 	tOut.FixupSpacedAndAppendEscaped ( GetTypeName ( eType ) );
@@ -1344,24 +1365,12 @@ public:
 		return m_dBuf;
 	}
 
-	bool IsError() const
-	{
-		return m_bError;
-	}
-
-	const char* GetErrorsz() const
-	{
-		return m_sError.scstr();
-	}
-
 private:
 	JsonEscapedBuilder m_dBuf;
 	CSphVector<ColumnNameType_t> m_dColumns;
 	int m_iExpectedColumns = 0;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
-	bool m_bError = false;
-	CSphString m_sError;
 
 	void AddDataColumn()
 	{
@@ -1379,13 +1388,118 @@ private:
 	}
 };
 
+/* Below is typical answer sent back by sql endpoint query mode=raw
+[{
+"columns":[{"id":{"type":"long long"}},{"proto":{"type":"string"}},{"state":{"type":"string"}},{"host":{"type":"string"}},{"connid":{"type":"long long"}},{"killed":{"type":"string"}},{"last cmd":{"type":"string"}}],
+"data":[
+{"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"},
+{"id":1,"proto":"mysql,ssl","state":"query","host":"127.0.0.1:50514","connid":1,"killed":"0","last cmd":"show queries"}
+],
+"total":2,
+"error":"",
+"warning":""
+}]
+ */
+
+bool ParseJsonDataset ( RowBuffer_i & tOut, const CSphString & sJson, CSphString & sError )
+{
+	using namespace bson;
+	CSphVector<BYTE> dData;
+	if ( !sphJsonParse ( dData, const_cast<char*>(sJson.cstr()) , false,false,false,sError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsArray() )
+	{
+		sError = "Something wrong with json - it is either empty, either not root object.";
+		return false;
+	}
+
+	ConverJsonDataset ( tBson, nullptr, tOut );
+	return true;
+}
+
+void ConverJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut )
+{
+	using namespace bson;
+
+	assert ( tBson.IsArray() );
+	int iItem = 0;
+
+	for ( BsonIterator_c dItem ( tBson ); dItem; dItem.Next() )
+	{
+		int iTotal = Int ( dItem.ChildByName ( "total" ) );
+		CSphString sError = String ( dItem.ChildByName ( "error" ) );
+		CSphString sWarning = String ( dItem.ChildByName ( "warning" ) );
+
+		if ( !sError.IsEmpty() )
+		{
+			session::GetClientSession()->m_sError = sError;
+			session::GetClientSession()->m_tLastMeta.m_sError = sError;
+			tOut.Error ( sStmt, sError.cstr() );
+			break;
+		}
+		if ( !iItem ) // only zero result set sets meta
+		{
+			session::GetClientSession()->m_tLastMeta.m_iTotalMatches = iTotal;
+			session::GetClientSession()->m_tLastMeta.m_sWarning = sWarning;
+		}
+
+		using ColType_t = std::pair<CSphString, MysqlColumnType_e>;
+		CSphVector<ColType_t> dSqlColumns;
+		assert ( dItem.IsAssoc() );
+		auto tColumnsNode = dItem.ChildByName ( "columns" );
+		for ( BsonIterator_c tColumnNode ( tColumnsNode ); tColumnNode; tColumnNode.Next() )
+		{
+			assert ( tColumnNode.IsAssoc() ); // like {"id":{"type":"long long"}}
+			tColumnNode.ForEach( [&] ( CSphString&& sName, const NodeHandle_t& tNode ) {
+				auto eType = GetTypeName ( String ( Bson_c ( tNode ).ChildByName ( "type" ) ) );
+				dSqlColumns.Add ( {sName,eType});
+			} );
+		}
+
+
+		// fill headers
+		if ( !dSqlColumns.IsEmpty() )
+		{
+			tOut.HeadBegin ( dSqlColumns.GetLength() );
+			dSqlColumns.for_each ( [&] ( const auto& tColumn ) { tOut.HeadColumn ( tColumn.first.cstr(), tColumn.second ); } );
+			tOut.HeadEnd();
+		} else
+		{
+			// just simple OK reply without table
+			tOut.Ok ( iTotal, ( sWarning.IsEmpty() ? 0 : 1 ) );
+			break;
+		}
+
+		auto tDataNodes = dItem.ChildByName ( "data" );
+		assert ( bson::IsNullNode ( tDataNodes ) || IsArray ( tDataNodes ) );
+		for ( BsonIterator_c tDataRow ( tDataNodes ); tDataRow; tDataRow.Next() )
+		{
+			assert ( tDataRow.IsAssoc() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}
+			tDataRow.ForEach ( [&] ( const NodeHandle_t& tDataCol ) {
+				if ( IsInt ( tDataCol ) )
+					tOut.PutNumAsString ( Int ( tDataCol ) );
+				else if ( IsDouble ( tDataCol ) )
+					tOut.PutDoubleAsString( Double ( tDataCol ) );
+				else
+					tOut.PutString ( String ( tDataCol ) );
+			} );
+			tOut.Commit();
+		}
+
+		tOut.Eof ( iItem+1!=dItem.NumElems(), ( sWarning.IsEmpty() ? 0 : 1 ) );
+		iItem++;
+	}
+}
+
 class HttpRawSqlHandler_c final: public HttpHandler_c
 {
 	Str_t m_sQuery;
 
 public:
 	explicit HttpRawSqlHandler_c ( Str_t sQuery )
-		: m_sQuery ( std::move ( sQuery ) )
+		: m_sQuery ( sQuery )
 	{}
 
 	bool Process () final
@@ -1401,7 +1515,7 @@ public:
 		session::Execute ( m_sQuery, tOut );
 		if ( tOut.IsError() )
 		{
-			ReportError (tOut.GetErrorsz(), SPH_HTTP_STATUS_500);
+			ReportError ( tOut.GetError().scstr(), SPH_HTTP_STATUS_500 );
 			return false;
 		}
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
@@ -1416,7 +1530,7 @@ class HttpHandler_JsonSearch_c : public HttpSearchHandler_c
 
 public:
 	explicit HttpHandler_JsonSearch_c ( Str_t sQuery )
-		: m_sQuery ( std::move ( sQuery ) )
+		: m_sQuery ( sQuery )
 	{}
 
 	std::unique_ptr<QueryParser_i> PreParseQuery() override
@@ -1521,7 +1635,7 @@ class HttpHandler_JsonInsert_c final : public HttpHandler_c
 
 public:
 	HttpHandler_JsonInsert_c ( Str_t sQuery, bool bReplace )
-		: m_sQuery ( std::move ( sQuery ) )
+		: m_sQuery ( sQuery )
 		, m_bReplace ( bReplace )
 	{}
 
@@ -1584,7 +1698,7 @@ protected:
 
 public:
 	explicit HttpHandler_JsonUpdate_c ( Str_t sQuery )
-		: m_sQuery ( std::move ( sQuery ) )
+		: m_sQuery ( sQuery )
 	{}
 
 	bool Process () final
@@ -1886,7 +2000,7 @@ class HttpHandlerPQ_c final : public HttpHandler_c
 	const OptionsHash_t& m_tOptions;
 public:
 	HttpHandlerPQ_c ( Str_t sQuery, const OptionsHash_t& tOptions )
-		: m_sQuery ( std::move ( sQuery ) )
+		: m_sQuery ( sQuery )
 		, m_tOptions ( tOptions )
 	{}
 
@@ -1901,16 +2015,24 @@ private:
 };
 
 
-static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, CharStream_c& tSource, const OptionsHash_t & tOptions, http_method eRequestType )
+static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pOption = nullptr;
-	Str_t sQuery = dEmptyStr;
+	sQuery = dEmptyStr;
 
 	auto SetQuery = [&sQuery] ( Str_t&& sData ) {
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_dQuery = { (const BYTE*)sData.first, sData.second };
 		sQuery = sData;
 	};
+
+	// SPH_HTTP_ENDPOINT_SQL SPH_HTTP_ENDPOINT_CLI these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
+	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
+	{
+		auto sWholeData = tSource.ReadAll();
+		StoreRawQuery ( tOptions, sWholeData );
+		HttpRequestParser_c::ParseList ( sWholeData, tOptions );
+	}
 
 	switch ( eEndpoint )
 	{
@@ -1924,15 +2046,20 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 			return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
 		}
 		else
+		{
 			return std::make_unique<HttpSearchHandler_SQL_c> ( tOptions ); // non-json
+		}
 
 	case SPH_HTTP_ENDPOINT_CLI:
 		{
 			pOption = tOptions ( "raw_query" );
 			if ( pOption )
+			{
 				SetQuery ( FromStr (*pOption) );
-			else
+			} else
+			{
 				SetQuery ( tSource.ReadAll() );
+			}
 			return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
 		}
 
@@ -1969,45 +2096,44 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 	return nullptr;
 }
 
-
-static bool ProcessHttpQuery ( ESphHttpEndpoint eEndpoint, CharStream_c& tSource, const OptionsHash_t& tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, const CSphString& sInvalidEndpoint )
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
 
-	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( eEndpoint, tSource, tOptions, eRequestType );
+	HttpProcessResult_t tRes;
+
+	const CSphString & sEndpoint = hOptions["endpoint"];
+	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
+
+	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sQuery, hOptions, eRequestType );
 	if ( !pHandler )
 	{
-		if ( eEndpoint == SPH_HTTP_ENDPOINT_INDEX )
-			HttpHandlerIndexPage ( dResult );
-		else
+		if ( tRes.m_eEndpoint == SPH_HTTP_ENDPOINT_INDEX )
 		{
-			CSphString sError;
-			sError.SetSprintf ( "/%s - unsupported endpoint", sInvalidEndpoint.cstr() );
-			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, sError.cstr() );
+			HttpHandlerIndexPage ( dResult );
+		} else
+		{
+			tRes.m_sError.SetSprintf ( "/%s - unsupported endpoint", sEndpoint.cstr() );
+			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
 		}
-		return false;
+		return tRes;
 	}
 
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
-	pHandler->Process();
+	tRes.m_bOk = pHandler->Process();
+	tRes.m_sError = pHandler->GetError();
 	dResult = std::move ( pHandler->GetResult() );
-	return true;
+
+	return tRes;
 }
 
-bool sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult )
+bool sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult )
 {
-	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( sEndpoint );
-	OptionsHash_t tOptions;
+	OptionsHash_t hOptions;
+	hOptions.Add ( sEndpoint, "endpoint" );
+
 	BlobStream_c tQuery { sQuery };
-
-	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
-	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
-	{
-		auto sWholeData = tQuery.ReadAll();
-		StoreRawQuery ( tOptions, sWholeData );
-	}
-
-	return ProcessHttpQuery ( eEndpoint, tQuery, tOptions, dResult, false, HTTP_GET, sEndpoint );
+	return ProcessHttpQueryBuddy ( tQuery, hOptions, dResult, false, HTTP_GET ).m_bOk;
 }
 
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
@@ -2026,17 +2152,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		pSource = std::make_unique<RawSocketStream_c> ( tIn, iFullLength );
 	}
 
-	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( m_sEndpoint );
-
-	// these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
-	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
-	{
-		auto sWholeData = pSource->ReadAll();
-		StoreRawQuery ( m_hOptions, sWholeData );
-		ParseList ( sWholeData );
-	}
-
-	return ProcessHttpQuery ( eEndpoint, *pSource, m_hOptions, dResult, true, m_eType, m_sEndpoint );
+	return ProcessHttpQueryBuddy ( *pSource, m_hOptions, dResult, true, m_eType ).m_bOk;
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )

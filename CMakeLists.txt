@@ -123,6 +123,7 @@ if (STATIC_BINARY)
 	set ( WITH_GALERA 0 CACHE BOOL "" FORCE )
 	set ( WITH_SSL 0 CACHE BOOL "" FORCE )
 	set ( WITH_ZSTD 0 CACHE BOOL "" FORCE )
+	set ( WITH_CURL 0 CACHE BOOL "" FORCE )
 	SET ( BUILD_TESTING 0 CACHE BOOL "" FORCE )
 elseif (NOT WIN32)
 	if (CMAKE_DL_LIBS) # CMAKE internal, usually '-ldl' on most UNIX machines
@@ -257,6 +258,10 @@ with_menu ( ZLIB "zlib" "for compressed data and networking" )
 with_menu ( ZSTD "libzstd" "for compressed networking" )
 dl_package ( ZSTD "zstd" )
 win_install ( ZSTD daemon )
+
+with_menu_libname ( CURL libcurl "libCURL" "for enhanced network communication" )
+dl_package_comp ( CURL libcurl "curl" )
+win_install_lib ( CURL libcurl daemon )
 
 # ODBC and it's dynamic linking
 with_menu ( ODBC "ODBC/UnixODBC/iODBC" "for indexing MSSQL (windows) and generic ODBC sources with indexer" )

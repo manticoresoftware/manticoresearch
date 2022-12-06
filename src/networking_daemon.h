@@ -30,6 +30,10 @@ struct Listener_t
 	Proto_e				m_eProto;
 	bool				m_bVIP;
 	bool 				m_bReadOnly;
+
+	// for informational purposes only
+	DWORD				m_uInfoIP;
+	int					m_iInfoPort;
 };
 
 class CSphNetLoop;

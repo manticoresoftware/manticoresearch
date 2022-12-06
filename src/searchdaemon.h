@@ -294,6 +294,10 @@ CSphString GetMacAddress();
 
 bool IsPortInRange( int iPort );
 
+// !COMMIT
+void SetShutdown();
+bool IsShutdown();
+
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
@@ -1641,6 +1645,13 @@ public:
 				break;
 		Eof();
 	}
+
+	virtual const CSphString & GetError() const { return m_sError; }
+	virtual bool IsError() const { return m_bError; }
+
+protected:
+	bool m_bError = false;
+	CSphString m_sError;
 };
 
 #endif // _searchdaemon_

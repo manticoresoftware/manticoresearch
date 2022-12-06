@@ -2118,6 +2118,15 @@ CSphString bson::String ( const NodeHandle_t &tLocator, CSphString sDefault )
 	return sResult;
 }
 
+Str_t bson::ToStr ( const NodeHandle_t & tLocator )
+{
+	if ( tLocator.second!=JSON_STRING )
+		return dEmptyStr;
+
+	auto dBlob = bson::RawBlob ( tLocator );
+	return dBlob;
+}
+
 void bson::ForEach ( const NodeHandle_t &tLocator, Action_f&& fAction )
 {
 	const BYTE * p = tLocator.first;

@@ -529,6 +529,7 @@ bool Bool ( const NodeHandle_t& tLocator, bool bDefault=false );
 int64_t Int ( const NodeHandle_t & tLocator, int64_t iDefault=0 );
 double Double ( const NodeHandle_t & tLocator, double fDefault=0.0 );
 CSphString String ( const NodeHandle_t & tLocator, CSphString sDefault="" );
+Str_t ToStr ( const NodeHandle_t & tLocator );
 inline bool IsNullNode ( const NodeHandle_t & dNode ) { return dNode==nullnode; }
 
 // iterate over collection (without names).

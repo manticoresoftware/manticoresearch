@@ -997,6 +997,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_indexes",		0, nullptr },
 	{ "accurate_aggregation",	0, nullptr },
 	{ "preopen_tables",			0, nullptr },
+	{ "buddy_path",				0, nullptr },
+	{ "telemetry",				0, nullptr },
 	{ NULL,						0, NULL }
 };
 

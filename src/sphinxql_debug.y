@@ -53,6 +53,7 @@
 %token <sValue>	TOK_LIKE
 %token <sValue>	TOK_META
 %token <sValue>	TOK_TRACE
+%token <sValue> TOK_CURL
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -85,6 +86,7 @@ debugcommand:
 	| wait
 	| TOK_META		{ pParser->m_tCmd.m_eCommand = Cmd_e::META; }
 	| trace			{ pParser->m_tCmd.m_eCommand = Cmd_e::TRACE; }
+	| curl			{ pParser->m_tCmd.m_eCommand = Cmd_e::CURL; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -92,7 +94,7 @@ debugcommand:
 ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
 	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SCHED | TOK_MERGE | TOK_FILES
-	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT | TOK_WAIT | TOK_LIKE
+	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT | TOK_WAIT | TOK_LIKE | TOK_CURL
 	;
 
 ident:
@@ -114,6 +116,11 @@ sh_cr_tok:
 	TOK_SHUTDOWN	{ pParser->m_tCmd.m_eCommand = Cmd_e::SHUTDOWN; }
 	| TOK_CRASH	{ pParser->m_tCmd.m_eCommand = Cmd_e::CRASH; }
 	| TOK_TOKEN	{ pParser->m_tCmd.m_eCommand = Cmd_e::TOKEN; }
+	;
+
+// command curl 'url'
+curl:
+	TOK_CURL szparam { pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($2); }
 	;
 
 szparam_special:

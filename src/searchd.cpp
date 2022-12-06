@@ -50,6 +50,7 @@
 #include "secondarylib.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
+#include "netfetch.h"
 
 // services
 #include "taskping.h"
@@ -63,6 +64,7 @@
 #include "taskpreread.h"
 #include "coroutine.h"
 #include "dynamic_idx.h"
+#include "searchdbuddy.h"
 
 extern "C"
 {
@@ -199,6 +201,8 @@ CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
 bool					g_bSecondaryError { false };
+static CSphString		g_sBuddyPath;
+static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -634,6 +638,8 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
+	SetShutdown(); // !COMMIT
+
 	// force even long time searches to shut
 	sphInterruptNow ();
 
@@ -1337,6 +1343,8 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
 	tListener.m_bReadOnly = tDesc.m_bReadOnly;
+	tListener.m_uInfoIP = tDesc.m_uIP;
+	tListener.m_iInfoPort = tDesc.m_iPort;
 
 #if !_WIN32
 	if ( !tDesc.m_sUnix.IsEmpty () )
@@ -8961,22 +8969,6 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	return true;
 }
 
-/* commented out as not used
-static bool operator < ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
-{
-	if ( tA.m_sAttr < tB.m_sAttr )
-		return true;
-
-	return tA.m_sType<tB.m_sType;
-}
-
-
-static bool operator == ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
-{
-	return tA.m_sAttr==tB.m_sAttr && tA.m_sType==tB.m_sType;
-}
-*/
-
 void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 {
 	if ( !sIndexOrAgent.IsEmpty() )
@@ -13109,6 +13101,43 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & d
 	dRows.Eof ( bMoreResultsFollow );
 }
 
+// defined in searchdhttp.cpp
+bool ParseJsonDataset ( RowBuffer_i& pResult, const CSphString& sJson, CSphString& sError );
+
+bool AskExternalHelper ( RowBuffer_i& dRows, Str_t sQuery )
+{
+	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
+	if ( !szHelperUrl )
+		return false;
+
+	auto iCbListener = g_dListeners.GetFirst([] (const auto& l) { return l.m_eProto == Proto_e::SPHINX || l.m_eProto == Proto_e::HTTP; });
+	if ( iCbListener < 0 )
+		return false;
+
+	const auto& tCbListener = g_dListeners[iCbListener];
+
+	char sAddress[SPH_ADDRESS_SIZE];
+	sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, tCbListener.m_uInfoIP );
+
+	// format query
+	JsonEscapedBuilder sJsonQuery;
+	{
+		ScopedComma_c tRoot( sJsonQuery, dJsonObj );
+		sJsonQuery.NamedString ( "format", "sphinxql" );
+		sJsonQuery.NamedString ( "version", "1.0" );
+		sJsonQuery.NamedString ( "cbaddress", sAddress );
+		sJsonQuery.NamedVal ( "cbport", tCbListener.m_iInfoPort );
+		sJsonQuery.NamedString ( "query", sQuery );
+	}
+
+	auto tResult = FetchHelperUrl ( szHelperUrl, (Str_t)sJsonQuery );
+	if ( !tResult.first )
+		return false;
+
+	CSphString sError;
+	return ParseJsonDataset ( dRows, tResult.second, sError );
+}
+
 void HandleMysqlStatus ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, bool bMoreResultsFollow )
 {
 	VectorLike dStatus ( tStmt.m_sStringParam );
@@ -14335,6 +14364,14 @@ void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
 	tOut.Eof ();
 }
 
+void HandleCurl ( RowBuffer_i & tOut, const CSphString & sParam )
+{
+	auto sRes = FetchUrl ( sParam );
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "curl", sRes.cstr() );
+	tOut.Eof();
+}
+
 #if HAVE_MALLOC_STATS
 void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 {
@@ -14463,6 +14500,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 	case Cmd_e::WAIT_STATUS: HandleWaitStatus ( tOut, tCmd ); return;
 #endif
 	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
+	case Cmd_e::CURL: HandleCurl ( tOut, tCmd.m_sParam ); return;
 	default: break;
 	}
 
@@ -18851,6 +18889,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( bGotSecondary && !IsSecondaryLibLoaded() )
 		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
 
+	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
+	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
+
 	SetSecondaryIndexDefault ( bGotSecondary );
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	g_sConfigPath = sphGetCwd();
@@ -20043,7 +20084,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
-	ReplicationStart ( std::move ( dListenerDescs ), bNewCluster, bNewClusterForce );
+	ReplicationStart ( dListenerDescs, bNewCluster, bNewClusterForce );
+	searchd::AddShutdownCb ( BuddyStop );
+	BuddyStart ( g_sBuddyPath, dListenerDescs, g_bTelemetry );
 
 	g_bJsonConfigLoadedOk = true;
 

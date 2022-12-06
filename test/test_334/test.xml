@@ -365,6 +365,9 @@ insert into test_exc values
 <query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 <query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 
+<!-- facets with offset/limit -->
+<query endpoint="json/search">{ "index": "test_gr1", "offset":4, "limit":3, "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+
 <!-- regression stored field missed at facet -->
 <query endpoint="json/search">{ "index": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
 

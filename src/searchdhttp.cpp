@@ -1032,6 +1032,7 @@ static std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_pt
 
 		// aggregate and main query could have different sizes
 		tQuery.m_iLimit = ( tBucket.m_iSize ? tBucket.m_iSize : iRefLimit );
+		tQuery.m_iOffset = 0;
 
 		pHandler->SetQuery ( i+1, tQuery, nullptr );
 	}

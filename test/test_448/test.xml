@@ -19,7 +19,7 @@ searchd
 
 <queries>
 <sphinxql>
-	create table a1 ( title text, tag integer );
+	create table a1 ( title text, tag integer ) min_infix_len='2';
 	insert into a1 values ( 1, 'a1_tag1', 1 );
 	insert into a1 values ( 2, 'a1_tag1', 1 );
 	insert into a1 values ( 3, 'a1_tag1', 1 );
@@ -27,7 +27,7 @@ searchd
 	insert into a1 values ( 5, 'a1_tag5', 5 );
 	insert into a1 values ( 6, 'a1_tag6', 6 );
 
-	create table a2 ( title text, tag integer );
+	create table a2 ( title text, tag integer )  min_infix_len='2';
 	insert into a2 values ( 1,  'a2_tag1', 1 );
 	insert into a2 values ( 10, 'a2_tag1', 1 );
 	insert into a2 values ( 11, 'a2_tag1', 1 );
@@ -61,6 +61,13 @@ searchd
 	create table distr type='distributed' local='a1' local='a2';
 	show create table distr;
 	select *, count(distinct id) from distr group by tag order by id asc;
+
+	<!-- global sorters vs fulltext -->
+	select *, count(distinct id) from a1 where match('*tag*') group by tag order by id asc;
+	select *, count(distinct id) from a2 where match('*tag*') group by tag order by id asc;
+
+	select *, count(distinct id) from a1,a2 where match('*tag*') group by tag order by id asc;
+
 
 	drop table a1;
 	drop table a2;

@@ -18198,6 +18198,7 @@ void ShowHelp ()
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve given index(es)\n"
+		"-t, --table <table>\tonly serve given index(es)\n"
 #if !_WIN32
 		"--nodetach\t\tdo not detach into background\n"
 #endif

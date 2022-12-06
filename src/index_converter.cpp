@@ -2458,13 +2458,13 @@ static void ShowHelp ()
 		"\n"
 		"Options are:\n"
 		"-c, --config <file>\t\tread configuration from specified file\n"
-		"--index <name>\t\t\tconvert index defined in config file\n"
-		"--path <path_to_index_files>\tconvert index from path provided\n"
-		"--strip-path\t\t\tstrip path from filenames referenced by index: stopwords, exceptions and wordforms\n"
+		"--table <name>\t\t\tconvert table defined in config file\n"
+		"--path <path_to_table_files>\tconvert table from path provided\n"
+		"--strip-path\t\t\tstrip path from filenames referenced by table: stopwords, exceptions and wordforms\n"
 		"--large-docid\t\t\tallows to convert documents with ids larger than 2^63 and display a warning, otherwise it will just exit on the large id with an error\n"
 		"--output-dir <dir>\t\toutput directory for converted files\n"
-		"--all\t\t\t\tconvert all indexes in config file\n"
-		"--killlist-target <targets>\tsets the indexes that the kill-list will be applied to\n"
+		"--all\t\t\t\tconvert all tables in config file\n"
+		"--killlist-target <targets>\tsets the tables that the kill-list will be applied to\n"
 	);
 }
 

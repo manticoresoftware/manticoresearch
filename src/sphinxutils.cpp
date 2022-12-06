@@ -1022,16 +1022,17 @@ struct KeySection_t
 	const char *		m_szKey;	///< key name
 	KeyDesc_t *			m_pSection; ///< section to refer
 	bool				m_bNamed;	///< true if section is named. false if plain
+	const char *		m_sAlias;	///< key name alias
 };
 
 static KeySection_t g_dConfigSections[] =
 {
-	{ "source",		g_dKeysSource,	true },
-	{ "index",		g_dKeysIndex,	true },
-	{ "indexer",	g_dKeysIndexer,	false },
-	{ "searchd",	g_dKeysSearchd,	false },
-	{ "common",		g_dKeysCommon,	false },
-	{ NULL,			NULL,			false }
+	{ "source",		g_dKeysSource,	true,  nullptr },
+	{ "index",		g_dKeysIndex,	true,  "table" },
+	{ "indexer",	g_dKeysIndexer,	false, nullptr },
+	{ "searchd",	g_dKeysSearchd,	false, nullptr },
+	{ "common",		g_dKeysCommon,	false, nullptr },
+	{ NULL,			NULL,			false, nullptr }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1056,28 +1057,35 @@ private:
 	static constexpr int	WARNS_THRESH	= 5;
 
 private:
-	static bool		IsPlainSection ( const char * szKey );
-	static bool		IsNamedSection ( const char * szKey );
 	bool			AddSection ( const char * szType, const char * szSection );
 	void			AddKey ( const char * szKey, char * szValue );
 	bool			ValidateKey ( const char * szKey );
 };
 
-bool CSphConfigParser::IsPlainSection ( const char * szKey )
+static const KeySection_t * GetSection ( const char * szKey )
 {
 	assert ( szKey );
 	const KeySection_t * pSection = g_dConfigSections;
-	while ( pSection->m_szKey && strcasecmp ( szKey, pSection->m_szKey )!=0 )
+	while ( pSection->m_szKey )
+	{
+		if ( strcasecmp ( szKey, pSection->m_szKey )==0 || ( pSection->m_sAlias && strcasecmp ( szKey, pSection->m_sAlias )==0 ) )
+			break;
+
 		++pSection;
+	}
+
+	return pSection;
+}
+
+static bool IsPlainSection ( const KeySection_t * pSection )
+{
+	assert ( pSection );
 	return pSection->m_szKey && !pSection->m_bNamed;
 }
 
-bool CSphConfigParser::IsNamedSection ( const char * szKey )
+static bool IsNamedSection ( const KeySection_t * pSection )
 {
-	assert ( szKey );
-	const KeySection_t * pSection = g_dConfigSections;
-	while ( pSection->m_szKey && strcasecmp ( szKey, pSection->m_szKey )!=0 )
-		++pSection;
+	assert ( pSection );
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
@@ -1112,10 +1120,8 @@ bool CSphConfigParser::ValidateKey ( const char * szKey )
 {
 	// get proper descriptor table
 	// OPTIMIZE! move lookup to AddSection
-	const KeySection_t * pSection = g_dConfigSections;
+	const KeySection_t * pSection = GetSection ( m_sSectionType.cstr() );
 	const KeyDesc_t * pDesc = nullptr;
-	while ( pSection->m_szKey && m_sSectionType!=pSection->m_szKey )
-		++pSection;
 	if ( pSection->m_szKey )
 		pDesc = pSection->m_pSection;
 
@@ -1419,7 +1425,10 @@ bool CSphConfigParser::Parse ()
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
-			if ( IsPlainSection ( sToken.data() ) )
+
+			const KeySection_t * pSection = GetSection ( sToken.data() );
+
+			if ( IsPlainSection ( pSection ) )
 			{
 				if ( !AddSection ( sToken.data(), sToken.data() ) )
 					break;
@@ -1431,8 +1440,17 @@ bool CSphConfigParser::Parse ()
 				LOC_BACK();
 				continue;
 			}
-			if ( IsNamedSection ( sToken.data() ) )	{ m_sSectionType = sToken.data(); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( States_e::S_SECNAME ); LOC_BACK(); continue; }
-											LOC_ERROR ( "invalid section type '%s'", sToken );
+
+			if ( IsNamedSection ( pSection ) )
+			{
+				m_sSectionType = pSection->m_szKey;
+				sToken[0] = '\0';
+				LOC_POP ();
+				LOC_PUSH ( States_e::S_SECNAME );
+				LOC_BACK();
+				continue;
+			}
+			LOC_ERROR ( "invalid section type '%s'", sToken );
 		}
 
 		// handle S_CHR state

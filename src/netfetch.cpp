@@ -424,9 +424,12 @@ struct CurlConn_t
 	CSphVector<BYTE> m_dData;
 	Threads::Coro::Waker_c m_tWaker;
 
+	// fixme! That is ad-hoc and should not work this way
+	// we never wait something from curl, because it has no execution thread itself
+
 	static bool CheckShutdown ( void * handle )
 	{
-		if ( IsShutdown() )
+		if ( sphInterrupted() )
 		{
 			const char * sUrl = "";
 			auto * pConn = (CurlConn_t *)handle;

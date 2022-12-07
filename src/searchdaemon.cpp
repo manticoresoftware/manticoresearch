@@ -1535,13 +1535,3 @@ volatile bool& sphGetSeamlessRotate() noexcept
 #endif
 	return bSeamlessRotate;
 }
-
-static bool g_bShutdown = false;
-void SetShutdown()
-{
-	g_bShutdown = true;
-}
-bool IsShutdown()
-{
-	return g_bShutdown;
-}

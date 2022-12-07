@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y \
     elfutils \
     nsis \
     zip \
-    libcurl4-openssl-dev \
 && wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
 && add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-$llvm main" \
 && apt-get install -y \

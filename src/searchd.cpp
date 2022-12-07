@@ -638,8 +638,6 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
-	SetShutdown(); // !COMMIT
-
 	// force even long time searches to shut
 	sphInterruptNow ();
 
@@ -1343,8 +1341,6 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
 	tListener.m_bReadOnly = tDesc.m_bReadOnly;
-	tListener.m_uInfoIP = tDesc.m_uIP;
-	tListener.m_iInfoPort = tDesc.m_iPort;
 
 #if !_WIN32
 	if ( !tDesc.m_sUnix.IsEmpty () )
@@ -13101,43 +13097,6 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & d
 
 	// cleanup
 	dRows.Eof ( bMoreResultsFollow );
-}
-
-// defined in searchdhttp.cpp
-bool ParseJsonDataset ( RowBuffer_i& pResult, const CSphString& sJson, CSphString& sError );
-
-bool AskExternalHelper ( RowBuffer_i& dRows, Str_t sQuery )
-{
-	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
-	if ( !szHelperUrl )
-		return false;
-
-	auto iCbListener = g_dListeners.GetFirst([] (const auto& l) { return l.m_eProto == Proto_e::SPHINX || l.m_eProto == Proto_e::HTTP; });
-	if ( iCbListener < 0 )
-		return false;
-
-	const auto& tCbListener = g_dListeners[iCbListener];
-
-	char sAddress[SPH_ADDRESS_SIZE];
-	sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, tCbListener.m_uInfoIP );
-
-	// format query
-	JsonEscapedBuilder sJsonQuery;
-	{
-		ScopedComma_c tRoot( sJsonQuery, dJsonObj );
-		sJsonQuery.NamedString ( "format", "sphinxql" );
-		sJsonQuery.NamedString ( "version", "1.0" );
-		sJsonQuery.NamedString ( "cbaddress", sAddress );
-		sJsonQuery.NamedVal ( "cbport", tCbListener.m_iInfoPort );
-		sJsonQuery.NamedString ( "query", sQuery );
-	}
-
-	auto tResult = FetchHelperUrl ( szHelperUrl, (Str_t)sJsonQuery );
-	if ( !tResult.first )
-		return false;
-
-	CSphString sError;
-	return ParseJsonDataset ( dRows, tResult.second, sError );
 }
 
 void HandleMysqlStatus ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, bool bMoreResultsFollow )

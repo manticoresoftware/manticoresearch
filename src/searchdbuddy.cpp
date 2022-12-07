@@ -412,7 +412,7 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 	int iRefPos = tOut.GetSentCount();
 
 	std::unique_ptr<RowBuffer_i> tRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
-	bool bKeepProfile = session::Execute ( sQuery, *tRows.get() );
+	bool bKeepProfile = session::Execute ( sQuery, *tRows );
 	bool bOk = !tRows->IsError();
 
 	if ( bOk || !HasBuddy() )
@@ -451,6 +451,6 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 	tOut.Rewind ( iRefPos );
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
-	ConverJsonDataset ( tReplyParsed.m_tMessage, sQuery.first, *tBuddyRows );
+	ConvertJsonDataset ( tReplyParsed.m_tMessage, sQuery.first, *tBuddyRows );
 	return bKeepProfile;
 }

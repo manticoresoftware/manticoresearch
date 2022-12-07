@@ -110,13 +110,12 @@ struct HttpProcessResult_t
 CharStream_c * CreateBlobStream ( const Str_t & sData );
 void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
-bool ParseJsonDataset ( RowBuffer_i & tOut, const CSphString & sJson, CSphString & sError );
 
 namespace bson {
 class Bson_c;
 }
 
-void ConverJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
+void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
 
 using SplitAction_fn = std::function<void(const char *, int)>;
 void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction);

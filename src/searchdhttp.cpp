@@ -1495,25 +1495,8 @@ private:
 }]
  */
 
-bool ParseJsonDataset ( RowBuffer_i & tOut, const CSphString & sJson, CSphString & sError )
-{
-	using namespace bson;
-	CSphVector<BYTE> dData;
-	if ( !sphJsonParse ( dData, const_cast<char*>(sJson.cstr()) , false,false,false,sError ) )
-		return false;
 
-	Bson_c tBson ( dData );
-	if ( tBson.IsEmpty() || !tBson.IsArray() )
-	{
-		sError = "Something wrong with json - it is either empty, either not root object.";
-		return false;
-	}
-
-	ConverJsonDataset ( tBson, nullptr, tOut );
-	return true;
-}
-
-void ConverJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut )
+void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut )
 {
 	using namespace bson;
 

@@ -246,6 +246,9 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 		case MYSQL_ERR_NO_SUCH_TABLE:
 			tOut.SendBytes ( "#42S02", 6 );
 			break;
+		case MYSQL_ERR_NO_SUCH_THREAD:
+			tOut.SendBytes ( "#HY000", 6 );
+			break;
 		default:
 			tOut.SendBytes ( "#42000", 6 );
 			break;

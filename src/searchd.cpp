@@ -16061,7 +16061,14 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 			++iKilled;
 		}
 	} );
-	tOut.Ok ( iKilled );
+
+	if ( !iKilled )
+	{
+		tOut.Error ( "Kill", SphSprintf ( "Unknown connection id: %d", iKill ).cstr(), MYSQL_ERR_NO_SUCH_THREAD );
+	} else
+	{
+		tOut.Ok ( iKilled );
+	}
 }
 
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )

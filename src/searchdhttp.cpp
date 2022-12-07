@@ -1075,6 +1075,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 	tQuery.m_bFacetHead = true;
 	pHandler->SetQuery ( 0, tQuery, nullptr );
 	int iRefLimit = tQuery.m_iLimit;
+	int iRefOffset = tQuery.m_iOffset;
 
 	ARRAY_FOREACH ( i, tQuery.m_dAggs )
 	{
@@ -1114,8 +1115,15 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		tQuery.m_sOrderBy = "@weight desc";
 
 		// aggregate and main query could have different sizes
-		tQuery.m_iLimit = ( tBucket.m_iSize ? tBucket.m_iSize : iRefLimit );
-		tQuery.m_iOffset = 0;
+		if ( tBucket.m_iSize )
+		{
+			tQuery.m_iLimit = tBucket.m_iSize;
+			tQuery.m_iOffset = 0;
+		} else
+		{
+			tQuery.m_iLimit = iRefLimit;
+			tQuery.m_iOffset = iRefOffset;
+		}
 
 		pHandler->SetQuery ( i+1, tQuery, nullptr );
 	}

@@ -1,6 +1,6 @@
 # Merging tables
 
-Merging two existing **plain** tables can be more efficient than indexing the data from scratch and desired in some cases (such as merging 'main' and 'delta' tables instead of simply reindexing 'main' in the 'main+delta' partitioning scheme). So `indexer` has an option to do that. Merging tables is normally faster than reindexing, but still **not** instant on huge tables. Basically, it will need to read the contents of the both tables once and write the result once. Merging 100 GB and 1 GB table, for example, will result in 202 GB of I/O (but that's still likely less than the indexing from scratch requires).
+Merging two existing **plain** tables can be more efficient than indexing the data from scratch and desired in some cases (such as merging 'main' and 'delta' tables instead of simply rebuilding 'main' in the 'main+delta' partitioning scheme). So `indexer` has an option to do that. Merging tables is normally faster than rebuilding, but still **not** instant on huge tables. Basically, it will need to read the contents of the both tables once and write the result once. Merging 100 GB and 1 GB table, for example, will result in 202 GB of I/O (but that's still likely less than the indexing from scratch requires).
 
 The basic command syntax is as follows:
 

@@ -24,13 +24,13 @@ Distributed table is defined by type 'distributed' in the configuration file or 
 #### In a configuration file
 
 ```ini
-index foo {
+table foo {
     type = distributed
     local = bar
     local = bar1, bar2
     agent = 127.0.0.1:9312:baz
-    agent = host1|host2:idx
-    agent = host1:9301:idx1|host2:idx2 [ha_strategy=random retry_count=10]
+    agent = host1|host2:tbl
+    agent = host1:9301:tbl1|host2:tbl2 [ha_strategy=random retry_count=10]
     ...
 }
 ```
@@ -50,4 +50,4 @@ Either way the key component of a distributed table is a list of children (the t
 
 Each agent can include several external locations and options specifying how to work with them.
 
-Note that for remotes the server knows nothing about the type of the table, and it may cause errors, if, say, you issue `CALL PQ` to remote 'foo' which is not a percolate table. 
+Note that for remotes the server knows nothing about the type of the table, and it may cause errors, if, say, you issue `CALL PQ` to remote 'foo' which is not a percolate table.

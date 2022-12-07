@@ -17,18 +17,18 @@ There are also two specialized statements can be used to perform rotations on ta
 ## RELOAD TABLE
 
 ```sql
-RELOAD TABLE idx [ FROM '/path/to/table_files' ];
+RELOAD TABLE tbl [ FROM '/path/to/table_files' ];
 ```
 
 `RELOAD TABLE` allows you to rotate tables using SQL.
 
-It has two modes of operation. First one (without specifying a path) makes Manticore server check for new table files in directory specified in [path](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must have a idx.new.sp? names.
+It has two modes of operation. First one (without specifying a path) makes Manticore server check for new table files in directory specified in [path](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must have names `tbl.new.sp?`.
 
-And if you additionally specify a path, server will look for table files in specified directory, move them to table [path](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), rename from `tbl_files.sp?` to `tbl_files.new.sp?` and rotate them.
+And if you additionally specify a path, the server will look for the table files in the specified directory, will move them to the table [path](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), rename from `tbl.sp?` to `tbl.new.sp?` and will rotate them.
 
 ```sql
-mysql> RELOAD TABLE plain_index;
-mysql> RELOAD TABLE plain_index FROM '/home/mighty/new_table_files';
+mysql> RELOAD TABLE plain_table;
+mysql> RELOAD TABLE plain_table FROM '/home/mighty/new_table_files';
 ```
 
 ## RELOAD TABLES

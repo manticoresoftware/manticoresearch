@@ -32,10 +32,10 @@ source mysource {
   sql_field_string = title
  }
 
-index myindex {
+table mytable {
   type   = plain
   source = mysource
-  path   = /path/to/myindex
+  path   = /path/to/mytable
   ...
  }
 ```

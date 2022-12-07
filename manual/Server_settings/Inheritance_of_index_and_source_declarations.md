@@ -7,12 +7,12 @@ For a parent table/source nothing needs to be specified.
 For the child table/source the declaration will contain the table/source name followed by `:` and the parent name.
 
 ```ini
-index parent {
+table parent {
 path = /var/lib/manticore/parent
 ...
 }
 
-index child:parent {
+table child:parent {
 path = /var/lib/manticore/child
 ...
 }

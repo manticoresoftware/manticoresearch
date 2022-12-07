@@ -110,13 +110,13 @@ utilsApi.sql("CREATE TABLE products(title text, price float) wordforms = '/var/l
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   wordforms = /var/lib/manticore/wordforms.txt
   wordforms = /var/lib/manticore/alternateforms.txt
   wordforms = /var/lib/manticore/dict*.txt
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

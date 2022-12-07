@@ -125,12 +125,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0.
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   charset_table = 0..9, A..Z->a..z, _, a..z, \
     U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -197,11 +197,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0.
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   charset_table = 0..9, english, _
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -292,13 +292,13 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   charset_table       = non_cjk
   ngram_len           = 1
   ngram_chars         = cjk
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -387,11 +387,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   blend_chars = +, &, U+23, @->_
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -485,12 +485,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   blend_mode = trim_tail, skip_pure
   blend_chars = +, &
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -562,11 +562,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'"
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   min_word_len = 4
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -645,12 +645,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk'
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   ngram_chars = cjk
   ngram_len = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -722,12 +722,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+30
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   ngram_chars = U+3000..U+2FA1F
   ngram_len = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -800,12 +800,12 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   ngram_chars = cjk
   ngram_len = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -879,11 +879,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+A
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   ignore_chars = U+AD
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -964,12 +964,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words =
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   bigram_index = both_freq
   bigram_freq_words = the, a, you, i
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1044,12 +1044,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words =
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   bigram_freq_words = the, a, you, i
   bigram_index = first_freq
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1133,11 +1133,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'")
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   dict = keywords
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1160,11 +1160,11 @@ With smaller files, such embedding reduces the number of the external files on w
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   embedded_limit = 32K
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1242,11 +1242,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   global_idf = /usr/local/manticore/var/global.idf
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1328,11 +1328,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'al
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   hitless_words = all
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1407,11 +1407,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   index_field_lengths = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1482,11 +1482,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   index_token_filter = my_lib.so:custom_blend:chars=@#&
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1556,11 +1556,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   overshort_step = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1636,12 +1636,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   phrase_boundary = ., ?, !, U+2026
   phrase_boundary_step = 10
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1714,12 +1714,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_ste
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   phrase_boundary_step = 100
   phrase_boundary = ., ?, !, U+2026
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -1800,7 +1800,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(b
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   # index '13"' as '13inch'
   regexp_filter = \b(\d+)\" => \1inch
 
@@ -1808,7 +1808,7 @@ index products {
   regexp_filter = (blue|red) => color
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

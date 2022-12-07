@@ -105,11 +105,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   exceptions = /usr/local/manticore/data/exceptions.txt
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

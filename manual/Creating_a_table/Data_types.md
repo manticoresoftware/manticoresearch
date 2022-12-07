@@ -92,7 +92,7 @@ utilsApi.sql("CREATE TABLE forum(title text, content text, author_id int, forum_
 <!-- request config -->
 
 ```ini
-index forum
+table forum
 {
 	type = rt
 	path = forum
@@ -254,15 +254,15 @@ The traditional row-wise storage is default, so if you want everything to be sto
 To enable the columnar storage you need to:
 * specify `engine='columnar'` in [CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) to make all attributes of the table columnar. Then if you want to keep a specific attribute row-wise you need to add `engine='rowwise'` when you declare it. For example:
 ```sql
-create table idx(title text, type int, price float engine='rowwise') engine='columnar'
+create table tbl(title text, type int, price float engine='rowwise') engine='columnar'
 ```
 * specify `engine='columnar'` for a specific attribute in `CREATE TABLE` to make it columnar. For example:
 ```sql
-create table idx(title text, type int, price float engine='columnar');
+create table tbl(title text, type int, price float engine='columnar');
 ```
 or
 ```sql
-create table idx(title text, type int, price float engine='columnar') engine='rowwise';
+create table tbl(title text, type int, price float engine='columnar') engine='rowwise';
 ```
 * in the [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) you need to list attributes you want to be columnar in [columnar_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs).
 
@@ -407,7 +407,7 @@ utilsApi.sql("CREATE TABLE products(title text)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -486,7 +486,7 @@ utilsApi.sql("CREATE TABLE products(title text indexed)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -632,7 +632,7 @@ utilsApi.sql("CREATE TABLE products(title text, keys string)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -713,7 +713,7 @@ utilsApi.sql("CREATE TABLE products ( title string attribute indexed )");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -793,7 +793,7 @@ utilsApi.sql("CREATE TABLE products(title text, price int)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -872,7 +872,7 @@ utilsApi.sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -954,7 +954,7 @@ utilsApi.sql("CREATE TABLE products(title text, price bigint )");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -1035,7 +1035,7 @@ utilsApi.sql("CREATE TABLE products(title text, sold bool )");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -1116,7 +1116,7 @@ utilsApi.sql("CREATE TABLE products(title text, date timestamp)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -1198,7 +1198,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, coeff float)');
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -1414,7 +1414,7 @@ utilsApi.sql'CREATE TABLE products(title text, data json)');
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -1712,7 +1712,7 @@ utilsApi.sql("CREATE TABLE products(title text, product_codes multi)");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -2183,7 +2183,7 @@ utilsApi.sql("CREATE TABLE products(title text, values multi64))");
 <!-- request config -->
 
 ```ini
-index products
+table products
 {
 	type = rt
 	path = products
@@ -2238,8 +2238,8 @@ source min {
     sql_attr_uint = b
 }
 
-index idx {
-    path = idx/col
+table tbl {
+    path = tbl/col
     source = min
     columnar_attrs = *
     columnar_no_fast_fetch = b

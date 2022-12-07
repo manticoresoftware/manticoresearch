@@ -14,7 +14,7 @@ In the following example, we are using PHP to create multiple tables with differ
 #!/usr/bin/php
 ...
 <?php for ($i=1; $i<=6; $i++) { ?>
-index test_<?=$i?> {
+table test_<?=$i?> {
   type = rt
   path = /var/lib/manticore/data/test_<?=$i?>
   rt_field = subject

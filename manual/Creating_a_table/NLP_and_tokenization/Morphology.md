@@ -106,11 +106,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'stem_
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   morphology = stem_en, libstemmer_sv
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -179,12 +179,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) morphology_skip_fie
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   morphology_skip_fields = name
   morphology = stem_en
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_field = name
   rt_attr_uint = price
@@ -257,12 +257,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) min_stemming_len = 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   min_stemming_len = 4
   morphology = stem_en
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -334,12 +334,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_exact_words =
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   index_exact_words = 1
   morphology = stem_en
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

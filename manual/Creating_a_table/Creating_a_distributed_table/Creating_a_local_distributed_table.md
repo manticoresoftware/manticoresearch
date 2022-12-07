@@ -10,7 +10,7 @@ A distributed table in Manticore Search doesn't hold any data. Instead it acts a
 
 <!-- request Configuration file -->
 ```ini
-index index_dist {
+table index_dist {
   type  = distributed
   local = index1
   local = index2

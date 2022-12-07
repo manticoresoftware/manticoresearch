@@ -34,7 +34,7 @@ source source {
   sql_field_string = title
  }
 
-index idx {
+table tbl {
   type   = plain
   source = source
   path   = /path/to/table

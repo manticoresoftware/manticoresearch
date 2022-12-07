@@ -81,9 +81,9 @@ utilsApi.sql("CREATE TABLE forum(title text, price float)");
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
   stored_fields = title

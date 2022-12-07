@@ -10,7 +10,7 @@ Here we have split the data over 4 servers, each serving one of the shards. If o
 
 <!-- request ini -->
 ```ini
-index mydist {
+table mydist {
           type  = distributed
           agent = box1:9312:shard1
           agent = box2:9312:shard2
@@ -33,7 +33,7 @@ More interesting strategies are those based on latency-weighted probabilities. `
 
 <!-- request ini -->
 ```ini
-index mydist {
+table mydist {
           type  = distributed
           agent = box1:9312|box5:9312:shard1
           agent = box2:9312:|box6:9312:shard2

@@ -229,7 +229,7 @@ You can also see table schema by executing the query `select * from <table_name>
 
 <!-- request SQL -->
 ```sql
-select * from idx.table where type='text';
+select * from tbl.table where type='text';
 ```
 
 <!-- response SQL -->
@@ -251,9 +251,9 @@ You can also do many other things, consider `<your_table_name>.table` just a reg
 <!-- request SQL -->
 
 ```sql
-select field from idx.table;
-select field, properties from idx.table where type in ('text', 'uint');
-select * from idx.table where properties any ('stored');
+select field from tbl.table;
+select field, properties from tbl.table where type in ('text', 'uint');
+select * from tbl.table where properties any ('stored');
 ```
 
 <!-- end -->
@@ -273,13 +273,13 @@ Prints the `CREATE TABLE` statement that creates the named table.
 
 <!-- request SQL -->
 ```sql
-SHOW CREATE TABLE idx\G
+SHOW CREATE TABLE tbl\G
 ```
 
 <!-- response SQL -->
 ```sql
-       Table: idx
-Create Table: CREATE TABLE idx (
+       Table: tbl
+Create Table: CREATE TABLE tbl (
 f text indexed stored
 ) charset_table='non_cjk,cjk' morphology='icu_chinese'
 1 row in set (0.00 sec)

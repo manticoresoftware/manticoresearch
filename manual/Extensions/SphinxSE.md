@@ -194,7 +194,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ```
 * indexweights - comma-separated list of table names and weights to use when searching through several tables:
 ```sql
-... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
+... WHERE query='test;indexweights=tbl_exact,2,tbl_stemmed,1;';
 ```
 * fieldweights - comma-separated list of per-field weights that can be used by the ranker:
 ```sql

@@ -4,7 +4,7 @@
 ## Defining table schema in a configuration file
 
 ```ini
-index <index_name>[:<parent table name>] {
+table <index_name>[:<parent table name>] {
 ...
 }
 ```
@@ -14,7 +14,7 @@ index <index_name>[:<parent table name>] {
 <!-- request Plain -->
 
 ```ini
-index <table name> {
+table <table name> {
   type = plain
   path = /path/to/table
   source = <source_name>
@@ -27,7 +27,7 @@ index <table name> {
 <!-- request Real-time -->
 
 ```ini
-index <table name> {
+table <table name> {
   type = rt
   path = /path/to/table
 
@@ -162,11 +162,11 @@ utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, nam
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   stored_fields = title, content # we want to store only "title" and "content", "name" shouldn't be stored
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_field = content
   rt_field = name
@@ -321,7 +321,7 @@ The `rt_mem_limit` is never exceeded, but the actual RAM chunk can be significan
 * Upon saving a new disk chunk we update the `rt_mem_limit` rate.
 * The rate is reset to 50% as soon as you restart the searchd.
 
-For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see table's current rate in [SHOW TABLE <idx> STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md).
+For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see table's current rate in [SHOW TABLE <tbl> STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md).
 
 ##### How to change rt_mem_limit and optimize_cutoff
 
@@ -602,7 +602,7 @@ This directive does not affect [searchd](../../Starting_the_server/Manually.md) 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   inplace_enable = 1
 
   path = products
@@ -630,7 +630,7 @@ This directive does not affect [searchd](../../Starting_the_server/Manually.md) 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   inplace_hit_gap = 1M
   inplace_enable = 1
 
@@ -659,7 +659,7 @@ This directive does not affect [searchd](../../Starting_the_server/Manually.md) 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   inplace_reloc_factor = 0.1
   inplace_enable = 1
 
@@ -688,7 +688,7 @@ This directive does not affect [searchd](../../Starting_the_server/Manually.md) 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   inplace_write_factor = 0.1
   inplace_enable = 1
 

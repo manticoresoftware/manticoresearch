@@ -160,59 +160,65 @@ DEBUG [ subcommand ]
 Call `DEBUG` without params to show list of useful commands (in general) and subcommands (of `DEBUG` statement) available at current context.
 
 ```sql
-MySQL [(none)]> debug;
-+------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-| command                                                          | meaning                                                                                |
-+------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-| flush logs                                                       | emulate USR1 signal                                                                    |
-| reload indexes                                                   | emulate HUP signal                                                                     |
-| debug token <password>                                           | calculate token for password                                                           |
-| debug malloc_stats                                               | perform 'malloc_stats', result in searchd.log                                          |
-| debug malloc_trim                                                | pefrorm 'malloc_trim' call                                                             |
-| debug sleep <N>                                                  | sleep for <N> seconds                                                                  |
-| debug tasks                                                      | display global tasks stat (use select from @@system.tasks instead)                     |
-| debug sched                                                      | display task manager schedule (use select from @@system.sched instead)                 |
-| debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1] | For RT index <IDX> merge disk chunk X into disk chunk Y                                |
-| debug drop [chunk] <X> [from] <IDX> [option sync=1]              | For RT index <IDX> drop disk chunk X                                                   |
-| debug files <IDX> [option format=all|external]                   | list files belonging to <IDX>. 'all' - including external (wordforms, stopwords, etc.) |
-| debug close                                                      | ask server to close connection from it's side                                          |
-| debug compress <IDX> [chunk] <X> [option sync=1]                 | Compress disk chunk X of RT index <IDX> (wipe out deleted documents)                   |
-| debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]      | Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar                 |
-| debug wait <cluster> [like 'xx'] [option timeout=3]              | wait <cluster> ready, but no more than 3 secs.                                         |
-| debug wait <cluster> status <N> [like 'xx'] [option timeout=13]  | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
-+------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-16 rows in set (0.00 sec)
+mysql> debug;
++-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| command                                                                 | meaning                                                                                |
++-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| flush logs                                                              | emulate USR1 signal                                                                    |
+| reload indexes                                                          | emulate HUP signal                                                                     |
+| debug token <password>                                                  | calculate token for password                                                           |
+| debug malloc_stats                                                      | perform 'malloc_stats', result in searchd.log                                          |
+| debug malloc_trim                                                       | pefrorm 'malloc_trim' call                                                             |
+| debug sleep <N>                                                         | sleep for <N> seconds                                                                  |
+| debug tasks                                                             | display global tasks stat (use select from @@system.tasks instead)                     |
+| debug sched                                                             | display task manager schedule (use select from @@system.sched instead)                 |
+| debug merge <TBL> [chunk] <X> [into] [chunk] <Y> [option sync=1,byid=0] | For RT table <TBL> merge disk chunk X into disk chunk Y                                |
+| debug drop [chunk] <X> [from] <TBL> [option sync=1]                     | For RT table <TBL> drop disk chunk X                                                   |
+| debug files <TBL> [option format=all|external]                          | list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.) |
+| debug close                                                             | ask server to close connection from it's side                                          |
+| debug compress <TBL> [chunk] <X> [option sync=1]                        | Compress disk chunk X of RT table <TBL> (wipe out deleted documents)                   |
+| debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]             | Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar                 |
+| debug wait <cluster> [like 'xx'] [option timeout=3]                     | wait <cluster> ready, but no more than 3 secs.                                         |
+| debug wait <cluster> status <N> [like 'xx'] [option timeout=13]         | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
+| debug meta                                                              | Show max_matches/pseudo_shards. Needs set profiling=1                                  |
+| debug trace OFF|'path/to/file' [<N>]                                    | trace flow to file until N bytes written, or 'trace OFF'                               |
+| debug curl <URL>                                                        | request given url via libcurl                                                          |
++-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+19 rows in set (0.00 sec)
 ```
 
 Same from VIP connection:
 ```sql
-MySQL [(none)]> debug;
-+------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-| command                                                          | meaning                                                                                |
-+------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-| flush logs                                                       | emulate USR1 signal                                                                    |
-| reload indexes                                                   | emulate HUP signal                                                                     |
-| debug shutdown <password>                                        | emulate TERM signal                                                                    |
-| debug crash <password>                                           | crash daemon (make SIGSEGV action)                                                     |
-| debug token <password>                                           | calculate token for password                                                           |
-| debug malloc_stats                                               | perform 'malloc_stats', result in searchd.log                                          |
-| debug malloc_trim                                                | pefrorm 'malloc_trim' call                                                             |
-| debug procdump                                                   | ask watchdog to dump us                                                                |
-| debug setgdb on|off                                              | enable or disable potentially dangerous crash dumping with gdb                         |
-| debug setgdb status                                              | show current mode of gdb dumping                                                       |
-| debug sleep <N>                                                  | sleep for <N> seconds                                                                  |
-| debug tasks                                                      | display global tasks stat (use select from @@system.tasks instead)                     |
-| debug sched                                                      | display task manager schedule (use select from @@system.sched instead)                 |
-| debug merge <IDX> [chunk] <X> [into] [chunk] <Y> [option sync=1] | For RT index <IDX> merge disk chunk X into disk chunk Y                                |
-| debug drop [chunk] <X> [from] <IDX> [option sync=1]              | For RT index <IDX> drop disk chunk X                                                   |
-| debug files <IDX> [option format=all|external]                   | list files belonging to <IDX>. 'all' - including external (wordforms, stopwords, etc.) |
-| debug close                                                      | ask server to close connection from it's side                                          |
-| debug compress <IDX> [chunk] <X> [option sync=1]                 | Compress disk chunk X of RT index <IDX> (wipe out deleted documents)                   |
-| debug split <IDX> [chunk] <X> on @<uservar> [option sync=1]      | Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar                 |
-| debug wait <cluster> [like 'xx'] [option timeout=3]              | wait <cluster> ready, but no more than 3 secs.                                         |
-| debug wait <cluster> status <N> [like 'xx'] [option timeout=13]  | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
-+------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-21 rows in set (0.00 sec)
+mysql> debug;
++-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| command                                                                 | meaning                                                                                |
++-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+| flush logs                                                              | emulate USR1 signal                                                                    |
+| reload indexes                                                          | emulate HUP signal                                                                     |
+| debug shutdown <password>                                               | emulate TERM signal                                                                    |
+| debug crash <password>                                                  | crash daemon (make SIGSEGV action)                                                     |
+| debug token <password>                                                  | calculate token for password                                                           |
+| debug malloc_stats                                                      | perform 'malloc_stats', result in searchd.log                                          |
+| debug malloc_trim                                                       | pefrorm 'malloc_trim' call                                                             |
+| debug procdump                                                          | ask watchdog to dump us                                                                |
+| debug setgdb on|off                                                     | enable or disable potentially dangerous crash dumping with gdb                         |
+| debug setgdb status                                                     | show current mode of gdb dumping                                                       |
+| debug sleep <N>                                                         | sleep for <N> seconds                                                                  |
+| debug tasks                                                             | display global tasks stat (use select from @@system.tasks instead)                     |
+| debug sched                                                             | display task manager schedule (use select from @@system.sched instead)                 |
+| debug merge <TBL> [chunk] <X> [into] [chunk] <Y> [option sync=1,byid=0] | For RT table <TBL> merge disk chunk X into disk chunk Y                                |
+| debug drop [chunk] <X> [from] <TBL> [option sync=1]                     | For RT table <TBL> drop disk chunk X                                                   |
+| debug files <TBL> [option format=all|external]                          | list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.) |
+| debug close                                                             | ask server to close connection from it's side                                          |
+| debug compress <TBL> [chunk] <X> [option sync=1]                        | Compress disk chunk X of RT table <TBL> (wipe out deleted documents)                   |
+| debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]             | Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar                 |
+| debug wait <cluster> [like 'xx'] [option timeout=3]                     | wait <cluster> ready, but no more than 3 secs.                                         |
+| debug wait <cluster> status <N> [like 'xx'] [option timeout=13]         | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
+| debug meta                                                              | Show max_matches/pseudo_shards. Needs set profiling=1                                  |
+| debug trace OFF|'path/to/file' [<N>]                                    | trace flow to file until N bytes written, or 'trace OFF'                               |
+| debug curl <URL>                                                        | request given url via libcurl                                                          |
++-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
+24 rows in set (0.00 sec)
 ```
 
 All `debug XXX` commands should be regarded as non-stable, and they're matter of freely modification at any moment, don't be surprised. This example output here also not necessary reflect actual available commands, try it on your system to see what is available on your instance. Also, no detailed documentation implied apart this short 'meaning' column.

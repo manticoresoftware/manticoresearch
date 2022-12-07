@@ -14,9 +14,9 @@ This query is expected to return a number of 1-column rows, each containing just
 In many cases the query is a union between a query that gets a list of updated documents and a list of deleted documents, e.g.:
 
 ```ini
-    sql_query_killlist = \
-        SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
-        SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
+sql_query_killlist = \
+    SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
+    SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
 ```
 
 ## Removing documents in a plain table
@@ -27,7 +27,7 @@ A plain table can contain a directive called [killlist_target](../../Creating_a_
 <!-- example killlist_target 1 -->
 Sets the table(s) that the kill-list will be applied to. Optional, default value is empty.
 
-When you use [plain_indexes](../../Creating_a_table/Local_tables/Plain_table.md) you often need to maintain not a single table, but a set of them to be able to add/update/delete new documents sooner (read [delta_index_updates](../../Adding_data_from_external_storages/Main_delta.md)). In order to suppress matches in the previous (**main**) table that were updated or deleted in the next (**delta**) table you need to:
+When you use [plain tables](../../Creating_a_table/Local_tables/Plain_table.md) you often need to maintain not a single table, but a set of them to be able to add/update/delete new documents sooner (read about [delta table updates](../../Adding_data_from_external_storages/Main_delta.md)). In order to suppress matches in the previous (**main**) table that were updated or deleted in the next (**delta**) table you need to:
 
 1.  Create a kill-list in the **delta** table using [sql_query_killlist](../../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)
 2.  Specify **main** table as `killlist_target` in **delta** table settings:
@@ -39,7 +39,7 @@ When you use [plain_indexes](../../Creating_a_table/Local_tables/Plain_table.md)
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   killlist_target = main:kl
 
   path = products
@@ -59,11 +59,11 @@ When `killlist_target` is specified, kill-list is applied to all the tables list
 Multiple targets can be specified separated by comma like
 
 ```ini
-killlist_target = index_one:kl,index_two:kl
+killlist_target = table_one:kl,table_two:kl
 ```
 
 <!-- example killlist_target 2 -->
-You can change `killlist_target` settings for a table without reindexing it by using `ALTER`.
+You can change `killlist_target` settings for a table without rebuilding it by using `ALTER`.
 
 But since the 'old' main table has already written the changes to disk, the documents that were deleted in it will **remain** deleted even if it is no longer in the `killlist_target` of the **delta** table.
 
@@ -74,13 +74,13 @@ But since the 'old' main table has already written the changes to disk, the docu
 <!-- request SQL -->
 
 ```sql
-ALTER TABLE delta KILLLIST_TARGET='new_main_index:kl'
+ALTER TABLE delta KILLLIST_TARGET='new_main_table:kl'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /cli -d "
-ALTER TABLE delta KILLLIST_TARGET='new_main_index:kl'"
+ALTER TABLE delta KILLLIST_TARGET='new_main_table:kl'"
 ```
 <!-- end -->

@@ -18,7 +18,7 @@ In the typical scenario, indexer does the following:
 General syntax for `indexer` is as follows:
 
 ```shell
-indexer [OPTIONS] [indexname1 [indexname2 [...]]]
+indexer [OPTIONS] [table_name1 [table_name2 [...]]]
 ```
 
 An important thing to keep in mind when creating tables with `indexer` is that the generated table files must be made with permissions that allow `searchd` to read, write and even delete them. In case of Linux official packages `searchd` runs under `manticore` user. In this case `indexer` must also run under `manticore` user:
@@ -53,7 +53,7 @@ The exit codes are as follows:
 * `--config <file>` (`-c <file>` for short) tells `indexer` to use the given file as its configuration. Normally, it will look for `manticore.conf` in the installation directory (e.g. `/etc/manticoresearch/manticore.conf`), followed by the current directory you are in when calling `indexer` from the shell. This is most of use in shared environments where the binary files are installed in a global folder, e.g. `/usr/bin/`, but you want to provide users with the ability to make their own custom Manticore set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own `manticore.conf` files and pass them to `indexer` with this option. For example:
 
 ```shell
-sudo -u manticore indexer --config /home/myuser/manticore.conf myindex
+sudo -u manticore indexer --config /home/myuser/manticore.conf mytable
 ```
 
 * `--all` tells `indexer` to update every table listed in `manticore.conf` instead of listing individual tables. This would be useful in small configurations or cron-kind or maintenance jobs where the entire table set will get rebuilt each day or week or whatever period is best. Please note that since `--all` tries to update all found tables in the configuration, it will issue a warning if encounters RealTime tables and the exit code of the command will be `1` not `0` even if the plain tables finished without issue. Example usage:
@@ -83,14 +83,14 @@ sudo -u manticore indexer --rotate --all --noprogress
 * `--buildstops <outputfile.text> <N>` reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the table. Note, it does not update the table in question, it simply processes the data **as if** it were indexing, including running queries defined with [sql_query_pre](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) or [sql_query_post](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). `outputfile.txt` will contain the list of words, one per line, sorted by frequency with most frequent first, and `N` specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the table, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with `--buildfreqs`, below. Example:
 
 ```shell
-sudo -u manticore indexer myindex --buildstops word_freq.txt 1000
+sudo -u manticore indexer mytable --buildstops word_freq.txt 1000
 ```
 
-This would produce a document in the current directory, `word_freq.txt` with the 1,000 most common words in 'myindex', ordered by most common first. Note that the file will pertain to the last table indexed when specified with multiple tables or `--all` (i.e. the last one listed in the configuration file)
+This would produce a document in the current directory, `word_freq.txt` with the 1,000 most common words in 'mytable', ordered by most common first. Note that the file will pertain to the last table indexed when specified with multiple tables or `--all` (i.e. the last one listed in the configuration file)
 * `--buildfreqs` works with `--buildstops` (and is ignored if `--buildstops` is not specified). As `--buildstops` provides the list of words used within the table, `--buildfreqs` adds the quantity present in the table, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean…" features where you need to know how much more common a given word compared to another, similar one. Example:
 
 ```shell
-sudo -u manticore indexer myindex --buildstops word_freq.txt 1000 --buildfreqs
+sudo -u manticore indexer mytable --buildstops word_freq.txt 1000 --buildfreqs
 ```
 
 This would produce the `word_freq.txt` as above, however after each word would be the number of times it occurred in the table in question.
@@ -112,23 +112,23 @@ Any documents marked as deleted (value 1) would be removed from the newly-merged
 * `--keep-attrs` allows to reuse existing attributes on reindexing. Whenever the table is rebuilt, each new document id is checked for presence in the "old" table, and if it already exists, its attributes are transferred to the "new" table; if not found, attributes from the new table are used. If the user has updated attributes in the table, but not in the actual source used for the table, all updates will be lost when reindexing; using –keep-attrs enables saving the updated attribute values from the previous table. It is possible to specify a path for table files to used instead of reference path from config:
 
 ```shell
-sudo -u manticore indexer myindex --keep-attrs=/path/to/index/files
+sudo -u manticore indexer mytable --keep-attrs=/path/to/index/files
 ```
 
 * `--keep-attrs-names=<attributes list>` allows to specify attributes to reuse from existing table on reindexing. By default all attributes from existing table are reused in the new table:
 
 ```shell
-sudo -u manticore indexer myindex --keep-attrs=/path/to/table/files --keep-attrs-names=update,state
+sudo -u manticore indexer mytable --keep-attrs=/path/to/table/files --keep-attrs-names=update,state
 ```
 
 * `--dump-rows <FILE>` dumps rows fetched by SQL source(s) into the specified file, in a MySQL compatible syntax. Resulting dumps are the exact representation of data as received by `indexer` and help to repeat indexing-time issues. The command performs fetching from the source and creates both table files and the dump file.
 * `--print-rt <rt_index> <table>` outputs fetched data from source as INSERTs for a real-time table. The first lines of the dump will contain the real-time fields and attributes (as a reflection of the plain table fields and attributes). The command performs fetching from the source and creates both table files and the dump output. The command can be used as `sudo -u manticore indexer -c manticore.conf --print-rt indexrt indexplain > dump.sql`. Only sql-based sources are supported. MVAs are not supported.
-* `--sighup-each` is useful when you are rebuilding many big tables, and want each one rotated into `searchd` as soon as possible. With `--sighup-each`, `indexer` will send the SIGHUP signal to searchd after successfully completing work on each table. (The default behavior is to send a single SIGHUP after all the tables are built).
+* `--sighup-each` is useful when you are rebuild many big tables, and want each one rotated into `searchd` as soon as possible. With `--sighup-each`, `indexer` will send the SIGHUP signal to searchd after successfully completing work on each table. (The default behavior is to send a single SIGHUP after all the tables are built).
 * `--nohup` is useful when you want to check your table with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on. Table files are renamed to .tmp. Use indextool to rename table files to .new and rotate it. Example usage:
 
 ```shell
-sudo -u manticore indexer --rotate --nohup myindex
-sudo -u manticore indextool --rotate --check myindex
+sudo -u manticore indexer --rotate --nohup mytable
+sudo -u manticore indextool --rotate --check mytable
 ```
 
 * `--print-queries` prints out SQL queries that `indexer` sends to the database, along with SQL connection and disconnection events. That is useful to diagnose and fix problems with SQL sources.
@@ -154,16 +154,7 @@ Lemmatizer cache size. Optional, default is 256K.
 
 Our [lemmatizer](../Server_settings/Common.md#lemmatizer_base) implementation uses a compressed dictionary format that enables a space/speed tradeoff. It can either perform lemmatization off the compressed data, using more CPU but less RAM, or it can decompress and precache the dictionary either partially or fully, thus using less CPU but more RAM. And the lemmatizer_cache directive lets you control how much RAM exactly can be spent for that uncompressed dictionary cache.
 
-Currently, the only available dictionaries are [ru.pak, en.pak, and de.pak](https://manticoresearch.com/install/). These are the Russian, English and German dictionaries. The compressed dictionary is approximately 2 to 10 MB in size. Note that the dictionary stays in memory at all times, too. The default cache size is 256 KB. The accepted cache sizes are 0 to 2047 MB. It's safe to raise the cache size too high; the lemmatizer will only use the needed memory. For instance, the entire Russian dictionary decompresses to approximately 110 MB; and thus setting lemmatizer_cache anywhere higher than that will not affect the memory use: even when 1024 MB is allowed for the cache, if only 110 MB is needed, it will only use those 110 MB.
-
-On our benchmarks, the total indexing time with different cache sizes was as follows:
-* 9.07 sec, morphology = lemmatize_ru, lemmatizer_cache = 0
-* 8.60 sec, morphology = lemmatize_ru, lemmatizer_cache = 256K
-* 8.33 sec, morphology = lemmatize_ru, lemmatizer_cache = 8M
-* 7.95 sec, morphology = lemmatize_ru, lemmatizer_cache = 128M
-* 6.85 sec, morphology = stem_ru (baseline)
-
-Your mileage may vary, but a simple rule of thumb would be to either go with the small default 256 KB cache when pressed for memory, or spend 128 MB extra RAM and cache the entire dictionary for maximum indexing performance.
+Currently, the only available dictionaries are [ru.pak, en.pak, and de.pak](https://manticoresearch.com/install/). These are the Russian, English and German dictionaries. The compressed dictionary is approximately 2 to 10 MB in size. Note that the dictionary stays in memory at all times, too. The default cache size is 256 KB. The accepted cache sizes are 0 to 2047 MB. It's safe to raise the cache size too high; the lemmatizer will only use the needed memory. For instance, the entire Russian dictionary decompresses to approximately 110 MB; and thus setting `lemmatizer_cache` anywhere higher than that will not affect the memory use: even when 1024 MB is allowed for the cache, if only 110 MB is needed, it will only use those 110 MB.
 
 #### max_file_field_buffer
 
@@ -187,7 +178,7 @@ Maximum I/O operations per second, for I/O throttling. Optional, default is 0 (u
 
 I/O throttling related option. It limits maximum count of I/O operations (reads or writes) per any given second. A value of 0 means that no limit is imposed.
 
-`indexer` can cause bursts of intensive disk I/O during indexing, and it might be desired to limit its disk activity (and keep something for other programs running on the same machine, such as `searchd`). I/O throttling helps to do that. It works by enforcing a minimum guaranteed delay between subsequent disk I/O operations performed by `indexer`. Limiting indexing I/O can help reduce search performance degradation caused by indexing.
+`indexer` can cause bursts of intensive disk I/O during building a table, and it might be desired to limit its disk activity (and keep something for other programs running on the same machine, such as `searchd`). I/O throttling helps to do that. It works by enforcing a minimum guaranteed delay between subsequent disk I/O operations performed by `indexer`. Throttling I/O can help reduce search performance degradation caused by building. This setting is not effective for other kinds of data ingestion, e.g. inserting data into a real-time table.
 
 #### max_iosize
 
@@ -215,9 +206,9 @@ mem_limit = 256M
 # mem_limit = 268435456 # same, but in bytes
 ```
 
-Indexing RAM usage limit. Optional, default is 128M. Enforced memory usage limit that the `indexer` will not go above. Can be specified in bytes, or kilobytes (using K postfix), or megabytes (using M postfix); see the example. This limit will be automatically raised if set to extremely low value causing I/O buffers to be less than 8 KB; the exact lower bound for that depends on the indexed data size. If the buffers are less than 256 KB, a warning will be produced.
+Plain table building RAM usage limit. Optional, default is 128M. Enforced memory usage limit that the `indexer` will not go above. Can be specified in bytes, or kilobytes (using K postfix), or megabytes (using M postfix); see the example. This limit will be automatically raised if set to extremely low value causing I/O buffers to be less than 8 KB; the exact lower bound for that depends on the built data size. If the buffers are less than 256 KB, a warning will be produced.
 
-Maximum possible limit is 2047M. Too low values can hurt indexing speed, but 256M to 1024M should be enough for most if not all datasets. Setting this value too high can cause SQL server timeouts. During the document collection phase, there will be periods when the memory buffer is partially sorted and no communication with the database is performed; and the database server can timeout. You can resolve that either by raising timeouts on SQL server side or by lowering `mem_limit`.  
+Maximum possible limit is 2047M. Too low values can hurt plain index building speed, but 256M to 1024M should be enough for most if not all datasets. Setting this value too high can cause SQL server timeouts. During the document collection phase, there will be periods when the memory buffer is partially sorted and no communication with the database is performed; and the database server can timeout. You can resolve that either by raising timeouts on SQL server side or by lowering `mem_limit`.  
 
 #### on_file_field_error
 

@@ -74,7 +74,7 @@ $client->indices()->create($index);
 ```php
 Array(
     [total] => 0
-    [error] => 
+    [error] =>
     [warning] =>
 )
 ```
@@ -107,9 +107,9 @@ utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
 ##### Creating a percolate table via config:
 
 ```ini
-index products {
+table products {
   type = percolate
-  path = idx_pq
+  path = tbl_pq
   rt_field = title
   rt_attr_json = meta
 }

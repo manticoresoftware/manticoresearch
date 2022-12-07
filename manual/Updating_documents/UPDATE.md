@@ -1214,10 +1214,10 @@ utilsApi.sql("create table products(title text, price float) attr_update_reserve
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   attr_update_reserve = 1M
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

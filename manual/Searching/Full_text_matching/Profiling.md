@@ -810,12 +810,12 @@ Variable: transformed_tree
 <!-- request SQL -->
 
 ```sql
-EXPLAIN QUERY idx 'i me' option format=dot\G
+EXPLAIN QUERY tbl 'i me' option format=dot\G
 ```
 <!-- response SQL -->
 
 ```sql
-EXPLAIN QUERY idx 'i me' option format=dot\G
+EXPLAIN QUERY tbl 'i me' option format=dot\G
 *************************** 1. row ***************************
 Variable: transformed_tree
    Value: digraph "transformed_tree"

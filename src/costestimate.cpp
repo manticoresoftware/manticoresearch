@@ -332,9 +332,11 @@ float CostEstimate_c::CalcQueryCost()
 	float fDocsAfterIndexes = 1.0f;
 	float fDocsAfterFilters = 1.0f;
 	int iToIntersect = 0;
+
 	int iNumFilters = 0;
 	int iNumAnalyzers = 0;
 	int iNumIndexes = 0;
+	int iNumLookups = 0;
 
 	for ( const auto & i : m_dSIInfo )
 	{
@@ -358,6 +360,7 @@ float CostEstimate_c::CalcQueryCost()
 		{
 		case SecondaryIndexType_e::LOOKUP:
 			iDocsToReadLookup += iDocs; 
+			iNumLookups++;
 			break;
 
 		case SecondaryIndexType_e::ANALYZER:
@@ -380,7 +383,8 @@ float CostEstimate_c::CalcQueryCost()
 	if ( iNumFilters )
 		fCost += CalcFilterCost ( iToIntersect>0, fDocsAfterIndexes );
 
-	fCost += Cost_LookupRead ( iDocsToReadLookup );
+	if ( iNumLookups )
+		fCost += Cost_LookupRead ( iDocsToReadLookup );
 
 	if ( iNumAnalyzers )
 		fCost += CalcAnalyzerCost();
@@ -394,7 +398,7 @@ float CostEstimate_c::CalcQueryCost()
 
 	fCost += Cost_Push ( iDocsToPush );
 
-	if ( !iNumIndexes ) // SI always run in a single thread
+	if ( !iNumIndexes && !iNumLookups ) // SI and docid lookups always run in a single thread
 		fCost = CalcMTCost(fCost);
 
 	return fCost;

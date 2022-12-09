@@ -3956,6 +3956,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		} else
 			iNotMyOpRAM += pSeg->GetUsedRam();
 	}
+	AT_SCOPE_EXIT ( [&dSegments] { dSegments.for_each ( [] ( const auto& dSeg ) { dSeg->SetKillHook ( nullptr ); } ); } );
 
 	UpdateUnlockedCount();
 

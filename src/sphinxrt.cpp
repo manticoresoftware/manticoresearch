@@ -343,8 +343,7 @@ int RtSegment_t::Kill ( DocID_t tDocID )
 		m_tAliveRows.fetch_sub ( 1, std::memory_order_relaxed );
 
 		// on runtime killing expected only from single fiber, so no mutex here required as no race for pKillHook
-		if ( m_pKillHook )
-			m_pKillHook->Kill ( tDocID );
+		KillHook ( tDocID );
 		return 1;
 	}
 

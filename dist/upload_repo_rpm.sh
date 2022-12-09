@@ -45,9 +45,9 @@ for f in build/*.rpm; do
       fi
     fi
 
-    cp $f /work/repomanager/docker/rpm_signer/data
-    /usr/bin/docker exec rpm_signer /worker.sh $DISTRO
-    mv /work/repomanager/docker/rpm_signer/data/*.rpm build/
+    cp $f /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH
+    /usr/bin/docker exec rpm_signer /worker.sh $DISTRO $ARCH
+    mv /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH/*.rpm build/
 
     if [[ $ARCH == "x86_64" ]]; then
       copy_to $f x86_64/

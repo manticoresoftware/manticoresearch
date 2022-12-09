@@ -917,8 +917,9 @@ using BlockerFn = std::function<bool()>;
 // an index or a part of an index that has its own row ids
 class IndexSegment_c
 {
-protected:
 	mutable IndexSegment_c* m_pKillHook = nullptr; // if set, killed docids will be emerged also here.
+
+protected:
 	enum
 	{
 		ATTRS_UPDATED			= ( 1UL<<0 ),
@@ -940,9 +941,20 @@ public:
 	virtual int			CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
 	virtual				~IndexSegment_c() = default;
 
-	inline void			SetKillHook ( IndexSegment_c * pKillHook ) const
+	inline void			SetKillHook ( IndexSegment_c * pKillHook ) const noexcept
 	{
 		m_pKillHook = pKillHook;
+	}
+
+	inline bool HasKillHook () const noexcept
+	{
+		return m_pKillHook!=nullptr;
+	}
+
+	inline void KillHook ( DocID_t tDocID ) const noexcept
+	{
+		if ( HasKillHook() )
+			m_pKillHook->Kill ( tDocID );
 	}
 
 public:

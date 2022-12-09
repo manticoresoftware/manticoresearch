@@ -2849,14 +2849,14 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled;
-	if ( !m_pKillHook )
+	if ( !HasKillHook() )
 		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
 	else
 		iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this] ( RowID_t tRow, DocID_t tDoc )
 		{
 			if ( !m_tDeadRowMap.Set ( tRow ) )
 				return false;
-			m_pKillHook->Kill ( tDoc );
+			KillHook ( tDoc );
 			return true;
 		} );
 
@@ -2880,8 +2880,7 @@ int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, Bloc
 			return false;
 
 		Verify ( m_tDeadRowMap.Set ( tRow ) );
-		if ( m_pKillHook )
-			m_pKillHook->Kill ( tDoc );
+		KillHook ( tDoc );
 		return true;
 	} );
 
@@ -7046,8 +7045,7 @@ int	CSphIndex_VLN::Kill ( DocID_t tDocID )
 	if ( m_tDeadRowMap.Set ( GetRowidByDocid ( tDocID ) ) )
 	{
 		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
-		if ( m_pKillHook )
-			m_pKillHook->Kill ( tDocID );
+		KillHook ( tDocID );
 		return 1;
 	}
 

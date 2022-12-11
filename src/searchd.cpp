@@ -50,6 +50,7 @@
 #include "secondarylib.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
+#include "netfetch.h"
 
 // services
 #include "taskping.h"
@@ -63,6 +64,7 @@
 #include "taskpreread.h"
 #include "coroutine.h"
 #include "dynamic_idx.h"
+#include "searchdbuddy.h"
 
 extern "C"
 {
@@ -199,6 +201,8 @@ CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
 bool					g_bSecondaryError { false };
+static CSphString		g_sBuddyPath;
+static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -3825,7 +3829,7 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 				continue;
 		}
 
-		if ( tAttr.m_sName.cstr()[0]!='@' && !dAttrs.BinarySearch(i) )
+		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !dAttrs.BinarySearch(i) )
 			dAttrsInSchema.Add(i);
 	}
 
@@ -4571,7 +4575,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		const CSphColumnInfo & tCol = m_tRes.m_tSchema.GetAttr(iCol);
 
 		assert ( !tCol.m_sName.IsEmpty() );
-		bool bMagic = ( *tCol.m_sName.cstr()=='@' );
+		bool bMagic = ( IsGroupbyMagic ( tCol.m_sName ) || IsSortStringInternal ( tCol.m_sName ) );
 
 		if ( !bMagic && tCol.m_pExpr )
 		{
@@ -7198,6 +7202,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+		for ( const auto & tLocal : m_dLocal )
+			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
 
 	/////////////////////////////////
@@ -8961,22 +8967,6 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	return true;
 }
 
-/* commented out as not used
-static bool operator < ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
-{
-	if ( tA.m_sAttr < tB.m_sAttr )
-		return true;
-
-	return tA.m_sType<tB.m_sType;
-}
-
-
-static bool operator == ( const IteratorDesc_t & tA, const IteratorDesc_t & tB )
-{
-	return tA.m_sAttr==tB.m_sAttr && tA.m_sType==tB.m_sType;
-}
-*/
-
 void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 {
 	if ( !sIndexOrAgent.IsEmpty() )
@@ -10608,7 +10598,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -13726,6 +13716,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			memcpy ( g_sLogFilter, tStmt.m_sSetValue.cstr(), iLen );
 			g_sLogFilter[iLen] = '\0';
 			g_iLogFilterLen = iLen;
+		} else if ( tStmt.m_sSetName=="log_http_filter" )
+		{
+			SetLogHttpFilter ( tStmt.m_sSetValue );
+
+		} else if ( tStmt.m_sSetName=="log_management" )
+		{
+			SetLogManagement ( !!tStmt.m_iSetValue );
+
 		} else if ( tStmt.m_sSetName=="net_wait" )
 		{
 			g_tmWaitUS = tStmt.m_iSetValue * 1000LL;
@@ -14335,6 +14333,14 @@ void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
 	tOut.Eof ();
 }
 
+void HandleCurl ( RowBuffer_i & tOut, const CSphString & sParam )
+{
+	auto sRes = FetchUrl ( sParam );
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "curl", sRes.cstr() );
+	tOut.Eof();
+}
+
 #if HAVE_MALLOC_STATS
 void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 {
@@ -14463,6 +14469,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 	case Cmd_e::WAIT_STATUS: HandleWaitStatus ( tOut, tCmd ); return;
 #endif
 	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
+	case Cmd_e::CURL: HandleCurl ( tOut, tCmd.m_sParam ); return;
 	default: break;
 	}
 
@@ -16013,7 +16020,14 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 			++iKilled;
 		}
 	} );
-	tOut.Ok ( iKilled );
+
+	if ( !iKilled )
+	{
+		tOut.Error ( "Kill", SphSprintf ( "Unknown connection id: %d", iKill ).cstr(), MYSQL_ERR_NO_SUCH_THREAD );
+	} else
+	{
+		tOut.Ok ( iKilled );
+	}
 }
 
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
@@ -18198,6 +18212,7 @@ void ShowHelp ()
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve given index(es)\n"
+		"-t, --table <table>\tonly serve given index(es)\n"
 #if !_WIN32
 		"--nodetach\t\tdo not detach into background\n"
 #endif
@@ -18849,6 +18864,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	bool bGotSecondary = ( hSearchd.GetInt ( "secondary_indexes", GetSecondaryIndexDefault() )!=0 );
 	if ( bGotSecondary && !IsSecondaryLibLoaded() )
 		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+
+	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
+	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 
 	SetSecondaryIndexDefault ( bGotSecondary );
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
@@ -19982,6 +20000,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();
+	SetupCompatHttp();
 
 	gStats().m_uStarted = (DWORD)time(NULL);
 
@@ -20042,7 +20061,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
-	ReplicationStart ( std::move ( dListenerDescs ), bNewCluster, bNewClusterForce );
+	ReplicationStart ( dListenerDescs, bNewCluster, bNewClusterForce );
+	searchd::AddShutdownCb ( BuddyStop );
+	BuddyStart ( g_sBuddyPath, dListenerDescs, g_bTelemetry );
 
 	g_bJsonConfigLoadedOk = true;
 

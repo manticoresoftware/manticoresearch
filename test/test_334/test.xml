@@ -365,6 +365,9 @@ insert into test_exc values
 <query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 <query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 
+<!-- facets with offset/limit -->
+<query endpoint="json/search">{ "index": "test_gr1", "offset":4, "limit":3, "aggs":{ "gr_small": { "terms": { "field": "gid", "size": 3 } }, "gr_tag": { "terms": { "field": "tag", "size": 3 } }} }</query>
+
 <!-- regression stored field missed at facet -->
 <query endpoint="json/search">{ "index": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
 
@@ -440,6 +443,11 @@ select * from dist_gr2 facet gid facet tag;;
 <sphinxql>select * from test_exc0 WHERE MATCH ( 'IT\/Tech' ) order by id asc</sphinxql>
 <sphinxql>select * from test_exc0 WHERE MATCH ( 'AT\\/Tech' ) order by id asc</sphinxql>
 <sphinxql>select * from test_exc0 WHERE MATCH ( 'AT\/Tech' ) order by id asc</sphinxql>
+
+<!-- facets with offset/limit -->
+<!-- FIXME!!! SphinxQL and HTTP beahavior is different -->
+<sphinxql>select * from test_gr1 limit 5,1 facet tag limit 2 facet gid;</sphinxql>
+<query endpoint="json/search">{ "index": "test_gr1", "offset":5, "limit":1, "aggs":{ "gr_small": { "terms": { "field": "tag", "size": 2 } }, "gr_tag": { "terms": { "field": "gid" } }} }</query>
 
 </queries>
 </test>

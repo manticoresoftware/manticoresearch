@@ -1046,3 +1046,35 @@ bool IsNotRealAttribute ( const CSphColumnInfo & tColumn )
 {
 	return tColumn.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 }
+
+
+const char * AttrType2Str ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_NONE:				return "SPH_ATTR_NONE";
+	case SPH_ATTR_INTEGER:			return "SPH_ATTR_INTEGER";
+	case SPH_ATTR_TIMESTAMP:		return "SPH_ATTR_TIMESTAMP";
+	case SPH_ATTR_BOOL:				return "SPH_ATTR_BOOL";
+	case SPH_ATTR_FLOAT:			return "SPH_ATTR_FLOAT";
+	case SPH_ATTR_BIGINT:			return "SPH_ATTR_BIGINT";
+	case SPH_ATTR_STRING:			return "SPH_ATTR_STRING";
+	case SPH_ATTR_POLY2D:			return "SPH_ATTR_POLY2D";
+	case SPH_ATTR_STRINGPTR:		return "SPH_ATTR_STRINGPTR";
+	case SPH_ATTR_TOKENCOUNT:		return "SPH_ATTR_TOKENCOUNT";
+	case SPH_ATTR_JSON:				return "SPH_ATTR_JSON";
+	case SPH_ATTR_UINT32SET:		return "SPH_ATTR_UINT32SET";
+	case SPH_ATTR_INT64SET:			return "SPH_ATTR_INT64SET";
+	case SPH_ATTR_MAPARG:			return "SPH_ATTR_MAPARG";
+	case SPH_ATTR_FACTORS:			return "SPH_ATTR_FACTORS";
+	case SPH_ATTR_JSON_FIELD:		return "SPH_ATTR_JSON_FIELD";
+	case SPH_ATTR_FACTORS_JSON:		return "SPH_ATTR_FACTORS_JSON";
+	case SPH_ATTR_UINT32SET_PTR:	return "SPH_ATTR_UINT32SET_PTR";
+	case SPH_ATTR_INT64SET_PTR:		return "SPH_ATTR_INT64SET_PTR";
+	case SPH_ATTR_JSON_PTR:			return "SPH_ATTR_JSON_PTR";
+	case SPH_ATTR_JSON_FIELD_PTR:	return "SPH_ATTR_JSON_FIELD_PTR";
+	default: return "";
+	}
+
+	return "SPH_ATTR_NONE";
+}

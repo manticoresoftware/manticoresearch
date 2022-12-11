@@ -86,14 +86,14 @@
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP
 * [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
 * [/insert](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
-* [/pq/idx/doc](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
+* [/pq/tbl_name/doc](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
 * [/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
 * [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time table
-* [/pq/idx/doc/N?refresh=1](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
+* [/pq/tbl_name/doc/N?refresh=1](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
 * [/delete](Deleting_documents.md) - Deletes a document in a table
 * [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
-* [/pq/idx/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
+* [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
 
 ### Common things
 * [data types](Creating_a_table/Data_types.md)
@@ -456,7 +456,7 @@ searchd [OPTIONS]
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes Manticore service from Microsoft Management Console and other places where the services are registered
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Forbids the server to serve any incoming connection until pre-reading of the table files completes
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Lists all the parameters
-* [--index](Starting_the_server/Manually.md#searchd-command-line-options) - Forces serving only the specified table
+* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Forces serving only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service into Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
 * [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [listen](Server_settings/Searchd.md#listen) from the configuration file

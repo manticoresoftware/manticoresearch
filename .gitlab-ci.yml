@@ -120,7 +120,7 @@ docs_deploy:
   needs: [ ]
   tags:
     - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:3201
   variables:
     DIAGNOSTIC: 1 # let's set it by default forever
     CACHEB: "../cache"
@@ -277,7 +277,7 @@ convert_win_junit:
       when: always
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:320
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:3201
   needs:
     - win_tests
   variables:

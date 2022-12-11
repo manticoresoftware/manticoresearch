@@ -12,9 +12,21 @@
 * Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 
 ### Minor changes
+* Since Manticore supports secondary indexes since recently things got confusing since `index` may mean a secondary index, a full-text index or a plain/real-time index. To make things less confusing we are renaming the latter to `table`. These are the affected SQL / command line commands. Their old variants are deprecated, but are still working:
+  - `index <table name>` => `table <table name>`
+  - `searchd -i / --index` => `searchd -t / --table`
+  - `SHOW INDEX STATUS` => `SHOW TABLE STATUS`
+  - `SHOW INDEX SETTINGS` => `SHOW TABLE SETTINGS`
+  - `FLUSH RTINDEX` => `FLUSH TABLE`
+  - `OPTIMIZE INDEX` => `OPTIMIZE TABLE`
+  - `ATTACH TABLE plain TO RTINDEX rt` => `ATTACH TABLE plain TO TABLE rt`
+  - `RELOAD INDEX` => `RELOAD TABLE`
+  - `RELOAD INDEXES` => `RELOAD TABLES`
+
+  We are not planning to obsolete the old forms, but to make things compatible with the documentation we recommend to change the names in your applicaiton.  
 * Queries with stateful UDFs are now forced to be executed in a single thread
 * Refactoring of task/scheduler system as a prerequisite for parallel chunks merging
-* **⚠️ BREAKING CHANGE**: Columnar storage format has been changed. You need to rebuild those indexes that have columnar attributes. 
+* **⚠️ BREAKING CHANGE**: Columnar storage format has been changed. You need to rebuild those indexes that have columnar attributes.
 * **⚠️ BREAKING CHANGE**: Secondary indexes file format has got changed, so if you are using secondary indexes for searching and have `searchd.secondary_indexes = 1` in your configuration file, be aware that the new Manticore version **will skip loading the tables that have secondary indexes**. It's recommended to:
   - before you upgrade change `searchd.secondary_indexes` to 0 in the configuration file
   - run the instance. Manticore will load up the tables with a warning.

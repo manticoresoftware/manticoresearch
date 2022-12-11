@@ -32,8 +32,9 @@ public:
 	bool KeepAlive() const;
 	const char* Error() const;
 
+	static void ParseList ( Str_t sData, OptionsHash_t & hOptions );
+
 private:
-	void ParseList ( Str_t sData );
 
 	// callbacks
 	int ParserUrl ( Str_t sData );
@@ -79,3 +80,42 @@ private:
 };
 
 void HttpBuildReply ( CSphVector<BYTE>& dData, ESphHttpStatus eCode, Str_t sReply, bool bHtml );
+
+///////////////////////////////////////////////////////////////////////
+/// Stream reader
+class CharStream_c
+{
+protected:
+	bool m_bDone = false;
+
+public:
+	virtual ~CharStream_c() = default;
+
+	// return next chunk of data
+	virtual Str_t Read() = 0;
+
+	// return all available data
+	virtual Str_t ReadAll() = 0;
+
+	inline bool Eof() const { return m_bDone; }
+};
+
+struct HttpProcessResult_t
+{
+	ESphHttpEndpoint m_eEndpoint { SPH_HTTP_ENDPOINT_TOTAL };
+	bool m_bOk { false };
+	CSphString m_sError;
+};
+
+CharStream_c * CreateBlobStream ( const Str_t & sData );
+void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
+
+namespace bson {
+class Bson_c;
+}
+
+void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
+
+using SplitAction_fn = std::function<void(const char *, int)>;
+void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction);

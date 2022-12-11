@@ -29,6 +29,9 @@
 #include <execinfo.h>
 #endif
 
+#include <sstream>
+#include <iomanip>
+
 #if _WIN32
 #include <io.h> // for ::open on windows
 #include <dbghelp.h>
@@ -442,6 +445,22 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
 
 //	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
+}
+
+bool HasWildcard ( const char * sVal )
+{
+	if ( !sVal || !*sVal )
+		return false;
+
+	while ( *sVal )
+	{
+		if ( *sVal=='*' || *sVal=='?' || *sVal=='%' )
+			return true;
+
+		sVal++;
+	}
+
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -997,6 +1016,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_indexes",		0, nullptr },
 	{ "accurate_aggregation",	0, nullptr },
 	{ "preopen_tables",			0, nullptr },
+	{ "buddy_path",				0, nullptr },
+	{ "telemetry",				0, nullptr },
 	{ NULL,						0, NULL }
 };
 
@@ -1022,16 +1043,17 @@ struct KeySection_t
 	const char *		m_szKey;	///< key name
 	KeyDesc_t *			m_pSection; ///< section to refer
 	bool				m_bNamed;	///< true if section is named. false if plain
+	const char *		m_sAlias;	///< key name alias
 };
 
 static KeySection_t g_dConfigSections[] =
 {
-	{ "source",		g_dKeysSource,	true },
-	{ "index",		g_dKeysIndex,	true },
-	{ "indexer",	g_dKeysIndexer,	false },
-	{ "searchd",	g_dKeysSearchd,	false },
-	{ "common",		g_dKeysCommon,	false },
-	{ NULL,			NULL,			false }
+	{ "source",		g_dKeysSource,	true,  nullptr },
+	{ "index",		g_dKeysIndex,	true,  "table" },
+	{ "indexer",	g_dKeysIndexer,	false, nullptr },
+	{ "searchd",	g_dKeysSearchd,	false, nullptr },
+	{ "common",		g_dKeysCommon,	false, nullptr },
+	{ NULL,			NULL,			false, nullptr }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1056,28 +1078,35 @@ private:
 	static constexpr int	WARNS_THRESH	= 5;
 
 private:
-	static bool		IsPlainSection ( const char * szKey );
-	static bool		IsNamedSection ( const char * szKey );
 	bool			AddSection ( const char * szType, const char * szSection );
 	void			AddKey ( const char * szKey, char * szValue );
 	bool			ValidateKey ( const char * szKey );
 };
 
-bool CSphConfigParser::IsPlainSection ( const char * szKey )
+static const KeySection_t * GetSection ( const char * szKey )
 {
 	assert ( szKey );
 	const KeySection_t * pSection = g_dConfigSections;
-	while ( pSection->m_szKey && strcasecmp ( szKey, pSection->m_szKey )!=0 )
+	while ( pSection->m_szKey )
+	{
+		if ( strcasecmp ( szKey, pSection->m_szKey )==0 || ( pSection->m_sAlias && strcasecmp ( szKey, pSection->m_sAlias )==0 ) )
+			break;
+
 		++pSection;
+	}
+
+	return pSection;
+}
+
+static bool IsPlainSection ( const KeySection_t * pSection )
+{
+	assert ( pSection );
 	return pSection->m_szKey && !pSection->m_bNamed;
 }
 
-bool CSphConfigParser::IsNamedSection ( const char * szKey )
+static bool IsNamedSection ( const KeySection_t * pSection )
 {
-	assert ( szKey );
-	const KeySection_t * pSection = g_dConfigSections;
-	while ( pSection->m_szKey && strcasecmp ( szKey, pSection->m_szKey )!=0 )
-		++pSection;
+	assert ( pSection );
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
@@ -1112,10 +1141,8 @@ bool CSphConfigParser::ValidateKey ( const char * szKey )
 {
 	// get proper descriptor table
 	// OPTIMIZE! move lookup to AddSection
-	const KeySection_t * pSection = g_dConfigSections;
+	const KeySection_t * pSection = GetSection ( m_sSectionType.cstr() );
 	const KeyDesc_t * pDesc = nullptr;
-	while ( pSection->m_szKey && m_sSectionType!=pSection->m_szKey )
-		++pSection;
 	if ( pSection->m_szKey )
 		pDesc = pSection->m_pSection;
 
@@ -1419,7 +1446,10 @@ bool CSphConfigParser::Parse ()
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
-			if ( IsPlainSection ( sToken.data() ) )
+
+			const KeySection_t * pSection = GetSection ( sToken.data() );
+
+			if ( IsPlainSection ( pSection ) )
 			{
 				if ( !AddSection ( sToken.data(), sToken.data() ) )
 					break;
@@ -1431,8 +1461,17 @@ bool CSphConfigParser::Parse ()
 				LOC_BACK();
 				continue;
 			}
-			if ( IsNamedSection ( sToken.data() ) )	{ m_sSectionType = sToken.data(); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( States_e::S_SECNAME ); LOC_BACK(); continue; }
-											LOC_ERROR ( "invalid section type '%s'", sToken );
+
+			if ( IsNamedSection ( pSection ) )
+			{
+				m_sSectionType = pSection->m_szKey;
+				sToken[0] = '\0';
+				LOC_POP ();
+				LOC_PUSH ( States_e::S_SECNAME );
+				LOC_BACK();
+				continue;
+			}
+			LOC_ERROR ( "invalid section type '%s'", sToken );
 		}
 
 		// handle S_CHR state
@@ -3444,4 +3483,15 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 	return iNew;
 }
 
+
+int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
+{
+	std::tm tTM = {};
+	std::stringstream sTimeStream (  sTime.cstr() );
+	sTimeStream >> std::get_time ( &tTM, sFormat.cstr() );
+	if ( sTimeStream.fail() )
+		return -1;
+
+	return std::mktime ( &tTM );
+}
 

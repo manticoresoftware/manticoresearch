@@ -200,7 +200,7 @@ Integer. Max predicted search time, see [predicted_time_costs](../Server_setting
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select * from idx where match('-donald');
+MySQL [(none)]> select * from tbl where match('-donald');
 ERROR 1064 (42000): index t: query error: query is non-computable (single NOT operator)
 MySQL [(none)]> select * from t where match('-donald') option not_terms_only_allowed=1;
 +---------------------+-----------+

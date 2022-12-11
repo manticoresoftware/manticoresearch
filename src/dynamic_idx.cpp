@@ -67,9 +67,6 @@ class Feeder_c : public RowBuffer_i
 	}
 
 public:
-	StringBuilder_c m_sErrors { "; " };
-
-public:
 	explicit Feeder_c ( TableFeeder_fn fnFeed )
 	{
 		m_fnCoro = MakeCoroExecutor ( [this, fnFeed = std::move ( fnFeed )] () { fnFeed ( this ); } );
@@ -334,7 +331,8 @@ public:
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
 	{
-		m_sErrors.Sprintf("%s: %s", sStmt, sError);
+		m_bError = true;
+		m_sError.SetSprintf ( "%s: %s", sStmt, sError );
 		Eof (false,0);
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
@@ -372,9 +370,6 @@ class FeederSchema_c : public RowBuffer_i
 		m_pMatch->SetAttr ( m_pSchema->GetAttr ( iCol ).m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, &pData ) );
 		memcpy ( pData, sMsg, iLen );
 	}
-
-public:
-	StringBuilder_c m_sErrors { "; " };
 
 public:
 	explicit FeederSchema_c ( TableFeeder_fn fnFeed )
@@ -473,7 +468,8 @@ public:
 	void Eof ( bool, int ) override {}
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
 	{
-		m_sErrors.Sprintf ( "%s:%s", sStmt, sError );
+		m_bError = true;
+		m_sError.SetSprintf ( "%s:%s", sStmt, sError );
 		Eof ( false, 0 );
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
@@ -494,7 +490,7 @@ private:
 
 	virtual void SetSorterStuff ( CSphMatch * pMatch ) const = 0;
 	virtual bool FillNextMatch () const = 0;
-	virtual const StringBuilder_c& GetErrors() const = 0;
+	virtual Str_t GetErrors() const = 0;
 };
 
 bool GenericTableIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
@@ -661,10 +657,10 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 		}
 	}
 
-	auto& sErrors = GetErrors();
-	bool bOk = sErrors.IsEmpty();
+	auto sErrors = GetErrors();
+	bool bOk = IsEmpty ( sErrors );
 	if ( !bOk )
-		tMeta.m_sError = (CSphString) sErrors;
+		tMeta.m_sError = sErrors;
 
 	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
 
@@ -700,7 +696,7 @@ protected:
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
 	bool FillNextMatch () const final;
-	const StringBuilder_c & GetErrors () const final;
+	Str_t GetErrors () const final;
 };
 
 
@@ -725,9 +721,9 @@ bool DynamicIndex_c::FillNextMatch () const
 	return m_tFeeder.FillNextMatch();
 }
 
-const StringBuilder_c & DynamicIndex_c::GetErrors () const
+Str_t DynamicIndex_c::GetErrors () const
 {
-	return m_tFeeder.m_sErrors;
+	return FromStr ( m_tFeeder.GetError() );
 }
 
 ///////////////
@@ -750,7 +746,7 @@ protected:
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
 	bool FillNextMatch () const final;
-	const StringBuilder_c & GetErrors () const final;
+	Str_t GetErrors () const final;
 };
 
 
@@ -775,9 +771,9 @@ bool DynamicIndexSchema_c::FillNextMatch () const
 	return m_tFeeder.FillNextMatch();
 }
 
-const StringBuilder_c & DynamicIndexSchema_c::GetErrors () const
+Str_t DynamicIndexSchema_c::GetErrors () const
 {
-	return m_tFeeder.m_sErrors;
+	return FromStr ( m_tFeeder.GetError() );
 }
 
 static ServedIndexRefPtr_c MakeServed ( CSphIndex* pIndex )

@@ -77,11 +77,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) html_strip = '1'");
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   html_strip = 1
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -156,12 +156,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) html_index_attrs = 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   html_index_attrs = img=alt,title; a=title;
   html_strip = 1
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -238,12 +238,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) html_remove_element
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   html_remove_elements = style, script
   html_strip = 1
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -333,12 +333,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_sp = \'1\' ht
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   index_sp = 1
   html_strip = 1
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -418,12 +418,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_zones = 'h, t
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   index_zones = h*, th, title
   html_strip = 1
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

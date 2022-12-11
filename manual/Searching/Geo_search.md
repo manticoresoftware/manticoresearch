@@ -5,7 +5,7 @@ One of the greatest features of Manticore Search is the ability to combine full-
 To perform geo searching, a document needs to contain pairs of latitude/longitude coordinates. The coordinates can be stored as float attributes. If the document has multiple locations, it may be convenient to use a json attribute to store coordinate pairs.
 
 ```ini
-index myrt
+table myrt
 {
     ...
     rt_attr_float = lat

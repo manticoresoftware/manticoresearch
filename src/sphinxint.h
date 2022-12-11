@@ -1487,4 +1487,6 @@ void sphFormatCurrentTime ( StringBuilder_c& sOut );
 
 CSphString sphCurrentUtcTime ( );
 
+bool IsGroupbyMagic ( const CSphString & s );
+
 #endif // _sphinxint_

@@ -2467,7 +2467,7 @@ static void NewClusterClean ( const CSphString & sPath )
 }
 
 // setup IP, ports and node incoming address
-static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
+static void SetListener ( const VecTraits_T<ListenerDesc_t> & dListeners )
 {
 	bool bGotReplicationPorts = false;
 	ARRAY_FOREACH ( i, dListeners )
@@ -2583,8 +2583,7 @@ private:
 };
 
 // start clusters on daemon start
-void ReplicationStart ( CSphVector<ListenerDesc_t> dListeners,
-	bool bNewCluster, bool bForce ) EXCLUDES ( g_tClustersLock )
+void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce ) EXCLUDES ( g_tClustersLock )
 {
 	SetListener ( dListeners );
 

@@ -105,6 +105,7 @@
 %token	TOK_PLAN
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
+%token	TOK_QUERY
 %token	TOK_RAND
 %token	TOK_RAMCHUNK
 %token	TOK_READ
@@ -264,7 +265,7 @@ reserved_no_option:
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO | TOK_TRUNCATE
 	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
-	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL
+	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	;
 
 reserved_set_tail:
@@ -326,7 +327,7 @@ one_index:
 only_one_index:
 	one_index
 		{
-			pParser->ToString (pParser->m_pStmt->m_sIndex, $1);
+			pParser->SetIndex ($1);
 		}
 	;
 
@@ -1234,6 +1235,7 @@ function:
 	| TOK_FLOAT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_DOUBLE '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_IDENT '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| TOK_QUERY '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
@@ -2033,12 +2035,17 @@ unfreeze_indexes:
 		}
 	;
 
+opt_word_query:
+	// empty
+	| TOK_QUERY
+	;
+
 kill_connid:
-	TOK_KILL TOK_CONST_INT
+	TOK_KILL opt_word_query TOK_CONST_INT
 		{
-    		pParser->m_pStmt->m_eStmt = STMT_KILL;
-    		pParser->m_pStmt->m_iIntParam = $2.m_iValue;
-    	}
+			pParser->m_pStmt->m_eStmt = STMT_KILL;
+			pParser->m_pStmt->m_iIntParam = $3.m_iValue;
+		}
     ;
 
 

@@ -495,6 +495,8 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
 		return false;
 
+	LoadCompatHttp ( (const char*)dData.Begin() );
+
 	// FIXME!!! check for path duplicates
 	// check indexes
 	JsonObj_c tIndexes = tRoot.GetItem("indexes");
@@ -553,6 +555,7 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 		i.Save(tIndexes);
 
 	tRoot.AddItem ( "indexes", tIndexes );
+	SaveCompatHttp ( tRoot );
 
 	CSphString sNew, sOld;
 	auto & sCur = sConfigPath;

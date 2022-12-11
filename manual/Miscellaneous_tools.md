@@ -27,7 +27,7 @@ The commands are as follows:
 *   `--dumpdocids INDEXNAME` dumps document IDs by table name.
 *   `--dumphitlist INDEXNAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as text.
 *   `--dumphitlist INDEXNAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as internal numeric ID.
-*   `--docextract IDX DOCID` runs usual table check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document. Then all of the words are placed in the order according to their fields and positions, and result is printed, grouping by field.
+*   `--docextract TBL DOCID` runs usual table check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document. Then all of the words are placed in the order according to their fields and positions, and result is printed, grouping by field.
 *   `--fold INDEXNAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
 *   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given table, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the table header.
 *   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `--skip-uniq` will skip unique (df=1) words.

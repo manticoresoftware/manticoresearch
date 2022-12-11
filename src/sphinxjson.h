@@ -450,6 +450,8 @@ public:
 	void			AddItem ( const char * szName, JsonObj_c & tObj );
 	void			AddItem ( JsonObj_c & tObj );
 	void			DelItem ( const char * szName );
+	void			ReplaceItem ( int iIndex, JsonObj_c & tObj );
+	JsonObj_c		Clone () const;
 
 	int				Size() const;
 	JsonObj_c		GetItem ( const char * szName ) const;
@@ -529,6 +531,7 @@ bool Bool ( const NodeHandle_t& tLocator, bool bDefault=false );
 int64_t Int ( const NodeHandle_t & tLocator, int64_t iDefault=0 );
 double Double ( const NodeHandle_t & tLocator, double fDefault=0.0 );
 CSphString String ( const NodeHandle_t & tLocator, CSphString sDefault="" );
+Str_t ToStr ( const NodeHandle_t & tLocator );
 inline bool IsNullNode ( const NodeHandle_t & dNode ) { return dNode==nullnode; }
 
 // iterate over collection (without names).

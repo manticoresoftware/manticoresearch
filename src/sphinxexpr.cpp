@@ -8541,7 +8541,7 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 		case TOK_COLUMNAR_STRING:		return CreateExpr_ColumnarStringLength ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_ATTR_JSON:				return new Expr_JsonFieldLength_c ( pLeft );
 		default:
-			m_sCreateError = "LENGTH() argument must be MVA or JSON field";
+			m_sCreateError = "LENGTH() argument must be MVA or JSON or STRING field";
 			return nullptr;
 	}
 }

@@ -153,6 +153,8 @@ void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
 
+bool HasWildcard ( const char * sVal );
+
 /// parse size from text (int, or K/M/G/T suffix), or return provided default value.
 /// *ppErr, if provided, will point to parsing error, if any
 int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDefault=-1 );
@@ -161,6 +163,8 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDe
 /// \return result in uSeconds, i.e. may be directly compared with sphMicroTimer(), etc.
 /// *ppErr, if provided, will point to parsing error, if any. By default scale is 's', seconds.
 int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
+
+int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat );
 //////////////////////////////////////////////////////////////////////////
 
 namespace sph

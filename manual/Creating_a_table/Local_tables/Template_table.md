@@ -15,7 +15,7 @@
 ##### Creating a template table via a configuration file:
 
 ```ini
-index template {
+table template {
   type = template
   morphology = stem_en
   wordforms = wordforms.txt

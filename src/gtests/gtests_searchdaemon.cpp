@@ -282,9 +282,9 @@ TEST_F ( T_ConfigureMultiAgent, fixme_wrong_portnum )
 
 TEST_F ( T_ConfigureMultiAgent, wrong_idx_name )
 {
-	ParserTest ( "/localhost:idx,idx-name,idx2", false,
-		"WARNING: index 'tstidx': agent '/localhost:idx,idx-name,idx2': "
-		"no such index: idx-name, - SKIPPING AGENT" );
+	ParserTest ( "/localhost:idx,idx=name,idx2", false,
+		"WARNING: index 'tstidx': agent '/localhost:idx,idx=name,idx2': "
+		"no such index: idx=name, - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_idx_delimited_from_host )

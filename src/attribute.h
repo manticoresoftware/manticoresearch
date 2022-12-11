@@ -145,5 +145,7 @@ inline DocID_t sphGetDocID ( const CSphRowitem * pData )
 	return sphUnalignedRead ( *(DocID_t*)(const_cast<CSphRowitem *>(pData)) );
 }
 
+const char * AttrType2Str ( ESphAttr eAttrType );
+
 #endif
 

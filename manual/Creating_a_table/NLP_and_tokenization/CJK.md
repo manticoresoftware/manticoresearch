@@ -65,12 +65,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cj
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   charset_table = cjk
   morphology = icu_chinese
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -140,13 +140,13 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   charset_table = non_cjk
   ngram_len = 1
   ngram_chars = cjk
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -218,13 +218,13 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'ch
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   charset_table = chinese
   morphology = icu_chinese
   stopwords = zh
   
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

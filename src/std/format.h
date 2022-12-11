@@ -30,3 +30,6 @@
 #define UINT64_FMT "%" PRIu64
 #define INT64_FMT "%" PRIi64
 
+#ifndef PRIx64
+#define PRIx64 "llx"
+#endif

@@ -927,7 +927,8 @@ Proto_e AsyncNetInputBuffer_c::Probe ( bool bLight )
 		else if ( !memcmp ( tBlob.first, "GET", 3)
 				|| !memcmp ( tBlob.first, "POST", 4 )
 				|| !memcmp ( tBlob.first, "PUT", 3 )
-				|| !memcmp ( tBlob.first, "DELE", 4 ) )
+				|| !memcmp ( tBlob.first, "DELE", 4 )
+				|| !memcmp ( tBlob.first, "HEAD", 4 ) )
 		{
 			eResult = Proto_e::HTTP;
 			sBytes << "HTTP";

@@ -181,6 +181,7 @@ public:
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
 	void 			AddIntSubkey ( const SqlNode_t & tNode ) const;
 	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
+	void			SetIndex ( const SqlNode_t & tNode ) const;
 
 private:
 	bool						m_bGotQuery = false;
@@ -1013,12 +1014,21 @@ void SqlParser_c::SwapSubkeys ()
 	m_pQuery->m_dStringSubkeys.SwapData ( m_pStmt->m_dStringSubkeys );
 }
 
+void SqlParser_c::SetIndex ( const SqlNode_t & tNode ) const
+{
+	ToString ( m_pStmt->m_sIndex, tNode );
+	// unquote index name
+	if ( ( tNode.m_iEnd - tNode.m_iStart )>2 && m_pStmt->m_sIndex.cstr()[0]=='\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1]=='\'' )
+		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length()-2 );
+}
+
+
 void SqlParser_c::GenericStatement ( SqlNode_t * pNode )
 {
 	SwapSubkeys();
 	m_pStmt->m_iListStart = pNode->m_iStart;
 	m_pStmt->m_iListEnd = pNode->m_iEnd;
-	ToString ( m_pStmt->m_sIndex, *pNode );
+	SetIndex ( *pNode );
 }
 
 void SqlParser_c::AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const

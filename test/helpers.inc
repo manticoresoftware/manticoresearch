@@ -448,7 +448,10 @@ function RunIndexerOnce ( &$error, $params )
 	$retval = 0;
 	exec ( "$path --quiet --config ".testdir('config.conf')." $params", $error, $retval );
 
-	$error = join ( "\n", $error );
+	// Not considering warnings as errors here to avoid possible fails caused by the columnar library init warning
+	$error = join ( "\n", array_filter ( $error, function( $errLine ) {
+		return strpos ( $errLine, "FATAL:" )===0 ||  strpos ( $errLine, "ERROR:" )===0;
+	} ) );
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
 }
 
@@ -485,6 +488,9 @@ function CheckSearchdLog ( $error_file, &$retval )
 			$t = strstr ( $line, $tag );
 			if ( $t )
 			{
+				// Adding an explicit check to avoid possible fails caused by the columnar library init warning
+				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: Error initializing columnar storage" )!==false )
+					continue;
 				$error .= $t;
 				if ( $tag!="WARNING:" )
 					$retval = 1;

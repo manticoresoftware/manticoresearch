@@ -19,11 +19,11 @@ You can perform a percolate query via SQL or JSON interfaces as well as using pr
 
 | Desired behaviour | SQL | HTTP | PHP |
 | - | - | - | - |
-| Provide a single document| `CALL PQ('idx', '{doc1}')` | `query.percolate.document{doc1}`  | `$client->pq()->search([$percolate])`   |
-| Provide a single document (alternative) | `CALL PQ('idx', 'doc1', 0 as docs_json)`  | -  |   |
-| Provide multiple documents  | `CALL PQ('idx', ('doc1', 'doc2'), 0 as docs_json)` | `query.percolate.documents[{doc1}, {doc2}]` | `$client->pq()->search([$percolate])`  |
-| Provide multiple documents (alternative)  | `CALL PQ('idx', ('{doc1}', '{doc2}'))` | -  | - |
-| Provide multiple documents (alternative)  | `CALL PQ('idx', '[{doc1}, {doc2}]')` | -  | - |
+| Provide a single document| `CALL PQ('tbl', '{doc1}')` | `query.percolate.document{doc1}`  | `$client->pq()->search([$percolate])`   |
+| Provide a single document (alternative) | `CALL PQ('tbl', 'doc1', 0 as docs_json)`  | -  |   |
+| Provide multiple documents  | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | `query.percolate.documents[{doc1}, {doc2}]` | `$client->pq()->search([$percolate])`  |
+| Provide multiple documents (alternative)  | `CALL PQ('tbl', ('{doc1}', '{doc2}'))` | -  | - |
+| Provide multiple documents (alternative)  | `CALL PQ('tbl', '[{doc1}, {doc2}]')` | -  | - |
 | Return matching document ids | 0/1 as docs (disabled by default)  | Enabled by default  | Enabled by default |
 | Use document's own id to show in the result | 'id field' as docs_id (disabled by default)  | Not available  | Not available  |
 | Consider input documents are JSON | 1 as docs_json (1 by default)  | Enabled by default  | Enabled by default |
@@ -1413,7 +1413,7 @@ There are two modes of distribution of a percolate table and how a percolate que
 Let's assume you have table `pq_d2` which is defined as:
 
 ``` ini
-index pq_d2
+table pq_d2
 {
     type = distributed
     agent = 127.0.0.1:6712:pq

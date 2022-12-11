@@ -39,7 +39,7 @@ SELECT * FROM pq;
 There are two way you can add a percolate query into a percolate table:
 * query in JSON /search compatible format, described at [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
-PUT /pq/pq_index/doc/1
+PUT /pq/pq_table/doc/1
 {
   "query": {
     "match": {
@@ -57,7 +57,7 @@ PUT /pq/pq_index/doc/1
 
 * query in SQL format, described at [search query syntax](../Searching/Filters.md#Queries-in-SQL-format)
 ```json
-PUT /pq/pq_index/doc/2
+PUT /pq/pq_table/doc/2
 {
   "query": {
     "ql": "@title shoes"
@@ -149,7 +149,7 @@ SELECT * FROM pq;
 <!-- request HTTP -->
 
 ```json
-PUT /pq/pq_index/doc
+PUT /pq/pq_table/doc
 {
 "query": {
   "match": {
@@ -164,7 +164,7 @@ PUT /pq/pq_index/doc
 "tags": ["Loius Vuitton"]
 }
 
-PUT /pq/pq_index/doc
+PUT /pq/pq_table/doc
 {
 "query": {
   "ql": "@title shoes"
@@ -177,14 +177,14 @@ PUT /pq/pq_index/doc
 
 ```json
 {
-  "index": "pq_index",
+  "index": "pq_table",
   "type": "doc",
   "_id": "1657843905795719196",
   "result": "created"
 }
 
 {
-  "index": "pq_index",
+  "index": "pq_table",
   "type": "doc",
   "_id": "1657843905795719198",
   "result": "created"
@@ -195,7 +195,7 @@ PUT /pq/pq_index/doc
 <!-- request PHP -->
 ```php
 $newstoredquery = [
-    'index' => 'pq_index',
+    'index' => 'pq_table',
     'body' => [
         'query' => [
                        'match' => [
@@ -215,7 +215,7 @@ $client->pq()->doc($newstoredquery);
 <!-- response PHP -->
 ```php
 Array(
-       [index] => pq_index
+       [index] => pq_table
        [type] => doc
        [_id] => 1657843905795719198
        [result] => created

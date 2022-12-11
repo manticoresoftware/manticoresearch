@@ -12,7 +12,7 @@ In the second you normally want to add a large bulk of new data to a real-time t
 The `ATTACH` statement allows to convert a plain table to be attached to an existing real-time table.
 
 ```sql
-ATTACH TABLE diskindex TO RTINDEX rtindex [WITH TRUNCATE]
+ATTACH TABLE plain_table TO TABLE rt_table [WITH TRUNCATE]
 ```
 
 `ATTACH TABLE` statement lets you move data from a plain table to an RT table.
@@ -52,7 +52,7 @@ mysql> SELECT * FROM rt;
 The plain table is not empty:
 
 ```sql
-mysql> SELECT * FROM disk WHERE MATCH('test');
+mysql> SELECT * FROM plain WHERE MATCH('test');
 +------+--------+----------+------------+
 | id   | weight | group_id | date_added |
 +------+--------+----------+------------+
@@ -66,7 +66,7 @@ mysql> SELECT * FROM disk WHERE MATCH('test');
 
 Attaching:
 ```sql
-mysql> ATTACH TABLE disk TO RTINDEX rt;
+mysql> ATTACH TABLE plain TO TABLE rt;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
@@ -104,7 +104,7 @@ mysql> SELECT * FROM rt WHERE MATCH('test');
 The plain table was removed:
 
 ```sql
-mysql> SELECT * FROM disk WHERE MATCH('test');
+mysql> SELECT * FROM plain WHERE MATCH('test');
 ERROR 1064 (42000): no enabled local indexes to search
 ```
 <!-- end -->

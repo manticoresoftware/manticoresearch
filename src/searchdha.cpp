@@ -1124,7 +1124,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 	while ( *p )
 	{
 		// skip non-alphas
-		while ( *p && !isalpha ( *p ) && !isdigit ( *p ) && *p!='_' )
+		while ( *p && !isalpha ( *p ) && !isdigit ( *p ) && *p!='_' && *p!='.' && *p!='-' )
 			p++;
 		if ( !( *p ) )
 			break;
@@ -1136,7 +1136,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 
 		// this is my next index name
 		const char * sNext = p;
-		while ( isalpha ( *p ) || isdigit ( *p ) || *p=='_' )
+		while ( isalpha ( *p ) || isdigit ( *p ) || *p=='_' || *p=='.' || *p=='-' )
 			p++;
 
 		assert ( sNext!=p );

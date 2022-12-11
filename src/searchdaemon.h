@@ -1255,6 +1255,7 @@ struct AggrResult_t final: CSphQueryResultMeta
 	Debug (bool				m_bOneSchema = false;) // either chunk's schemas are valid, or single result's schema in game.
 	Debug (bool				m_bTagsCompacted = false;) // whether tags range is compact or has gaps
 	Debug (bool				m_bIdxByTag = false;) // if m_dResults[iTag].m_iTag==iTag is true for all results
+	StrVec_t				m_dIndexNames;
 
 	int				GetLength() const;
 	inline bool		IsEmpty() const { return GetLength()==0; }
@@ -1302,6 +1303,7 @@ enum MysqlErrors_e
 	MYSQL_ERR_UNKNOWN_COM_ERROR			= 1047,
 	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
 	MYSQL_ERR_PARSE_ERROR				= 1064,
+	MYSQL_ERR_NO_SUCH_THREAD			= 1094,
 	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110,
 	MYSQL_ERR_NO_SUCH_TABLE				= 1146,
 	MYSQL_ERR_TOO_MANY_USER_CONNECTIONS	= 1203
@@ -1321,6 +1323,9 @@ public:
 	void Error ( const char * sTemplate, ... );
 
 	virtual RowBuffer_i * GetBuffer() = 0;
+
+	virtual bool IsError() const { return false; }
+	virtual const char * GetError() const { return nullptr; }
 };
 
 
@@ -1331,6 +1336,7 @@ class ReplyParser_i;
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson );
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
 std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
+StmtErrorReporter_i * CreateHttpErrorReporter();
 
 enum ESphHttpStatus
 {
@@ -1339,12 +1345,34 @@ enum ESphHttpStatus
 	SPH_HTTP_STATUS_206,
 	SPH_HTTP_STATUS_400,
 	SPH_HTTP_STATUS_403,
+	SPH_HTTP_STATUS_404,
+	SPH_HTTP_STATUS_405,
+	SPH_HTTP_STATUS_409,
 	SPH_HTTP_STATUS_500,
 	SPH_HTTP_STATUS_501,
 	SPH_HTTP_STATUS_503,
 	SPH_HTTP_STATUS_526,
 
 	SPH_HTTP_STATUS_TOTAL
+};
+
+enum ESphHttpEndpoint
+{
+	SPH_HTTP_ENDPOINT_INDEX,
+	SPH_HTTP_ENDPOINT_SQL,
+	SPH_HTTP_ENDPOINT_JSON_SEARCH,
+	SPH_HTTP_ENDPOINT_JSON_INDEX,
+	SPH_HTTP_ENDPOINT_JSON_CREATE,
+	SPH_HTTP_ENDPOINT_JSON_INSERT,
+	SPH_HTTP_ENDPOINT_JSON_REPLACE,
+	SPH_HTTP_ENDPOINT_JSON_UPDATE,
+	SPH_HTTP_ENDPOINT_JSON_DELETE,
+	SPH_HTTP_ENDPOINT_JSON_BULK,
+	SPH_HTTP_ENDPOINT_PQ,
+	SPH_HTTP_ENDPOINT_CLI,
+	SPH_HTTP_ENDPOINT_ES_BULK,
+
+	SPH_HTTP_ENDPOINT_TOTAL
 };
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
@@ -1362,6 +1390,14 @@ bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
 bool				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
+void				LoadCompatHttp ( const char * sData );
+void				SaveCompatHttp ( JsonObj_c & tRoot );
+void				SetupCompatHttp();
+void				SetLogManagement ( bool bEnable );
+bool				IsLogManagementEnabled ();
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
+int64_t GetDocID ( const char * sID );
+void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
@@ -1440,6 +1476,37 @@ void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
 
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
+void SetLogHttpFilter ( const CSphString & sVal );
+int HttpGetStatusCodes ( ESphHttpStatus eStatus );
+void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
+void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
+void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
+
+using HttpOptionsHash_t = SmallStringHash_T<CSphString>;
+struct http_parser;
+
+struct HttpRequestParsed_t
+{
+	HttpRequestParsed_t ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
+		: m_sBody ( sBody )
+		, m_iType ( iReqType )
+		, m_hOpts ( hOpts )
+	{}
+	const CSphString &		GetBody() const { return m_sBody; }
+	int						GetRequestType() const { return m_iType; }
+	const CSphString &		GetFullURL() const { return m_hOpts["full_url"]; }
+	const SmallStringHash_T<CSphString> &	GetOptions() const { return m_hOpts; }
+
+	CSphString m_sBody;
+	int m_iType { 0 };
+	const SmallStringHash_T<CSphString> & m_hOpts;
+};
+
+void ProcessCompatHttp ( const HttpRequestParsed_t & tParser, CSphVector<BYTE> & dResult );
+void UriPercentReplace ( Str_t & sEntity, bool bAlsoPlus=true );
+void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody );
+void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody, const VecTraits_T<BYTE> & dResult );
+int GetLogFD ();
 
 enum MysqlColumnType_e
 {
@@ -1641,6 +1708,13 @@ public:
 				break;
 		Eof();
 	}
+
+	virtual const CSphString & GetError() const { return m_sError; }
+	virtual bool IsError() const { return m_bError; }
+
+protected:
+	bool m_bError = false;
+	CSphString m_sError;
 };
 
 #endif // _searchdaemon_

@@ -343,8 +343,7 @@ int RtSegment_t::Kill ( DocID_t tDocID )
 		m_tAliveRows.fetch_sub ( 1, std::memory_order_relaxed );
 
 		// on runtime killing expected only from single fiber, so no mutex here required as no race for pKillHook
-		if ( m_pKillHook )
-			m_pKillHook->Kill ( tDocID );
+		KillHook ( tDocID );
 		return 1;
 	}
 
@@ -3957,6 +3956,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		} else
 			iNotMyOpRAM += pSeg->GetUsedRam();
 	}
+	AT_SCOPE_EXIT ( [&dSegments] { dSegments.for_each ( [] ( const auto& dSeg ) { dSeg->SetKillHook ( nullptr ); } ); } );
 
 	UpdateUnlockedCount();
 
@@ -7545,7 +7545,12 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
 		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
-		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, GetName(), tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+	{
+		CSphMultiQueryArgs tFTArgs ( tArgs.m_iIndexWeight );
+		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
+
+		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, GetName(), tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+	}
 
 	if (!bResult)
 		return false;

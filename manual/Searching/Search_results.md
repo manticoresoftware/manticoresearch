@@ -7,7 +7,7 @@ When you run a query via SQL over mysql protocol as a result you get the request
 
 <!-- request SQL -->
 ```sql
-SELECT * FROM idx;
+SELECT * FROM tbl;
 ```
 
 <!-- response SQL -->
@@ -59,7 +59,7 @@ In some cases, e.g. when you do [faceted search](../Searching/Faceted_search.md)
 
 <!-- request SQL -->
 ```sql
-SELECT * FROM idx WHERE MATCH('joe') FACET age;
+SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 ```
 
 <!-- response SQL -->
@@ -84,7 +84,7 @@ SELECT * FROM idx WHERE MATCH('joe') FACET age;
 In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](../Profiling_and_monitoring/SHOW_WARNINGS.md).
 <!-- request SQL -->
 ```sql
-SELECT * from idx where match('"joe"/3'); show warnings;
+SELECT * from tbl where match('"joe"/3'); show warnings;
 ```
 
 <!-- response SQL -->
@@ -110,7 +110,7 @@ If your query fails you will get an error:
 
 <!-- request SQL -->
 ```sql
-SELECT * from idx where match('@surname joe');
+SELECT * from tbl where match('@surname joe');
 ```
 
 <!-- response SQL -->

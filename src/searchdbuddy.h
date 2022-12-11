@@ -12,9 +12,13 @@
 
 #pragma once
 
-#include "networking_daemon.h"
+#include "sphinxstd.h"
+#include "searchdhttp.h"
 
-void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf );
+void BuddyStart ( const CSphString & sPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry );
+void BuddyStop ();
 
+bool HasBuddy();
 
-RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, ISphOutputBuffer * pOut );
+HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
+bool ProcessSqlQueryBuddy ( Str_t tQuery, BYTE & uPacketID, ISphOutputBuffer & tOut );

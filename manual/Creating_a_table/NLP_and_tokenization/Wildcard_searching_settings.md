@@ -82,11 +82,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) min_prefix_len = '3
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   min_prefix_len = 3
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -178,11 +178,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) min_infix_len = '3'
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   min_infix_len = 3
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -208,7 +208,7 @@ Because prefix indexing impacts both indexing and searching performance, it migh
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   prefix_fields = title, name
   min_prefix_len = 3
   dict = crc
@@ -234,7 +234,7 @@ Similar to [prefix_fields](../../Creating_a_table/NLP_and_tokenization/Low-level
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   infix_fields = title, name
   min_infix_len = 3
   dict = crc
@@ -273,7 +273,7 @@ There is no performance impact associated with substring length when using dict=
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   max_substring_len = 12
   min_infix_len = 3
   dict = crc
@@ -350,11 +350,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) expand_keywords = '
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   expand_keywords = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

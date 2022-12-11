@@ -76,12 +76,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = '/usr/l
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   stopwords = /usr/local/manticore/data/stopwords.txt
   stopwords = stopwords-ru.txt stopwords-en.txt
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -199,11 +199,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'it'");
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   stopwords = it
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -268,11 +268,11 @@ utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   stopwords = en it ru
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -344,12 +344,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   stopwords = en
   stopword_step = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }
@@ -425,12 +425,12 @@ utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' 
 <!-- request CONFIG -->
 
 ```ini
-index products {
+table products {
   stopwords = en
   stopwords_unstemmed = 1
 
   type = rt
-  path = idx
+  path = tbl
   rt_field = title
   rt_attr_uint = price
 }

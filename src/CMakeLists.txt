@@ -118,7 +118,8 @@ set ( Boost_USE_STATIC_LIBS ON )
 if (CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL Windows)
 	set ( Boost_COMPILER vc142 )
 endif ()
-find_package ( Boost 1.61.0 REQUIRED COMPONENTS context )
+# ver 1.64 for process; filesystem need for process; ver 1.71 for limit_handles
+find_package ( Boost 1.71.0 REQUIRED COMPONENTS context filesystem  )
 target_link_libraries ( lextra INTERFACE Boost::boost Boost::context )
 
 # Fixme! That is temporary solution - as we just use some headers of Boost::fiber, and that is available by default.
@@ -157,7 +158,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		netreceive_api.h netreceive_http.h netreceive_ql.h networking_daemon.h query_status.h
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
-		netpoll.h pollable_event.h)
+		netpoll.h pollable_event.h netfetch.h searchdbuddy.h)
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
@@ -211,11 +212,21 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
-		sphinxql_debug.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp pollable_event.cpp)
+		sphinxql_debug.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
+		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp)
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
-target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra )
+target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra nlohmann_json::nlohmann_json )
+target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
+
+if (WITH_CURL)
+	if (DL_CURL)
+		target_link_libraries ( lsearchd PRIVATE CURL::libcurl_ld )
+	else ()
+		target_link_libraries ( lsearchd PRIVATE CURL::libcurl )
+	endif ()
+endif ()
 
 function (stackmock processors compiler versions config values)
 	if (NOT CMAKE_SYSTEM_PROCESSOR IN_LIST processors)
@@ -239,7 +250,7 @@ diag ( CMAKE_SYSTEM_PROCESSOR CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION )
 stackmock ( "x86_64;amd64" Clang "12;13;13.0.1" relwithdebinfo "KNOWN_CREATE_SIZE=768;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=224" )
 stackmock ( "x86_64;amd64" Clang "12;13;13.0.1" debug "KNOWN_CREATE_SIZE=4208;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=400" )
 stackmock ( "x86_64;amd64" Clang "15.0.2" relwithdebinfo "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=128" )
-stackmock ( "x86_64;amd64" Clang "15.0.4" relwithdebinfo "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=208" )
+stackmock ( "x86_64;amd64" Clang "15.0.4" relwithdebinfo "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=224" )
 stackmock ( "x86_64;amd64" Clang "15.0.2;15.0.4" debug "KNOWN_CREATE_SIZE=1936;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=368" )
 stackmock ( "x86_64;amd64" GNU "9.3;9.4" relwithdebinfo "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=240" )
 stackmock ( "x86_64;amd64" GNU "9.3;9.4" debug "KNOWN_CREATE_SIZE=256;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=272" )

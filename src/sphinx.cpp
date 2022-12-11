@@ -1384,6 +1384,7 @@ private:
 	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery ) const;
+	bool						CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads, bool & bFastQuery ) const;
 
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
@@ -2944,41 +2945,74 @@ static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tSc
 }
 
 
+static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
+{
+	if ( !tQuery.m_sGroupDistinct.IsEmpty() )
+		return true;
+
+	// FIXME: also need to handle 
+	// 1. Stateful UDFs
+	// 2. Update/delete queue
+
+	return false;
+}
+
+
+bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads, bool & bFastQuery ) const
+{
+	// if there's a filter tree, we don't have any indexes and there's no point in wasting time to eval them
+	if ( tQuery.m_dFilterTree.GetLength() )
+		return true;
+
+	const float COST_THRESH = 0.5f;
+
+	float fCost = FLT_MAX;
+	bool bImplicitCutoff;
+	int iCutoff;
+	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, {} );
+
+	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
+	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost );
+
+	// disable pseudo sharding if any of the queries use secondary indexes/docid lookups
+	if ( dEnabledIndexes.any_of ( []( const SecondaryIndexInfo_t & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::LOOKUP; } ) )
+		return false;
+
+	if ( tQuery.m_sQuery.IsEmpty() )
+		bFastQuery = dEnabledIndexes.GetLength() && fCost<=COST_THRESH;
+	else
+		bFastQuery = IsQueryFast(tQuery);
+
+	return true;
+}
+
+
 int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
 	bool bAllFast = true;
-	const float COST_THRESH = 0.5f;
-
-	ESphCollation eCollation = dQueries.GetLength() ? dQueries.Begin()->m_eCollation : SPH_COLLATION_DEFAULT;
 
 	ARRAY_FOREACH ( i, dQueries )
 	{
 		auto & tQuery = dQueries[i];
-		int iMaxCountDistinct = dMaxCountDistinct[i];
-		float fCost = FLT_MAX;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
 			continue;
-
-		SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), eCollation, tQuery.m_iCutoff, m_iDocinfo, iThreads );
-		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost );
-
-		// disable pseudo sharding if any of the queries use secondary indexes/docid lookups
-		if ( dEnabledIndexes.any_of ( []( const SecondaryIndexInfo_t & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::LOOKUP; } ) )
-			return -1;
-
+		
 		bool bFastQuery = false;
-		if ( tQuery.m_sQuery.IsEmpty() )
-			bFastQuery = dEnabledIndexes.GetLength() && fCost<=COST_THRESH;
-		else
-			bFastQuery = IsQueryFast(tQuery);
+		if ( !CheckEnabledIndexes ( tQuery, iThreads, bFastQuery ) )
+			return -1; 
 
 		bAllFast &= bFastQuery;
+
+		// check for potential non-clonable sorters (we don't have actual sorters at this stage)
+		if ( DetectNonClonableSorters(tQuery) )
+			return -1;
 
 		// at this point we are trying to decide how many threads this index gets
 		// we did not correct max_matches yet (to achieve max grouping accuracy)
 		// but if increasing max_matches would be enough to achieve max accuracy, there's no need to turn off multithreading
 		// that's why now we try to guess if increasing max_matches is enough
+		int iMaxCountDistinct = dMaxCountDistinct[i];
 		bool bAccurateAggregation = tQuery.m_bExplicitAccurateAggregation ? tQuery.m_bAccurateAggregation : GetAccurateAggregationDefault();
 		if ( bAccurateAggregation && !tQuery.m_sGroupBy.IsEmpty() )
 		{
@@ -7799,16 +7833,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<
 
 	std::vector<common::Filter_t> dColumnarFilters;
 	std::vector<int> dFilterMap;
-	dFilterMap.resize ( dFilters.GetLength() );
-	ARRAY_FOREACH ( i, dFilters )
-	{
-		dFilterMap[i] = -1;
-		const CSphColumnInfo * pCol = tSchema.GetAttr ( dFilters[i].m_sAttrName.cstr() );
-		bool bColumnarFilter = pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() || pCol->IsStoredExpr() );
-		bool bRowIdFilter = dFilters[i].m_sAttrName=="@rowid";
-		if ( ( bColumnarFilter || bRowIdFilter ) && AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning ) )
-			dFilterMap[i] = (int)dColumnarFilters.size()-1;
-	}
+	ToColumnarFilters ( dFilters, dColumnarFilters, dFilterMap, tSchema, eCollation, sWarning );
 
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return nullptr;

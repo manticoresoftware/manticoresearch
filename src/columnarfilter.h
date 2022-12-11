@@ -14,7 +14,8 @@
 #include "sphinxfilter.h"
 
 std::unique_ptr<ISphFilter>	TryToCreateColumnarFilter ( int iAttr, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation, CSphString & sError, CSphString & sWarning );
-bool			AddColumnarFilter ( std::vector<common::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
-bool			ToColumnarFilter ( common::Filter_t & tFilter, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
+bool AddColumnarFilter ( std::vector<common::Filter_t> & dDst, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
+bool ToColumnarFilter ( common::Filter_t & tFilter, const CSphFilterSettings & tSrc, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning );
+void ToColumnarFilters ( VecTraits_T<const CSphFilterSettings> & dFilters, std::vector<common::Filter_t> & dColumnarFilters, std::vector<int> & dFilterMap, const ISphSchema & tSchema, ESphCollation eCollation, CSphString & sWarning );
 
 #endif // _columnarfilter_

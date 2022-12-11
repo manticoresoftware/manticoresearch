@@ -527,6 +527,7 @@ public:
 
 	columnar::Iterator_i *					CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
 	std::vector<common::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<common::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
+	int64_t			EstimateMinMax ( const common::Filter_t & tFilter, const columnar::BlockTester_i & tBlockTester ) const final { return -1; }
 
 	bool			GetAttrInfo ( const std::string & sName, columnar::AttrInfo_t & tInfo ) const override;
 	bool			EarlyReject ( const std::vector<common::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
@@ -604,7 +605,6 @@ bool ColumnarRT_c::GetAttrInfo ( const std::string & sName, columnar::AttrInfo_t
 
 	tInfo.m_iId = pFound->second;
 	tInfo.m_eType = pFound->first->GetType();
-	tInfo.m_bHasHash = false;
 
 	return true;
 }

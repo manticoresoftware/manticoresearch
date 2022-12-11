@@ -728,6 +728,97 @@ static void DisableRowidFilters ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 			dSIInfo[i].m_dCapabilities.Resize(0);
 }
 
+
+static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	ARRAY_FOREACH ( i, dSIInfo )
+	{
+		auto & tSIInfo = dSIInfo[i];
+		auto & tFilter = tCtx.m_dFilters[i];
+
+		bool bHaveAnalyzers = tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::ANALYZER; } );
+		bool bHaveSI		= tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::INDEX; } );
+		bool bHaveLookups	= tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::LOOKUP; } );
+
+		if ( bHaveAnalyzers && ( bHaveSI || bHaveLookups ) )
+		{
+			// create a single filter and run it through partial columnar minmax
+			VecTraits_T<CSphFilterSettings> dFilter = { &tFilter, 1 };
+
+			CreateFilterContext_t tCFCtx;
+			tCFCtx.m_pFilters	= &dFilter;
+			tCFCtx.m_pSchema	= &tCtx.m_tSchema;
+			tCFCtx.m_pColumnar	= tCtx.m_pColumnar;
+			tCFCtx.m_eCollation	= tCtx.m_eCollation;
+			tCFCtx.m_bScan		= true;
+			tCFCtx.m_pHistograms= tCtx.m_pHistograms;
+			tCFCtx.m_iTotalDocs	= tCtx.m_iTotalDocs;
+
+			CSphString sError, sWarning;
+			if ( !sphCreateFilters ( tCFCtx, sError, sWarning ) )
+				continue;
+
+			common::Filter_t tColumnarFilter;
+			if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_eCollation, tCtx.m_tSchema, sWarning ) )
+				continue;
+
+			tSIInfo.m_iPartialColumnarMinMax = tCtx.m_pColumnar->EstimateMinMax ( tColumnarFilter, *tCFCtx.m_pFilter );
+		}
+	}
+}
+
+
+static bool IsWideRange ( const CSphFilterSettings & tFilter )
+{
+	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+		return true;
+
+	if ( tFilter.m_eType!=SPH_FILTER_RANGE )
+		return false;
+
+	if ( tFilter.m_bOpenLeft || tFilter.m_bOpenRight )
+		return true;
+
+	const int WIDE_RANGE_THRESH=10000;
+	return ( tFilter.m_iMaxValue-tFilter.m_iMinValue ) >= WIDE_RANGE_THRESH;
+}
+
+
+static uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs, const SelectIteratorCtx_t & tCtx )
+{
+	uint32_t uNumIterators = 1;
+	if ( !tCtx.m_pSI )
+		return uNumIterators;
+
+	// if we suspect that that index may fetch A LOT of iterators,
+	// we ask the SI about it explicitly
+	const int DOC_THRESH = 10000;
+	if ( !IsWideRange(tFilter) || iDocs<DOC_THRESH )
+		return uNumIterators;
+
+	common::Filter_t tColumnarFilter;
+	CSphString sWarning;
+	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_eCollation, tCtx.m_tSchema, sWarning ) )
+		return 0;
+
+	return tCtx.m_pSI->GetNumIterators(tColumnarFilter);
+}
+
+
+static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	ARRAY_FOREACH ( i, dSIInfo )
+	{
+		auto & tSIInfo = dSIInfo[i];
+		auto & tFilter = tCtx.m_dFilters[i];
+
+		if ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1 )
+			tSIInfo.m_uNumSIIterators = 1;
+		else
+			tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tFilter, tSIInfo.m_iRsetEstimate, tCtx );
+	}
+}
+
 /////////////////////////////////////////////////////////////////////
 
 CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost )
@@ -747,6 +838,8 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	MarkAvailableAnalyzers ( dSIInfo, tCtx );
 	ForceSI(dSIInfo);
 	DisableRowidFilters ( dSIInfo, tCtx );
+	FetchPartialColumnarMinMax ( dSIInfo, tCtx );
+	FetchNumSIIterators ( dSIInfo, tCtx );
 
 	CSphVector<int> dCapabilities ( dSIInfo.GetLength() );
 	CSphVector<int> dBest ( dSIInfo.GetLength() );

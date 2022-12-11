@@ -810,3 +810,18 @@ bool AddColumnarFilter ( std::vector<common::Filter_t> & dDst, const CSphFilterS
 	dDst.emplace_back ( std::move(tFilter) );
 	return true;
 }
+
+
+void ToColumnarFilters ( VecTraits_T<const CSphFilterSettings> & dFilters, std::vector<common::Filter_t> & dColumnarFilters, std::vector<int> & dFilterMap, const ISphSchema & tSchema, ESphCollation eCollation, CSphString & sWarning )
+{
+	dFilterMap.resize ( dFilters.GetLength() );
+	ARRAY_FOREACH ( i, dFilters )
+	{
+		dFilterMap[i] = -1;
+		const CSphColumnInfo * pCol = tSchema.GetAttr ( dFilters[i].m_sAttrName.cstr() );
+		bool bColumnarFilter = pCol && ( pCol->IsColumnar() || pCol->IsColumnarExpr() || pCol->IsStoredExpr() );
+		bool bRowIdFilter = dFilters[i].m_sAttrName=="@rowid";
+		if ( ( bColumnarFilter || bRowIdFilter ) && AddColumnarFilter ( dColumnarFilters, dFilters[i], eCollation, tSchema, sWarning ) )
+			dFilterMap[i] = (int)dColumnarFilters.size()-1;
+	}
+}

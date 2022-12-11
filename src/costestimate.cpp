@@ -59,9 +59,7 @@ private:
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const;
-	bool	IsWideRange ( const CSphFilterSettings & tFilter ) const;
 	uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const;
-	bool	HasSeveralSIIterators ( const CSphFilterSettings & tFilter ) const;
 };
 
 
@@ -95,22 +93,6 @@ bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64
 }
 
 
-bool CostEstimate_c::IsWideRange ( const CSphFilterSettings & tFilter ) const
-{
-	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
-		return true;
-
-	if ( tFilter.m_eType!=SPH_FILTER_RANGE )
-		return false;
-
-	if ( tFilter.m_bOpenLeft || tFilter.m_bOpenRight )
-		return true;
-
-	const int WIDE_RANGE_THRESH=10000;
-	return ( tFilter.m_iMaxValue-tFilter.m_iMinValue ) >= WIDE_RANGE_THRESH;
-}
-
-
 static bool IsSingleValueFilter ( const CSphFilterSettings & tFilter )
 {
 	return  ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1 ) ||
@@ -138,18 +120,14 @@ float CostEstimate_c::CalcIndexCost() const
 
 		iNumIndexes++;
 
-		uint32_t uNumIterators = 1;
-		const auto & tFilter = m_tCtx.m_dFilters[i];
-		if ( HasSeveralSIIterators(tFilter) )
+		uint32_t uNumIterators = tSIInfo.m_uNumSIIterators;
+		if ( uNumIterators )
 		{
-			uNumIterators = CalcNumSIIterators ( tFilter, iDocs );
+			const auto & tFilter = m_tCtx.m_dFilters[i];
 
 			if ( uNumIterators>1 && !NeedBitmapUnion ( tFilter, iDocs ) )
 				fCost += Cost_IndexUnionQueue(iDocs);
-		}
 
-		if ( uNumIterators )
-		{
 			const int COST_THRESH = 1024;
 			if ( iDocs/uNumIterators < COST_THRESH )
 				fCost += Cost_IndexReadSparse(iDocs);
@@ -231,9 +209,7 @@ float CostEstimate_c::CalcAnalyzerCost() const
 
 		assert ( m_tCtx.m_pColumnar );
 		columnar::AttrInfo_t tAttrInfo;
-		bool bHasHash = false;
-		if ( m_tCtx.m_pColumnar->GetAttrInfo ( tFilter.m_sAttrName.cstr(), tAttrInfo ) )
-			bHasHash = tAttrInfo.m_bHasHash;
+		m_tCtx.m_pColumnar->GetAttrInfo ( tFilter.m_sAttrName.cstr(), tAttrInfo );
 
 		float fFilterComplexity = CalcGetFilterComplexity ( tSIInfo, tFilter );
 		int64_t iDocs = tSIInfo.m_iRsetEstimate;
@@ -242,11 +218,8 @@ float CostEstimate_c::CalcAnalyzerCost() const
 		float fAcceptCoeff = std::min ( float(tSIInfo.m_iRsetEstimate)/m_tCtx.m_iTotalDocs, 1.0f ) / 2.0f + 0.5f;
 		float fTotalCoeff = fFilterComplexity*tAttrInfo.m_fComplexity*fAcceptCoeff;
 
-		if ( bHasHash )
-		{
-			// strings with prebuilt hashes don't have minmax, so we scan the whole index
+		if ( tSIInfo.m_iPartialColumnarMinMax==-1 ) // no minmax? scan whole index
 			fCost += Cost_ColumnarFilter ( m_tCtx.m_iTotalDocs, fTotalCoeff );
-		}
 		else
 		{
 			// minmax tree eval
@@ -254,9 +227,7 @@ float CostEstimate_c::CalcAnalyzerCost() const
 			int iMatchingNodes = ( iDocs + MINMAX_NODE_SIZE - 1 ) / MINMAX_NODE_SIZE;
 			int iTreeLevels = sphLog2 ( m_tCtx.m_iTotalDocs );
 			fCost += Cost_Filter ( iMatchingNodes*iTreeLevels, fFilterComplexity );
-
-			// the idea is that minmax rejects most docs and 50% of the remaining docs are filtered out
-			fCost += Cost_ColumnarFilter ( Min ( iDocs*2, m_tCtx.m_iTotalDocs ), fTotalCoeff );
+			fCost += Cost_ColumnarFilter ( std::min ( tSIInfo.m_iPartialColumnarMinMax, m_tCtx.m_iTotalDocs ), fTotalCoeff );
 		}
 	}
 
@@ -291,36 +262,6 @@ float CostEstimate_c::CalcMTCost ( float fCost ) const
 	float fY = fA/float(sqrt(fX)) + fB;
 
 	return fY;
-}
-
-
-uint32_t CostEstimate_c::CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const
-{
-	uint32_t uNumIterators = 1;
-	if ( !m_tCtx.m_pSI )
-		return uNumIterators;
-
-	// if we suspect that that index may fetch A LOT of iterators,
-	// we ask the SI about it explicitly
-	const int DOC_THRESH = 10000;
-	if ( !IsWideRange(tFilter) || iDocs<DOC_THRESH )
-		return uNumIterators;
-
-	common::Filter_t tColumnarFilter;
-	CSphString sWarning;
-	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, m_tCtx.m_eCollation, m_tCtx.m_tSchema, sWarning ) )
-		return 0;
-
-	return m_tCtx.m_pSI->GetNumIterators(tColumnarFilter);
-}
-
-
-bool CostEstimate_c::HasSeveralSIIterators ( const CSphFilterSettings & tFilter ) const
-{
-	if ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1 )
-		return false;
-
-	return true;
 }
 
 

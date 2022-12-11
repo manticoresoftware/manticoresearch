@@ -18,7 +18,7 @@ include ( update_bundle )
 # still can do it for any specific requirements.
 
 # Versions of API headers we are need to build with.
-set ( NEED_COLUMNAR_API 17 )
+set ( NEED_COLUMNAR_API 18 )
 set ( NEED_SECONDARY_API 6 )
 
 

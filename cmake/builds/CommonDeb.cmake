@@ -88,7 +88,7 @@ set ( CPACK_DEBIAN_COMMON_PACKAGE_BREAKS "${breaks}" )
 set ( CPACK_DEBIAN_COMMON_PACKAGE_ARCHITECTURE all )
 
 set ( CPACK_DEBIAN_META_PACKAGE_NAME "manticore" )
-seta ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server (= ${CPACK_PACKAGE_VERSION}), manticore-tools (= ${CPACK_PACKAGE_VERSION}), manticore-dev (= ${CPACK_PACKAGE_VERSION}), manticore-icudata-65l" )
+seta ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server (= ${CPACK_PACKAGE_VERSION}), manticore-tools (= ${CPACK_PACKAGE_VERSION}), manticore-dev (= ${CPACK_PACKAGE_VERSION}), manticore-icudata-65l, manticore-buddy" )
 #set ( CPACK_DEBIAN_META_PACKAGE_ARCHITECTURE all )
 set ( CPACK_DEBIAN_META_PACKAGE_DEBUG OFF )
 set ( CPACK_DEBIAN_META_PACKAGE_SECTION metapackages )

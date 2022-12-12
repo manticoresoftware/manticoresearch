@@ -4671,6 +4671,17 @@ static CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESph
 static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation );
 static CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation );
 
+
+static bool HasImplicitGrouping ( const CSphQuery & tQuery )
+{
+	auto fnIsImplicit = [] ( const CSphQueryItem & t )
+	{
+		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
+	};
+
+	return tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_dItems.any_of(fnIsImplicit) : false;
+}
+
 class QueueCreator_c
 {
 public:
@@ -6388,7 +6399,7 @@ bool QueueCreator_c::AddGroupbyStuff ()
 		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
 	};
 
-	bool bHasImplicitGrouping = m_tQuery.m_sGroupBy.IsEmpty() ? m_tQuery.m_dItems.any_of(fnIsImplicit) : false;
+	bool bHasImplicitGrouping = HasImplicitGrouping(m_tQuery);  m_tQuery.m_sGroupBy.IsEmpty() ? m_tQuery.m_dItems.any_of(fnIsImplicit) : false;
 
 	// count(*) and distinct wo group by at main query should keep implicit flag
 	if ( bHasImplicitGrouping && m_bHeadWOGroup )
@@ -6711,6 +6722,11 @@ std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTra
 		return { false, tQuery.m_iCutoff };
 
 	if ( !tQuery.m_iCutoff )
+		return { false, -1 };
+
+	// this is the same as checking the sorters for disabled cutoff
+	// but this works when sorters are not yet available (e.g. GetPseudoShardingMetric())
+	if ( HasImplicitGrouping ( tQuery ) )
 		return { false, -1 };
 
 	bool bDisableCutoff = dSorters.any_of ( []( auto * pSorter ){ return pSorter->IsCutoffDisabled(); } );

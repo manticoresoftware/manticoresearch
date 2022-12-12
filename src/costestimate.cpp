@@ -28,9 +28,9 @@ private:
 
 	static constexpr float COST_PUSH					= 6.0f;
 	static constexpr float COST_FILTER					= 8.5f;
-	static constexpr float COST_COLUMNAR_FILTER			= 6.0f;
+	static constexpr float COST_COLUMNAR_FILTER			= 4.0f;
 	static constexpr float COST_INTERSECT				= 5.0f;
-	static constexpr float COST_INDEX_READ_SINGLE		= 1.0f;
+	static constexpr float COST_INDEX_READ_SINGLE		= 1.5f;
 	static constexpr float COST_INDEX_READ_DENSE_BITMAP	= 1.5f;
 	static constexpr float COST_INDEX_READ_SPARSE		= 30.0f;
 	static constexpr float COST_INDEX_UNION_COEFF		= 4.0f;
@@ -215,7 +215,8 @@ float CostEstimate_c::CalcAnalyzerCost() const
 		int64_t iDocs = tSIInfo.m_iRsetEstimate;
 
 		// filters that process but reject values are 2x faster
-		float fAcceptCoeff = std::min ( float(tSIInfo.m_iRsetEstimate)/m_tCtx.m_iTotalDocs, 1.0f ) / 2.0f + 0.5f;
+		int64_t iDocsBeforeFilter = tSIInfo.m_iPartialColumnarMinMax==-1 ? m_tCtx.m_iTotalDocs : std::min ( tSIInfo.m_iPartialColumnarMinMax, m_tCtx.m_iTotalDocs );
+		float fAcceptCoeff = std::min ( float(tSIInfo.m_iRsetEstimate)/iDocsBeforeFilter, 1.0f ) / 2.0f + 0.5f;
 		float fTotalCoeff = fFilterComplexity*tAttrInfo.m_fComplexity*fAcceptCoeff;
 
 		if ( tSIInfo.m_iPartialColumnarMinMax==-1 ) // no minmax? scan whole index

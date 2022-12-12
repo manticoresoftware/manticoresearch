@@ -45,7 +45,7 @@ for f in build/*.rpm; do
       fi
     fi
 
-    cp $f /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH
+    cp $f /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH/
     /usr/bin/docker exec rpm_signer /worker.sh $DISTRO $ARCH
     mv /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH/*.rpm build/
 

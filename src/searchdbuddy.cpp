@@ -352,7 +352,12 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 		}
 	}
 
-	return FetchHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery );
+	CSphString sConnID;
+	sConnID.SetSprintf ( "Request-ID: %d", session::GetConnID() );
+	CSphFixedVector<const char *> dHeaders ( 1 );
+	dHeaders[0] = sConnID.cstr();
+
+	return FetchHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
 
 static bool HasProhibitBuddy ( const OptionsHash_t & hOptions )

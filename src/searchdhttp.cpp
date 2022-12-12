@@ -969,12 +969,17 @@ protected:
 	void ReportError ( const char * szError, ESphHttpStatus eStatus )
 	{
 		m_sError = szError;
+		ReportError ( eStatus );
+	}
+
+	void ReportError ( ESphHttpStatus eStatus )
+	{
 		if ( m_bNeedHttpResponse )
-			sphHttpErrorReply ( m_dData, eStatus, szError );
+			sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
 		else
 		{
-			m_dData.Resize ( (int) strlen ( szError ) );
-			memcpy ( m_dData.Begin(), szError, m_dData.GetLength() );
+			m_dData.Resize ( m_sError.Length() );
+			memcpy ( m_dData.Begin(), m_sError.cstr(), m_dData.GetLength() );
 		}
 	}
 
@@ -1227,10 +1232,9 @@ protected:
 			return nullptr;
 		}
 
-		CSphString sError;
-		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), m_dStmt, sError, SPH_COLLATION_DEFAULT ) )
+		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), m_dStmt, m_sError, SPH_COLLATION_DEFAULT ) )
 		{
-			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+			ReportError ( SPH_HTTP_STATUS_400 );
 			return nullptr;
 		}
 
@@ -1612,11 +1616,9 @@ public:
 
 	std::unique_ptr<QueryParser_i> PreParseQuery() override
 	{
-		CSphString sError;
-		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, sError, m_sWarning ) )
+		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, m_sError, m_sWarning ) )
 		{
-			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
-			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+			ReportError ( SPH_HTTP_STATUS_400 );
 			return nullptr;
 		}
 
@@ -1650,14 +1652,15 @@ protected:
 		m_iUpdates = 0;
 	}
 
-	bool ProcessCommitRollback ( Str_t sIndex, DocID_t tDocId, JsonObj_c& tResult ) const
+	bool ProcessCommitRollback ( Str_t sIndex, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError ) const
 	{
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlCommitRollback ( tReporter, sIndex, true );
 
 		if ( tReporter.IsError() )
 		{
-			tResult = sphEncodeInsertErrorJson ( sIndex.first, tReporter.GetError() );
+			sError = tReporter.GetError();
+			tResult = sphEncodeInsertErrorJson ( sIndex.first, sError.cstr() );
 		} else
 		{
 			auto iDeletes = tReporter.GetAffectedRows();
@@ -1673,14 +1676,15 @@ protected:
 	int m_iUpdates = 0;
 };
 
-static bool ProcessInsert ( SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c& tResult )
+static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
 
 	if ( tReporter.IsError() )
 	{
-		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+		sError = tReporter.GetError();
+		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr() );
 	} else
 	{
 		auto dLastIds = session::LastIds();
@@ -1692,15 +1696,19 @@ static bool ProcessInsert ( SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c& tResult
 	return !tReporter.IsError();
 }
 
-static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c& tResult )
+static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError  )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlDelete ( tReporter, tStmt, std::move ( sRawRequest ) );
 
 	if ( tReporter.IsError() )
-		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
-	else
+	{
+		sError = tReporter.GetError();
+		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr() );
+	} else
+	{
 		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+	}
 
 	return !tReporter.IsError();
 }
@@ -1721,17 +1729,15 @@ public:
 		TRACE_CONN ( "conn", "HttpHandler_JsonInsert_c::Process" );
 		SqlStmt_t tStmt;
 		DocID_t tDocId = 0;
-		CSphString sError;
-		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, false, sError ) )
+		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, false, m_sError ) )
 		{
-			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
-			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+			ReportError ( SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
 		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? SPH_HTTP_ENDPOINT_JSON_REPLACE : SPH_HTTP_ENDPOINT_JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
-		bool bResult = ProcessInsert ( tStmt, tDocId, tResult );
+		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
 
 		CSphString sResult = tResult.AsString();
 		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
@@ -1746,15 +1752,19 @@ class HttpJsonUpdateTraits_c
 	int m_iLastUpdated = 0;
 
 protected:
-	bool ProcessUpdate ( Str_t sRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
+	bool ProcessUpdate ( Str_t sRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError )
 	{
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlUpdate ( tReporter, tStmt, sRawRequest );
 
 		if ( tReporter.IsError() )
-			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
-		else
+		{
+			sError = tReporter.GetError();
+			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr() );
+		} else
+		{
 			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+		}
 
 		m_iLastUpdated = tReporter.GetAffectedRows();
 
@@ -1786,11 +1796,9 @@ public:
 		tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
 
 		DocID_t tDocId = 0;
-		CSphString sError;
-		if ( !ParseQuery ( tStmt, tDocId, sError ) )
+		if ( !ParseQuery ( tStmt, tDocId ) )
 		{
-			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
-			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+			ReportError ( SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
@@ -1802,14 +1810,14 @@ public:
 	}
 
 protected:
-	virtual bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+	virtual bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId )
 	{
-		return sphParseJsonUpdate ( m_sQuery, tStmt, tDocId, sError );
+		return sphParseJsonUpdate ( m_sQuery, tStmt, tDocId, m_sError );
 	}
 
 	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
-		return ProcessUpdate ( m_sQuery, tStmt, tDocId, tResult );
+		return ProcessUpdate ( m_sQuery, tStmt, tDocId, tResult, m_sError );
 	}
 };
 
@@ -1822,15 +1830,15 @@ public:
 	{}
 
 protected:
-	bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError ) final
+	bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId ) final
 	{
 		tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
-		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, sError );
+		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, m_sError );
 	}
 
 	bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult ) final
 	{
-		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult );
+		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult, m_sError );
 	}
 };
 
@@ -1966,12 +1974,10 @@ public:
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
 			DocID_t tDocId = 0;
-			CSphString sError;
 			CSphString sQuery;
-			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, sError ) )
+			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
 			{
-				sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
-				ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+				ReportError ( SPH_HTTP_STATUS_400 );
 				HTTPINFO << "inserted  " << iInserted;
 				return false;
 			}
@@ -1988,7 +1994,7 @@ public:
 			{
 				assert ( !sTxnIdx.IsEmpty() );
 				// we should finish current txn, as we got another index
-				bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult );
+				bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
 				sStmt = "bulk";
 				AddResult ( tItems, sStmt, tResult );
 				if ( !bResult )
@@ -2001,21 +2007,21 @@ public:
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bResult = ProcessInsert ( tStmt, tDocId, tResult );
+				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
 				if ( bResult )
 					++m_iInserts;
 				break;
 
 			case STMT_UPDATE:
 				tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
-				bResult = ProcessUpdate ( FromStr ( sQuery ), tStmt, tDocId, tResult );
+				bResult = ProcessUpdate ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError );
 				if ( bResult )
 					m_iUpdates += GetLastUpdated();
 				break;
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
-				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult );
+				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError );
 				break;
 
 			default:
@@ -2037,7 +2043,7 @@ public:
 			assert ( !sTxnIdx.IsEmpty() );
 			// We're in txn - that is, nothing committed, and we should do it right now
 			JsonObj_c tResult;
-			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), 0, tResult );
+			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), 0, tResult, m_sError );
 			sStmt = "bulk";
 			AddResult ( tItems, sStmt, tResult );
 		}
@@ -2337,7 +2343,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 
 bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tPercolate, bool bVerbose )
 {
-	CSphString sWarning, sError, sTmp;
+	CSphString sWarning, sTmp;
 	BlobVec_t dDocs;
 
 	// single document
@@ -2353,10 +2359,10 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 	}
 
 	// multiple documents
-	JsonObj_c tJsonDocs = tPercolate.GetArrayItem ( "documents", sError, true );
-	if ( !sError.IsEmpty() )
+	JsonObj_c tJsonDocs = tPercolate.GetArrayItem ( "documents", m_sError, true );
+	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2409,7 +2415,7 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const JsonObj_c& tJsonQuery,
 	const JsonObj_c& tRoot, CSphString* pUID, bool bReplace )
 {
-	CSphString sTmp, sError, sWarning;
+	CSphString sTmp, sWarning;
 
 	bool bQueryQL = true;
 	CSphQuery tQuery;
@@ -2420,9 +2426,9 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	else
 	{
 		bQueryQL = false;
-		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, sWarning ) )
+		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, m_sError, sWarning ) )
 		{
-			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+			ReportError ( SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
@@ -2440,10 +2446,10 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	if ( pUID && !pUID->IsEmpty() )
 		iID = strtoll ( pUID->cstr(), nullptr, 10 );
 
-	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
-	if ( !sError.IsEmpty() )
+	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", m_sError, true );
+	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2451,10 +2457,10 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	for ( const auto & i : tTagsArray )
 		sTags << i.SzVal();
 
-	JsonObj_c tFilters = tRoot.GetStrItem ( "filters", sError, true );
-	if ( !sError.IsEmpty() )
+	JsonObj_c tFilters = tRoot.GetStrItem ( "filters", m_sError, true );
+	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2474,9 +2480,9 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 
 		RIdx_T<const PercolateIndex_i*> pIndex { pServed };
 
-		if ( !PercolateParseFilters ( tFilters.SzVal(), SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetInternalSchema (), dFilters, dFilterTree, sError ) )
+		if ( !PercolateParseFilters ( tFilters.SzVal(), SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetInternalSchema (), dFilters, dFilterTree, m_sError ) )
 		{
-			ReportError ( sError.scstr(), SPH_HTTP_STATUS_400 );
+			ReportError ( SPH_HTTP_STATUS_400 );
 			return false;
 		}
 	} else
@@ -2502,25 +2508,26 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		tArgs.m_bQL = bQueryQL;
 
 		// add query
-		auto pStored = pIndex->CreateQuery ( tArgs, sError );
+		auto pStored = pIndex->CreateQuery ( tArgs, m_sError );
 		if ( pStored )
 		{
 			auto* pSession = session::GetClientSession();
 			auto& tAcc = pSession->m_tAcc;
-			auto* pAccum = tAcc.GetAcc( pIndex, sError );
+			auto* pAccum = tAcc.GetAcc( pIndex, m_sError );
 
 			ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
 			pCmd->m_pStored = std::move ( pStored );
 
-			bOk = HandleCmdReplicate ( *pAccum, sError );
+			bOk = HandleCmdReplicate ( *pAccum, m_sError );
 		}
 	}
 
 	if ( !bOk )
-		ReportError ( sError.scstr(), SPH_HTTP_STATUS_500 );
-	else
+	{
+		ReportError ( SPH_HTTP_STATUS_500 );
+	} else
 	{
 		StringBuilder_c sRes;
 		EncodePercolateQueryResult ( bReplace, sIndex, iID, sRes );
@@ -2553,11 +2560,10 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 
 	ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
 
-	CSphString sError;
-	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
-	if ( !sError.IsEmpty() )
+	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", m_sError, true );
+	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2565,10 +2571,10 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	for ( const auto & i : tTagsArray )
 		sTags << i.SzVal();
 
-	JsonObj_c tUidsArray = tRoot.GetArrayItem ( "id", sError, true );
-	if ( !sError.IsEmpty() )
+	JsonObj_c tUidsArray = tRoot.GetArrayItem ( "id", m_sError, true );
+	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2585,13 +2591,13 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	bool bOk = HandleCmdReplicate ( *pAccum, sError, iDeleted );
+	bool bOk = HandleCmdReplicate ( *pAccum, m_sError, iDeleted );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 
 	if ( !bOk )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "%s", sError.cstr() );
+		FormatError ( SPH_HTTP_STATUS_400, "%s", m_sError.cstr() );
 		return false;
 	}
 
@@ -2648,18 +2654,17 @@ bool HttpHandlerPQ_c::Process()
 	if ( !tRoot.Size() )
 		return ListQueries ( sIndex );
 
-	CSphString sError;
-	JsonObj_c tQuery = tRoot.GetObjItem ( "query", sError );
+	JsonObj_c tQuery = tRoot.GetObjItem ( "query", m_sError, bDelete );
 	if ( !tQuery && !bDelete )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	JsonObj_c tPerc = bMatch ? tQuery.GetObjItem ( "percolate", sError ) : JsonNull;
+	JsonObj_c tPerc = bMatch ? tQuery.GetObjItem ( "percolate", m_sError ) : JsonNull;
 	if ( bMatch && !tPerc )
 	{
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2863,7 +2868,6 @@ static bool Validate( const OptionsHash_t & hOpts, const Str_t & tSource, CSphVe
 
 bool HttpHandlerEsBulk_c::Process()
 {
-	CSphString sError;
 	if ( !Validate ( m_hOptions, m_tSource, m_dData ) )
 		return false;
 
@@ -2890,9 +2894,9 @@ bool HttpHandlerEsBulk_c::Process()
 
 			// any bad meta result in general error
 			BulkDoc_t & tDoc = dDocs.Add();
-			if ( !ParseMetaLine ( tLine.first, tDoc, sError ) )
+			if ( !ParseMetaLine ( tLine.first, tDoc, m_sError ) )
 			{
-				ReportLogError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false, m_hOptions, m_tSource, m_dData );
+				ReportLogError ( m_sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false, m_hOptions, m_tSource, m_dData );
 				return false;
 			}
 			bMetaLine = false;
@@ -3013,12 +3017,11 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			tStmt.m_tQuery.m_sIndexes = tDoc.m_sIndex;
 			tStmt.m_sIndex = tDoc.m_sIndex;
 			tStmt.m_sStmt = tDoc.m_tDocLine.first;
-			CSphString sError;
 
-			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc.m_sAction, tStmt, tDoc.m_tDocid, sError );
+			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc.m_sAction, tStmt, tDoc.m_tDocid, m_sError );
 			if ( !bParsed )
 			{
-				dErrors.Add ( { iDoc, sError } );
+				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
 
@@ -3029,17 +3032,17 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult );
+				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError );
 				break;
 
 			case STMT_UPDATE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
-				bAction = ProcessUpdate ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult );
+				bAction = ProcessUpdate ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError );
 				break;
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
-				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult );
+				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError );
 				break;
 
 			default:
@@ -3053,20 +3056,19 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 
 		// FIXME!!! check commit of empty accum
 		JsonObj_c tResult;
-		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), DocID_t(), tResult );
+		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), DocID_t(), tResult, m_sError );
 		if ( bCommited )
 		{
 			for ( int i=0; i<tTnx.m_iCount; i++ )
 				AddEsReply ( dDocs[tTnx.m_iFrom], tItems );
 		} else
 		{
-			CSphString sError;
 			for ( int i=0; i<tTnx.m_iCount; i++ )
 			{
 				JsonObj_c tTmp ( JsonNull );
 				tItems.AddItem ( tTmp );
 				assert ( tItems.Size()==tTnx.m_iFrom+i+1 );
-				AddEsError ( tTnx.m_iFrom+i, tResult.GetStrItem ( "error", sError, false ).StrVal(), dDocs[tTnx.m_iFrom+i], tItems );
+				AddEsError ( tTnx.m_iFrom+i, tResult.GetStrItem ( "error", m_sError, false ).StrVal(), dDocs[tTnx.m_iFrom+i], tItems );
 			}
 		}
 

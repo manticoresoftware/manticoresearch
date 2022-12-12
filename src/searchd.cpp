@@ -18921,10 +18921,14 @@ static void DumpSettingsSection ( const CSphConfig & hConf, const char * sSectio
 
 	for ( const auto & tIt : hNode )
 	{
+		const CSphVariant * pVal = &tIt.second;
+
+		// empty binlog_path should not have default value
+		if ( tIt.first=="binlog_path" && pVal->strval().IsEmpty() )
+			continue;
+
 		tTmp.Clear();
 		tTmp.Appendf ( "%s.%s", sSectionName, tIt.first.cstr() );
-
-		const CSphVariant * pVal = &tIt.second;
 
 		do
 		{

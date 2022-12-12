@@ -658,7 +658,7 @@ static const char * szNoCurlMsg = CURL_LIB " not found";
 
 using CurlOpt_t = std::pair<CURLoption, intptr_t>;
 
-std::pair<bool, CSphString> InvokeCurl ( CSphString sUrl, const VecTraits_T<CurlOpt_t>& dParams, std::initializer_list<const char*> dHeaders )
+std::pair<bool, CSphString> InvokeCurl ( CSphString sUrl, const VecTraits_T<CurlOpt_t>& dParams, const VecTraits_T<const char *> & dHeaders )
 {
 	if ( !IsCurlAvailable() )
 		return { false, szNoCurlMsg };
@@ -698,11 +698,22 @@ CSphString FetchUrl ( const CSphString& sUrl )
 
 std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery )
 {
+	return FetchHelperUrl ( sUrl, sQuery, {} );
+}
+
+std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<const char *> & dHeaders )
+{
 	CSphVector<CurlOpt_t> dOptions;
 	dOptions.Add ( { CURLOPT_POST, 1 } );
 	dOptions.Add ( { CURLOPT_POSTFIELDSIZE, sQuery.second } );
 	dOptions.Add ( { CURLOPT_POSTFIELDS, (intptr_t)sQuery.first } );
-	return InvokeCurl ( std::move ( sUrl ), dOptions, { "Content-Type: application/json; charset=UTF-8" } );
+	
+	CSphFixedVector<const char*> dHeadersPost ( dHeaders.GetLength() + 1 );
+	dHeadersPost[dHeaders.GetLength()] = "Content-Type: application/json; charset=UTF-8";
+	ARRAY_FOREACH ( i, dHeaders )
+		dHeadersPost[i] = dHeaders[i];
+
+	return InvokeCurl ( std::move ( sUrl ), dOptions, dHeadersPost );
 }
 
 #else // WITH_CURL

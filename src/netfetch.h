@@ -15,5 +15,6 @@
 CSphString FetchUrl ( const CSphString& sUrl );
 
 std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery );
+std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<const char *> & dHeaders );
 
 bool IsCurlAvailable();

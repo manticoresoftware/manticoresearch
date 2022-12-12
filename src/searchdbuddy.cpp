@@ -13,6 +13,8 @@
 #include "searchdtask.h"
 #include "netreceive_ql.h"
 
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/read_until.hpp>
 #include <boost/process.hpp>
 #if _WIN32
 #include <boost/winapi/process.hpp>
@@ -22,13 +24,34 @@
 #include "searchdbuddy.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
-static std::unique_ptr<boost::process::ipstream> g_tBuddyOut;
 static CSphString g_sPath;
 static CSphString g_sListener4Buddy;
 static int g_iBuddyVersion = 1;
-static bool g_bTelemetry { true };
-
 static CSphString g_sUrlBuddy;
+static CSphString g_sStartArgs;
+
+static boost::asio::io_service g_tIOS;
+static std::vector<char> g_dPipeBuf ( 4096 );
+static std::unique_ptr<boost::process::async_pipe> g_pPipe;
+enum class BuddyState_e
+{
+	NONE,
+	STARTING,
+	WORK,
+	STOPPED,
+	FAILED
+};
+static BuddyState_e g_eBuddy { BuddyState_e::NONE };
+static int g_iRestartCount = 0;
+static int64_t g_tmStarting = 0;
+static int g_iTask = 0;
+
+static const int g_iRestartMax = 3;
+static const int g_iStartMaxTimeout = 3; // max start timeout 3 sec
+
+static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
+static CSphString GetUrl ( const ListenerDesc_t & tDesc );
+static void BuddyNextTick();
 
 #if _WIN32
 struct BuddyWindow_t : boost::process::detail::handler_base
@@ -53,115 +76,184 @@ struct PreservedStd_t : boost::process::detail::handler, boost::process::detail:
 	}
 };
 
-static int64_t g_iTM = 0;
-static int g_iTask = 0;
-static void NextLog();
-static bool BuddyStart();
-
-static void BuddyCheck()
+static CSphString CheckLine ( Str_t sLine )
 {
-	auto pDesc = PublishSystemInfo ( "buddy check" );
+	char sBuddyAddrHead[] = "started ";
+	const char * sGot = strstr ( sLine.first, sBuddyAddrHead );
+	if ( sGot )
+	{
+		int iHeaderLen = sizeof ( sBuddyAddrHead ) - 1;
+		const char * sAddrStart = sGot + iHeaderLen;
+		int iAddrLen = sLine.second - iHeaderLen;
+		assert ( iAddrLen>0 );
 
-	//sphInfo ( "at log " INT64_FMT, g_iTM );
-	std::string sLine;
-	std::getline ( *g_tBuddyOut, sLine );
-	//std::string sLine ( std::istreambuf_iterator<char> ( *g_tBuddyOut ), {} );
-	if ( !sLine.empty() )
-		sphInfo ( "[BUDDY] %s", sLine.c_str() );
+		CSphString sAddr;
+		sAddr.SetBinary ( sAddrStart, iAddrLen );
+		return sAddr;
+	}
+
+	return CSphString();
+}
+
+static Str_t TrimRight ( Str_t tSrc )
+{
+	char * sStart = const_cast<char *>( tSrc.first );
+	if ( !tSrc.second )
+	{
+		sStart[tSrc.second] = '\0';
+		return tSrc;
+	}
+
+	const char * sEnd = sStart + tSrc.second - 1;
+	while ( sStart<=sEnd && isspace ( (unsigned char)*sEnd ) )
+		sEnd--;
+
+	int iLen = sEnd - sStart + 1;
+	sStart[iLen] = '\0';
+	return Str_t ( tSrc.first, iLen );
+}
+
+static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
+{
+	if ( tGotCode.failed() )
+		return;
+
+	if ( !iSize )
+		return;
+
+	Str_t sLine = TrimRight ( { g_dPipeBuf.data(), iSize } );
+	// regular work log all lines from the buddy output
+	if ( g_eBuddy!=BuddyState_e::STARTING )
+	{
+		sphInfo ( "[BUDDY] %s", sLine.first ); // FIXME!!! add split line by line
+		return;
+	}
+
+	// at the BuddyState_e::STARTING parsing buddy output
+	CSphString sAddr = CheckLine ( sLine );
+	sAddr.Trim();
+	if ( sAddr.IsEmpty() )
+	{
+		g_eBuddy = BuddyState_e::FAILED;
+		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%s'", sLine.first );
+		return;
+	}
+
+	CSphString sError;
+	ListenerDesc_t tListen = ParseListener ( sAddr.cstr(), &sError );
+	if ( tListen.m_eProto==Proto_e::UNKNOWN || !sError.IsEmpty() )
+	{
+		g_eBuddy = BuddyState_e::FAILED;
+		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%s', parse error: %s", sAddr.cstr(), sError.cstr() );
+		return;
+	}
+
+	// buddy really started and ready to serve queries
+	g_sUrlBuddy = GetUrl( tListen );
+	g_eBuddy = BuddyState_e::WORK;
+	g_iRestartCount = 0;
+	sphInfo ( "[BUDDY] started '%s' at %s", g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
+}
+
+static BuddyState_e BuddyCheckLive()
+{
+	assert ( g_eBuddy==BuddyState_e::WORK );
 
 	std::error_code tErrorCode;
 	if ( g_pBuddy && g_pBuddy->running ( tErrorCode ) )
-		NextLog ();
-	else if ( g_pBuddy ) // restart buddy
-	{
+		return BuddyState_e::WORK;
+
+	// need to restart buddy as curent buddy got killed
+	if ( g_pBuddy )
 		sphWarning ( "[BUDDY] terminated, exit code %d", tErrorCode.value() );
-		BuddyStart ();
-		if ( g_pBuddy && g_pBuddy->running ( tErrorCode ) )
-		{
-			sphInfo ( "[BUDDY] restarted" );
-			NextLog ();
-		} else
-		{
-			BuddyStop();
-		}
+	return BuddyState_e::FAILED;
+}
+
+static void BuddyTryRestart()
+{
+	if ( g_eBuddy!=BuddyState_e::FAILED )
+		return;
+
+	BuddyStop();
+	g_iRestartCount++;
+	if ( g_iRestartCount>=g_iRestartMax )
+	{
+		sphInfo ( "[BUDDY] restart amount of attempts (%d) has been exceeded", g_iRestartMax );
+		return;
+	}
+
+	CSphString sErorr;
+	g_eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );
+	if ( g_eBuddy!=BuddyState_e::STARTING )
+	{
+		sphWarning ( "[BUDDY] failed to restart: %s", sErorr.cstr() );
+		BuddyStop();
+	} else
+	{
+		sphInfo ( "[BUDDY] restarting" );
 	}
 }
 
-void NextLog()
+static void NextShedule()
 {
-	g_iTM = sphMicroTimer();
-	TaskManager::ScheduleJob ( g_iTask, g_iTM + 15000, BuddyCheck );
+	int64_t tmCur = sphMicroTimer();
+	TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, BuddyNextTick );
 }
 
-typedef std::function<bool ( const std::string & )> StartCnd_fn;
+void BuddyNextTick()
+{
+	auto pDesc = PublishSystemInfo ( "buddy check" );
 
-static bool TryToStart ( const char * sArgs, CSphString & sError, StartCnd_fn tCnd )
+	if ( g_pPipe )
+		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
+	g_tIOS.poll();
+	g_tIOS.restart();
+
+	if ( g_eBuddy==BuddyState_e::STARTING && sphMicroTimer()>( g_tmStarting + g_iStartMaxTimeout * 1000 * 1000  ) )
+	{
+		sphWarning ( "[BUDDY] failed to start after %d sec", g_iStartMaxTimeout );
+		BuddyStop();
+		return;
+	}
+
+	if ( g_eBuddy==BuddyState_e::WORK )
+		g_eBuddy = BuddyCheckLive();
+
+	BuddyTryRestart();
+
+	if ( g_eBuddy==BuddyState_e::STARTING || g_eBuddy==BuddyState_e::WORK )
+		NextShedule();
+}
+
+BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 {
 	std::string sCmd = sArgs;
 	g_pBuddy.reset();
-	g_tBuddyOut.reset ( new boost::process::ipstream );
+	g_pPipe.reset ( new boost::process::async_pipe ( g_tIOS ) );
 
 	std::unique_ptr<boost::process::child> pBuddy;
 	std::error_code tErrorCode;
 
 #if _WIN32
 	BuddyWindow_t tWnd;
-	//pBuddy.reset ( new boost::process::child ( sCmd, tWnd ) );
-	//pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_tBuddyOut, tWnd ) );
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_tBuddyOut, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
+	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
 #else
 	PreservedStd_t tPreserveStd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_tBuddyOut, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd ) );
+	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd ) );
 #endif
 
-	//sphInfo ( "[BUDDY] prior line" ); // !COMMIT
-	std::string sLine;
-	while ( !tErrorCode && pBuddy->running ( tErrorCode ) )
+	if ( !pBuddy->running ( tErrorCode ) )
 	{
-		//sphInfo ( "[BUDDY] prior get-line" ); // !COMMIT
-		if ( std::getline ( *g_tBuddyOut, sLine ) && tCnd ( sLine ) )
-			break;
-
-		//sphInfo ( "[BUDDY] got-line %s, len %d", sLine.c_str(), (int)sLine.length() ); // !COMMIT
-		if ( !sLine.empty() )
-			sphInfo ( "[BUDDY] %s", sLine.c_str() );
+		sError.SetSprintf ( "'%s' terminated with exit code %d", sArgs, tErrorCode.value() );
+		return BuddyState_e::FAILED;
 	}
 
-	//sphInfo ( "[BUDDY] aftert line %s, code %d, run %d", sLine.c_str(), (int)tErrorCode.value(), (int)pBuddy->running ( tErrorCode ) ); // !COMMIT
-	if ( !pBuddy->running ( tErrorCode ) || !tCnd ( sLine ) )
-	{
-		std::string sTmp ( std::istreambuf_iterator<char> ( *g_tBuddyOut ), {} );
-		sError.SetSprintf ( "'%s' terminated with exit code %d, %s", sArgs, tErrorCode.value(), ( sTmp.empty() ? sLine.c_str() : sTmp.c_str() ) );
-		return false;
-	}
-
+	g_tmStarting = sphMicroTimer();
 	g_pBuddy = std::move ( pBuddy );
-
-	return g_pBuddy->running ( tErrorCode );
+	return BuddyState_e::STARTING;
 }
 
-struct BuddyListenOut_t
-{
-	const char * m_sBuddyAddr { "started" };
-	CSphString m_sOutput;
-	bool GotLine ( const std::string & sLine )
-	{
-		//sphInfo ( "[BUDDY] line %s", sLine.c_str() ); // !COMMIT
-
-		int iPos = sLine.find ( m_sBuddyAddr );
-		if ( iPos!=std::string::npos )
-		{
-			int iHeaderLen = strlen ( m_sBuddyAddr );
-			int iAddrStart = iPos + iHeaderLen;
-			int iAddrLen = sLine.length() - iAddrStart;
-			assert ( iAddrLen>0 );
-			m_sOutput.SetBinary ( sLine.c_str() + iAddrStart, iAddrLen );
-		}
-
-		return ( iPos!=std::string::npos );
-	}
-};
-static CSphString GetUrl ( const ListenerDesc_t & tDesc )
+CSphString GetUrl ( const ListenerDesc_t & tDesc )
 {
 	char sAddrBuf [ SPH_ADDRESS_SIZE ];
 	sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
@@ -200,58 +292,25 @@ void BuddyStart ( const CSphString & sPath, const VecTraits_T<ListenerDesc_t> & 
 	}
 
 	g_sPath = sPath;
-	g_bTelemetry = bTelemetry;
 
-	if ( BuddyStart() )
-	{
-		g_iTask = TaskManager::RegisterGlobal ( "buddy service" );
-		assert ( g_iTask>=0 && "failed to create buddy service task" );
-		NextLog();
-	} else
-	{
-		BuddyStop();
-	}
-}
-
-bool BuddyStart ()
-{
-	CSphString sErorr;
-
-	StringBuilder_c sArgs;
-	sArgs.Appendf (
-		"%s --listen=%s ",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s",
 		g_sPath.cstr(),
-		g_sListener4Buddy.cstr()
-	);
-	if ( !g_bTelemetry )
-		sArgs += " --disable-telemetry ";
-	
-	BuddyListenOut_t tOut;
-	StartCnd_fn fnOut = [&tOut]( const std::string & sLine ) { return tOut.GotLine ( sLine ); };
+		g_sListener4Buddy.cstr(),
+		( bTelemetry ? "" : "--disable-telemetry" ) );
 
-	if ( !TryToStart ( sArgs.cstr(), sErorr, fnOut ) )
+	CSphString sErorr;
+	BuddyState_e eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );
+	if ( eBuddy!=BuddyState_e::STARTING )
 	{
-		sphWarning ( "[BUDDY] failed to start buddy, %s", sErorr.cstr() );
-		return false;
+		sphWarning ( "[BUDDY] failed to start: %s", sErorr.cstr() );
+		BuddyStop();
+		return;
 	}
 
-	tOut.m_sOutput.Trim();
-	if ( tOut.m_sOutput.IsEmpty() )
-	{
-		sphWarning ( "[BUDDY] empty output from buddy, should be 'address:port'" );
-		return false;
-	}
-
-	ListenerDesc_t tListen = ParseListener ( tOut.m_sOutput.cstr(), &sErorr );
-	if ( tListen.m_eProto==Proto_e::UNKNOWN || !sErorr.IsEmpty() )
-	{
-		sphWarning ( "[BUDDY] invalid output from buddy, should be 'address:port', got '%s', parse error: %s", tOut.m_sOutput.cstr(), sErorr.cstr() );
-		return false;
-	}
-
-	g_sUrlBuddy = GetUrl( tListen );
-	sphInfo ( "[BUDDY] started '%s' at %s", sArgs.cstr(), g_sUrlBuddy.cstr() );
-	return true;
+	g_eBuddy = eBuddy;
+	g_iTask = TaskManager::RegisterGlobal ( "buddy service" );
+	assert ( g_iTask>=0 && "failed to create buddy service task" );
+	BuddyNextTick();
 }
 
 void BuddyStop ()
@@ -261,16 +320,16 @@ void BuddyStop ()
 		std::error_code tErrorCode;
 		g_pBuddy->terminate ( tErrorCode );
 		if ( tErrorCode )
-			sphWarning ( "[BUDDY] buddy stop exit code %d", tErrorCode.value() );
+			sphWarning ( "[BUDDY] stopped, exit code: %d", tErrorCode.value() );
 	}
 
+	g_eBuddy = BuddyState_e::STOPPED;
 	g_pBuddy.reset();
-	g_tBuddyOut.reset();
 }
 
 bool HasBuddy()
 {
-	return ( g_pBuddy && !g_sUrlBuddy.IsEmpty() );
+	return ( g_eBuddy==BuddyState_e::WORK );
 }
 
 static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery )
@@ -293,7 +352,12 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 		}
 	}
 
-	return FetchHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery );
+	CSphString sConnID;
+	sConnID.SetSprintf ( "Request-ID: %d", session::GetConnID() );
+	CSphFixedVector<const char *> dHeaders ( 1 );
+	dHeaders[0] = sConnID.cstr();
+
+	return FetchHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
 
 static bool HasProhibitBuddy ( const OptionsHash_t & hOptions )
@@ -344,12 +408,12 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 	int iVer = bson::Int ( tVer );
 	if ( iVer>g_iBuddyVersion )
 	{
-		sError.SetSprintf ( "budy reply version (%d) greater daemon version (%d), upgrade daemon binary", iVer, g_iBuddyVersion );
+		sError.SetSprintf ( "buddy reply version (%d) greater daemon version (%d), upgrade daemon binary", iVer, g_iBuddyVersion );
 		return false;
 	}
 	if ( iVer<1 )
 	{
-		sError.SetSprintf ( "wrong budy reply version (%d), daemon version (%d), upgrade buddy", iVer, g_iBuddyVersion );
+		sError.SetSprintf ( "wrong buddy reply version (%d), daemon version (%d), upgrade buddy", iVer, g_iBuddyVersion );
 		return false;
 	}
 

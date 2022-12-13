@@ -443,7 +443,7 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 
 	if ( !tReplyRaw.first )
 	{
-		sphWarning ( "[BUDDY] error: %s", tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return tRes;
 	}
 
@@ -451,12 +451,12 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 	BuddyReply_t tReplyParsed;
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
-		sphWarning ( "[BUDDY] %s: %s", sError.cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
 	{
-		sphWarning ( "[BUDDY] wrong response type %s: %s", bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return tRes;
 	}
 
@@ -486,7 +486,7 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 
 	if ( !tReplyRaw.first )
 	{
-		sphWarning ( "[BUDDY] error: %s", tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 
@@ -494,19 +494,19 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 	BuddyReply_t tReplyParsed;
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
-		sphWarning ( "[BUDDY] %s: %s", sError.cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="sql response" )
 	{
-		sphWarning ( "[BUDDY] wrong response type %s: %s", bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 
 	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
 	{
 		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
-		sphWarning ( "[BUDDY] wrong reply format - %s: %s", sReplyType, tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 

@@ -433,7 +433,7 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 	DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
-		sError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
 		return false;
 	}
 
@@ -501,7 +501,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	DWORD uMinFormatVer = 64;
 	if ( m_uVersion < uMinFormatVer )
 	{
-		sError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
 		return false;
 	}
 
@@ -530,7 +530,7 @@ bool DiskIndexChecker_c::Impl_c::OpenFiles ()
 {
 	CSphString sError;
 	if ( !ReadHeader ( sError ) )
-		return m_tReporter.Fail ( "error reading index header: %s", sError.cstr() );
+		return m_tReporter.Fail ( "error reading table header: %s", sError.cstr() );
 
 	if ( !m_tDictReader.Open ( GetFilename ( SPH_EXT_SPI ), sError ) )
 		return m_tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
@@ -1306,7 +1306,7 @@ void DiskIndexChecker_c::Impl_c::CheckKillList() const
 		CSphString sIndex = tReader.GetString();
 		if ( tReader.GetErrorFlag() )
 		{
-			m_tReporter.Fail ( "error reading index name from kill-list: %s", tReader.GetErrorMessage().cstr() );
+			m_tReporter.Fail ( "error reading table name from kill-list: %s", tReader.GetErrorMessage().cstr() );
 			return;
 		}
 
@@ -1314,7 +1314,7 @@ void DiskIndexChecker_c::Impl_c::CheckKillList() const
 		DWORD uMask = KillListTarget_t::USE_KLIST | KillListTarget_t::USE_DOCIDS;
 		if ( uFlags & (~uMask) )
 		{
-			m_tReporter.Fail ( "unknown index flags in kill-list: %u", uMask );
+			m_tReporter.Fail ( "unknown table flags in kill-list: %u", uMask );
 			return;
 		}
 	}

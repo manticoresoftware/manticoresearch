@@ -918,7 +918,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 
 		if ( sType!="plain" && sType!="distributed" && sType!="rt" && sType!="template" && sType!="percolate" )
 		{
-			fprintf ( stdout, "ERROR: index '%s': unknown type '%s'; fix your config file.\n", szIndexName, sType.cstr() );
+			fprintf ( stdout, "ERROR: table '%s': unknown type '%s'; fix your config file.\n", szIndexName, sType.cstr() );
 			fflush ( stdout );
 			return false;
 		}
@@ -927,7 +927,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 	{
 		if ( !g_bQuiet && !g_bIgnoreNonPlain )
 		{
-			fprintf ( stdout, "WARNING: skipping non-plain index '%s'...\n", szIndexName );
+			fprintf ( stdout, "WARNING: skipping non-plain table '%s'...\n", szIndexName );
 			fflush ( stdout );
 		}
 		return g_bIgnoreNonPlain;
@@ -936,14 +936,14 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 	// progress bar
 	if ( !g_bQuiet )
 	{
-		fprintf ( stdout, "indexing index '%s'...\n", szIndexName );
+		fprintf ( stdout, "indexing table '%s'...\n", szIndexName );
 		fflush ( stdout );
 	}
 
 	// check config
 	if ( !hIndex("path") )
 	{
-		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", szIndexName );
+		fprintf ( stdout, "ERROR: table '%s': key 'path' not found.\n", szIndexName );
 		return false;
 	}
 
@@ -953,10 +953,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 	{
 		CSphString sWarning, sError;
 		if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
-			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		if ( !sWarning.IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	///////////////////
@@ -968,13 +968,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		CSphString sWarning;
 		tTokSettings.Setup ( hIndex, sWarning );
 		if ( !sWarning.IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	{
 		CSphString sWarning;
 		if ( !sphCheckTokenizerICU ( tSettings, tTokSettings, sWarning ) )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	CSphDictSettings tDictSettings;
@@ -982,25 +982,25 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		CSphString sWarning;
 		tDictSettings.Setup ( hIndex, nullptr, sWarning );
 		if ( !sWarning.IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sWarning.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
 	StrVec_t dWarnings;
 	CSphString sError;
 	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
 	if ( !pTokenizer )
-		sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+		sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 	// enable sentence indexing on tokenizer
 	// (not in Create() because search time tokenizer does not care)
 	bool bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
 	if ( bIndexSP )
 		if ( !pTokenizer->EnableSentenceIndexing ( sError ) )
-			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 	if ( hIndex("index_zones") )
 		if ( !pTokenizer->EnableZoneIndexing ( sError ) )
-			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 	DictRefPtr_c pDict;
 
@@ -1013,7 +1013,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			Tokenizer::AddPluginFilterTo ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
 			// need token_filter that just passes init phase in case stopwords or wordforms will be loaded
 			if ( !sError.IsEmpty() )
-				sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+				sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 		}
 
 		// multiforms filter
@@ -1021,7 +1021,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			? sphCreateDictionaryKeywords ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
 			: sphCreateDictionaryCRC ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
 		if ( !pDict )
-			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		MutableIndexSettings_c tMutableSettings;
 		tMutableSettings.Load ( hIndex, false, nullptr );
@@ -1030,13 +1030,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		if ( tSettings.m_bIndexExactWords && !bNeedExact )
 		{
 			tSettings.m_bIndexExactWords = false;
-			fprintf ( stdout, "WARNING: index '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
+			fprintf ( stdout, "WARNING: table '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
 		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && ( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
 		{
 			tSettings.m_bIndexExactWords = true;
-			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
+			fprintf ( stdout, "WARNING: table '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
 		}
 
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
@@ -1044,7 +1044,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		// bigram filter
 		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
 		if ( !sError.IsEmpty() )
-			sphDie ( "index '%s': %s", szIndexName, sError.cstr() );
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		// aot filter
 		if ( tSettings.m_uAotFilterMask )
@@ -1057,7 +1057,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
 	if ( !sError.IsEmpty () )
-		fprintf ( stdout, "WARNING: index '%s': %s\n", szIndexName, sError.cstr() );
+		fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sError.cstr() );
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, szIndexName, sError ) )
 		sphDie ( "%s", sError.cstr() );
@@ -1106,10 +1106,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 	} else
 	{
 		if ( bIndexSP )
-			sphWarning ( "index '%s': index_sp=1 requires html_strip=1 to index paragraphs", szIndexName );
+			sphWarning ( "table '%s': index_sp=1 requires html_strip=1 to index paragraphs", szIndexName );
 
 		if ( hIndex("index_zones") )
-			sphDie ( "index '%s': index_zones requires html_strip=1", szIndexName );
+			sphDie ( "table '%s': index_zones requires html_strip=1", szIndexName );
 	}
 
 	// parse all sources
@@ -1120,7 +1120,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 	{
 		if ( !hSources ( pSourceName->cstr() ) )
 		{
-			fprintf ( stdout, "ERROR: index '%s': source '%s' not found.\n", szIndexName, pSourceName->cstr() );
+			fprintf ( stdout, "ERROR: table '%s': source '%s' not found.\n", szIndexName, pSourceName->cstr() );
 			continue;
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
@@ -1150,13 +1150,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 
 	if ( bSpawnFailed )
 	{
-		fprintf ( stdout, "ERROR: index '%s': failed to configure some of the sources, will not index.\n", szIndexName );
+		fprintf ( stdout, "ERROR: table '%s': failed to configure some of the sources, will not index.\n", szIndexName );
 		return false;
 	}
 
 	if ( !dSources.GetLength() )
 	{
-		fprintf ( stdout, "ERROR: index '%s': no valid sources configured; skipping.\n", szIndexName );
+		fprintf ( stdout, "ERROR: table '%s': no valid sources configured; skipping.\n", szIndexName );
 		return false;
 	}
 
@@ -1186,7 +1186,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateStart ( sError ) )
 			{
 				if ( !sError.IsEmpty() )
-					fprintf ( stdout, "ERROR: index '%s': %s\n", szIndexName, sError.cstr() );
+					fprintf ( stdout, "ERROR: table '%s': %s\n", szIndexName, sError.cstr() );
 				continue;
 			}
 
@@ -1196,12 +1196,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 				while ( dSources[i]->IterateHits ( sError ) );
 				if ( !sError.IsEmpty() )
 				{
-					fprintf ( stdout, "ERROR: index '%s': %s\n", szIndexName, sError.cstr() );
+					fprintf ( stdout, "ERROR: table '%s': %s\n", szIndexName, sError.cstr() );
 					sError = "";
 				}
 			}
 			if ( !sError.IsEmpty() )
-				fprintf ( stdout, "ERROR: index '%s': %s\n", szIndexName, sError.cstr() );
+				fprintf ( stdout, "ERROR: table '%s': %s\n", szIndexName, sError.cstr() );
 		}
 
 		tDict->Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
@@ -1230,7 +1230,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 
 		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 		{
-			fprintf ( stdout, "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
+			fprintf ( stdout, "WARNING: table '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
 		}
 
 		if ( bInplaceEnable )
@@ -1257,10 +1257,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		}
 
 		if ( !bOK )
-			fprintf ( stdout, "ERROR: index '%s': %s.\n", szIndexName, pIndex->GetLastError().cstr() );
+			fprintf ( stdout, "ERROR: table '%s': %s.\n", szIndexName, pIndex->GetLastError().cstr() );
 
 		if ( !pIndex->GetLastWarning().IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s.\n", szIndexName, pIndex->GetLastWarning().cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s.\n", szIndexName, pIndex->GetLastWarning().cstr() );
 
 		pIndex->Unlock ();
 	}
@@ -1307,7 +1307,7 @@ static bool RenameIndexFiles ( const char * szPath, const char * szName, CSphInd
 	pIndex->SetFilebase ( sFrom.cstr() );
 	if ( !pIndex->Rename ( sTo.cstr() ) )
 	{
-		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", szName, sFrom.cstr(), sTo.cstr(), pIndex->GetLastError().cstr() );
+		fprintf ( stdout, "ERROR: table '%s': failed to rename '%s' to '%s': %s", szName, sFrom.cstr(), sTo.cstr(), pIndex->GetLastError().cstr() );
 		return false;
 	}
 
@@ -1323,19 +1323,19 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 	// progress bar
 	if ( !g_bQuiet )
 	{
-		fprintf ( stdout, "merging index '%s' into index '%s'...\n", sSrc, sDst );
+		fprintf ( stdout, "merging table '%s' into table '%s'...\n", sSrc, sDst );
 		fflush ( stdout );
 	}
 
 	// check config
 	if ( !hDst("path") )
 	{
-		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sDst );
+		fprintf ( stdout, "ERROR: table '%s': key 'path' not found.\n", sDst );
 		return false;
 	}
 	if ( !hSrc("path") )
 	{
-		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sSrc );
+		fprintf ( stdout, "ERROR: table '%s': key 'path' not found.\n", sSrc );
 		return false;
 	}
 
@@ -1349,12 +1349,12 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 		CSphString sError;
 		if ( !sphFixupIndexSettings ( pSrc.get(), hSrc, false, nullptr, dWarnings, sError ) )
 		{
-			fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
+			fprintf ( stdout, "ERROR: table '%s': %s\n", sSrc, sError.cstr () );
 			return false;
 		}
 
 		for ( const auto & i : dWarnings )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sSrc, i.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", sSrc, i.cstr() );
 	}
 
 	{
@@ -1362,25 +1362,25 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 		CSphString sError;
 		if ( !sphFixupIndexSettings ( pDst.get(), hDst, false, nullptr, dWarnings, sError ) )
 		{
-			fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
+			fprintf ( stdout, "ERROR: table '%s': %s\n", sDst, sError.cstr () );
 			return false;
 		}
 
 		for ( const auto & i : dWarnings )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sDst, i.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", sDst, i.cstr() );
 	}
 
 	if ( !bRotate )
 	{
 		if ( !pSrc->Lock() )
 		{
-			fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );
+			fprintf ( stdout, "ERROR: table '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );
 			return false;
 		}
 
 		if ( !pDst->Lock() )
 		{
-			fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sDst, pDst->GetLastError().cstr() );
+			fprintf ( stdout, "ERROR: table '%s' is already locked; lock: %s\n", sDst, pDst->GetLastError().cstr() );
 			return false;
 		}
 	}
@@ -1419,25 +1419,25 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst, const CSphConf
 
 	{
 		if ( !pDst->Merge ( pSrc.get(), tPurge, true, tProgress ) )
-			sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
+			sphDie ( "failed to merge table '%s' into table '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 
 		if ( !pDst->GetLastWarning().IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sDst, pDst->GetLastWarning().cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", sDst, pDst->GetLastWarning().cstr() );
 	}
 
 	if ( bDropSrc )
 	{
 		if ( !pSrc->Merge ( pSrc.get(), {}, true, tProgress ) )
-			sphDie ( "failed to drop index '%s' : %s", sSrc, pSrc->GetLastError().cstr() );
+			sphDie ( "failed to drop table '%s' : %s", sSrc, pSrc->GetLastError().cstr() );
 
 		if ( !pSrc->GetLastWarning().IsEmpty() )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sSrc, pSrc->GetLastWarning().cstr() );
+			fprintf ( stdout, "WARNING: table '%s': %s\n", sSrc, pSrc->GetLastWarning().cstr() );
 
 		// write klist with targets but without klist itself
 		// that will affect the order of index load on rotation, but no actual klist will be applied
 		CSphString sSrcKlist = pSrc->GetTmpFilename ( SPH_EXT_SPK );
 		if ( !WriteKillList ( sSrcKlist, nullptr, 0, tTargets, sError ) )
-			sphDie ( "failed to modify klist target in index '%s': %s", sSrc, sError.cstr() );
+			sphDie ( "failed to modify klist target in table '%s': %s", sSrc, sError.cstr() );
 	}
 
 	tmMergeTime = sphMicroTimer() - tmMergeTime;
@@ -1633,7 +1633,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 		BYTE uWrite = 0;
 		BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
 		if ( bResult )
-			fprintf ( stdout, "rotating indices: successfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+			fprintf ( stdout, "rotating tables: successfully sent SIGHUP to searchd (pid=%d).\n", iPID );
 		else
 			fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d, GetLastError()=%d)\n", iPID, GetLastError () );
 
@@ -1645,7 +1645,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	if ( iErr==0 )
 	{
 		if ( !g_bQuiet )
-			fprintf ( stdout, "rotating indices: successfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+			fprintf ( stdout, "rotating tables: successfully sent SIGHUP to searchd (pid=%d).\n", iPID );
 	} else
 	{
 		switch ( errno )
@@ -1936,7 +1936,7 @@ int main ( int argc, char ** argv )
 	auto hConf = sphLoadConfig ( sOptConfig, !g_bQuiet, &sOptConfig );
 
 	if ( !hConf ( "source" ) )
-		sphDie ( "no indexes found in config file '%s'", sOptConfig );
+		sphDie ( "no tables found in config file '%s'", sOptConfig );
 
 	sphCheckDuplicatePaths ( hConf );
 
@@ -2039,13 +2039,13 @@ int main ( int argc, char ** argv )
 	if ( bMerge )
 	{
 		if ( dIndexes.GetLength()!=2 )
-			sphDie ( "there must be 2 indexes to merge specified" );
+			sphDie ( "there must be 2 tables to merge specified" );
 
 		if ( !hConf["index"](dIndexes[0]) )
-			sphDie ( "no merge destination index '%s'", dIndexes[0] );
+			sphDie ( "no merge destination table '%s'", dIndexes[0] );
 
 		if ( !hConf["index"](dIndexes[1]) )
-			sphDie ( "no merge source index '%s'", dIndexes[1] );
+			sphDie ( "no merge source table '%s'", dIndexes[1] );
 
 		bool bLastOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
@@ -2071,7 +2071,7 @@ int main ( int argc, char ** argv )
 		ARRAY_FOREACH ( j, dIndexes )
 		{
 			if ( !hConf["index"](dIndexes[j]) )
-				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[j] );
+				fprintf ( stdout, "WARNING: no such table '%s', skipping.\n", dIndexes[j] );
 			else
 			{
 				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows);
@@ -2113,7 +2113,7 @@ int main ( int argc, char ** argv )
 	{
 		if ( !SendRotate ( hConf, true ) )
 		{
-			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
+			fprintf ( stdout, "WARNING: tables NOT rotated.\n" );
 			iExitCode = 2;
 		}
 	}

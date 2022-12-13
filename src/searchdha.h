@@ -286,7 +286,7 @@ public:
 
 		CSphString sWarning;
 		if ( m_szIndexName )
-			sWarning.SetSprintf ( "index '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
+			sWarning.SetSprintf ( "table '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
 		else
 			sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
 
@@ -309,7 +309,7 @@ public:
 		CSphString sWarning;
 
 		if ( m_szIndexName )
-			sWarning.SetSprintf ( "index '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
+			sWarning.SetSprintf ( "table '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
 		else
 			sWarning.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
 

@@ -2073,7 +2073,7 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 			break;
 
 		default:
-			sphWarning ( "index %s: unsupported command %d", GetName(), (int)pCmd->m_eCommand );
+			sphWarning ( "table %s: unsupported command %d", GetName(), (int)pCmd->m_eCommand );
 		}
 	}
 
@@ -2467,7 +2467,7 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// hitless
 	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
-		sphWarning ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		sphWarning ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 
 	m_pQueries->ReserveGap( m_dLoadedQueries.GetLength () );
 
@@ -2489,7 +2489,7 @@ void PercolateIndex_c::PostSetupUnl()
 				continue;
 			}
 		}
-		sphWarning ( "index '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", GetName(), i, tQuery.m_iQUID );
+		sphWarning ( "table '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", GetName(), i, tQuery.m_iQUID );
 	}
 	m_dLoadedQueries.Reset ( 0 );
 
@@ -2535,7 +2535,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	DWORD uMinFormatVer = 8;
 	if ( uVersion < uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
+		m_sLastError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2557,7 +2557,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
 	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
 	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
-		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
+		sphWarning ( "table '%s': morphology option changed from config has no effect, ignoring", GetName() );
 
 	if ( bStripPath )
 	{
@@ -2575,7 +2575,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
-		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2645,7 +2645,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	DWORD uMinFormatVer = 9;
 	if ( uVersion < uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
+		m_sLastError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, GetFilebase(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2668,7 +2668,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
 	m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
 	if ( m_tSettings.m_uAotFilterMask != uPrevAot )
-		sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
+		sphWarning ( "table '%s': morphology option changed from config has no effect, ignoring", GetName() );
 
 	if ( bStripPath )
 	{
@@ -2686,7 +2686,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
-		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -3048,7 +3048,7 @@ void PercolateIndex_c::ForceRamFlush ( const char * szReason )
 	int64_t tmAge = tmNow - tmWas;
 	int64_t tmSave = tmNow - tmStart;
 
-	sphInfo ( "percolate: index %s: saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
+	sphInfo ( "percolate: table %s: saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
 		"time delta=%d sec, took=%d.%03d sec)", GetName(), szReason, iWasTID, m_iTID, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 

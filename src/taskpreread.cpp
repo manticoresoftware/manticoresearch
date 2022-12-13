@@ -30,7 +30,7 @@ void DoPreread ()
 			dIndexes.Add ( tIt.first );
 	}
 
-	sphInfo ( "prereading %d indexes", dIndexes.GetLength ());
+	sphInfo ( "prereading %d tables", dIndexes.GetLength ());
 	int iRead = 0;
 
 	for ( const CSphString& sName : dIndexes )
@@ -44,7 +44,7 @@ void DoPreread ()
 
 		int64_t tmReading = sphMicroTimer ();
 
-		sphLogDebug ( "prereading index '%s'", sName.cstr ());
+		sphLogDebug ( "prereading table '%s'", sName.cstr ());
 
 		RWIdx_c pIdx {pServed};
 		pIdx->Preread ();
@@ -53,13 +53,13 @@ void DoPreread ()
 			sphWarning ( "'%s' preread: %s", sName.cstr (), pIdx->GetLastWarning ().cstr ());
 
 		int64_t tmRead = sphMicroTimer () - tmReading;
-		sphLogDebug ( "preread index '%s' in %0.3f sec", sName.cstr (), float ( tmRead ) / 1000000.0f );
+		sphLogDebug ( "preread table '%s' in %0.3f sec", sName.cstr (), float ( tmRead ) / 1000000.0f );
 
 		++iRead;
 	}
 
 	int64_t tmFinished = sphMicroTimer () - tmStart;
-	sphInfo ( "preread %d indexes in %0.3f sec", iRead, float ( tmFinished ) / 1000000.0f );
+	sphInfo ( "preread %d tables in %0.3f sec", iRead, float ( tmFinished ) / 1000000.0f );
 	g_tPrereadFinished.SetEvent ();
 }
 } // namespace

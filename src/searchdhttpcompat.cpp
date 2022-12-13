@@ -3540,7 +3540,7 @@ static void DropKbnTables()
 	}
 
 	if ( dIdx.GetLength() )
-		sphWarning ( "dropped %d system indexes", dIdx.GetLength() );
+		sphWarning ( "dropped %d system tables", dIdx.GetLength() );
 }
 
 void SetLogManagement ( bool bEnable )

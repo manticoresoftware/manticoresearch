@@ -1048,7 +1048,7 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 		StringBuilder_c sIndexes ( "," );
 		for ( const CSphString & sIndex : tArgs.m_pCluster->m_dIndexes )
 			sIndexes += sIndex.cstr();
-		sphLogDebugRpl ( "cluster '%s', new %d, indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), (int)tArgs.m_bNewCluster, sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
+		sphLogDebugRpl ( "cluster '%s', new %d, tables '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), (int)tArgs.m_bNewCluster, sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.scstr() );
 	}
 	tArgs.m_pCluster->m_sViewNodes = sIncoming; // till view_handler_cb got called by Galera
 
@@ -1503,13 +1503,13 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !pServed )
 	{
-		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "unknown table '%s'", sIndex.cstr() );
 		return false;
 	}
 
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "wrong type of table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -1523,7 +1523,7 @@ bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, C
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		if ( pError )
-			pError->SetSprintf ( "unknown index, or wrong type of index '%s'", sIndex.cstr() );
+			pError->SetSprintf ( "unknown table, or wrong type of table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -1543,7 +1543,7 @@ static bool EnableIndexWrite ( const CSphString & sIndex, CSphString & sError )
 	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "unknown or wrong-typed index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "unknown or wrong-typed table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -1593,19 +1593,19 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 			if ( !pServed )
 			{
-				sphWarning ( "unknown index '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
+				sphWarning ( "unknown table '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
 				return false;
 			}
 
 			if ( pServed->m_eType!=IndexType_e::PERCOLATE )
 			{
-				sphWarning ( "wrong type of index '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
+				sphWarning ( "wrong type of table '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
 				return false;
 			}
 
 			StoredQueryDesc_t tPQ;
 			LoadStoredQuery ( pRequest, iRequestLen, tPQ );
-			sphLogDebugRpl ( "pq-add, index '%s', uid " INT64_FMT " query %s", pCmd->m_sIndex.cstr(), tPQ.m_iQUID, tPQ.m_sQuery.cstr() );
+			sphLogDebugRpl ( "pq-add, table '%s', uid " INT64_FMT " query %s", pCmd->m_sIndex.cstr(), tPQ.m_iQUID, tPQ.m_sQuery.cstr() );
 
 			CSphString sError;
 			PercolateQueryArgs_t tArgs ( tPQ );
@@ -1614,7 +1614,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 			if ( !pCmd->m_pStored )
 			{
-				sphWarning ( "pq-add replication error '%s', index '%s'", sError.cstr(), pCmd->m_sIndex.cstr() );
+				sphWarning ( "pq-add replication error '%s', table '%s'", sError.cstr(), pCmd->m_sIndex.cstr() );
 				return false;
 			}
 		}
@@ -1622,31 +1622,31 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 		case ReplicationCommand_e::PQUERY_DELETE:
 			LoadDeleteQuery ( pRequest, iRequestLen, pCmd->m_dDeleteQueries, pCmd->m_sDeleteTags );
-			sphLogDebugRpl ( "pq-delete, index '%s', queries %d, tags %s", pCmd->m_sIndex.cstr(), pCmd->m_dDeleteQueries.GetLength(), pCmd->m_sDeleteTags.scstr() );
+			sphLogDebugRpl ( "pq-delete, table '%s', queries %d, tags %s", pCmd->m_sIndex.cstr(), pCmd->m_dDeleteQueries.GetLength(), pCmd->m_sDeleteTags.scstr() );
 			break;
 
 		case ReplicationCommand_e::TRUNCATE:
-			sphLogDebugRpl ( "pq-truncate, index '%s'", pCmd->m_sIndex.cstr() );
+			sphLogDebugRpl ( "pq-truncate, table '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
 		case ReplicationCommand_e::CLUSTER_ALTER_ADD:
 			pCmd->m_bCheckIndex = false;
-			sphLogDebugRpl ( "pq-cluster-alter-add, index '%s'", pCmd->m_sIndex.cstr() );
+			sphLogDebugRpl ( "pq-cluster-alter-add, table '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
 		case ReplicationCommand_e::CLUSTER_ALTER_DROP:
-			sphLogDebugRpl ( "pq-cluster-alter-drop, index '%s'", pCmd->m_sIndex.cstr() );
+			sphLogDebugRpl ( "pq-cluster-alter-drop, table '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
 		case ReplicationCommand_e::RT_TRX:
 			tAcc.LoadRtTrx ( pRequest, iRequestLen );
-			sphLogDebugRpl ( "rt trx, index '%s'", pCmd->m_sIndex.cstr() );
+			sphLogDebugRpl ( "rt trx, table '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
 		case ReplicationCommand_e::UPDATE_API:
 			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
 			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
-			sphLogDebugRpl ( "update, index '%s'", pCmd->m_sIndex.cstr() );
+			sphLogDebugRpl ( "update, table '%s'", pCmd->m_sIndex.cstr() );
 			break;
 
 		case ReplicationCommand_e::UPDATE_QL:
@@ -1660,7 +1660,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
 			pCmd->m_pUpdateCond = &tQuery;
-			sphLogDebugRpl ( "update %s, index '%s'", ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ),  pCmd->m_sIndex.cstr() );
+			sphLogDebugRpl ( "update %s, table '%s'", ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ),  pCmd->m_sIndex.cstr() );
 			break;
 		}
 
@@ -1712,7 +1712,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		{
 			HashedServedClone_c tMutableDesc { tCmd.m_sIndex, g_pLocalIndexes.get() };
 			if ( !ServedDesc_t::IsMutable ( tMutableDesc.Orig() ) )
-				sError.SetSprintf ( "wrong type of index '%s'", tCmd.m_sIndex.cstr() );
+				sError.SetSprintf ( "wrong type of table '%s'", tCmd.m_sIndex.cstr() );
 			else
 				bOk = tCommit.CommitTOI ( &tMutableDesc, sError );
 		} else
@@ -1744,28 +1744,28 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+		sphWarning ( "wrong type of table '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
 	// special path with wlocked index for truncate
 	if ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE )
 	{
-		sphLogDebugRpl ( "truncate-commit, index '%s'", tCmd.m_sIndex.cstr ());
+		sphLogDebugRpl ( "truncate-commit, table '%s'", tCmd.m_sIndex.cstr ());
 		if ( !WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError ) )
 			sphWarning ( "%s", sError.cstr ());
 		return true;
 	}
 
 	assert ( tCmd.m_eCommand!=ReplicationCommand_e::TRUNCATE );
-	sphLogDebugRpl ( "commit, index '%s', uid " INT64_FMT ", queries %d, tags %s",
+	sphLogDebugRpl ( "commit, table '%s', uid " INT64_FMT ", queries %d, tags %s",
 		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ),
 		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
 
 	RIdx_T<RtIndex_i*> pIndex { pServed };
 	if ( !tAcc.SetupDocstore ( *pIndex, sError ) )
 	{
-		sphWarning ( "%s, index '%s', command %d", sError.cstr(), tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+		sphWarning ( "%s, table '%s', command %d", sError.cstr(), tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
@@ -1817,14 +1817,14 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 
 	if ( tCmdCluster.m_eCommand==ReplicationCommand_e::TRUNCATE && tCmdCluster.m_tReconfigure )
 	{
-		sError.SetSprintf ( "RECONFIGURE is not supported for a cluster index" );
+		sError.SetSprintf ( "RECONFIGURE is not supported for a cluster table" );
 		return false;
 	}
 
 	const uint64_t uIndexHash = sphFNV64 ( tCmdCluster.m_sIndex.cstr() );
 	if ( tCmdCluster.m_bCheckIndex && !pCluster->m_dIndexHashes.BinarySearch ( uIndexHash ) )
 	{
-		sError.SetSprintf ( "index '%s' doesn't belong to cluster '%s'", tCmdCluster.m_sIndex.cstr(), tCmdCluster.m_sCluster.cstr() );
+		sError.SetSprintf ( "table '%s' doesn't belong to cluster '%s'", tCmdCluster.m_sIndex.cstr(), tCmdCluster.m_sCluster.cstr() );
 		return false;
 	}
 
@@ -2016,7 +2016,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 	auto pServed = GetServed ( tCmd.m_sIndex );
 	if ( !pServed )
 	{
-		sError = "requires an existing index";
+		sError = "requires an existing table";
 		return false;
 	}
 
@@ -2026,7 +2026,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 			? CommitNonEmptyCmds ( WIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate, sError )
 			: CommitNonEmptyCmds ( RIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate, sError );
 
-	sError = "requires an existing RT or percolate index";
+	sError = "requires an existing RT or percolate table";
 	return false;
 }
 
@@ -2073,7 +2073,7 @@ bool CommitMonitor_c::CommitTOI ( ServedClone_c * pDesc, CSphString & sError ) E
 	const uint64_t uIndexHash = sphFNV64 ( tCmd.m_sIndex.cstr() );
 	if ( tCmd.m_bCheckIndex && !pCluster->m_dIndexHashes.BinarySearch ( uIndexHash ) )
 	{
-		sError.SetSprintf ( "index '%s' doesn't belong to cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
+		sError.SetSprintf ( "table '%s' doesn't belong to cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
 		return false;
 	}
 
@@ -2136,7 +2136,7 @@ bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
 	cServedIndexRefPtr_c pServed { GetServed ( tCmd.m_sIndex ) };
 	if ( !pServed )
 	{
-		sError = "requires an existing index";
+		sError = "requires an existing table";
 		return false;
 	}
 
@@ -2163,7 +2163,7 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd, CSphString & sEr
 	cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
 	if ( !pServed )
 	{
-		sError.SetSprintf ( "requires an existing index, %s", tCmd.m_sIndex.cstr() );
+		sError.SetSprintf ( "requires an existing table, %s", tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
@@ -2217,7 +2217,7 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, const CS
 
 	UnlockedHazardIdxFromServed ( *pNewServed )->GetIndexFiles ( tIndexFiles.m_dRef, tIndexFiles.m_dRef );
 	for ( const auto & i : dWarnings )
-		sphWarning ( "index '%s': %s", szIndexName, i.cstr() );
+		sphWarning ( "table '%s': %s", szIndexName, i.cstr() );
 
 	pResult = std::move (pNewServed);
 	return pResult;
@@ -2293,7 +2293,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 			{
 				if ( hIndexes.Exists ( sIndex ) )
 				{
-					sError.SetSprintf ( "index '%s' is already a part of cluster '%s'", sIndex.cstr(), pOrigCluster->m_sName.cstr() );
+					sError.SetSprintf ( "table '%s' is already a part of cluster '%s'", sIndex.cstr(), pOrigCluster->m_sName.cstr() );
 					return false;
 				}
 			}
@@ -2570,7 +2570,7 @@ public:
 			for ( const CSphString & sIndexName : m_dIndexes )
 			{
 				if ( !SetIndexCluster ( sIndexName, sClusterEmpty, &sError ) )
-					sphWarning ( "%s on removal index '%s' from a cluster", sError.cstr(), sIndexName.cstr() );
+					sphWarning ( "%s on removal table '%s' from a cluster", sError.cstr(), sIndexName.cstr() );
 			}
 		}
 	}
@@ -2678,7 +2678,7 @@ void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNe
 		} else
 		{
 			tClearIndexGuard.SkipCleanup();
-			sphLogDebugRpl ( "'%s' cluster started with %d indexes", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength() );
+			sphLogDebugRpl ( "'%s' cluster started with %d tables", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength() );
 		}
 	}
 
@@ -4291,7 +4291,7 @@ struct ScopedFilesRemoval_t : public ISphNoncopyable
 // - or make sure that index has exact same index file, ie sha1 matched
 bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
-	sphLogDebugRpl ( "reserve index '%s'", tCmd.m_sIndex.cstr() );
+	sphLogDebugRpl ( "reserve table '%s'", tCmd.m_sIndex.cstr() );
 
 	int64_t tmStartReserve = sphMicroTimer();
 	CSphString sLocalIndexPath;
@@ -4543,7 +4543,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	uint64_t uWriter = GetWriterKey ( tCmd.m_sCluster, tCmd.m_sIndex );
 	if ( !g_tRecvStates.HasState ( uWriter ) )
 	{
-		sError.SetSprintf ( "missed writer state at joiner node for cluster '%s' index '%s'", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
+		sError.SetSprintf ( "missed writer state at joiner node for cluster '%s' table '%s'", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
@@ -4555,11 +4555,11 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
 	if ( tCmd.m_eIndex!=IndexType_e::PERCOLATE && tCmd.m_eIndex!=IndexType_e::RT )
 	{
-		sError.SetSprintf ( "unsupported type '%s' in index '%s'", sType.cstr(), tCmd.m_sIndex.cstr() );
+		sError.SetSprintf ( "unsupported type '%s' in table '%s'", sType.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
-	sphLogDebugRpl ( "rotating index '%s' content from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
+	sphLogDebugRpl ( "rotating table '%s' content from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
 	RollbackFilesGuard_t tFilesGuard;
 	if ( !RotateFiles ( pMerge.get(), tFilesGuard.m_tFiles, sError ) )
 		return false;
@@ -4568,7 +4568,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 #ifndef NDEBUG
 	//if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
 	{
-		sphLogDebugRpl ( "verify index '%s' from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
+		sphLogDebugRpl ( "verify table '%s' from %s", tCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
 
 		// check that size matched and sha1 matched prior to loading index
 		assert ( tCmd.m_pChunks );
@@ -4577,7 +4577,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	}
 #endif
 
-	sphLogDebugRpl ( "%s index '%s' into cluster '%s' from %s", ( tCmd.m_bSendFilesSuccess ? "loading" : "rolling-back" ), tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), pMerge->m_sIndexPath.cstr() );
+	sphLogDebugRpl ( "%s table '%s' into cluster '%s' from %s", ( tCmd.m_bSendFilesSuccess ? "loading" : "rolling-back" ), tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), pMerge->m_sIndexPath.cstr() );
 
 	// rollback to old index files via RollbackFilesGuard_t
 	if ( !tCmd.m_bSendFilesSuccess )
@@ -4587,7 +4587,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 
 	if ( !LoadIndex ( pMerge->m_sIndexPath, sType, tCmd.m_sIndex, tCmd.m_sCluster, tIndexFiles, sError ) )
 	{
-		sError.SetSprintf ( "failed to load index '%s': %s", tCmd.m_sIndex.cstr(), sError.cstr() );
+		sError.SetSprintf ( "failed to load table '%s': %s", tCmd.m_sIndex.cstr(), sError.cstr() );
 		return false;
 	}
 
@@ -5137,14 +5137,14 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	assert ( !sIndexPath.IsEmpty() );
 	assert ( dIndexFiles.GetLength() );
 
-	sphLogDebugRpl ( "calculate sha1 of index files chunks '%s'", sIndex.cstr() );
+	sphLogDebugRpl ( "calculate sha1 of table files chunks '%s'", sIndex.cstr() );
 
 	SyncSrc_t tSigSrc;
 	tSigSrc.m_dIndexFiles.SwapData ( dIndexFiles );
 	if ( !SyncSigBegin ( tSigSrc, sError ) )
 		return false;
 
-	sphLogDebugRpl ( "calculated sha1 of index '%s', files %d, hashes %d", sIndex.cstr(), tSigSrc.m_dIndexFiles.GetLength(), tSigSrc.m_dHashes.GetLength() );
+	sphLogDebugRpl ( "calculated sha1 of table '%s', files %d, hashes %d", sIndex.cstr(), tSigSrc.m_dIndexFiles.GetLength(), tSigSrc.m_dHashes.GetLength() );
 
 	int64_t tmLongOpTimeout = GetQueryTimeout ( tSigSrc.m_tmTimeout * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
 
@@ -5163,11 +5163,11 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		for ( AgentConn_t * pAgent : dNodes )
 			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = std::make_unique<SyncDst_t>();
 
-		sphLogDebugRpl ( "reserve index '%s' at %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
+		sphLogDebugRpl ( "reserve table '%s' at %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
 		PQRemoteFileReserve_c tReq;
 		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-		sphLogDebugRpl ( "reserved index '%s' - %s", sIndex.cstr(), ( bOk ? "ok" : "failed" ) );
+		sphLogDebugRpl ( "reserved table '%s' - %s", sIndex.cstr(), ( bOk ? "ok" : "failed" ) );
 		if ( !bOk )
 			return false;
 
@@ -5222,7 +5222,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	if ( !dSendStates.GetLength() && !dActivateIndexes.GetLength() )
 		return true;
 
-	sphLogDebugRpl ( "sending index '%s'", sIndex.cstr() );
+	sphLogDebugRpl ( "sending table '%s'", sIndex.cstr() );
 
 	bool bSendOk = true;
 	if ( dSendStates.GetLength() )
@@ -5249,13 +5249,13 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			PQRemoteBase_c::GetRes ( *dNodes[i] ).m_pSharedDst = tState.m_pSyncDst;
 		}
 
-		sphLogDebugRpl ( "sent index '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
+		sphLogDebugRpl ( "sent table '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
 		PQRemoteIndexAdd_c tReq;
 		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
 
-		sphLogDebugRpl ( "remote index '%s' %s", sIndex.cstr(), ( bSendOk ? "added" : "rolled-back" ) );
+		sphLogDebugRpl ( "remote table '%s' %s", sIndex.cstr(), ( bSendOk ? "added" : "rolled-back" ) );
 	}
 
 	return bSendOk;
@@ -5287,7 +5287,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "unknown or wrong index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "unknown or wrong table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -5318,18 +5318,18 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !ServedDesc_t::IsMutable ( pServed ) )
 		{
-			sError.SetSprintf ( "unknown or wrong type of index '%s'", sIndex.cstr() );
+			sError.SetSprintf ( "unknown or wrong type of table '%s'", sIndex.cstr() );
 			return false;
 		}
 
 		if ( bAdd && !pServed->m_sCluster.IsEmpty() )
 		{
-			sError.SetSprintf ( "index '%s' is a part of cluster '%s'", sIndex.cstr(), pServed->m_sCluster.cstr() );
+			sError.SetSprintf ( "table '%s' is a part of cluster '%s'", sIndex.cstr(), pServed->m_sCluster.cstr() );
 			return false;
 		}
 		if ( !bAdd && pServed->m_sCluster.IsEmpty() )
 		{
-			sError.SetSprintf ( "index '%s' is not in cluster '%s'", sIndex.cstr(), sCluster.cstr() );
+			sError.SetSprintf ( "table '%s' is not in cluster '%s'", sIndex.cstr(), sCluster.cstr() );
 			return false;
 		}
 	}
@@ -5447,14 +5447,14 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 		if ( !pServed )
 		{
 			bSentOk = false;
-			sphWarning ( "unknown index '%s'", sIndex.cstr() );
+			sphWarning ( "unknown table '%s'", sIndex.cstr() );
 			continue;
 		}
 
 		if ( pServed->m_eType!=IndexType_e::PERCOLATE && pServed->m_eType!=IndexType_e::RT )
 		{
 			bSentOk = false;
-			sphWarning ( "wrong type of index '%s'", sIndex.cstr() );
+			sphWarning ( "wrong type of table '%s'", sIndex.cstr() );
 			continue;
 		}
 
@@ -5502,7 +5502,7 @@ void AbortSST ( wsrep_t * pProvider )
 // callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
 bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
-	sphLogDebugRpl ( "join sync %s, UID %s, sent %s, indexes %d, %s", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), tCmd.m_sMsg.scstr() );
+	sphLogDebugRpl ( "join sync %s, UID %s, sent %s, tables %d, %s", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), tCmd.m_sMsg.scstr() );
 
 	if ( !tCmd.m_bSendFilesSuccess )
 	{
@@ -5559,13 +5559,13 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 
 	if ( tDesc.m_sCluster.IsEmpty() )
 	{
-		sError.SetSprintf ( "index '%s' is not in any cluster, use just '%s'", sIndexName.cstr(), sIndexName.cstr() );
+		sError.SetSprintf ( "table '%s' is not in any cluster, use just '%s'", sIndexName.cstr(), sIndexName.cstr() );
 	} else
 	{
 		if ( !bHTTP )
-			sError.SetSprintf ( "index '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+			sError.SetSprintf ( "table '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 		else
-			sError.SetSprintf ( "index '%s' is a part of cluster '%s', use \"cluster\":\"%s\" and \"index\":\"%s\" properties", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+			sError.SetSprintf ( "table '%s' is a part of cluster '%s', use \"cluster\":\"%s\" and \"index\":\"%s\" properties", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 	}
 
 	return false;

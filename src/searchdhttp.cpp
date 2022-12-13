@@ -1021,12 +1021,12 @@ protected:
 	{
 		if ( !pServed )
 		{
-			FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
+			FormatError ( SPH_HTTP_STATUS_500, "no such table '%s'", sIndex.cstr () );
 			return false;
 		}
 		if ( pServed->m_eType!=eType )
 		{
-			FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
+			FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
 			return false;
 		}
 		return true;

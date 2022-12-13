@@ -5,14 +5,14 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:87:"create table rt1 (title text indexe
 	{
 	    "gid" : 221
 	}
-}";s:4:"rows";s:146:"{"error":{"type":"index 'rt1' is a part of cluster 'test', use \"cluster\":\"test\" and \"index\":\"rt1\" properties","index":"rt1"},"status":500}";s:9:"http_code";i:500;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:12;a:7:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:66:"{
+}";s:4:"rows";s:146:"{"error":{"type":"table 'rt1' is a part of cluster 'test', use \"cluster\":\"test\" and \"index\":\"rt1\" properties","index":"rt1"},"status":500}";s:9:"http_code";i:500;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:12;a:7:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:66:"{
 	"index":"test:rt1",
 	"id":221,
 	"doc":
 	{
 	    "gid" : 221
 	}
-}";s:4:"rows";s:125:"{"error":"wrong index at cluster syntax, use \"cluster\": \"test\" and \"index\": \"rt1\" properties, instead of 'test:rt1'"}";s:9:"http_code";i:400;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:13;a:7:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:158:"{
+}";s:4:"rows";s:125:"{"error":"wrong table at cluster syntax, use \"cluster\": \"test\" and \"index\": \"rt1\" properties, instead of 'test:rt1'"}";s:9:"http_code";i:400;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:13;a:7:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:158:"{
 	"cluster":"test",
 	"index":"rt1",
 	"id":221,

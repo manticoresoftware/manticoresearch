@@ -55,11 +55,13 @@ private:
 	float	CalcIndexCost() const;
 	float	CalcFilterCost ( bool bFromIterator, float fDocsAfterIndexes ) const;
 	float	CalcAnalyzerCost() const;
+	float	CalcLookupCost() const;
 	float	CalcMTCost ( float fCost ) const;
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const;
 	uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const;
+	int64_t	ApplyCutoff ( int64_t iDocs ) const;
 };
 
 
@@ -100,6 +102,15 @@ static bool IsSingleValueFilter ( const CSphFilterSettings & tFilter )
 }
 
 
+int64_t CostEstimate_c::ApplyCutoff ( int64_t iDocs ) const
+{
+	if ( m_tCtx.m_iCutoff<0 )
+		return iDocs;
+
+	return Min ( iDocs, m_tCtx.m_iCutoff );
+}
+
+
 float CostEstimate_c::CalcIndexCost() const
 {
 	int iNumIndexes = 0;
@@ -108,7 +119,7 @@ float CostEstimate_c::CalcIndexCost() const
 	ARRAY_FOREACH ( i, m_dSIInfo )
 	{
 		const auto & tSIInfo = m_dSIInfo[i];
-		int64_t iDocs = tSIInfo.m_iRsetEstimate;
+		int64_t iDocs = ApplyCutoff ( tSIInfo.m_iRsetEstimate );
 
 		if ( tSIInfo.m_eType==SecondaryIndexType_e::LOOKUP ||
 			tSIInfo.m_eType==SecondaryIndexType_e::ANALYZER ||
@@ -180,12 +191,17 @@ float CostEstimate_c::CalcFilterCost ( bool bFromIterator, float fDocsAfterIndex
 			continue;
 
 		float fFilterComplexity = CalcGetFilterComplexity ( tSIInfo, tFilter );
-		int64_t iDocs = tSIInfo.m_iRsetEstimate;
 
 		if ( bFromIterator )
-			fCost += Cost_Filter ( int64_t(fDocsAfterIndexes*m_tCtx.m_iTotalDocs), fFilterComplexity );
+		{
+			int64_t iDocsToProcess = int64_t(fDocsAfterIndexes*m_tCtx.m_iTotalDocs);
+			iDocsToProcess = ApplyCutoff ( iDocsToProcess );
+			fCost += Cost_Filter ( iDocsToProcess, fFilterComplexity );
+		}
 		else
 		{
+			int64_t iDocs = ApplyCutoff ( tSIInfo.m_iRsetEstimate );
+
 			// the idea is that block filter rejects most docs and 50% of the remaining docs are filtered out
 			fCost += Cost_Filter ( Min ( iDocs*2, m_tCtx.m_iTotalDocs ), fFilterComplexity );
 			fCost += Cost_BlockFilter ( m_tCtx.m_iTotalDocs, fFilterComplexity );
@@ -212,27 +228,40 @@ float CostEstimate_c::CalcAnalyzerCost() const
 		m_tCtx.m_pColumnar->GetAttrInfo ( tFilter.m_sAttrName.cstr(), tAttrInfo );
 
 		float fFilterComplexity = CalcGetFilterComplexity ( tSIInfo, tFilter );
-		int64_t iDocs = tSIInfo.m_iRsetEstimate;
 
 		// filters that process but reject values are 2x faster
 		int64_t iDocsBeforeFilter = tSIInfo.m_iPartialColumnarMinMax==-1 ? m_tCtx.m_iTotalDocs : std::min ( tSIInfo.m_iPartialColumnarMinMax, m_tCtx.m_iTotalDocs );
 		float fAcceptCoeff = std::min ( float(tSIInfo.m_iRsetEstimate)/iDocsBeforeFilter, 1.0f ) / 2.0f + 0.5f;
 		float fTotalCoeff = fFilterComplexity*tAttrInfo.m_fComplexity*fAcceptCoeff;
 
+		int64_t iDocsAfterCutoff = ApplyCutoff ( m_tCtx.m_iTotalDocs );
+
 		if ( tSIInfo.m_iPartialColumnarMinMax==-1 ) // no minmax? scan whole index
-			fCost += Cost_ColumnarFilter ( m_tCtx.m_iTotalDocs, fTotalCoeff );
+			fCost += Cost_ColumnarFilter ( iDocsAfterCutoff, fTotalCoeff );
 		else
 		{
 			// minmax tree eval
 			const int MINMAX_NODE_SIZE = 1024;
-			int iMatchingNodes = ( iDocs + MINMAX_NODE_SIZE - 1 ) / MINMAX_NODE_SIZE;
+			int iMatchingNodes = ( tSIInfo.m_iRsetEstimate + MINMAX_NODE_SIZE - 1 ) / MINMAX_NODE_SIZE;
 			int iTreeLevels = sphLog2 ( m_tCtx.m_iTotalDocs );
 			fCost += Cost_Filter ( iMatchingNodes*iTreeLevels, fFilterComplexity );
-			fCost += Cost_ColumnarFilter ( std::min ( tSIInfo.m_iPartialColumnarMinMax, m_tCtx.m_iTotalDocs ), fTotalCoeff );
+			fCost += Cost_ColumnarFilter ( std::min ( tSIInfo.m_iPartialColumnarMinMax, iDocsAfterCutoff ), fTotalCoeff );
 		}
 	}
 
 	return fCost;
+}
+
+
+float CostEstimate_c::CalcLookupCost() const
+{
+	int64_t iDocsToReadLookup = 0;
+	for ( const auto & i : m_dSIInfo )
+		if ( i.m_eType==SecondaryIndexType_e::LOOKUP )
+			iDocsToReadLookup += i.m_iRsetEstimate;
+
+	iDocsToReadLookup = ApplyCutoff(iDocsToReadLookup);
+	return Cost_LookupRead ( iDocsToReadLookup );
 }
 
 
@@ -268,8 +297,6 @@ float CostEstimate_c::CalcMTCost ( float fCost ) const
 
 float CostEstimate_c::CalcQueryCost()
 {
-	int64_t iDocsToReadLookup = 0;
-
 	float fCost = 0.0f;
 	float fDocsAfterIndexes = 1.0f;
 	float fDocsAfterFilters = 1.0f;
@@ -301,7 +328,6 @@ float CostEstimate_c::CalcQueryCost()
 		switch ( i.m_eType )
 		{
 		case SecondaryIndexType_e::LOOKUP:
-			iDocsToReadLookup += iDocs; 
 			iNumLookups++;
 			break;
 
@@ -326,7 +352,7 @@ float CostEstimate_c::CalcQueryCost()
 		fCost += CalcFilterCost ( iToIntersect>0, fDocsAfterIndexes );
 
 	if ( iNumLookups )
-		fCost += Cost_LookupRead ( iDocsToReadLookup );
+		fCost += CalcLookupCost();
 
 	if ( iNumAnalyzers )
 		fCost += CalcAnalyzerCost();
@@ -334,11 +360,7 @@ float CostEstimate_c::CalcQueryCost()
 	if ( iNumIndexes )
 		fCost += CalcIndexCost();
 
-	int64_t iDocsToPush = uint64_t(fDocsAfterFilters*m_tCtx.m_iTotalDocs);
-	if ( m_tCtx.m_iCutoff>=0 )
-		iDocsToPush = Min ( iDocsToPush, m_tCtx.m_iCutoff );
-
-	fCost += Cost_Push ( iDocsToPush );
+	fCost += Cost_Push ( uint64_t(fDocsAfterFilters*m_tCtx.m_iTotalDocs) );
 
 	if ( !iNumIndexes && !iNumLookups ) // SI and docid lookups always run in a single thread
 		fCost = CalcMTCost(fCost);

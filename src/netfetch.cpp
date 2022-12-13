@@ -730,6 +730,11 @@ std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery )
 	return { false, szNoCurlMsg };
 }
 
+std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<const char *> & dHeaders )
+{
+	return { false, szNoCurlMsg };
+}
+
 bool IsCurlAvailable()
 {
 	return false;

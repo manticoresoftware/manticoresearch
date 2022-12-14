@@ -58,7 +58,7 @@ set ( CPACK_RPM_COMMON_PACKAGE_ARCHITECTURE noarch )
 set ( CPACK_RPM_COMMON_PACKAGE_CONFLICTS "sphinx" )
 
 set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
-set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata" )
+set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata, manticore-buddy" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "sphinx" )
 set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore-all" )
 set ( CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF )

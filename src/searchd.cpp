@@ -5198,9 +5198,17 @@ private:
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
 
-	CSphVector<std::pair<int,bool>>		m_dSplits;
+	struct IndexPSInfo_t
+	{
+		int		m_iThreads = 0;		// threads per index
+		int		m_iMaxThreads = 0;	// max threads per index (used for consistency between GetPseudoShardingMetric() and SpawnIterators()
+		bool	m_bForceSingleThread = false;	// for disk chunks; means "run all disk chunk searches in a single thread"
+	};
+
+	CSphVector<IndexPSInfo_t>			m_dPSInfo;
 
 	StringBuilder_c						m_sError;
+
 private:
 	bool							ParseSysVar();
 	bool							ParseIdxSubkeys();
@@ -5219,7 +5227,10 @@ private:
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const;
 	cServedIndexRefPtr_c			CheckIndexSelectable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
-	void							CalcSplits ( int iConcurrency );
+
+	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const;
+	void							CalcMaxThreadsPerIndex ( CSphVector<std::pair<int64_t,int>> & dSplitData, int iConcurrency ) const;
+	void							CalcThreadsPerIndex ( int iConcurrency );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5513,7 +5524,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 {
 	int iValidSorters = 0;
 
-	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dNQueries.First ().m_iMaxMatches, m_dSplits.First().second, pHook );
+	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dNQueries.First ().m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
 	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra, m_pProfile );
 
 	m_dNQueries.First().m_bZSlist = tQueueRes.m_bZonespanlist;
@@ -5540,7 +5551,7 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 		CSphQuery & tQuery = m_dNQueries[iQuery];
 
 		// create queue
-		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches, m_dSplits.First().second, pHook );
+		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
 		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile );
 		if ( !pSorter )
 			continue;
@@ -5717,32 +5728,10 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 }
 
 
-void SearchHandler_c::CalcSplits ( int iConcurrency )
+void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const
 {
-	if ( !g_bSplit )
-	{
-		// let's set the 'force single thread' flag for all indexes to make sure max_matches won't be increased when it is not necessary
-		for ( auto & i : m_dSplits )
-			i = { 1, true };
+	dCountDistinct.Resize ( m_dLocal.GetLength() );
 
-		return;
-	}
-
-	if ( !iConcurrency )
-		iConcurrency = g_iThreads;
-
-	struct SplitData_t
-	{
-		bool	m_bEnabled = false;
-		int64_t	m_iMetric = 0;
-	};
-
-	CSphFixedVector<SplitData_t> dSplitData { m_dLocal.GetLength() };
-
-	// FIXME! what about PQ?
-	int64_t iTotalMetric = 0;
-	int iSingleSplits = 0;
-	int iEnabled = 0;
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const LocalIndex_t & tLocal = m_dLocal[iLocal];
@@ -5750,30 +5739,88 @@ void SearchHandler_c::CalcSplits ( int iConcurrency )
 		if ( !pIndex )
 			continue;
 
-		CSphVector<int64_t> dCountDistinct { m_dNQueries.GetLength() };
-		dCountDistinct.Fill(-1);
-		ARRAY_FOREACH ( i, dCountDistinct )
+		auto & dIndexCountDistinct = dCountDistinct[iLocal];
+		dIndexCountDistinct.Resize ( m_dNQueries.GetLength() );
+		dIndexCountDistinct.Fill(-1);
+		ARRAY_FOREACH ( i, dIndexCountDistinct )
 		{
 			auto & tQuery = m_dNQueries[i];
 			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, RIdx_c(pIndex)->GetMatchSchema() );
-			if ( iGroupby>=0 )
-			{
-				auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
-				dCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct(sAttr);
-			}
-		}
+			if ( iGroupby<0 )
+				continue;
 
-		SplitData_t & tSplitData = dSplitData[iLocal];
-		int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct, iConcurrency, m_dSplits[iLocal].second );
+			auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
+			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct(sAttr);
+		}
+	}
+}
+
+
+void SearchHandler_c::CalcMaxThreadsPerIndex ( CSphVector<std::pair<int64_t,int>> & dSplitData, int iConcurrency ) const
+{
+	dSplitData.Resize ( m_dLocal.GetLength() );
+	dSplitData.Fill ( { -1, 0 } );
+
+	int iNumValid = 0;
+	ARRAY_FOREACH ( i, m_dLocal )
+	{
+		auto pIndex = CheckIndexSelectable ( m_dLocal[i].m_sName, m_dLocal[i].m_sParentIndex.cstr(), nullptr );
+		if ( !pIndex )
+			continue;
+
+		iNumValid++;
+	}
+
+	int iMaxThreadsPerIndex = iNumValid<iConcurrency ? ( iConcurrency-iNumValid ) + 1 : 1;
+	for ( auto & i : dSplitData )
+		i.second = iMaxThreadsPerIndex;
+}
+
+
+void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
+{
+	if ( !g_bSplit )
+	{
+		// let's set the 'force single thread' flag for all indexes to make sure max_matches won't be increased when it is not necessary
+		for ( auto & i : m_dPSInfo )
+			i = { 1, 1, true };
+
+		return;
+	}
+
+	if ( !iConcurrency )
+		iConcurrency = g_iThreads;
+
+	CSphVector<CSphVector<int64_t>> dCountDistinct;
+	PopulateCountDistinct ( dCountDistinct );
+
+	CSphVector<std::pair<int64_t,int>> dSplitData;
+	CalcMaxThreadsPerIndex ( dSplitData, iConcurrency );
+
+	// FIXME! what about PQ?
+	int64_t iTotalMetric = 0;
+	int iSingleSplits = 0;
+	int iEnabled = 0;
+
+	ARRAY_FOREACH ( iLocal, m_dLocal )
+	{
+		const LocalIndex_t & tLocal = m_dLocal[iLocal];
+		auto pIndex = CheckIndexSelectable ( tLocal.m_sName, tLocal.m_sParentIndex.cstr(), nullptr );
+		if ( !pIndex )
+			continue;
+
+		auto & tPSInfo = m_dPSInfo[iLocal];
+		auto & tSplitData = dSplitData[iLocal];
+		tPSInfo.m_iMaxThreads = tSplitData.second;
+		int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
 		if ( iMetric==-1 )
 		{
 			iSingleSplits++;
 			continue;
 		}
 
-		tSplitData.m_bEnabled = true;
-		tSplitData.m_iMetric = iMetric;
-		iTotalMetric += tSplitData.m_iMetric;
+		tSplitData.first = iMetric;
+		iTotalMetric += iMetric;
 		iEnabled++;
 	}
 
@@ -5782,11 +5829,11 @@ void SearchHandler_c::CalcSplits ( int iConcurrency )
 		int iLeft = iConcurrency-iSingleSplits;
 		ARRAY_FOREACH ( i, dSplitData )
 		{
-			const SplitData_t & tSplitData = dSplitData[i];
-			if ( !tSplitData.m_bEnabled )
+			const auto & tSplitData = dSplitData[i];
+			if ( tSplitData.first==-1 )
 				continue;
 
-			m_dSplits[i].first = Max ( (int)round ( double(tSplitData.m_iMetric) / iTotalMetric * iLeft ), 1 );
+			m_dPSInfo[i].m_iThreads = Max ( (int)round ( double(tSplitData.first) / iTotalMetric * iLeft ), 1 );
 		}
 	}
 }
@@ -5958,8 +6005,8 @@ void SearchHandler_c::RunLocalSearches ()
 
 	GlobalSorters_c tGlobalSorters ( m_dNQueries, dLocalIndexes );
 
-	m_dSplits.Resize(iNumLocals);
-	m_dSplits.Fill ( { 1, false } );
+	m_dPSInfo.Resize(iNumLocals);
+	m_dPSInfo.Fill ( { 1, false } );
 
 	CSphFixedVector<int> dOrder { iNumLocals };
 	for ( int i = 0; i<iNumLocals; ++i )
@@ -5986,7 +6033,7 @@ void SearchHandler_c::RunLocalSearches ()
 			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
 		} ) );
 
-		CalcSplits ( pDispatcher->GetConcurrency() );
+		CalcThreadsPerIndex ( pDispatcher->GetConcurrency() );
 	}
 
 //	for ( int iOrder : dOrder )
@@ -6076,8 +6123,8 @@ void SearchHandler_c::RunLocalSearches ()
 				bool bCanBeCloned = dSorters.all_of ( []( auto * pSorter ){ return pSorter ? pSorter->CanBeCloned() : true; } );
 
 				// fixme: previous calculations are wrong; we are not splitting the query if we are using non-clonable sorters
-				tMultiArgs.m_iThreads = bCanBeCloned ? m_dSplits[iLocal].first : 1;
-				tMultiArgs.m_iTotalThreads = pDispatcher->GetConcurrency();
+				tMultiArgs.m_iThreads = bCanBeCloned ? m_dPSInfo[iLocal].m_iThreads : 1;
+				tMultiArgs.m_iTotalThreads = m_dPSInfo[iLocal].m_iMaxThreads;
 				tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
 
 				dNAggrResults.First().m_tIOStats.Start ();

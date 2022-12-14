@@ -1271,6 +1271,7 @@ public:
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
+	bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
 
 private:
@@ -2986,26 +2987,15 @@ bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads
 }
 
 
-int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
+bool CSphIndex_VLN::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const
 {
-	bool bAllFast = true;
-
 	ARRAY_FOREACH ( i, dQueries )
 	{
 		auto & tQuery = dQueries[i];
 
-		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
-			continue;
-		
-		bool bFastQuery = false;
-		if ( !CheckEnabledIndexes ( tQuery, iThreads, bFastQuery ) )
-			return -1; 
-
-		bAllFast &= bFastQuery;
-
 		// check for potential non-clonable sorters (we don't have actual sorters at this stage)
 		if ( DetectNonClonableSorters(tQuery) )
-			return -1;
+			return true;
 
 		// at this point we are trying to decide how many threads this index gets
 		// we did not correct max_matches yet (to achieve max grouping accuracy)
@@ -3024,24 +3014,49 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 				if ( iMaxCountDistinct==-1 )
 				{
 					bForceSingleThread = true;
-					return -1;	// no info on max_matches; disable ps
+					return true;	// no info on max_matches; disable ps
 				}
 				else
 				{
 					if ( tQuery.m_bExplicitMaxMatches && iMaxCountDistinct > tQuery.m_iMaxMatches )
 					{
 						bForceSingleThread = true;
-						return -1;	// can't change max_matches and not enough were set; disable ps
+						return true;	// can't change max_matches and not enough were set; disable ps
 					}
 
 					if ( iMaxCountDistinct > tQuery.m_iMaxMatchThresh )
 					{
 						bForceSingleThread = true;
-						return -1; // max_matches can't be increased; disable ps
+						return true; // max_matches can't be increased; disable ps
 					}
 				}
 			}
 		}
+	}
+
+	return GetStats().m_iTotalDocuments<=g_iSplitThresh;
+}
+
+
+int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
+{
+	if ( MustRunInSingleThread ( dQueries, dMaxCountDistinct, bForceSingleThread ) )
+		return -1;
+
+	bool bAllFast = true;
+
+	ARRAY_FOREACH ( i, dQueries )
+	{
+		auto & tQuery = dQueries[i];
+
+		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
+			continue;
+		
+		bool bFastQuery = false;
+		if ( !CheckEnabledIndexes ( tQuery, iThreads, bFastQuery ) )
+			return -1; 
+
+		bAllFast &= bFastQuery;
 	}
 
 	if ( bAllFast )
@@ -7873,9 +7888,9 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 {
 	float fCost = FLT_MAX;
 
-	// In order to maintain some consistency with GetPseudoShardingMetrics we need to do one of the following:
+	// In order to maintain some consistency with GetPseudoShardingMetric() we need to do one of the following:
 	// a. Run this with the number of docs in this pseudo_chunk and one thread
-	// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetrics
+	// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetric()
 	// For now we use approach b) as it is simpler
 	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
 	CSphVector<SecondaryIndexInfo_t> dSIInfo = SelectIterators ( tSelectIteratorCtx, fCost );

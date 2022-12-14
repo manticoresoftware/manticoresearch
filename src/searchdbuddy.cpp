@@ -52,6 +52,7 @@ static const int g_iStartMaxTimeout = 3; // max start timeout 3 sec
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
 static void BuddyNextTick();
+static CSphString BuddyGetPath ( const CSphString & sPath, bool bHasBuddyPath );
 
 #if _WIN32
 struct BuddyWindow_t : boost::process::detail::handler_base
@@ -265,8 +266,9 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 }
 
 
-void BuddyStart ( const CSphString & sPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry )
+void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry )
 {
+	CSphString sPath = BuddyGetPath ( sConfigPath, bHasBuddyPath );
 	if ( sPath.IsEmpty() )
 		return;
 
@@ -517,4 +519,56 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sQuery.first, *tBuddyRows );
 	return bKeepProfile;
+}
+
+#ifdef _WIN32
+static CSphString g_sDefaultBuddyName ( "manticore-buddy.phar" );
+#else
+static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
+#endif
+static CSphString g_sDefaultBuddyExecName ( "manticore-executor.exe" );
+
+static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
+{
+#ifdef _WIN32
+		assert ( !sExecPath.IsEmpty() );
+		CSphString sFullPath;
+		sFullPath.SetSprintf ( "\"%s\" \"%s\"", sExecPath.cstr(), sBuddyPath.cstr() );
+		return sFullPath;
+#else
+		return sBuddyPath.cstr();
+#endif
+}
+
+CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
+{
+	if ( bHasBuddyPath )
+		return sConfigPath;
+
+	CSphString sExecPath;
+	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
+	// check executor first
+#ifdef _WIN32
+	sExecPath.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyExecName.cstr() );
+	if ( !sphFileExists ( sExecPath.cstr() ) )
+	{
+		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyExecName.cstr(), sExecPath.cstr() );
+		return CSphString();
+	}
+#endif
+
+	CSphString sPathBuddy2Module;
+	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
+	if ( sphFileExists ( sPathBuddy2Module.cstr() ) )
+		return GetFullBuddyPath ( sExecPath, sPathBuddy2Module );
+
+	// check at the daemon location / cwd
+	CSphString sPathBuddy2Cwd;
+	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyName.cstr() );
+	if ( sphFileExists ( sPathBuddy2Cwd.cstr() ) )
+		return GetFullBuddyPath ( sExecPath, sPathBuddy2Cwd );
+
+	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
+
+	return CSphString();
 }

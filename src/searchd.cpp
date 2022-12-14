@@ -203,6 +203,7 @@ CSphString				g_sSecondaryError;
 bool					g_bSecondaryError { false };
 static CSphString		g_sBuddyPath;
 static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
+static bool				g_bHasBuddyPath = false;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -18865,6 +18866,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( bGotSecondary && !IsSecondaryLibLoaded() )
 		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
 
+	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 
@@ -20067,7 +20069,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
 	ReplicationStart ( dListenerDescs, bNewCluster, bNewClusterForce );
 	searchd::AddShutdownCb ( BuddyStop );
-	BuddyStart ( g_sBuddyPath, dListenerDescs, g_bTelemetry );
+	BuddyStart ( g_sBuddyPath, g_bHasBuddyPath, dListenerDescs, g_bTelemetry );
 
 	g_bJsonConfigLoadedOk = true;
 

@@ -6558,7 +6558,7 @@ bool SearchHandler_c::AcquireInvokedIndexes()
 		return true;
 
 	// report failed
-	m_sError << "unknown local table(es) '" << sFailed << "' in search request";
+	m_sError << "unknown local table(s) '" << sFailed << "' in search request";
 	return false;
 }
 
@@ -18211,8 +18211,8 @@ void ShowHelp ()
 		"-p, --port <port>\tlisten on given port (overrides config setting)\n"
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
-		"-i, --index <index>\tonly serve given table(es)\n"
-		"-t, --table <table>\tonly serve given table(es)\n"
+		"-i, --index <index>\tonly serve given table(s)\n"
+		"-t, --table <table>\tonly serve given table(s)\n"
 #if !_WIN32
 		"--nodetach\t\tdo not detach into background\n"
 #endif

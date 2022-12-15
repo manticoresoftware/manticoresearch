@@ -1385,7 +1385,7 @@ int main ( int argc, char ** argv )
 
 	if ( g_eCommand==IndextoolCmd_e::CHECKCONFIG )
 	{
-		fprintf ( stdout, "config valid\nchecking table(es) ... " );
+		fprintf ( stdout, "config valid\nchecking table(s) ... " );
 
 		bool bError = false;
 
@@ -1409,7 +1409,7 @@ int main ( int argc, char ** argv )
 			{
 				// nice looking output
 				if ( !bError )
-					fprintf ( stdout, "\nmissed table(es): '%s'", tIndex.first.cstr() );
+					fprintf ( stdout, "\nmissed table(s): '%s'", tIndex.first.cstr() );
 				else
 					fprintf ( stdout, ", '%s'", tIndex.first.cstr() );
 

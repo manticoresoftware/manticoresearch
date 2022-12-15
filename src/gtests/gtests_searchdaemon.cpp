@@ -270,7 +270,7 @@ TEST_F ( T_ConfigureMultiAgent, wrong_formatted_option )
 TEST_F ( T_ConfigureMultiAgent, fixme_wrong_agent_port )
 {
 	ParserTest ( "localhost:1000abc", false, "WARNING: table 'tstidx': agent 'localhost:1000abc': "
-		"after host/socket expected ':', then table(es), but got 'abc'), - SKIPPING AGENT" );
+		"after host/socket expected ':', then table(s), but got 'abc'), - SKIPPING AGENT" );
 }
 
 // fixme: m.b. parse 100000abc as index name in the case?
@@ -290,7 +290,7 @@ TEST_F ( T_ConfigureMultiAgent, wrong_idx_name )
 TEST_F ( T_ConfigureMultiAgent, wrong_idx_delimited_from_host )
 {
 	ParserTest ( "localhost:1000 idx", false, "WARNING: table 'tstidx': agent 'localhost:1000 idx': "
-		"after host/socket expected ':', then table(es), but got ' idx'), - SKIPPING AGENT" );
+		"after host/socket expected ':', then table(s), but got ' idx'), - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_empty_idx )

@@ -1263,7 +1263,7 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 		if ( *sRawAgent )
 		{
 			if ( *sRawAgent!=':' )
-				return tWI.ErrSkip ( "after host/socket expected ':', then table(es), but got '%s')", sRawAgent );
+				return tWI.ErrSkip ( "after host/socket expected ':', then table(s), but got '%s')", sRawAgent );
 
 			CSphString sIndexList = ++sRawAgent;
 			sIndexList.Trim ();

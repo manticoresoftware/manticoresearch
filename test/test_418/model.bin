@@ -1,1 +1,1 @@
-a:1:{i:0;a:1:{i:0;a:2:{i:0;s:123:"ERROR: index 'test_1': source 'test_1': XML parse error: not well-formed (invalid token) (line=60006, pos=19, docid=14999).";i:1;s:12:"exit code: 1";}}}
+a:1:{i:0;a:1:{i:0;a:2:{i:0;s:123:"ERROR: table 'test_1': source 'test_1': XML parse error: not well-formed (invalid token) (line=60006, pos=19, docid=14999).";i:1;s:12:"exit code: 1";}}}

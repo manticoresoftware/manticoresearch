@@ -632,7 +632,7 @@ CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSp
 
 			CSphString sAllFiles;
 			ConcatReportStrings ( dErrorReport, sAllFiles );
-			sphWarning ( "index '%s': wordforms file '%s' is shared with index '%s', but tokenizer settings are different",	szIndex,	sAllFiles.cstr(), pContainer->m_sIndexName.cstr() );
+			sphWarning ( "table '%s': wordforms file '%s' is shared with table '%s', but tokenizer settings are different",	szIndex,	sAllFiles.cstr(), pContainer->m_sIndexName.cstr() );
 		}
 
 	CSphWordforms* pContainer = LoadWordformContainer ( dFileInfos, pEmbedded, pTokenizer, szIndex );
@@ -697,26 +697,26 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 	if ( !dTokens.GetLength() )
 	{
 		if ( !bCommentedWholeLine )
-			sphWarning ( "index '%s': all source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+			sphWarning ( "table '%s': all source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	if ( !bSeparatorFound )
 	{
-		sphWarning ( "index '%s': no wordform separator found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "table '%s': no wordform separator found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	BYTE* pTo = pTokenizer->GetToken();
 	if ( !pTo )
 	{
-		sphWarning ( "index '%s': no destination token found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "table '%s': no destination token found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	if ( *pTo == '#' )
 	{
-		sphWarning ( "index '%s': misplaced comment (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "table '%s': misplaced comment (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
@@ -747,12 +747,12 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 
 	if ( !dDestTokens.GetLength() )
 	{
-		sphWarning ( "index '%s': destination token is a stopword (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "table '%s': destination token is a stopword (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	if ( bStopwordsPresent )
-		sphWarning ( "index '%s': wordform contains stopwords (wordform='%s'). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "table '%s': wordform contains stopwords (wordform='%s'). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 
 	// we disabled all blended, so we need to filter them manually
 	bool bBlendedPresent = false;
@@ -806,7 +806,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 						CSphString sStoredTokens, sStoredForms;
 						ConcatReportStrings ( pStoredMF->m_dTokens, sStoredTokens );
 						ConcatReportStrings ( pStoredMF->m_dNormalForm, sStoredForms );
-						sphWarning ( "index '%s': duplicate wordform found - overridden ( current='%s', old='%s %s > %s' ). Fix your wordforms file '%s'.",
+						sphWarning ( "table '%s': duplicate wordform found - overridden ( current='%s', old='%s %s > %s' ). Fix your wordforms file '%s'.",
 							pContainer->m_sIndexName.cstr(),
 							sBuffer,
 							dTokens[0].cstr(),
@@ -886,7 +886,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 			if ( pContainer->m_dNormalForms[*pRefTo].m_sWord != dDestTokens[0].m_sForm || pContainer->m_dNormalForms[*pRefTo].m_bAfterMorphology != bAfterMorphology )
 			{
 				CSphStoredNF& tRefTo = pContainer->m_dNormalForms[*pRefTo];
-				sphWarning ( "index '%s': duplicate wordform found - overridden ( current='%s', old='%s%s > %s' ). Fix your wordforms file '%s'.",
+				sphWarning ( "table '%s': duplicate wordform found - overridden ( current='%s', old='%s%s > %s' ). Fix your wordforms file '%s'.",
 					pContainer->m_sIndexName.cstr(),
 					sBuffer,
 					tRefTo.m_bAfterMorphology ? "~" : "",
@@ -898,7 +898,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 				tRefTo.m_bAfterMorphology = bAfterMorphology;
 				pContainer->m_bHavePostMorphNF |= bAfterMorphology;
 			} else
-				sphWarning ( "index '%s': duplicate wordform found ( '%s' ). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+				sphWarning ( "table '%s': duplicate wordform found ( '%s' ). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		} else
 		{
 			CSphStoredNF tStoredForm;
@@ -979,7 +979,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 			CSphString sError;
 			if ( !rdWordforms.Open ( szFile, sError ) )
 			{
-				sphWarning ( "index '%s': %s", szIndex, sError.cstr() );
+				sphWarning ( "table '%s': %s", szIndex, sError.cstr() );
 				return nullptr;
 			}
 
@@ -1010,7 +1010,7 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 				if ( tFile.Collect ( sFile.cstr() ) )
 					m_dWFFileInfos.Add ( tFile );
 				else
-					sphWarning ( "index '%s': wordforms file '%s' not found", szIndex, sFile.cstr() );
+					sphWarning ( "table '%s': wordforms file '%s' not found", szIndex, sFile.cstr() );
 			}
 	}
 
@@ -1024,7 +1024,7 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 	{
 		++m_pWordforms->m_iRefCount;
 		if ( m_pWordforms->m_bHavePostMorphNF && !m_dMorph.GetLength() )
-			sphWarning ( "index '%s': wordforms contain post-morphology normal forms, but no morphology was specified", szIndex );
+			sphWarning ( "table '%s': wordforms contain post-morphology normal forms, but no morphology was specified", szIndex );
 	}
 
 	return !!m_pWordforms;

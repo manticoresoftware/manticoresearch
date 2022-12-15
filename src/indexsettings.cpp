@@ -307,7 +307,7 @@ bool CSphTokenizerSettings::Load ( const FilenameBuilder_i * pFilenameBuilder, C
 	m_iType = tReader.GetByte ();
 	if ( m_iType!=TOKENIZER_UTF8 && m_iType!=TOKENIZER_NGRAM )
 	{
-		sWarning = "can't load an old index with SBCS tokenizer";
+		sWarning = "can't load an old table with SBCS tokenizer";
 		return false;
 	}
 
@@ -342,7 +342,7 @@ bool CSphTokenizerSettings::Load ( const FilenameBuilder_i* pFilenameBuilder, co
 	m_iType = (int)Int ( tNode.ChildByName ( "type" ) );
 	if ( m_iType != TOKENIZER_UTF8 && m_iType != TOKENIZER_NGRAM )
 	{
-		sWarning = "can't load an old index with SBCS tokenizer";
+		sWarning = "can't load an old table with SBCS tokenizer";
 		return false;
 	}
 
@@ -875,13 +875,13 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		bWordDict = false;
 	else if ( sIndexType!="keywords" )
 	{
-		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
 		return false;
 	}
 
 	if ( hIndex("type") && hIndex["type"]=="rt" && ( m_iMinInfixLen>0 || RawMinPrefixLen()>0 ) && !bWordDict )
 	{
-		sError.SetSprintf ( "RT indexes support prefixes and infixes with only dict=keywords" );
+		sError.SetSprintf ( "RT tables support prefixes and infixes with only dict=keywords" );
 		return false;
 	}
 
@@ -2093,7 +2093,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	CSphFixedVector<BYTE> dBuf ( iSize+1 );
 	if ( !tReader.Read ( dBuf.Begin(), iSize, sError ) )
 	{
-		sphWarning ( "index %s, error: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
 		return false;
 	}
 	dBuf[iSize] = '\0';
@@ -2111,7 +2111,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::EXPAND_KEYWORDS );
 	} else if ( !sError.IsEmpty() )
 	{
-		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 		sError = "";
 	}
 
@@ -2122,7 +2122,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::RT_MEM_LIMIT );
 	} else if ( !sError.IsEmpty() )
 	{
-		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 		sError = "";
 	}
 
@@ -2133,7 +2133,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	} else if ( !sError.IsEmpty() )
 	{
-		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 		sError = "";
 	}
 
@@ -2149,7 +2149,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
 	} else if ( !sError.IsEmpty() )
 	{
-		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 		sError = "";
 	}
 
@@ -2160,7 +2160,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
 	} else if ( !sError.IsEmpty() )
 	{
-		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 		sError = "";
 	}
 
@@ -2172,7 +2172,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	} else if ( !sError.IsEmpty() )
 	{
-		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 		sError = "";
 	}
 

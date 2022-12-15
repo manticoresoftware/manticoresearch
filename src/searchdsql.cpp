@@ -1425,7 +1425,7 @@ static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sEr
 	for ( int i = 1; i < dHints.GetLength(); i++ )
 		if ( dHints[i-1].m_sIndex==dHints[i].m_sIndex )
 		{
-			sError.SetSprintf ( "conflicting hints specified for index '%s'", dHints[i-1].m_sIndex.cstr() );
+			sError.SetSprintf ( "conflicting hints specified for table '%s'", dHints[i-1].m_sIndex.cstr() );
 			return false;
 		}
 

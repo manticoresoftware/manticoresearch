@@ -1468,10 +1468,10 @@ RtIndex_c::~RtIndex_c ()
 
 	tmSave = sphMicroTimer() - tmSave;
 	if ( tmSave>=1000 )
-		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec", GetName(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+		sphInfo ( "rt: table %s: ramchunk saved in %d.%03d sec", GetName(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 
 	if ( !sphInterrupted() )
-		sphLogDebug ( "closed index %s, valid %d, deleted %d, time %d.%03d sec", GetName(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+		sphLogDebug ( "closed table %s, valid %d, deleted %d, time %d.%03d sec", GetName(), (int)bValid, (int)m_bIndexDeleted, (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
 void RtIndex_c::RaiseAlterGeneration()
@@ -1567,7 +1567,7 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
 	if ( !SaveRamChunk () )
 	{
-		sphWarning ( "rt: index %s: ramchunk save FAILED! (error=%s)", GetName(), m_sLastError.cstr() );
+		sphWarning ( "rt: table %s: ramchunk save FAILED! (error=%s)", GetName(), m_sLastError.cstr() );
 		return;
 	}
 
@@ -1582,7 +1582,7 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	m_tmSaved = sphMicroTimer();
 
 	tmSave = sphMicroTimer() - tmSave;
-	sphInfo ( "rt: index %s: ramchunk saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
+	sphInfo ( "rt: table %s: ramchunk saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
 		"ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)",
 		GetName(), szReason, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
 		, (int) (tmDelta/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
@@ -1877,14 +1877,14 @@ bool RtIndex_i::PrepareAccum ( RtAccum_t* pAcc, bool bWordDict, CSphString* pErr
 	if ( pAcc->GetIndex() && pAcc->GetIndex()!=this )
 	{
 		if ( pError )
-			pError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->GetIndex()->GetName() );
+			pError->SetSprintf ( "current txn is working with another table ('%s')", pAcc->GetIndex()->GetName() );
 		return false;
 	}
 
 	if ( pAcc->GetIndex() && pAcc->GetSchemaHash()!=GetSchemaHash() )
 	{
 		if ( pError )
-			pError->SetSprintf ( "current txn is working with index's another schema ('%s'), restart session", pAcc->GetIndex()->GetName() );
+			pError->SetSprintf ( "current txn is working with table's another schema ('%s'), restart session", pAcc->GetIndex()->GetName() );
 		return false;
 	}
 
@@ -2717,7 +2717,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
 	if ( pAcc->GetIndexGeneration()!=m_iAlterGeneration )
 	{
 		if ( pError )
-			pError->SetSprintf( "Can't commit to index '%s', index was altered during txn!", GetName() );
+			pError->SetSprintf( "Can't commit to table '%s', table was altered during txn!", GetName() );
 		return false;
 	}
 
@@ -3990,7 +3990,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		tmSave = -sphMicroTimer();
 		if ( !SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError ) )
 		{
-			sphWarning ( "rt: index %s failed to save disk chunk %s: %s", GetName(), sChunk.cstr(), m_sLastError.cstr() );
+			sphWarning ( "rt: table %s failed to save disk chunk %s: %s", GetName(), sChunk.cstr(), m_sLastError.cstr() );
 			tmSave += sphMicroTimer();
 			break;
 		}
@@ -4009,7 +4009,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 			for ( const auto & sItem : dWarnings )
 				sWarningLine << sItem;
 
-			sphWarning ( "rt: index %s save disk chunk %s warnings: %s", GetName(), sChunk.cstr(), sWarningLine.cstr() );
+			sphWarning ( "rt: table %s save disk chunk %s warnings: %s", GetName(), sChunk.cstr(), sWarningLine.cstr() );
 		}
 
 		tmSave += sphMicroTimer();
@@ -4019,7 +4019,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
 	if ( !pNewChunk )
 	{
-		sphWarning ( "rt: index %s failed to load disk chunk after RAM save: %s", GetName(), m_sLastError.cstr () );
+		sphWarning ( "rt: table %s failed to load disk chunk after RAM save: %s", GetName(), m_sLastError.cstr () );
 		return false;
 	}
 
@@ -4104,7 +4104,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	tmSaveWall += m_tmSaved;
 
 	StringBuilder_c sInfo;
-	sInfo.Sprintf ( "rt: index %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", GetName (), iChunkID
+	sInfo.Sprintf ( "rt: table %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", GetName (), iChunkID
 					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 
 	// calculate DoubleBuf percent using current save/insert rate
@@ -4179,7 +4179,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 	DWORD uMinFormatVer = 14;
 	if ( uVersion<uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "tables with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -4220,7 +4220,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
 	{
 		CSphString sWarning;
-		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
+		sWarning.SetSprintf ( "table '%s': morphology option changed from config has no effect, ignoring", GetName() );
 		dWarnings.Add(sWarning);
 	}
 
@@ -4239,7 +4239,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 	// recreate dictionary
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_sLastError.IsEmpty() )
-		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 
 	if ( !m_pDict )
 		return LOAD_E::GeneralError_e;
@@ -4316,7 +4316,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	DWORD uMinFormatVer = 20;
 	if ( uVersion<uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
+		m_sLastError.SetSprintf ( "tables with meta prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sMeta.cstr(), uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -4357,7 +4357,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
 	{
 		CSphString sWarning;
-		sWarning.SetSprintf ( "index '%s': morphology option changed from config has no effect, ignoring", GetName() );
+		sWarning.SetSprintf ( "table '%s': morphology option changed from config has no effect, ignoring", GetName() );
 		dWarnings.Add(sWarning);
 	}
 
@@ -4376,7 +4376,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	// recreate dictionary
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_sLastError.IsEmpty() )
-		m_sLastError.SetSprintf ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		m_sLastError.SetSprintf ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 
 	if ( !m_pDict )
 		return LOAD_E::GeneralError_e;
@@ -4560,7 +4560,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	if ( m_tSchema.HasColumnarAttrs() && !IsColumnarLibLoaded() )
 	{
-		m_sLastError.SetSprintf ( "failed to load index with columnar attributes without columnar library" );
+		m_sLastError.SetSprintf ( "failed to load table with columnar attributes without columnar library" );
 		return false;
 	}
 
@@ -4613,7 +4613,7 @@ static bool CheckVectorLength ( int iLen, int64_t iMinLen, const char * sAt, CSp
 	if ( iLen>=0 && iLen<iSaneLen )
 		return true;
 
-	sError.SetSprintf ( "broken index, %s length overflow (len=%d, max=" INT64_FMT ")", sAt, iLen, iSaneLen );
+	sError.SetSprintf ( "broken table, %s length overflow (len=%d, max=" INT64_FMT ")", sAt, iLen, iSaneLen );
 	return false;
 }
 
@@ -4913,7 +4913,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 			if ( pSeg )
 				tWriter.m_pNewRamSegs->Add ( AdoptSegment ( pSeg ) );
 		dRawSegments.Reset();
-		sphWarning ( "RAM chunk has %d segments after repairing. You need to flush this index, otherwise result could be LOST, and repairing will start again on daemon's restart", tWriter.m_pNewRamSegs->GetLength() );
+		sphWarning ( "RAM chunk has %d segments after repairing. You need to flush this table, otherwise result could be LOST, and repairing will start again on daemon's restart", tWriter.m_pNewRamSegs->GetLength() );
 	}
 
 	// field lengths
@@ -4959,7 +4959,7 @@ void RtIndex_c::PostSetup()
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
 	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
-		sphWarning ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		sphWarning ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 
 	// hitless
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
@@ -4971,7 +4971,7 @@ void RtIndex_c::PostSetup()
 	}
 
 	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
-		sphWarning ( "index '%s': %s", GetName(), m_sLastError.cstr() );
+		sphWarning ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 
 	// still need index files for index just created from config
 	if ( !m_bHasFiles )
@@ -5037,13 +5037,13 @@ int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter )
 		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iRtMemLimit );
 
 	if ( m_iTID<0 )
-		tReporter.Fail ( "index TID < 0 (current=" INT64_FMT ")", m_iTID );
+		tReporter.Fail ( "table TID < 0 (current=" INT64_FMT ")", m_iTID );
 
 	if ( m_iSavedTID<0 )
-		tReporter.Fail ( "index saved TID < 0 (current=" INT64_FMT ")", m_iSavedTID );
+		tReporter.Fail ( "table saved TID < 0 (current=" INT64_FMT ")", m_iSavedTID );
 
 	if ( m_iTID<m_iSavedTID )
-		tReporter.Fail ( "index TID < index saved TID (current=" INT64_FMT ", saved=" INT64_FMT ")", m_iTID, m_iSavedTID );
+		tReporter.Fail ( "table TID < table saved TID (current=" INT64_FMT ", saved=" INT64_FMT ")", m_iTID, m_iSavedTID );
 
 	if ( m_iWordsCheckpoint!=RTDICT_CHECKPOINT_V5 )
 		tReporter.Fail ( "unexpected number of words per checkpoint (expected 48, got %d)", m_iWordsCheckpoint );
@@ -7958,7 +7958,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	}
 
 	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError ) ) // fixme!
-		sphWarn ( "INTERNAL ERROR: index %s update failure: %s", GetName(), sError.cstr() );
+		sphWarn ( "INTERNAL ERROR: table %s update failure: %s", GetName(), sError.cstr() );
 
 	// bump the counter, binlog the update!
 	Binlog::CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
@@ -8202,7 +8202,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 {
 	if ( !m_tRtChunks.DiskChunks()->IsEmpty() && !m_tSchema.GetAttrsCount() )
 	{
-		sError = "index must already have attributes";
+		sError = "table must already have attributes";
 		return false;
 	}
 
@@ -8282,7 +8282,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
 	const CSphIndexSettings & tSettings = pIndex->GetSettings();
 	if ( tSettings.m_iStopwordStep!=1 )
-		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk index (RT-side support not implemented yet)" );
+		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk table (RT-side support not implemented yet)" );
 
 	bool bEmptyRT = m_tRtChunks.IsEmpty();
 	// ATTACH to exist index require these checks
@@ -8597,7 +8597,7 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 {
 	TRACE_SCHED ( "rt", "RtIndex_c::DropDiskChunk" );
 
-	sphLogDebug( "rt optimize: index %s: drop disk chunk %d", GetName(), iChunkID );
+	sphLogDebug( "rt optimize: table %s: drop disk chunk %d", GetName(), iChunkID );
 
 	// work in serial fiber
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
@@ -8632,7 +8632,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	{
 		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
 			sError = "interrupted because of shutdown";
-		sphWarning ( "rt %s: index %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", tChunkA.GetFilebase(), sError.cstr() );
+		sphWarning ( "rt %s: table %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", tChunkA.GetFilebase(), sError.cstr() );
 		return pChunk;
 	}
 
@@ -8651,7 +8651,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
 	else
-		sphWarning ( "rt %s: index %s: failed to prealloc", szParentAction, GetName() );
+		sphWarning ( "rt %s: table %s: failed to prealloc", szParentAction, GetName() );
 
 	return pChunk;
 }
@@ -8671,7 +8671,7 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 	if ( tChunk.Rename ( sNewchunk ) )
 		return true;
 
-	sphWarning ( "rt %s: index %s: processed to cur rename failed (%s)", szParentAction, GetName(), tChunk.GetLastError().cstr() );
+	sphWarning ( "rt %s: table %s: processed to cur rename failed (%s)", szParentAction, GetName(), tChunk.GetLastError().cstr() );
 	return false;
 }
 
@@ -8692,7 +8692,7 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<
 
 	if ( !bReplaced )
 	{
-		sphWarning ( "rt %s: index %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
+		sphWarning ( "rt %s: table %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
 		tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
 		return false;
 	}
@@ -8868,7 +8868,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 		bool bSame = IsSameSettings ( tSettings, tSetup, dWarnings, sError );
 
 		if ( !sError.IsEmpty() )
-			sphWarning ( "binlog: reconfigure: wrong settings (index=%s, error=%s)", GetName(), sError.cstr() );
+			sphWarning ( "binlog: reconfigure: wrong settings (table=%s, error=%s)", GetName(), sError.cstr() );
 
 		if ( !bSame )
 			tRes.m_bApply = Reconfigure ( tSetup );
@@ -8919,7 +8919,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
 	{
-		sphWarning ( "rt optimize: index %s: compress of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
+		sphWarning ( "rt optimize: table %s: compress of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
 		return false;
 	}
 	const CSphIndex& tVictim = pVictim->Cidx();
@@ -8996,7 +8996,7 @@ bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
 	{
-		sphWarning ( "rt optimize: index %s: split of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
+		sphWarning ( "rt optimize: table %s: split of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
 		bResult = false;
 		return true;
 	}
@@ -9166,14 +9166,14 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 	auto pA = m_tRtChunks.DiskChunkByID ( iAID );
 	if ( !pA )
 	{
-		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", GetName(), iAID, iBID, iAID );
+		sphWarning ( "rt optimize: table %s: merge chunks %d and %d failed, chunk ID %d is not valid!", GetName(), iAID, iBID, iAID );
 		return false;
 	}
 
 	auto pB = m_tRtChunks.DiskChunkByID ( iBID );
 	if ( !pB )
 	{
-		sphWarning ( "rt optimize: index %s: merge chunks %d and %d failed, chunk ID %d is not valid!", GetName(), iAID, iBID, iBID );
+		sphWarning ( "rt optimize: table %s: merge chunks %d and %d failed, chunk ID %d is not valid!", GetName(), iAID, iBID, iBID );
 		return false;
 	}
 
@@ -9269,7 +9269,7 @@ bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) c
 	{
 		if ( iChunk >= iChunks || iChunk < 0 )
 		{
-			sphWarning ( "rt: index %s: Optimize step: provided chunk %d is out of range [0..%d]", GetName(), iChunk, iChunks - 1 );
+			sphWarning ( "rt: table %s: Optimize step: provided chunk %d is out of range [0..%d]", GetName(), iChunk, iChunks - 1 );
 			return false;
 		}
 		iChunk = ChunkIDByChunkIdx ( iChunk );
@@ -9277,13 +9277,13 @@ bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) c
 	auto pChunk = m_tRtChunks.DiskChunkByID ( iChunk );
 	if ( !pChunk )
 	{
-		sphWarning ( "rt: index %s: Optimize step: provided chunk ID %d is invalid", GetName(), iChunk );
+		sphWarning ( "rt: table %s: Optimize step: provided chunk ID %d is invalid", GetName(), iChunk );
 		return false;
 	}
 
 	if ( pChunk->m_bOptimizing.load ( std::memory_order_relaxed ) )
 	{
-		sphWarning ( "rt: index %s: Optimize step: provided chunk %d is now occupied in another optimize operation", GetName(), iChunk );
+		sphWarning ( "rt: table %s: Optimize step: provided chunk %d is now occupied in another optimize operation", GetName(), iChunk );
 		return false;
 	}
 	return true;
@@ -9329,7 +9329,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	if ( !MergeCanRun() )
 		return;
 
-	sphLogDebug ( "rt optimize: index %s: optimization started", GetName() );
+	sphLogDebug ( "rt optimize: table %s: optimization started", GetName() );
 
 	int64_t tmStart = sphMicroTimer();
 	m_tOptimizeRuns.ModifyValue ( [] ( int& i ) { ++i; } );
@@ -9340,9 +9340,9 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	int iDiskChunks = m_tRtChunks.GetDiskChunksCount();
 
 	if ( sphInterrupted() )
-		LogWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", GetName(), iChunks, iDiskChunks, tmPass );
+		LogWarning ( "rt: table %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", GetName(), iChunks, iDiskChunks, tmPass );
 	else if ( iChunks > 0 )
-		LogInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %.3t", GetName(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
+		LogInfo ( "rt: table %s: optimized %s chunk(s) %d ( left %d ) in %.3t", GetName(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
 }
 
 bool RtIndex_c::MergeCanRun() const

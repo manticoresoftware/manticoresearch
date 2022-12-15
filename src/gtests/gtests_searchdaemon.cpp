@@ -155,7 +155,7 @@ TEST_F ( T_ParseAddressPort, simple_ip_no_port )
 {
 	ParserTest ( "127.0.0.1:tail", true, ":tail",
 		AF_INET, "127.0.0.1", IANA_PORT_SPHINXAPI,
-		"WARNING: index 'tstidx': agent 'tstagent': portnum expected before 'tail' - Using default IANA 9312 port"
+		"WARNING: table 'tstidx': agent 'tstagent': portnum expected before 'tail' - Using default IANA 9312 port"
 		);
 }
 
@@ -164,7 +164,7 @@ TEST_F ( T_ParseAddressPort, wrong_ip_no_port)
 {
 	ParserTest ( "257.0.0.1|tail", true, "|tail",
 		AF_INET, "257.0.0.1", IANA_PORT_SPHINXAPI,
-		"WARNING: index 'tstidx': agent 'tstagent': colon and portnum expected before '|tail' - Using default IANA 9312 port"
+		"WARNING: table 'tstidx': agent 'tstagent': colon and portnum expected before '|tail' - Using default IANA 9312 port"
 		);
 }
 
@@ -180,7 +180,7 @@ TEST_F ( T_ParseAddressPort, any_host_wrong_port )
 {
 	ParserTest ( "my_server:96540", false, "",
 		AF_INET, "my_server", IANA_PORT_SPHINXAPI,
-		"WARNING: index 'tstidx': agent 'tstagent': invalid port number near '', - SKIPPING AGENT"
+		"WARNING: table 'tstidx': agent 'tstagent': invalid port number near '', - SKIPPING AGENT"
 		);
 }
 
@@ -189,7 +189,7 @@ TEST_F ( T_ParseAddressPort, double_host_no_port )
 {
 	ParserTest ( "my_server:my_server2", true, ":my_server2",
 		AF_INET, "my_server", IANA_PORT_SPHINXAPI,
-		"WARNING: index 'tstidx': agent 'tstagent': portnum expected before 'my_server2' - Using default IANA 9312 port"
+		"WARNING: table 'tstidx': agent 'tstagent': portnum expected before 'my_server2' - Using default IANA 9312 port"
 		);
 }
 
@@ -241,61 +241,61 @@ protected:
 TEST_F ( T_ConfigureMultiAgent, wrong_only_options )
 {
 	ParserTest ( "[only=options]", false,
-		"WARNING: index 'tstidx': agent '[only=options]': "
+		"WARNING: table 'tstidx': agent '[only=options]': "
 	"one or more hosts/sockets expected before [, - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_syntax )
 {
 	ParserTest ( "bla|ble|bli:idx[options]haha", false,
-			   "WARNING: index 'tstidx': agent 'bla|ble|bli:idx[options]haha': "
+			   "WARNING: table 'tstidx': agent 'bla|ble|bli:idx[options]haha': "
 	"wrong syntax: expected one or more hosts/sockets, then m.b. []-enclosed options, - SKIPPING AGENT");
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_unknown_option )
 {
 	ParserTest ( "bla|ble|bli:idx[conn =pconn, ha_strategy=unknown]", false,
-		"WARNING: index 'tstidx': agent 'bla|ble|bli:idx[conn =pconn, ha_strategy=unknown]': "
+		"WARNING: table 'tstidx': agent 'bla|ble|bli:idx[conn =pconn, ha_strategy=unknown]': "
 			"unknown agent option ' ha_strategy=unknown', - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_formatted_option )
 {
 	ParserTest ( "bla|ble|bli[options]", false,
-			   "WARNING: index 'tstidx': agent 'bla|ble|bli[options]': "
+			   "WARNING: table 'tstidx': agent 'bla|ble|bli[options]': "
 	"option options error: option and value must be =-separated pair, - SKIPPING AGENT");
 }
 
 // fixme: m.b. parse 1000abc as index name in the case?
 TEST_F ( T_ConfigureMultiAgent, fixme_wrong_agent_port )
 {
-	ParserTest ( "localhost:1000abc", false, "WARNING: index 'tstidx': agent 'localhost:1000abc': "
-		"after host/socket expected ':', then index(es), but got 'abc'), - SKIPPING AGENT" );
+	ParserTest ( "localhost:1000abc", false, "WARNING: table 'tstidx': agent 'localhost:1000abc': "
+		"after host/socket expected ':', then table(s), but got 'abc'), - SKIPPING AGENT" );
 }
 
 // fixme: m.b. parse 100000abc as index name in the case?
 TEST_F ( T_ConfigureMultiAgent, fixme_wrong_portnum )
 {
-	ParserTest ( "localhost:100000abc", false, "WARNING: index 'tstidx': agent 'localhost:100000abc': "
+	ParserTest ( "localhost:100000abc", false, "WARNING: table 'tstidx': agent 'localhost:100000abc': "
 		"invalid port number near 'abc', - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_idx_name )
 {
 	ParserTest ( "/localhost:idx,idx=name,idx2", false,
-		"WARNING: index 'tstidx': agent '/localhost:idx,idx=name,idx2': "
-		"no such index: idx=name, - SKIPPING AGENT" );
+		"WARNING: table 'tstidx': agent '/localhost:idx,idx=name,idx2': "
+		"no such table: idx=name, - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_idx_delimited_from_host )
 {
-	ParserTest ( "localhost:1000 idx", false, "WARNING: index 'tstidx': agent 'localhost:1000 idx': "
-		"after host/socket expected ':', then index(es), but got ' idx'), - SKIPPING AGENT" );
+	ParserTest ( "localhost:1000 idx", false, "WARNING: table 'tstidx': agent 'localhost:1000 idx': "
+		"after host/socket expected ':', then table(s), but got ' idx'), - SKIPPING AGENT" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, wrong_empty_idx )
 {
-	ParserTest ( "", false, "WARNING: index 'tstidx': agent '': "
+	ParserTest ( "", false, "WARNING: table 'tstidx': agent '': "
 		"empty agent definition, - SKIPPING AGENT" );
 }
 
@@ -311,14 +311,14 @@ TEST_F ( T_ConfigureMultiAgent, agent_host_port_index )
 
 TEST_F ( T_ConfigureMultiAgent, agent_ok_only_one_index_and_options )
 {
-	ParserTest ( "bla|ble|bli:idx[conn=pconn]", true, "WARNING: index 'tstidx': agent 'bla|ble|bli:idx[conn=pconn]': "
+	ParserTest ( "bla|ble|bli:idx[conn=pconn]", true, "WARNING: table 'tstidx': agent 'bla|ble|bli:idx[conn=pconn]': "
 		"portnum expected before 'idx' - Using default IANA 9312 port" );
 }
 
 TEST_F ( T_ConfigureMultiAgent, agent_ok_options_space_sparsed )
 {
 	ParserTest ( "bla|ble|bli:idx[conn =pconn, blackhole = 1]", true
-				 , "WARNING: index 'tstidx': agent 'bla|ble|bli:idx[conn =pconn, blackhole = 1]': "
+				 , "WARNING: table 'tstidx': agent 'bla|ble|bli:idx[conn =pconn, blackhole = 1]': "
 			"portnum expected before 'idx' - Using default IANA 9312 port" );
 }
 

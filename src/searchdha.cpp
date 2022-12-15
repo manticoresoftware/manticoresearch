@@ -1211,7 +1211,7 @@ static bool CheckIndexNames ( const CSphString & sIndexes, const WarnInfo_c & tW
 	{
 		dRawIndexes[i].Trim();
 		if ( dRawIndexes[i]!= dParsedIndexes[i] )
-			return tWI.ErrSkip ("no such index: %s", dRawIndexes[i].cstr());
+			return tWI.ErrSkip ("no such table: %s", dRawIndexes[i].cstr());
 	}
 	return true;
 }
@@ -1263,7 +1263,7 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 		if ( *sRawAgent )
 		{
 			if ( *sRawAgent!=':' )
-				return tWI.ErrSkip ( "after host/socket expected ':', then index(es), but got '%s')", sRawAgent );
+				return tWI.ErrSkip ( "after host/socket expected ':', then table(s), but got '%s')", sRawAgent );
 
 			CSphString sIndexList = ++sRawAgent;
 			sIndexList.Trim ();

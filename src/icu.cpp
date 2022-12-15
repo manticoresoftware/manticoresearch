@@ -422,7 +422,7 @@ bool sphSpawnFilterICU ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const 
 	auto pFilterICU = sphCreateFilterICU ( std::move ( pFieldFilter ), tTokSettings.m_sBlendChars.cstr(), sError );
 	if ( !sError.IsEmpty() )
 	{
-		sError.SetSprintf ( "index '%s': Error initializing ICU: %s", szIndex, sError.cstr() );
+		sError.SetSprintf ( "table '%s': Error initializing ICU: %s", szIndex, sError.cstr() );
 		return false;
 	}
 

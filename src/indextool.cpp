@@ -604,7 +604,7 @@ static void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 
 static void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 {
-	fprintf ( stdout, "\n ======== INDEX SETTINGS ========" );
+	fprintf ( stdout, "\n ======== TABLE SETTINGS ========" );
 	fprintf ( stdout, "\nMinPrefixLen: %u", tReader.GetDword () );
 	fprintf ( stdout, "\nMinInfixLen: %u", tReader.GetDword () );
 	fprintf ( stdout, "\nMaxSubstringLen: %u", tReader.GetDword () );
@@ -653,7 +653,7 @@ static bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 	fprintf ( stdout, "\niType: %d", m_iType );
 	if ( m_iType!=TOKENIZER_UTF8 && m_iType!=TOKENIZER_NGRAM )
 	{
-		fprintf (stdout, "\ncan't load an old index with SBCS tokenizer" );
+		fprintf (stdout, "\ncan't load an old table with SBCS tokenizer" );
 		return false;
 	}
 
@@ -877,14 +877,14 @@ static void ApplyKilllists ( CSphConfig & hConf )
 
 		if ( !tIndexFiles.CheckHeader() )
 		{
-			fprintf ( stdout, "WARNING: unable to index header for index %s\n", tIndex.m_sName.cstr() );
+			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
 
 		// no lookups prior to v.54
 		if ( tIndexFiles.GetVersion() < 54 )
 		{
-			fprintf ( stdout, "WARNING: index '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
+			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
 			continue;
 		}
 
@@ -893,19 +893,19 @@ static void ApplyKilllists ( CSphConfig & hConf )
 			auto pIndex = sphCreateIndexPhrase ( "", tIndex.m_sPath );
 			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_tTargets, sError ) )
 			{
-				fprintf ( stdout, "WARNING: unable to load kill-list for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+				fprintf ( stdout, "WARNING: unable to load kill-list for table %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 				continue;
 			}
 
 			StrVec_t dWarnings;
 			if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
 			{
-				fprintf ( stdout, "WARNING: unable to prealloc index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+				fprintf ( stdout, "WARNING: unable to prealloc table %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 				continue;
 			}
 
 			for ( const auto & i : dWarnings )
-				fprintf ( stdout, "WARNING: index %s: %s\n", tIndex.m_sName.cstr(), i.cstr() );
+				fprintf ( stdout, "WARNING: table %s: %s\n", tIndex.m_sName.cstr(), i.cstr() );
 
 			tIndex.m_nDocs = (DWORD)pIndex->GetStats().m_iTotalDocuments;
 		}
@@ -914,7 +914,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		sLookup.SetSprintf ( "%s.spt", tIndex.m_sPath.cstr() );
 		if ( !tIndex.m_tLookup.Setup ( sLookup.cstr(), sError, false ) )
 		{
-			fprintf ( stdout, "WARNING: unable to load lookup for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+			fprintf ( stdout, "WARNING: unable to load lookup for table %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 			continue;
 		}
 
@@ -922,7 +922,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		sDeadRowMap.SetSprintf ( "%s.spm", tIndex.m_sPath.cstr() );		
 		if ( !tIndex.m_tDeadRowMap.Prealloc ( tIndex.m_nDocs, sDeadRowMap, sError ) )
 		{
-			fprintf ( stdout, "WARNING: unable to load dead row map for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+			fprintf ( stdout, "WARNING: unable to load dead row map for table %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 			continue;
 		}
 
@@ -934,13 +934,13 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		if ( !tIndex.m_bEnabled || !tIndex.m_tTargets.m_dTargets.GetLength() )
 			continue;
 
-		fprintf ( stdout, "applying kill-list of index %s\n", tIndex.m_sName.cstr() );
+		fprintf ( stdout, "applying kill-list of table %s\n", tIndex.m_sName.cstr() );
 
 		for ( const auto & tTarget : tIndex.m_tTargets.m_dTargets )
 		{
 			if ( tTarget.m_sIndex==tIndex.m_sName )
 			{
-				fprintf ( stdout, "WARNING: index '%s': appying killlist to itself\n", tIndex.m_sName.cstr() );
+				fprintf ( stdout, "WARNING: table '%s': appying killlist to itself\n", tIndex.m_sName.cstr() );
 				continue;
 			}
 
@@ -962,7 +962,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		// flush maps
 		CSphString sError;
 		if ( !tIndex.m_tDeadRowMap.Flush ( true, sError ) )
-			fprintf ( stdout, "WARNING: index '%s': unable to flush dead row map: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+			fprintf ( stdout, "WARNING: table '%s': unable to flush dead row map: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 
 		// delete killlists
 		CSphString sKilllist;
@@ -1000,33 +1000,33 @@ static void ShowHelp ()
 		"Commands are:\n"
 		"-h, --help\t\t\tdisplay this help message\n"
 		"-v\t\t\t\tdisplay version information\n"
-		"--check <INDEX>\t\t\tperform index consistency check\n"
+		"--check <TABLE>\t\t\tperform table consistency check\n"
                 "--check-disk-chunk <CHUNK_ID>\tperform single disk chunk consistency check (to be used together with --check)\n"
                 "--check-id-dups <CHUNK_ID>\tcheck if there are duplicate ids (to be used together with --check)\n"
-                "--rotate\t\t\trotate index after --check in case it's valid\n"
+                "--rotate\t\t\trotate table after --check in case it's valid\n"
 		"--checkconfig\t\t\tperform config consistency check\n"
-		"--dumpconfig <SPH-FILE>\t\tdump index header in config format by file name\n"
-		"--dumpdocids <INDEX>\t\tdump docids by index name\n"
+		"--dumpconfig <SPH-FILE>\t\tdump table header in config format by file name\n"
+		"--dumpdocids <TABLE>\t\tdump docids by table name\n"
 		"--dumpdict <SPI-FILE>\t\tdump dictionary by file name\n"
-		"--dumpdict <INDEX>\t\tdump dictionary\n"
+		"--dumpdict <TABLE>\t\tdump dictionary\n"
 		"--dumpheader <SPH-FILE>|<META-FILE>\n"
-                "\t\t\t\tdump index header, or rt index meta by file name\n"
-		"--dumpheader <INDEX>\t\tdump index header by index name\n"
-		"--dumphitlist <INDEX> <KEYWORD>\n"
-		"--dumphitlist <INDEX> --wordid <ID>\n"
+                "\t\t\t\tdump table header, or rt table meta by file name\n"
+		"--dumpheader <TABLE>\t\tdump table header by table name\n"
+		"--dumphitlist <TABLE> <KEYWORD>\n"
+		"--dumphitlist <TABLE> --wordid <ID>\n"
 		"\t\t\t\tdump hits for a given keyword\n"
-		"--fold <INDEX> [FILE]\t\tfold FILE or stdin using INDEX charset_table\n"
-		"--htmlstrip <INDEX>\t\tfilter stdin using index HTML stripper settings\n"
-		"--buildidf <INDEX1.dict> [INDEX2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
+		"--fold <TABLE> [FILE]\t\tfold FILE or stdin using TABLE charset_table\n"
+		"--htmlstrip <TABLE>\t\tfilter stdin using table HTML stripper settings\n"
+		"--buildidf <TABLE1.dict> [TABLE2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
 		"\t\t\t\tjoin --stats dictionary dumps into global.idf file\n"
 		"--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n"
 		"\t\t\t\tmerge several .idf files into one file\n"
-		"--apply-killlists\t\tapply index killlists\n"
+		"--apply-killlists\t\tapply table killlists\n"
 		"\n"
 		"Options are:\n"
 		"-c, --config <file>\t\tuse given config file instead of defaults\n"
 		"-q, --quiet\t\t\tbe quiet, skip banner etc (useful with --fold etc)\n"
-		"--strip-path\t\t\tstrip path from filenames referenced by index\n"
+		"--strip-path\t\t\tstrip path from filenames referenced by table\n"
 		"\t\t\t\t(eg. stopwords, exceptions, etc)\n"
 		"--stats\t\t\t\tshow total statistics in the dictionary dump\n"
 		"--skip-uniq\t\t\tskip unique (df=1) words in the .idf files\n"
@@ -1107,7 +1107,7 @@ static bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf,
 
 		const CSphString & sIndexName = i.Name();
 		if ( hConf[szSection].Exists ( sIndexName ) )
-			sphDie ( "index '%s' already exists", sIndexName.cstr() );
+			sphDie ( "table '%s' already exists", sIndexName.cstr() );
 
 		hConf[szSection].Add ( CSphConfigSection(), sIndexName );
 
@@ -1143,7 +1143,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 
 	if ( hConf.Exists("index") || hConf.Exists("source") || !hConf.Exists("searchd") )
 	{
-		sphDie ( "'data_dir' cannot be mixed with index declarations in '%s'", sConfigFile.cstr() );
+		sphDie ( "'data_dir' cannot be mixed with table declarations in '%s'", sConfigFile.cstr() );
 		return false;
 	}
 
@@ -1191,10 +1191,10 @@ static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * p
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.get(), dWarnings ) )
-		sphDie ( "index '%s': prealloc failed: %s\n", szIndex, pIndex->GetLastError().cstr() );
+		sphDie ( "table '%s': prealloc failed: %s\n", szIndex, pIndex->GetLastError().cstr() );
 
 	for ( const auto & i : dWarnings )
-		fprintf ( stdout, "WARNING: index %s: %s\n", szIndex, i.cstr() );
+		fprintf ( stdout, "WARNING: table %s: %s\n", szIndex, i.cstr() );
 }
 
 int main ( int argc, char ** argv )
@@ -1363,7 +1363,7 @@ int main ( int argc, char ** argv )
 
 	// no indexes in both .json and .conf?
 	if ( !hConf ( "index" ) )
-		sphDie ( "no indexes found in config file '%s'", sOptConfig );
+		sphDie ( "no tables found in config file '%s'", sOptConfig );
 
 	while (true)
 	{
@@ -1385,7 +1385,7 @@ int main ( int argc, char ** argv )
 
 	if ( g_eCommand==IndextoolCmd_e::CHECKCONFIG )
 	{
-		fprintf ( stdout, "config valid\nchecking index(es) ... " );
+		fprintf ( stdout, "config valid\nchecking table(s) ... " );
 
 		bool bError = false;
 
@@ -1409,7 +1409,7 @@ int main ( int argc, char ** argv )
 			{
 				// nice looking output
 				if ( !bError )
-					fprintf ( stdout, "\nmissed index(es): '%s'", tIndex.first.cstr() );
+					fprintf ( stdout, "\nmissed table(s): '%s'", tIndex.first.cstr() );
 				else
 					fprintf ( stdout, ", '%s'", tIndex.first.cstr() );
 
@@ -1442,7 +1442,7 @@ int main ( int argc, char ** argv )
 	{
 		// check config
 		if ( !hConf["index"].Exists(sIndex) )
-			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
+			sphDie ( "table '%s': no such table in config\n", sIndex.cstr() );
 
 		// only need config-level settings for --htmlstrip
 		if ( g_eCommand==IndextoolCmd_e::STRIP )
@@ -1450,10 +1450,10 @@ int main ( int argc, char ** argv )
 
 		CSphVariant * pType = hConf["index"][sIndex]("type");
 		if ( pType && ( *pType=="distributed" || *pType=="percolate" ) )
-			sphDie ( "index '%s': check of '%s' type is not supported'\n", sIndex.cstr(), pType->cstr() );
+			sphDie ( "table '%s': check of '%s' type is not supported'\n", sIndex.cstr(), pType->cstr() );
 
 		if ( !hConf["index"][sIndex]("path") )
-			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
+			sphDie ( "table '%s': missing 'path' in config'\n", sIndex.cstr() );
 
 		// preload that index
 		bool bDictKeywords = true;
@@ -1463,7 +1463,7 @@ int main ( int argc, char ** argv )
 		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, sError );
 
 		if ( !pIndex )
-			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
+			sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 		pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
@@ -1510,10 +1510,10 @@ int main ( int argc, char ** argv )
 			CSphString sIndexName = "(none)";
 			if ( hConf("index") && hConf["index"](sDumpHeader) )
 			{
-				fprintf ( stdout, "dumping header for index '%s'...\n", sDumpHeader.cstr() );
+				fprintf ( stdout, "dumping header for table '%s'...\n", sDumpHeader.cstr() );
 
 				if ( !hConf["index"][sDumpHeader]("path") )
-					sphDie ( "missing 'path' for index '%s'\n", sDumpHeader.cstr() );
+					sphDie ( "missing 'path' for table '%s'\n", sDumpHeader.cstr() );
 
 				sIndexName = sDumpHeader;
 				sDumpHeader.SetSprintf ( "%s.sph", hConf["index"][sDumpHeader]["path"].cstr() );
@@ -1526,12 +1526,12 @@ int main ( int argc, char ** argv )
 		}
 
 		case IndextoolCmd_e::DUMPDOCIDS:
-			fprintf ( stdout, "dumping docids for index '%s'...\n", sIndex.cstr() );
+			fprintf ( stdout, "dumping docids for table '%s'...\n", sIndex.cstr() );
 			pIndex->DebugDumpDocids ( stdout );
 			break;
 
 		case IndextoolCmd_e::DUMPHITLIST:
-			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
+			fprintf ( stdout, "dumping hitlist for table '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
 			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
 			break;
 
@@ -1545,18 +1545,18 @@ int main ( int argc, char ** argv )
 				pIndex = sphCreateIndexPhrase ( sIndex, sIndex );
 
 				if ( !pIndex )
-					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
+					sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 				StrVec_t dWarnings;
 				if ( !pIndex->Prealloc ( bStripPath, nullptr, dWarnings ) )
-					sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+					sphDie ( "table '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
 				for ( const auto & sWarning : dWarnings )
-					fprintf ( stdout, "WARNING: index %s: %s\n", sIndex.cstr(), sWarning.cstr() );
+					fprintf ( stdout, "WARNING: table %s: %s\n", sIndex.cstr(), sWarning.cstr() );
 
 				pIndex->Preread();
 			} else
-				fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
+				fprintf ( stdout, "dumping dictionary for table '%s'...\n", sIndex.cstr() );
 
 			if ( bStats )
 				fprintf ( stdout, "total-documents: " INT64_FMT "\n", pIndex->GetStats().m_iTotalDocuments );
@@ -1566,7 +1566,7 @@ int main ( int argc, char ** argv )
 
 		case IndextoolCmd_e::CHECK:
 		case IndextoolCmd_e::EXTRACT:
-			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
+			fprintf ( stdout, "checking table '%s'...\n", sIndex.cstr() );
 			{
 			std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout, ( g_eCommand == IndextoolCmd_e::CHECK ? nullptr : &iExtractDocid ) ) };
 				iCheckErrno = pIndex->DebugCheck ( *pReporter );
@@ -1578,7 +1578,7 @@ int main ( int argc, char ** argv )
 				pIndex->Dealloc();
 				sNewIndex.SetSprintf ( "%s.new", hConf["index"][sIndex]["path"].cstr() );
 				if ( !pIndex->Rename ( sNewIndex ) )
-					sphDie ( "index '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+					sphDie ( "table '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 			}
 			return 0;
 
@@ -1586,7 +1586,7 @@ int main ( int argc, char ** argv )
 			{
 				const CSphConfigSection & hIndex = hConf["index"][sIndex];
 				if ( hIndex.GetInt ( "html_strip" )==0 )
-					sphDie ( "HTML stripping is not enabled in index '%s'", sIndex.cstr() );
+					sphDie ( "HTML stripping is not enabled in table '%s'", sIndex.cstr() );
 				StripStdin ( hIndex.GetStr ( "html_index_attrs" ).cstr(), hIndex.GetStr ( "html_remove_elements" ).cstr() );
 			}
 			break;

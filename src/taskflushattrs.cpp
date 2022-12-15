@@ -46,7 +46,7 @@ static Saved_e CheckSaveIndexes ()
 			bDirty = true;
 			if ( !pIdx->SaveAttributes ( sError ) )
 			{
-				sphWarning ( "index %s: attrs save failed: %s", tIt.first.cstr(), sError.cstr() );
+				sphWarning ( "table %s: attrs save failed: %s", tIt.first.cstr(), sError.cstr() );
 				eSaveState = Saved_e::NOT_ALL;
 			}
 		}
@@ -74,9 +74,9 @@ void SaveIndexesMT ()
 {
 	sphLogDebug ( "attrflush: doing the check" );
 
-	auto pDesc = PublishSystemInfo ( "SAVE indexes" );
+	auto pDesc = PublishSystemInfo ( "SAVE tables" );
 	if ( CheckSaveIndexes ()==Saved_e::NOTHING )
-		sphLogDebug ( "attrflush: no dirty indexes found" );
+		sphLogDebug ( "attrflush: no dirty tables found" );
 
 	int iFireOnExit = g_tFlush.m_iDemandEvents.exchange ( 0 );
 	for ( int i=0; i<iFireOnExit; ++i )
@@ -108,7 +108,7 @@ void ScheduleFlushAttrs ()
 	if ( !g_iAttrFlushPeriodUs )
 		return;
 
-	static TaskID iScheduledSave = TaskManager::RegisterGlobal ( "Scheduled save indexes", 1 );
+	static TaskID iScheduledSave = TaskManager::RegisterGlobal ( "Scheduled save tables", 1 );
 	static auto iLastCheckFinishedTime = sphMicroTimer ();
 
 	TaskManager::ScheduleJob ( iScheduledSave, iLastCheckFinishedTime + g_iAttrFlushPeriodUs, []

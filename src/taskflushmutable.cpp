@@ -77,7 +77,7 @@ StringSetMT_c& FlushSet()
 
 void ScheduleFlushTask ( CSphString sName )
 {
-	static int iRtFlushTask = TaskManager::RegisterGlobal ( "Flush mutable index" );
+	static int iRtFlushTask = TaskManager::RegisterGlobal ( "Flush mutable table" );
 	static auto iLastFlushFinishedTime = sphMicroTimer();
 
 	TaskManager::ScheduleJob ( iRtFlushTask, iLastFlushFinishedTime + FlushPeriodUs(), [sName = std::move ( sName )]() mutable

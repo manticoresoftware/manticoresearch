@@ -2,11 +2,11 @@ a:1:{i:0;a:1:{i:0;a:15:{i:0;s:51:"dummy | local
 idx1 | local
 rt1 | rt
 rt2 | rt
-4 rows";i:1;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:2;s:16:"Indexes reloaded";i:3;s:51:"dummy | local
+4 rows";i:1;s:51:"ERROR: SHOW TABLE STATUS requires an existing table";i:2;s:16:"Indexes reloaded";i:3;s:51:"dummy | local
 idx2 | local
 rt1 | rt
 rt2 | rt
-4 rows";i:4;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:5;s:14:"binlog removal";i:6;s:2:"OK";i:7;s:2:"OK";i:8;s:9:"flush rt1";i:9;s:2:"OK";i:10;s:18:"inserting into rt1";i:11;s:2:"OK";i:12;s:17:"check of rt index";i:13;s:34:"2 | 12 | test
+4 rows";i:4;s:51:"ERROR: SHOW TABLE STATUS requires an existing table";i:5;s:14:"binlog removal";i:6;s:2:"OK";i:7;s:2:"OK";i:8;s:9:"flush rt1";i:9;s:2:"OK";i:10;s:18:"inserting into rt1";i:11;s:2:"OK";i:12;s:17:"check of rt index";i:13;s:34:"2 | 12 | test
 1 | 11 | test
 2 rows";i:14;s:42:"dummy | local
 idx2 | local

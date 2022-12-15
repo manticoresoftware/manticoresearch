@@ -1434,7 +1434,7 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 	// volatile return values *should* normally achieve that
 	CSphString sWarning;
 	if ( bMlock && !tBuf.MemLock ( sWarning ) )
-		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
+		sphWarning ( "table '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
 	return g_uHash;
 }
 
@@ -1447,7 +1447,7 @@ inline DWORD PrereadMappingCountingBits ( const char * sIndexName, const char * 
 
 	CSphString sWarning;
 	if ( bMlock && !tBuf.MemLock ( sWarning ) )
-		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
+		sphWarning ( "table '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
 	return uBits;
 }
 

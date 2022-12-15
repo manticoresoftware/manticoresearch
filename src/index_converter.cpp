@@ -332,7 +332,7 @@ static bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings 
 	tSettings.m_iType = tReader.GetByte ();
 	if ( tSettings.m_iType!=TOKENIZER_UTF8 && tSettings.m_iType!=TOKENIZER_NGRAM )
 	{
-		sWarning = "can't load an old index with SBCS tokenizer";
+		sWarning = "can't load an old table with SBCS tokenizer";
 		return false;
 	}
 
@@ -523,7 +523,7 @@ static bool LoadHeader ( const char * sHeaderName, Index_t & tIndex, CSphString 
 
 	if ( tIndex.m_uVersion>=50 )
 	{
-		sError.SetSprintf ( "already a v3 index; nothing to do" );
+		sError.SetSprintf ( "already a v3 table; nothing to do" );
 		return false;
 	}
 
@@ -531,14 +531,14 @@ static bool LoadHeader ( const char * sHeaderName, Index_t & tIndex, CSphString 
 	bool bUse64 = !!rdInfo.GetDword();
 	if ( !bUse64 )
 	{
-		sError = "indexes with 32-bit docids are no longer supported";
+		sError = "tables with 32-bit docids are no longer supported";
 		return false;
 	}
 
 	// skiplists
 	if ( tIndex.m_uVersion<31 )
 	{
-		sError = "indexes without skiplist unsupported";
+		sError = "tables without skiplist unsupported";
 		return false;
 	}
 
@@ -546,7 +546,7 @@ static bool LoadHeader ( const char * sHeaderName, Index_t & tIndex, CSphString 
 	ESphDocinfo eDocinfo = (ESphDocinfo)rdInfo.GetDword();
 	if ( eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
-		sError.SetSprintf ( "index without docinfo extern unsupported, docinfo is %d", (int)eDocinfo );
+		sError.SetSprintf ( "table without docinfo extern unsupported, docinfo is %d", (int)eDocinfo );
 		return false;
 	}
 
@@ -1828,7 +1828,7 @@ static bool LoadRtIndex ( Index_t & tIndex, CSphString & sError )
 
 	if ( uVersion>13 )
 	{
-		sError.SetSprintf ( "already a v3 index; nothing to do" );
+		sError.SetSprintf ( "already a v3 table; nothing to do" );
 		return false;
 	}
 
@@ -1910,7 +1910,7 @@ static bool LoadRtIndex ( Index_t & tIndex, CSphString & sError )
 
 		if ( !rdChunk.GetDword () ) // !Id64
 		{
-			sError = "indexes with 32-bit docids are no longer supported";
+			sError = "tables with 32-bit docids are no longer supported";
 			return false;
 		}
 
@@ -1918,7 +1918,7 @@ static bool LoadRtIndex ( Index_t & tIndex, CSphString & sError )
 		int iSegmentCount = rdChunk.GetDword();
 		if ( iSegmentCount )
 		{
-			sError = "RT index could not be converted; run FLUSH RAMCHUNK <index_name> before conversion";
+			sError = "RT table could not be converted; run FLUSH RAMCHUNK <table_name> before conversion";
 			return false;
 		}
 
@@ -2107,14 +2107,14 @@ static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, b
 		bool bLoaded = LoadPlainIndexChunk ( tIndex, sError );
 		if ( !bLoaded )
 		{
-			sError.SetSprintf ( "failed to load index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "failed to load table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
 		ConverterPlain_t tConverter;
 		if ( !tConverter.Save ( dKilled, tIndex, bIgnoreKlist, sError ) )
 		{
-			sError.SetSprintf ( "failed to convert index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "failed to convert table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
@@ -2127,14 +2127,14 @@ static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, b
 	{
 		if ( !RotateIndexFiles ( sPath, sPathOut, sError ) )
 		{
-			sError.SetSprintf ( "failed to rename index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "failed to rename table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 	} else 
 	{
 		if ( !CopyHitlist ( sPath, sPathOut, sError ) )
 		{
-			sError.SetSprintf ( "failed to copy hitlist index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "failed to copy hitlist table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 	}
@@ -2189,7 +2189,7 @@ static bool LoadPqIndex ( Index_t & tIndex, CSphString & sError )
 	DWORD uVersion = rdMeta.GetDword();
 	if ( uVersion>PQ_META_VERSION )
 	{
-		sError.SetSprintf ( "already a v3 index; nothing to do" );
+		sError.SetSprintf ( "already a v3 table; nothing to do" );
 		return false;
 	}
 	if ( uVersion==0 || uVersion>PQ_META_VERSION )
@@ -2341,11 +2341,11 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 
 	if ( eType==INDEX_UNKNOWN )
 	{
-		sError.SetSprintf ( "unknown index type '%s'", sName.cstr() );
+		sError.SetSprintf ( "unknown table type '%s'", sName.cstr() );
 		return false;
 	}
 
-	printf ( "converting %s index '%s'\n", g_sIndexType[eType], sName.cstr() );
+	printf ( "converting %s table '%s'\n", g_sIndexType[eType], sName.cstr() );
 
 	if ( eType==INDEX_RT )
 	{
@@ -2357,7 +2357,7 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 
 		if ( !LoadRtIndex ( tIndex, sError ) )
 		{
-			sError.SetSprintf ( "failed to load index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "failed to load table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
@@ -2392,14 +2392,14 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 				}
 			}
 
-			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "conversion failed for table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
 		CSphString sWarning;
 		if ( !SaveRtIndex ( tIndex, sWarning, sError ) )
 		{
-			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "conversion failed for table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
@@ -2414,14 +2414,14 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 
 		if ( !LoadPqIndex ( tIndex, sError ) )
 		{
-			sError.SetSprintf ( "failed to load index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "failed to load table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
 		CSphString sWarning;
 		if ( !SavePqIndex ( tIndex, sWarning, sError ) )
 		{
-			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "conversion failed for table '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
 
@@ -2449,11 +2449,11 @@ static void ShowVersion ()
 static void ShowHelp ()
 {
 	printf (
-		"index_converter, a tool to convert index files from 2.X to 3.0 format\n"
+		"index_converter, a tool to convert table files from 2.X to 3.0 format\n"
 		"\n"
 		"Usage:\n"
-		"index_converter --config manticore.conf --index test\n"
-		"index_converter --path path_to_index_files --killlist-target main_idx:id\n"
+		"index_converter --config manticore.conf --table test\n"
+		"index_converter --path path_to_table_files --killlist-target main_tbl:id\n"
 		"index_converter --config manticore.conf --all --output-dir converted\n"
 		"\n"
 		"Options are:\n"
@@ -2500,14 +2500,14 @@ int main ( int argc, char ** argv )
 		} else if ( strcmp ( argv[i], "-i" )==0 || strcmp ( argv[i], "--index" )==0 || strcmp ( argv[i], "-t" )==0 || strcmp ( argv[i], "--table" )==0 )
 		{
 			if ( ++i>=argc )
-				sphDie ( "index name requires an argument" );
+				sphDie ( "table name requires an argument" );
 
 			sIndexName = argv[i];
 
 		} else if ( strcmp ( argv[i], "--path")==0 )
 		{
 			if ( ++i>=argc )
-				sphDie ( "path to index requires an argument" );
+				sphDie ( "path to table requires an argument" );
 
 			sIndexIn = argv[i];
 
@@ -2575,7 +2575,7 @@ int main ( int argc, char ** argv )
 		pIndexes = hConfig ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )
-			sphDie ( "no indexes found in config" );
+			sphDie ( "no tables found in config" );
 
 		sphConfigureCommon ( hConfig );
 	}
@@ -2609,7 +2609,7 @@ int main ( int argc, char ** argv )
 		{
 			if ( !bAll && !pIndexes->Exists ( sIndexName ) )
 			{
-				sphWarning ( "no such index '%s', skipped", sIndexName.cstr() );
+				sphWarning ( "no such table '%s', skipped", sIndexName.cstr() );
 				continue;
 			}
 
@@ -2619,12 +2619,12 @@ int main ( int argc, char ** argv )
 				const CSphString sType = tIndex.GetStr ( "type", NULL );
 				if ( sType.IsEmpty() )
 				{
-					sphWarning ( "unknown index '%s' type '%s', skipped", sIndexName.cstr(), sType.cstr() );
+					sphWarning ( "unknown table '%s' type '%s', skipped", sIndexName.cstr(), sType.cstr() );
 					continue;
 				}
 				if ( sType!="rt" && sType!="plain" && sType!="percolate" )
 				{
-					sphWarning ( "index '%s' type '%s', only 'plain' or 'rt' or 'percolate' types supported, skipped", sIndexName.cstr(), sType.cstr() );
+					sphWarning ( "table '%s' type '%s', only 'plain' or 'rt' or 'percolate' types supported, skipped", sIndexName.cstr(), sType.cstr() );
 					continue;
 				}
 
@@ -2633,7 +2633,7 @@ int main ( int argc, char ** argv )
 
 			if ( !tIndex.Exists ( "path" ) )
 			{
-				sphWarning ( "no index path '%s', skipped", sIndexName.cstr() );
+				sphWarning ( "no table path '%s', skipped", sIndexName.cstr() );
 				continue;
 			}
 			sIndexIn = tIndex["path"].cstr();
@@ -2689,13 +2689,13 @@ int main ( int argc, char ** argv )
 			sphWarning ( "%s", sError.cstr() );
 		} else
 		{
-			printf ( "converted index '%s'%s%s\n", sIndexName.cstr(),
+			printf ( "converted table '%s'%s%s\n", sIndexName.cstr(),
 				( sKlistTarget.IsEmpty() ? "" : " with killlist_target=" ), ( sKlistTarget.IsEmpty() ? "" : sKlistTarget.cstr() ) );
 			iConvertedCount++;
 		}
 	}
 
-	printf ( "converted indexes %d(%d)\n", iConvertedCount, iIndexTotal );
+	printf ( "converted tables %d(%d)\n", iConvertedCount, iIndexTotal );
 
 	return 0;
 }

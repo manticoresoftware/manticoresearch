@@ -197,6 +197,7 @@ private:
 	bool					m_bNegative = false;
 };
 
+namespace DebugCmd { struct DebugCommand_t; }
 
 /// parsing result
 /// one day, we will start subclassing this
@@ -229,7 +230,6 @@ struct SqlStmt_t
 	int64_t					m_iSetValue = 0;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
-	//	bool					m_bSetNull = false; // not(yet) used
 
 	// CALL specific
 	CSphString				m_sCallProc;
@@ -286,7 +286,13 @@ public:
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 
+	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;
+
 	SqlStmt_t ();
+	~SqlStmt_t();
+
+	SqlStmt_t ( SqlStmt_t&& ) = default;
+	SqlStmt_t& operator= ( SqlStmt_t&& ) = default;
 
 	bool AddSchemaItem ( const char * psName );
 	// check if the number of fields which would be inserted is in accordance to the given schema
@@ -310,6 +316,8 @@ public:
 
 class SqlParserTraits_c : ISphNoncopyable
 {
+	bool m_bWrongParserSyntaxError = false;
+
 public:
 	const char *	m_pBuf;
 	CSphString *	m_pParseError;
@@ -322,6 +330,8 @@ public:
 	void			PushQuery();
 	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
+	void			ProcessParsingError ( const char* szMessage );
+	bool 			IsWrongSyntaxError() const noexcept;
 
 protected:
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
@@ -346,5 +356,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sValue, int64_t iValue, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
+
+enum class ParseResult_e { PARSE_OK, PARSE_ERROR, PARSE_SYNTAX_ERROR };
+
+struct ParsedOption_t
+{
+	int64_t m_iValue = 0;
+	float m_fValue = 0.0;
+	bool m_bValue = false;
+	CSphString m_sValue;
+};
+
 
 #endif // _searchdsql_

@@ -54,8 +54,6 @@
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
-%token	TOK_DDLCLAUSE
-%token	TOK_DEBUGCLAUSE
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -235,10 +233,8 @@ statement:
 	| flush_hostnames
 	| flush_logs
 	| sysfilters
-	| TOK_DEBUGCLAUSE	{ pParser->m_pStmt->m_eStmt = STMT_DEBUG; }
 	| delete_cluster
 	| explain_query
-	| TOK_DDLCLAUSE	{ pParser->m_bGotDDLClause = true; }
 	| freeze_indexes
 	| unfreeze_indexes
 	| kill_connid
@@ -1405,18 +1401,17 @@ indexes_or_tables:
 set_stmt:
 	TOK_SET ident_set '=' bool_or_integer_value
 		{
-			pParser->SetStatement ( $2, SET_LOCAL );
+			pParser->SetLocalStatement ( $2 );
 			pParser->m_pStmt->m_iSetValue = $4.GetValueInt();
 		}
 	| TOK_SET ident_set '=' set_string_value
 		{
-			pParser->SetStatement ( $2, SET_LOCAL );
+			pParser->SetLocalStatement ( $2 );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
 		}
 	| TOK_SET ident_set '=' TOK_NULL
 		{
-			pParser->SetStatement ( $2, SET_LOCAL );
-//			pParser->m_pStmt->m_bSetNull = true;
+			pParser->SetLocalStatement ( $2 );
 		}
 	| TOK_SET TOK_NAMES set_value opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET sysvar '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }

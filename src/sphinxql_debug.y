@@ -10,8 +10,8 @@
 #endif
 %}
 
-%lex-param	{ struct SqlDebugParser_c * pParser }
-%parse-param	{ struct SqlDebugParser_c * pParser }
+%lex-param	{ class SqlDebugParser_c * pParser }
+%parse-param	{ class SqlDebugParser_c * pParser }
 %pure-parser
 %error-verbose
 
@@ -65,32 +65,33 @@
 %%
 
 debugclause:
-	TOK_DEBUG debugcommand optsemicolon
+	word_debug debugcommand
 	;
 
-optsemicolon:
-	| ';'
+word_debug:
+	TOK_DEBUG		{ pParser->SetCommand ( Cmd_e::INVALID_CMD ); }
 	;
 
 debugcommand:
-	shutdown_crash_token
-	| malstats		{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_STATS; }
-	| TOK_MALTRIM	{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_TRIM; }
-	| TOK_PROCDUMP  { pParser->m_tCmd.m_eCommand = Cmd_e::PROCDUMP; }
-	| TOK_CLOSE		{ pParser->m_tCmd.m_eCommand = Cmd_e::CLOSE; }
+	// empty
+	| shutdown_crash_token
+	| malstats		{ pParser->SetCommand ( Cmd_e::MALLOC_STATS ); }
+	| TOK_MALTRIM	{ pParser->SetCommand ( Cmd_e::MALLOC_TRIM ); }
+	| TOK_PROCDUMP  { pParser->SetCommand ( Cmd_e::PROCDUMP ); }
+	| TOK_CLOSE		{ pParser->SetCommand ( Cmd_e::CLOSE ); }
 	| setgdb
-	| sleep			{ pParser->m_tCmd.m_eCommand = Cmd_e::SLEEP; }
-	| TOK_TASKS		{ pParser->m_tCmd.m_eCommand = Cmd_e::TASKS; }
-	| TOK_SCHED		{ pParser->m_tCmd.m_eCommand = Cmd_e::SCHED; }
-	| merge			{ pParser->m_tCmd.m_eCommand = Cmd_e::MERGE; }
-	| drop			{ pParser->m_tCmd.m_eCommand = Cmd_e::DROP; }
-	| files			{ pParser->m_tCmd.m_eCommand = Cmd_e::FILES; }
-	| compress		{ pParser->m_tCmd.m_eCommand = Cmd_e::COMPRESS; }
-	| split			{ pParser->m_tCmd.m_eCommand = Cmd_e::SPLIT; }
+	| sleep			{ pParser->SetCommand ( Cmd_e::SLEEP ); }
+	| TOK_TASKS		{ pParser->SetCommand ( Cmd_e::TASKS ); }
+	| TOK_SCHED		{ pParser->SetCommand ( Cmd_e::SCHED ); }
+	| merge			{ pParser->SetCommand ( Cmd_e::MERGE ); }
+	| drop			{ pParser->SetCommand ( Cmd_e::DROP ); }
+	| files			{ pParser->SetCommand ( Cmd_e::FILES ); }
+	| compress		{ pParser->SetCommand ( Cmd_e::COMPRESS ); }
+	| split			{ pParser->SetCommand ( Cmd_e::SPLIT ); }
 	| wait
-	| TOK_META		{ pParser->m_tCmd.m_eCommand = Cmd_e::META; }
-	| trace			{ pParser->m_tCmd.m_eCommand = Cmd_e::TRACE; }
-	| curl			{ pParser->m_tCmd.m_eCommand = Cmd_e::CURL; }
+	| TOK_META		{ pParser->SetCommand ( Cmd_e::META ); }
+	| trace			{ pParser->SetCommand ( Cmd_e::TRACE ); }
+	| curl			{ pParser->SetCommand ( Cmd_e::CURL ); }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -113,18 +114,18 @@ like_filter:
 
 // commands 'debug shutdown', 'debug crash', 'debug token'
 shutdown_crash_token:
-	sh_cr_tok szparam opt_option_clause { pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($2); }
+	sh_cr_tok szparam opt_option_clause { pParser->SetSParam ($2); }
 	;
 
 sh_cr_tok:
-	TOK_SHUTDOWN	{ pParser->m_tCmd.m_eCommand = Cmd_e::SHUTDOWN; }
-	| TOK_CRASH	{ pParser->m_tCmd.m_eCommand = Cmd_e::CRASH; }
-	| TOK_TOKEN	{ pParser->m_tCmd.m_eCommand = Cmd_e::TOKEN; }
+	TOK_SHUTDOWN	{ pParser->SetCommand ( Cmd_e::SHUTDOWN ); }
+	| TOK_CRASH		{ pParser->SetCommand ( Cmd_e::CRASH ); }
+	| TOK_TOKEN		{ pParser->SetCommand ( Cmd_e::TOKEN ); }
 	;
 
 // command curl 'url'
 curl:
-	TOK_CURL szparam { pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($2); }
+	TOK_CURL szparam { pParser->SetSParam ($2); }
 	;
 
 szparam_special:
@@ -139,7 +140,7 @@ szparam:
 
 szparam_opt:
 	// empty
-	| szparam { pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($1); }
+	| szparam { pParser->SetSParam ($1); }
 	;
 
 malstats:
@@ -150,12 +151,12 @@ malstats:
 setgdb:
 	TOK_SETGDB boolpar
 	{
-		pParser->m_tCmd.m_eCommand = Cmd_e::SETGDB;
-		pParser->m_tCmd.m_iPar1 = $2;
+		pParser->SetCommand ( Cmd_e::SETGDB );
+		pParser->SetPar1 ( $2 );
 	}
 	| TOK_SETGDB TOK_STATUS
 	{
-		pParser->m_tCmd.m_eCommand = Cmd_e::GDBSTATUS;
+		pParser->SetCommand ( Cmd_e::GDBSTATUS );
 	}
 	;
 
@@ -170,8 +171,7 @@ boolpar:
 sleep:
 	TOK_SLEEP timeint opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-                tCmd.m_iPar1 = $2;
+		pParser->SetPar1 ( $2 );
 	}
 	;
 
@@ -184,10 +184,9 @@ timeint:
 merge:
 	TOK_MERGE ident chunk TOK_CONST_INT into chunk TOK_CONST_INT opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-		tCmd.m_sParam = pParser->StrFromBlob ($2);
-		tCmd.m_iPar1 = $4;
-		tCmd.m_iPar2 = $7;
+		pParser->SetSParam ($2);
+		pParser->SetPar1 ( $4 );
+		pParser->SetPar2 ( $7 );
 	}
 	;
 chunk:
@@ -202,9 +201,8 @@ into:
 drop:
 	TOK_DROP chunk TOK_CONST_INT from ident opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-		tCmd.m_sParam = pParser->StrFromBlob ($5);
-		tCmd.m_iPar1 = $3;
+		pParser->SetSParam ($5);
+		pParser->SetPar1 ( $3 );
 	}
 	;
 
@@ -216,8 +214,7 @@ from:
 files:
 	TOK_FILES ident opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-		tCmd.m_sParam = pParser->StrFromBlob ($2);
+		pParser->SetSParam ($2);
 	}
 	;
 
@@ -225,9 +222,8 @@ files:
 compress:
 	TOK_COMPRESS ident chunk TOK_CONST_INT opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-		tCmd.m_sParam = pParser->StrFromBlob ($2);
-		tCmd.m_iPar1 = $4;
+		pParser->SetSParam ($2);
+		pParser->SetPar1 ( $4 );
 	}
 	;
 
@@ -235,10 +231,9 @@ compress:
 split:
 	TOK_SPLIT ident chunk TOK_CONST_INT TOK_ON TOK_USERVAR opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-		tCmd.m_sParam = pParser->StrFromBlob ($2);
-		tCmd.m_sParam2 = pParser->StrFromBlob ($6);
-		tCmd.m_iPar1 = $4;
+		pParser->SetSParam ($2);
+		pParser->SetSParam2 ($6);
+    	pParser->SetPar1 ( $4 );
 	}
 	;
 
@@ -246,10 +241,9 @@ split:
 wait:
 	TOK_WAIT ident opt_status like_filter opt_option_clause
 	{
-		auto& tCmd = pParser->m_tCmd;
-		if ( tCmd.m_eCommand!=Cmd_e::WAIT_STATUS)
-			tCmd.m_eCommand = Cmd_e::WAIT;
-    	tCmd.m_sParam = pParser->StrFromBlob ($2);
+		if (!pParser->CommandIs(Cmd_e::WAIT_STATUS))
+			pParser->SetCommand(Cmd_e::WAIT);
+		pParser->SetSParam ($2);
 	}
 	;
 
@@ -257,9 +251,8 @@ opt_status:
 	// empty
 	| TOK_STATUS TOK_CONST_INT
 	{
-		auto& tCmd = pParser->m_tCmd;
-		tCmd.m_eCommand = Cmd_e::WAIT_STATUS;
-		tCmd.m_iPar1 = $2;
+		pParser->SetCommand ( Cmd_e::WAIT_STATUS );
+		pParser->SetPar1 ( $2 );
 	}
 	;
 
@@ -296,11 +289,11 @@ trace:
 trace_args:
 	TOK_QUOTED_STRING opt_size
 	{
-		pParser->m_tCmd.m_sParam = pParser->StrFromBlob ($1);
+		pParser->SetSParam ($1);
 	}
 	| boolpar
 	{
-		pParser->m_tCmd.m_iPar1 = 0;
+		pParser->SetPar1(0);
 	}
 	;
 
@@ -308,7 +301,7 @@ opt_size:
 	// empty
 	| TOK_CONST_INT
 	{
-		pParser->m_tCmd.m_iPar1 = $1;
+		pParser->SetPar1($1);
 	}
 	;
 

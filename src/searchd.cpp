@@ -14573,12 +14573,13 @@ void HandleSched ( RowBuffer_i & tOut )
 	tOut.Eof ();
 }
 
-void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c & tProfile )
+void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pCommand, const QueryProfile_c & tProfile )
 {
 	using namespace DebugCmd;
-	CSphString sError;
 	bool bVipConn = session::GetVip ();
-	auto tCmd = ParseDebugCmd ( sCommand, sError );
+	assert ( pCommand->Valid() );
+
+	const auto& tCmd = *pCommand;
 
 	if ( bVipConn )
 	{
@@ -16640,7 +16641,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_DEBUG:
-		HandleMysqlDebug ( tOut, sQuery, m_tLastProfile );
+		HandleMysqlDebug ( tOut, pStmt->m_pDebugCmd.get(), m_tLastProfile );
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:

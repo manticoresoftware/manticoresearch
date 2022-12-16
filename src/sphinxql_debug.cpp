@@ -21,14 +21,18 @@ struct BlobLocator_t
 
 using namespace DebugCmd;
 
-struct SqlDebugParser_c
+class SqlDebugParser_c : public SqlParserTraits_c
 {
-	explicit SqlDebugParser_c ( DebugCommand_t& tCmd )
-		: m_tCmd ( tCmd ) {}
-
 	DebugCommand_t& m_tCmd;
-	void * m_pScanner = nullptr;
-	const char * m_pBuf = nullptr;
+
+public:
+	SqlDebugParser_c ( DebugCommand_t& tCmd, Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError )
+		: SqlParserTraits_c ( dStmt, sQuery.first, &sError )
+		, m_tCmd ( tCmd )
+	{
+		m_sErrorHeader = "sphinxql-debug:";
+	}
+
 	CSphString StrFromBlob ( BlobLocator_t tStr ) const
 	{
 		CSphString sResult;
@@ -36,7 +40,7 @@ struct SqlDebugParser_c
 		return sResult;
 	}
 
-	Option_t& OptByName ( BlobLocator_t tStr )
+	ParsedOption_t& OptByName ( BlobLocator_t tStr )
 	{
 		auto sOption = StrFromBlob ( tStr );
 		sOption.ToLower ();
@@ -89,6 +93,41 @@ struct SqlDebugParser_c
 		tOption.m_iValue = int ( fValue );
 		tOption.m_bValue = tOption.m_iValue!=0;
 	}
+
+	void SetWrongDebugCmd ()
+	{
+		SetCommand ( Cmd_e::PARSE_SYNTAX_ERROR );
+	}
+
+	void SetCommand ( Cmd_e eCmd )
+	{
+		m_tCmd.m_eCommand = eCmd;
+	}
+
+	bool CommandIs ( Cmd_e eCmd ) const noexcept
+	{
+		return m_tCmd.m_eCommand == eCmd;
+	}
+
+	void SetPar1 ( int64_t iPar )
+	{
+		m_tCmd.m_iPar1 = iPar;
+	}
+
+	void SetPar2 ( int64_t iPar )
+	{
+		m_tCmd.m_iPar2 = iPar;
+	}
+
+	void SetSParam ( BlobLocator_t tStr )
+	{
+		m_tCmd.m_sParam = StrFromBlob ( tStr );
+	}
+
+	void SetSParam2 ( BlobLocator_t tStr )
+	{
+		m_tCmd.m_sParam2 = StrFromBlob ( tStr );
+	}
 };
 
 bool DebugCommand_t::bOpt ( const char * szName, bool bDefault ) const
@@ -125,18 +164,17 @@ CSphString DebugCommand_t::sOpt ( const char * szName, const char * szDefault ) 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_debugparser ( YYSTYPE * lvalp, void * yyscanner, SqlDebugParser_c * pParser )
 
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wpragmas"
-#endif
-
 #include "flexsphinxqldebug.c"
 
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
+static void yyerror ( SqlDebugParser_c* pParser, const char* szMessage )
+{
+	// flex put a zero at last token boundary; make it undo that
+	yy4lex_unhold ( pParser->m_pScanner );
 
+	pParser->ProcessParsingError ( szMessage );
+	if ( pParser->IsWrongSyntaxError() )
+		pParser->SetWrongDebugCmd();
+}
 
 #ifndef NDEBUG
 // using a proxy to be possible to debug inside yylex
@@ -152,26 +190,21 @@ inline int yylex ( YYSTYPE * lvalp, SqlDebugParser_c * pParser )
 }
 #endif
 
-static void yyerror ( SqlDebugParser_c * /*pParser*/, const char * /*sMessage*/ )
-{
-	// flex put a zero at last token boundary; make it undo that
-}
-
-
 #include "bissphinxql_debug.c"
 
-DebugCmd::DebugCommand_t DebugCmd::ParseDebugCmd ( Str_t sQuery, CSphString & sError )
+static std::unique_ptr<DebugCmd::DebugCommand_t> ParseDebugCmdImpl ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError )
 {
-	DebugCmd::DebugCommand_t tResult;
+	auto pResult = std::make_unique<DebugCmd::DebugCommand_t>();
+	auto& tResult = *pResult;
 	if ( !IsFilled ( sQuery ) )
 	{
-		sError = "query was empty";
-		return tResult;
+		tResult.m_sParam = "query was empty";
+		return pResult;
 	}
 
-	SqlDebugParser_c tParser (tResult);
+	SqlDebugParser_c tParser ( tResult, sQuery, dStmt, sError );
 	tParser.m_pBuf = sQuery.first;
-	tParser.m_tCmd.m_szStmt = sQuery.first;
+	tResult.m_szStmt = sQuery.first;
 
 	char * sEnd = const_cast<char *>( sQuery.first+sQuery.second );
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -181,8 +214,8 @@ DebugCmd::DebugCommand_t DebugCmd::ParseDebugCmd ( Str_t sQuery, CSphString & sE
 	YY_BUFFER_STATE tLexerBuffer = yy4_scan_buffer ( const_cast<char *>( sQuery.first ), sQuery.second+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
-		sError = "internal error: yy4_scan_buffer() failed";
-		return tResult;
+		tResult.m_sParam = "internal error: yy4_scan_buffer() failed";
+		return pResult;
 	}
 
 	yyparse ( &tParser );
@@ -190,7 +223,20 @@ DebugCmd::DebugCommand_t DebugCmd::ParseDebugCmd ( Str_t sQuery, CSphString & sE
 	yy4_delete_buffer ( tLexerBuffer, tParser.m_pScanner );
 	yy4lex_destroy ( tParser.m_pScanner );
 
-	return tResult;
+	return pResult;
+}
+
+ParseResult_e ParseDebugCmd ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError )
+{
+	// parse debug statements
+	auto pCmd = ParseDebugCmdImpl ( sQuery, dStmt, sError );
+	if ( !pCmd->Valid() )
+		return ParseResult_e::PARSE_SYNTAX_ERROR;
+
+	auto& tStmt = dStmt.Add();
+	tStmt.m_pDebugCmd = std::move ( pCmd );
+	tStmt.m_eStmt = STMT_DEBUG;
+	return ParseResult_e::PARSE_OK;
 }
 
 

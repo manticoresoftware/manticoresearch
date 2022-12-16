@@ -13,16 +13,9 @@
 #pragma once
 
 #include "sphinxstd.h"
+#include "searchdsql.h"
 
 namespace DebugCmd {
-
-struct Option_t
-{
-	int64_t m_iValue = 0;
-	float m_fValue = 0.0;
-	bool m_bValue = false;
-	CSphString m_sValue;
-};
 
 enum class Cmd_e : BYTE
 {
@@ -49,23 +42,25 @@ enum class Cmd_e : BYTE
 	TRACE,
 	CURL,
 
-	INVALID_CMD
+	INVALID_CMD,
+	PARSE_SYNTAX_ERROR,
 };
 
 struct DebugCommand_t
 {
-	Cmd_e	m_eCommand {Cmd_e::INVALID_CMD};
+	Cmd_e	m_eCommand {Cmd_e::PARSE_SYNTAX_ERROR};
 	CSphString m_sParam;
 	CSphString m_sParam2;
 	int64_t m_iPar1 = -1;
 	int64_t m_iPar2;
 	const char * m_szStmt;
-	SmallStringHash_T<Option_t> m_hOptions;
+	SmallStringHash_T<ParsedOption_t> m_hOptions;
 
 	bool bOpt ( const char * szName, bool bDefault = false ) const;
 	int64_t iOpt ( const char * szName, int64_t iDefault = 0 ) const;
 	float fOpt ( const char * szName, float fDefault = 0.0 ) const;
 	CSphString sOpt ( const char * szName, const char* szDefault = nullptr ) const;
+	[[nodiscard]] inline bool Valid() const noexcept { return m_eCommand != Cmd_e::PARSE_SYNTAX_ERROR; };
 };
 
 enum Traits_e : BYTE
@@ -86,7 +81,7 @@ struct CmdNotice_t
 
 extern CmdNotice_t dCommands[(BYTE) Cmd_e::INVALID_CMD];
 
-DebugCommand_t ParseDebugCmd ( Str_t sQuery, CSphString & sError );
-
 } // namespace DebugCmd;
+
+ParseResult_e ParseDebugCmd ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError );
 

@@ -2,7 +2,7 @@
 
 <!-- example Example -->
 
-[Node status](../../Profiling_and_monitoring/Node_status.md) outputs, among other information, cluster status variables.
+[Node status](../../Node_info_and_management/Node_status.md) outputs, among other information, cluster status variables.
 
 The output format is `cluster_name_variable_name` `variable_value`. Most of them are described in [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). Additionally we display:
 

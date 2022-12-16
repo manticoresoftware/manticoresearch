@@ -220,7 +220,7 @@ mysql> DESC rt;
 ```
 
 An optional LIKE clause is supported. Refer to
-[SHOW META](Profiling_and_monitoring/SHOW_META.md) for its syntax details.
+[SHOW META](Node_info_and_management/SHOW_META.md) for its syntax details.
 
 ### SELECT FROM name.table
 

@@ -26,7 +26,7 @@ Queries can then use cache when the table, the full-text query (ie.`MATCH()` con
 
 Cache entries expire with TTL, and also get invalidated on table rotation, or on `TRUNCATE`, or on `ATTACH`. Note that at the moment entries are **not** invalidated on arbitrary RT table writes! So a cached query might be returning older results for the duration of its TTL.
 
-Current cache status can be inspected with in [SHOW STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-STATUS) through the `qcache_XXX` variables:
+Current cache status can be inspected with in [SHOW STATUS](../Node_info_and_management/Node_status.md#SHOW-STATUS) through the `qcache_XXX` variables:
 
 ```sql
 mysql> SHOW STATUS LIKE 'qcache%';

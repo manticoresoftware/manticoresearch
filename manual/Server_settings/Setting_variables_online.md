@@ -45,7 +45,7 @@ Per-session and global server variables affect certain server settings in the re
 *   `SQL_AUTO_IS_NULL = value` Does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
 *   `SQL_MODE = <value>` Does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
 *   `WAIT_TIMEOUT = <value>` Set connection timeout, either per session or global. Global can only be set on a VIP connection.
-*   `PROFILING = {0 | 1}` Enables query profiling in the current session. Defaults to 0. See also [show profile](../Profiling_and_monitoring/Profiling/Query_profile.md)
+*   `PROFILING = {0 | 1}` Enables query profiling in the current session. Defaults to 0. See also [show profile](../Node_info_and_management/Profiling/Query_profile.md)
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` Redefines [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) in the runtime. Per-session variable influences only the queries run in the same session (connection), i.e. up to disconnect. Value 0 means 'no limit'. If both per-session and the global variables are set, the per-session one has a higher priority.
 * `ro = {1 | 0}` switch session to read-only mode or back. In `show variables` output the variable displayed with name `session_read_only`.
 

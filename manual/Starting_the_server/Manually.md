@@ -35,7 +35,7 @@ Possible exit codes are as follows:
   * 2 if server reported an error during shutdown
   * 3 if server crashed during shutdown
 
-* `--status` command is used to query running `searchd` instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use [SHOW STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-STATUS) command to access the very same counters via SQL protocol. Examples:
+* `--status` command is used to query running `searchd` instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use [SHOW STATUS](../Node_info_and_management/Node_status.md#SHOW-STATUS) command to access the very same counters via SQL protocol. Examples:
 ```bash
 $ searchd --status
 $ searchd --config /etc/manticoresearch/manticore.conf --status

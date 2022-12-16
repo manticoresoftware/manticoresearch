@@ -1,6 +1,6 @@
 ^Deleting_an_index(.*?)$ Deleting_a_table$1
-^Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS(.*?)$ Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS$1
-^Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_SETTINGS(.*?)$ Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_SETTINGS$1 
+^Node_info_and_management/Index_settings_and_status/SHOW_INDEX_STATUS(.*?)$ Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS$1
+^Node_info_and_management/Index_settings_and_status/SHOW_INDEX_SETTINGS(.*?)$ Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS$1 
 ^Emptying_an_index(.*?)$ Emptying_a_table$1
 ^Adding_data_from_external_storages/Rotating_an_index(.*?)$ ^Adding_data_from_external_storages/Rotating_a_table$1
 ^Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data(.*?)$ Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data$1

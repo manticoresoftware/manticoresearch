@@ -32,7 +32,7 @@ You can perform a percolate query via SQL or JSON interfaces as well as using pr
 | [Sharded distribution mode](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query)   | sharded as mode  | Not available  |  Not available  |
 | Return all info about matching query | 1 as query (0 by default) |  Enabled by default | Enabled by default |
 | Skip invalid JSON | 1 as skip_bad_json (0 by default)  | Not available | Not available  |
-| Extended info in [SHOW META](../Profiling_and_monitoring/SHOW_META.md) | 1 as verbose (0 by default)  | Not available  | Not available |
+| Extended info in [SHOW META](../Node_info_and_management/SHOW_META.md) | 1 as verbose (0 by default)  | Not available  | Not available |
 | Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)) | 1 as shift (0 by default)  | Not available  | Not available |
 
 <!-- example create percolate -->
@@ -1931,7 +1931,7 @@ Note that the syntax of agent mirrors in the configuration (when several hosts a
 
 <!-- example verbose -->
 ##### How do I understand more about the performance?
-In some case you might want to get more details about performance a percolate query. For that purposes there is option `1 as verbose` which is available only via SQL and allows to save more performance metrics. You can see them via `SHOW META` query which you can run after `CALL PQ`. See [SHOW META](../Profiling_and_monitoring/SHOW_META.md) for more info.
+In some case you might want to get more details about performance a percolate query. For that purposes there is option `1 as verbose` which is available only via SQL and allows to save more performance metrics. You can see them via `SHOW META` query which you can run after `CALL PQ`. See [SHOW META](../Node_info_and_management/SHOW_META.md) for more info.
 
 <!-- intro -->
 1 as verbose:

@@ -296,7 +296,7 @@ For a distributed table with agent mirrors in it (see more in [agent](../Creatin
 
 After beginning a new block, master may still use the accumulated values from the previous one, until the new one is half full. Thus, any previous history stops affecting the mirror choice after 1.5 times ha_period_karma seconds at most.
 
-Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using [SHOW AGENT STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-AGENT-STATUS) statement.
+Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using [SHOW AGENT STATUS](../Node_info_and_management/Node_status.md#SHOW-AGENT-STATUS) statement.
 
 
 <!-- intro -->

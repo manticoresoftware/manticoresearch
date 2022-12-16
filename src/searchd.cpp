@@ -204,6 +204,7 @@ bool					g_bSecondaryError { false };
 static CSphString		g_sBuddyPath;
 static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
+static bool				g_bAutoSchema = true;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -18875,6 +18876,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
+	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
 	SetSecondaryIndexDefault ( bGotSecondary );
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );

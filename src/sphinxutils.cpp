@@ -1018,6 +1018,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "preopen_tables",			0, nullptr },
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },
+	{ "auto_schema",			0, nullptr },
 	{ NULL,						0, NULL }
 };
 

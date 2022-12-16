@@ -353,22 +353,22 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 
 //////////////////////////////////////////////////////////////////////////
 
-bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+bool ParseDdl ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError )
 {
-	if ( !sQuery || !iLen )
+	if ( !IsFilled ( sQuery ) )
 	{
 		sError = "query was empty";
 		return false;
 	}
 
-	DdlParser_c tParser { dStmt, sQuery, &sError };
+	DdlParser_c tParser { dStmt, sQuery.first, &sError };
 
-	char * sEnd = const_cast<char *>( sQuery ) + iLen;
+	auto* sEnd = const_cast<char*> ( end ( sQuery ) );
 	sEnd[0] = 0; // prepare for yy_scan_buffer
 	sEnd[1] = 0; // this is ok because string allocates a small gap
 
 	yy3lex_init ( &tParser.m_pScanner );
-	YY_BUFFER_STATE tLexerBuffer = yy3_scan_buffer ( const_cast<char *>( sQuery ), iLen+2, tParser.m_pScanner );
+	YY_BUFFER_STATE tLexerBuffer = yy3_scan_buffer ( const_cast<char*> ( sQuery.first ), sQuery.second + 2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
 		sError = "internal error: yy3_scan_buffer() failed";

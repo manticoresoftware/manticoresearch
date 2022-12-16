@@ -69,6 +69,6 @@ private:
 	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError );
 };
 
-bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
+bool ParseDdl ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
 
 #endif // _searchdddl_

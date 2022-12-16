@@ -12131,7 +12131,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	};
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
-	if ( !ParseDdl ( sCreateTable.cstr(), sCreateTable.Length(), dCreateTableStmts, sError ) )
+	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -15819,7 +15819,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema() );
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
-	if ( !ParseDdl ( sCreateTable.cstr(), sCreateTable.Length(), dCreateTableStmts, sError ) )
+	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;

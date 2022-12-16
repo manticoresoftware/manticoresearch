@@ -1564,7 +1564,7 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	dStmt.Pop(); // last query is always dummy
 
 	if ( tParser.m_bGotDDLClause )
-		return ParseDdl ( sQuery.first, sQuery.second, dStmt, sError );
+		return ParseDdl ( sQuery, dStmt, sError );
 
 	int iFilterStart = 0;
 	int iFilterCount = 0;

@@ -33,3 +33,4 @@
 ^Securing_and_compacting_an_index/Backup_and_restore(.*?)$ Securing_and_compacting_a_table/Backup_and_restore$1
 ^Securing_and_compacting_an_index/RT_index_structure(.*?)$ Securing_and_compacting_a_table/RT_table_structure$1
 ^Securing_and_compacting_an_index/Compacting_an_index(.*?)$ Securing_and_compacting_a_table/Compacting_a_table$1
+^Profiling_and_monitoring/(.*?)$ Node_info_and_management/$1

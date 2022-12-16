@@ -142,19 +142,21 @@
     * [Binary logging](Logging/Binary_logging.md)
     * [Docker logging](Logging/Docker_logging.md)
     * [Rotating query and server logs](Logging/Rotating_query_and_server_logs.md)
-* [▪️ Profiling and monitoring]
-    * [Node status](Profiling_and_monitoring/Node_status.md)
-    * [SHOW META](Profiling_and_monitoring/SHOW_META.md)
-    * [SHOW THREADS](Profiling_and_monitoring/SHOW_THREADS.md)
-    * [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS.md)
-    * [SHOW VARIABLES](Profiling_and_monitoring/SHOW_VARIABLES.md)
-    * [SHOW COLLATION](Profiling_and_monitoring/SHOW_COLLATION.md)
+* [▪️ Node info and management]
+    * [Node status](Node_info_and_management/Node_status.md)
+    * [SHOW META](Node_info_and_management/SHOW_META.md)
+    * [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md)
+    * [SHOW QUERIES](Node_info_and_management/SHOW_QUERIES.md)
+    * [KILL](Node_info_and_management/KILL.md)
+    * [SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
+    * [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
+    * [SHOW COLLATION](Node_info_and_management/SHOW_COLLATION.md)
     * [Profiling]
-        * [Query profiling](Profiling_and_monitoring/Profiling/Query_profile.md)
-        * [Query plan](Profiling_and_monitoring/Profiling/Query_plan.md)
+        * [Query profiling](Node_info_and_management/Profiling/Query_profile.md)
+        * [Query plan](Node_info_and_management/Profiling/Query_plan.md)
     * [Table settings and status]
-        * [SHOW TABLE STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md)
-        * [SHOW TABLE SETTINGS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
+        * [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md)
+        * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
 * [▪️ Server settings]
     * [Searchd](Server_settings/Searchd.md)
     * [Common](Server_settings/Common.md)

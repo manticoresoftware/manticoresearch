@@ -39,7 +39,7 @@ inline bool StrEq ( Str_t l, const char * r )
 	return strncmp ( l.first, r, l.second ) == 0;
 }
 
-inline Str_t FromStr ( const CSphString& sString )
+inline Str_t FromStr ( const CSphString& sString ) noexcept
 {
 	return { sString.cstr(), (int)sString.Length() };
 }

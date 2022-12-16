@@ -12,7 +12,7 @@
 
 #include <cstring>
 
-inline Str_t FromSz ( const char* szString ) { return { szString, szString ? (int)strlen ( szString ) : 0 }; }
+inline Str_t FromSz ( const char* szString ) noexcept { return { szString, szString ? (int)strlen ( szString ) : 0 }; }
 
 template<int prec>
 inline FixedFrac_T<int, prec> FixedFrac ( int iVal )

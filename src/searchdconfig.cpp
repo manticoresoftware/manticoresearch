@@ -657,7 +657,7 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 
 	SmallStringHash_T<IndexDesc_t*> hConfigLocal;
 	SccRL_t tCfgRLock { g_tCfgIndexesLock };
-	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc ) { hConfigLocal.Add ( &tDesc, tDesc.m_sName ); } );
+	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc ) { if (tDesc.m_eType!=IndexType_e::DISTR) hConfigLocal.Add ( &tDesc, tDesc.m_sName ); } );
 	for_each ( *hLocals, [&hConfigLocal] ( auto& tIt ) { hConfigLocal.Delete ( tIt.first ); } );
 
 	// keep indexes loaded from JSON but disabled due to errors

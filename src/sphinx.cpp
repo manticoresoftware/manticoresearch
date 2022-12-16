@@ -9124,32 +9124,46 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	if ( m_uVersion<61 )
 		return true;
 
+	if ( !IsSecondaryLibLoaded() )
+	{
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+		{
+			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+				m_sLastError = "secondary library not loaded";
+			else
+				sphWarning ( "secondary library not loaded; secondary index(es) disabled" );
+		}
+		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
+	}
+
 	const CSphString & sFile = GetFilename ( SPH_EXT_SPIDX );
 	if ( !sphFileExists ( sFile.cstr() ) )
 	{
-		if ( IsSecondaryLibLoaded() )
-			sphWarning ( "missing %s; secondary index(es) disabled", sFile.cstr() );
-		return true;
-	}
-
-	// lets load index but warns about missed secondary index library and missed feature
-	if ( !IsSecondaryLibLoaded() )
-	{
-		sphWarning ( "'%s' secondary index library not loaded; secondary index(es) disabled", GetName() );
-		return true;
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+		{
+			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
+			else
+				sphWarning ( "missing %s; secondary index(es) disabled, consider use ALTER REBUILD SECONDARY to enable secondary index", sFile.cstr() );
+		}
+		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
 	}
 
 	m_pSIdx.reset ( CreateSecondaryIndex ( sFile.cstr(), m_sLastError ) );
 
 	bool bValid = !!m_pSIdx;
-	if ( !bValid && !GetSecondaryIndexDefault() )
+	if ( !bValid && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
 	{
-		sphWarning ( "'%s' secondary index library not loaded, %s; secondary index(es) disabled", GetName(), m_sLastError.cstr() );
-		m_sLastError = "";
-		return true;
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
+		{
+			sphWarning ( "'%s' secondary index not loaded, %s; secondary index(es) disabled, consider use ALTER REBUILD SECONDARY to enable secondary index", GetName(), m_sLastError.cstr() );
+			m_sLastError = "";
+		}
+		if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+			return false;
 	}
 
-	return bValid;
+	return true;
 }
 
 bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )

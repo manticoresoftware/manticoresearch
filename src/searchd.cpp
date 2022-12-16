@@ -200,7 +200,6 @@ CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
-bool					g_bSecondaryError { false };
 static CSphString		g_sBuddyPath;
 static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
@@ -13803,7 +13802,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			g_bSplit = !!tStmt.m_iSetValue;
 		} else if ( tStmt.m_sSetName=="secondary_indexes" )
 		{
-			SetSecondaryIndexDefault ( !!tStmt.m_iSetValue );
+			SetSecondaryIndexDefault ( tStmt.m_iSetValue!=0 ? SIDefault_e::ENABLED : SIDefault_e::DISABLED );
 
 		} else if ( tStmt.m_sSetName=="accurate_aggregation" )
 		{
@@ -14818,7 +14817,17 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		});
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", g_bSplit ? "1" : "0" );
-	dTable.MatchTuplet ( "secondary_indexes", GetSecondaryIndexDefault() ? "1" : "0" );
+
+	switch ( GetSecondaryIndexDefault() )
+	{
+	case SIDefault_e::FORCE:
+		dTable.MatchTuplet ( "secondary_indexes", "force" ); break;
+	case SIDefault_e::ENABLED:
+		dTable.MatchTuplet ( "secondary_indexes", "1" ); break;
+	default:
+		dTable.MatchTuplet ( "secondary_indexes", "0" );
+	}
+
 	dTable.MatchTuplet ( "accurate_aggregation", GetAccurateAggregationDefault() ? "1" : "0" );
 	dTable.MatchTupletFn ( "threads_ex_effective", [] {
 		StringBuilder_c tBuf;
@@ -18656,6 +18665,29 @@ static void ConfigureDaemonLog ( const CSphString & sMode )
 		sphWarning ( "query_log_statements invalid values: %s", sWrongModes.cstr() );
 }
 
+static void SetOptionSI ( const CSphConfigSection & hSearchd, bool bTestMode )
+{
+	SIDefault_e eState = GetSecondaryIndexDefault();
+	if ( bTestMode )
+		eState = SIDefault_e::DISABLED;
+
+	CSphVariant * pOption = hSearchd ( "secondary_indexes" );
+	if ( pOption )
+	{
+		if ( pOption->strval()=="force" )
+			eState = SIDefault_e::FORCE;
+		else if ( pOption->intval()==0 )
+			eState = SIDefault_e::DISABLED;
+		else
+			eState = SIDefault_e::ENABLED;
+	}
+
+	if ( eState!=SIDefault_e::DISABLED && !IsSecondaryLibLoaded() )
+		sphWarning ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+
+	SetSecondaryIndexDefault ( eState );
+}
+
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode ) REQUIRES ( MainThread )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
@@ -18868,17 +18900,13 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
-
-	bool bGotSecondary = ( hSearchd.GetInt ( "secondary_indexes", GetSecondaryIndexDefault() )!=0 );
-	if ( bGotSecondary && !IsSecondaryLibLoaded() )
-		sphFatal ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+	SetOptionSI ( hSearchd, bTestMode );
 
 	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
-	SetSecondaryIndexDefault ( bGotSecondary );
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	g_sConfigPath = sphGetCwd();
 }
@@ -19433,7 +19461,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CSphString sError;
 	// initialize it before other code to fetch version string for banner
 	bool bColumnarError = !InitColumnar ( sError );
-	g_bSecondaryError = !InitSecondary ( g_sSecondaryError );
+	bool bSecondaryError = !InitSecondary ( g_sSecondaryError );
 	sphCollationInit ();
 
 	InitBanner();
@@ -19443,7 +19471,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
-	if ( g_bSecondaryError )
+	if ( bSecondaryError )
 		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
 
 	if ( !sError.IsEmpty() )

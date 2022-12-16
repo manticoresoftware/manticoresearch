@@ -575,15 +575,15 @@ static bool NextSet ( CSphVector<int> & dSet, const CSphVector<SecondaryIndexInf
 	return false;
 }
 
-static bool g_bEnabledSI = false;
-void SetSecondaryIndexDefault ( bool bEnabled )
+static SIDefault_e g_eSIState = SIDefault_e::ENABLED;
+void SetSecondaryIndexDefault ( SIDefault_e eState )
 {
-	g_bEnabledSI = bEnabled;
+	g_eSIState = eState;
 }
 
-bool GetSecondaryIndexDefault ()
+SIDefault_e GetSecondaryIndexDefault ()
 {
-	return g_bEnabledSI;
+	return g_eSIState;
 }
 
 
@@ -617,10 +617,10 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 	if ( !CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::INDEX, bForce, pHint ) )
 		return false;
 
-	// default secondary index is disabled
-	// but FORCE INDEX (name) enables it
-	// set global secondary_indexes=1 allows to use optimizer
-	if ( !g_bEnabledSI && ( !pHint || ( pHint && *pHint!=IndexHint_e::FORCE ) ) )
+	if ( !IsSecondaryLibLoaded() || GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
+		return false;
+
+	if ( !pHint || ( pHint && *pHint!=IndexHint_e::FORCE ) )
 		return false;
 
 	return true;

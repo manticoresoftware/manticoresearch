@@ -12159,8 +12159,11 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
 	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
 	tOut.HeadColumn ( "Work time" );
-	tOut.HeadColumn ( "Work time CPU" );
-	tOut.HeadColumn ( "Thd efficiency", MYSQL_COL_FLOAT);
+	if ( g_bCpuStats )
+	{
+		tOut.HeadColumn ( "Work time CPU" );
+		tOut.HeadColumn ( "Thd efficiency", MYSQL_COL_FLOAT);
+	}
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "In idle" );
@@ -12193,8 +12196,11 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		int64_t tmNow = sphMicroTimer (); // short-term cache
 		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
 		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
-		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
-		tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // work CPU time %
+		if ( g_bCpuStats )
+		{
+			tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
+			tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // work CPU time %
+		}
 		tOut.PutNumAsString ( dThd.m_iTotalJobsDone ); // jobs done
 		if ( dThd.m_tmLastJobStartTimeUS<0 )
 		{

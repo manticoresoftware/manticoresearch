@@ -1533,22 +1533,23 @@ static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sEr
 }
 
 
-bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
+
+bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
-	if ( !sQuery || !iLen )
+	if ( !IsFilled ( sQuery ) )
 	{
 		sError = "query was empty";
 		return false;
 	}
 
-	SqlParser_c tParser ( dStmt, eCollation, sQuery, &sError );
+	SqlParser_c tParser ( dStmt, eCollation, sQuery.first, &sError );
 
-	char * sEnd = const_cast<char *>( sQuery ) + iLen;
+	char* sEnd = const_cast<char*> ( end ( sQuery ) );
 	sEnd[0] = 0; // prepare for yy_scan_buffer
 	sEnd[1] = 0; // this is ok because string allocates a small gap
 
 	yylex_init ( &tParser.m_pScanner );
-	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( const_cast<char *>( sQuery ), iLen+2, tParser.m_pScanner );
+	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( const_cast<char *>( sQuery.first ), sQuery.second+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
 		sError = "internal error: yy_scan_buffer() failed";
@@ -1563,7 +1564,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	dStmt.Pop(); // last query is always dummy
 
 	if ( tParser.m_bGotDDLClause )
-		return ParseDdl ( sQuery, iLen, dStmt, sError );
+		return ParseDdl ( sQuery.first, sQuery.second, dStmt, sError );
 
 	int iFilterStart = 0;
 	int iFilterCount = 0;
@@ -1579,7 +1580,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		{
 			if ( tQuery.m_iSQLSelectStart-1>=0 && tParser.m_pBuf[tQuery.m_iSQLSelectStart-1]=='`' )
 				tQuery.m_iSQLSelectStart--;
-			if ( tQuery.m_iSQLSelectEnd<iLen && tParser.m_pBuf[tQuery.m_iSQLSelectEnd]=='`' )
+			if ( tQuery.m_iSQLSelectEnd<sQuery.second && tParser.m_pBuf[tQuery.m_iSQLSelectEnd]=='`' )
 				tQuery.m_iSQLSelectEnd++;
 
 			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,

@@ -243,8 +243,7 @@ class FilterCreationMeasureStack_c : public StackMeasurer_c
 		tParams.m_tSchema.AddAttr ( tAttr, false );
 
 		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
-			tParams.m_bSuccess = sphParseSqlQuery ( tParams.m_sQuery.cstr (), tParams.m_sQuery.Length ()
-													, tParams.m_dStmt, tParams.m_sError, SPH_COLLATION_DEFAULT );
+			tParams.m_bSuccess = sphParseSqlQuery ( FromStr ( tParams.m_sQuery ), tParams.m_dStmt, tParams.m_sError, SPH_COLLATION_DEFAULT );
 			if ( !tParams.m_bSuccess )
 				return;
 

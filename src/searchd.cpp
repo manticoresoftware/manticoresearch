@@ -16262,7 +16262,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	m_sError = "";
 
 	CSphVector<SqlStmt_t> dStmt;
-	bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, tSess.GetCollation () );
+	bool bParsedOK = sphParseSqlQuery ( sQuery, dStmt, m_sError, tSess.GetCollation () );
 
 	if ( tSess.IsProfile() )
 		m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
@@ -16884,7 +16884,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 
 	// parse real query
 	CSphVector<SqlStmt_t> dRealStmt;
-	bool bParsedOK = sphParseSqlQuery ( sRealQuery.cstr(), sRealQuery.Length(), dRealStmt, sError, eCollation );
+	bool bParsedOK = sphParseSqlQuery ( FromStr ( sRealQuery ), dRealStmt, sError, eCollation );
 	if ( !bParsedOK )
 		return false;
 

@@ -41,7 +41,7 @@ To make Manticore start at boot, run:
 sudo systemctl enable manticore
 ```
 
-In some newer operating systems it can fail with error "Failed to enable unit: Unit ... is transient or generated.". In this can you can remove the generator and try again. It's unlikely you need the generator ever again after Manticore is installed.
+In some newer operating systems it can fail with error "Failed to enable unit: Unit ... is transient or generated.". In this case you can remove the generator and try again. It's unlikely you need the generator ever again after Manticore is installed.
 
 In Debian-based operating systems run:
 ```bash

@@ -20104,7 +20104,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( ReplicateClustersDelete );
 	ReplicationStart ( dListenerDescs, bNewCluster, bNewClusterForce );
 	searchd::AddShutdownCb ( BuddyStop );
-	BuddyStart ( g_sBuddyPath, g_bHasBuddyPath, dListenerDescs, g_bTelemetry );
+	// --test should not guess buddy path
+	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
+	BuddyStart ( g_sBuddyPath, ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry );
 
 	g_bJsonConfigLoadedOk = true;
 

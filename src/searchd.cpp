@@ -1581,7 +1581,7 @@ public:
 	void		BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 
 protected:
-	void		SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight, int iAgentQueryTimeout ) const;
+	void		SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const;
 
 protected:
 	const VecTraits_T<CSphQuery> &		m_dQueries;
@@ -1639,7 +1639,7 @@ void operator>> ( InputBuffer_c & dIn, CSphNamedInt & tValue )
 	tValue.second = dIn.GetInt ();
 }
 
-void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight, int iAgentQueryTimeout ) const
+void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const
 {
 	bool bAgentWeight = ( iWeight!=-1 );
 	// starting with command version 1.27, flags go first
@@ -1777,8 +1777,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		for ( const auto& dWeight : q.m_dIndexWeights )
 			tOut << dWeight;
 	}
-	DWORD iQueryTimeout = ( q.m_uMaxQueryMsec ? q.m_uMaxQueryMsec : iAgentQueryTimeout );
-	tOut.SendDword ( iQueryTimeout );
+	tOut.SendDword ( q.m_uMaxQueryMsec );
 	tOut.SendInt ( q.m_dFieldWeights.GetLength() );
 	for ( const auto & dWeight : q.m_dFieldWeights )
 		tOut << dWeight;
@@ -1848,7 +1847,7 @@ void SearchRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	tOut.SendInt ( VER_COMMAND_SEARCH_MASTER );
 	tOut.SendInt ( m_dQueries.GetLength() );
 	for ( auto& dQuery : m_dQueries )
-		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, dQuery, tAgent.m_iWeight, tAgent.m_iMyQueryTimeoutMs );
+		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, dQuery, tAgent.m_iWeight );
 }
 
 

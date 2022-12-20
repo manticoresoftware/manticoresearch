@@ -12149,7 +12149,13 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	tOut.HeadBegin ( bAll ? 15 : 14 ); // 15 with chain
+	int iColCount = 15;
+	if ( !bAll )
+		iColCount -= 1;
+	if ( !g_bCpuStats )
+		iColCount -= 2;
+
+	tOut.HeadBegin ( iColCount ); // 15 with chain
 	tOut.HeadColumn ( "Tid", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );

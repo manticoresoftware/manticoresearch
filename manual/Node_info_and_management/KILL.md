@@ -1,12 +1,16 @@
 # KILL
 
+<!-- example KILL -->
 ```sql
-KILL cid
+KILL <query id>
 ```
 
-It terminates the execution of the query statement with `connection_id`=`cid`.  One can see the current queries that can be killed by running the [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) statement.
+`KILL` terminates execution of a query by its id which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).
 
+<!-- request SQL -->
 ```sql
 mysql> KILL 4;
 Query OK, 1 row affected (0.00 sec)
 ```
+
+<!-- end -->

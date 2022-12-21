@@ -55,7 +55,7 @@ private:
 		auto* pExisting = ( *m_hLocalSnapshot.first ) ( sIndex );
 		if ( !pExisting )
 			return false;
-		sphLogDebug ( "Keep existing before local index %s", sIndex.cstr() );
+		sphLogDebug ( "Keep existing before local table %s", sIndex.cstr() );
 		return m_hNewLocalIndexes.Add ( *pExisting, sIndex );
 	}
 
@@ -65,20 +65,20 @@ private:
 		auto* pExisting = ( *m_hDistrSnapshot.first ) ( sIndex );
 		if ( !pExisting )
 			return false;
-		sphLogDebug ( "Keep existing before distr index %s", sIndex.cstr() );
+		sphLogDebug ( "Keep existing before distr table %s", sIndex.cstr() );
 		return m_hNewDistrIndexes.Add ( *pExisting, sIndex );
 	}
 
 	void KeepExisting ( const CSphString& sIndex )
 	{
-		sphLogDebug ( "keep existing index  %s", sIndex.cstr() );
+		sphLogDebug ( "keep existing table  %s", sIndex.cstr() );
 		CopyExistingLocal ( sIndex );
 		m_hLocals.Add ( sIndex );
 	}
 
 	void AddDeferred ( const CSphString& sIndex, ServedIndexRefPtr_c&& pServed )
 	{
-		sphLogDebug ( "add deferred index %s", sIndex.cstr() );
+		sphLogDebug ( "add deferred table %s", sIndex.cstr() );
 		KeepExisting ( sIndex );
 		CopyExistingDistr ( sIndex ); // keep for now; will be removed when deferred processed.
 		m_hDeferred.Add ( pServed, sIndex );
@@ -91,7 +91,7 @@ private:
 		if ( pNewDistr->IsEmpty() )
 		{
 			if ( CopyExistingDistr ( sIndex ) || CopyExistingLocal ( sIndex ) )
-				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndex.cstr() );
+				sphWarning ( "table '%s': no valid local/remote tables in distributed table; using last valid definition", sIndex.cstr() );
 		} else
 			m_hNewDistrIndexes.Add ( pNewDistr, sIndex );
 	}
@@ -101,12 +101,12 @@ private:
 	{
 		CSphString sError;
 		auto [ eAdd, pFreshLocal ] = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
-		assert ( eAdd != ADD_DISTR && "internal error: distr index should not be here!" );
+		assert ( eAdd != ADD_DISTR && "internal error: distr table should not be here!" );
 
 		switch ( eAdd )
 		{
 		case ADD_ERROR:
-			sphWarning ( "index '%s': failed to load with error %s", sIndex.cstr(), sError.cstr() );
+			sphWarning ( "table '%s': failed to load with error %s", sIndex.cstr(), sError.cstr() );
 			break;
 		case ADD_NEEDLOAD:
 			assert ( ServedDesc_t::IsLocal ( pFreshLocal ) ); // that is: PLAIN, RT, or PERCOLATE
@@ -115,7 +115,7 @@ private:
 			AddDeferred ( sIndex, std::move ( pFreshLocal ) );
 			break;
 		case ADD_SERVED:
-			sphLogDebug ( "add template index %s", sIndex.cstr() );
+			sphLogDebug ( "add template table %s", sIndex.cstr() );
 			assert ( pFreshLocal->m_eType == IndexType_e::TEMPLATE ); // only templates are immediately ready
 			m_hLocals.Add ( sIndex );
 			m_hNewLocalIndexes.Add ( pFreshLocal, sIndex );
@@ -168,7 +168,7 @@ private:
 		{
 			if ( !g_bSeamlessRotate && ServedDesc_t::IsLocal ( pAlreadyServed ) && ( eType == IndexType_e::RT || eType == IndexType_e::PERCOLATE || eType == IndexType_e::PLAIN ) )
 			{
-				sphWarning ( "index '%s': changing index role plain<>rt<>percolate is possible only with seamless rotation - skip", sIndex.cstr() );
+				sphWarning ( "table '%s': changing table role plain<>rt<>percolate is possible only with seamless rotation - skip", sIndex.cstr() );
 				return;
 			}
 			return LoadNewLocalFromConfig ( sIndex, hIndex );
@@ -214,11 +214,11 @@ public:
 
 	void LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
 	{
-		sphLogDebug ( "Load from config index %s with type %s", sIndex.cstr(), szIndexType ( eType ) );
+		sphLogDebug ( "Load from config table %s with type %s", sIndex.cstr(), szIndexType ( eType ) );
 		assert ( eType != IndexType_e::ERROR_ );
 		if ( m_hProcessed[sIndex] )
 		{
-			sphWarning ( "index '%s': duplicate name - NOT SERVING", sIndex.cstr() );
+			sphWarning ( "table '%s': duplicate name - NOT SERVING", sIndex.cstr() );
 			return;
 		}
 

@@ -104,7 +104,7 @@ You can view the final transformed query tree with all normalized keywords by ad
 }
 ```
 
-This feature is somewhat similar to [SHOW PLAN](../../Profiling_and_monitoring/Profiling/Query_plan.md) statement in SQL. The result appears as a profile property in the result set. For example:
+This feature is somewhat similar to [SHOW PLAN](../../Node_info_and_management/Profiling/Query_plan.md) statement in SQL. The result appears as a profile property in the result set. For example:
 
 ```json
 "profile":

@@ -601,7 +601,7 @@ const char* CheckFmtMagic ( DWORD uHeader )
 			return "This instance is working on big-endian platform, but %s seems built on little-endian host.";
 #endif
 		else
-			return "%s is invalid header file (too old index version?)";
+			return "%s is invalid header file (too old table version?)";
 	}
 	return nullptr;
 }
@@ -2427,7 +2427,7 @@ bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSr
 			if ( bNeedSrc && !sph::rename ( sExtOld.cstr(), sExt.cstr() ) )
 			{
 				// rollback failed too!
-				sError.SetSprintf ( "rollback rename to '%s' failed: %s; INDEX UNUSABLE; FIX FILE NAMES MANUALLY", sExt.cstr(), strerror(errno) );
+				sError.SetSprintf ( "rollback rename to '%s' failed: %s; TABLE UNUSABLE; FIX FILE NAMES MANUALLY", sExt.cstr(), strerror(errno) );
 			} else
 			{
 				// rollback went ok
@@ -2449,7 +2449,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 
 	DWORD uAttrStatus = m_uAttrsStatus;
 
-	sphLogDebugvv ( "index '%s' attrs (%u) saving...", GetName(), uAttrStatus );
+	sphLogDebugvv ( "table '%s' attrs (%u) saving...", GetName(), uAttrStatus );
 
 	if ( uAttrStatus & IndexSegment_c::ATTRS_UPDATED )
 	{
@@ -2488,7 +2488,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;
 
-	sphLogDebugvv ( "index '%s' attrs (%u) saved", GetName(), m_uAttrsStatus );
+	sphLogDebugvv ( "table '%s' attrs (%u) saved", GetName(), m_uAttrsStatus );
 
 	return true;
 }
@@ -2602,7 +2602,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	if ( !tNewSchema.GetAttrsCount() )
 	{
-		sError = "index must have at least one attribute";
+		sError = "table must have at least one attribute";
 		return false;
 	}
 
@@ -4702,7 +4702,7 @@ public:
 			if ( !m_pIndex->GetLastError().IsEmpty() )
 				sError.SetSprintf ( "%s error: '%s'", sError.scstr(), m_pIndex->GetLastError().cstr() );
 
-			sphWarn ( "unable to load 'keep-attrs' index (%s); ignoring --keep-attrs", sError.cstr() );
+			sphWarn ( "unable to load 'keep-attrs' table (%s); ignoring --keep-attrs", sError.cstr() );
 
 			m_pIndex.reset();
 		} else
@@ -5706,7 +5706,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	if ( m_tStats.m_iTotalDocuments>=INT_MAX )
 	{
-		m_sLastError.SetSprintf ( "index over %d documents not supported (got documents count=" INT64_FMT ")", INT_MAX, m_tStats.m_iTotalDocuments );
+		m_sLastError.SetSprintf ( "table over %d documents not supported (got documents count=" INT64_FMT ")", INT_MAX, m_tStats.m_iTotalDocuments );
 		return 0;
 	}
 
@@ -6215,7 +6215,7 @@ bool CheckDocsCount ( int64_t iDocs, CSphString & sError )
 	if ( iDocs<INT_MAX )
 		return true;
 
-	sError.SetSprintf ( "index over %d documents not supported (got " INT64_FMT " documents)", INT_MAX, iDocs );
+	sError.SetSprintf ( "table over %d documents not supported (got " INT64_FMT " documents)", INT_MAX, iDocs );
 	return false;
 }
 
@@ -6523,7 +6523,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 
 	if ( !pSource->Prealloc ( false, nullptr, dWarnings ) )
 	{
-		m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
+		m_sLastError.SetSprintf ( "source table preload failed: %s", pSource->GetLastError().cstr() );
 		return false;
 	}
 	pSource->Preread();
@@ -6620,7 +6620,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	if ( !bCompress && pDstIndex->m_tSettings.m_eHitless!=pSrcIndex->m_tSettings.m_eHitless )
 	{
-		sError = "hitless settings must be the same on merged indices";
+		sError = "hitless settings must be the same on merged tables";
 		return false;
 	}
 
@@ -7948,7 +7948,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// check if index is ready
 	if ( !m_bPassedAlloc )
 	{
-		tMeta.m_sError = "index not preread";
+		tMeta.m_sError = "table not preread";
 		return false;
 	}
 
@@ -8345,7 +8345,7 @@ ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
 bool CSphIndex_VLN::Lock ()
 {
 	CSphString sName = GetFilename ( SPH_EXT_SPL );
-	sphLogDebug ( "Locking the index via file %s", sName.cstr() );
+	sphLogDebug ( "Locking the table via file %s", sName.cstr() );
 	return RawFileLock ( sName, m_iLockFD, m_sLastError );
 }
 
@@ -8354,7 +8354,7 @@ void CSphIndex_VLN::Unlock()
 	CSphString sName = GetFilename ( SPH_EXT_SPL );
 	if ( m_iLockFD<0 )
 		return;
-	sphLogDebug ( "Unlocking the index (lock %s)", sName.cstr() );
+	sphLogDebug ( "Unlocking the table (lock %s)", sName.cstr() );
 	RawFileUnLock ( sName, m_iLockFD );
 }
 
@@ -8503,7 +8503,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 	DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName.cstr(), m_uVersion );
+		m_sLastError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName.cstr(), m_uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -8566,7 +8566,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
-		sWarning.SetSprintf ( "different lemmatizer dictionaries (index='%s', current='%s')",
+		sWarning.SetSprintf ( "different lemmatizer dictionaries (table='%s', current='%s')",
 			tDictSettings.m_sMorphFingerprint.cstr(),
 			pDict->GetMorphDataFingerprint().cstr() );
 
@@ -8643,7 +8643,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
-		m_sLastError.SetSprintf ( "indexes prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName.cstr(), m_uVersion );
+		m_sLastError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeaderName.cstr(), m_uVersion );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -8704,7 +8704,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
-		sWarning.SetSprintf ( "different lemmatizer dictionaries (index='%s', current='%s')",
+		sWarning.SetSprintf ( "different lemmatizer dictionaries (table='%s', current='%s')",
 			tDictSettings.m_sMorphFingerprint.cstr(),
 			pDict->GetMorphDataFingerprint().cstr() );
 
@@ -9164,32 +9164,46 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	if ( m_uVersion<61 )
 		return true;
 
+	if ( !IsSecondaryLibLoaded() )
+	{
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+		{
+			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+				m_sLastError = "secondary library not loaded";
+			else
+				sphWarning ( "secondary library not loaded; secondary index(es) disabled" );
+		}
+		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
+	}
+
 	const CSphString & sFile = GetFilename ( SPH_EXT_SPIDX );
 	if ( !sphFileExists ( sFile.cstr() ) )
 	{
-		if ( IsSecondaryLibLoaded() )
-			sphWarning ( "missing %s; secondary index(es) disabled", sFile.cstr() );
-		return true;
-	}
-
-	// lets load index but warns about missed secondary index library and missed feature
-	if ( !IsSecondaryLibLoaded() )
-	{
-		sphWarning ( "'%s' secondary index library not loaded; secondary index(es) disabled", GetName() );
-		return true;
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+		{
+			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
+			else
+				sphWarning ( "missing %s; secondary index(es) disabled, consider use ALTER REBUILD SECONDARY to enable secondary index", sFile.cstr() );
+		}
+		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
 	}
 
 	m_pSIdx.reset ( CreateSecondaryIndex ( sFile.cstr(), m_sLastError ) );
 
 	bool bValid = !!m_pSIdx;
-	if ( !bValid && !GetSecondaryIndexDefault() )
+	if ( !bValid && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
 	{
-		sphWarning ( "'%s' secondary index library not loaded, %s; secondary index(es) disabled", GetName(), m_sLastError.cstr() );
-		m_sLastError = "";
-		return true;
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
+		{
+			sphWarning ( "'%s' secondary index not loaded, %s; secondary index(es) disabled, consider use ALTER REBUILD SECONDARY to enable secondary index", GetName(), m_sLastError.cstr() );
+			m_sLastError = "";
+		}
+		if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+			return false;
 	}
 
-	return bValid;
+	return true;
 }
 
 bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
@@ -9407,7 +9421,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema
 				const CSphColumnInfo * pMy = tSchema.GetAttr ( tIn.m_sName.cstr() );
 				if ( !pMy )
 				{
-					tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema attr missing from index-schema (in=%s)",
+					tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema attr missing from table-schema (in=%s)",
 						sphDumpAttr(tIn).cstr() );
 					return false;
 				}
@@ -9568,7 +9582,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	if ( !m_bPassedAlloc )
 	{
 		if ( pError )
-			*pError = "index not preread";
+			*pError = "table not preread";
 		return false;
 	}
 
@@ -10883,7 +10897,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	// non-ready index, empty response!
 	if ( !m_bPassedAlloc )
 	{
-		tMeta.m_sError = "index not preread";
+		tMeta.m_sError = "table not preread";
 		return false;
 	}
 
@@ -11272,7 +11286,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 
 	// check if index is ready
 	if ( !m_bPassedAlloc )
-		tReporter.Fail ( "index not preread" );
+		tReporter.Fail ( "table not preread" );
 
 	if ( !pIndexChecker->OpenFiles() )
 		return 1;

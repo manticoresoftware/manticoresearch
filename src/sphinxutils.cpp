@@ -1018,6 +1018,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "preopen_tables",			0, nullptr },
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },
+	{ "auto_schema",			0, nullptr },
 	{ NULL,						0, NULL }
 };
 
@@ -1705,7 +1706,7 @@ inline static CSphConfig LoadConfig ( const char * szPathToConfigFile, bool bTra
 
 	if constexpr ( eNeed==Indexes_e::eNeed )
 		if ( !hConf ( "index" ) )
-			sphDie ( "no indexes found in config file '%s'", szPathToConfigFile );
+			sphDie ( "no tables found in config file '%s'", szPathToConfigFile );
 
 	if ( ppActualConfigFile )
 		*ppActualConfigFile = szPathToConfigFile;
@@ -3087,7 +3088,7 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 		{
 			const CSphString & sIndex = tVal.first;
 			if ( hPaths ( hIndex["path"].strval() ) )
-				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"].strval()].cstr() );
+				sphDie ( "duplicate paths: table '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"].strval()].cstr() );
 			hPaths.Add ( sIndex, hIndex["path"].strval() );
 		}
 	}

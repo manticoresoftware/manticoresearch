@@ -705,7 +705,7 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 	if ( sIndexStart!=nullptr )
 	{
 		const char * sIndex = tStmt.m_sIndex.cstr();
-		sError.SetSprintf ( "wrong index at cluster syntax, use \"cluster\": \"%.*s\" and \"index\": \"%s\" properties, instead of '%s'",
+		sError.SetSprintf ( "wrong table at cluster syntax, use \"cluster\": \"%.*s\" and \"index\": \"%s\" properties, instead of '%s'",
 			(int)(sIndexStart-sIndex), sIndex, sIndexStart+1, sIndex );
 		return false;
 	}

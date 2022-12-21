@@ -11,6 +11,7 @@
 searchd
 {
 <searchd_settings/>
+secondary_indexes = 0
 <dynamic>
 <variant>
 	binlog_path =

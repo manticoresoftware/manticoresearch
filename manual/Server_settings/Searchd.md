@@ -296,7 +296,7 @@ For a distributed table with agent mirrors in it (see more in [agent](../Creatin
 
 After beginning a new block, master may still use the accumulated values from the previous one, until the new one is half full. Thus, any previous history stops affecting the mirror choice after 1.5 times ha_period_karma seconds at most.
 
-Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using [SHOW AGENT STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-AGENT-STATUS) statement.
+Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using [SHOW AGENT STATUS](../Node_info_and_management/Node_status.md#SHOW-AGENT-STATUS) statement.
 
 
 <!-- intro -->
@@ -1085,7 +1085,12 @@ seamless_rotate = 1
 ### secondary_indexes
 <!-- example conf secondary_indexes -->
 
-Enables using secondary indexes for search queries. Note, you don't need to enable it for indexing (it's always enabled). Requires [Manticore Columnar Library](https://github.com/manticoresoftware/columnar).
+Enables using secondary indexes for search queries. Optional, default is 1 (enable use of secondary indexes on search). Note, you don't need to enable it for indexing (it's always enabled). Requires [Manticore Columnar Library](https://github.com/manticoresoftware/columnar). Three modes are supported:
+
+*  0, disable use of the secondary indexes on search, could be enabled at each query with analyzer [hints](../Searching/Options.md#FORCE-and-IGNORE-INDEX)
+*  1, enable use of the secondary indexes on search, could be disabled at each query with analyzer [hints](../Searching/Options.md#FORCE-and-IGNORE-INDEX)
+*  force, same as enable but fails to load the whole index into daemon in case of any errors during the secondary indexes loading will be reported.
+
 
 <!-- intro -->
 ##### Example:

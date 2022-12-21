@@ -2,16 +2,22 @@
 
 # Next release
 
+From this release on Manticore Search is shipped with Manticore Buddy which is a sidecar daemon written in PHP responsible for high-level functionality that doesn't require low latency or high throughput. It's completely behind the scenes and you might not even notice Buddy is running. Even though it's  invisible for the end user it was really challenging to make it easily installable and working together with the main daemon written in C++. This major change will allow the team produce a lot of new high-level functionality: shards orchestration, access control and authentication, numerous integrations: mysqldump, DBeaver etc.
+
 ### Major Changes
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases. Integrated it with [secondary indexes](../Server_settings/Searchd.md#secondary_indexes)
+* Auto-schema: you can now skip creating a table, just `INSERT` and Manticore will create it automatically for you based on the first document
 * `ALTER TABLE <table name> REBUILD SECONDARY`
 * New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_a_table/Backup_and_restore.md)
-* Added `KILL`
-* Added [FREEZE/UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup
+* SQL command `BACKUP` to do backups from inside Manticore
+* SQL command `SHOW QUERIES` as an easy way to see running queries rather than threads
+* SQL command `KILL` to kill a long-running `SELECT`
 * Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time
-* Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 
 ### Minor changes
+* SQL commands [FREEZE/UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup
+* New setting `accurate_aggregation` for maximal aggregation accuracy
+* Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 * Since Manticore supports secondary indexes since recently things got confusing since `index` may mean a secondary index, a full-text index or a plain/real-time index. To make things less confusing we are renaming the latter to `table`. These are the affected SQL / command line commands. Their old variants are deprecated, but are still working:
   - `index <table name>` => `table <table name>`
   - `searchd -i / --index` => `searchd -t / --table`
@@ -42,6 +48,10 @@
 * Debian Stretch and Ubuntu Xenial are too old and we stop supporting them
 * Centos 9
 * Debian Bookworm
+
+## Bugfixes
+* [Commit 10416ef7](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` has been broken all the time since Sphinx
+* ... tens more ...
 
 # Version 5.0.2
 Released: May 30th 2022
@@ -136,7 +146,7 @@ Released: May 18th 2022
 * **⚠️ BREAKING CHANGE**: [Pseudo sharding](../Server_settings/Searchd.md#pseudo_sharding) is enabled by default. If you want to disable it make sure you add `pseudo_sharding = 0` to section `searchd` of your Manticore configuration file.
 * Having at least one full-text field in a real-time/plain index is not mandatory anymore. You can now use Manticore even in cases not having anything to do with full-text search.
 * [Fast fetching](../Creating_a_table/Data_types.md#fast_fetch) for attributes backed by [Manticore Columnar Library](https://github.com/manticoresoftware/columnar): queries like `select * from <columnar table>` are now much faster than previously, especially if there are many fields in the schema.
-* **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Profiling_and_monitoring/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
+* **⚠️ BREAKING CHANGE**: Implicit [cutoff](../Searching/Options.md#cutoff). Manticore now doesn't spend time and resources processing data you don't need in the result set which will be returned. The downside is that it affects `total_found` in [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META) and [hits.total](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) in JSON output. It is now only accurate in case you see `total_relation: eq` while `total_relation: gte` means the actual number of matching documents is greater than the `total_found` value you've got. To retain the previous behaviour you can use search option `cutoff=0`, which makes `total_relation` always `eq`.
 * **⚠️ BREAKING CHANGE**: All full-text fields are now [stored](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields) by default. You need to use `stored_fields = ` (empty value) to make all fields non-stored (i.e. revert to the previous behaviour).
 * [#715](https://github.com/manticoresoftware/manticoresearch/issues/715) HTTP JSON supports [search options](../Searching/Options.md#General-syntax).
 
@@ -434,7 +444,7 @@ sys     0m0.001s
 - `OPTIMIZE` happens automatically. If you don't need it make sure to set `auto_optimize=0` in section `searchd` in the configuration file
 - [Issue #616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` were deprecated, now they are removed
 - for contributors: we now use Clang compiler for Linux builds as according to our tests it can build a faster Manticore Search and Manticore Columnar Library
-- if [max_matches](Searching/Options.md#max_matches) is not specified in a search query it gets updated implicitly with the lowest needed value for the sake of performance of the new columnar storage. It can affect metric `total` in [SHOW META](Profiling_and_monitoring/SHOW_META.md#SHOW-META), but not `total_found` which is the actual number of found documents.
+- if [max_matches](Searching/Options.md#max_matches) is not specified in a search query it gets updated implicitly with the lowest needed value for the sake of performance of the new columnar storage. It can affect metric `total` in [SHOW META](Node_info_and_management/SHOW_META.md#SHOW-META), but not `total_found` which is the actual number of found documents.
 
 ### Migration from Manticore 3
 - make sure you a stop Manticore 3 cleanly:
@@ -547,7 +557,7 @@ status of the query, not the server status
 
 ### Minor Changes
 - [Issue #453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer.ignore_non_plain=1](Adding_data_from_external_storages/Plain_tables_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `ignore_non_plain=1` you'll get a warning and a respective exit code.
-- [SHOW PLAN ... OPTION format=dot](Profiling_and_monitoring/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) and [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) enable visualization of full-text query plan execution. Useful for understanding complex queries.
+- [SHOW PLAN ... OPTION format=dot](Node_info_and_management/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) and [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) enable visualization of full-text query plan execution. Useful for understanding complex queries.
 
 ### Deprecations
 - `indexer --verbose` is deprecated as it never added anything to the indexer output
@@ -580,7 +590,7 @@ Per `SELECT` query the number of threads can be limited with [OPTION threads=N](
 
 * If no replication listen directive is declared, the engine will try to use ports after the defined 'sphinx' port, up to 200.
 * `listen=...:sphinx` needs to be explicit set for SphinxSE connections or SphinxAPI clients.
-* [SHOW INDEX STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`.
+* [SHOW INDEX STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`.
 * SQL command `status` now outputs `Queue\Threads` and `Tasks\Threads`.
 
 ### Deprecations:
@@ -665,7 +675,7 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 ### Minor changes
 * You can now [highlight string attributes](Searching/Highlighting.md#Highlighting-via-SQL).
 * SSL and compression support for SQL interface
-* Support of mysql client [`status`](Profiling_and_monitoring/Node_status.md#STATUS) command.
+* Support of mysql client [`status`](Node_info_and_management/Node_status.md#STATUS) command.
 * [Replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication) can now replicate external files (stopwords, exceptions etc.).
 * Filter operator [`in`](Searching/Filters.md#Set-filters) is now available via HTTP JSON interface.
 * [`expressions`](Searching/Expressions.md#expressions) in HTTP JSON.
@@ -1243,7 +1253,7 @@ development libraries.
 * proto improvements
 * Windows communication switched from wsapoll to IO completion ports
 * TFO can be used for communication between master and nodes
-* [SHOW STATUS](Profiling_and_monitoring/Node_status.md#SHOW-STATUS) now outputs to server version and mysql_version_string
+* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) now outputs to server version and mysql_version_string
 * added `docs_id` option for documents called in CALL PQ.
 * percolate queries filter can now contain expressions
 * distributed indexes can work with FEDERATED
@@ -1353,7 +1363,7 @@ In this release we've changed internal protocol used by masters and agents to sp
 * JSON queries on [HTTP API protocol](Connecting_to_the_server/HTTP.md). Supported search, insert, update, delete, replace operations. Data manipulation commands can be also bulked, also there are some limitations currently as MVA and JSON attributes can't be used for inserts, replaces or updates.
 * [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) command
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) command
-* [SHOW THREADS](Profiling_and_monitoring/SHOW_THREADS.md) can show progress of optimize, rotation or flushes.
+* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) can show progress of optimize, rotation or flushes.
 * GROUP N BY work correctly with MVA attributes
 * blackhole agents are run on separate thread to not affect master query anymore
 * implemented reference count on indexes, to avoid stalls caused by rotations and high load
@@ -1382,7 +1392,7 @@ In this release we've changed internal protocol used by masters and agents to sp
 * COUNT DISTINCT works with facet searches
 * IN can be used with JSON float arrays
 * multi-query optimization is not broken anymore by integer/float expressions
-* [SHOW META](Profiling_and_monitoring/SHOW_META.md) shows a `multiplier` row when multi-query optimization is used
+* [SHOW META](Node_info_and_management/SHOW_META.md) shows a `multiplier` row when multi-query optimization is used
 
 ### Compiling
 Manticore Search is built using cmake and the minimum gcc version required for compiling is 4.7.2.

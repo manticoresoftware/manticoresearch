@@ -26,7 +26,14 @@ bool			IsSecondaryLibLoaded();
 SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );
 std::unique_ptr<SI::Builder_i>	CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, CSphString & sError );
 
-void				SetSecondaryIndexDefault ( bool bEnabled );
-bool				GetSecondaryIndexDefault ();
+enum class SIDefault_e
+{
+	DISABLED,
+	ENABLED,
+	FORCE
+};
+
+void				SetSecondaryIndexDefault ( SIDefault_e eState );
+SIDefault_e			GetSecondaryIndexDefault ();
 
 #endif // _secondarylib_

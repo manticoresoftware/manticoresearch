@@ -267,7 +267,7 @@ bool HistogramStreamed_T<T>::Load ( CSphReader & tReader, CSphString & sError )
 	DWORD uVersion = tReader.GetDword();
 	if ( uVersion > VERSION )
 	{
-		sError.SetSprintf ( "index histogram version (%u) greater than code histogram version (%u)", uVersion, VERSION );
+		sError.SetSprintf ( "table histogram version (%u) greater than code histogram version (%u)", uVersion, VERSION );
 		return false;
 	}
 

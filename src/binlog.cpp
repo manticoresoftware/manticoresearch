@@ -307,7 +307,7 @@ bool BinlogReader_c::CheckCrc ( const char * sOp, const char * sIndexName, int64
 	ResetCrc();
 	bool bPassed = ( uRef==uCRC );
 	if ( !bPassed )
-		sphWarning ( "binlog: %s: CRC mismatch (index=%s, tid=" INT64_FMT ", pos=" INT64_FMT ")", sOp, sIndexName ? sIndexName : "", iTid, iTxnPos );
+		sphWarning ( "binlog: %s: CRC mismatch (table=%s, tid=" INT64_FMT ", pos=" INT64_FMT ")", sOp, sIndexName ? sIndexName : "", iTid, iTxnPos );
 	return bPassed;
 }
 
@@ -385,7 +385,7 @@ void Binlog_c::WriteBlopHeader ( int64_t * pTID, Blop_e eBlop, const char * szIn
 void Binlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown )
 {
 	if ( m_bReplayMode )
-		sphInfo ( "index '%s': ramchunk saved. TID=" INT64_FMT "", sIndexName, iTID );
+		sphInfo ( "table '%s': ramchunk saved. TID=" INT64_FMT "", sIndexName, iTID );
 
 	if (!IsBinlogWritable ())
 		return;
@@ -637,7 +637,7 @@ void Binlog_c::LoadMeta ()
 			sMeta.cstr(), uVersion, BINLOG_VERSION );
 
 	if ( !bLoaded64bit )
-		sphDie ( "indexes with 32-bit docids are no longer supported; recovery requires previous binary version" );
+		sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
 
 	// load list of active log files
 	ARRAY_FOREACH ( i, m_dLogFiles )
@@ -788,17 +788,18 @@ void Binlog_c::CheckDoFlush ()
 {
 	switch ( m_eOnCommit )
 	{
-	case ACTION_NONE: return;
+	case ACTION_NONE:
+		break;
+
 	case ACTION_WRITE:
-		if ( m_tWriter.HasUnwrittenData() )
-			m_tWriter.Write();
-		return;
+		m_tWriter.Write();
+		break;
+
 	case ACTION_FSYNC:
-		if ( !m_tWriter.HasUnsyncedData() )
-			return;
-		if ( m_tWriter.HasUnwrittenData() )
-			m_tWriter.Write();
+		m_tWriter.Write();
 		m_tWriter.Fsync();
+		break;
+
 	default:
 		assert(false && "wrong binlog flush action flag");
 		break;
@@ -934,17 +935,17 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	{
 		if ( tIndex.m_iPreReplayTID < tIndex.m_iMaxTID )
 		{
-			sphInfo ( "binlog: index %s: recovered from tid " INT64_FMT " to tid " INT64_FMT,
+			sphInfo ( "binlog: table %s: recovered from tid " INT64_FMT " to tid " INT64_FMT,
 				tIndex.m_sName.cstr(), tIndex.m_iPreReplayTID, tIndex.m_iMaxTID );
 
 		} else
 		{
-			sphInfo ( "binlog: index %s: skipped at tid " INT64_FMT " and max binlog tid " INT64_FMT,
+			sphInfo ( "binlog: table %s: skipped at tid " INT64_FMT " and max binlog tid " INT64_FMT,
 				tIndex.m_sName.cstr(), tIndex.m_iPreReplayTID, tIndex.m_iMaxTID );
 		}
 	}
 
-	sphInfo ( "binlog: replay stats: %d commits; %d updates, %d reconfigure; %d pq-add; %d pq-delete; %d pq-add-delete, %d indexes",
+	sphInfo ( "binlog: replay stats: %d commits; %d updates, %d reconfigure; %d pq-add; %d pq-delete; %d pq-add-delete, %d tables",
 		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[RECONFIGURE], dTotal[PQ_ADD], dTotal[PQ_DELETE],
 			dTotal[PQ_ADD_DELETE], dTotal[ADD_INDEX] );
 	sphInfo ( "binlog: finished replaying %s; %d.%d MB in %d.%03d sec",
@@ -965,7 +966,7 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	uint64_t uVal = tReader.UnzipOffset();
 	if ( (int)uVal!=tLog.m_dIndexInfos.GetLength() )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: indexadd: unexpected index id (id=" UINT64_FMT ", expected=%d, pos=" INT64_FMT ")",
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: indexadd: unexpected table id (id=" UINT64_FMT ", expected=%d, pos=" INT64_FMT ")",
 			uVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
 		return false;
 	}
@@ -984,7 +985,7 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	ARRAY_FOREACH ( i, tLog.m_dIndexInfos )
 		if ( tLog.m_dIndexInfos[i].m_sName==sName )
 		{
-			Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: duplicate index name (name=%s, dupeid=%d, pos=" INT64_FMT ")",
+			Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: duplicate table name (name=%s, dupeid=%d, pos=" INT64_FMT ")",
 				sName.cstr(), i, iTxnPos );
 			return false;
 		}
@@ -1035,7 +1036,7 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const
 
 	if ( dCache.GetLength()!=tLog.m_dIndexInfos.GetLength() )
 	{
-		sphWarning ( "binlog: cache mismatch: %d indexes cached, %d replayed",
+		sphWarning ( "binlog: cache mismatch: %d tables cached, %d replayed",
 			dCache.GetLength(), tLog.m_dIndexInfos.GetLength() );
 		return true;
 	}
@@ -1047,14 +1048,14 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const
 
 		if ( tCache.m_sName!=tIndex.m_sName )
 		{
-			sphWarning ( "binlog: cache mismatch: index %d name mismatch (%s cached, %s replayed)",
+			sphWarning ( "binlog: cache mismatch: table %d name mismatch (%s cached, %s replayed)",
 				i, tCache.m_sName.cstr(), tIndex.m_sName.cstr() );
 			continue;
 		}
 
 		if ( tCache.m_iMinTID!=tIndex.m_iMinTID || tCache.m_iMaxTID!=tIndex.m_iMaxTID )
 		{
-			sphWarning ( "binlog: cache mismatch: index %s tid ranges mismatch "
+			sphWarning ( "binlog: cache mismatch: table %s tid ranges mismatch "
 				"(cached " INT64_FMT " to " INT64_FMT ", replayed " INT64_FMT " to " INT64_FMT ")",
 				tCache.m_sName.cstr(),
 				tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
@@ -1076,7 +1077,7 @@ int Binlog_c::ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t &
 
 	if ( iVal<0 || iVal>=tLog.m_dIndexInfos.GetLength() )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: unexpected index id (id=%d, max=%d, pos=" INT64_FMT ")",
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: unexpected table id (id=%d, max=%d, pos=" INT64_FMT ")",
 			sPlace, iVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
 		return -1;
 	}
@@ -1202,7 +1203,7 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 	// could be invalid TXN in binlog
 	if ( !tReplayed.m_bValid )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (index=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",
 			OpName ( eOp ), tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
 		return false;
 	}
@@ -1240,7 +1241,7 @@ bool Binlog_c::CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, in
 {
 	if ( iTID<tIndex.m_iMaxTID )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: descending tid (index=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: descending tid (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
 			sOp, tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos );
 		return false;
 	}
@@ -1252,7 +1253,7 @@ bool Binlog_c::CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, in
 void Binlog_c::CheckTidSeq ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, CSphIndex * pIndexTID, int64_t iTxnPos ) const
 {
 	if ( pIndexTID && iTID!=pIndexTID->m_iTID+1 )
-		sphWarning ( "binlog: %s: unexpected tid (index=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
+		sphWarning ( "binlog: %s: unexpected tid (table=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
 			sOp, tIndex.m_sName.cstr(), pIndexTID->m_iTID, iTID, iTxnPos );
 }
 
@@ -1260,7 +1261,7 @@ bool Binlog_c::CheckTime ( BinlogIndexInfo_t & tIndex, const char * sOp, int64_t
 {
 	if ( tmStamp<tIndex.m_tmMax )
 	{
-		Log ( REPLAY_ACCEPT_DESC_TIMESTAMP, "binlog: %s: descending time (index=%s, lasttime=" INT64_FMT ", logtime=" INT64_FMT ", pos=" INT64_FMT ")",
+		Log ( REPLAY_ACCEPT_DESC_TIMESTAMP, "binlog: %s: descending time (table=%s, lasttime=" INT64_FMT ", logtime=" INT64_FMT ", pos=" INT64_FMT ")",
 				sOp, tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
 		return false;
 	}

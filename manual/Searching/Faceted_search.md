@@ -1298,7 +1298,7 @@ When using SQL, a search with facets returns a multiple result sets response. Th
 Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick-in for a faceted search, meaning the search query is executed only once and the facets operates on the search query result, each facet adding only a fraction of time to the total query time.
 
 
-To check if the faceted search ran in an optimized mode can be seen in [query log](../Logging/Query_logging.md), where all the logged queries will contain a `xN` string, where `N` is the number of queries that ran in the optimized group or checking the output of [SHOW META](../Profiling_and_monitoring/SHOW_META.md) statement which will exhibit a `multiplier` metric:
+To check if the faceted search ran in an optimized mode can be seen in [query log](../Logging/Query_logging.md), where all the logged queries will contain a `xN` string, where `N` is the number of queries that ran in the optimized group or checking the output of [SHOW META](../Node_info_and_management/SHOW_META.md) statement which will exhibit a `multiplier` metric:
 
 <!-- request SQL -->
 

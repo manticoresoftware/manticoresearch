@@ -237,7 +237,7 @@ bool ClusterDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSph
 		if ( j.IsStr() )
 			m_dIndexes.Add ( j.StrVal() );
 		else
-			sWarning.SetSprintf ( "index %d: name '%s' should be a string, skipped", iItem, m_sName.cstr() );
+			sWarning.SetSprintf ( "table %d: name '%s' should be a string, skipped", iItem, m_sName.cstr() );
 
 		iItem++;
 	}
@@ -275,7 +275,7 @@ bool IndexDescDistr_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, C
 	{
 		if ( !i.IsStr() )
 		{
-			sWarning = "lists of local indexes must only contain strings, skipped";
+			sWarning = "lists of local tables must only contain strings, skipped";
 			continue;
 		}
 
@@ -393,7 +393,7 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphSt
 	m_sName = tJson.Name();
 	if ( m_sName.IsEmpty() )
 	{
-		sError = "empty index name";
+		sError = "empty table name";
 		return false;
 	}
 
@@ -412,10 +412,10 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphSt
 	{
 		bool bParseOk = m_tDistr.Parse ( tJson, sWarning, sError );
 		if ( !sError.IsEmpty() )
-			sError.SetSprintf ( "index %s: %s", m_sName.cstr(), sError.cstr() );
+			sError.SetSprintf ( "table %s: %s", m_sName.cstr(), sError.cstr() );
 
 		if ( !sWarning.IsEmpty() )
-			sWarning.SetSprintf ( "index %s: %s", m_sName.cstr(), sWarning.cstr() );
+			sWarning.SetSprintf ( "table %s: %s", m_sName.cstr(), sWarning.cstr() );
 
 		if ( !bParseOk )
 			return false;
@@ -506,12 +506,12 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 		CSphString sWarning;
 		if ( !tIndex.Parse ( i, sWarning, sError ) )
 		{
-			sphWarning ( "index '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
+			sphWarning ( "table '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
 			return false;
 		}
 
 		if ( !sWarning.IsEmpty() )
-			sphWarning ( "index '%s'(%d) warning: %s", i.Name(), dIndexes.GetLength(), sWarning.cstr() );
+			sphWarning ( "table '%s'(%d) warning: %s", i.Name(), dIndexes.GetLength(), sWarning.cstr() );
 
 		dIndexes.Add(tIndex);
 	}
@@ -535,7 +535,7 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 		iCluster++;
 	}
 
-	sphLogDebug ( "config loaded, indexes %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
+	sphLogDebug ( "config loaded, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
 
 	return true;
 }
@@ -588,7 +588,7 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 
 	unlink ( sOld.cstr() );
 
-	sphLogDebug ( "config saved, indexes %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
+	sphLogDebug ( "config saved, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
 
 	return true;
 }
@@ -625,10 +625,10 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 		iCounter += ( eAdd== ADD_NEEDLOAD ? 1 : 0 );
 
 		for ( const auto & i : dWarnings )
-			sphWarning ( "index '%s': %s", tIndex.m_sName.cstr(), i.cstr() );
+			sphWarning ( "table '%s': %s", tIndex.m_sName.cstr(), i.cstr() );
 
 		if ( eAdd==ADD_ERROR )
-			sphWarning ( "index '%s': %s - NOT SERVING", tIndex.m_sName.cstr(), sError.cstr() );
+			sphWarning ( "table '%s': %s - NOT SERVING", tIndex.m_sName.cstr(), sError.cstr() );
 	}
 }
 
@@ -657,7 +657,7 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 
 	SmallStringHash_T<IndexDesc_t*> hConfigLocal;
 	SccRL_t tCfgRLock { g_tCfgIndexesLock };
-	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc ) { hConfigLocal.Add ( &tDesc, tDesc.m_sName ); } );
+	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc ) { if (tDesc.m_eType!=IndexType_e::DISTR) hConfigLocal.Add ( &tDesc, tDesc.m_sName ); } );
 	for_each ( *hLocals, [&hConfigLocal] ( auto& tIt ) { hConfigLocal.Delete ( tIt.first ); } );
 
 	// keep indexes loaded from JSON but disabled due to errors
@@ -731,7 +731,7 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 
 	if ( hConf.Exists("index") )
 	{
-		sError.SetSprintf ( "'data_dir' cannot be mixed with index declarations in '%s'", sConfigFile.cstr() );
+		sError.SetSprintf ( "'data_dir' cannot be mixed with table declarations in '%s'", sConfigFile.cstr() );
 		return false;
 	}
 
@@ -950,13 +950,13 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 	// checks for source index
 	if ( !dFoundFiles.GetLength() )
 	{
-		sError = "no index files found";
+		sError = "no table files found";
 		return false;
 	}
 
 	if ( !dFoundFiles.any_of ( [] ( const CSphString & sFile ) { return sFile.Ends ( ".meta" ); } ) )
 	{
-		sError.SetSprintf ( "missing %s.meta index file", sPathToIndex.cstr() );
+		sError.SetSprintf ( "missing %s.meta table file", sPathToIndex.cstr() );
 		return false;
 	}
 
@@ -1160,7 +1160,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 		if ( !PrepareDirForNewIndex ( sPath, sIndexPath, sIndex, sError ) )
 		{
 			if ( HasConfigLocal ( sIndex ) )
-				sError.SetSprintf ( "%s (the index may be corrupted, refer to Manticore log)", sError.cstr() );
+				sError.SetSprintf ( "%s (the table may be corrupted, refer to Manticore log)", sError.cstr() );
 			return false;
 		}
 
@@ -1262,7 +1262,7 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 	auto pDistr = GetDistr(sIndex);
 	if ( !pDistr )
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unknown distributed index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed: unknown distributed table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -1289,20 +1289,20 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	auto pServed = GetServed(sIndex);
 	if ( !pServed )
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unknown local index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed: unknown local table '%s'", sIndex.cstr() );
 		return false;
 	}
 
 	if ( ServedDesc_t::IsCluster ( pServed ) )
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster table '%s'", sIndex.cstr() );
 		return false;
 	}
 
 	WIdx_T<RtIndex_i*> pRt { pServed };
 	if ( !pRt )
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unknown local index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed: unknown local table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -1336,14 +1336,14 @@ bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sErr
 		if ( bIfExists )
 			return true;
 
-		sError.SetSprintf ( "DROP TABLE failed: unknown index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed: unknown table '%s'", sIndex.cstr() );
 		return false;
 	}
 
 	// we are unable to roll back the drop at this point
 	if ( !SaveConfigInt(sError) )
 	{
-		sError.SetSprintf ( "DROP TABLE failed for index '%s': %s", sIndex.cstr(), sError.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed for table '%s': %s", sIndex.cstr(), sError.cstr() );
 		return false;
 	}
 

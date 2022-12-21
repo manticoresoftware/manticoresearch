@@ -32,8 +32,8 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SPT,	".spt",		53,	true,	true,	"docid lookup table" },
 	{ SPH_EXT_SPHI,	".sphi",	53,	true,	true,	"secondary index histograms" },
 	{ SPH_EXT_SPDS, ".spds",	57, true,	true,	"document storage" },
-	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the index" },
-	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"index runtime settings" },
+	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the table" },
+	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"table runtime settings" },
 	{ SPH_EXT_SPIDX,	".spidx",	62,	true,	true,	"secondary index" },
 };
 
@@ -66,13 +66,13 @@ CSphString IndexFiles_c::FatalMsg ( const char * sMsg )
 		if ( m_sIndexName.IsEmpty () )
 			sFatalMsg.SetSprintf ( "%s: %s", sMsg, ErrorMsg () );
 		else
-			sFatalMsg.SetSprintf ( "%s index '%s': %s", sMsg, m_sIndexName.cstr(), ErrorMsg() );
+			sFatalMsg.SetSprintf ( "%s table '%s': %s", sMsg, m_sIndexName.cstr(), ErrorMsg() );
 	} else
 	{
 		if ( m_sIndexName.IsEmpty () )
 			sFatalMsg.SetSprintf ( "%s", ErrorMsg () );
 		else
-			sFatalMsg.SetSprintf ( "index '%s': %s", m_sIndexName.cstr (), ErrorMsg () );
+			sFatalMsg.SetSprintf ( "table '%s': %s", m_sIndexName.cstr (), ErrorMsg () );
 	}
 	return sFatalMsg;
 }

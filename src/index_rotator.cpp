@@ -77,7 +77,7 @@ private:
 		switch ( m_pIdx->RenameEx ( sTo ) )
 		{
 		case CSphIndex::RE_FATAL: // not just failed, but also rollback wasn't success. Source index is damaged!
-			return ThrowError ( SphSprintf ( "rename to '%s' failed: %s; rollback also failed, INDEX UNUSABLE", szExt, m_pIdx->GetLastError().cstr() ), true );
+			return ThrowError ( SphSprintf ( "rename to '%s' failed: %s; rollback also failed, TABLE UNUSABLE", szExt, m_pIdx->GetLastError().cstr() ), true );
 		case CSphIndex::RE_FAIL:
 			return ThrowError ( SphSprintf ( "rename to '%s' failed: %s", szExt, m_pIdx->GetLastError().cstr() ) );
 		default:
@@ -163,7 +163,7 @@ private:
 
 		// backup failed.
 		if ( m_tFiles.IsFatal() )
-			return ThrowError ( SphSprintf ( "'%s' to '%s' rename failed: %s; rollback also failed, INDEX UNUSABLE", szFromExt, szToExt, m_tFiles.FatalMsg ( "rotating" ).cstr() ), true );
+			return ThrowError ( SphSprintf ( "'%s' to '%s' rename failed: %s; rollback also failed, TABLE UNUSABLE", szFromExt, szToExt, m_tFiles.FatalMsg ( "rotating" ).cstr() ), true );
 		return ThrowError ( SphSprintf ( "'%s' to '%s' rename failed: %s", szFromExt, szToExt, m_tFiles.ErrorMsg() ) );
 	}
 

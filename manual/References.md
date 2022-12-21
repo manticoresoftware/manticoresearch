@@ -10,8 +10,8 @@
 * [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
 * [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
 * [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
-* [SHOW TABLE STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
-* [SHOW TABLE SETTINGS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
+* [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
+* [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
 
 ##### Data management
 * [INSERT](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
@@ -30,10 +30,10 @@
   * [FACET](Searching/Faceted_search.md) - Faceted search
   * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
 * [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself
-* [SHOW META](Profiling_and_monitoring/SHOW_META.md) - Shows extended information about executed query
-* [SHOW PROFILE](Profiling_and_monitoring/Profiling/Query_profile.md) - Shows profiling information about executed query
+* [SHOW META](Node_info_and_management/SHOW_META.md) - Shows extended information about executed query
+* [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - Shows profiling information about executed query
 * [SHOW PLAN](Searching/Full_text_matching/Profiling.md#Profiling-the-query-tree-in-SQL) - Shows query execution plan after the query was executed
-* [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS.md) - Shows warnings from the latest query
+* [SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md) - Shows warnings from the latest query
 
 ##### Flushing misc things
 * [FLUSH ATTRIBUTES](Securing_and_compacting_a_table/Flushing_attributes.md) - Forces flushing updated attributes to disk
@@ -78,9 +78,9 @@
 * [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Reloads all plugins from a given library
 
 ##### Server status
-* [SHOW STATUS](Profiling_and_monitoring/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
-* [SHOW THREADS](Profiling_and_monitoring/SHOW_THREADS.md) - Lists all currently active client threads
-* [SHOW VARIABLES](Profiling_and_monitoring/SHOW_VARIABLES.md) - Lists server-wide variables and their values
+* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
+* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Lists all currently active client threads
+* [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Lists server-wide variables and their values
 
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP

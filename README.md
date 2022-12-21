@@ -12,7 +12,8 @@
   <a href="https://play.manticoresearch.com">Courses</a> •
   <a href="https://forum.manticoresearch.com">Forum</a> •
   <a href="https://slack.manticoresearch.com">Slack</a> •
-  <a href="https://t.me/manticore_chat">Telegram</a> •
+  <a href="https://t.me/manticoresearch_en">Telegram (En)</a> •
+  <a href="https://t.me/manticore_chat">Telegram (Ru)</a> •
   <a href="https://twitter.com/manticoresearch">Twitter</a>
 </h3>
 
@@ -173,7 +174,8 @@ See [instruction here](https://manual.manticoresearch.com/Installation/MacOS#Fro
   * [Interactive courses](https://play.manticoresearch.com)
   * [Manticore Community Forum](https://forum.manticoresearch.com/)
   * [Public Slack chat](http://slack.manticoresearch.com/)
-  * [Public Telegram chat](https://twitter.com/manticoresearch)
+  * [Public Telegram chat (En)](https://twitter.com/manticoresearch_en)
+  * [Public Telegram chat (Ru)](https://twitter.com/manticore_chat)
   * [Bug tracker](https://github.com/manticoresoftware/manticore/issues)
 
 # Third-party integrations

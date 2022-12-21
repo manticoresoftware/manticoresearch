@@ -321,7 +321,7 @@ The `rt_mem_limit` is never exceeded, but the actual RAM chunk can be significan
 * Upon saving a new disk chunk we update the `rt_mem_limit` rate.
 * The rate is reset to 50% as soon as you restart the searchd.
 
-For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see table's current rate in [SHOW TABLE <tbl> STATUS](Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS.md).
+For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see table's current rate in [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md).
 
 ##### How to change rt_mem_limit and optimize_cutoff
 

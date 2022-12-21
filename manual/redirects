@@ -1,6 +1,6 @@
 ^Deleting_an_index(.*?)$ Deleting_a_table$1
-^Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS(.*?)$ Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_STATUS$1
-^Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_SETTINGS(.*?)$ Profiling_and_monitoring/Table_settings_and_status/SHOW_TABLE_SETTINGS$1 
+^Node_info_and_management/Index_settings_and_status/SHOW_INDEX_STATUS(.*?)$ Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS$1
+^Node_info_and_management/Index_settings_and_status/SHOW_INDEX_SETTINGS(.*?)$ Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS$1 
 ^Emptying_an_index(.*?)$ Emptying_a_table$1
 ^Adding_data_from_external_storages/Rotating_an_index(.*?)$ ^Adding_data_from_external_storages/Rotating_a_table$1
 ^Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data(.*?)$ Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data$1
@@ -33,3 +33,4 @@
 ^Securing_and_compacting_an_index/Backup_and_restore(.*?)$ Securing_and_compacting_a_table/Backup_and_restore$1
 ^Securing_and_compacting_an_index/RT_index_structure(.*?)$ Securing_and_compacting_a_table/RT_table_structure$1
 ^Securing_and_compacting_an_index/Compacting_an_index(.*?)$ Securing_and_compacting_a_table/Compacting_a_table$1
+^Profiling_and_monitoring/(.*?)$ Node_info_and_management/$1

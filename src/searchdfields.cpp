@@ -144,7 +144,7 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 
 		if ( !pLocal && !pDist )
 		{
-			sError.SetSprintf ( "no such index %s", sIndex.cstr() );
+			sError.SetSprintf ( "no such table %s", sIndex.cstr() );
 			return false;
 		}
 
@@ -176,7 +176,7 @@ bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & t
 	auto pServed = GetServed ( sIndexName );
 	if ( !pServed )
 	{
-		tRes.m_sError.SetSprintf ( "no such index %s", sIndexName.cstr() );
+		tRes.m_sError.SetSprintf ( "no such table %s", sIndexName.cstr() );
 		return false;
 	}
 

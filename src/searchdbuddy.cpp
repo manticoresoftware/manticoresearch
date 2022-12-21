@@ -52,6 +52,7 @@ static const int g_iStartMaxTimeout = 3; // max start timeout 3 sec
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
 static void BuddyNextTick();
+static CSphString BuddyGetPath ( const CSphString & sPath, bool bHasBuddyPath );
 
 #if _WIN32
 struct BuddyWindow_t : boost::process::detail::handler_base
@@ -265,8 +266,9 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 }
 
 
-void BuddyStart ( const CSphString & sPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry )
+void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry )
 {
+	CSphString sPath = BuddyGetPath ( sConfigPath, bHasBuddyPath );
 	if ( sPath.IsEmpty() )
 		return;
 
@@ -443,7 +445,7 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 
 	if ( !tReplyRaw.first )
 	{
-		sphWarning ( "[BUDDY] error: %s", tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return tRes;
 	}
 
@@ -451,12 +453,12 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 	BuddyReply_t tReplyParsed;
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
-		sphWarning ( "[BUDDY] %s: %s", sError.cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
 	{
-		sphWarning ( "[BUDDY] wrong response type %s: %s", bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return tRes;
 	}
 
@@ -486,7 +488,7 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 
 	if ( !tReplyRaw.first )
 	{
-		sphWarning ( "[BUDDY] error: %s", tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 
@@ -494,19 +496,19 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 	BuddyReply_t tReplyParsed;
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
-		sphWarning ( "[BUDDY] %s: %s", sError.cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="sql response" )
 	{
-		sphWarning ( "[BUDDY] wrong response type %s: %s", bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 
 	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
 	{
 		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
-		sphWarning ( "[BUDDY] wrong reply format - %s: %s", sReplyType, tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );
 		return bKeepProfile;
 	}
 
@@ -517,4 +519,56 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sQuery.first, *tBuddyRows );
 	return bKeepProfile;
+}
+
+#ifdef _WIN32
+static CSphString g_sDefaultBuddyName ( "manticore-buddy.phar" );
+#else
+static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
+#endif
+static CSphString g_sDefaultBuddyExecName ( "manticore-executor.exe" );
+
+static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
+{
+#ifdef _WIN32
+		assert ( !sExecPath.IsEmpty() );
+		CSphString sFullPath;
+		sFullPath.SetSprintf ( "\"%s\" \"%s\"", sExecPath.cstr(), sBuddyPath.cstr() );
+		return sFullPath;
+#else
+		return sBuddyPath.cstr();
+#endif
+}
+
+CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
+{
+	if ( bHasBuddyPath )
+		return sConfigPath;
+
+	CSphString sExecPath;
+	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
+	// check executor first
+#ifdef _WIN32
+	sExecPath.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyExecName.cstr() );
+	if ( !sphFileExists ( sExecPath.cstr() ) )
+	{
+		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyExecName.cstr(), sExecPath.cstr() );
+		return CSphString();
+	}
+#endif
+
+	CSphString sPathBuddy2Module;
+	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
+	if ( sphFileExists ( sPathBuddy2Module.cstr() ) )
+		return GetFullBuddyPath ( sExecPath, sPathBuddy2Module );
+
+	// check at the daemon location / cwd
+	CSphString sPathBuddy2Cwd;
+	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyName.cstr() );
+	if ( sphFileExists ( sPathBuddy2Cwd.cstr() ) )
+		return GetFullBuddyPath ( sExecPath, sPathBuddy2Cwd );
+
+	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
+
+	return CSphString();
 }

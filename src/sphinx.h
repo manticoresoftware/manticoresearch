@@ -1107,7 +1107,9 @@ public:
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
+
 	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const;
+	virtual bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
 	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 
 public:

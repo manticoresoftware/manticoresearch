@@ -1154,6 +1154,8 @@ public:
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int* pAffected = nullptr );
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
+	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
+
 	// helpers
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -6791,7 +6793,7 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 }
 
 
-static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard, int iConcurrency )
+static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard )
 {
 	int64_t iMaxCountDistinct = CalcMaxCountDistinct ( tQuery, tGuard );
 
@@ -6804,7 +6806,7 @@ static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery
 	ARRAY_FOREACH ( i, dMetrics )
 	{
 		bool bForceSingleThread = false;
-		dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 }, { &iMaxCountDistinct, 1 }, iConcurrency, bForceSingleThread );
+		dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 }, { &iMaxCountDistinct, 1 }, tArgs.m_iThreads, bForceSingleThread );
 		if ( bForceSingleThread )
 			return false;
 
@@ -6849,8 +6851,8 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	IntVec_t dSplits {iJobs};
-	int iThreads = pDispatcher->GetConcurrency();
-	if ( !CalcDiskChunkSplits ( dSplits, iJobs, tQuery, tArgs, tGuard, iThreads ) )
+	int iThreads = tArgs.m_iThreads;
+	if ( !CalcDiskChunkSplits ( dSplits, iJobs, tQuery, tArgs, tGuard ) )
 		iThreads = 1;
 
 	tClonableCtx.LimitConcurrency(iThreads);
@@ -8592,6 +8594,28 @@ int RtIndex_c::ChunkIDByChunkIdx ( int iChunkIdx ) const
 
 	return m_tRtChunks.DiskChunks()->operator[] ( iChunkIdx )->Cidx().m_iChunk;
 }
+
+
+int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
+{
+	// fixme! we don't account for distinct values in RAM chunk
+	auto pDiskChunks = m_tRtChunks.DiskChunks();
+	if ( !pDiskChunks || !pDiskChunks->GetLength() )
+		return -1;
+
+	int64_t iSumCountDistinct = 0;
+	for ( const auto & i : *pDiskChunks )
+	{
+		int64_t iCountDistinct = i->Cidx().GetCountDistinct(sAttr);
+		if ( iCountDistinct==-1 )
+			return -1;
+
+		iSumCountDistinct += iCountDistinct;
+	}
+
+	return iSumCountDistinct;
+}
+
 
 void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 {

@@ -1271,7 +1271,6 @@ public:
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
-	bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
 
 private:
@@ -2040,8 +2039,75 @@ void CSphIndex::SetMutableSettings ( const MutableIndexSettings_c & tSettings )
 }
 
 
+static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
+{
+	if ( !tQuery.m_sGroupDistinct.IsEmpty() )
+		return true;
+
+	// FIXME: also need to handle 
+	// 1. Stateful UDFs
+	// 2. Update/delete queue
+
+	return false;
+}
+
+
+bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const
+{
+	ARRAY_FOREACH ( i, dQueries )
+	{
+		auto & tQuery = dQueries[i];
+
+		// check for potential non-clonable sorters (we don't have actual sorters at this stage)
+		if ( DetectNonClonableSorters(tQuery) )
+			return true;
+
+		// at this point we are trying to decide how many threads this index gets
+		// we did not correct max_matches yet (to achieve max grouping accuracy)
+		// but if increasing max_matches would be enough to achieve max accuracy, there's no need to turn off multithreading
+		// that's why now we try to guess if increasing max_matches is enough
+		int iMaxCountDistinct = dMaxCountDistinct[i];
+		bool bAccurateAggregation = tQuery.m_bExplicitAccurateAggregation ? tQuery.m_bAccurateAggregation : GetAccurateAggregationDefault();
+		if ( bAccurateAggregation && !tQuery.m_sGroupBy.IsEmpty() )
+		{
+			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, m_tSchema );
+			if ( iGroupby>0 )
+			{
+				if ( iMaxCountDistinct==-1 )
+					iMaxCountDistinct = GetCountDistinct ( tQuery.m_sGroupBy );
+
+				if ( iMaxCountDistinct==-1 )
+				{
+					bForceSingleThread = true;
+					return true;	// no info on max_matches; disable ps
+				}
+				else
+				{
+					if ( tQuery.m_bExplicitMaxMatches && iMaxCountDistinct > tQuery.m_iMaxMatches )
+					{
+						bForceSingleThread = true;
+						return true;	// can't change max_matches and not enough were set; disable ps
+					}
+
+					if ( iMaxCountDistinct > tQuery.m_iMaxMatchThresh )
+					{
+						bForceSingleThread = true;
+						return true; // max_matches can't be increased; disable ps
+					}
+				}
+			}
+		}
+	}
+
+	return GetStats().m_iTotalDocuments<=g_iSplitThresh;
+}
+
+
 int64_t CSphIndex::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
+	if ( MustRunInSingleThread ( dQueries, dMaxCountDistinct, bForceSingleThread ) )
+		return -1;
+
 	int64_t iTotalDocs = GetStats().m_iTotalDocuments;
 	return iTotalDocs > g_iSplitThresh ? iTotalDocs : -1;
 }
@@ -2945,19 +3011,6 @@ static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tSc
 }
 
 
-static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
-{
-	if ( !tQuery.m_sGroupDistinct.IsEmpty() )
-		return true;
-
-	// FIXME: also need to handle 
-	// 1. Stateful UDFs
-	// 2. Update/delete queue
-
-	return false;
-}
-
-
 bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads, bool & bFastQuery ) const
 {
 	// if there's a filter tree, we don't have any indexes and there's no point in wasting time to eval them
@@ -2984,57 +3037,6 @@ bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads
 		bFastQuery = IsQueryFast(tQuery);
 
 	return true;
-}
-
-
-bool CSphIndex_VLN::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const
-{
-	ARRAY_FOREACH ( i, dQueries )
-	{
-		auto & tQuery = dQueries[i];
-
-		// check for potential non-clonable sorters (we don't have actual sorters at this stage)
-		if ( DetectNonClonableSorters(tQuery) )
-			return true;
-
-		// at this point we are trying to decide how many threads this index gets
-		// we did not correct max_matches yet (to achieve max grouping accuracy)
-		// but if increasing max_matches would be enough to achieve max accuracy, there's no need to turn off multithreading
-		// that's why now we try to guess if increasing max_matches is enough
-		int iMaxCountDistinct = dMaxCountDistinct[i];
-		bool bAccurateAggregation = tQuery.m_bExplicitAccurateAggregation ? tQuery.m_bAccurateAggregation : GetAccurateAggregationDefault();
-		if ( bAccurateAggregation && !tQuery.m_sGroupBy.IsEmpty() )
-		{
-			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, m_tSchema );
-			if ( iGroupby>0 )
-			{
-				if ( iMaxCountDistinct==-1 )
-					iMaxCountDistinct = GetCountDistinct ( tQuery.m_sGroupBy );
-
-				if ( iMaxCountDistinct==-1 )
-				{
-					bForceSingleThread = true;
-					return true;	// no info on max_matches; disable ps
-				}
-				else
-				{
-					if ( tQuery.m_bExplicitMaxMatches && iMaxCountDistinct > tQuery.m_iMaxMatches )
-					{
-						bForceSingleThread = true;
-						return true;	// can't change max_matches and not enough were set; disable ps
-					}
-
-					if ( iMaxCountDistinct > tQuery.m_iMaxMatchThresh )
-					{
-						bForceSingleThread = true;
-						return true; // max_matches can't be increased; disable ps
-					}
-				}
-			}
-		}
-	}
-
-	return GetStats().m_iTotalDocuments<=g_iSplitThresh;
 }
 
 

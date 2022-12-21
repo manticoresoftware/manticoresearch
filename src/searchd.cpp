@@ -5779,15 +5779,6 @@ void SearchHandler_c::CalcMaxThreadsPerIndex ( CSphVector<std::pair<int64_t,int>
 
 void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 {
-	if ( !g_bSplit )
-	{
-		// let's set the 'force single thread' flag for all indexes to make sure max_matches won't be increased when it is not necessary
-		for ( auto & i : m_dPSInfo )
-			i = { 1, 1, true };
-
-		return;
-	}
-
 	if ( !iConcurrency )
 		iConcurrency = g_iThreads;
 
@@ -5800,7 +5791,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	// FIXME! what about PQ?
 	int64_t iTotalMetric = 0;
 	int iSingleSplits = 0;
-	int iEnabled = 0;
+	int iMTSplits = 0;
 
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
@@ -5810,21 +5801,32 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 			continue;
 
 		auto & tPSInfo = m_dPSInfo[iLocal];
-		auto & tSplitData = dSplitData[iLocal];
-		tPSInfo.m_iMaxThreads = tSplitData.second;
-		int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
-		if ( iMetric==-1 )
-		{
-			iSingleSplits++;
-			continue;
-		}
 
-		tSplitData.first = iMetric;
-		iTotalMetric += iMetric;
-		iEnabled++;
+		if ( g_bSplit || RIdx_c(pIndex)->IsRT() )
+		{
+			// do metric calcs
+			auto & tSplitData = dSplitData[iLocal];
+			tPSInfo.m_iMaxThreads = tSplitData.second;
+			int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
+			if ( iMetric==-1 )
+				iSingleSplits++;
+			else
+			{
+				tSplitData.first = iMetric;
+				iTotalMetric += iMetric;
+				iMTSplits++;
+			}
+		}
+		else
+		{
+			// don't do metric calcs; we are guaranteed to have one thread
+			// set the 'force single thread' flag to make sure max_matches won't be increased when it is not necessary
+			tPSInfo = { 1, 1, true };
+			iSingleSplits++;
+		}
 	}
 
-	if ( iConcurrency>iSingleSplits+iEnabled )
+	if ( iConcurrency>iSingleSplits+iMTSplits )
 	{
 		int iLeft = iConcurrency-iSingleSplits;
 		ARRAY_FOREACH ( i, dSplitData )
@@ -6006,7 +6008,7 @@ void SearchHandler_c::RunLocalSearches ()
 	GlobalSorters_c tGlobalSorters ( m_dNQueries, dLocalIndexes );
 
 	m_dPSInfo.Resize(iNumLocals);
-	m_dPSInfo.Fill ( { 1, false } );
+	m_dPSInfo.Fill ( { 1, 1, false } );
 
 	CSphFixedVector<int> dOrder { iNumLocals };
 	for ( int i = 0; i<iNumLocals; ++i )

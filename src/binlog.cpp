@@ -788,17 +788,18 @@ void Binlog_c::CheckDoFlush ()
 {
 	switch ( m_eOnCommit )
 	{
-	case ACTION_NONE: return;
+	case ACTION_NONE:
+		break;
+
 	case ACTION_WRITE:
-		if ( m_tWriter.HasUnwrittenData() )
-			m_tWriter.Write();
-		return;
+		m_tWriter.Write();
+		break;
+
 	case ACTION_FSYNC:
-		if ( !m_tWriter.HasUnsyncedData() )
-			return;
-		if ( m_tWriter.HasUnwrittenData() )
-			m_tWriter.Write();
+		m_tWriter.Write();
 		m_tWriter.Fsync();
+		break;
+
 	default:
 		assert(false && "wrong binlog flush action flag");
 		break;

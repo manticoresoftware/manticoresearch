@@ -620,9 +620,6 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 	if ( !IsSecondaryLibLoaded() || GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
 		return false;
 
-	if ( !pHint || ( pHint && *pHint!=IndexHint_e::FORCE ) )
-		return false;
-
 	return true;
 }
 

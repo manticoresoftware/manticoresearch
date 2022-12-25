@@ -6,6 +6,7 @@
 <requires>
 	<icu/>
 	<force-rt/>
+	<columnar/>
 </requires>
 
 <skip_indexer/>
@@ -146,6 +147,19 @@ searchd
 	
 	<!-- regression crash on create table with empty exceptions -->
 	create table test ( f1 text ) exceptions='';
+	drop table test;
+
+	<!-- regression for crash on facet by json vs columnar -->
+	create table test(pos text, ipaddress json)  min_infix_len='1' engine='columnar';
+	insert into test(pos,ipaddress) values ('a','{ data: [\"127.0.0.1\",\"192.168.0.1\"] }'),('b','{ data: [\"127.0.0.2\",\"192.168.0.1\"] }');
+	select * from test;
+	select * from test facet ipaddress.data order by count(*) desc limit 10;;
+	drop table test;
+
+	create table test(pos text, ipaddress json)  min_infix_len='1';
+	insert into test(pos,ipaddress) values ('a','{ data: [\"127.0.0.1\",\"192.168.0.1\"] }'),('b','{ data: [\"127.0.0.2\",\"192.168.0.1\"] }');
+	select * from test;
+	select * from test facet ipaddress.data order by count(*) desc limit 10;;
 	drop table test;
 </sphinxql>
 </queries>

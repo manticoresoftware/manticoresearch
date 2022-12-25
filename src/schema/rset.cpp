@@ -217,10 +217,9 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 
 	// we may be removing our static attribute after expressions have been created and that invalidates their dependent cols (if any)
 	// we need to update those
-	int iExtraAttrId = ActualLen();
-	for ( auto& i : m_dExtraAttrs )
+	for ( auto & i : m_dExtraAttrs )
 		if ( i.m_pExpr )
-			i.m_pExpr->Command ( SPH_EXPR_UPDATE_DEPENDENT_COLS, &iExtraAttrId );
+			i.m_pExpr->Command ( SPH_EXPR_UPDATE_DEPENDENT_COLS, &iAttr );
 
 	m_dRemoved.Add ( iAttr );
 	m_dRemoved.Uniq();

@@ -1566,7 +1566,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		}
 
 		WORD uVer = tReader.GetVal<WORD>();
-		if ( uVer!=g_iReplicateCommandVer )
+		if ( uVer>g_iReplicateCommandVer )
 		{
 			sphWarning ( "replication command %d, version mismatch %d, got %d", (int)eCommand, g_iReplicateCommandVer, (int)uVer );
 			return false;
@@ -1639,7 +1639,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			break;
 
 		case ReplicationCommand_e::RT_TRX:
-			tAcc.LoadRtTrx ( pRequest, iRequestLen );
+			tAcc.LoadRtTrx ( pRequest, iRequestLen, uVer );
 			sphLogDebugRpl ( "rt trx, table '%s'", pCmd->m_sIndex.cstr() );
 			break;
 

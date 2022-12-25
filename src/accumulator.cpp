@@ -505,12 +505,13 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID = 0;
 }
 
-void RtAccum_t::LoadRtTrx ( const BYTE* pData, int iLen )
+void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen, DWORD uVer )
 {
 	MemoryReader_c tReader ( pData, iLen );
 	m_bReplace = !!tReader.GetVal<BYTE>();
 	tReader.GetVal ( m_uAccumDocs );
-	tReader.GetVal ( m_iAccumBytes );
+	if ( uVer>=0x106 )
+		tReader.GetVal ( m_iAccumBytes );
 
 	// insert and replace
 	m_dAccum.Resize ( tReader.GetDword() );

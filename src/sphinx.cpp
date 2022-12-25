@@ -3051,6 +3051,13 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 	{
 		auto & tQuery = dQueries[i];
 
+		// only process fullscan queries
+		if ( !tQuery.m_sQuery.IsEmpty() )
+		{
+			bAllFast = false;
+			continue;
+		}
+
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
 			continue;
 		

@@ -497,8 +497,6 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 
 	LoadCompatHttp ( (const char*)dData.Begin() );
 
-	// FIXME!!! check for path duplicates
-	// check indexes
 	JsonObj_c tIndexes = tRoot.GetItem("indexes");
 	for ( const auto & i : tIndexes )
 	{
@@ -513,26 +511,44 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "table '%s'(%d) warning: %s", i.Name(), dIndexes.GetLength(), sWarning.cstr() );
 
+		int iExists = dIndexes.GetFirst ( [&] ( const IndexDesc_t & tItem ) { return ( tItem.m_sName==tIndex.m_sName || tItem.m_sPath==tIndex.m_sPath ); } );
+		if ( iExists!=-1 )
+		{
+			const IndexDesc_t & tItem = dIndexes[iExists];
+			sphWarning ( "table with the same %s already exists: %s, %s, SKIPPED", ( tItem.m_sName==tIndex.m_sName ? "name" : "path" ), tIndex.m_sName.scstr(), tIndex.m_sPath.scstr() );
+			continue;
+		}
+
 		dIndexes.Add(tIndex);
 	}
 
 	// check clusters
 	JsonObj_c tClusters = tRoot.GetItem("clusters");
-	int iCluster = 0;
-	for ( const auto & i : tClusters )
+	for ( const auto & tIt : tClusters )
 	{
 		ClusterDesc_t tCluster;
 	
 		CSphString sClusterError, sClusterWarning;
-		if ( !tCluster.Parse ( i, sClusterWarning, sClusterError ) )
-			sphWarning ( "cluster '%s'(%d): removed from JSON config, %s", tCluster.m_sName.cstr(), iCluster, sClusterError.cstr() );
-		else
-			dClusters.Add(tCluster);
+		bool bParsed = tCluster.Parse ( tIt, sClusterWarning, sClusterError );
 
 		if ( !sClusterWarning.IsEmpty() )
-			sphWarning ( "cluster '%s'(%d): %s", tCluster.m_sName.cstr(), iCluster, sClusterWarning.cstr() );
+			sphWarning ( "cluster '%s': %s", tCluster.m_sName.cstr(), sClusterWarning.cstr() );
 
-		iCluster++;
+		if ( !bParsed )
+		{
+			sphWarning ( "cluster '%s': disabled at JSON config, %s", tCluster.m_sName.cstr(), sClusterError.cstr() );
+			continue;
+		}
+
+		int iExists = dClusters.GetFirst ( [&] ( const ClusterDesc_t & tItem ) { return ( tItem.m_sName==tCluster.m_sName || tItem.m_sPath==tCluster.m_sPath ); } );
+		if ( iExists!=-1 )
+		{
+			const ClusterDesc_t & tItem = dClusters[iExists];
+			sphWarning ( "cluster with the same %s already exists: %s, %s, SKIPPED", ( tItem.m_sName==tCluster.m_sName ? "name" : "path" ), tCluster.m_sName.scstr(), tCluster.m_sPath.scstr() );
+			continue;
+		}
+
+		dClusters.Add ( tCluster );
 	}
 
 	sphLogDebug ( "config loaded, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
@@ -779,6 +795,9 @@ bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, C
 	}
 
 	SccWL_t tCfgWLock { g_tCfgIndexesLock };
+	// reset index and cluster descs on restart (watchdog resurrect)
+	g_dCfgClusters.Reset();
+	g_dCfgIndexes.Reset();
 	if ( !ConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
 	{
 		sError.SetSprintf ( "failed to use JSON config %s: %s", g_sConfigPath.cstr(), sError.cstr() );

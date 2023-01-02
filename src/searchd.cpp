@@ -17684,6 +17684,7 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 	// check name
 	if ( bCheckDupe && IndexIsServed ( szIndexName ) )
 	{
+		sError = "duplicate name";
 		sphWarning ( "table '%s': duplicate name - NOT SERVING", szIndexName );
 		return { ADD_ERROR, nullptr };
 	}

@@ -1,12 +1,12 @@
 # Configure Galera build
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
-set ( GALERA_REPO "https://github.com/klirichek/galera" )
-set ( GALERA_BRANCH "5e7af6e5" )
-set ( GALERA_SRC_MD5 "33be7903e01e5cd6d966d88c47fc5c4d" )
+set ( GALERA_REPO "https://github.com/manticoresoftware/galera" )
+set ( GALERA_REV "582dc17" )
+set ( GALERA_SRC_MD5 "faceb32a7fc131e0a6a87a22d54058d2" )
 
-set ( GALERA_GITHUB "${GALERA_REPO}/archive/${GALERA_BRANCH}.zip" )
-set ( GALERA_BUNDLE "${LIBS_BUNDLE}/galera-${GALERA_BRANCH}.zip" )
+set ( GALERA_GITHUB "${GALERA_REPO}/archive/${GALERA_REV}.zip" )
+set ( GALERA_BUNDLE "${LIBS_BUNDLE}/galera-${GALERA_REV}.zip" )
 
 if (DEFINED WITH_GALERA AND NOT WITH_GALERA) # already defined and required NOT to be used
 	return ()
@@ -46,7 +46,7 @@ endif ()
 select_nearest_url ( GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB} )
 set ( WSREP_PATH "${MANTICORE_SOURCE_DIR}/src/replication" ) # WSREP_PATH provides path to galera-imported for build
 get_build ( GALERA_BUILD galera )
-configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-imported.cmake.in galera-build/CMakeLists.txt ) # consumes GALERA_PLACE, GALERA_SRC_MD5, WSREP_PATH, GALERA_BUILD
+configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-imported.cmake.in galera-build/CMakeLists.txt ) # consumes GALERA_PLACE, GALERA_SRC_MD5, WSREP_PATH, GALERA_BUILD, GALERA_REV
 execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
 execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
 

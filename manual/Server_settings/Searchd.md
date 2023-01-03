@@ -385,7 +385,7 @@ You can also specify a protocol handler (listener) to be used for connections on
 * `mysql` - MySQL protocol for connections from MySQL clients. Note:
   - Compressed protocol is also supported.
   - If [SSL](../Security/SSL.md#SSL) is enabled you can make an encrypted connection.
-* `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
+* `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section. You can specify multiple replication listeners, but they must all listen on the same IP, only the ports can be different.
 * `http` - same as **Not specified**. Manticore will accept connections at this port from remote agents and clients via HTTP and HTTPS.
 * `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. More details can be found in section [SSL](../Security/SSL.md).
 * `sphinx` - legacy binary protocol. Used to serve connections from remote [SphinxSE](../Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.

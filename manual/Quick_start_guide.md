@@ -163,6 +163,8 @@ Let's now create a table called "products" with 2 fields:
 * title - full-text field which will contain our product's title
 * price - of type "float"
 
+(Note that creating a table with an explicit create statement can be omitted. For details, see [Auto schema](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).)
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

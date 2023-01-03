@@ -174,22 +174,16 @@ sqlresult = indexApi.insert(newdoc);
 
 ## Auto schema
 
-Manticore has a mechanism for automatically creating tables when a specified table in an `INSERT` statement does not yet exist.
+Manticore has a mechanism for automatically creating tables when a specified table in the `INSERT` statement does not yet exist.
 
 <!-- example auto-schema -->
 
 By default, all text values in the `VALUES` clause are considered to be of the `text` type, with the exception of values that represent valid email addresses, which are treated as the `string` type.
 
-If your INSERT statement has multiple rows with different incompatible value types for the same field, auto table creation will be cancelled and an insert error message will be returned.
-
-If different value types are compatible, the resulting field type to be used is determined with the following type priority table:
-
-| Priority | 3 | 2 | 1 |
-| - | - | - | - |
-| Compatible data types | mva64 | mva    |      |
-| Compatible data types | float | bigint | uint |
-| Compatible data types | text  | string |      |
-
+If you try to INSERT multiple rows with different, incompatible value types for the same field, auto table creation will be canceled and an error message will be returned. However, if the different value types are compatible, the resulting field type will be the one that accommodates all the values. Some automatic data type conversions that may occur include:
+* mva -> mva64
+* uint -> bigint -> float
+* string -> text
 
 <!-- intro -->
 ##### SQL:
@@ -198,6 +192,11 @@ If different value types are compatible, the resulting field type to be used is 
 
 ```sql
 MySQL [(none)]> drop table if exists t; insert into t(i,f,t,s,j,b,m,mb) values(123,1.2,'text here','test@mail.com','{"a": 123}',1099511627776,(1,2),(1099511627776,1099511627777)); desc t; select * from t;
+```
+
+<!-- response SQL -->
+
+```sql
 --------------
 drop table if exists t
 --------------
@@ -260,9 +259,12 @@ POST /insert  -d
    "mb": [1099511627776,1099511627777]
  }
 }
+```
 
+<!-- response HTTP -->
+
+```json
 {"_index":"t","_id":2,"created":true,"result":"created","status":201}
-
 ```
 
 <!-- end -->

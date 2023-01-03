@@ -2,7 +2,7 @@
 
 # Next release
 
-From this release on Manticore Search is shipped with Manticore Buddy which is a sidecar daemon written in PHP responsible for high-level functionality that doesn't require low latency or high throughput. It's completely behind the scenes and you might not even notice Buddy is running. Even though it's  invisible for the end user it was really challenging to make it easily installable and working together with the main daemon written in C++. This major change will allow the team produce a lot of new high-level functionality: shards orchestration, access control and authentication, numerous integrations: mysqldump, DBeaver etc.
+Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump and DBeaver. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 ### Major Changes
 * Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases. Integrated it with [secondary indexes](../Server_settings/Searchd.md#secondary_indexes)
@@ -39,15 +39,16 @@ From this release on Manticore Search is shipped with Manticore Buddy which is a
   - run `ALTER TABLE <table name> REBUILD SECONDARY` for each index to rebuild secondary indexes.
 
   If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
+* **⚠️ BREAKING CHANGE**: The binlog version has been updated, so any binlogs from previous versions will not be replayed. It is important to ensure that Manticore Search is stopped cleanly during the upgrade process. This means that there should be no binlog files in `/var/lib/manticore/binlog/` except for `binlog.meta` after stopping the previous instance.
 * `SHOW SETTINGS`
 * `max_matches_increase_threshold`
 
 ### Packaging
-* arm64 packages for macOS and Linuxes
-* easier package building for contributors
-* Debian Stretch and Ubuntu Xenial are too old and we stop supporting them
-* Centos 9
-* Debian Bookworm
+* Arm64 packages for macOS and Linux
+* Simplified package building for contributors
+* Support for Debian Stretch and Ubuntu Xenial has been discontinued
+* Centos 9 is supported
+* Debian Bookworm is supported
 
 ## Bugfixes
 * [Commit 10416ef7](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` has been broken all the time since Sphinx

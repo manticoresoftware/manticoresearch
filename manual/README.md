@@ -181,6 +181,7 @@
             * [Token filter plugins](Extensions/UDFs_and_Plugins/Plugins/Token_filter_plugins.md)
 * [▪️ Miscellaneous tools](Miscellaneous_tools.md)
 * [▪️ OpenAPI specification](Openapi.md)
+* [▪️ Telemetry](Telemetry.md)
 * [▪️ Changelog](Changelog.md)
 * [🐞 Reporting bugs](Reporting_bugs.md)
 * [📖 References](References.md)

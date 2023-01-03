@@ -3,7 +3,7 @@
 > If you are looking for information about adding documents to a plain table please read section about [adding data from external storages](../Adding_data_from_external_storages/Plain_tables_creation.md).
 
 <!-- example insert -->
-Adding documents in a real-time manner is only supported for [Real-Time](../Creating_a_table/Local_tables/Real-time_table.md) and [percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into a table with provided field values. Note that you do not need for a table to already exist before you can start adding documents to it. If the table does not exist Manticore will try to create it automatically. For details, see [Auto schema](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Adding documents in a real-time manner is only supported for [Real-Time](../Creating_a_table/Local_tables/Real-time_table.md) and [percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into a table with provided field values. Note that it is not necessary for a table to already exist before adding documents to it. If the table does not exist, Manticore will attempt to create it automatically. For more information, see [Auto schema](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 
 You can insert a single or [multiple documents](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) with values for all fields of the table or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
@@ -174,15 +174,15 @@ sqlresult = indexApi.insert(newdoc);
 
 ## Auto schema
 
-Manticore provides a mechanism of automatic table creation when a table specified in the INSERT statement does not yet exist.
+Manticore has a mechanism for automatically creating tables when a specified table in an `INSERT` statement does not yet exist.
 
 <!-- example auto-schema -->
 
-By default, all text values used in the `VALUES` clause are considered to be of the `text` type.  The only exception are values representing valid email addresses. Such values are going to be treated as the `string` type.
+By default, all text values in the `VALUES` clause are considered to be of the `text` type, with the exception of values that represent valid email addresses, which are treated as the `string` type.
 
-If your INSERT statement has multiple rows with different incompatible value types for the same field, auto table creation will be cancelled and the insert error message will be returned.
+If your INSERT statement has multiple rows with different incompatible value types for the same field, auto table creation will be cancelled and an insert error message will be returned.
 
-If different value types are compatible, the following type priority table is applied to determine the resulting field type to be used:
+If different value types are compatible, the resulting field type to be used is determined with the following type priority table:
 
 | Priority | 3 | 2 | 1 |
 | - | - | - | - |

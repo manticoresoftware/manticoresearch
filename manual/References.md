@@ -20,6 +20,9 @@
 * [DELETE](Deleting_documents.md) - Deletes documents
 * [TRUNCATE TABLE](Emptying_a_table.md) - Deletes all documents from table
 
+##### Backup
+* [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) - Backs up your tables
+
 ##### SELECT
 * [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Searches
   * [WHERE](Searching/Filters.md#Filters) - Filters

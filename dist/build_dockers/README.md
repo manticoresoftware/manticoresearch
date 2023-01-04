@@ -1,24 +1,27 @@
 # Official build docker
 
-This directory contains sources for docker image which is used for building official packages of Manticoresearch, and also instructions and scripts to extract and pack necessary stuff for different distros/packages.
+This directory contains the sources for a Docker image that is used for building official packages of Manticore Search. It also includes instructions and scripts for extracting and packing the necessary files for different distros/packages.
 
-At the bottom of `Dockerfile` there is commands you need to run t build the image. The name of the image is the one used in `dist/gitlab-release.yml` for actual builds. Feel free to make shorter name, if desired.
+At the bottom of the `Dockerfile`, you will find the commands you need to run to build the image. The name of the image is the one used in `dist/gitlab-release.yml` for actual builds. If you wish, you can make the name shorter.
 
-Notice, docker is **NOT** standalone, it needs internet to fetch sysroot archives. However you can have your copy of that archive available somewhere and adjust the url.
+Note that Docker is **NOT** standalone and requires an internet connection to fetch sysroot archives. However, you can have a copy of the archive available locally and adjust the URL accordingly.
 
 ## Running the docker
 
-You need to provide 3 env variables: `DISTR`, `arch`, and `SYSROOT_URL`.
+You need to provide a few environment variables: `DISTR`, `arch`, and `SYSROOT_URL` and some others. It's best to use the CI yaml file as a reference - https://github.com/manticoresoftware/manticoresearch/blob/master/dist/gitlab-release.yml
 
 For example,
 ```bash
-docker run -it --rm -v /sphinx/sphinxfrommac:/manticore \
--e DISTR=bionic \
+docker run -it --rm \
+-v $(pwd):/manticore \
+-e DISTR=bullseye \
 -e arch=x86_64 \
 -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
-registry.gitlab.com/manticoresearch/dev/external_toolchain:clang13_cmake3232 bash
+-e boosboost=boost_nov22 \
+-e sysroot=roots_nov22 \
+93ba969c68b2 bash
 ```
-Also you most probably need to mount folder with sources, if you're not going to fetch them another way, like with git. Just add `-v /manticore/on/host:/manticore`, or something similar to have folder `/manticore` with sources mounted inside the docker.
+Also, you will most likely need to mount a folder with sources if you are not going to fetch them another way, like with git. Just add `-v /manticore/on/host:/manticore`, or something similar, to have the `/manticore/` folder with sources mounted inside the docker.
 
 ### Building package, same as release
 
@@ -31,10 +34,10 @@ cmake --build . --target package
 
 ### Some internal details
 
-Docker includes only build system, agnostic to target platform. Docker itself is targeted to arch of the machine where it is built, however with docker manifest it is possible to create multi-arch image (see details in the bottom of Dockerfile).
+Docker includes only the build system and is agnostic to the target platform. However, with the docker manifest, it is possible to create a multi-arch image (see details at the bottom of the Dockerfile).
 
-On entry point we fetch necessary artifacts of target platform and architecture (that is - sysroot, boost libraries, boost headers, and toolchain file).
+On start of the container, it fetches the necessary artifacts of the target platform and architecture (i.e., sysroot, boost libraries, boost headers, and toolchain file).
 
-Build itself is performed via cross-compilation with clang-13. Toolchain file, provided in system-root archive, is defined via `CMAKE_TOOLCHAIN_FILE` env, and is picked automatically. It files determines everything necessary to build target binaries and packages.
+The build is performed via cross-compilation with clang. The toolchain file, provided in the system-root archive, is defined via the `CMAKE_TOOLCHAIN_FILE` env. var. and is picked automatically. It determines everything necessary to build the target binaries and packages.
 
-Clang-13 is powerful enough to produce binaries for Mac OS and Windows, aside usual elf executables for linux/freebsd, so it is quite usual, say to run docker on Raspberry PI and create distribution for MS Windows.
+Clang is powerful enough to produce binaries for Mac OS and Windows, in addition to the usual elf executables for Linux/FreeBSD, so it is quite common to run Docker on a Raspberry PI and create a distribution for MS Windows.

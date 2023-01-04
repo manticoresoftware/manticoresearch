@@ -1,44 +1,48 @@
 # Compiling Manticore from source
 
-Compiling Manticore Search from sources can be used for custom build configurations, such as disabling some features, adding new or testing patches, if you want to contribute. For example, you can compile from sources disabling embedded ICU, if you want to replace it with another one installed in your system with possibility to upgrade it independently from Manticore.
+Compiling Manticore Search from sources allows you to create custom build configurations, such as disabling certain features or adding new patches for testing. For example, you may want to compile from sources and disable the embedded ICU in order to use a different version installed on your system that can be upgraded independently of Manticore. This can be also useful if you are interested in contributing to the Manticore Search project.
 
 ## Building using CI docker
 
-To prepare [official release and dev packages](https://repo.manticoresearch.com/) we use Docker and a special building image. It includes an essential toolchain and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md). That is the easiest way to make binaries for any supported operating system and architecture. Once you build the image whe you run the container from it you need to specify 3 environment variables:
-* Target platform `DISTR`
-* Architecture `arch`
-* URL to system roots archives `SYSROOT_URL`. Just use `https://repo.manticoresearch.com/repository/sysroots` unless you build the sysroots yourself (the instruction is [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+To prepare [official release and dev packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes an essential toolchain and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md). This is the easiest way to create binaries for any supported operating system and architecture. Once you have built the image, you need to specify three or more environment variables when you run the container from it:
 
-You can use directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a cheatsheet to find out possible `DISTR` and `arch` values since it includes sysroots for all the supported combinations.
+* `DISTR`: the target platform
+* `arch`: the architecture
+* `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+* Use the CI yaml file as a reference to find the other env. var. you might need to use - https://github.com/manticoresoftware/manticoresearch/blob/master/dist/gitlab-release.yml
 
-After that inside the docker container building packages is as easy as calling:
+To find out possible values for `DISTR` and `arch`, you can use the directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a reference, as it includes sysroots for all the supported combinations.
+
+After that, building packages inside the Docker container is as easy as calling:
 
 ```bash
 cmake -DPACK=1 /path/to/sources
 cmake --build .
 ```
 
-For example, to create the same RedHat 7 package as official, but without embedded ICU with it's big datafile, you can
-execute the following (supposed that the sources are placed in `/manticore/sources/` on the host):
+For example, to create the same RedHat 7 package as the official one, but without the embedded ICU and its large datafile, you can execute the following (assuming that the sources are placed in `/manticore/sources/` on the host):
 
 ```bash
 docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
 -e arch=x86_64 \
 -e DISTR=rhel7 \
--v /manticore/sources:/manticore \
+-v /manticore/sources:/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
 <docker image> bash
 
 # following is to be run inside docker shell
-cd /manticore/
+cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 RELEASE_TAG="noicu"
 mkdir build && cd build
 cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG -DWITH_ICU_FORCE_STATIC=0 ..
 cmake --build . --target package
 ```
+The long source directory path is required, or it may fail to build the sources.
 
-The same way you can build binaries/packages not only for popular Linux distributions, but also for FreeBSD, Windows and macOS.
+The same process can be used to build binaries/packages not only for popular Linux distributions, but also for FreeBSD, Windows, and macOS.
 
 ## Building manually
+
+Compiling Manticore without the building docker is not recommended, but if you need to do it, here's wha you may need to know:
 
 ### Required tools
 

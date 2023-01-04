@@ -2,7 +2,7 @@
 
 At Manticore, we gather various anonymized metrics in order to enhance the quality of our products, including Manticore Search. By analyzing this data, we can not only improve the overall performance of our product, but also identify which features would be most beneficial to prioritize in order to provide even more value to our users. The telemetry system operates on a separate thread in non-blocking mode, taking snapshots and sending them once every few minutes.
 
-We take your privacy seriously, and you can be assured that all metrics are completely anonymous and no sensitive information is transmitted. However, if you still wish to disable telemetry, you can do so by by:
+We take your privacy seriously, and you can be assured that all metrics are completely anonymous and no sensitive information is transmitted. However, if you still wish to disable telemetry, you can do so by:
 * setting the environment variable `TELEMETRY=0`
 * or setting `telemetry = 0` in the section `searchd` of your configuration file
 

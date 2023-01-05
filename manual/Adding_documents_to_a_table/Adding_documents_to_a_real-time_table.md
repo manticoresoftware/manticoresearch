@@ -174,7 +174,7 @@ sqlresult = indexApi.insert(newdoc);
 
 ## Auto schema
 
-Manticore has a mechanism for automatically creating tables when a specified table in the `INSERT` statement does not yet exist.
+Manticore has a mechanism for automatically creating tables when a specified table in the `INSERT` statement does not yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd#auto_schema) section of your Manticore config file.
 
 <!-- example auto-schema -->
 

@@ -6845,17 +6845,15 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 	// the context
 	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t, Threads::ECONTEXT::ORDERED> tClonableCtx { dSorters, tResult };
-	auto pDispatcher = Dispatcher::Make ( iJobs, tQuery.m_iCouncurrency, tDispatch, tClonableCtx.IsSingle() );
 
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	IntVec_t dSplits {iJobs};
-	int iThreads = tArgs.m_iThreads;
-	if ( !CalcDiskChunkSplits ( dSplits, iJobs, tQuery, tArgs, tGuard ) )
-		iThreads = 1;
+	auto pDispatcher = Dispatcher::Make ( iJobs, tArgs.m_iThreads, tDispatch, tClonableCtx.IsSingle() || !CalcDiskChunkSplits ( dSplits, iJobs, tQuery, tArgs, tGuard ));
 
-	tClonableCtx.LimitConcurrency(iThreads);
+	const int iThreads = pDispatcher->GetConcurrency();
+	tClonableCtx.LimitConcurrency ( iThreads );
 
 	auto iStart = sphMicroTimer();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );

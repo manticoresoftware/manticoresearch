@@ -47,6 +47,9 @@ struct ISphNetAction :  NetPollEvent_t
 	/// invoked when CSphNetLoop with this action destroying
 	/// Netloop itself is finished, no further actions in process.
 	virtual void NetLoopDestroying ()  REQUIRES ( NetPoollingThread ) = 0;
+
+protected:
+	~ISphNetAction() = default;
 };
 
 // event that wakes-up poll net loop from finished thread pool job

@@ -228,7 +228,8 @@ TEST_F ( CustomNetloop_c, test_usual_remove_1st )
 	int to_del = 0;
 
 	auto dOutdated = RemoveOutdated ( to_del );
-	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+	ARRAY_FOREACH ( i, dOutdated )
+		SafeRelease ( dOutdated[i] );
 }
 
 TEST_F ( CustomNetloop_c, test_usual_remove_2nd )
@@ -236,7 +237,8 @@ TEST_F ( CustomNetloop_c, test_usual_remove_2nd )
 	int to_del = 1;
 
 	auto dOutdated = RemoveOutdated ( to_del );
-	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+	ARRAY_FOREACH ( i, dOutdated )
+		SafeRelease ( dOutdated[i] );
 }
 
 TEST_F ( CustomNetloop_c, test_usual_remove_3rd )
@@ -244,17 +246,20 @@ TEST_F ( CustomNetloop_c, test_usual_remove_3rd )
 	int to_del = 2;
 
 	auto dOutdated = RemoveOutdated ( to_del );
-	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+	ARRAY_FOREACH ( i, dOutdated )
+		SafeRelease ( dOutdated[i] );
 }
 
 TEST_F ( CustomNetloop_c, test_usual_remove_12 )
 {
 	auto dOutdated = RemoveOutdated ( 0,1 );
-	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+	ARRAY_FOREACH ( i, dOutdated )
+		SafeRelease ( dOutdated[i] );
 }
 
 TEST_F ( CustomNetloop_c, test_usual_remove_23 )
 {
 	auto dOutdated = RemoveOutdated ( 1, 2 );
-	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+	ARRAY_FOREACH ( i, dOutdated )
+		SafeRelease ( dOutdated[i] );
 }

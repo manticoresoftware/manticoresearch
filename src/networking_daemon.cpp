@@ -167,6 +167,7 @@ private:
 
 		m_pPoll->ProcessAll( [this] ( NetPollEvent_t * pWork ) NO_THREAD_SAFETY_ANALYSIS
 		{
+			SafeAddRef ( pWork );
 			m_dWorkExternal.Add ( (ISphNetAction*) pWork );
 		});
 
@@ -175,7 +176,6 @@ private:
 		{
 			// deal with closed sockets which lives exclusively in m_pPoll (and so, would be removed immediately on RemoveEvent() )
 			CSphRefcountedPtr<ISphNetAction> pWorkKeeper { pWork };
-			SafeAddRef ( pWork );
 
 			m_pPoll->RemoveEvent ( pWork );
 			pWork->NetLoopDestroying();
@@ -207,6 +207,7 @@ private:
 		m_dWorkInternal.for_each ( [&] ( ISphNetAction* pWork ) REQUIRES ( NetPoollingThread ) {
 			assert ( pWork );
 			m_pPoll->SetupEvent ( pWork );
+			pWork->Release();
 		} );
 		m_dWorkInternal.Resize ( 0 );
 		m_tPrf.EndTask();
@@ -341,6 +342,7 @@ private:
 			return false;
 		{
 			sph::Spinlock_lock tExtLock { m_tExtLock };
+			SafeAddRef ( pElem );
 			m_dWorkExternal.Add ( pElem );
 		}
 		Kick();

@@ -329,7 +329,7 @@ public:
 
 		// since event already removed from kqueue - it is safe to remove it from the list of events also,
 		// and totally unlink
-		if ( pEvent->m_tBackHook.is_linked() )
+		if ( pEvent->IsLinked() )
 		{
 			m_tEvents.remove ( *pEvent );
 			SafeRelease ( pEvent );
@@ -507,7 +507,7 @@ public:
 
 		sphLogDebugvv ( "RemoveEvent for %d, fd=%d", pEvent->m_iBackIdx, pEvent->m_iSock );
 
-		if ( pEvent->m_iBackIdx < 0 ) // already removed by iteration
+		if ( !pEvent->IsLinked() ) // already removed by iteration
 			return;
 
 		assert ( pEvent->m_iBackIdx < m_dEvents.GetLength() );

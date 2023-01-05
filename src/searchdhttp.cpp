@@ -25,11 +25,10 @@
 #include "tracer.h"
 #include "searchdbuddy.h"
 
+static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http reqests, ruled by this env variable
+static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // verbose logging http processing events, ruled by this env variable
 #define LOG_COMPONENT_HTTP ""
-#define LOG_LEVEL_HTTP false
-
-#define HTTPINFO LOGMSG ( INFO, HTTP, HTTP )
-
+#define HTTPINFO LOGINFO ( HTTP, HTTP )
 
 static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "404 Not Found", "405 Method Not Allowed", "409 Conflict", "500 Internal Server Error",
 								 "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
@@ -345,7 +344,9 @@ public:
 				{
 				case -1:
 					if ( m_tIn.GetError() )
-						sphLogDebug ( "failed to receive HTTP request -1 (error='%s') after %d us", sphSockError(), (int)( sphMicroTimer() - iStart ) );
+					{
+						HTTPINFO << "failed to receive HTTP request -1 (error=" << sphSockError() << ") after " << ( (int)( sphMicroTimer() - iStart ) ) << " us";
+					}
 				case 0:
 					m_bDone = true;
 					return dEmptyStr;
@@ -451,7 +452,13 @@ bool HttpRequestParser_c::ParseHeader ( ByteBlob_t sData )
 	m_iLastParsed = (int) http_parser_execute ( &m_tParser, &m_tParserSettings, (const char *)sData.first, sData.second );
 	if ( m_iLastParsed != sData.second )
 	{
-		sphLogDebug ( "ParseChunk error: parsed %d, chunk %d", m_iLastParsed, sData.second );
+		if ( g_bLogBadHttpReq )
+		{
+			sphWarning ( "ParseChunk error: parsed %d, chunk %d, conn %d, %.*s", m_iLastParsed, sData.second, session::GetConnID(), sData.second, sData.first );
+		} else
+		{
+			HTTPINFO << "ParseChunk error: parsed " << m_iLastParsed << ", chunk " << sData.second;
+		}
 		m_szError = http_errno_description ( (http_errno)m_tParser.http_errno );
 		return true;
 	}
@@ -3102,4 +3109,24 @@ void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction )
 		while ( sBody<sBodyEnd && *sBody == '\n' )
 			sBody++;
 	}
+}
+
+bool HttpSetLogVerbosity ( const CSphString & sVal )
+{
+	if ( !sVal.Begins( "http_" ) )
+		return false;
+
+	bool bOn = ( sVal.Ends ( "_1" ) || sVal.Ends ( "_on" ) );
+	
+	if ( sVal.Begins ( "http_bad_req" ) )
+		g_bLogBadHttpReq = bOn;
+	else
+		LOG_LEVEL_HTTP = bOn;
+
+	return true;
+}
+
+void LogReplyStatus100()
+{
+	HTTPINFO << "100 Continue sent";
 }

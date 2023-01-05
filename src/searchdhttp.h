@@ -119,3 +119,5 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 
 using SplitAction_fn = std::function<void(const char *, int)>;
 void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction);
+bool HttpSetLogVerbosity ( const CSphString & sVal );
+void LogReplyStatus100();

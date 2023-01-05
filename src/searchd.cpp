@@ -225,6 +225,10 @@ static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 static bool				g_bCoreDump		= false;
 
+static bool LOG_LEVEL_LOCAL_SEARCH = val_from_env ( "MANTICORE_LOG_LOCAL_SEARCH", false ); // verbose logging local search events, ruled by this env variable
+#define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
+#define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
+
 static auto& g_bGotSighup		= sphGetGotSighup();	// we just received SIGHUP; need to log
 static auto& g_bGotSigusr1		= sphGetGotSigusr1();	// we just received SIGUSR1; need to reopen logs
 static auto& g_bGotSigusr2		= sphGetGotSigusr2();   // we just received SIGUSR2; need to dump daemon's bt
@@ -6049,7 +6053,7 @@ void SearchHandler_c::RunLocalSearches ()
 
 		if ( !pSource->FetchTask ( iJob ) )
 		{
-			sphLogDebug ( "Early finish parallel RunLocalSearches because of empty queue" );
+			LOCSEARCHINFO << "Early finish parallel RunLocalSearches because of empty queue";
 			return; // already nothing to do, early finish.
 		}
 
@@ -6059,7 +6063,7 @@ void SearchHandler_c::RunLocalSearches ()
 
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
-		sphLogDebug ( "RunLocalSearches cloned context %d", tJobContext.second );
+		LOCSEARCHINFO << "RunLocalSearches cloned context " << tJobContext.second;
 		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
 		while ( true )
 		{
@@ -6067,7 +6071,7 @@ void SearchHandler_c::RunLocalSearches ()
 				return; // all is done
 
 			auto iLocal = dOrder[iJob];
-			sphLogDebugv ( "RunLocalSearches %d, iJob: %d, iLocal: %d, mass %d", tJobContext.second, iJob, iLocal, (int) m_dLocal[iLocal].m_iMass );
+			LOCSEARCHINFO << "RunLocalSearches " << tJobContext.second << ", iJob: " << iJob << ", iLocal: " << iLocal << ", mass " << ( (int)m_dLocal[iLocal].m_iMass );
 			iJob = -1; // mark it consumed
 
 			int64_t iCpuTime = -sphTaskCpuTimer ();
@@ -6205,7 +6209,7 @@ void SearchHandler_c::RunLocalSearches ()
 			Threads::Coro::ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	});
-	sphLogDebug ( "RunLocalSearches processed in %d thread(s)", dCtx.NumWorked() );
+	LOCSEARCHINFO << "RunLocalSearches processed in " << dCtx.NumWorked() << " thread(s)";
 	dCtx.Finalize (); // merge mt results (if any)
 
 	tGlobalSorters.MergeResults(m_dNAggrResults);
@@ -13750,7 +13754,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 				g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 			else if ( tStmt.m_sSetValue=="replication" )
 				g_eLogLevel = SPH_LOG_RPL_DEBUG;
-			else
+			else if ( tStmt.m_sSetValue.Begins ( "http" ) )
+			{
+				if ( !HttpSetLogVerbosity ( tStmt.m_sSetValue ) )
+				{
+					tOut.Error ( tStmt.m_sStmt, "Unknown log_level value (http_on, http_off, http_bad_req_on, http_bad_req_off)" );
+					return;
+				}
+			} else
 			{
 				tOut.Error ( tStmt.m_sStmt, "Unknown log_level value (must be one of info, debug, debugv, debugvv, replication)" );
 				return;

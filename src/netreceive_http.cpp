@@ -137,7 +137,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		{
 			if ( !HttpReply ( SPH_HTTP_STATUS_100, dEmptyStr ) )
 				break;
-			sphLogDebug ("100 Continue sent");
+			LogReplyStatus100();
 		}
 
 //		tracer.Instant ( [&tIn](StringBuilder_c& sOut) {sOut<< ",\"args\":{\"step\":"<<tIn.HasBytes()<<"}";} );

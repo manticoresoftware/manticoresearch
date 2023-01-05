@@ -104,6 +104,11 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
+static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+#define LOG_COMPONENT_RTQUERYINFO __LINE__ << " "
+#define RTQUERYINFO LOGINFO ( RTSPLIT_QUERY, RTQUERYINFO )
+
+
 //////////////////////////////////////////////////////////////////////////
 // GLOBALS
 //////////////////////////////////////////////////////////////////////////
@@ -6856,7 +6861,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	tClonableCtx.LimitConcurrency ( iThreads );
 
 	auto iStart = sphMicroTimer();
-	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
+	RTQUERYINFO << "Started: " << ( sphMicroTimer()-iStart );
 
 	std::atomic<bool> bInterrupt {false};
 	auto CheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
@@ -6868,7 +6873,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 		if ( !pSource->FetchTask ( iJob ) || CheckInterrupt() )
 		{
-			sphLogDebug ( "Early finish parallel QueryDiskChunks because of empty queue" );
+			RTQUERYINFO << "Early finish parallel QueryDiskChunks because of empty queue";
 			return; // already nothing to do, early finish.
 		}
 
@@ -6878,7 +6883,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			tCtx.m_tMeta.m_sWarning = szReason;
 			bInterrupt.store ( true, std::memory_order_relaxed );
 		};
-		sphLogDebug ( "QueryDiskChunks cloned context %d (job %d)", tJobContext.second, iJob );
+		RTQUERYINFO << "QueryDiskChunks cloned context " << tJobContext.second << " (job " << iJob << ")";
 		tClonableCtx.SetJobOrder ( tJobContext.second, -iJob ); // fixme! Same as in single search, but here we walk in reverse order. Need to fix?
 		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
 		while ( !CheckInterrupt() ) // some earlier job met error; abort.
@@ -6886,7 +6891,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			// jobs come in ascending order from 0 up to iJobs-1.
 			// We walk over disk chunk in reverse order, from last to 0-th.
 			auto iChunk = iJobs - iJob - 1;
-			sphLogDebug ( "QueryDiskChunks %d, Jb/Chunk: %d/%d", tJobContext.second, iJob, iChunk );
+			RTQUERYINFO << "QueryDiskChunks " << tJobContext.second << ", Jb/Chunk: " << iJob << "/" << iChunk;
 			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", Threads::Coro::NumOfRestarts(), iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
@@ -6946,7 +6951,7 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			}
 		}
 	});
-	sphLogDebug ( "QueryDiskChunks processed in %d thread(s)", tClonableCtx.NumWorked() );
+	RTQUERYINFO "QueryDiskChunks processed in " << tClonableCtx.NumWorked() << " thread(s)";
 	tClonableCtx.Finalize();
 }
 

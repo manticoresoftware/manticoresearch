@@ -96,6 +96,39 @@ static CSphString CheckLine ( Str_t sLine )
 	return CSphString();
 }
 
+static std::pair<Str_t, Str_t> GetLines ( Str_t tSrc )
+{
+	std::pair<Str_t, Str_t> tLines { tSrc, Str_t() };
+
+	char * sStart = const_cast<char *>( tSrc.first );
+	if ( !tSrc.second )
+	{
+		sStart[tSrc.second] = '\0';
+		return tLines;
+	}
+
+	const char * sEnd = sStart + tSrc.second - 1;
+	char * sCur = sStart;
+	while ( sCur<=sEnd && *sCur!='\n' && *sCur!='\r' )
+		sCur++;
+
+	tLines.first = Str_t( tSrc.first, sCur - sStart + 1 );
+
+	while ( sCur<=sEnd && sphIsSpace ( *sCur ) )
+		sCur++;
+
+	tLines.second = Str_t( sCur, sEnd - sCur + 1 );
+
+	// check the rest of text for only empty lines
+	while ( sCur<=sEnd && !sphIsSpace ( *sCur ) )
+		sCur++;
+
+	if ( sCur==sEnd )
+		tLines.second.second = 0;
+
+	return tLines;
+}
+
 static Str_t TrimRight ( Str_t tSrc )
 {
 	char * sStart = const_cast<char *>( tSrc.first );
@@ -110,7 +143,6 @@ static Str_t TrimRight ( Str_t tSrc )
 		sEnd--;
 
 	int iLen = sEnd - sStart + 1;
-	sStart[iLen] = '\0';
 	return Str_t ( tSrc.first, iLen );
 }
 
@@ -122,13 +154,17 @@ static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size
 	if ( !iSize )
 		return;
 
-	Str_t sLine = TrimRight ( { g_dPipeBuf.data(), iSize } );
+	Str_t sLineRef ( g_dPipeBuf.data(), iSize );
+
 	// regular work log all lines from the buddy output
 	if ( g_eBuddy!=BuddyState_e::STARTING )
 	{
-		sphInfo ( "[BUDDY] %s", sLine.first ); // FIXME!!! add split line by line
+		Str_t sLine = TrimRight ( sLineRef );
+		sphInfo ( "[BUDDY] %.*s", sLine.second, sLine.first ); // FIXME!!! add split line by line
 		return;
 	}
+
+	auto [sLine, sLinesTail] = GetLines ( sLineRef );
 
 	// at the BuddyState_e::STARTING parsing buddy output
 	CSphString sAddr = CheckLine ( sLine );
@@ -136,7 +172,7 @@ static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size
 	if ( sAddr.IsEmpty() )
 	{
 		g_eBuddy = BuddyState_e::FAILED;
-		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%s'", sLine.first );
+		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%.*s'", sLineRef.second, sLineRef.first );
 		return;
 	}
 
@@ -145,7 +181,7 @@ static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size
 	if ( tListen.m_eProto==Proto_e::UNKNOWN || !sError.IsEmpty() )
 	{
 		g_eBuddy = BuddyState_e::FAILED;
-		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%s', parse error: %s", sAddr.cstr(), sError.cstr() );
+		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%.*s', parse error: %s", sLineRef.second, sLineRef.first, sError.cstr() );
 		return;
 	}
 
@@ -154,6 +190,8 @@ static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size
 	g_eBuddy = BuddyState_e::WORK;
 	g_iRestartCount = 0;
 	sphInfo ( "[BUDDY] started '%s' at %s", g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
+	if ( sLinesTail.second )
+		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
 }
 
 static BuddyState_e BuddyCheckLive()
@@ -266,7 +304,7 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 }
 
 
-void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry )
+void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads )
 {
 	CSphString sPath = BuddyGetPath ( sConfigPath, bHasBuddyPath );
 	if ( sPath.IsEmpty() )
@@ -295,10 +333,12 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s %s",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s --threads=%d",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
-		( bTelemetry ? "" : "--disable-telemetry" ) );
+		( bTelemetry ? "" : "--disable-telemetry" ),
+		iThreads );
+		
 
 	CSphString sErorr;
 	BuddyState_e eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );

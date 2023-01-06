@@ -126,7 +126,7 @@ sudo apt -y install manticore manticore-lemmatizer-uk
 
 # install packages needed for building Python
 sudo apt -y update
-sudo apt -y install wget build-essential libreadline-gplv2-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
+sudo apt -y install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
 
 # download, build and install Python 3.9
 cd ~
@@ -142,12 +142,4 @@ sudo ldconfig
 # install pymorphy2 and UK dictionary
 sudo pip3.9 install pymorphy2[fast]
 sudo pip3.9 install pymorphy2-dicts-uk
-```
-
-After you have all installed make sure you have the following in your Manticore Search configuration file (`/etc/manticoresearch/manticore.conf` by default):
-
-```
-common {
-    plugin_dir = /usr/local/manticore/lib/
-}
 ```

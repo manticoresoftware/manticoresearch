@@ -1,26 +1,27 @@
 # Reporting bugs
 
-Unfortunately, Manticore is not yet 100% bug free (even though we're working hard towards that), so you might occasionally run into some issues.
+Unfortunately, Manticore is not yet 100% bug-free (although we are working hard towards that goal). You may occasionally encounter some issues.
 
-Reporting as much as possible about each bug is very important - because to fix it, we need to be able to either reproduce and fix the bug, or to deduce what's causing it from the information that you provide. So here are some instructions how to do that.
+It is very important to report as much information as possible about each bug. To fix a bug, we need to either reproduce and fix it or deduce what is causing it based on the information you provide. Therefore, here are some instructions on how to do that.
 
 ### Bug-tracker
-We track bugs and feature requests in [Github](https://github.com/manticoresoftware/manticore/issues). Feel free to create a new ticket and describe your bug in details so both you and developers can save their time.
+We track bugs and feature requests on [Github](https://github.com/manticoresoftware/manticore/issues). Feel free to create a new ticket and describe your bug in detail so that you and the developers can save time.
 
 ### Documentation updates
-Updates to the documentation (what you are reading now) is also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual).
+Updates to the documentation (what you are reading now) are also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual).
 
 ### Crashes
-Manticore is written in C++ - low level programming language allowing to speak to the computer with not so many intermediate layers for faster performance. The drawback of that is that in rare cases there is no way to handle a bug elegantly writing the error about it to a log and skipping processing the command which caused the problem. Instead of that the program can just crash which means it would stop completely and would have to be restarted.
 
-When Manticore Search crashes you need to let Manticore team know about that by [making a bug report](https://github.com/manticoresoftware/manticoresearch/issues/new?assignees=&labels=&template=bug_report.md&title=) on github or if you use Manticore's professional services in your private helpdesk. Manticore team needs the following:
+Manticore is written in C++, a low-level programming language that allows for direct communication with the computer for faster performance. The drawback of that is that in rare cases, it may not be possible to elegantly handle a bug by writing an error to a log and skipping the processing of the command that caused the problem. Instead, the program may crash, which means it will stop completely and need to be restarted.
 
-1. searchd log
-2. coredump
-3. query log
+When Manticore Search crashes, you need to let the Manticore team know about it by [making a bug report](https://github.com/manticoresoftware/manticoresearch/issues/new?assignees=&labels=&template=bug_report.md&title=) on GitHub, or if you use Manticore's professional services in your private helpdesk. The Manticore team needs the following information:
+
+1. Searchd log
+2. Coredump
+3. Query log
 
 It will be great if you additionally do the following:
-1. run gdb to inspect the coredump:
+1. Run gdb to inspect the coredump:
 ```
 gdb /usr/bin/searchd </path/to/coredump>
 ```
@@ -81,7 +82,7 @@ mantico+  1955  0.0  0.0  61964  1580 ?        S    11:02   0:00 /usr/bin/search
 mantico+  1956  0.6  0.0 392744  2664 ?        Sl   11:02   0:00 /usr/bin/searchd --config /etc/manticoresearch/manticore.conf --coredump
 ```
 
-* make sure that your OS allows you to save coredumps: `/proc/sys/kernel/core_pattern` should be non-empty - it is where it will save them. If you do:
+* make sure that your OS allows you to save coredumps: `/proc/sys/kernel/core_pattern` should be non-empty - this is where it will save them. If you do:
 ```
 echo "/cores/core.%e.%p.%h.%t" > /proc/sys/kernel/core_pattern
 ```
@@ -94,16 +95,17 @@ LimitCORE=infinity
 
 ### How do I install debug symbols?
 
-Manticore Search and Manticore Columnar Library are written in C++, which means that what you get is a compiled compact binary file which executes in your OS optimal way. When you run a binary your system doesn't have full access to the names of variables, functions, methods, classes etc that are implemented. All that is provided separately in so called "debuginfo" packages or "symbol packages".
-Debug symbols are useful for troubleshooting and other debugging purposes, since when you have symbols and your binary crashes there's a way to visualize the state it crashed at including function names. Manticore Search provides such backtrace in searchd log and also generates coredump if it was run with `--coredump`. Without symbols all you get is just internal offsets that is difficult/impossible to decode. So if you make a bug report about a crash in most cases Manticore team will need debug symbols to be able to help you.
+Manticore Search and Manticore Columnar Library are written in C++, which means that when you run them, you get a compiled, compact binary file that executes optimally on your operating system. However, when you run a binary, your system does not have full access to the names of variables, functions, methods, and classes that are implemented. All of this information is provided separately in something called "debuginfo" or "symbol packages."
 
-To install Manticore Search / Manticore Columnar Library debug symbols just install package `*debuginfo*` (centos), `*dbgsym*` (ubuntu, debian), `*dbgsymbols*` (windows, macos) of exactly the same version you are running. For example if you've installed Manticore Search in Centos 8 from package https://repo.manticoresearch.com/repository/manticoresearch/release/centos/8/x86_64/manticore-4.0.2_210921.af497f245-1.el8.x86_64.rpm the corresponding package with symbols is https://repo.manticoresearch.com/repository/manticoresearch/release/centos/8/x86_64/manticore-debuginfo-4.0.2_210921.af497f245-1.el8.x86_64.rpm
+Debug symbols are useful for troubleshooting and other debugging purposes, as they allow you to visualize the state of the system when it crashed, including the names of functions, when you have symbols and your binary crashes. Manticore Search provides a backtrace in the searchd log and also generates a coredump if it was run with the `--coredump` flag. Without symbols, all you get is internal offsets, which can be difficult or impossible to decode. Therefore, if you need to make a bug report about a crash, the Manticore team will often need debug symbols in order to help you.
 
-Note they have the same commit id `af497f245` which corresponds to the commit this version was built from.
+To install Manticore Search/Manticore Columnar Library debug symbols, you will need to install the `*debuginfo*` package for CentOS, the `*dbgsym*` package for Ubuntu and Debian, or the `*dbgsymbols*` package for Windows and macOS. These packages should be of the same version as the version of Manticore that you are running. For example, if you've installed Manticore Search in Centos 8 from the package https://repo.manticoresearch.com/repository/manticoresearch/release/centos/8/x86_64/manticore-4.0.2_210921.af497f245-1.el8.x86_64.rpm , the corresponding package with symbols would be https://repo.manticoresearch.com/repository/manticoresearch/release/centos/8/x86_64/manticore-debuginfo-4.0.2_210921.af497f245-1.el8.x86_64.rpm
 
-If you installed Manticore from a Manticore APT/YUM repo you can one of the following tools:
-* `debuginfo-install` in centos 7
-* `dnf debuginfo-install` centos 8
+Note that both packages have the same commit id `af497f245`, which corresponds to the commit that this version was built from.
+
+If you have installed Manticore from a Manticore APT/YUM repository, you can use one of the following tools:
+* `debuginfo-install` in CentOS 7
+* `dnf debuginfo-install` CentOS 8
 * `find-dbgsym-packages` in Debian and Ubuntu
 
 to find a debug symbols package for you.
@@ -129,25 +131,12 @@ lrwxrwxrwx. 1 root root 27 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1
 
 ### Uploading your data
 
-To fix your bug developers often need to reproduce it locally. To do it they need your configuration file, table files, binlog (if present), sometimes source data (like data from external storages or XML/CSV files) and queries.
+To fix your bug, developers often need to reproduce it locally. To do this, they need your configuration file, table files, binlog (if present), and sometimes source data (such as data from external storages or XML/CSV files) and queries.
 
-Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). In case it's too big or the data is sensitive feel free to upload it to our write-only FTP server:
-
-* ftp: `dev.manticoresearch.com`
-* user: `manticorebugs`
-* pass: `shithappens`
-* mode: only active mode is supported
-* directory: create directory `github-issue-N` so we understand what data is related with what issue on [Github](https://github.com/manticoresoftware/manticoresearch/issues).
-
-It's convenient to mirror your directory with our FTP using tool [lftp](https://lftp.yar.ru/) which is available for Linux, Mac and Windows. For example, if you want to sync your current directory `ftp` to directory `github-ussue-123`, here's what you should do and what you will get:
-
-```bash
-➜  ~ lftp -e "set ftp:passive-mode off; mkdir github-issue-123; mirror -LR ftp/ github-issue-123/" -u manticorebugs,shithappens dev.manticoresearch.com
-mkdir ok, `github-issue-123' created
-Total: 2 directories, 1 file, 0 symlinks
-New: 1 file, 0 symlinks
-lftp manticorebugs@dev.manticoresearch.com:/> quit
-```
+Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If it is too large or the data is sensitive, you can feel free to upload it to our write-only S3 storage `s3://s3.manticoresearch.com/write-only/`. Here's how you can do it using Minio client:
+1. Install the client https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc
+2. Add our s3 host: `mc config host add manticore http://s3.manticoresearch.com:9000 manticore manticore`
+3. Copy your files: `mc cp -r issue-1234/ manticore/write-only/issue-1234` . Make sure you make the folder name unique, best if it corresponds to the issue on GitHub where you described the bug
 
 ### DEBUG
 
@@ -157,7 +146,7 @@ DEBUG [ subcommand ]
 
 `DEBUG` statement is designed to call different internal or vip commands for dev/testing purposes. It is not intended for production automation, since the syntax of `subcommand` part may be freely changed in any build.
 
-Call `DEBUG` without params to show list of useful commands (in general) and subcommands (of `DEBUG` statement) available at current context.
+Call `DEBUG` without params to show a list of useful commands (in general) and subcommands (of `DEBUG` statement) available at the current context.
 
 ```sql
 mysql> debug;
@@ -221,12 +210,9 @@ mysql> debug;
 24 rows in set (0.00 sec)
 ```
 
-All `debug XXX` commands should be regarded as non-stable, and they're matter of freely modification at any moment, don't be surprised. This example output here also not necessary reflect actual available commands, try it on your system to see what is available on your instance. Also, no detailed documentation implied apart this short 'meaning' column.
+All `debug XXX` commands should be regarded as non-stable and subject to modification at any time, so don't be surprised if they change. This example output may not reflect the actual available commands, so try it on your system to see what is available on your instance. Additionally, there is no detailed documentation provided aside from this short 'meaning' column.
 
-Just as quick illustration, two commands available only to VIP clients described below - `shutdown` and `crash`. Both requires a token, which can be generated with `debug token`
-subcommand, and put into [shutdown_token](Server_settings/Searchd.md#shutdown_token) param of searchd section of the
-config file. If no such section exists, or if a hash of the provided password does not match with the token stored in
-the config, the subcommands will do nothing.
+As a quick illustration, two commands available only to VIP clients are described below - shutdown and crash. Both require a token, which can be generated with the debug token subcommand, and added to the [shutdown_token](Server_settings/Searchd.md#shutdown_token) param in the searchd section of the config file. If no such section exists, or if the provided password hash does not match the token stored in the config, the subcommands will do nothing.
 
 ```sql
 mysql> debug token hello;
@@ -238,11 +224,8 @@ mysql> debug token hello;
 1 row in set (0,00 sec)
 ```
 
-Subcommand `shutdown` will send a TERM signal to the server and so will make it shut down. Since it is quite dangerous (nobody wants accidentally stop a production service), it:
-1. needs a VIP connection, and
-2. needs the password
+The subcommand `shutdown` will send a TERM signal to the server, causing it to shut down. This can be dangerous, as nobody wants to accidentally stop a production service. Therefore, it requires a VIP connection and the password to be used.
 
-Subcommand `crash` is literally causes crash. It may be used when setting up different things, like 'how system manager keeps livenes of the service', or 'how feasible is coredump tracking'.
+The subcommand `crash` literally causes a crash. It may be used for testing purposes, such as to test how the system manager maintains the service's liveness or to test the feasibility of tracking coredumps.
 
-If some commands is found useful in generic, we'll move them from `debug` subcommands to more generic and stable
-place (notice meaning of `debug tasks` and `debug sched` in the table as such examples).
+If some commands are found to be useful in a more general context, they may be moved from the debug subcommands to a more stable and generic location (as exemplified by the `debug tasks` and `debug sched` in the table).

@@ -6800,11 +6800,9 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 
 static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard )
 {
+	assert ( dSplits.GetLength()==iJobs );
+
 	int64_t iMaxCountDistinct = CalcMaxCountDistinct ( tQuery, tGuard );
-
-	dSplits.Resize(iJobs);
-	dSplits.Fill(1);
-
 	int iNumSingleThreads = 0;
 	int64_t iTotalMetric = 0;
 	CSphVector<int64_t> dMetrics { iJobs };
@@ -6854,7 +6852,13 @@ static void QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
+	// uninitilized dSplits (due to tClonableCtx.IsSingle()) could still cause the SplitQuery code path at the CSphIndex_VLN::MultiQuery as
+	// dSplits[iChunk] -> tMultiArgs.m_iThreads
+	// then at the m_dDiskChunks
+	// if ( tArgs.m_iThreads>1 ) return SplitQuery
 	IntVec_t dSplits {iJobs};
+	dSplits.Fill(1); // moved here from CalcDiskChunkSplits to prevent short-cuts
+
 	auto pDispatcher = Dispatcher::Make ( iJobs, tArgs.m_iThreads, tDispatch, tClonableCtx.IsSingle() || !CalcDiskChunkSplits ( dSplits, iJobs, tQuery, tArgs, tGuard ));
 
 	const int iThreads = pDispatcher->GetConcurrency();

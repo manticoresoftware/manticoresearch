@@ -239,13 +239,6 @@ enum QueryOption_e
 	QUERY_OPT_MORPH_NONE
 };
 
-enum class IndexHint_e
-{
-	USE,
-	FORCE,
-	IGNORE_		// dumb windows expands IGNORE as a macro
-};
-
 /// match sorting functions
 enum ESphSortFunc
 {

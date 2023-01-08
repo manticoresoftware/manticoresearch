@@ -56,12 +56,12 @@ insert into test_table values
 
 <queries><sphinxql>
 select id from test1 where id in (1,13) and gid not in (1);
-select id from test1 where id in (1,13) and gid not in (1) force index(id);
-select id from test1 where id in (1,13) and gid not in (1) ignore index(id);
+select id from test1 where id in (1,13) and gid not in (1) /*+ DocidIndex(id) */;
+select id from test1 where id in (1,13) and gid not in (1) /*+ NO_DocidIndex(id) */;
 
 select * from test1;
-update test1 set gid=1212 where id=2 force index(id);
-update test1 set gid=1313 where id=3 ignore index(id);
+update test1 set gid=1212 where id=2 /*+ DocidIndex(id) */;
+update test1 set gid=1313 where id=3 /*+ NO_DocidIndex(id) */;
 select * from test1;
 
 </sphinxql></queries>

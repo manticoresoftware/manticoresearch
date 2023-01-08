@@ -117,7 +117,7 @@ public:
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
-	void			AddIndexHint ( IndexHint_e eHint, const SqlNode_t & tValue );
+	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddCount ();
@@ -803,18 +803,19 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt>
 }
 
 
-void SqlParser_c::AddIndexHint ( IndexHint_e eHint, const SqlNode_t & tValue )
+void SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue )
 {
 	CSphString sIndexes;
 	ToString ( sIndexes, tValue );
 	StrVec_t dIndexes;
 	sphSplit ( dIndexes, sIndexes.cstr() );
-
+	
 	for ( const auto & i : dIndexes )
 	{
 		IndexHint_t & tHint = m_pQuery->m_dIndexHints.Add();
 		tHint.m_sIndex = i;
-		tHint.m_dHints[int(SecondaryIndexType_e::INDEX)] = eHint;
+		tHint.m_eType = eType;
+		tHint.m_bForce = bForce;
 	}
 }
 
@@ -1405,14 +1406,7 @@ struct HintComp_fn
 
 	bool IsEq ( const IndexHint_t & tA, const IndexHint_t & tB ) const
 	{
-		if ( tA.m_sIndex!=tB.m_sIndex )
-			return false;
-
-		for ( int i = 0; i < int(SecondaryIndexType_e::TOTAL); i++ )
-			if ( tA.m_dHints[i] != tB.m_dHints[i] )
-				return false;
-		
-		return true;
+		return tA.m_sIndex==tB.m_sIndex && tA.m_eType==tB.m_eType && tA.m_bForce==tB.m_bForce;
 	}
 };
 
@@ -1423,7 +1417,7 @@ static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sEr
 	sphUniq ( dHints.Begin(), dHints.GetLength(), HintComp_fn() );
 
 	for ( int i = 1; i < dHints.GetLength(); i++ )
-		if ( dHints[i-1].m_sIndex==dHints[i].m_sIndex )
+		if ( dHints[i-1].m_sIndex==dHints[i].m_sIndex && dHints[i-1].m_eType==dHints[i].m_eType )
 		{
 			sError.SetSprintf ( "conflicting hints specified for table '%s'", dHints[i-1].m_sIndex.cstr() );
 			return false;

@@ -649,32 +649,29 @@ static void PrintStats ( const char * szHeader, int64_t iTime, float fEstimatedC
 }
 
 
-static IndexHint_t & IgnoreAll ( CSphQuery & tQuery, const char * szName )
+static void IgnoreAll ( CSphQuery & tQuery, const char * szName )
 {
-	tQuery.m_dIndexHints.Add( { szName } );
-
-	for ( auto & i : tQuery.m_dIndexHints.Last().m_dHints )
-		i = IndexHint_e::IGNORE_;
-
-	return tQuery.m_dIndexHints.Last();
+	tQuery.m_dIndexHints.Add ( { szName, SecondaryIndexType_e::INDEX, false } );
+	tQuery.m_dIndexHints.Add ( { szName, SecondaryIndexType_e::ANALYZER, false } );
+	tQuery.m_dIndexHints.Add ( { szName, SecondaryIndexType_e::LOOKUP, false } );
 }
 
 
 static void ForceColumnar ( CSphQuery & tQuery, const char * szName )
 {
-	IgnoreAll ( tQuery, szName ).m_dHints[int(SecondaryIndexType_e::ANALYZER)] = IndexHint_e::FORCE;
+	tQuery.m_dIndexHints.Add ( { szName, SecondaryIndexType_e::ANALYZER, true } );
 }
 
 
 static void ForceSI( CSphQuery & tQuery, const char * szName )
 {
-	IgnoreAll ( tQuery, szName ).m_dHints[int(SecondaryIndexType_e::INDEX)] = IndexHint_e::FORCE;
+	tQuery.m_dIndexHints.Add ( { szName, SecondaryIndexType_e::INDEX, true } );
 }
 
 
 static void ForceLookup( CSphQuery & tQuery, const char * szName )
 {
-	IgnoreAll ( tQuery, szName ).m_dHints[int(SecondaryIndexType_e::LOOKUP)] = IndexHint_e::FORCE;
+	tQuery.m_dIndexHints.Add ( { szName, SecondaryIndexType_e::LOOKUP, true } );
 }
 
 

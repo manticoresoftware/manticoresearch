@@ -453,8 +453,9 @@ enum class SecondaryIndexType_e
 
 struct IndexHint_t
 {
-	CSphString		m_sIndex;
-	IndexHint_e		m_dHints[DWORD(SecondaryIndexType_e::TOTAL)] = {};
+	CSphString				m_sIndex;
+	SecondaryIndexType_e	m_eType = SecondaryIndexType_e::NONE;
+	bool					m_bForce = true;
 };
 
 const int DEFAULT_MAX_MATCHES = 1000;

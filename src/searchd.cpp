@@ -1838,8 +1838,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendInt ( q.m_dIndexHints.GetLength() );
 	for ( const auto & i : q.m_dIndexHints )
 	{
-		tOut.SendDword ( (DWORD)i.m_dHints[int(SecondaryIndexType_e::INDEX)] );
 		tOut.SendString ( i.m_sIndex.cstr() );
+		tOut.SendDword ( (DWORD)i.m_eType );
+		tOut.SendDword ( (DWORD)i.m_bForce );
 	}
 }
 
@@ -2651,13 +2652,15 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=16 )
 		tQuery.m_eExpandKeywords = (QueryOption_e)tReq.GetDword();
 
-	if ( uMasterVer>=17 )
+	// pre-v.20 had old-style index hints, but they were not documented anyway
+	if ( uMasterVer>=20 )
 	{
 		tQuery.m_dIndexHints.Resize ( tReq.GetDword() );
 		for ( auto & i : tQuery.m_dIndexHints )
 		{
-			i.m_dHints[int(SecondaryIndexType_e::INDEX)] = (IndexHint_e)tReq.GetDword();
 			i.m_sIndex = tReq.GetString();
+			i.m_eType = (SecondaryIndexType_e)tReq.GetDword();
+			i.m_bForce = !!tReq.GetDword();
 		}
 	}
 
@@ -2977,12 +2980,30 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 }
 
 
-static void AppendHint ( const char * szHint, const StrVec_t & dIndexes, StringBuilder_c & tBuf )
+static CSphString GenerateHintName ( const IndexHint_t & tHint )
 {
-	if ( dIndexes.IsEmpty() )
-		return;
-	tBuf << " " << szHint;
-	ScopedComma_c tComma ( tBuf, ",", " INDEX (", ")" );
+	CSphString sName;
+	switch ( tHint.m_eType )
+	{
+	case SecondaryIndexType_e::FILTER:	sName = "Filter"; break;
+	case SecondaryIndexType_e::LOOKUP:	sName = "DocidIndex"; break;
+	case SecondaryIndexType_e::INDEX:	sName = "SecondaryIndex"; break;
+	case SecondaryIndexType_e::ANALYZER:sName = "ColumnarScan"; break;
+	default:							sName = "None"; break;
+	}
+
+	if ( !tHint.m_bForce )
+		sName.SetSprintf ( "NO_%s", sName.cstr() );
+
+	return sName;
+}
+
+
+static void AppendHint ( const IndexHint_t & tHint, const StrVec_t & dIndexes, StringBuilder_c & tBuf )
+{
+	CSphString sName;
+	sName.SetSprintf ( " %s (", GenerateHintName(tHint).cstr() );
+	ScopedComma_c tComma ( tBuf, ",", sName.cstr(), ")" );
 	for ( const auto & sIndex : dIndexes )
 		tBuf << sIndex;
 }
@@ -2990,35 +3011,41 @@ static void AppendHint ( const char * szHint, const StrVec_t & dIndexes, StringB
 
 static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 {
+	if ( !tQuery.m_dIndexHints.GetLength() )
+		return;
+
 	ScopedComma_c sMatch ( tBuf, nullptr );
-	StrVec_t dUse, dForce, dIgnore;
-	for ( const auto & i : tQuery.m_dIndexHints )
+	CSphVector<bool> dUsed { tQuery.m_dIndexHints.GetLength() };
+	dUsed.ZeroVec();
+
+	tBuf << " /*+ ";
+
+	ARRAY_FOREACH ( i, tQuery.m_dIndexHints )
 	{
-		switch ( i.m_dHints[int(SecondaryIndexType_e::INDEX)] )
-		{
-		case IndexHint_e::USE:
-			dUse.Add(i.m_sIndex);
-			break;
-		case IndexHint_e::FORCE:
-			dForce.Add(i.m_sIndex);
-			break;
-		case IndexHint_e::IGNORE_:
-			dIgnore.Add(i.m_sIndex);
-			break;
-		default:
-			break;
-		}
+		if ( dUsed[i] )
+			continue;
+
+		StrVec_t dIndexes;
+		dIndexes.Add ( tQuery.m_dIndexHints[i].m_sIndex );
+		for ( int j = i+1; j<tQuery.m_dIndexHints.GetLength(); j++)
+			if ( !dUsed[j] && tQuery.m_dIndexHints[i].m_eType==tQuery.m_dIndexHints[j].m_eType && tQuery.m_dIndexHints[i].m_bForce==tQuery.m_dIndexHints[j].m_bForce )
+			{
+				dIndexes.Add ( tQuery.m_dIndexHints[j].m_sIndex );
+				dUsed[j] = true;
+			}
+
+		AppendHint ( tQuery.m_dIndexHints[i], dIndexes, tBuf );
 	}
 
-	AppendHint ( "USE", dUse, tBuf );
-	AppendHint ( "FORCE", dForce, tBuf );
-	AppendHint ( "IGNORE", dIgnore, tBuf );
+	tBuf << " */";
 }
+
 
 static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
 	tBuf << " /*" << q.m_sRawQuery << " */";
 }
+
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {

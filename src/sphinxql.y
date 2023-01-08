@@ -71,6 +71,14 @@
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
+%token	TOK_HINT_SECONDARY
+%token	TOK_HINT_NO_SECONDARY
+%token	TOK_HINT_DOCID
+%token	TOK_HINT_NO_DOCID
+%token	TOK_HINT_CLOSE
+%token	TOK_HINT_COLUMNAR
+%token	TOK_HINT_NO_COLUMNAR
+%token	TOK_HINT_OPEN
 %token	TOK_HOSTNAMES
 %token	TOK_IGNORE
 %token	TOK_IN
@@ -1160,30 +1168,38 @@ named_const:
 
 opt_hint_clause:
 	// empty
-	| hint_list
+	| TOK_HINT_OPEN hint_list TOK_HINT_CLOSE
 	;
 
 hint_list:
 	hint_item
 	| hint_list hint_item
 	;
-identidx_list:
-	ident
-	| identidx_list ',' ident				{ TRACK_BOUNDS ( $$, $1, $3 ); }
-	;
 
-hint_item:
-	TOK_FORCE TOK_INDEX '(' identidx_list ')'
+hint_item:           
+	TOK_HINT_SECONDARY '(' ident ')'
 		{
-			pParser->AddIndexHint ( IndexHint_e::FORCE, $4 );
+			pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, true, $3 );
 		}
-	| TOK_USE TOK_INDEX '(' identidx_list ')'
+	| TOK_HINT_NO_SECONDARY '(' ident ')'
 		{
-			pParser->AddIndexHint ( IndexHint_e::USE, $4 );
+			pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, false, $3 );
 		}
-	| TOK_IGNORE TOK_INDEX '(' identidx_list ')'
+	| TOK_HINT_DOCID '(' ident ')'
 		{
-			pParser->AddIndexHint ( IndexHint_e::IGNORE_, $4 );
+			pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, true, $3 );
+		}
+	| TOK_HINT_NO_DOCID '(' ident ')'
+		{
+			pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, false, $3 );
+		}
+	| TOK_HINT_COLUMNAR '(' ident ')'
+		{
+			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, true, $3 );
+		}
+	| TOK_HINT_NO_COLUMNAR '(' ident ')'
+		{
+			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, false, $3 );
 		}
 	;
 

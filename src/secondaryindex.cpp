@@ -587,23 +587,17 @@ SIDefault_e GetSecondaryIndexDefault ()
 }
 
 
-static bool CheckIndexHint ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, SecondaryIndexType_e eType, bool & bForce, IndexHint_e *& pHint )
+static bool CheckIndexHint ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, SecondaryIndexType_e eType, bool & bForce )
 {
-	bool bHaveUseHint = false;
-	ARRAY_FOREACH_COND ( i, dHints, !bHaveUseHint )
-		bHaveUseHint = dHints[i].m_dHints[int(eType)]==IndexHint_e::USE;
+	bForce = false;
 
-	ARRAY_FOREACH_COND ( iHint, dHints, !pHint )
-		if ( dHints[iHint].m_sIndex==tFilter.m_sAttrName )
-			pHint = &dHints[iHint].m_dHints[int(eType)];
+	for ( const auto & i : dHints )
+		if ( i.m_sIndex==tFilter.m_sAttrName && i.m_eType==eType )
+		{
+			bForce = i.m_bForce;
+			return bForce;
+		}
 
-	if ( pHint && *pHint==IndexHint_e::IGNORE_ )
-		return false;
-
-	if ( bHaveUseHint && !pHint )
-		return false;
-
-	bForce = pHint && *pHint==IndexHint_e::FORCE;
 	return true;
 }
 
@@ -613,8 +607,7 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 	if ( !tCtx.IsEnabled_SI(tFilter) )
 		return false;
 
-	IndexHint_e * pHint = nullptr;
-	if ( !CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::INDEX, bForce, pHint ) )
+	if ( !CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::INDEX, bForce ) )
 		return false;
 
 	if ( !IsSecondaryLibLoaded() || GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
@@ -629,8 +622,7 @@ static bool HaveAnalyzer ( const CSphFilterSettings & tFilter, const SelectItera
 	if ( !tCtx.IsEnabled_Analyzer(tFilter) )
 		return false;
 
-	IndexHint_e * pHint = nullptr;
-	return CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::ANALYZER, bForce, pHint );
+	return CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::ANALYZER, bForce );
 }
 
 
@@ -639,8 +631,7 @@ static bool HaveLookup ( const CSphFilterSettings & tFilter, const CSphVector<In
 	if ( tFilter.m_sAttrName!=sphGetDocidName() )
 		return false;
 
-	IndexHint_e * pHint = nullptr;
-	return CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::LOOKUP, bForce, pHint );
+	return CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::LOOKUP, bForce );
 }
 
 

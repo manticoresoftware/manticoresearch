@@ -48,8 +48,8 @@ CREATE TABLE test (
 <queries><sphinxql>
 
 select id from test where id>0;
-select id from test where id>0 force index(id);
-select id from test where id>0 ignore index(id);
+select id from test where id>0 /*+ DocidIndex(id) */;
+select id from test where id>0 /*+ NO_DocidIndex(id) */;
 
 select * from test where id>60;
 

@@ -165,6 +165,11 @@ select length(title) from META:all;
 select id,price from META:all where price=101;
 
 select avg(price) from test_dist;
+
+select brand_id from test_col where price&gt;500;
+show meta;
+select brand_id from test_col where price&gt;500 /*+ NO_ColumnarScan(price) */;
+show meta;
 </sphinxql></queries>
 
 </test>

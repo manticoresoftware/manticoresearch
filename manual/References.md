@@ -543,7 +543,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A complete alphabetical list of keywords that are currently reserved in Manticore SQL syntax (and therefore can not be used as identifiers).
 
 ```
-AND, AS, BY, DISTINCT, DIV, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, MOD, NOT, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SELECT, SYSFILTERS, TRUE, USE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE, USE
 ```
 
 ## Documentation for old Manticore versions

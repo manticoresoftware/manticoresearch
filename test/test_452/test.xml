@@ -58,8 +58,8 @@ CREATE TABLE `test_table1` (
 <db_insert>insert into test_table1 (id,title, tag, flag) values(1,'abc', 1, 1),(2,'abc', 1, 1),(3,'abc', 2, 0),(4,'abc', 1, 1),(5,'abc', 2, 0)</db_insert>
 
 <queries>
-<sphinxql>select * from test1 where flag=1 force index(flag)</sphinxql>
-<sphinxql>select * from test2 where tag &gt; 10 force index(tag)</sphinxql>
+<sphinxql>select * from test1 where flag=1 /*+ SecondaryIndex(flag) */</sphinxql>
+<sphinxql>select * from test2 where tag &gt; 10 /*+ SecondaryIndex(tag) */</sphinxql>
 </queries>
 
 </test>

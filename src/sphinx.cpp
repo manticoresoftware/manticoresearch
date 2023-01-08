@@ -7861,6 +7861,16 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<
 	std::vector<int> dFilterMap;
 	ToColumnarFilters ( dFilters, dColumnarFilters, dFilterMap, tSchema, eCollation, sWarning );
 
+	// remove disabled analyzers
+	for ( size_t i = 0; i < dFilterMap.size(); )
+		if ( dSIInfo[i].m_eType!=SecondaryIndexType_e::ANALYZER )
+		{
+			dFilterMap.erase ( dFilterMap.begin()+i );
+			dColumnarFilters.erase ( dColumnarFilters.begin()+i );
+		}
+		else
+			i++;
+
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return nullptr;
 

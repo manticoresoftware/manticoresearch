@@ -711,7 +711,7 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 
 bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError )
 {
-	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("columnar_no_fast_fetch") || hIndex.Exists("rowwise_attrs") || hIndex.Exists("engine") ) && !IsColumnarLibLoaded() )
+	if ( ( hIndex.Exists("columnar_attrs") || hIndex.Exists("columnar_no_fast_fetch") || ( hIndex.Exists("engine") && hIndex["engine"]=="columnar" ) ) && !IsColumnarLibLoaded() )
 	{
 		sError = "columnar library not loaded";
 		return false;

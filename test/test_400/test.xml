@@ -161,6 +161,10 @@ searchd
 	select * from test;
 	select * from test facet ipaddress.data order by count(*) desc limit 10;;
 	drop table test;
+
+	create table t(f text) engine='rowwise';
+	show create table t;
+	drop table t;
 </sphinxql>
 </queries>
 

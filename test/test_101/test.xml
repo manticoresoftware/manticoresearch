@@ -75,6 +75,11 @@ index test2
 	insert into test2 values (2, 'test of my things going well', 22), (1, 'test', 12);
 	insert into test2 values (3, 'test', 22), (3, 'test', 12), (3, 'test', 23);
 	select id from test2;
+    
+	<!-- regression error from delete\update complex query does not get back from disk chunks -->
+	flush ramchunk test2;
+    delete from test2 where id in ('testnope1', 'testnope2');
+    update test2 set idd=202 where id in ('testnope1', 'testnope2');
 </sphinxql>
 </queries>
 </Test>

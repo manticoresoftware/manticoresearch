@@ -28,7 +28,7 @@ manticore-backup --config=path/to/manticore.conf --backup-dir=backupdir
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2022, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: all tables
@@ -67,7 +67,7 @@ manticore-backup --backup-dir=/mnt/backup/ --tables=products
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2022, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: products
@@ -159,7 +159,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2022, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -189,7 +189,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore=backup-20221007104044
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2022, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/

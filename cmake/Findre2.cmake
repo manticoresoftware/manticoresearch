@@ -18,7 +18,7 @@
 #   WITH_RE2_LIBS       - where to search for the lib
 
 #=============================================================================
-# Copyright 2017-2022, Manticore Software LTD (https://manticoresearch.com)
+# Copyright 2017-2023, Manticore Software LTD (https://manticoresearch.com)
 # Copyright 2015-2016 Sphinx Technologies, Inc.
 #
 # Distributed under the OSI-approved BSD License (the "License");

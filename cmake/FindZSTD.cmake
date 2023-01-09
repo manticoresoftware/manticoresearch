@@ -13,7 +13,7 @@
 # If library is found, imported target ZSTD::ZSTD is produced to link with.
 #
 #=============================================================================
-# Copyright 2021-2022, Manticore Software LTD (https://manticoresearch.com)
+# Copyright 2021-2023, Manticore Software LTD (https://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.

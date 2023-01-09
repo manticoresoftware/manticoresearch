@@ -428,7 +428,7 @@ $ indexer mysmallindex mybigindex</programlisting>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017-2022 Manticore Software LTD (https://manticoresearch.com),
+		<para>Copyright  2017-2023 Manticore Software LTD (https://manticoresearch.com),
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -902,7 +902,7 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017-2022 Manticore Software LTD (https://manticoresearch.com),
+		<para>Copyright  2017-2023 Manticore Software LTD (https://manticoresearch.com),
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -1026,7 +1026,7 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017-2022 Manticore Software LTD (https://manticoresearch.com),
+		<para>Copyright  2017-2023 Manticore Software LTD (https://manticoresearch.com),
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -1259,7 +1259,7 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017-2022 Manticore Software LTD (https://manticoresearch.com),
+		<para>Copyright  2017-2023 Manticore Software LTD (https://manticoresearch.com),
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -1388,7 +1388,7 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017-2022 Manticore Software LTD (https://manticoresearch.com),
+		<para>Copyright  2017-2023 Manticore Software LTD (https://manticoresearch.com),
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document

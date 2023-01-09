@@ -580,12 +580,9 @@ max_filter_values = 16384
 ### max_open_files
 
 <!-- example conf max_open_files -->
-Maximum num of files which allowed to be opened by server. Note that serving big fragmented rt-tables may require this limit to be high. Say, if every disk chunk occupy dozen of files, rt-table from 1000 chunks will suppose to have thousand dozens of files keep opened simultaneously. So, one time you may face the error 'Too many open files' somewhere in logs. In this case try to manipulate with this option, it may help to solve the problem.
+The maximum number of files that are allowed to be opened by the server is called "soft limit". Note that serving large fragmented real-time tables may require this limit to be set high, as each disk chunk may occupy a dozen or more files. For example, a real-time table with 1000 chunks may require thousands of files to be opened simultaneously. If you encounter the error 'Too many open files' in the logs, try adjusting this option, as it may help resolve the issue.
 
-Apart this value (so called 'soft limit') there is also 'hard limit', which can't be exceed by the option.
-
-Hard limit is defined by the system and on Linux may be changed in file `/etc/security/limits.conf`. Another OSes may use different approaches here, consult your manuals for details.
-
+There is also a "hard limit" that cannot be exceeded by the option. This limit is defined by the system and can be changed in the file `/etc/security/limits.conf` on Linux. Other operating systems may have different approaches, so consult your manuals for more information.
 
 <!-- intro -->
 ##### Example:

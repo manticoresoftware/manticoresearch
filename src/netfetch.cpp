@@ -281,7 +281,6 @@ public:
 	CURLM* m_pCurlMulti;
 	Threads::RoledSchedulerSharedPtr_t m_tStrand;
 	MiniTimer_c m_tTimer;
-	int m_iLeftConns = 0;
 
 	void WriteSocketCookie ( curl_socket_t tCurlSocket, void* pCookie=nullptr ) const REQUIRES ( CurlStrand() )
 	{
@@ -582,11 +581,6 @@ void CurlMulti_c::CheckCompleted ( curl_socket_t tCurlSocket, int iWhat ) REQUIR
 	int iLeft = 0;
 	auto x = sph_curl_multi_socket_action ( m_pCurlMulti, tCurlSocket, iWhat, &iLeft );
 	MULTI_DEBUG << "curl_multi_socket_action returned " << x << ", " << iLeft << " tasks running.";
-	if ( iLeft == m_iLeftConns )
-		return;
-
-	MULTI_INFO << "N of running changed " << m_iLeftConns << " -> " << iLeft;
-	m_iLeftConns = iLeft;
 
 	while ( true )
 	{

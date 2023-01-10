@@ -40,6 +40,15 @@ index test2
 	source 			= test2
 	path			= <data_path/>/test2
 }
+
+index test3
+{
+	type = rt
+	path			= <data_path/>/test3
+	rt_field = title
+	rt_attr_uint = idd
+    rt_attr_uint = tag
+}
 </config>
 
 <db_create>
@@ -60,6 +69,20 @@ CREATE TABLE `test_table1` (
 <queries>
 <sphinxql>select * from test1 where flag=1 /*+ SecondaryIndex(flag) */</sphinxql>
 <sphinxql>select * from test2 where tag &gt; 10 /*+ SecondaryIndex(tag) */</sphinxql>
+
+<!-- regression empty secondary index crash at the disk chunks with all dead documents -->
+<!-- make disk chunk; UPDATE attr there to allov ALTER to work later; DELETE all docs in that disk chunk; regenerate SI with ALTER -->
+<sphinxql>
+INSERT INTO test3 (id,title,idd) VALUES (11,'abc 1', 1),(12,'abc1', 1),(13,'abc 1', 2);
+FLUSH RAMCHUNK test3;
+INSERT INTO test3 (id,title,idd) VALUES (21,'abc 2', 1),(22,'abc2', 1),(23,'abc 2', 2);
+UPDATE test3 SET tag=1 WHERE id IN (11,12);
+DELETE FROM test3 WHERE id in (11,12,13);
+ALTER TABLE test3 REBUILD SECONDARY;
+
+SELECT * FROM test3 WHERE idd &gt; 0 ORDER BY id ASC /*+ SecondaryIndex(idd) */
+</sphinxql>
+
 </queries>
 
 </test>

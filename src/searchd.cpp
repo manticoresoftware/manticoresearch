@@ -204,6 +204,7 @@ static CSphString		g_sBuddyPath;
 static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
+static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -19001,7 +19002,43 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
-	g_sConfigPath = sphGetCwd();
+}
+
+static void DirMustWritable ( const CSphString & sDataDir )
+{
+	CSphString sError;
+	CSphString sTmpName;
+	sTmpName.SetSprintf ( "%s/gmb_%d", sDataDir.cstr(), (int)getpid() );
+
+	CSphWriter tFile;
+	if ( !tFile.OpenFile ( sTmpName, sError ) )
+		sphFatal ( "The directory Manticore starts from must be writable for the daemon, error: %s", sError.cstr() );
+
+	tFile.PutDword( 1 );
+	tFile.Flush();
+
+	if ( tFile.IsError() )
+		sphFatal ( "The directory Manticore starts from must be writable for the daemon, error: %s", sError.cstr() );
+}
+
+static void CheckSetCwd () REQUIRES ( MainThread )
+{
+	if ( g_bNoChangeCwd || !IsConfigless() )
+		return;
+
+	CSphString sDataDir = GetDataDirInt();
+	if ( !IsPathAbsolute ( sDataDir ) )
+	{
+		DirMustWritable ( "." );
+		return;
+	}
+
+	int iRes = chdir ( sDataDir.cstr() );
+	if ( iRes!=0 )
+		sphFatal ( "failed to change current working directory to '%s': %s", sDataDir.cstr(), strerror(errno) );
+
+	sphLogDebug ( "current working directory changed to '%s'", sDataDir.cstr() );
+	DirMustWritable ( sDataDir );
 }
 
 static void PutPath ( const CSphString & sCwd, const CSphString & sVar, RowBuffer_i & tOut )
@@ -19638,6 +19675,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--coredump" )		g_bCoreDump = true;
 		OPT1 ( "--new-cluster" )	bNewCluster = true;
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
+		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -19762,6 +19800,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphFatal ( "%s", sError.cstr() );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+	CheckSetCwd();
+	g_sConfigPath = sphGetCwd();
 	sphConfigureCommon ( hConf ); // this also inits plugins now
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;

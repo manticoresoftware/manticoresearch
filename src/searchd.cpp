@@ -14702,6 +14702,7 @@ void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 				pVars->m_dLastIds.Apply ( [&s] ( int64_t iID ) { s << iID; } );
 				return CSphString(s);
 			}},
+		{ MYSQL_COL_LONG,	"@@autocommit", [] { return tVars.m_bAutoCommit ? "1" : "0"; }},
 	};
 
 	auto fnVar = [&dSysvars] ( const CSphString & sVar )->const SysVar_t &
@@ -16500,7 +16501,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_SELECT_SYSVAR:
-		HandleMysqlSelectSysvar ( tOut, *pStmt );
+		HandleMysqlSelectSysvar ( tOut, *pStmt, m_tVars );
 		return true;
 
 	case STMT_SHOW_COLLATION:

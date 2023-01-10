@@ -306,6 +306,16 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 
 void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads )
 {
+	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
+	if ( szHelperUrl )
+	{
+		// debug mode - don't start anything and consider env url valid and available
+		// - can start any kind of helper externally and just route to it using provided URL
+		g_sUrlBuddy = szHelperUrl;
+		g_eBuddy = BuddyState_e::WORK;
+		return;
+	}
+
 	CSphString sPath = BuddyGetPath ( sConfigPath, bHasBuddyPath );
 	if ( sPath.IsEmpty() )
 		return;

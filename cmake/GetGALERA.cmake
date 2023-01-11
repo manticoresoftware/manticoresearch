@@ -3,7 +3,7 @@ cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
 set ( GALERA_REPO "https://github.com/manticoresoftware/galera" )
 set ( GALERA_REV "a79a074" )
-set ( GALERA_SRC_MD5 "742f08ffaff4713107a195e49e1b1871" )
+set ( GALERA_SRC_MD5 "720cbbed3916ce217285349140f1fca6" )
 
 set ( GALERA_GITHUB "${GALERA_REPO}/archive/${GALERA_REV}.zip" )
 set ( GALERA_BUNDLE "${LIBS_BUNDLE}/galera-${GALERA_REV}.zip" )

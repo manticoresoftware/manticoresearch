@@ -174,8 +174,8 @@ See [instruction here](https://manual.manticoresearch.com/Installation/MacOS#Fro
   * [Interactive courses](https://play.manticoresearch.com)
   * [Manticore Community Forum](https://forum.manticoresearch.com/)
   * [Public Slack chat](http://slack.manticoresearch.com/)
-  * [Public Telegram chat (En)](https://twitter.com/manticoresearch_en)
-  * [Public Telegram chat (Ru)](https://twitter.com/manticore_chat)
+  * [Public Telegram chat (En)](https://t.me/manticoresearch_en)
+  * [Public Telegram chat (Ru)](https://t.me/manticore_chat)
   * [Bug tracker](https://github.com/manticoresoftware/manticore/issues)
 
 # Third-party integrations

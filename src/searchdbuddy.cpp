@@ -599,7 +599,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyExecName.cstr() );
+	sExecPath.SetSprintf ( "%smanticore-executor\\%s", sPathToDaemon.cstr(), g_sDefaultBuddyExecName.cstr() );
 	if ( !sphFileExists ( sExecPath.cstr() ) )
 	{
 		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyExecName.cstr(), sExecPath.cstr() );

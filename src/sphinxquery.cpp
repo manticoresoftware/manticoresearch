@@ -327,10 +327,8 @@ static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
 }
 
-static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned )
+static XQNode_t * TransformOnlyNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned )
 {
-	pNode->SetOp ( SPH_QUERY_AND );
-
 	XQNode_t * pScan = new XQNode_t ( pNode->m_dSpec );
 	pScan->SetOp ( SPH_QUERY_SCAN );
 	dSpawned.Add ( pScan );
@@ -342,6 +340,13 @@ static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned
 	return pAnd;
 }
 
+
+static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned )
+{
+	pNode->SetOp ( SPH_QUERY_AND );
+	return TransformOnlyNot ( pNode, dSpawned );
+}
+
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed )
 {
 	FixupDestForms ();
@@ -350,7 +355,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
 	FixupNulls ( pRoot );
 
-	if ( !FixupNots ( pRoot ) )
+	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
 	{
 		Cleanup ();
 		return NULL;
@@ -496,7 +501,7 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 	}
 }
 
-bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
+bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode_t ** ppRoot )
 {
 	// no processing for plain nodes
 	if ( !pNode || !pNode->m_dWords.IsEmpty() )
@@ -508,7 +513,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
 
 	// process 'em children
 	for ( auto& dNode : pNode->m_dChildren )
-		if ( !FixupNots ( dNode ) )
+		if ( !FixupNots ( dNode, bOnlyNotAllowed, ppRoot ) )
 			return false;
 
 	// extract NOT subnodes
@@ -525,7 +530,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
 		return true;
 
 	// nothing but NOTs? we can't compute that
-	if ( !pNode->m_dChildren.GetLength() )
+	if ( !pNode->m_dChildren.GetLength() && !bOnlyNotAllowed )
 		return Error ( "query is non-computable (node consists of NOT operators only)" );
 
 	// NOT within OR or MAYBE? we can't compute that
@@ -541,7 +546,30 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
 		return Error ( "query is non-computable (NOT cannot be used as before operand)" );
 
 	// must be some NOTs within AND at this point, convert this node to ANDNOT
-	assert ( pNode->GetOp()==SPH_QUERY_AND && pNode->m_dChildren.GetLength() && dNots.GetLength() );
+	assert ( ( ( pNode->GetOp()==SPH_QUERY_AND && pNode->m_dChildren.GetLength() )
+		|| ( pNode->GetOp()==SPH_QUERY_AND && !pNode->m_dChildren.GetLength() && bOnlyNotAllowed ) )
+		&& dNots.GetLength() );
+
+	if ( pNode->GetOp()==SPH_QUERY_AND && !pNode->m_dChildren.GetLength() )
+	{
+		if ( !bOnlyNotAllowed )
+			return Error ( "query is non-computable (node consists of NOT operators only)" );
+
+		if ( !pNode->m_pParent )
+		{
+			pNode->SetOp ( SPH_QUERY_OR, dNots );
+			*ppRoot = TransformOnlyNot ( pNode, m_dSpawned );
+			return true;
+		} else if ( pNode->m_pParent && pNode->m_pParent->GetOp()==SPH_QUERY_AND && pNode->m_pParent->m_dChildren.GetLength()==2 )
+		{
+			pNode->m_pParent->SetOp ( SPH_QUERY_ANDNOT );
+			pNode->SetOp ( SPH_QUERY_OR, dNots );
+			return true;
+		} else
+		{
+			return Error ( "query is non-computable (node consists of NOT operators only)" );
+		}
+	}
 
 	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
 	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
@@ -1846,7 +1874,7 @@ static void xqIndent ( int iIndent )
 		printf ( "|-" );
 }
 
-static void xqDump ( const XQNode_t * pNode, int iIndent )
+void xqDump ( const XQNode_t * pNode, int iIndent )
 {
 #ifdef XQ_DUMP_NODE_ADDR
 	printf ( "0x%08x ", pNode );
@@ -1879,7 +1907,10 @@ static void xqDump ( const XQNode_t * pNode, int iIndent )
 	} else
 	{
 		xqIndent ( iIndent );
-		printf ( "MATCH(%d,%d):", pNode->m_dSpec.m_dFieldMask.GetMask32(), pNode->m_iOpArg );
+		if ( pNode->GetOp()==SPH_QUERY_SCAN )
+			printf ( "SCAN:" );
+		else
+			printf ( "MATCH(%d,%d):", pNode->m_dSpec.m_dFieldMask.GetMask32(), pNode->m_iOpArg );
 
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
@@ -4247,7 +4278,7 @@ bool CSphTransformation::TransformExcessAndNot ()
 
 void CSphTransformation::Dump ()
 {
-#ifdef XQDEBUG
+#ifdef XQ_DUMP_TRANSFORMED_TREE
 	m_hSimilar.IterateStart();
 	while ( m_hSimilar.IterateNext() )
 	{

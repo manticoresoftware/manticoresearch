@@ -359,7 +359,7 @@ protected:
 
 private:
 	XQNode_t *		SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed );
-	bool			FixupNots ( XQNode_t * pNode );
+	bool			FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode_t ** ppRoot );
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
 	void			FixupDestForms();

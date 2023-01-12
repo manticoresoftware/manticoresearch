@@ -81,5 +81,12 @@ INSERT INTO pq1 (query) VALUES ('-war');
 CALL PQ ('pq1', ('hello world', 'hello hallo world', 'a b world', 'a b c world' ), 1 as docs, 0 as docs_json, 1 as query );
 CALL PQ ('pq1', ('hello war', 'hello hallo war', 'a b war', 'a b c war' ), 1 as docs, 0 as docs_json, 1 as query );
 
+<!-- multiple not operators and not operators inside group -->
+select id from META:all where match ('-war -a') order by id asc;
+select id from META:all where match ('(-war -a)') order by id asc;
+select id from META:all where match ('hello ( -war -hallo )') order by id asc;
+select id from META:all where match ('( -war -hallo ) hello') order by id asc;
+select id from META:all where match ('hello -war -hallo') order by id asc;
+select id from META:all where match ('-war -hallo hello') order by id asc;
 </sphinxql></queries>
 </test>

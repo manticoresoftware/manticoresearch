@@ -11,7 +11,7 @@ SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and HTTP
 **SQL**:
 
 ```sql
-SELECT ... [OPTION <optionname>=<value> [ , ... ]] [FORCE|IGNORE INDEX(id)]
+SELECT ... [OPTION <optionname>=<value> [ , ... ]] [/*+ [NO_][ColumnarScan|DocidIndex|SecondaryIndex(<attribute>[,...])]] /*]
 ```
 
 **HTTP**:
@@ -261,16 +261,22 @@ Quoted, colon-separated of `library name:plugin name:optional string of settings
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
 
-## FORCE and IGNORE INDEX
+## Query optimizer hints
 
 <!-- example options_force -->
 
-In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id or another field (in case [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) is on) should be used or not. Adding `FORCE INDEX(field{, fieldN})` will force Manticore use indexes of the specified fields. `IGNORE INDEX(field{, fieldN})` will force ignore that.
+In rare cases, Manticore's built-in query analyzer may be incorrect in understanding a query and determining whether a docid index, secondary indexes, or columnar scan should be used. To override the query optimizer's decisions, you can use the following hints in your query:
+
+* `/*+ DocidIndex(id) */`  to force the use of a docid index, `/*+ NO_DocidIndex(id) */` to tell the optimizer to ignore it
+* `/*+ SecondaryIndex(<attr_name1>[, <attr_nameN>]) */` to force the use of a secondary index (if available), `/*+ NO_SecondaryIndex(id) */`  to tell the optimizer to ignore it
+* `/*+ ColumnarScan(<attr_name1>[, <attr_nameN>]) */`  to force the use of a columnar scan (if the attribute is columnar), `/*+ NO_ColumnarScan(id) */` to tell the optimizer to ignore it
+
+For more information on how the query optimizer works, see the [Cost based optimizer](../Searching/Cost_based_optimizer.md).
 
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM students where age > 21 FORCE INDEX(age)
+SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```
 
 <!-- end -->

@@ -17,7 +17,7 @@ docker run -it --rm \
 -e DISTR=bullseye \
 -e arch=x86_64 \
 -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
--e boosboost=boost_nov22 \
+-e boost=boost_nov22 \
 -e sysroot=roots_nov22 \
 93ba969c68b2 bash
 ```

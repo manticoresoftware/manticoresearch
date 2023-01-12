@@ -2,6 +2,11 @@
 # from outside: $DISTRO = 6,7,8
 # That file here is for reference; actually used the one stored on the host to avoid checkout of the whole code
 
+
+repo_generator() {
+   /usr/bin/docker exec -i repo-generator /generator.sh $@
+}
+
 echo "Collected rpm packages"
 ls -1 build/
 
@@ -43,18 +48,18 @@ for f in build/*.rpm; do
 
     if [[ ! $ARCH == "none" ]]; then
           if [[ $ARCH == "x86_64" ]]; then
-            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a x86_64 --not-index < $f
+            repo_generator -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a x86_64 --not-index < $f
             bundleintel=1
           fi
 
           if [[ $ARCH == "aarch64" ]]; then
-            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a aarch64 --not-index < $f
+            repo_generator -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a aarch64 --not-index < $f
             bundleaarch=1
           fi
 
           if [[ $ARCH == "noarch" ]]; then
-            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a x86_64 --not-index < $f
-            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a aarch64 --not-index < $f
+            repo_generator -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a x86_64 --not-index < $f
+            repo_generator -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a aarch64 --not-index < $f
           fi
     fi
 
@@ -67,18 +72,18 @@ if [ $bundleintel == 1 ]; then
   echo make bundle x86_64
   TGZ1=manticore-${VER}.x86_64.tgz
   (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "x86_64\|noarch") *icudata*rpm | gzip -9 -f) > $TGZ1
-  /usr/bin/docker exec -i repo-generator /generator.sh -p "/repository/manticoresearch/$DESTINATION/centos/$DISTRO/" -n $TGZ1 --not-index --skip-signing < $TGZ1
+  repo_generator -p "/repository/manticoresearch/$DESTINATION/centos/$DISTRO/" -n $TGZ1 --not-index --skip-signing < $TGZ1
 fi
 
 if [ $bundleaarch == 1 ]; then
   echo make bundle aarch64
   TGZ2=manticore-${VER}.aarch64.tgz
   (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "aarch64\|noarch") *icudata*rpm | gzip -9 -f) > $TGZ2
-  /usr/bin/docker exec -i repo-generator /generator.sh -p "/repository/manticoresearch/$DESTINATION/centos/$DISTRO/" -n $TGZ2 --not-index --skip-signing < $TGZ2
+  repo_generator -p "/repository/manticoresearch/$DESTINATION/centos/$DISTRO/" -n $TGZ2 --not-index --skip-signing < $TGZ2
 fi
 
-/usr/bin/docker exec -i repo-generator /generator.sh -d centos -v $DISTRO --architecture aarch64 --target $DESTINATION --only-index
-/usr/bin/docker exec -i repo-generator /generator.sh -d centos -v $DISTRO --architecture x86_64 --target $DESTINATION --only-index
+repo_generator -d centos -v $DISTRO --architecture aarch64 --target $DESTINATION --only-index
+repo_generator -d centos -v $DISTRO --architecture x86_64 --target $DESTINATION --only-index
 
 
 rm -rf build/*.rpm

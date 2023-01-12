@@ -2,6 +2,11 @@
 # from outside: $DISTRO = jessie,stretch,buster,trusty,xenial,bionic,focal,jammy
 # That file here is for reference; actually used the one stored on the host to avoid checkout of the whole code
 
+repo_generator() {
+   /usr/bin/docker exec -i repo-generator /generator.sh $@
+}
+
+
 echo "Collected debian packages in build/"
 ls -1 build/
 
@@ -37,18 +42,18 @@ for f in build/*deb; do
     fi
 
     if [[ $ARCH == "amd64" ]]; then
-      /usr/bin/docker exec -i repo-generator /generator.sh --distro $DISTRO --architecture amd --target $TARGET --name $FILE_NAME --not-index < $f
+      repo_generator --distro $DISTRO --architecture amd --target $TARGET --name $FILE_NAME --not-index < $f
       bundleamd=1
     fi
 
     if [[ $ARCH == "arm64" ]]; then
-      /usr/bin/docker exec -i repo-generator /generator.sh --distro $DISTRO --architecture arm --target $TARGET --name $FILE_NAME --not-index < $f
+      repo_generator --distro $DISTRO --architecture arm --target $TARGET --name $FILE_NAME --not-index < $f
       bundlearm=1
     fi
 
     if [[ $ARCH == "all" ]]; then
-      /usr/bin/docker exec -i repo-generator /generator.sh --distro $DISTRO --architecture amd --target $TARGET --name $FILE_NAME --not-index < $f
-      /usr/bin/docker exec -i repo-generator /generator.sh --distro $DISTRO --architecture arm --target $TARGET --name $FILE_NAME --not-index < $f
+      repo_generator --distro $DISTRO --architecture amd --target $TARGET --name $FILE_NAME --not-index < $f
+      repo_generator --distro $DISTRO --architecture arm --target $TARGET --name $FILE_NAME --not-index < $f
     fi
   fi
 done
@@ -59,17 +64,17 @@ if [ $bundleamd == 1 ]; then
   echo Pack amd packages
   TGZ1=manticore_${VER}_amd64.tgz
   (cd build && tar cf - *_all.deb *_amd64.deb *icudata*deb | gzip -9 -f) > $TGZ1
-  /usr/bin/docker exec -i repo-generator /generator.sh --path "/repository/manticoresearch_$DISTRO$SUFFIX/dists/" --name $TGZ1 --not-index --skip-signing < $TGZ1
+  repo_generator --path "/repository/manticoresearch_$DISTRO$SUFFIX/dists/" --name $TGZ1 --not-index --skip-signing < $TGZ1
 fi
 
 if [ $bundlearm == 1 ]; then
   echo Pack arm packages
   TGZ2=manticore_${VER}_arm64.tgz
   (cd build && tar cf - *_all.deb *_arm64.deb *icudata*deb | gzip -9 -f) > $TGZ2
-  /usr/bin/docker exec -i repo-generator /generator.sh --path "/repository/manticoresearch_$DISTRO$SUFFIX/dists/" --name $TGZ2 --not-index --skip-signing < $TGZ2
+  repo_generator --path "/repository/manticoresearch_$DISTRO$SUFFIX/dists/" --name $TGZ2 --not-index --skip-signing < $TGZ2
 fi
 
-/usr/bin/docker exec -i repo-generator /generator.sh --distro $DISTRO --architecture amd --target $TARGET --only-index
-/usr/bin/docker exec -i repo-generator /generator.sh --distro $DISTRO --architecture arm --target $TARGET --only-index
+repo_generator --distro $DISTRO --architecture amd --target $TARGET --only-index
+repo_generator --distro $DISTRO --architecture arm --target $TARGET --only-index
 
 rm -rf build/*deb

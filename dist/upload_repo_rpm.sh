@@ -5,12 +5,6 @@
 echo "Collected rpm packages"
 ls -1 build/
 
-copy_to() {
-    echo -e "Copy $1 to /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/$2";
-    cp $1 /mnt/repo_storage/manticoresearch/$DESTINATION/centos/$DISTRO/$2 && echo -e "Success"
-    echo -e "\n"
-}
-
 bundleaarch=0
 bundleintel=0
 
@@ -42,43 +36,26 @@ for f in build/*.rpm; do
         ARCH=noarch
       else
         # "None" is a nonexisting architecture. In case it's set we build bundle (zip) without building rpm
-        # more answers can give @klirichek 
+        # more answers can give @klirichek
         ARCH=none
       fi
     fi
 
     if [[ ! $ARCH == "none" ]]; then
-      FILENAME=$(basename "$f")
-      cp $f /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH/$FILENAME
+          if [[ $ARCH == "x86_64" ]]; then
+            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a x86_64 --not-index < $f
+            bundleintel=1
+          fi
 
-      /usr/bin/docker exec rpm_signer /worker.sh $DISTRO $ARCH
-      if [[ ! $? -eq 0 ]]; then
-        echo "Error signing $FILENAME"
-        exit 1
-      fi
+          if [[ $ARCH == "aarch64" ]]; then
+            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a aarch64 --not-index < $f
+            bundleaarch=1
+          fi
 
-      mv /work/repomanager/docker/rpm_signer/data/$DISTRO/$ARCH/$FILENAME $f
-
-      SIGNATURE=$(rpm -qpi $f 2>/dev/null | grep Signature)
-      if [[ $(echo $SIGNATURE | grep "(none)") ]]; then
-        echo "Error $FILENAME was not signed"
-        exit 1
-      fi
-    fi
-
-    if [[ $ARCH == "x86_64" ]]; then
-      copy_to $f x86_64/
-      bundleintel=1
-    fi
-
-    if [[ $ARCH == "aarch64" ]]; then
-      copy_to $f aarch64/
-      bundleaarch=1
-    fi
-
-    if [[ $ARCH == "noarch" ]]; then
-      copy_to $f x86_64/
-      copy_to $f aarch64/
+          if [[ $ARCH == "noarch" ]]; then
+            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a x86_64 --not-index < $f
+            /usr/bin/docker exec -i repo-generator /generator.sh -n $(basename $f) -d centos -v $DISTRO -t $DESTINATION -a aarch64 --not-index < $f
+          fi
     fi
 
   fi
@@ -90,20 +67,18 @@ if [ $bundleintel == 1 ]; then
   echo make bundle x86_64
   TGZ1=manticore-${VER}.x86_64.tgz
   (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "x86_64\|noarch") *icudata*rpm | gzip -9 -f) > $TGZ1
-  copy_to $TGZ1
+  /usr/bin/docker exec -i repo-generator /generator.sh -p "/repository/manticoresearch/$DESTINATION/centos/$DISTRO/" -n $TGZ1 --not-index --skip-signing < $TGZ1
 fi
 
 if [ $bundleaarch == 1 ]; then
   echo make bundle aarch64
   TGZ2=manticore-${VER}.aarch64.tgz
   (cd build && tar cf - $(ls | grep -v -e debuginfo | grep "aarch64\|noarch") *icudata*rpm | gzip -9 -f) > $TGZ2
-  copy_to $TGZ2
+  /usr/bin/docker exec -i repo-generator /generator.sh -p "/repository/manticoresearch/$DESTINATION/centos/$DISTRO/" -n $TGZ2 --not-index --skip-signing < $TGZ2
 fi
 
-if [ "$DESTINATION" = "dev" ]; then
-    /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO -dev 1
-  else
-    /usr/bin/docker exec repo-generator /generator.sh -distro centos -version $DISTRO
-fi
+/usr/bin/docker exec -i repo-generator /generator.sh -d centos -v $DISTRO --architecture aarch64 --target $DESTINATION --only-index
+/usr/bin/docker exec -i repo-generator /generator.sh -d centos -v $DISTRO --architecture x86_64 --target $DESTINATION --only-index
+
 
 rm -rf build/*.rpm

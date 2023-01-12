@@ -1,12 +1,6 @@
 #!/bin/bash
 # That file here is for reference; actually used the one stored on the host to avoid checkout of the whole code
 
-copy_to() {
-  echo -e "Copy $1 to /mnt/repo_storage/manticoresearch_$2";
-  cp $1 /mnt/repo_storage/manticoresearch_$2 && echo -e "Success"
-  echo
-}
-
 get_destination() {
   if [ -z "${IS_RELEASE_DIGIT}" ]; then
     IS_RELEASE_DIGIT=$(echo $f | cut -d. -f3 | cut -d- -f1)
@@ -31,14 +25,14 @@ fi
 for f in build/*.zip build/*.exe; do
   if [ -f "$f" ]; then
     get_destination
-    copy_to $f windows/$DESTINATION/x64/
+    /usr/bin/docker exec -i repo-generator /generator.sh --path "/repository/manticoresearch_windows/$DESTINATION/x64/" --name $(basename $f) --not-index --skip-signing < $f
   fi
 done
 
 for f in build/*.gz; do
   if [ -f "$f" ]; then
     get_destination
-    copy_to $f macos/$DESTINATION/
+    /usr/bin/docker exec -i repo-generator /generator.sh --path "/repository/manticoresearch_macos/$DESTINATION/" --name $(basename $f) --not-index --skip-signing < $f
   fi
 done
 

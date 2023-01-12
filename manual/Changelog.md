@@ -1,58 +1,156 @@
 # Changelog
 
-# Next release
+# Version 6.0.0
+Released: Jan ?? 2022
 
-Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump and DBeaver. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require super low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump, DBeaver, Grafana mysql connector. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+
+This release also includes more than 60 bug fixes and numerous features, many of which can be considered major.
 
 ### Major Changes
-* Improved [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which may increase query response time in many cases. Integrated it with [secondary indexes](../Server_settings/Searchd.md#secondary_indexes)
-* Auto-schema: you can now skip creating a table, just `INSERT` and Manticore will create it automatically for you based on the first document
-* `ALTER TABLE <table name> REBUILD SECONDARY`
-* New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_a_table/Backup_and_restore.md)
-* SQL command `BACKUP` to do backups from inside Manticore
-* SQL command `SHOW QUERIES` as an easy way to see running queries rather than threads
-* SQL command `KILL` to kill a long-running `SELECT`
-* Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time
+* You can now insert data into Manticore from Logstash and Beats.
+* [Commit c436f902](https://gitlab.com/manticoresearch/dev/-/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [search.auto_schema](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table#Auto-schema).
+* Vast revamp of [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which lowers query response time in many cases. Integrated it with [secondary indexes](../Server_settings/Searchd.md#secondary_indexes):
+  - [Issue #1008](https://github.com/manticoresoftware/manticoresearch/issues/1008) Parallelization performance estimate in CBO.
+  - [Issue #1014](https://github.com/manticoresoftware/manticoresearch/issues/1014) CBO is now aware of secondary indexes and can act smarter.
+  - [Commit cef9b54d](https://gitlab.com/manticoresearch/columnar/-/commit/cef9b54dc3a4ee9138ebc4df3a671715b996d6b3) Encoding stats of columnar tables/fields are now stored in the meta data to help CBO make smarter decisions.
+  - [Commit 2b95fb8c](https://gitlab.com/manticoresearch/dev/-/commit/2b95fb8c2ba422c9c5a66e2b61c1f7922f31c7aa) Added CBO hints for fine-tuning its behaviour.
+* [Commit 5aafb17d](https://gitlab.com/manticoresearch/dev/-/commit/5aafb17d81b601e399e212a344a4738f65576cdd) [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) to rebuild secondary indexes whenever you want, for example:
+  - when you migrate from Manticore 5 to the newer version,
+  - when you did [UPDATE](../Updating_documents/UPDATE.md#UPDATE) (i.e. [in-place update, not replace](../Updating_documents/REPLACE_vs_UPDATE.md)) of an attribute in the index
+* [Issue #821](https://github.com/manticoresoftware/manticoresearch/issues/821) New tool manticore-backup for [backing up and restoring Manticore instance](../Securing_and_compacting_a_table/Backup_and_restore.md)
+* SQL command [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) to do backups from inside Manticore.
+* SQL command [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) as an easy way to see running queries rather than threads.
+* [Issue #551](https://github.com/manticoresoftware/manticoresearch/issues/551) SQL command `KILL` to kill a long-running `SELECT`s.
+* [Commit 43ff59bf](https://gitlab.com/manticoresearch/dev/-/commit/43ff59bf1e8641c3bda5e55d31474e085a613120) Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time.
 
 ### Minor changes
-* SQL commands [FREEZE/UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup
-* New setting `accurate_aggregation` for maximal aggregation accuracy
-* Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
-* Since Manticore supports secondary indexes since recently things got confusing since `index` may mean a secondary index, a full-text index or a plain/real-time index. To make things less confusing we are renaming the latter to `table`. These are the affected SQL / command line commands. Their old variants are deprecated, but are still working:
-  - `index <table name>` => `table <table name>`
-  - `searchd -i / --index` => `searchd -t / --table`
-  - `SHOW INDEX STATUS` => `SHOW TABLE STATUS`
-  - `SHOW INDEX SETTINGS` => `SHOW TABLE SETTINGS`
-  - `FLUSH RTINDEX` => `FLUSH TABLE`
-  - `OPTIMIZE INDEX` => `OPTIMIZE TABLE`
-  - `ATTACH TABLE plain TO RTINDEX rt` => `ATTACH TABLE plain TO TABLE rt`
-  - `RELOAD INDEX` => `RELOAD TABLE`
-  - `RELOAD INDEXES` => `RELOAD TABLES`
+* [Issue #822](https://github.com/manticoresoftware/manticoresearch/issues/822) SQL commands [FREEZE/UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup.
+* [Commit 46c99091](https://gitlab.com/manticoresearch/dev/-/commit/46c9909197ebfaa8af7e8e31289eb380f7f05827) New settings `accurate_aggregation` and `max_matches_increase_threshold`  for controlled aggregation accuracy.
+* [Issue #718](https://github.com/manticoresoftware/manticoresearch/issues/718) Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
+* As Manticore recently added support for secondary indexes, things became confusing as index could refer to a secondary index, a full-text index, or a plain/real-time `index`. To reduce confusion, we are renaming the latter to `table`. The following SQL/command line commands are affected by this change. Their old versions are deprecated, but still functional:
+  - `index <table name>` => `table <table name>`,
+  - `searchd -i / --index` => `searchd -t / --table`,
+  - `SHOW INDEX STATUS` => `SHOW TABLE STATUS`,
+  - `SHOW INDEX SETTINGS` => `SHOW TABLE SETTINGS`,
+  - `FLUSH RTINDEX` => `FLUSH TABLE`,
+  - `OPTIMIZE INDEX` => `OPTIMIZE TABLE`,
+  - `ATTACH TABLE plain TO RTINDEX rt` => `ATTACH TABLE plain TO TABLE rt`,
+  - `RELOAD INDEX` => `RELOAD TABLE`,
+  - `RELOAD INDEXES` => `RELOAD TABLES`.
 
-  We are not planning to obsolete the old forms, but to make things compatible with the documentation we recommend to change the names in your applicaiton.  
-* Queries with stateful UDFs are now forced to be executed in a single thread
-* Refactoring of task/scheduler system as a prerequisite for parallel chunks merging
-* **⚠️ BREAKING CHANGE**: Columnar storage format has been changed. You need to rebuild those indexes that have columnar attributes.
-* **⚠️ BREAKING CHANGE**: Secondary indexes file format has got changed, so if you are using secondary indexes for searching and have `searchd.secondary_indexes = 1` in your configuration file, be aware that the new Manticore version **will skip loading the tables that have secondary indexes**. It's recommended to:
-  - before you upgrade change `searchd.secondary_indexes` to 0 in the configuration file
-  - run the instance. Manticore will load up the tables with a warning.
-  - run `ALTER TABLE <table name> REBUILD SECONDARY` for each index to rebuild secondary indexes.
+  We are not planning to make the old forms obsolete, but to ensure compatibility with the documentation, we recommend changing the names in your application.
+* Queries with stateful UDFs are now forced to be executed in a single thread.
+* [Issue #1011](https://github.com/manticoresoftware/manticoresearch/issues/1011) Refactoring of all related with time scheduling as a prerequisite for parallel chunks merging.
+* **⚠️ BREAKING CHANGE**: Columnar storage format has been changed. You need to rebuild those tables that have columnar attributes.
+* **⚠️ BREAKING CHANGE**: Secondary indexes file format has been changed, so if you are using secondary indexes for searching and have `searchd.secondary_indexes = 1` in your configuration file, be aware that the new Manticore version **will skip loading the tables that have secondary indexes**. It's recommended to:
+  - Before you upgrade change `searchd.secondary_indexes` to 0 in the configuration file.
+  - Run the instance. Manticore will load up the tables with a warning.
+  - Run `ALTER TABLE <table name> REBUILD SECONDARY` for each index to rebuild secondary indexes.
 
   If you are running a replication cluster, you'll need to run `ALTER TABLE <table name> REBUILD SECONDARY` on all the nodes or follow [this instruction](../Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables) with just change: run the `ALTER .. REBUILD SECONDARY` instead of the `OPTIMIZE`.
 * **⚠️ BREAKING CHANGE**: The binlog version has been updated, so any binlogs from previous versions will not be replayed. It is important to ensure that Manticore Search is stopped cleanly during the upgrade process. This means that there should be no binlog files in `/var/lib/manticore/binlog/` except for `binlog.meta` after stopping the previous instance.
-* `SHOW SETTINGS`
-* `max_matches_increase_threshold`
+* [Issue #849](https://github.com/manticoresoftware/manticoresearch/issues/849) `SHOW SETTINGS`: helper command for manticore-backup.
+* [Issue #1007](https://github.com/manticoresoftware/manticoresearch/issues/1007) [SET GLOBAL CPUSTATS=1/0](../Server_settings/Setting_variables_online.md#SET) turns on/off cpu time tracking; [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) now doesn't show CPU statistics when the cpu time tracking is off.
+* [Issue #1009](https://github.com/manticoresoftware/manticoresearch/issues/1009) RT table RAM chunk segments can now be merged while the RAM chunk is being flushed.
+* [Issue #1012](https://github.com/manticoresoftware/manticoresearch/issues/1012) Added secondary index progress to the output of [indexer](../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+* [Issue #1013](https://github.com/manticoresoftware/manticoresearch/issues/1013) Previously a table record could be removed by Manticore from the index list if it couldn't start serving it on start. The new behaviour is to keep it in the list to try to load it on the next start.
+* [indextool --docextract](../Miscellaneous_tools.md#indextool) returns all the words and hits belonging to requested document.
+* [Commit 2b296ee2](https://gitlab.com/manticoresearch/dev/-/commit/2b296ee20e520b85bcbb4383e87095d31e7165dc) Environment variable `dump_corrupt_meta` enables dumping a corrupted table meta data to log in case searchd can't load the index.
+* [Commit c7a3136e](https://gitlab.com/manticoresearch/dev/-/commit/c7a3136eefe0eb2f69e3d99fae9c10beb5821ea6) `DEBUG META` can show `max_matches` and pseudo sharding statistics.
+* [Commit 6bca4848](https://gitlab.com/manticoresearch/dev/-/commit/6bca4848dc5c8396dbc1e057be4b9b2d579794e8) A better error instead of the confusing "Index header format is not json, will try it as binary...".
+* [Commit bef3ff03](https://github.com/manticoresoftware/lemmatizer-uk/commit/bef3ff0386d3ee87ec57619782100972c1122e47) Ukirainian lemmatizer path has been changed.
+* [Commit 4ae78959](https://gitlab.com/manticoresearch/dev/-/commit/4ae789595329a2951e194d1191ddb3121459a560) Secondary indexes statistics has been added to [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META).
+* [Commit 2e7c585e](https://github.com/manticoresoftware/manticoresearch/commit/2e7c585e) JSON interface can now be easily visualized using Swagger Editor https://manual.manticoresearch.com/dev/Openapi#OpenAPI-specification.
 
-### Packaging
-* Arm64 packages for macOS and Linux
-* Simplified package building for contributors
-* Support for Debian Stretch and Ubuntu Xenial has been discontinued
-* Centos 9 is supported
-* Debian Bookworm is supported
+### Changes related with Manticore Columnar Library
+* Refactoring of Secondary indexes integration with Columnar storage.
+* [Commit efe26b2a](https://github.com/manticoresoftware/columnar/commit/efe26b2a) Manticore Columnar Library optimization which can lower response time by partial preliminary min/max evaluation.
+* [Commit 2757b99b](https://github.com/manticoresoftware/columnar/commit/2757b99b) If a disk chunk merge is interrupted, the daemon now cleans up the MCL-related tmp files.
+* [Commit e9c67201](https://gitlab.com/manticoresearch/dev/-/commit/e9c672014b63e2b49e7a5a53880583af86c3ab4e) Columnar and secondary libraries versions are dumped to log on crash.
+* [Commit f5e84eeb](https://github.com/manticoresoftware/columnar/commit/f5e84eeb8b6cb102f13e3468246702427527fef9) Added support for quick doclist rewinding to secondary indexes.
+* [Commit 06dfdd2e](https://gitlab.com/manticoresearch/dev/-/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) Queries like `select attr, count(*) from plain_index` (w/o filtering) are now faster in case you are using MCL.
 
-## Bugfixes
-* [Commit 10416ef7](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` has been broken all the time since Sphinx
-* ... tens more ...
+
+### Packaging-related changes
+* [Commit 4d19f5cb](https://gitlab.com/manticoresearch/dev/-/commit/4d19f5cbe49a31228aa09253f061165bfe80e51b) **⚠️ BREAKING CHANGE**: Support for Debian Stretch and Ubuntu Xenial has been discontinued.
+* RHEL 9 support including Centos 9, Alma Linux 9 and Oracle Linux 9.
+* [Issue #924](https://github.com/manticoresoftware/manticoresearch/issues/924) Debian Bookworm support.
+* [Issue #636](https://github.com/manticoresoftware/manticoresearch/issues/636) Packaging: arm64 builds for Linuxes and MacOS.
+* [Simplified package building for contributors](../Installation/Compiling_from_sources.md#Building-using-CI-docker).
+* It's now possible to install a specific version using APT.
+* [Commit a6b84a9a](https://gitlab.com/manticoresearch/dev/-/commit/a6b84a9a8c11e172026412165332fb737a9f26dd) Windows installer (previously we provided just an archive).
+* Switched to compiling using CLang 15.
+
+
+### Bugfixes
+* ❗[Issue #652](https://github.com/manticoresoftware/manticoresearch/issues/652) Possible BUG: HTTP (JSON) offset and limit affects facet results
+* ❗[Issue #827](https://github.com/manticoresoftware/manticoresearch/issues/827) Searchd hangs/crashes under intensive loading
+* ❗[Issue #996](https://github.com/manticoresoftware/manticoresearch/issues/996) PQ index out of memory
+* ❗[Commit 10416ef7](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` has been broken all the time since Sphinx. Fixed.
+* [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) MCL: crash on select when too many ft fields
+* [Issue #470](https://github.com/manticoresoftware/manticoresearch/issues/470) sql_joined_field can't be stored
+* [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpected and cant to normal restart
+* [Issue #788](https://github.com/manticoresoftware/manticoresearch/issues/788) CALL KEYWORDS through /sql returns control char which breaks json
+* [Issue #789](https://github.com/manticoresoftware/manticoresearch/issues/789) mariadb can't create table FEDERATED
+* [Issue #797](https://github.com/manticoresoftware/manticoresearch/issues/797) Manticore crashes when search with ZONESPAN is done through api
+* [Issue #799](https://github.com/manticoresoftware/manticoresearch/issues/799) wrong weight when using multiple indexes and facet distinct
+* [Issue #801](https://github.com/manticoresoftware/manticoresearch/issues/801) SphinxQL group query hangs after SQL index reprocessing
+* [Issue #802](https://github.com/manticoresoftware/manticoresearch/issues/802) MCL: Indexer crashes in 5.0.2 and manticore-columnar-lib 1.15.4
+* [Issue #813](https://github.com/manticoresoftware/manticoresearch/issues/813) Manticore 5.0.2 FEDERATED returns empty set (MySQL 8.0.28)
+* [Issue #843](https://github.com/manticoresoftware/manticoresearch/issues/843) MCL: Bug with long text field
+* [Issue #856](https://github.com/manticoresoftware/manticoresearch/issues/856) 5.0.2 rtindex: Aggregate search limit behavior is not as expected
+* [Issue #863](https://github.com/manticoresoftware/manticoresearch/issues/863) Hits returned is Nonetype object even for searches that should return multiple results
+* [Issue #870](https://github.com/manticoresoftware/manticoresearch/issues/870) Crash with using Attribute and Stored Field in SELECT expression
+* [Issue #872](https://github.com/manticoresoftware/manticoresearch/issues/872) table gets invisible after crash
+* [Issue #878](https://github.com/manticoresoftware/manticoresearch/issues/878) a -b -c is not working via json query_string
+* [Issue #893](https://github.com/manticoresoftware/manticoresearch/issues/893) Manticore 5.0.2 min/max function doesn't work as expecting ...
+* [Issue #897](https://github.com/manticoresoftware/manticoresearch/issues/897) Manticore service crash upon start and keep restarting
+* [Issue #913](https://github.com/manticoresoftware/manticoresearch/issues/913) Searchd crash when expr used in ranker, but only for queries with two proximities
+* [Issue #916](https://github.com/manticoresoftware/manticoresearch/issues/916) net_throttle_action is broken
+* [Issue #919](https://github.com/manticoresoftware/manticoresearch/issues/919) MCL: Manticore crashes on query execution and other crashed during cluster recovery.
+* [Issue #930](https://github.com/manticoresoftware/manticoresearch/issues/930) It's now possible to query Manticore from Java via JDBC connector
+* [Issue #933](https://github.com/manticoresoftware/manticoresearch/issues/933) bm25f ranking problems
+* [Issue #934](https://github.com/manticoresoftware/manticoresearch/issues/934) configless indexes frozen in watchdog on the first-load state
+* [Issue #937](https://github.com/manticoresoftware/manticoresearch/issues/937) Segfault when sorting facet data
+* [Issue #940](https://github.com/manticoresoftware/manticoresearch/issues/940) crash on CONCAT(TO_STRING)
+* [Issue #947](https://github.com/manticoresoftware/manticoresearch/issues/947) In some cases a single simple select could cause the whole instance stall, so you couldn't log in to it or run any other query until the running select is done.
+* [Issue #948](https://github.com/manticoresoftware/manticoresearch/issues/948) Indexer crash
+* [Issue #950](https://github.com/manticoresoftware/manticoresearch/issues/950) wrong count from facet distinct
+* [Issue #955](https://github.com/manticoresoftware/manticoresearch/issues/955) 5.0.3 dev crashing
+* [Issue #963](https://github.com/manticoresoftware/manticoresearch/issues/963) FACET with json on engine columnar crash
+* [Issue #982](https://github.com/manticoresoftware/manticoresearch/issues/982) MCL: 5.0.3 crash from secondary index
+* [Issue #985](https://github.com/manticoresoftware/manticoresearch/issues/985) Fix thread-chunk distribution in RT indexes
+* [Issue #986](https://github.com/manticoresoftware/manticoresearch/issues/986) wrong default max_query_time
+* [Issue #987](https://github.com/manticoresoftware/manticoresearch/issues/987) Crash on when using regex expression in multithreaded execution
+* [Issue #988](https://github.com/manticoresoftware/manticoresearch/issues/988) Broken backward index compatibility
+* [Issue #989](https://github.com/manticoresoftware/manticoresearch/issues/989) indextool reports error checking columnar attributes
+* [Issue #990](https://github.com/manticoresoftware/manticoresearch/issues/990) memleak of json grouper clones
+* [Issue #991](https://github.com/manticoresoftware/manticoresearch/issues/991) Memleak of levenshtein func cloning
+* [Issue #992](https://github.com/manticoresoftware/manticoresearch/issues/992) Error message lost when loading meta
+* [Issue #993](https://github.com/manticoresoftware/manticoresearch/issues/993) Propagate errors from dynamic indexes/subkeys and sysvars
+* [Issue #994](https://github.com/manticoresoftware/manticoresearch/issues/994) Crash on count distinct over a columnar string in columnar storage
+* [Issue #995](https://github.com/manticoresoftware/manticoresearch/issues/995) MCL: min(pickup_datetime) from taxi1 crashes
+* [Issue #997](https://github.com/manticoresoftware/manticoresearch/issues/997) empty excludes JSON query removes columns from select list
+* [Issue #998](https://github.com/manticoresoftware/manticoresearch/issues/998) Secondary tasks run on current scheduler sometimes cause abnormal side effects
+* [Issue #999](https://github.com/manticoresoftware/manticoresearch/issues/999) crash with facet distinct and different schemas
+* [Issue #1000](https://github.com/manticoresoftware/manticoresearch/issues/1000) MCL: Columnar rt index became damaged after run without columnar library
+* [Issue #1001](https://github.com/manticoresoftware/manticoresearch/issues/1001) implicit cutoff is not working in json
+* [Issue #1002](https://github.com/manticoresoftware/manticoresearch/issues/1002) Columnar grouper issue
+* [Issue #1003](https://github.com/manticoresoftware/manticoresearch/issues/1003) Unable to delete last field from the index
+* [Issue #1004](https://github.com/manticoresoftware/manticoresearch/issues/1004) wrong behaviour after --new-cluster
+* [Issue #1005](https://github.com/manticoresoftware/manticoresearch/issues/1005) "columnar library not loaded", but it's not required
+* [Issue #1006](https://github.com/manticoresoftware/manticoresearch/issues/1006) no error for delete query
+* [Issue #1010](https://github.com/manticoresoftware/manticoresearch/issues/1010) Fixed ICU data file location in Windows builds
+* [Commit 4739dafd](https://github.com/manticoresoftware/manticoresearch/commit/4739dafd) Thread gets stuck on shutdown while replication is busy between nodes
+* [Commit ab878367](https://github.com/manticoresoftware/manticoresearch/commit/ab87836782e7ae43fe5f9dea739eed0d336b42c1) Mixing floats and ints in a JSON range filter could make Manticore ignore the filter
+* [Commit d00101c2](https://github.com/manticoresoftware/manticoresearch/commit/d00101c2905f6393ce3fca23c4f6dcb2506f4bd9) Float filters in JSON were inaccurate
+* [Commit 4092c6a8](https://github.com/manticoresoftware/manticoresearch/commit/4092c6a8) Discard uncommitted txns if index altered (or it can crash)
+* [Commit 9692a840](https://github.com/manticoresoftware/manticoresearch/commit/9692a840) Query syntax error when using backslash
+* [Commit 0c19ad8d](https://github.com/manticoresoftware/manticoresearch/commit/0c19ad8d) workers_clients could be wrong in SHOW STATUS
+* [Commit 17720e1e](https://github.com/manticoresoftware/manticoresearch/commit/17720e1e2f2ec38337df565bee78f7ce9d9c744a) fixed a crash on merging ram segments w/o docstores
+* [Commit f45b337b](https://github.com/manticoresoftware/manticoresearch/commit/f45b337b5c265433bb7d6262ad65d02f65edbaf3) Fixed missed ALL/ANY condition for equals JSON filter
+* [Commit 3e83c1f0](https://github.com/manticoresoftware/manticoresearch/commit/3e83c1f0c0e6e7a9d4297113f69a112cbabd9e64) Replication could fail with `got exception while reading ist stream: mkstemp(./gmb_pF6TJi) failed: 13 (Permission denied)` if the searchd was started from a directory it can't write to.
 
 # Version 5.0.2
 Released: May 30th 2022

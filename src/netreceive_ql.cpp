@@ -646,6 +646,7 @@ public:
 		}
 		if ( i < AUTH_DATA_LEN )
 			memcpy ( m_sAuthData + i, &uRand, AUTH_DATA_LEN - i );
+		memset ( m_sAuthData + AUTH_DATA_LEN - 1, 0, 1);
 
 		// version string (plus 0-terminator)
 		m_sVersionString = FromStr ( g_sMySQLVersion );

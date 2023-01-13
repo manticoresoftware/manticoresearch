@@ -296,6 +296,39 @@ SHOW META LIKE 'multiplier';
 
 <!-- end -->
 
+## SHOW META and query optimizer
+
+<!-- example of show meta vs query optimizer -->
+
+When the [query optimizer](../Searching/Cost_based_optimizer.md) decides to use `DocidIndex`, `ColumnarScan` or `SecondaryIndex` in place of a plain filter, this is reflected in the `SHOW META` command.
+
+The `index` variable lists the names and types of secondary indexes used while executing the query. The percent shows how many disk chunks (in the case of an RT index) or pseudo shards (in the case of a plain index) the secondary index was used on.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+SELECT count(*) FROM taxi1 WHERE tip_amount = 5;
+SHOW META;
+```
+
+<!-- response SQL -->
+
+```sql
++----------------+----------------------------------+
+| Variable_name  | Value                            |
++----------------+----------------------------------+
+| total          | 1                                |
+| total_found    | 1                                |
+| total_relation | eq                               |
+| time           | 0.016                            |
+| index          | tip_amount:SecondaryIndex (100%) |
++----------------+----------------------------------+
+5 rows in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## SHOW META for PQ tables
 

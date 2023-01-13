@@ -186,7 +186,7 @@ public:
 
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override { return m_iProcessed; }
-	void				AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { "id", "lookup" } ); }
+	void				AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { "id", "DocidIndex" } ); }
 
 private:
 	RowIdBoundaries_t	m_tBoundaries;
@@ -414,7 +414,7 @@ public:
 
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t				GetNumProcessed() const override { return m_iProcessed; }
-	void				AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { "id", "lookup" } ); }
+	void				AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { "id", "DocidIndex" } ); }
 
 protected:
 	RowIdBoundaries_t	m_tBoundaries;

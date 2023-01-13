@@ -9670,6 +9670,24 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	if ( m_tSettings.m_bIndexExactWords )
 		pTokenizer->AddPlainChars ( "=" );
 
+	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
+	{
+		CSphString sError;
+		Tokenizer::AddPluginFilterTo ( pTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !sError.IsEmpty() )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+	}
+
 	pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 	ExpansionContext_t tExpCtx;

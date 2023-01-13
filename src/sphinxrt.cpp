@@ -1213,7 +1213,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const final;
 
 	bool				MultiQuery ( CSphQueryResult& tResult, const CSphQuery& tQuery, const VecTraits_T<ISphMatchSorter*>& dAllSorters, const CSphMultiQueryArgs& tArgs ) const final;
-	void				DoGetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, bool bFillOnly, CSphString* pError, const RtGuard_t& tGuard ) const;
+	bool				DoGetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, bool bFillOnly, CSphString* pError, const RtGuard_t& tGuard ) const;
 	bool				GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const char* sQuery, const GetKeywordsSettings_t& tSettings, CSphString* pError ) const final;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
 	void				AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, const DictRefPtr_c& pDict, bool bGetStats, int iQpos, RtQword_t* pQueryWord, CSphVector<CSphKeywordInfo>& dKeywords, const RtSegVec_c& dRamSegs ) const;
@@ -7656,13 +7656,13 @@ static void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringH
 }
 
 
-void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const RtGuard_t& tGuard ) const
+bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const RtGuard_t& tGuard ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
 
 	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !sQuery || !sQuery[0] ) ) )
-		return;
+		return true;
 
 	RtQword_t tQword;
 
@@ -7684,6 +7684,24 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		SetupExactTokenizer ( pTokenizer, false );
 		SetupExactDict ( pDict );
+	}
+
+	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
+	{
+		CSphString sError;
+		Tokenizer::AddPluginFilterTo ( pTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !pError->IsEmpty() )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
 	}
 
 	CSphVector<BYTE> dFiltered;
@@ -7746,7 +7764,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	// get stats from disk chunks too
 	if ( !tSettings.m_bStats )
-		return;
+		return true;
 
 	if ( bFillOnly )
 	{
@@ -7777,22 +7795,22 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 			sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
 		}
 	}
+
+	return true;
 }
 
 
 bool RtIndex_c::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
 	auto tGuard = RtGuard();
-	DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, tGuard );
-	return true;
+	return DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, tGuard );
 }
 
 
 bool RtIndex_c::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 {
 	auto tGuard = RtGuard();
-	DoGetKeywords ( dKeywords, nullptr, GetKeywordsSettings_t(), true, nullptr, tGuard );
-	return true;
+	return DoGetKeywords ( dKeywords, nullptr, GetKeywordsSettings_t(), true, nullptr, tGuard );
 }
 
 

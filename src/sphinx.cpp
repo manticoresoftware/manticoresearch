@@ -7865,8 +7865,10 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<
 	for ( size_t i = 0; i < dFilterMap.size(); )
 		if ( dSIInfo[i].m_eType!=SecondaryIndexType_e::ANALYZER )
 		{
+			int iColumnarFilter = dFilterMap[i];
 			dFilterMap.erase ( dFilterMap.begin()+i );
-			dColumnarFilters.erase ( dColumnarFilters.begin()+i );
+			if ( iColumnarFilter!=-1 )
+				dColumnarFilters.erase ( dColumnarFilters.begin()+iColumnarFilter );
 		}
 		else
 			i++;

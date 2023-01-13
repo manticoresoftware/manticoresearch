@@ -5,6 +5,7 @@
 
 <requires>
 <columnar/>
+<non-rt/>
 </requires>
 
 <config>

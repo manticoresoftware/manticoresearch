@@ -211,15 +211,15 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 	assert ( iAttr >= 0 );
 	assert ( iAttr < ActualLen() );
 
-	// map from rset indexes (adjusted for removal) to index schema indexes (the original ones)
-	ARRAY_FOREACH_COND ( i, m_dRemoved, iAttr >= m_dRemoved[i] )
-		iAttr++;
-
 	// we may be removing our static attribute after expressions have been created and that invalidates their dependent cols (if any)
 	// we need to update those
 	for ( auto & i : m_dExtraAttrs )
 		if ( i.m_pExpr )
 			i.m_pExpr->Command ( SPH_EXPR_UPDATE_DEPENDENT_COLS, &iAttr );
+
+	// map from rset indexes (adjusted for removal) to index schema indexes (the original ones)
+	ARRAY_FOREACH_COND ( i, m_dRemoved, iAttr >= m_dRemoved[i] )
+		iAttr++;
 
 	m_dRemoved.Add ( iAttr );
 	m_dRemoved.Uniq();

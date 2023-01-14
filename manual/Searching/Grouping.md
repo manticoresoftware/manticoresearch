@@ -1015,7 +1015,14 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 
 <!-- example accuracy -->
 ## Grouping accuracy
-Grouping is done in fixed memory which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If the max_matches allows to store all found groups, the results will be 100% correct. The less the value the less accurate will be the results.
+
+Grouping is done in fixed memory, which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If `max_matches` allows for storage of all found groups, the results will be 100% accurate. However, if the value of `max_matches` is lower, the results will be less accurate.
+
+When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT index with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the results sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
+
+Manticore will try to increase `max_matches` up to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) if it detects that groupby may return inaccurate results. Detection is based on the number of unique values of the groupby attribute, which is retrieved from secondary indexes (if present).
+
+To ensure accurate aggregates and/or group counts when using RT indexes or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
 
 <!-- intro -->
 ##### Example:

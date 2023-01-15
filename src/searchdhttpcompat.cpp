@@ -38,18 +38,32 @@ static RwLock_t g_tLockAlias;
 static RwLock_t g_tLockKbnTable;
 static nljson g_tKbnTable = "{}"_json;
 
-static RwLock_t g_tLockSettings;
-static nljson g_tSettings = "{}"_json;
+enum class CompatMode_e
+{
+	ON = 0,
+	OFF,
+	DASHBOARDS,
 
-static bool g_bEnabled = true; // shortcut to /log_management/settings/enabled
+	COUNT,
+	DEFAULT = ON
+};
+
+static CompatMode_e g_eMode = CompatMode_e::DEFAULT;
+static std::array<const char *, (int)CompatMode_e::COUNT> g_dModeNames = { "on", "off", "dashboards" };
 
 static CSphString g_sLogHttpFilter;
 static CSphString g_sKbnTableName = ".kibana";
 static CSphString g_sKbnTableAlias = ".kibana_1";
 static std::vector<CSphString> g_dKbnTablesNames { ".kibana_task_manager", ".apm-agent-configuration", g_sKbnTableName };
 
-static nljson::json_pointer g_tConfigTables ( "/log_management/tables" );
-static nljson::json_pointer g_tConfigSettings ( "/log_management/settings" );
+static nljson::json_pointer g_tConfigTables ( "/es_compat/tables" );
+static nljson::json_pointer g_tMode ( "/es_compat/mode" );
+
+static bool LOG_LEVEL_COMPAT = val_from_env ( "MANTICORE_LOG_ES_COMPAT", false ); // verbose logging compat events, ruled by this env variable
+#define LOG_COMPONENT_COMPATINFO ""
+#define COMPATINFO LOGINFO ( COMPAT, COMPATINFO )
+
+#define CompatWarning( ... ) do if ( LOG_LEVEL_COMPAT ) sphWarning_impl (__VA_ARGS__); while(0)
 
 //////////////////////////////////////////////////////////////////////////
 // compatibility mode
@@ -139,7 +153,9 @@ static void CreateKbnTable ( const CSphString & sParent, bool bRoot, const nljso
 			tAttr.m_tAttr.m_sName = sName;
 			tAttr.m_tAttr.m_eAttrType = SPH_ATTR_JSON;
 		} else
-			sphWarning ( "skipped column '%s' %s", sName.cstr(), tVal.value().dump().c_str() );
+		{
+			CompatWarning ( "skipped column '%s' %s", sName.cstr(), tVal.value().dump().c_str() );
+		}
 	}
 }
 
@@ -278,7 +294,7 @@ static void InsertIntoKbnTable ( const CSphString & sIndex, const nljson & tTbl,
 		if ( !InsertDoc ( sIndex, dFields, tSrc, false, sRefDocID.cstr(), GetVersion ( tDoc.value() ), sError ) )
 		{
 			iFailed++;
-			sphWarning ( "doc '%s', error: %s", sRefDocID.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sRefDocID.cstr(), sError.cstr() );
 			continue;
 		}
 	}
@@ -304,7 +320,7 @@ static void CreateAliases()
 		}
 	}
 
-	sphInfo ( "created %d aliases, tables %d", g_hAlias.GetLength(), (int)g_tKbnTable.size() );
+	COMPATINFO << "created " << g_hAlias.GetLength() << " aliases, tables " << g_tKbnTable.size();
 }
 
 static void CreateKbnIndexes()
@@ -324,18 +340,18 @@ static void CreateKbnIndexes()
 			CSphString sError;
 
 			if ( !DropIndexInt ( sName, true, sError ) )
-				sphWarning ( "%s", sError.cstr() );
+				CompatWarning ( "%s", sError.cstr() );
 
 			CreateTableSettings_t tOpts;
 			CreateKbnTable ( tOpts, tTbl.value(), dFields );
 
 			if ( !CreateNewIndexConfigless ( sName, tOpts, dWarnings, sError ) )
-				sphWarning ( "%s", sError.cstr() );
+				CompatWarning ( "%s", sError.cstr() );
 
 			for ( const CSphString & sWarn : dWarnings )
-				sphWarning ( "%s", sWarn.cstr() );
+				CompatWarning ( "%s", sWarn.cstr() );
 
-			sphInfo ( "created kibana table '%s'", sName.cstr() );
+			COMPATINFO << "created kibana table '" << sName.cstr() << "'";
 		}
 
 		if ( tTbl.value().contains( "hits" ) )
@@ -351,11 +367,7 @@ static void CatColumnsSetup();
 
 void SetupCompatHttp()
 {
-	if ( g_tSettings.empty() )
-		return;
-
-	g_bEnabled = g_tSettings["enabled"];
-	if ( !g_bEnabled )
+	if ( g_eMode!=CompatMode_e::DASHBOARDS )
 		return;
 
 	Threads::CallCoroutine ( [] { 
@@ -364,6 +376,22 @@ void SetupCompatHttp()
 	CreateScripts();
 	CatColumnsSetup();
 	} );
+}
+
+static CompatMode_e GetMode ( const std::string & sName, CSphString * pError=nullptr )
+{
+	auto tIt = std::find ( g_dModeNames.begin(), g_dModeNames.end(), sName );
+	if ( tIt!=g_dModeNames.end() )
+		return (CompatMode_e)( tIt - g_dModeNames.begin() );
+
+	if ( pError )
+		pError->SetSprintf ( "unknown mode %s (must be one of: on, off, dashboards)", sName.c_str() );
+	return CompatMode_e::DEFAULT;
+}
+
+static const char * GetModeName ( CompatMode_e eMode )
+{
+	return g_dModeNames[(int)eMode];
 }
 
 void LoadCompatHttp ( const char * sData )
@@ -378,33 +406,28 @@ void LoadCompatHttp ( const char * sData )
 		iLoadedItems = (int)g_tKbnTable.size();
 	}
 
-	{
-		ScWL_t tLock ( g_tLockSettings );
-		if ( tRaw.contains ( g_tConfigSettings ) )
-			g_tSettings = tRaw[g_tConfigSettings];
+	if ( tRaw.contains ( g_tMode ) )
+		g_eMode = GetMode ( tRaw[g_tMode].get<std::string>() );
 
-		if ( !g_tSettings.contains ( "enabled" ) )
-			g_tSettings["enabled"] = false;
-
-		if ( !g_tSettings.contains ( "version_string" ) )
-			g_tSettings["version_string"] = "ElasticSearch 7.4.1";
-	}
-
-	sphInfo ( "load compat http complete, loaded %d items, enabled %d", iLoadedItems, (int)g_tSettings["enabled"] );
+	COMPATINFO << "load compat http complete, loaded " << iLoadedItems << " items, mode " << GetModeName ( g_eMode );
 }
 
 void SaveCompatHttp ( JsonObj_c & tRoot )
 {
-	JsonObj_c tRaw ( false );
+	if ( g_eMode!=CompatMode_e::DEFAULT )
 	{
-		ScRL_t tLockTbl ( g_tLockKbnTable );
-		ScRL_t tLockSettings ( g_tLockSettings );
-		JsonObj_c tTable ( g_tKbnTable.dump().c_str() );
-		JsonObj_c tSettings ( g_tSettings.dump().c_str() );
-		tRaw.AddItem ( g_tConfigTables.back().c_str(), tTable );
-		tRaw.AddItem ( g_tConfigSettings.back().c_str(), tSettings );
+		JsonObj_c tRaw ( false );
+		{
+			ScRL_t tLockTbl ( g_tLockKbnTable );
+			if ( g_tKbnTable.size() )
+			{
+				JsonObj_c tTable ( g_tKbnTable.dump().c_str() );
+				tRaw.AddItem ( g_tConfigTables.back().c_str(), tTable );
+			}
+			tRaw.AddStr ( g_tMode.back().c_str(), GetModeName ( g_eMode ) );
+		}
+		tRoot.AddItem ( g_tConfigTables.parent_pointer().back().c_str(), tRaw );
 	}
-	tRoot.AddItem ( g_tConfigTables.parent_pointer().back().c_str(), tRaw );
 }
 
 void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody, const VecTraits_T<BYTE> & dResult )
@@ -433,7 +456,7 @@ void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody,
 	}
 	sReq += "}";
 
-	sphWarning ( "--->\n%s\n<---", sReq.cstr() );
+	CompatWarning ( "--->\n%s\n<---", sReq.cstr() );
 }
 
 void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody )
@@ -938,14 +961,14 @@ static void FixupKibana ( const StrVec_t & dIndexes, nljson & tFullQuery )
 			}
 
 			if ( !bKbnTable )
-				sphWarning ( "removed sort[_script] property at query to not kibana index '%s'", dIndexes[0].cstr() );
+				CompatWarning ( "removed sort[_script] property at query to not kibana index '%s'", dIndexes[0].cstr() );
 		}
 	}
 }
 
 static void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult, const char * sIndex, bool bHeadReply )
 {
-	sphWarning ( "%s", sError.cstr() );
+	CompatWarning ( "%s", sError.cstr() );
 
 	int iStatus = HttpGetStatusCodes ( eStatus );
 	CSphString sReply = JsonEncodeResultError ( sError, sErrorType, iStatus, sIndex );
@@ -967,7 +990,7 @@ static void ReportMissedIndex ( const CSphString & sIndex, const StrVec_t & dUrl
 {
 	StringBuilder_c sLocation ( "/", "/", "/" );
 	dUrlParts.Apply ( [&sLocation] ( const CSphString & sItem ) { sLocation << sItem; } );
-	sphWarning ( "missed index '%s' at '%s'", sIndex.cstr(), sLocation.cstr() );
+	CompatWarning ( "missed index '%s' at '%s'", sIndex.cstr(), sLocation.cstr() );
 
 	CSphString sMsg;
 	sMsg.SetSprintf ( "no such index [%s]", sIndex.cstr() );
@@ -1127,13 +1150,13 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	bool bProfile = false;
 	if ( !sphParseJsonQuery ( tMntReq, tQuery, bProfile, sError, sWarning ) )
 	{
-		sphWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), sReqFixed.cstr() );
+		CompatWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), sReqFixed.cstr() );
 		sRes = JsonEncodeResultError ( sError, "parse_exception", 400 );
 		return false;
 	}
 
 	if ( !sWarning.IsEmpty() )
-		sphWarning ( "%s", sWarning.cstr() );
+		CompatWarning ( "%s", sWarning.cstr() );
 
 	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
 	tHandler->RunQueries();
@@ -1149,7 +1172,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	{
 		if ( !pAggr->m_iSuccesses )
 		{
-			sphWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), sReqFixed.cstr() );
+			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), sReqFixed.cstr() );
 			break;
 		}
 	}
@@ -1282,7 +1305,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 	}
 
 	if ( !pRes->m_sWarning.IsEmpty() )
-		sphWarning ( "%s", pRes->m_sWarning.cstr() );
+		CompatWarning ( "%s", pRes->m_sWarning.cstr() );
 
 	const ISphSchema & tSchema = pRes->m_tSchema;
 	const CSphColumnInfo * pColId = tSchema.GetAttr ( sIdName );
@@ -1351,7 +1374,7 @@ static void TableGetDoc ( const CSphString & sId, const CSphIndex * pIndex, cons
 	DocIdVer_t dDocVer;
 	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dDocVer, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 		return;
 	}
 
@@ -1361,7 +1384,7 @@ static void TableGetDoc ( const CSphString & sId, const CSphIndex * pIndex, cons
 
 	if ( dDocVer.GetLength()>2 )
 	{
-		sphWarning ( "%s multiple documents", sId.cstr() );
+		CompatWarning ( "%s multiple documents", sId.cstr() );
 		return;
 	}
 	iVersion = dDocVer[0].second;
@@ -1371,7 +1394,7 @@ static void TableGetDoc ( const CSphString & sId, const CSphIndex * pIndex, cons
 
 	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 		return;
 	}
 }
@@ -1391,7 +1414,7 @@ static bool ProcessKbnTableDoc ( const StrVec_t & dUrlParts, bool bHeadReply, CS
 	auto tServed ( GetServed ( sIndex ) );
 	if ( !tServed )
 	{
-		sphWarning ( "unknown kibana table %s", sIndex.cstr() );
+		CompatWarning ( "unknown kibana table %s", sIndex.cstr() );
 		return false;
 	}
 
@@ -1404,19 +1427,19 @@ static bool ProcessKbnTableDoc ( const StrVec_t & dUrlParts, bool bHeadReply, CS
 	CSphVector<BYTE> dField;
 	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dField, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 		return false;
 	}
 
 	DocIdVer_t dDocVer;
 	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dDocVer, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 		return false;
 	}
 	if ( dField.GetLength() && !dDocVer.GetLength() )
 	{
-		sphWarning ( "%s mismatch document", sId.cstr() );
+		CompatWarning ( "%s mismatch document", sId.cstr() );
 		return false;
 	}
 
@@ -2358,7 +2381,7 @@ static bool GetIndexComplexFields ( const CSphString & sIndex, ComplexFields_t &
 	auto tIndex ( GetServed ( sIndex ) );
 	if ( !tIndex )
 	{
-		sphWarning ( "unknown kibana table %s", sIndex.cstr() );
+		CompatWarning ( "unknown kibana table %s", sIndex.cstr() );
 		return false;
 	}
 
@@ -2397,7 +2420,7 @@ static void ProcessInsertIntoIdx ( const CompatInsert_t & tIns, CSphVector<BYTE>
 	bool bInserted = InsertDoc ( tSrc.cstr(), tIns.m_bReplace, sError );
 
 	if ( !bInserted )
-		sphWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
+		CompatWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
 
 	if ( !bInserted )
 	{
@@ -2459,14 +2482,14 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 	DocIdVer_t dIds;
 	if ( !GetDocIds ( sIndex.cstr(), tIns.m_sId, dIds, sError ) )
 	{
-		sphWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
+		CompatWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
 		return false;
 	}
 	if ( dIds.GetLength() )
 	{
 		if ( dIds.GetLength()!=1 )
 		{
-			sphWarning ( "multiple (%d) docs '%s' found", dIds.GetLength(), tIns.m_sId );
+			CompatWarning ( "multiple (%d) docs '%s' found", dIds.GetLength(), tIns.m_sId );
 			return false;
 		}
 
@@ -2487,7 +2510,7 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 	bool bInserted = InsertDoc ( sIndex, dFields, tSrc, tIns.m_bReplace, tIns.m_sId, iVersion, sError );
 	
 	if ( !bInserted )
-		sphWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
+		CompatWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
 
 	if ( !bInserted )
 	{
@@ -2531,7 +2554,7 @@ static bool ProcessDeleteDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	DocIdVer_t dIds;
 	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, sError ) )
 	{
-		sphWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+		CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
 		return false;
 	}
 
@@ -2539,7 +2562,7 @@ static bool ProcessDeleteDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	{
 		if ( dIds.GetLength()!=1 )
 		{
-			sphWarning ( "multiple (%d) docs '%s' found", dIds.GetLength(), sId.cstr() );
+			CompatWarning ( "multiple (%d) docs '%s' found", dIds.GetLength(), sId.cstr() );
 			return false;
 		}
 
@@ -2559,7 +2582,7 @@ static bool ProcessDeleteDoc ( const HttpRequestParsed_t & tParser, const StrVec
 
 		if ( pReporter->IsError() )
 		{
-			sphWarning ( "doc '%s', error: %s", sId.cstr(), pReporter->GetError() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), pReporter->GetError() );
 			ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400, dResult );
 			return true;
 		}
@@ -2659,7 +2682,7 @@ void CreateScripts()
 		StripSpaces ( const_cast<char *>( sScript.cstr() ) );
 		
 		if ( !g_hScripts.Add ( tItem.second, sScript ) )
-			sphWarning ( "duplicate script %d found %s", iScript, tItem.first );
+			CompatWarning ( "duplicate script %d found %s", iScript, tItem.first );
 
 		iScript++;
 	}
@@ -2694,7 +2717,7 @@ static void ReportMissedScript ( const CSphString & sIndex,  const CSphString & 
 	StringBuilder_c sLocation ( "/", "/", "/" );
 	dUrlParts.Apply ( [&sLocation] ( const CSphString & sItem ) { sLocation << sItem; } );
 	nljson tReq = nljson::parse ( sBody.cstr() );
-	sphWarning ( "missed script '%s' at '%s' body '%s'", sIndex.cstr(), sLocation.cstr(), tReq.dump().c_str() );
+	CompatWarning ( "missed script '%s' at '%s' body '%s'", sIndex.cstr(), sLocation.cstr(), tReq.dump().c_str() );
 
 	ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
 }
@@ -2742,7 +2765,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	DocIdVer_t dIds;
 	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 		return false;
 	}
 
@@ -2750,7 +2773,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	nljson::json_pointer tSrcName ( "/upsert" );
 	if ( !dIds.GetLength() && !tUpd.contains ( tSrcName ) )
 	{
-		sphWarning ( "doc '%s' source '%s' missed", sId.cstr(), tSrcName.to_string().c_str() );
+		CompatWarning ( "doc '%s' source '%s' missed", sId.cstr(), tSrcName.to_string().c_str() );
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
 		ReportError ( sMsg.cstr(), "document_missing_exception", SPH_HTTP_STATUS_404, dResult );
@@ -2769,7 +2792,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		const nljson & tSrc = tUpd[tSrcName];
 		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, sError ) )
 		{
-			sphWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
@@ -2784,13 +2807,13 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 
 	if ( dIds.GetLength()!=1 )
 	{
-		sphWarning ( "multiple %d documents found for '%s'", dIds.GetLength(), sId.cstr() );
+		CompatWarning ( "multiple %d documents found for '%s'", dIds.GetLength(), sId.cstr() );
 		ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
 		return false;
 	}
 	if ( dIds[0].first!=sId )
 	{
-		sphWarning ( "wrong document found '%s' for '%s'", dIds[0].first.cstr(), sId.cstr() );
+		CompatWarning ( "wrong document found '%s' for '%s'", dIds[0].first.cstr(), sId.cstr() );
 		ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
 		return false;
 	}
@@ -2798,7 +2821,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	auto tServed ( GetServed ( sIndex ) );
 	if ( !tServed )
 	{
-		sphWarning ( "unknown kibana table %s", sIndex.cstr() );
+		CompatWarning ( "unknown kibana table %s", sIndex.cstr() );
 		return false;
 	}
 
@@ -2812,7 +2835,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	iVersion = dIds[0].second + 1;
 	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 		return false;
 	}
 
@@ -2824,7 +2847,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		assert ( pUpdateScript );
 		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, sError ) ) )
 		{
-			sphWarning ( "%s", sError.cstr() );
+			CompatWarning ( "%s", sError.cstr() );
 			ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
 			return true;
 		}
@@ -2834,7 +2857,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		tSrc.update ( tDocUpd );
 	} else
 	{
-		sphWarning ( "doc '%s' source 'doc' missed", sId.cstr() );
+		CompatWarning ( "doc '%s' source 'doc' missed", sId.cstr() );
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
 		ReportError ( sMsg.cstr(), "document_missing_exception", SPH_HTTP_STATUS_404, dResult );
@@ -2844,7 +2867,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	// reinsert updated document
 	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, sError ) )
 	{
-			sphWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
@@ -2861,7 +2884,7 @@ static void DropTable ( const CSphString & sName )
 {
 	CSphString sError;
 	if ( !DropIndexInt ( sName, true, sError ) )
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 
 	{
 		CSphVector<CSphString> dIndexes;
@@ -2917,17 +2940,17 @@ static bool ProcessCreateTable ( const HttpRequestParsed_t & tParser, const CSph
 
 	StrVec_t dWarnings;
 	if ( !CreateNewIndexConfigless ( sName, tOpts, dWarnings, sError ) )
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 
 	for ( const CSphString & sWarn : dWarnings )
-		sphWarning ( "%s", sWarn.cstr() );
+		CompatWarning ( "%s", sWarn.cstr() );
 
 	{
 		ScWL_t tLockTbl ( g_tLockKbnTable );
 		g_tKbnTable[sName.cstr()] = tTbl;
 	}
 
-	sphInfo ( "created table '%s'", sName.cstr() );
+	COMPATINFO << "created table '" << sName.cstr() << "'";
 	CreateAliases(); // FIXME!!! create only this table alias
 
 	nljson tRes = R"(
@@ -3314,7 +3337,7 @@ static bool ProcessFields ( const CSphString & sIndex, CSphVector<BYTE> & dResul
 	AddSpecialColumns ( tRes["fields"] );
 
 	if ( !sError.IsEmpty() )
-		sphWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", sError.cstr() );
 
 	CSphString sRes ( tRes.dump().c_str() );
 	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
@@ -3536,31 +3559,34 @@ static void DropKbnTables()
 	for ( const CSphString & sName : dIdx )
 	{
 		if ( !DropIndexInt ( sName, true, sError ) )
-			sphWarning ( "%s", sError.cstr() );
+			CompatWarning ( "%s", sError.cstr() );
 	}
 
 	if ( dIdx.GetLength() )
-		sphWarning ( "dropped %d system tables", dIdx.GetLength() );
+		CompatWarning ( "dropped %d system tables", dIdx.GetLength() );
 }
 
-void SetLogManagement ( bool bEnable )
+bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 {
-	ScRL_t tLock ( g_tLockSettings );
-	g_tSettings["enabled"] = bEnable;
+	CompatMode_e eMode = GetMode ( sVal.scstr(), &sError );
+	if ( !sError.IsEmpty() )
+		return false;
 
+	g_eMode = eMode;
 	DropKbnTables();
 
-	g_bEnabled = bEnable;
-	if ( g_bEnabled )
+	if ( g_eMode==CompatMode_e::DASHBOARDS )
 	{
 		nljson tSys = GetSystemTable();
 		g_tKbnTable.update ( tSys );
 		CreateKbnIndexes();
 		CreateAliases();
 	}
+
+	return true;
 }
 
 bool IsLogManagementEnabled ()
 {
-	return g_bEnabled;
+	return ( g_eMode!=CompatMode_e::OFF );
 }

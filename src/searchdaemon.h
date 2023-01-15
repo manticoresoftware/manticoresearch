@@ -1393,7 +1393,7 @@ void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, cons
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonObj_c & tRoot );
 void				SetupCompatHttp();
-void				SetLogManagement ( bool bEnable );
+bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
 std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
 int64_t GetDocID ( const char * sID );

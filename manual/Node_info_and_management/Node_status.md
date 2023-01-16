@@ -159,6 +159,47 @@ SHOW STATUS LIKE 'qcache%';
 
 <!-- end -->
 
+## SHOW SETTINGS
+
+<!-- example show settings -->
+
+`SHOW SETTINGS` is an SQL statement that displays the current settings from your configuration file. The setting names are represented in the following format: `'config_section_name'.'setting_name'`
+
+The result also contains two additionary values: 
+- `configuration_file` - the path to the configuration file
+- `worker_pid` -  the process id of the running searchd instance
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+SHOW SETTINGS;
+```
+
+<!-- response SQL -->
+```sql
++--------------------------+-------------------------------------+
+| Setting_name             | Value                               |
++--------------------------+-------------------------------------+
+| configuration_file       | /etc/manticoresearch/manticore.conf |
+| worker_pid               | 658                                 |
+| searchd.listen           | 0.0.0:9312                          |
+| searchd.listen           | 0.0.0:9306:mysql                    |
+| searchd.listen           | 0.0.0:9308:http                     |
+| searchd.log              | /var/log/manticore/searchd.log      |
+| searchd.query_log        | /var/log/manticore/query.log        |
+| searchd.pid_file         | /var/run/manticore/searchd.pid      |
+| searchd.data_dir         | /var/lib/manticore                  |
+| searchd.query_log_format | sphinxql                            |
+| searchd.binlog_path      | /var/lib/manticore/binlog           |
+| common.plugin_dir        | /usr/local/lib/manticore            |
+| common.lemmatizer_base   | /usr/share/manticore/morph/         |
++--------------------------+-------------------------------------+
+13 rows in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## SHOW AGENT STATUS
 ```sql

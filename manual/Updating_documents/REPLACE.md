@@ -4,6 +4,9 @@
 
 `REPLACE` works similar to [INSERT](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the old document with the same ID as a new document as deleted before inserting a new document.
 
+If you use HTTP JSON protocol, 2 different request formats are available: a common Manticore query and an Elasticsearch-like one. You can see both formats demonstrated in the examples.
+
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
@@ -23,7 +26,8 @@ Query OK, 1 row affected (0.00 sec)
 
 <!-- request HTTP -->
 
-```http
+```json
+#Common Manticore format
 POST /replace
 -H "Content-Type: application/x-ndjson" -d '
 {
@@ -31,21 +35,66 @@ POST /replace
   "id":1,
   "doc":
   {
-	"title":"document one",
+    "title":"product one",
     "price":10
   }
 }
 '
+
+#Elasticsearch-like format
+PUT /products/_doc/2
+{
+  "title": "product two",
+  "price": 20
+}
+
+POST /products/_doc/
+{
+  "title": "product three",
+  "price": 10
+}
 ```
 
 <!-- response HTTP -->
-```http
+```json
+#Common Manticore format
 {
   "_index":"products",
   "_id":1,
   "created":false,
   "result":"updated",
   "status":200
+}
+
+#Elasticsearch-like format
+{
+"_id":2,
+"_index":"products",
+"_primary_term":1,
+"_seq_no":0,
+"_shards":{
+    "failed":0,
+    "successful":1,
+    "total":1
+},
+"_type":"_doc",
+"_version":1,
+"result":"created"
+}
+
+{
+"_id":2235747273424240642,
+"_index":"products",
+"_primary_term":1,
+"_seq_no":0,
+"_shards":{
+    "failed":0,
+    "successful":1,
+    "total":1
+},
+"_type":"_doc",
+"_version":1,
+"result":"created"
 }
 ```
 

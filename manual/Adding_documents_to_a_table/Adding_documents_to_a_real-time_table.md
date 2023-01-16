@@ -12,7 +12,10 @@ Expressions are currently not supported in `INSERT` and the values should be exp
 
 The ID field/value can be omitted as RT and PQ tables support [auto-id](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../Updating_documents/REPLACE.md) for that.
 
-Note, when you use the HTTP JSON protocol node `doc` is mandatory, all the values should be provided inside it.
+When you use the HTTP JSON protocol, 2 different request formats are available: a common Manticore format and an Elasticsearch-like one. You can see both formats demonstrated in the examples.
+
+Also, if you use JSON and the Manticore request format, note that the `doc` node is mandatory and all the values should be provided inside it.
+
 
 <!-- intro -->
 ##### SQL:
@@ -44,7 +47,9 @@ Query OK, 1 rows affected (0.00 sec)
 <!-- request HTTP -->
 
 ```json
-POST /insert -d
+#Common Manticore format
+
+POST /insert 
 {
   "index":"products",
   "id":1,
@@ -65,7 +70,7 @@ POST /insert
   }
 }
 
-POST /insert -d
+POST /insert 
 {
   "index":"products",
   "id":0,
@@ -75,10 +80,25 @@ POST /insert -d
   }
 }
 
+#Elasticsearch-like format
+
+POST /products/_create/3 
+{
+  "title": "Yellow Bag with Tassel",
+  "price": 19.85
+}
+
+POST /products/_create/ 
+{
+  "title": "Red Bag with Tassel",
+  "price": 19.85
+}
+
 ```
 <!-- response HTTP -->
 
 ```json
+#Common Manticore format
 {
   "_index": "products",
   "_id": 1,
@@ -99,6 +119,36 @@ POST /insert -d
   "created": true,
   "result": "created",
   "status": 201
+}
+
+#Elasticsearch-like format
+{
+"_id":3,
+"_index":"products",
+"_primary_term":1,
+"_seq_no":0,
+"_shards":{
+    "failed":0,
+    "successful":1,
+    "total":1
+},
+"_type":"_doc",
+"_version":1,
+"result":"updated"
+}
+{
+"_id":2235747273424240642,
+"_index":"products",
+"_primary_term":1,
+"_seq_no":0,
+"_shards":{
+    "failed":0,
+    "successful":1,
+    "total":1
+},
+"_type":"_doc",
+"_version":1,
+"result":"updated"
 }
 ```
 
@@ -434,14 +484,25 @@ The syntax is in general the same as for [inserting a single document](../Quick_
 * The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline \n and maybe \r.
 
 ```json
+#Common Manticore format
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
 {"insert": {"index":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
 {"insert":{"index":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
 '
+
+#Elasticsearcgh-like format
+POST /_bulk
+-H "Content-Type: application/x-ndjson" -d '
+{ "index" : { "_index" : "products" } }
+{ "title" : "Yellow Bag", "price": 12 }
+{ "create" : { "_index" : "products" } }
+{ "title" : "Red Bag", "price": 12.5, "id": 3 }
+'
 ```
 <!-- response HTTP -->
 ```json
+#Common Manticore format
 {
   "items": [
     {
@@ -457,6 +518,44 @@ POST /bulk
     }
   ],
   "errors": false
+}
+
+#Elasticsearcgh-like format
+{
+"items":[
+    {
+    "_id":"0",
+    "_index":"products",
+    "_primary_term":1,
+    "_seq_no":0,
+    "_shards":{
+        "failed":0,
+        "successful":1,
+        "total":1
+    },
+    "_type":"_doc",
+    "_version":1,
+    "result":"created",
+    "status":201
+    },
+   {
+    "_id":"0",
+    "_index":"products",
+    "_primary_term":1,
+    "_seq_no":0,
+    "_shards":{
+        "failed":0,
+        "successful":1,
+        "total":1
+    },
+    "_type":"_doc",
+    "_version":1,
+    "result":"created",
+    "status":201
+    }    
+],
+"errors":false,
+"took":1
 }
 ```
 

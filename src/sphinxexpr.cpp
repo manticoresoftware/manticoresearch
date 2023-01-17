@@ -4056,6 +4056,7 @@ private:
 	int						ProcessRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
 	int						ProcessAtRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
 	int						ErrLex ( const char * sTemplate, ...); // issue lexer error
+	int						CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp );
 
 	CSphVector<int>			GatherArgTypes ( int iNode );
 	CSphVector<int>			GatherArgNodes ( int iNode );
@@ -4338,6 +4339,18 @@ inline static bool IsTok ( Tokh_e e )
 	return e<TOKH_TOKH_COUNT && e>=FUNC_FUNCS_COUNT;
 }
 
+
+int ExprParser_t::CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp )
+{
+	if ( eTok==TOKH_COUNT ) // in case someone used 'count' as a name for an attribute
+		return ParseAttrsAndFields ("count", lvalp);
+
+	if ( eTok==TOKH_WEIGHT ) // in case someone used 'weight' as a name for an attribute
+		return ParseAttrsAndFields ("weight", lvalp);
+
+	return -1;
+}
+
 // general flow: flex parser do most generic tokenization, and provides raw token.
 // here we look it in the schema, perfect hash, overrides, udfs, etc. and provide concrete result
 int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lvalp )
@@ -4347,12 +4360,10 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	auto eTok = TokHashLookup ( { sToken, iLen } );
 	if ( IsTok(eTok) )
 	{
-		if ( eTok==TOKH_COUNT )
-		{
-			iRes = ParseAttrsAndFields ("count", lvalp);
-			if ( iRes>=0 ) // in case someone used 'count' as a name for an attribute
-				return iRes;
-		}
+		iRes = CheckForFields ( eTok, lvalp );
+		if ( iRes>=0 ) 
+			return iRes;
+
 		return dHash2Op[eTok-FUNC_FUNCS_COUNT];
 	}
 

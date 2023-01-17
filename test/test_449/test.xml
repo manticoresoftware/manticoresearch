@@ -97,6 +97,14 @@ searchd
 	select * from col;
 	select s from col;
 	drop table col;
+
+	<!-- regression for selecting a stored field called `weight` -->
+	create table testrt (`weight` text);
+	desc testrt;
+	select weight from testrt;
+	select `weight` from testrt;
+	select * from testrt;
+	drop table testrt;
 </sphinxql>
 </queries>
 

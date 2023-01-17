@@ -601,10 +601,9 @@ void CurlSocket_t::NotifyCurl ( int iCurlEvents )
 
 	SOCKET_DEBUG << "got events " << m_uGotEvents << ", " << CurlPollName(iCurlEvents);
 	m_iNotifiedCurlEvents = iCurlEvents;
-
+	AddRef();
 	Threads::Coro::Go ( [this, iCurlEvents]() REQUIRES ( CurlStrand() ) {
 		CSphRefcountedPtr<ISphNetAction> pWorkKeeper { this };
-		AddRef();
 
 		CurlMulti().CheckCompleted ( m_iSock, iCurlEvents );
 		CurlNotified();

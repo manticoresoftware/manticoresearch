@@ -165,6 +165,13 @@ searchd
 	create table t(f text) engine='rowwise';
 	show create table t;
 	drop table t;
+
+	<!-- regression for group by multiple json values -->
+	drop table if exists t;
+	create table t(j json, s string);
+	insert into t(id,j,s) values(1,'{"a":[]}','s1'),(2,'{"a":["el1","el2"]}','s2'),(3,'{"a":[]}','s2');
+	select * from t; select groupby(), count(*), * from t group by j.a,s;
+	drop table t;
 </sphinxql>
 </queries>
 

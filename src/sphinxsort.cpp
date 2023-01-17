@@ -1536,130 +1536,287 @@ protected:
 };
 
 
+static bool NextSet ( CSphFixedVector<int> & dSet, const CSphFixedVector<CSphVector<SphGroupKey_t>> & dAllKeys )
+{
+	for ( int i = 0; i < dSet.GetLength(); i++ )
+	{
+		int iMaxValues = dAllKeys[i].GetLength();
+		if ( !iMaxValues )
+			continue;
+
+		dSet[i]++;
+		if ( dSet[i]>=iMaxValues )
+			dSet[i] = 0;
+		else
+			return true;
+	}
+
+	return false;
+}
+
+
+template <typename MVA, typename ADDER>
+static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
+{
+	VecTraits_T<MVA> dMvas {dRawMVA};
+	for ( auto & tValue : dMvas )
+		fnAdd ( sphUnalignedRead(tValue) );
+}
+
+
+template <typename PUSH>
+static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
+{
+	int iLen;
+	char szBuf[32];
+	SphGroupKey_t uGroupKey;
+
+	ESphJsonType eJson = sphJsonUnpackType ( iValue );
+	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
+
+	switch ( eJson )
+	{
+	case JSON_ROOT:
+	{
+		iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
+		bool bEmpty = iLen==5; // mask and JSON_EOF
+		uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
+		return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
+	}
+
+	case JSON_STRING:
+	case JSON_OBJECT:
+	case JSON_MIXED_VECTOR:
+		iLen = sphJsonUnpackInt ( &pValue );
+		uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
+		return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
+
+	case JSON_STRING_VECTOR:
+	{
+		bool bRes = false;
+		sphJsonUnpackInt ( &pValue );
+		iLen = sphJsonUnpackInt ( &pValue );
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
+
+			int iStrLen = sphJsonUnpackInt ( &pValue );
+			uGroupKey = sphFNV64 ( pValue, iStrLen );
+			bRes |= fnPush ( &iNewValue, uGroupKey );
+			pValue += iStrLen;
+		}
+		return bRes;
+	}
+
+	case JSON_INT32:
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword(pValue) ) ) );
+
+	case JSON_INT64:
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
+
+	case JSON_DOUBLE:
+		snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+		return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
+
+	case JSON_INT32_VECTOR:
+	{
+		bool bRes = false;
+		iLen = sphJsonUnpackInt ( &pValue );
+		auto p = (const int*)pValue;
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
+			uGroupKey = *p++;
+			bRes |= fnPush ( &iPacked, uGroupKey );
+		}
+		return bRes;
+	}
+
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		bool bRes = false;
+		iLen = sphJsonUnpackInt ( &pValue );
+		auto p = (const int64_t*)pValue;
+		ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
+			uGroupKey = *p++;
+			bRes |= fnPush ( &iPacked, uGroupKey );
+		}
+		return bRes;
+	}
+
+	case JSON_TRUE:
+	case JSON_FALSE:
+		uGroupKey = eJson;
+		return fnPush ( &iValue, uGroupKey );
+
+	default:
+		uGroupKey = 0;
+		iValue = 0;
+		return fnPush ( &iValue, uGroupKey );
+	}
+}
+
+template<typename T>
+void FetchMVAKeys ( CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	dKeys.Resize(0);
+
+	if ( !pBlobPool )
+		return;
+
+	int iLengthBytes = 0;
+	const BYTE * pMva = sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
+	int iNumValues = iLengthBytes / sizeof(T);
+	const T * pValues = (const T*)pMva;
+
+	dKeys.Resize(iNumValues);
+	for ( int i = 0; i<iNumValues; i++ )
+		dKeys[i] = (SphGroupKey_t)pValues[i];
+}
+
 template <class PRED>
 class CSphGrouperMulti final: public CSphGrouper, public PRED
 {
 	using MYTYPE = CSphGrouperMulti<PRED>;
 
 public:
-	CSphGrouperMulti ( CSphVector<CSphAttrLocator> dLocators, CSphVector<ESphAttr> dAttrTypes, VecRefPtrs_t<ISphExpr *> dJsonKeys)
-		: m_dLocators ( std::move(dLocators) )
-		, m_dAttrTypes ( std::move(dAttrTypes) )
-		, m_dJsonKeys ( std::move(dJsonKeys) )
-	{
-		assert ( m_dLocators.GetLength()>1 );
-		assert ( m_dLocators.GetLength()==m_dAttrTypes.GetLength() && m_dLocators.GetLength()==m_dJsonKeys.GetLength() );
-	}
+					CSphGrouperMulti ( CSphVector<CSphAttrLocator> dLocators, CSphVector<ESphAttr> dAttrTypes, VecRefPtrs_t<ISphExpr *> dJsonKeys );
 
-	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const final
-	{
-		auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
-
-		for ( int i=0; i<m_dLocators.GetLength(); i++ )
-		{
-			int iLen = 0;
-			const BYTE * pStr = nullptr;
-
-			switch ( m_dAttrTypes[i] )
-			{
-			case SPH_ATTR_STRINGPTR:
-			// FIXME! this is slow; dynamic string grouping should be handled by different groupers
-			{
-				ByteBlob_t tData = tMatch.FetchAttrData ( m_dLocators[i], GetBlobPool() );
-				if ( !tData.first || !tData.second )
-					continue;
-
-				tKey = PRED::Hash ( tData.first, tData.second, tKey );
-			}
-			break;
-
-			case SPH_ATTR_STRING:
-				pStr = sphGetBlobAttr( tMatch, m_dLocators[i], GetBlobPool(), iLen );
-				if ( !pStr || !iLen )
-					continue;
-
-				tKey = PRED::Hash ( pStr, iLen, tKey );
-				break;
-
-			case SPH_ATTR_JSON:
-				pStr = sphGetBlobAttr( tMatch, m_dLocators[i], GetBlobPool(), iLen );
-				if ( !pStr || !iLen )
-					continue;
-
-				tKey = EvalJsonKey ( m_dJsonKeys[i]->Int64Eval(tMatch), tKey );
-				break;
-
-			default:
-			{
-				SphAttr_t tAttr = tMatch.GetAttr ( m_dLocators[i] );
-				tKey = ( SphGroupKey_t ) sphFNV64 ( &tAttr, sizeof(SphAttr_t), tKey );
-			}
-			break;
-			}
-		}
-
-		return tKey;
-	}
-
-	void SetBlobPool ( const BYTE * pBlobPool ) final
-	{
-		CSphGrouper::SetBlobPool ( pBlobPool );
-		ARRAY_FOREACH ( i, m_dJsonKeys )
-		{
-			if ( m_dJsonKeys[i] )
-				m_dJsonKeys[i]->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
-		}
-	}
-
-	CSphGrouper* Clone() const final
-	{
-		VecRefPtrs_t<ISphExpr *> dJsonKeys;
-		m_dJsonKeys.for_each ( [&dJsonKeys] ( ISphExpr * p ) { dJsonKeys.Add ( SafeClone ( p ) ); } );
-		return new MYTYPE ( m_dLocators, m_dAttrTypes, std::move(dJsonKeys) );
-	}
-
+	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final;
+	void			SetBlobPool ( const BYTE * pBlobPool ) final;
+	CSphGrouper *	Clone() const final;
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final;
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
 	void			GetLocator ( CSphAttrLocator & ) const final { assert(0); }
 	ESphAttr		GetResultType() const final { return SPH_ATTR_BIGINT; }
+	bool			IsMultiValue() const final	{ return m_dAttrTypes.any_of ( []( auto eType ){ return eType==SPH_ATTR_JSON || eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET; } ); }
 
 private:
 	CSphVector<CSphAttrLocator>	m_dLocators;
 	CSphVector<ESphAttr>		m_dAttrTypes;
 	VecRefPtrs_t<ISphExpr *>	m_dJsonKeys;
 
-	SphGroupKey_t EvalJsonKey ( uint64_t uPacked, SphGroupKey_t tKey ) const
-	{
-		ESphJsonType eType = sphJsonUnpackType ( uPacked );
-		const BYTE * pValue = GetBlobPool () + sphJsonUnpackOffset ( uPacked );
-
-		int i32Val;
-		int64_t i64Val;
-		double fVal;
-		switch ( eType )
-		{
-		case JSON_STRING:
-			i32Val = sphJsonUnpackInt ( &pValue );
-			return ( SphGroupKey_t ) sphFNV64 ( pValue, i32Val, tKey );
-
-		case JSON_INT32:
-			i32Val = sphJsonLoadInt ( &pValue );
-			return ( SphGroupKey_t ) sphFNV64 ( &i32Val, sizeof(i32Val), tKey );
-
-		case JSON_INT64:
-			i64Val = sphJsonLoadBigint ( &pValue );
-			return ( SphGroupKey_t ) sphFNV64 ( &i64Val, sizeof(i64Val), tKey );
-
-		case JSON_DOUBLE:
-			fVal = sphQW2D ( sphJsonLoadBigint ( &pValue ) );
-			return ( SphGroupKey_t ) sphFNV64 ( &fVal, sizeof(fVal), tKey );
-
-		default:
-			return tKey;
-		}
-	}
+	SphGroupKey_t	FetchStringKey ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, SphGroupKey_t tPrevKey ) const;
 };
 
+template <class PRED>
+CSphGrouperMulti<PRED>::CSphGrouperMulti ( CSphVector<CSphAttrLocator> dLocators, CSphVector<ESphAttr> dAttrTypes, VecRefPtrs_t<ISphExpr *> dJsonKeys)
+	: m_dLocators ( std::move(dLocators) )
+	, m_dAttrTypes ( std::move(dAttrTypes) )
+	, m_dJsonKeys ( std::move(dJsonKeys) )
+{
+	assert ( m_dLocators.GetLength()>1 );
+	assert ( m_dLocators.GetLength()==m_dAttrTypes.GetLength() && m_dLocators.GetLength()==m_dJsonKeys.GetLength() );
+}
+
+template <class PRED>
+SphGroupKey_t CSphGrouperMulti<PRED>::KeyFromMatch ( const CSphMatch & tMatch ) const
+{
+	auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
+
+	for ( int i=0; i<m_dLocators.GetLength(); i++ )
+		switch ( m_dAttrTypes[i] )
+		{
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:
+			tKey = FetchStringKey ( tMatch, m_dLocators[i], tKey );
+			break;
+
+		default:
+			{
+				SphAttr_t tAttr = tMatch.GetAttr ( m_dLocators[i] );
+				tKey = ( SphGroupKey_t ) sphFNV64 ( &tAttr, sizeof(SphAttr_t), tKey );
+			}
+			break;
+		}
+
+	return tKey;
+}
+
+template <class PRED>
+void CSphGrouperMulti<PRED>::SetBlobPool ( const BYTE * pBlobPool )
+{
+	CSphGrouper::SetBlobPool ( pBlobPool );
+	ARRAY_FOREACH ( i, m_dJsonKeys )
+		if ( m_dJsonKeys[i] )
+			m_dJsonKeys[i]->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+}
+
+template <class PRED>
+CSphGrouper * CSphGrouperMulti<PRED>::Clone() const
+{
+	VecRefPtrs_t<ISphExpr *> dJsonKeys;
+	m_dJsonKeys.for_each ( [&dJsonKeys] ( ISphExpr * p ) { dJsonKeys.Add ( SafeClone ( p ) ); } );
+	return new MYTYPE ( m_dLocators, m_dAttrTypes, std::move(dJsonKeys) );
+}
+
+template <class PRED>
+void CSphGrouperMulti<PRED>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+
+	CSphFixedVector<CSphVector<SphGroupKey_t>> dAllKeys { m_dLocators.GetLength() };
+	for ( int i=0; i<m_dLocators.GetLength(); i++ )
+	{
+		auto & dCurKeys = dAllKeys[i];
+
+		switch ( m_dAttrTypes[i] )
+		{
+		case SPH_ATTR_UINT32SET:
+			FetchMVAKeys<DWORD> ( dCurKeys, tMatch, m_dLocators[i], GetBlobPool() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			FetchMVAKeys<int64_t> ( dCurKeys, tMatch, m_dLocators[i], GetBlobPool() );
+			break;
+
+		case SPH_ATTR_JSON:
+			PushJsonField ( m_dJsonKeys[i]->Int64Eval(tMatch), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey ){ dCurKeys.Add(uMatchGroupKey); return true; } );
+			break;
+
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:
+			{
+				SphGroupKey_t tStringKey = FetchStringKey ( tMatch, m_dLocators[i], SPH_FNV64_SEED );
+				if ( tStringKey!=SPH_FNV64_SEED )
+					dAllKeys[i].Add ( tStringKey );		
+			}
+			break;
+
+		default:
+			dAllKeys[i].Add ( tMatch.GetAttr ( m_dLocators[i] ) );
+			break;
+		}
+	}
+
+	CSphFixedVector<int> dIndexes { m_dLocators.GetLength() };
+	dIndexes.ZeroVec();
+
+	do
+	{
+		auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
+		ARRAY_FOREACH ( i, dAllKeys )
+			if ( dAllKeys[i].GetLength() )
+				tKey = (SphGroupKey_t)sphFNV64 ( &dAllKeys[i][dIndexes[i]], sizeof(SphAttr_t), tKey );
+
+		dKeys.Add(tKey);
+	}
+	while ( NextSet ( dIndexes, dAllKeys ) );
+}
+
+template <class PRED>
+SphGroupKey_t CSphGrouperMulti<PRED>::FetchStringKey ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, SphGroupKey_t tPrevKey ) const
+{
+	ByteBlob_t tData = tMatch.FetchAttrData ( tLocator, GetBlobPool() );
+	if ( !tData.first || !tData.second )
+		return tPrevKey;
+
+	return PRED::Hash ( tData.first, tData.second, tPrevKey );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1696,125 +1853,7 @@ ESphAttr GrouperMVA_T<int64_t>::GetResultType() const
 template<typename T>
 void GrouperMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
 {
-	dKeys.Resize(0);
-
-	if ( !GetBlobPool() )
-		return;
-
-	int iLengthBytes = 0;
-	const BYTE * pMva = sphGetBlobAttr ( tMatch, m_tLocator, GetBlobPool(), iLengthBytes );
-	int iNumValues = iLengthBytes / sizeof(T);
-	const T * pValues = (const T*)pMva;
-
-	dKeys.Resize(iNumValues);
-	for ( int i = 0; i<iNumValues; i++ )
-		dKeys[i] = (SphGroupKey_t)pValues[i];
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-template <typename MVA, typename ADDER>
-static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
-{
-	VecTraits_T<MVA> dMvas {dRawMVA};
-	for ( auto & tValue : dMvas )
-		fnAdd ( sphUnalignedRead(tValue) );
-}
-
-template <typename PUSH>
-static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
-{
-	int iLen;
-	char szBuf[32];
-	SphGroupKey_t uGroupKey;
-
-	ESphJsonType eJson = sphJsonUnpackType ( iValue );
-	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
-
-	switch ( eJson )
-	{
-		case JSON_ROOT:
-		{
-			iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
-			bool bEmpty = iLen==5; // mask and JSON_EOF
-			uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
-			return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
-		}
-
-		case JSON_STRING:
-		case JSON_OBJECT:
-		case JSON_MIXED_VECTOR:
-			iLen = sphJsonUnpackInt ( &pValue );
-			uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
-			return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
-
-		case JSON_STRING_VECTOR:
-		{
-			bool bRes = false;
-			sphJsonUnpackInt ( &pValue );
-			iLen = sphJsonUnpackInt ( &pValue );
-			for ( int i=0;i<iLen;i++ )
-			{
-				int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
-
-				int iStrLen = sphJsonUnpackInt ( &pValue );
-				uGroupKey = sphFNV64 ( pValue, iStrLen );
-				bRes |= fnPush ( &iNewValue, uGroupKey );
-				pValue += iStrLen;
-			}
-			return bRes;
-		}
-
-		case JSON_INT32:
-			return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword(pValue) ) ) );
-
-		case JSON_INT64:
-			return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
-
-		case JSON_DOUBLE:
-			snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-			return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
-
-		case JSON_INT32_VECTOR:
-		{
-			bool bRes = false;
-			iLen = sphJsonUnpackInt ( &pValue );
-			auto p = (const int*)pValue;
-			for ( int i=0;i<iLen;i++ )
-			{
-				int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
-				uGroupKey = *p++;
-				bRes |= fnPush ( &iPacked, uGroupKey );
-			}
-			return bRes;
-		}
-
-		case JSON_INT64_VECTOR:
-		case JSON_DOUBLE_VECTOR:
-		{
-			bool bRes = false;
-			iLen = sphJsonUnpackInt ( &pValue );
-			auto p = (const int64_t*)pValue;
-			ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
-			for ( int i=0;i<iLen;i++ )
-			{
-				int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
-				uGroupKey = *p++;
-				bRes |= fnPush ( &iPacked, uGroupKey );
-			}
-			return bRes;
-		}
-
-		case JSON_TRUE:
-		case JSON_FALSE:
-			uGroupKey = eJson;
-			return fnPush ( &iValue, uGroupKey );
-
-		default:
-			uGroupKey = 0;
-			iValue = 0;
-			return fnPush ( &iValue, uGroupKey );
-	}
+	FetchMVAKeys<T> ( dKeys, tMatch, m_tLocator, GetBlobPool() );
 }
 
 

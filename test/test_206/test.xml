@@ -565,7 +565,7 @@ select * from json_attr where json1.floatkey between 1.01 and 1.02;
 select * from json_attr where json1.floatkey>2.22;
 select * from json_attr where json1.floatkey>=2.22;
 <!-- json in multiple -->
-select *, groupby(), count(*) from test group by gid, j.t1, j.gid;
+select *, count(*) from test group by gid, j.t1, j.gid;
 <!-- type conversion -->
 select double(json1.year) from json_attr;
 select double(json1.floatkey) from json_attr;

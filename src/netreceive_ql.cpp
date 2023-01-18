@@ -638,15 +638,15 @@ public:
 
 		// fill scramble auth data (random)
 		int i = 0;
-		DWORD uRand = sphRand();
+		DWORD uRand = sphRand() | 0x01010101;
 		for ( ; i < AUTH_DATA_LEN - sizeof ( DWORD ); i += sizeof ( DWORD ) )
 		{
 			memcpy ( m_sAuthData + i, &uRand, sizeof ( DWORD ) );
-			uRand = sphRand();
+			uRand = sphRand() | 0x01010101;
 		}
 		if ( i < AUTH_DATA_LEN )
 			memcpy ( m_sAuthData + i, &uRand, AUTH_DATA_LEN - i );
-
+		memset ( m_sAuthData + AUTH_DATA_LEN - 1, 0, 1);
 		// version string (plus 0-terminator)
 		m_sVersionString = FromStr ( g_sMySQLVersion );
 		++m_sVersionString.second; // encount also z-terminator

@@ -91,10 +91,10 @@
 * [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
 * [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
 * [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
-* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time table
+* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces a document in a real-time table
 * [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - Deletes a document in a table
-* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
+* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
 
@@ -315,7 +315,7 @@ To be put to section `common {}` in configuration file:
 * [plugin_dir](Server_settings/Common.md#plugin_dir) - Location for the dynamic libraries and UDFs
 
 ## [Indexer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
-`indexer` is a tool to create [plain tables](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
+`indexer` is a tool to create [plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
 
 ##### Indexer settings in configuration file
 To be put to section `indexer {}` in configuration file:
@@ -381,7 +381,7 @@ To be put to section `searchd {}` in configuration file:
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies how many times Manticore will try to connect and query remote agents
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Specifies the delay before retrying to query a remote agent in case it fails
-  * [attr_flush_period](Updating_documents/UPDATE.md#attr_flush_period) - Defines time period between flushing updated attributes to disk
+  * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Defines time period between flushing updated attributes to disk
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - Binary log files path

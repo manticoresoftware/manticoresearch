@@ -3,13 +3,13 @@
 # Version 6.0.0
 Released: Jan ?? 2022
 
-Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require super low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump, DBeaver, Grafana mysql connector. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require super low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump, DBeaver, Grafana mysql connector. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 This release also includes more than 60 bug fixes and numerous features, many of which can be considered major.
 
 ### Major Changes
 * You can now insert data into Manticore from Logstash and Beats.
-* [Commit c436f902](https://gitlab.com/manticoresearch/dev/-/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [search.auto_schema](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table#Auto-schema).
+* [Commit c436f902](https://gitlab.com/manticoresearch/dev/-/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [search.auto_schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table#Auto-schema).
 * Vast revamp of [cost-based optimizer](../Searching/Cost_based_optimizer.md#Cost-based-optimizer) which lowers query response time in many cases. Integrated it with [secondary indexes](../Server_settings/Searchd.md#secondary_indexes):
   - [Issue #1008](https://github.com/manticoresoftware/manticoresearch/issues/1008) Parallelization performance estimate in CBO.
   - [Issue #1014](https://github.com/manticoresoftware/manticoresearch/issues/1014) CBO is now aware of secondary indexes and can act smarter.
@@ -53,7 +53,7 @@ This release also includes more than 60 bug fixes and numerous features, many of
 * [Issue #849](https://github.com/manticoresoftware/manticoresearch/issues/849) `SHOW SETTINGS`: helper command for manticore-backup.
 * [Issue #1007](https://github.com/manticoresoftware/manticoresearch/issues/1007) [SET GLOBAL CPUSTATS=1/0](../Server_settings/Setting_variables_online.md#SET) turns on/off cpu time tracking; [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) now doesn't show CPU statistics when the cpu time tracking is off.
 * [Issue #1009](https://github.com/manticoresoftware/manticoresearch/issues/1009) RT table RAM chunk segments can now be merged while the RAM chunk is being flushed.
-* [Issue #1012](https://github.com/manticoresoftware/manticoresearch/issues/1012) Added secondary index progress to the output of [indexer](../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+* [Issue #1012](https://github.com/manticoresoftware/manticoresearch/issues/1012) Added secondary index progress to the output of [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 * [Issue #1013](https://github.com/manticoresoftware/manticoresearch/issues/1013) Previously a table record could be removed by Manticore from the index list if it couldn't start serving it on start. The new behaviour is to keep it in the list to try to load it on the next start.
 * [indextool --docextract](../Miscellaneous_tools.md#indextool) returns all the words and hits belonging to requested document.
 * [Commit 2b296ee2](https://gitlab.com/manticoresearch/dev/-/commit/2b296ee20e520b85bcbb4383e87095d31e7165dc) Environment variable `dump_corrupt_meta` enables dumping a corrupted table meta data to log in case searchd can't load the index.
@@ -435,7 +435,7 @@ sys	0m0.047s
 * [Commit 00874743](https://github.com/manticoresoftware/manticoresearch/commit/00874743823eaf43e2a09a088392fd7e0a617f47) accurate [count(distinct ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) and [FACET ... distinct](Searching/Faceted_search.md#Faceting-without-duplicates) over several local physical indexes (real-time/plain) with identical fields set/order.
 * [PR #598](https://github.com/manticoresoftware/manticoresearch/pull/598) bigint support for `YEAR()` and other timestamp functions.
 * [Commit 8e85d4bc](https://github.com/manticoresoftware/manticoresearch/commit/8e85d4bce596cc88f9d9615ea243a27e4afde0f7) Adaptive [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit). Previously Manticore Search was collecting exactly up to `rt_mem_limit` of data before saving a new disk chunk to disk, and while saving was still collecting up to 10% more (aka double-buffer) to minimize possible insert suspension. If that limit was also exhausted, adding new documents was blocked until the disk chunk was fully saved to disk. The new adaptive limit is built on the fact that we have [auto-optimize](Server_settings/Searchd.md#auto_optimize) now, so it's not a big deal if disk chunks do not fully respect `rt_mem_limit` and start flushing a disk chunk earlier. So, now we collect up to 50% of `rt_mem_limit` and save that as a disk chunk. Upon saving we look at the statistics (how much we've saved, how many new documents have arrived while saving) and recalculate the initial rate which will be used next time. For example, if we saved 90 million documents, and another 10 million docs arrived while saving, the rate is 90%, so we know that next time we can collect up to 90% of `rt_mem_limit` before starting flushing another disk chunk. The rate value is calculated automatically from 33.3% to 95%.
-* [Issue #628](https://github.com/manticoresoftware/manticoresearch/issues/628) [unpack_zlib](Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md#unpack_zlib) for PostgreSQL source. Thank you, [Dmitry Voronin](https://github.com/dimv36) for the [contribution](https://github.com/manticoresoftware/manticoresearch/pull/630).
+* [Issue #628](https://github.com/manticoresoftware/manticoresearch/issues/628) [unpack_zlib](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md#unpack_zlib) for PostgreSQL source. Thank you, [Dmitry Voronin](https://github.com/dimv36) for the [contribution](https://github.com/manticoresoftware/manticoresearch/pull/630).
 * [Commit 6d54cf2b](https://github.com/manticoresoftware/manticoresearch/commit/6d54cf2b319b131970c29410cc21abcbdf8083b1) `indexer -v` and `--version`. Previously you could still see indexer's version, but `-v`/`--version` were not supported.
 * [Issue #662](https://github.com/manticoresoftware/manticoresearch/issues/662) infinit mlock limit by default when Manticore is started via systemd.
 * [Commit 63c8cd05](https://github.com/manticoresoftware/manticoresearch/commit/63c8cd05cf399e705c2c14939411a92cb784735a) spinlock -> op queue for coro rwlock.
@@ -589,11 +589,11 @@ sys     0m0.001s
 
 ### Minor changes
 - tool `manticore_new_cluster [--force]` useful for restarting a replication cluster via systemd
-- [--drop-src](Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md#Merging-tables) for `indexer --merge`
+- [--drop-src](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md#Merging-tables) for `indexer --merge`
 - [new mode](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) `blend_mode='trim_all'`
 - added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
 - [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
-- [FORCE/IGNORE INDEX(id)](Data_creation_and_modification/Updating_documents/UPDATE.md#FORCE-and-IGNORE-INDEX) for SELECT/UPDATE
+- [FORCE/IGNORE INDEX(id)](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-SQL) for SELECT/UPDATE
 - chunk id for a merged disk chunk is now unique
 - [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
 
@@ -655,7 +655,7 @@ status of the query, not the server status
 - [standalone NOT](Searching/Options.md#not_terms_only_allowed) as an option for SELECT
 
 ### Minor Changes
-- [Issue #453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer.ignore_non_plain=1](Adding_data_from_external_storages/Plain_tables_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `ignore_non_plain=1` you'll get a warning and a respective exit code.
+- [Issue #453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer.ignore_non_plain=1](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `ignore_non_plain=1` you'll get a warning and a respective exit code.
 - [SHOW PLAN ... OPTION format=dot](Node_info_and_management/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) and [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) enable visualization of full-text query plan execution. Useful for understanding complex queries.
 
 ### Deprecations
@@ -682,7 +682,7 @@ status of the query, not the server status
 * NOT operator can be now used standalone. By default it is disabled since accidental single NOT queries can be slow. It can be enabled by setting new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
 * New setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
 Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.md#threads) overriding the global `max_threads_per_query`.
-* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md).
+* Percolate indexes can be now be imported with [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md).
 * HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP-JSON)/[grouping](Searching/Grouping.md) by new query node `aggs`.
 
 ### Minor changes
@@ -788,7 +788,7 @@ Besides the usual `manticore` package, you can also install Manticore Search by 
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
-* [`INSERT INTO PQ VALUES()`](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
+* [`INSERT INTO PQ VALUES()`](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
 * [`allow_empty=0`](Searching/Highlighting.md#allow_empty) is a new default in highlighting via HTTP JSON interface.
 * Only absolute paths are allowed for external files (stopwords, exceptions etc.) in `CREATE TABLE`/`ALTER TABLE`.
 
@@ -1408,7 +1408,7 @@ development libraries.
 * new full-text matching operator NOTNEAR/N
 * LIMIT for SELECT on percolate indexes
 * [expand_keywords](Searching/Options.md#expand_keywords) can accept 'start','exact' (where 'star,exact' has same effect as '1')
-* ranged-main-query for  [joined fields](Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#sql_joined_field) which uses the ranged query defined by sql_query_range
+* ranged-main-query for  [joined fields](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#sql_joined_field) which uses the ranged query defined by sql_query_range
 
 ### Bugfixes
 * [Commit 72dcf66](https://github.com/manticoresoftware/manticoresearch/commit/72dcf669744e9b7d636dfc213d24df85ab301f6b) fixed crash on searching ram segments; deadlock on save disk chunk with double buffer; deadlock on save disk chunk during optimize
@@ -1460,7 +1460,7 @@ In this release we've changed internal protocol used by masters and agents to sp
 ## Version 2.5.1, 23 November 2017
 ### Features and improvements
 * JSON queries on [HTTP API protocol](Connecting_to_the_server/HTTP.md). Supported search, insert, update, delete, replace operations. Data manipulation commands can be also bulked, also there are some limitations currently as MVA and JSON attributes can't be used for inserts, replaces or updates.
-* [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) command
+* [RELOAD INDEXES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) command
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) command
 * [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) can show progress of optimize, rotation or flushes.
 * GROUP N BY work correctly with MVA attributes

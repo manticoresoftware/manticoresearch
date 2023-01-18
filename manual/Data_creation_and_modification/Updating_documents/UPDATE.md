@@ -982,7 +982,7 @@ POST /bulk
 
 * `insert`: Inserts a document. The syntax is the same as in the [/insert endpoint](../../Quick_start_guide.md#Add-documents).
 * `create`: a synonym for `insert`
-* `replace`: Replaces a document. The syntax is the same as in the [/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md#HTTP-JSON).
+* `replace`: Replaces a document. The syntax is the same as in the [/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 * `index`: a synonym for `replace`
 * `update`: Updates a document. The syntax is the same as in the [/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 * `delete`: Deletes a document. The syntax is the same as in the [/delete endpoint](../../Data_creation_and_modification/Deleting_documents.md).

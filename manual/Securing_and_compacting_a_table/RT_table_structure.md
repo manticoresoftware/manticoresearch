@@ -26,7 +26,7 @@ Binlog is designed especially for sequential saving of new arriving transactions
 When the data from RAM is surely saved to disk, which happens:
 
 * when the server saves the collected data as a disk table
-* or when it dumps the RAM part during a clean shutdown or by [manual flushing](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-RTINDEX)
+* or when it dumps the RAM part during a clean shutdown or by [manual flushing](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE)
 
 the binlog for that table is no more necessary. So, it gets discarded. If all the tables are saved, it will be deleted.
 

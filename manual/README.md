@@ -60,32 +60,33 @@
     * [MySQL protocol](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)
     * [SQL over HTTP](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
-* [▪️ Adding documents to a table]
-    * [✔ Adding documents to a real-time table](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
-    * [Adding rules to a percolate table](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
-* [▪️ Adding data from external storages]
-    * [Plain tables creation](Adding_data_from_external_storages/Plain_tables_creation.md)
-    * [Fetching from databases]
-        * [Introduction](Adding_data_from_external_storages/Fetching_from_databases/Introduction.md)
-        * [Database connection](Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md)
-        * [Execution of fetch queries](Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md)
-        * [Processing fetched data](Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md)
-        * [Ranged queries](Adding_data_from_external_storages/Fetching_from_databases/Ranged_queries.md)
-    * [Fetching from XML stream](Adding_data_from_external_storages/Fetching_from_XML_streams.md)
-    * [Fetching from CSV,TSV](Adding_data_from_external_storages/Fetching_from_CSV,TSV.md)
-    * [Main+delta schema](Adding_data_from_external_storages/Main_delta.md)
-    * [Adding data from tables]
-        * [Merging tables](Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
-        * [Killlists in plain tables](Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
-        * [Attaching a plain table to RT table](Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
-        * [Importing RT table](Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)        
-    * [Rotating a table](Adding_data_from_external_storages/Rotating_a_table.md)
-* [✔ Updating documents]
-    * [REPLACE vs UPDATE](Updating_documents/REPLACE_vs_UPDATE.md)
-    * [REPLACE](Updating_documents/REPLACE.md)
-    * [UPDATE](Updating_documents/UPDATE.md)
-* [▪️ Deleting documents](Deleting_documents.md)
-* [▪️ Transactions](Transactions.md)
+* [▪️ Data creation and modification](Data_creation_and_modification/Data_creation_and_modification.md)
+    * [▪️ Adding documents to a table]
+        * [✔ Adding documents to a real-time table](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
+        * [Adding rules to a percolate table](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
+    * [▪️ Adding data from external storages]
+        * [Plain tables creation](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
+        * [Fetching from databases]
+            * [Introduction](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction.md)
+            * [Database connection](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md)
+            * [Execution of fetch queries](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md)
+            * [Processing fetched data](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md)
+            * [Ranged queries](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Ranged_queries.md)
+        * [Fetching from XML stream](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_XML_streams.md)
+        * [Fetching from CSV,TSV](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_CSV,TSV.md)
+        * [Main+delta schema](Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)
+        * [Adding data from tables]
+            * [Merging tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
+            * [Killlists in plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+            * [Attaching a plain table to RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
+            * [Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)        
+        * [Rotating a table](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
+    * [✔ Updating documents]
+        * [REPLACE vs UPDATE](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)
+        * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md)
+        * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md)
+    * [▪️ Deleting documents](Data_creation_and_modification/Deleting_documents.md)
+    * [▪️ Transactions](Data_creation_and_modification/Transactions.md)
 * [✔ Searching]
     * [Intro](Searching/Intro.md)
     * [Full-text matching]

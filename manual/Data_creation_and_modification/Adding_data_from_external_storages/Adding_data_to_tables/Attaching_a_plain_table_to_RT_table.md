@@ -25,7 +25,7 @@ When `TRUNCATE` option is used RT table gets truncated prior to attaching source
 
 `ATTACH TABLE` comes with a number of restrictions. Most notably, the target RT table is currently required to be either empty or have the same settings as the source plain table. In case the source plain table gets attached to a non-empty RT table the RT table data collected so far gets stored as a regular disk chunk and table being attached becomes the newest disk chunk and documents with same IDs get killed. The complete list is as follows:
 * Target RT table needs to be either empty or have same settings
-* Source plain table needs to have [phrase_boundary_step](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)=0, [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)=1.
+* Source plain table needs to have [phrase_boundary_step](../../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)=0, [stopword_step](../../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)=1.
 
 
 <!-- intro -->

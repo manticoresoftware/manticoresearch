@@ -52,7 +52,7 @@ For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `T
 
 All write statements for HTTP interface to a cluster's table should set `cluster` property along with `table` name. An error will be triggered otherwise.
 
-[Auto ID](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) generated for a table in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
+[Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) generated for a table in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
 
 <!-- intro -->
 ##### SQL:
@@ -66,7 +66,7 @@ UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN
 DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /insert -d '
@@ -154,7 +154,7 @@ SELECT * FROM weekly_index
 CALL PQ('posts:weekly_index', 'document is here')
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /search -d '
@@ -188,7 +188,7 @@ See [Galera Documentation Parameters](https://galeracluster.com/library/document
 ```sql
 SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -215,7 +215,7 @@ All other nodes will reconnect to the node and resync their data based on this n
 ```sql
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -257,7 +257,7 @@ Create a cluster at the server that has local tables that need to be replicated
 CREATE CLUSTER posts
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -316,7 +316,7 @@ ALTER CLUSTER posts ADD pq_title
 ALTER CLUSTER posts ADD pq_clicks
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -392,7 +392,7 @@ All other nodes that want replica of cluster's tables should join cluster as
 JOIN CLUSTER posts AT '192.168.1.101:9312'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -452,7 +452,7 @@ When running queries for SQL prepend the table name with the cluster name `posts
 INSERT INTO posts:pq_title VALUES ( 3, 'test me' )
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /insert -d '

@@ -17,7 +17,7 @@ CREATE CLUSTER click_query '/var/data/click_query/' as path
 CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

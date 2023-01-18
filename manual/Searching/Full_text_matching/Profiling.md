@@ -92,9 +92,9 @@ Variable: transformed_tree
 1 row in set (0.00 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-``` rest
+```JSON
 POST /search
 {
   "index": "forum",
@@ -105,8 +105,8 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
-``` rest
+<!-- response JSON -->
+```JSON
 {
   "took":1503,
   "timed_out":false,
@@ -165,7 +165,7 @@ POST /search
 $result = $index->search('i me')->setSource(['excludes'=>['*']])->setLimit(1)->profile()->get();
 print_r($result->getProfile());
 ```
-<!-- response HTTP -->
+<!-- response PHP -->
 ``` php
 Array
 (
@@ -344,11 +344,11 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "forum",
@@ -359,8 +359,8 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
-```
+<!-- response JSON -->
+```JSON
 {
   "took":33,
   "timed_out":false,

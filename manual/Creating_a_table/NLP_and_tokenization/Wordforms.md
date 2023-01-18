@@ -61,7 +61,7 @@ If multi-byte codepages are used, and file names can include foreign characters,
 CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt /var/lib/manticore/dict*.txt'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

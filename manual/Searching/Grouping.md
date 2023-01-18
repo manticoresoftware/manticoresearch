@@ -28,8 +28,8 @@ SELECT_expr: { field_name | function_name(...) }
 where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
-<!-- request HTTP -->
-HTTP supports currently a simple grouping that can retrieve the aggregate values and their count(*).
+<!-- request JSON -->
+JSON query format supports currently a simple grouping that can retrieve the aggregate values and their count(*).
 
 ```json
 {
@@ -123,7 +123,7 @@ SELECT release_year, AVG(rental_rate) FROM films GROUP BY release_year LIMIT 5;
 +--------------+------------------+
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ``` json
 POST /search -d '
     {
@@ -143,7 +143,7 @@ POST /search -d '
     }
 '
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 ``` json
 {
   "took": 2,
@@ -583,7 +583,7 @@ SELECT groupby() gb, count(*) FROM shoes GROUP BY sizes ORDER BY gb asc;
 +------+----------+
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ``` json
 POST /search -d '
     {
@@ -603,7 +603,7 @@ POST /search -d '
     }
 '
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 ``` json
 {
   "took": 0,
@@ -775,7 +775,7 @@ SELECT groupby() color, count(*) from products GROUP BY meta.color;
 | green |        1 |
 +-------+----------+
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 ``` json
 POST /search -d '
     {
@@ -795,7 +795,7 @@ POST /search -d '
     }
 '
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 ``` json
 {
   "took": 0,

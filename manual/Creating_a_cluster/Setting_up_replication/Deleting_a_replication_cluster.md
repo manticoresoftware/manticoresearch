@@ -13,7 +13,7 @@ Delete statement removes a cluster specified with [name](../../Creating_a_cluste
 DELETE CLUSTER click_query
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "DELETE CLUSTER click_query"

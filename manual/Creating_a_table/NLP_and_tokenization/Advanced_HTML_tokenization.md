@@ -32,7 +32,7 @@ Only the tags themselves, and also HTML comments, are stripped. To strip  the co
 CREATE TABLE products(title text, price float) html_strip = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -110,7 +110,7 @@ Specifies HTML markup attributes whose contents should be retained and indexed e
 CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -192,7 +192,7 @@ The value is a comma-separated list of element (tag) names whose contents should
 CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -287,7 +287,7 @@ Both sentences and paragraphs increment the keyword position counter by 1.
 CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -372,7 +372,7 @@ Zones can nest and overlap arbitrarily. The only requirement is that every openi
 CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

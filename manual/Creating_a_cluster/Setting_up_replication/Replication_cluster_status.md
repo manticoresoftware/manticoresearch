@@ -42,7 +42,7 @@ SHOW STATUS
 | cluster_post_nodes_view    | 10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication |
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -50,7 +50,7 @@ SHOW STATUS
 "
 ```
 
-<!-- response HTTP-->
+<!-- response JSON-->
 
 ```json
 "

@@ -1,8 +1,8 @@
 # Deleting documents
 
 Deleting is only supported for:
-* [real-time](Creating_a_table/Local_tables/Real-time_table.md) tables,
-* [percolate](Creating_a_table/Local_tables/Percolate_table.md) tables
+* [real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables,
+* [percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables
 * distributed tables that contain only RT tables as agents
 
 You can delete existing rows (documents) from an existing table based on ID or conditions.
@@ -14,7 +14,7 @@ SQL response for successful operation will show the number of rows deleted.
 
 `json/delete` is an HTTP endpoint for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
 
-To delete all documents from a table it's recommended to use instead the [table truncation](Emptying_a_table.md) as it's a much faster operation.
+To delete all documents from a table it's recommended to use instead the [table truncation](../Emptying_a_table.md) as it's a much faster operation.
 
 <!-- intro -->
 ##### SQL:
@@ -26,9 +26,9 @@ DELETE FROM table WHERE where_condition
 ```
 
 * `table` is a name of the table from which the row should be deleted.
-* `where_condition` for SQL has the same syntax as in the [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement.
+* `where_condition` for SQL has the same syntax as in the [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) statement.
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ``` json
 POST /delete -d '
     {
@@ -46,8 +46,8 @@ POST /delete -d '
 ```
 
 * `id` for JSON is the row `id` which should be deleted.
-* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
-* `cluster` for JSON is cluster name property and should be set along with `table` property to delete a row from a table which is inside a [replication cluster](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
+* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
+* `cluster` for JSON is cluster name property and should be set along with `table` property to delete a row from a table which is inside a [replication cluster](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
 
 <!-- end -->
 
@@ -100,7 +100,7 @@ Query OK, 2 rows affected (0.00 sec)
 6 rows in set (0.00 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ``` json
 POST /delete -d '
@@ -113,7 +113,7 @@ POST /delete -d '
     }'
 ```
 
-<!-- response json -->
+<!-- response JSON -->
 
 ``` json
     {
@@ -224,7 +224,7 @@ Query OK, 1 rows affected (0.00 sec)
 5 rows in set (0.00 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ``` json
 POST /delete -d '
@@ -234,7 +234,7 @@ POST /delete -d '
     }'
 ```
 
-<!-- response json -->
+<!-- response JSON -->
 
 ``` json
     {
@@ -359,7 +359,7 @@ Here is an example of deleting documents in cluster `nodes4`'s table `test`:
 delete from nodes4:test where id=100;
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ``` json
 POST /delete -d '
     {
@@ -378,7 +378,7 @@ $index->setCluster('nodes4');
 $index->deleteDocument(100);
 ```
 
-<!-- response json -->
+<!-- response JSON -->
 
 ``` php
 Array(

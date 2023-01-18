@@ -37,11 +37,11 @@ Variable: enabled_indexes
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```json
 POST /search
 {
   "index": "hn_small",
@@ -52,8 +52,8 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
-```
+<!-- response JSON -->
+```json
 {
   "took": 0,
   "timed_out": false,
@@ -143,11 +143,11 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "forum",
@@ -158,8 +158,8 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
-```
+<!-- response JSON -->
+```JSON
 {
   "took":33,
   "timed_out":false,

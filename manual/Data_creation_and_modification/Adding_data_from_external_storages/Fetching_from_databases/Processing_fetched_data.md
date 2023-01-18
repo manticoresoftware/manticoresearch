@@ -93,7 +93,7 @@ sql_attr_uint = forum_id:9 # 9 bits for forum_id
 
 ### sql_field_string
 
-Declares a combo string attribute/text field. The values will be indexed as a full-text field, but also stored in a string attribute with the same name. Note, it should be only used when you are sure you want the field to be searchable both in a full-text manner and as an attribute (with the ability to sort and group by it). If you just want to be able to fetch the original value of the field you don't need to do anything for it unless you implicitly removed the field from the stored fields list via [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields).
+Declares a combo string attribute/text field. The values will be indexed as a full-text field, but also stored in a string attribute with the same name. Note, it should be only used when you are sure you want the field to be searchable both in a full-text manner and as an attribute (with the ability to sort and group by it). If you just want to be able to fetch the original value of the field you don't need to do anything for it unless you implicitly removed the field from the stored fields list via [stored_fields](../../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields).
 
 ```ini
 sql_field_string = name

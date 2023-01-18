@@ -14,7 +14,7 @@ To join an existing cluster you should specify at least:
 JOIN CLUSTER posts AT '10.12.1.35:9312'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -100,7 +100,7 @@ When nodes are located in different network segments or in different datacenters
 JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

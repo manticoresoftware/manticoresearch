@@ -22,7 +22,7 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 ```
 
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 {
@@ -64,7 +64,7 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 ```
 
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 
 ```json

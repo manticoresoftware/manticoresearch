@@ -67,14 +67,14 @@ Thd efficiency: 0.00%
           Info: show threads
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```http
 POST /cli -d "SHOW THREADS"
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 ```json
 {
   "columns": [
@@ -607,14 +607,14 @@ Thd efficiency: 0.00%
 2 rows in set (0.00 sec)
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "SHOW THREADS OPTION columns=30"
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 ```json
 {
   "columns": [

@@ -1,10 +1,10 @@
 <!-- example plain -->
 # Plain table
 
-**Plain table** is a basic element for non-[percolate](../../Creating_a_table/Local_tables/Percolate_table.md) searching. It can be specified only in a configuration file in the [Plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29). It's not supported in the [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29). It's normally used together with a [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) to process data [from an external storage](../../Adding_data_from_external_storages/Plain_tables_creation.md) and afterwards can be [attached](../../Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) to a **real-time table**.
+**Plain table** is a basic element for non-[percolate](../../Creating_a_table/Local_tables/Percolate_table.md) searching. It can be specified only in a configuration file in the [Plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29). It's not supported in the [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29). It's normally used together with a [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) to process data [from an external storage](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) and afterwards can be [attached](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) to a **real-time table**.
 
 ### 👍 What you can do with a plain table:
-  * build it from an external storage with help of [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) and [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)
+  * build it from an external storage with help of [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) and [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)
   * do an in-place update of an [integer, float, string and MVA attribute](../../Creating_a_table/Data_types.md)
   * [update](../../Quick_start_guide.md#Update) it's killlist_target
 
@@ -12,9 +12,9 @@
   * insert more data into a table after it's built
   * delete data from it
   * create/delete/alter a plain table online (you need to define it in a configuration file)
-  * use [UUID](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID generation. When you fetch data from an external storage it must include a unique identifier for each document
+  * use [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID generation. When you fetch data from an external storage it must include a unique identifier for each document
 
-Except numeric attributes (including [MVA](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)), the rest of the data in a plain table is immutable. If you need to update/add new records you need to rebuild the table. While table is being rebuilt, existing table is still available for serving requests. When a new version of the table is ready, a process called [rotation](../../Adding_data_from_external_storages/Rotating_a_table.md) is performed which puts the new version online and discards the old one.
+Except numeric attributes (including [MVA](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)), the rest of the data in a plain table is immutable. If you need to update/add new records you need to rebuild the table. While table is being rebuilt, existing table is still available for serving requests. When a new version of the table is ready, a process called [rotation](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md) is performed which puts the new version online and discards the old one.
 
 <!-- intro -->
 #### How to create a plain table
@@ -68,7 +68,7 @@ This is called **main+delta schema** and you can learn more about it in [this in
 
 When you build a smaller "delta" table it can get documents that are already in the "main" table. To let Manticore know that documents from the current table should take precedence there's a mechanism called **kill list** and corresponding directive [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target).
 
-More information on this topic can be found [here](../../Adding_data_from_external_storages/Main_delta.md).
+More information on this topic can be found [here](../../Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md).
 
 #### Plain table files structure
 | Extension | Description |

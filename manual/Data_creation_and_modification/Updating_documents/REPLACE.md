@@ -2,7 +2,7 @@
 
 <!-- example replace -->
 
-`REPLACE` works similar to [INSERT](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the old document with the same ID as a new document as deleted before inserting a new document.
+`REPLACE` works similar to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the old document with the same ID as a new document as deleted before inserting a new document.
 
 If you use HTTP JSON protocol, 2 different request formats are available: a common Manticore query and an Elasticsearch-like one. You can see both formats demonstrated in the examples.
 
@@ -22,12 +22,11 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP JSON
+##### JSON
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
-#Common Manticore format
 POST /replace
 -H "Content-Type: application/x-ndjson" -d '
 {
@@ -41,7 +40,26 @@ POST /replace
 }
 '
 
-#Elasticsearch-like format
+```
+
+<!-- response JSON -->
+```json
+{
+  "_index":"products",
+  "_id":1,
+  "created":false,
+  "result":"updated",
+  "status":200
+}
+
+```
+
+<!-- intro -->
+##### Elasticsearch
+
+<!-- request Elasticsearch -->
+
+```json
 PUT /products/_doc/2
 {
   "title": "product two",
@@ -55,18 +73,8 @@ POST /products/_doc/
 }
 ```
 
-<!-- response HTTP -->
+<!-- response Elasticsearch -->
 ```json
-#Common Manticore format
-{
-  "_index":"products",
-  "_id":1,
-  "created":false,
-  "result":"updated",
-  "status":200
-}
-
-#Elasticsearch-like format
 {
 "_id":2,
 "_index":"products",
@@ -181,9 +189,9 @@ class SuccessResponse {
 
 `REPLACE` is supported for RT and PQ tables.
 
-The old document is not removed from the table, it is only marked as deleted. Because of this the table size grows until table chunks are merged and documents marked as deleted in these chunks are not included in the chunk created as a result of merge. You can force chunk merge by using [OPTIMIZE statement](../Securing_and_compacting_a_table/Compacting_a_table.md).
+The old document is not removed from the table, it is only marked as deleted. Because of this the table size grows until table chunks are merged and documents marked as deleted in these chunks are not included in the chunk created as a result of merge. You can force chunk merge by using [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-The syntax of the `REPLACE` statement is identical to [INSERT syntax](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md):
+The syntax of the `REPLACE` statement is identical to [INSERT syntax](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md):
 
 ```sql
 REPLACE INTO table [(column1, column2, ...)]
@@ -195,7 +203,7 @@ REPLACE INTO table [(column1, column2, ...)]
 
 <!-- example bulk_replace -->
 
-Multiple documents can be replaced at once. See [bulk adding documents](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) for more details.
+Multiple documents can be replaced at once. See [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) for more details.
 
 <!-- intro -->
 ##### HTTP:
@@ -212,7 +220,7 @@ REPLACE INTO products(id,title,tag) VALUES (1, 'doc one', 10), (2,' doc two', 20
 Query OK, 2 rows affected (0.00 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /bulk
@@ -222,7 +230,7 @@ POST /bulk
 '
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {

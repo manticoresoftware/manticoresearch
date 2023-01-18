@@ -117,7 +117,7 @@ SELECT *, price AS aprice FROM facetdemo LIMIT 10 FACET price LIMIT 10 FACET bra
 +----------+----------+
 5 rows in set (0.00 sec)
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /search -d '
@@ -146,7 +146,7 @@ POST /search -d '
 '
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -582,7 +582,7 @@ SELECT * FROM facetdemo FACET INTERVAL(price,200,400,600,800) AS price_range ;
 5 rows in set (0.01 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ``` json
 POST /search -d '
@@ -609,7 +609,7 @@ POST /search -d '
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ``` json
 {
@@ -1028,7 +1028,7 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC LIMIT 4;
 +-------------+----------+
 3 rows in set (0.01 sec)
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ``` json
 POST /search -d '
@@ -1059,7 +1059,7 @@ POST /search -d '
 '
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ``` json
 {

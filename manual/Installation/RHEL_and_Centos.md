@@ -44,7 +44,7 @@ You can also download standalone rpm files [from our site](https://manticoresear
 
 ### More packages you may need
 #### For indexer
-If you plan to use [indexer](../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external sources, you'll need to make sure you have installed corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
+If you plan to use [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external sources, you'll need to make sure you have installed corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC

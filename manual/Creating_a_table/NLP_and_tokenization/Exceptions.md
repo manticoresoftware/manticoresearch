@@ -60,7 +60,7 @@ Exceptions are applied to raw incoming document and query data during indexing a
 CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

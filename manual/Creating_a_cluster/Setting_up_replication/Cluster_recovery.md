@@ -52,7 +52,7 @@ However, if both nodes A and B crashed or restarted due to power outage, someone
 ```sql
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -88,7 +88,7 @@ After that, the group with the node we run this statement at can successfully ha
 ```sql
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

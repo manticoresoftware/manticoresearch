@@ -96,7 +96,7 @@ docker run --name manticore -p 9308:9308 -d manticoresearch/manticore
 <!-- example create -->
 Create a table:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /cli -d 'CREATE TABLE testrt ( title text, content text, gid integer)'
 ```
@@ -104,7 +104,7 @@ POST /cli -d 'CREATE TABLE testrt ( title text, content text, gid integer)'
 <!-- example insert -->
 Insert a document:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /insert
 -d'{"index":"testrt","id":1,"doc":{"title":"Hello","content":"world","gid":1}}'
@@ -113,7 +113,7 @@ POST /insert
 <!-- example search -->
 Perform a simple search:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search -d '{"index":"testrt","query":{"match":{"*":"hello world"}}}'
 ```

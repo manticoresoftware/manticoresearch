@@ -34,11 +34,11 @@ A good example for attributes would be a forum posts table. Assume that only tit
 CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)"
 ```
 
@@ -124,11 +124,11 @@ This example shows running a full-text query filtered by `author_id`, `forum_id`
 select * from forum where author_id=123 and forum_id in (1,3,7) order by post_date desc
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "forum",
@@ -272,7 +272,7 @@ Below is the list of data types supported by Manticore Search:
 ## Document ID
 
 <!-- example id -->
-Document identifier is a mandatory attribute. Document IDs must be **unique signed 64-bit integers**. Document ID can be specified explicitly, but if it's not it's still enabled. Document IDs can't be [UPDATE](../Updating_documents/UPDATE.md)'ed.
+Document identifier is a mandatory attribute. Document IDs must be **unique signed 64-bit integers**. Document ID can be specified explicitly, but if it's not it's still enabled. Document IDs can't be [UPDATE](../Data_creation_and_modification/Updating_documents/UPDATE.md)'ed.
 
 <!-- request Explicit ID -->
 
@@ -356,11 +356,11 @@ Full-text fields can only be used in `MATCH()` clause and cannot be used for sor
 CREATE TABLE products(title text);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text)"
 ```
 
@@ -434,11 +434,11 @@ This behavior can be overridden by explicitly specifying that the text is only i
 CREATE TABLE products(title text indexed);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text indexed)"
 ```
 
@@ -510,11 +510,11 @@ Fields are named, and you can limit your searches to a single field (e.g. search
 select * from products where match('@title first');
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
 	"index": "products",
@@ -580,11 +580,11 @@ If want to also index the string attribute, can specify both as `string attribut
 CREATE TABLE products(title text, keys string);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, keys string)"
 ```
 
@@ -662,11 +662,11 @@ You can create a fulltext field that is also stored as a string attribute. This 
 CREATE TABLE products ( title string attribute indexed );
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products ( title string attribute indexed )"
 ```
 
@@ -741,11 +741,11 @@ Integer type allows storing 32 bit **unsigned** integer values.
 CREATE TABLE products(title text, price int);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, price int)"
 ```
 
@@ -819,11 +819,11 @@ Integers can be stored in shorter sizes than 32 bit by specifying a bit count. F
 CREATE TABLE products(title text, flags bit(3), tags bit(2) );
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 ```
 
@@ -901,11 +901,11 @@ Big integers are 64-bit wide **signed** integers.
 CREATE TABLE products(title text, price bigint );
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, price bigint)"
 ```
 
@@ -982,11 +982,11 @@ Declares a boolean attribute. It's equivalent to an integer attribute with bit c
 CREATE TABLE products(title text, sold bool );
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, sold bool)"
 ```
 
@@ -1063,11 +1063,11 @@ Timestamp type represents unix timestamps which is stored as a 32-bit integer. T
 CREATE TABLE products(title text, date timestamp);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, date timestamp)"
 ```
 
@@ -1143,11 +1143,11 @@ Real numbers are stored as 32-bit IEEE 754 single precision floats.
 CREATE TABLE products(title text, coeff float);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, coeff float)"
 ```
 
@@ -1224,10 +1224,10 @@ Unlike integer types, equal comparison of floats is forbidden due to rounding er
 select abs(a-b)<=0.00001 from products
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
-```http
+<!-- request JSON -->
+```JSON
 POST /search
 {
   "index": "products",
@@ -1292,10 +1292,10 @@ Another alternative, which can also be used to perform `IN(attr,val1,val2,val3)`
 select in(ceil(attr*100),200,250,350) from products
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
-```http
+<!-- request JSON -->
+```JSON
 POST /search
 {
   "index": "products",
@@ -1362,11 +1362,11 @@ This data type allows storing JSON objects for schema-less data. It is not suppo
 CREATE TABLE products(title text, data json);
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, data json)"
 ```
 
@@ -1441,11 +1441,11 @@ JSON properties can be used in most operations. There are also special functions
 select indexof(x>2 for x in data.intarray) from products
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "products",
@@ -1510,11 +1510,11 @@ Text properties are treated same as strings so it's not possible to use them in 
 select regex(data.name, 'est') as c from products where c>0
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "products",
@@ -1588,11 +1588,11 @@ In case of JSON properties, enforcing data type is required to be casted in some
 select * from products order by double(data.myfloat) desc
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "products",
@@ -1658,11 +1658,11 @@ CREATE TABLE products(title text, product_codes multi);
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 ```
 
@@ -1738,11 +1738,11 @@ It supports filtering and aggregation, but not sorting. Filtering can be made of
 select * from products where any(product_codes)=3
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "products",
@@ -1809,11 +1809,11 @@ Information like [least](../Functions/Mathematical_functions.md#LEAST%28%29) or 
 select least(product_codes) l from products order by l asc
 ```
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /search
 {
   "index": "products",
@@ -1924,11 +1924,11 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /insert
 {
 	"index":"products",
@@ -1947,9 +1947,9 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
-```http
+```JSON
 {
    "_index":"products",
    "_id":1,
@@ -2131,11 +2131,11 @@ CREATE TABLE products(title text, values multi64);
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, values multi64)"
 ```
 

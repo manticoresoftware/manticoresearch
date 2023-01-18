@@ -28,15 +28,15 @@ Query OK, 0 rows affected (0.02 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```http
 POST /cli -d "TRUNCATE TABLE products"
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 ```http
 {
 "total":0,
@@ -106,7 +106,7 @@ utilsApi.sql("TRUNCATE TABLE products");
 
 <!-- end -->
 
-One of the possible uses of this command is before [attaching a table](Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md).
+One of the possible uses of this command is before [attaching a table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md).
 
 <!-- example truncate with RECONFIGURE -->
 
@@ -128,7 +128,7 @@ Query OK, 0 rows affected (0.02 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
 <!-- request HTTP -->
 

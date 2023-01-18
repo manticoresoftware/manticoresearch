@@ -15,7 +15,7 @@ After the table is replicated, write statements can be performed on any node but
 ALTER CLUSTER click_query ADD clicks_daily_index
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -91,7 +91,7 @@ After a table is removed from a cluster, it becomes a 'local' table and write st
 ALTER CLUSTER posts DROP weekly_index
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

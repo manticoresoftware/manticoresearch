@@ -113,9 +113,9 @@ See also [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_rea
 CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)"
 ```
@@ -360,7 +360,7 @@ source = srcpart2
 source = srcpart3
 ```
 
-Specifies document source to get documents from when the current table is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](../../Adding_data_from_external_storages/Plain_tables_creation.md)
+Specifies document source to get documents from when the current table is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
 
 Value: name of the source to build the table from, **mandatory**. Can be multiple records.
 
@@ -370,7 +370,7 @@ Value: name of the source to build the table from, **mandatory**. Can be multipl
 killlist_target = main:kl
 ```
 
-Sets the table(s) that the kill-list will be applied to. Suppresses matches in the targeted table that are updated or deleted in the current table. In `:kl` mode the documents to suppress are taken from the [kill-list](../../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). In `:id` mode all document ids from the current table are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+Sets the table(s) that the kill-list will be applied to. Suppresses matches in the targeted table that are updated or deleted in the current table. In `:kl` mode the documents to suppress are taken from the [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). In `:id` mode all document ids from the current table are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
 Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
 
@@ -593,7 +593,7 @@ Whether to enable in-place table inversion. Optional, default is 0 (use separate
 
 Indexing involves two major phases. The first phase collects, processes, and partially sorts documents by keyword, and writes the intermediate result to temporary files (.tmp\*). The second phase fully sorts the documents, and creates the final table files. Thus, rebuilding a production table on the fly involves around 3x peak disk footprint: 1st copy for the intermediate temporary files, 2nd copy for newly constructed copy, and 3rd copy for the old table that will be serving production queries in the meantime. (Intermediate data is comparable in size to the final table.) That might be too much disk footprint for big data collections, and `inplace_enable` allows to reduce it. When enabled, it reuses the temporary files, outputs the final data back to them, and renames them on completion. However, this might require additional temporary data chunk relocation, which is where the performance impact comes from.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -621,7 +621,7 @@ inplace_hit_gap = size
 
 [In-place inversion](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable) fine-tuning option. Controls preallocated hitlist gap size. Optional, default is 0.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -650,7 +650,7 @@ inplace_reloc_factor = 0.1
 
 Controls relocation buffer size within indexing memory arena. Optional, default is 0.1.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -679,7 +679,7 @@ inplace_write_factor = 0.1
 
 Controls in-place write buffer size within indexing memory arena. Optional, default is 0.1.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 
 <!-- intro -->

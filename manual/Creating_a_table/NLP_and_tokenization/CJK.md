@@ -15,7 +15,7 @@ Manticore has built-in support for indexing CJK texts. There are two ways how CJ
 CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```http
 POST /cli -d "
@@ -91,7 +91,7 @@ There are separate charset tables(`chinese`, `korean`, `japanese`) that can be u
 CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```http
 POST /cli -d "
@@ -166,9 +166,9 @@ There's also built-in [stopwords](../../Creating_a_table/NLP_and_tokenization/Ig
 CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
 ```

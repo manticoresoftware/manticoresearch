@@ -26,7 +26,7 @@ The morphology processors that come with our own built-in Manticore implementati
 * Chinese word breaking algorithm
 * Snowball (libstemmer) stemmers for more than [15 other languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
 
-Lemmatizers require dictionary `.pak` files that you can [download from the website](https://manticoresearch.com/install/#other-downloads). The dictionaries needs to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base). Also, there is the [lemmatizer_cache](../../Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) setting which lets you speed up lemmatizing (and therefore indexing) by spending more RAM for, basically, an uncompressed dictionary cache.
+Lemmatizers require dictionary `.pak` files that you can [download from the website](https://manticoresearch.com/install/#other-downloads). The dictionaries needs to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base). Also, there is the [lemmatizer_cache](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) setting which lets you speed up lemmatizing (and therefore indexing) by spending more RAM for, basically, an uncompressed dictionary cache.
 
 The Chinese language segmentation using [ICU](http://site.icu-project.org/) is also available. It is a much more precise, but a little bit slower way (compared to n-grams) to segment Chinese documents. [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must contain all Chinese characters (you can use alias "cjk"). In case of "morphology=icu_chinese" documents are first pre-processed by ICU, then the result is processed by the tokenizer (according to your charset_table) and then other morphology processors specified in the  "morphology" option are applied. When the documents are processed by ICU, only those parts of texts that contain Chinese are passed to ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
@@ -62,7 +62,7 @@ Several stemmers can be specified at once comma-separated. They will be applied 
 CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "CREATE TABLE products(title text, price float)  morphology = 'stem_en, libstemmer_sv'"
@@ -133,7 +133,7 @@ A list of fields to skip morphology preprocessing. Optional, default is empty (a
 CREATE TABLE products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -210,9 +210,9 @@ Stemmers are not perfect, and might sometimes produce undesired results. For ins
 CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'"
 ```
@@ -287,9 +287,9 @@ When enabled, `index_exact_words` forces indexation to put the raw keywords in t
 CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'"
 ```

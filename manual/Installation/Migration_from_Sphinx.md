@@ -40,7 +40,7 @@ If you have a spare box (like a testing or staging server), you can do there fir
 There have been no changes made on how clients should connect to the engine or any change in querying mode or queries behavior.
 
 ## kill-lists in Sphinx / Manticore 2.x vs Manticore 3.x
-[Kill-lists](../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md) have been redesigned in Manticore Search 3. In previous versions kill-lists were applied on the result set provided by each previous searched table on query time.
+[Kill-lists](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md) have been redesigned in Manticore Search 3. In previous versions kill-lists were applied on the result set provided by each previous searched table on query time.
 
 Thus In 2.x the table order at query time mattered. For example if a delta table had a kill-list in order to apply it against the main table the order had to be main, delta (either in a distributed table or in the FROM clause).
 
@@ -58,7 +58,7 @@ In previous versions tables were rotated following the order from the configurat
 ## Updating var-length attributes in Manticore 3.x
 String, JSON and MVA attributes can be updated in Manticore 3.x using `UPDATE` statement.
 
-In 2.x string attributes required `REPLACE`, for JSON it was only possible to update scalar properties (as they were fixed-width) and MVAs could be updated using the MVA pool. Now updates are performed directly on the blob component. One setting that may require tuning is [attr_update_reserve](../Updating_documents/UPDATE.md#attr_update_reserve) which allows changing the allocated extra space at the end of the blob used to avoid frequent resizes in case the new values are bigger than the existing values in the blob.
+In 2.x string attributes required `REPLACE`, for JSON it was only possible to update scalar properties (as they were fixed-width) and MVAs could be updated using the MVA pool. Now updates are performed directly on the blob component. One setting that may require tuning is [attr_update_reserve](../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve) which allows changing the allocated extra space at the end of the blob used to avoid frequent resizes in case the new values are bigger than the existing values in the blob.
 
 ## Document IDs in Manticore 3.x
 Doc ids used to be UNSIGNED 64-bit integers. Now they are POSITIVE SIGNED 64-bit integers.
@@ -111,7 +111,7 @@ A special case is for tables containing kill-lists. As the behaviour of how kill
   $ index_converter --config /home/myuser/manticore.conf --index deltaindex --killlist-target mainindex:kl
   ```
 * Add killlist_target in the configuration before doing the conversion
-* use [ALTER ... KILLIST_TARGET](../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) command after conversion
+* use [ALTER ... KILLIST_TARGET](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) command after conversion
 
 #### Complete list of index_converter options
 

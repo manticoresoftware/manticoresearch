@@ -48,8 +48,8 @@ field_weights=(title=10, body=3), agent_query_timeout=10000
 ```
 
 <!-- intro -->
-HTTP:
-<!-- request HTTP -->
+JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -76,7 +76,7 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {

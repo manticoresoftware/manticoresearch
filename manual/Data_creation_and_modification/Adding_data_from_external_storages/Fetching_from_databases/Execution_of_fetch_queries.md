@@ -43,7 +43,7 @@ table mytable {
 ## sql_query
 
 This is the query which is used to retrieve documents from SQL server. There can be only one sql_query declared and it's mandatory to have one.
-See also [Processing fetched data](../../Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#Processing-fetched-data)
+See also [Processing fetched data](../../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#Processing-fetched-data)
 
 ## sql_query_pre
 

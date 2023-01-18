@@ -21,7 +21,7 @@ Here's an example of several filters in a `bool` query.
 This is a fulltext query that matches all the documents containing `product` in any field. These documents must have a price greater or equal than 500 (`gte`) and less or equal than 1000 (`lte`). All of these documents must not have a revision less than 15 (`lt`).
 
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -47,7 +47,7 @@ POST /search
 <!-- example bool -->
 `bool` query matches documents matching boolean combinations of other queries and/or filters. Queries and filters must be specified in `must`, `should` or `must_not` sections and can be [nested](../Searching/Filters.md#Nested-bool-query).
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -100,7 +100,7 @@ Note also, it may be better in terms of performance to use:
 ### must_not
 Queries and filters specified in the `must_not` section must not match the documents. If several queries are specified under `must_not`, the document matches if none of them match.
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -148,7 +148,7 @@ a = 2 and (a = 10 or b = 0)
 
 should be presented in JSON.
 
-<!-- request HTTP -->
+<!-- request JSON -->
 a = 2 and (a = 10 or b = 0)
 
 ```json
@@ -191,7 +191,7 @@ More complex query:
 ```
 (a = 1 and b = 1) or (a = 10 and b = 2) or (b = 0)
 ```
-<!-- request HTTP -->
+<!-- request JSON -->
 
 (a = 1 and b = 1) or (a = 10 and b = 2) or (b = 0)
 
@@ -257,7 +257,7 @@ POST /search
 <!-- example query_string -->
 Queries in SQL format (`query_string`) can also be used in bool queries.
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -280,7 +280,7 @@ POST /search
 <!-- example equals -->
 Equality filters are the simplest filters that work with integer, float and string attributes.
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -297,7 +297,7 @@ Filter `equals` can be applied to a [multi-value attribute](../../Creating_a_tab
 * `any()` which will be positive if the attribute has at least one value which equals to the queried value;
 * `all()` which will be positive if the attribute has a single value and it equals to the queried value
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -316,7 +316,7 @@ Set filters check if attribute value is equal to any of the values in the specif
 
 Set filters support integer, string and multi-value attributes.
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -335,7 +335,7 @@ When applied to a [multi-value attribute](../../Creating_a_table/Data_types.md#M
 * `any()` (equivalent to no function) which will be positive if there's at least one match between the attribute values and the queried values;
 * `all()` which will be positive if all the attribute values are in the queried set
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {
@@ -359,7 +359,7 @@ Range filters support the following properties:
 * `lte`: less than or equal to
 * `lt`: less than
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ```json
 POST /search
 {

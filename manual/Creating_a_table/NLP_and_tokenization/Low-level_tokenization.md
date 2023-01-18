@@ -79,9 +79,9 @@ for case insensitive search.
 CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'"
 ```
@@ -150,9 +150,9 @@ Besides definitions of characters and mappings, there are several built-in alias
 CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'"
 ```
@@ -243,9 +243,9 @@ To be able to work with both cjk and non-cjk languages you should set the option
 CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
 ```
@@ -338,9 +338,9 @@ Blended characters can be remapped, so that multiple different blended character
 CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
 ```
@@ -437,9 +437,9 @@ The more modes you use, the higher the chance your keyword will match something.
 CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
 ```
@@ -514,9 +514,9 @@ Only those words that are not shorter than this minimum will be indexed. For ins
 CREATE TABLE products(title text, price float) min_word_len = '4'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) min_word_len = '4'"
 ```
@@ -596,9 +596,9 @@ Even if the search query is not segmented, Manticore should still produce good r
 CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
 ```
@@ -676,9 +676,9 @@ To be used in conjunction with in [ngram_len](../../Creating_a_table/NLP_and_tok
 CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
 ```
@@ -761,9 +761,9 @@ Also you can use an alias for our default N-gram table as in the example. It sho
 CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
 ```
@@ -831,9 +831,9 @@ The syntax is the same as for [charset_table](../../Creating_a_table/NLP_and_tok
 CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
 ```
@@ -915,9 +915,9 @@ For most use cases, `both_freq` would be the best mode, but your mileage may var
 CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
 ```
@@ -995,9 +995,9 @@ Some of the bigram indexing modes (see [bigram_index](../../Creating_a_table/NLP
 CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
 ```
@@ -1085,9 +1085,9 @@ Essentially, keywords and CRC dictionaries represent the two different trade-off
 CREATE TABLE products(title text, price float) dict = 'keywords'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) dict = 'keywords'"
 ```
@@ -1194,9 +1194,9 @@ You can build an .idf file using [indextool](../../Miscellaneous_tools.md#indext
 CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'"
 ```
@@ -1280,9 +1280,9 @@ A positional query than contains only hitless words will result in an empty phra
 CREATE TABLE products(title text, price float) hitless_words = 'all'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) hitless_words = 'all'"
 ```
@@ -1361,9 +1361,9 @@ When `index_field_lengths` is set to 1 Manticore will:
 CREATE TABLE products(title text, price float) index_field_lengths = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) index_field_lengths = '1'"
 ```
@@ -1435,9 +1435,9 @@ Index-time token filter gets created by indexer on indexing source data into a p
 CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
 ```
@@ -1508,9 +1508,9 @@ Position increment on overshort (less than [min_word_len](../../Creating_a_table
 CREATE TABLE products(title text, price float) overshort_step = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) overshort_step = '1'"
 ```
@@ -1588,9 +1588,9 @@ Phrase boundary condition will be raised if and only if such character is follow
 CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
 ```
@@ -1665,9 +1665,9 @@ On phrase boundary, current word position will be additionally incremented by th
 CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
 ```
@@ -1751,9 +1751,9 @@ Regular expressions listed in `regexp_filter` are applied in the order they are 
 CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "
 CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'"
 ```

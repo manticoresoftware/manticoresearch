@@ -9,7 +9,7 @@ This is where a traditional search is not a good fit, since would assume perform
 Google Alerts, AlertHN, Bloomberg Terminal and other systems that let their users to subscribe to something use a similar technology.
 
 > * See [percolate](../Creating_a_table/Local_tables/Percolate_table.md) about how to create a PQ table.
-> * See [Adding rules to a percolate table](../Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
+> * See [Adding rules to a percolate table](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
 
 ### Performing a percolate query with CALL PQ
 
@@ -71,7 +71,7 @@ select * from products;
 +---------------------+--------------+------+---------------------------+
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 PUT /pq/products/doc/
@@ -107,7 +107,7 @@ PUT /pq/products/doc/
 
 <!-- intro -->
 #### JSON
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -323,8 +323,8 @@ CALL PQ('products', '{"title": "What a nice bag"}');
 +---------------------+
 ```
 <!-- intro -->
-HTTP:
-<!-- request HTTP -->
+JSON:
+<!-- request JSON -->
 
 ```json
 POST /pq/products/_search
@@ -338,7 +338,7 @@ POST /pq/products/_search
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -536,8 +536,8 @@ CALL PQ('products', '{"title": "What a nice bag"}', 1 as query);
 +---------------------+------------+------+---------+
 ```
 <!-- intro -->
-HTTP:
-<!-- request HTTP -->
+JSON:
+<!-- request JSON -->
 
 ```json
 POST /pq/products/_search
@@ -551,7 +551,7 @@ POST /pq/products/_search
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -777,8 +777,8 @@ CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title"
 +---------------------+--------------+------+---------------------------+
 ```
 <!-- intro -->
-HTTP:
-<!-- request HTTP -->
+JSON:
+<!-- request JSON -->
 
 ```json
 POST /pq/products/_search
@@ -793,7 +793,7 @@ POST /pq/products/_search
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -1069,8 +1069,8 @@ CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title"
 +---------------------+-----------+--------------+------+---------------------------+
 ```
 <!-- intro -->
-HTTP:
-<!-- request HTTP -->
+JSON:
+<!-- request JSON -->
 
 ```json
 POST /pq/products/_search
@@ -1085,7 +1085,7 @@ POST /pq/products/_search
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -1446,13 +1446,13 @@ SELECT * FROM pq;
 2 rows in set (0.01 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /pq/pq/_search
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -1666,7 +1666,7 @@ CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test do
 +------+-----------+
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /pq/pq/_search -d '
@@ -1683,7 +1683,7 @@ POST /pq/pq/_search -d '
 '
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {

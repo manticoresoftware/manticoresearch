@@ -7,9 +7,9 @@ There can be two cases:
 * for plain tables that are already loaded
 * tables added in configuration, but not loaded yet
 
-In the first case, indexer cannot put the new version of the table online as the running copy is locked and loaded by `searchd`. In this case `indexer` needs to be called with [--rotate](../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) parameter. If rotate is used, `indexer` creates new table files with `.new.` in their names and sends a *HUP* signal to `searchd` informing it about the new version. The `searchd` will perform a lookup and will put in place the new version of the table and discard the old one. In some cases it might be desired to create the new version of the table but not perform the rotate as soon as possible. For example it might be desired to check first the health of the new table versions. In this case, `indexer` can accept `--nohup` parameter which will forbid sending the HUP signal to the server.
+In the first case, indexer cannot put the new version of the table online as the running copy is locked and loaded by `searchd`. In this case `indexer` needs to be called with [--rotate](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) parameter. If rotate is used, `indexer` creates new table files with `.new.` in their names and sends a *HUP* signal to `searchd` informing it about the new version. The `searchd` will perform a lookup and will put in place the new version of the table and discard the old one. In some cases it might be desired to create the new version of the table but not perform the rotate as soon as possible. For example it might be desired to check first the health of the new table versions. In this case, `indexer` can accept `--nohup` parameter which will forbid sending the HUP signal to the server.
 
-New tables can be loaded by rotation, however the regular handling of HUP signal is to check for new tables only if configuration has changed since server startup. If the table was already defined in the configuration, the table should be first created by running `indexer` without rotation and perform [RELOAD TABLES](../Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) statement instead.
+New tables can be loaded by rotation, however the regular handling of HUP signal is to check for new tables only if configuration has changed since server startup. If the table was already defined in the configuration, the table should be first created by running `indexer` without rotation and perform [RELOAD TABLES](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) statement instead.
 
 
 There are also two specialized statements can be used to perform rotations on tables:
@@ -22,9 +22,9 @@ RELOAD TABLE tbl [ FROM '/path/to/table_files' ];
 
 `RELOAD TABLE` allows you to rotate tables using SQL.
 
-It has two modes of operation. First one (without specifying a path) makes Manticore server check for new table files in directory specified in [path](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must have names `tbl.new.sp?`.
+It has two modes of operation. First one (without specifying a path) makes Manticore server check for new table files in directory specified in [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must have names `tbl.new.sp?`.
 
-And if you additionally specify a path, the server will look for the table files in the specified directory, will move them to the table [path](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), rename from `tbl.sp?` to `tbl.new.sp?` and will rotate them.
+And if you additionally specify a path, the server will look for the table files in the specified directory, will move them to the table [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), rename from `tbl.sp?` to `tbl.new.sp?` and will rotate them.
 
 ```sql
 mysql> RELOAD TABLE plain_table;
@@ -39,7 +39,7 @@ RELOAD TABLES;
 
 Works same as system HUP signal. Initiates table rotation. Unlike regular HUP signalling (which can come from `kill` or indexer ), the statement forces lookup on possible tables to rotate even if the configuration has no changes since the startup of the server.
 
-Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors. Command is non-blocking (i.e., returns immediately).
+Depending on the value of [seamless_rotate](../../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors. Command is non-blocking (i.e., returns immediately).
 
 ```sql
 mysql> RELOAD TABLES;

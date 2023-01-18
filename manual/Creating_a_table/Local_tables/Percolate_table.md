@@ -4,13 +4,13 @@
 Percolate table is a special table which stores queries instead of documents. It is used for prospective searches (or "search in reverse").
 
 * See section [Percolate query](../../Searching/Percolate_query.md) for more details about performing a search query against a percolate table.
-* See section [Adding rules to a percolate table](../../Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to prepare a table for searching.
+* See section [Adding rules to a percolate table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to prepare a table for searching.
 
 The schema of a percolate table is fixed and contains the following fields:
 
 | Field | Description |
 | - | - |
-| ID| Unsigned 64-bit integer with autoincrement functionality therefore it can be omitted when you [add a PQ rule](../../Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) |
+| ID| Unsigned 64-bit integer with autoincrement functionality therefore it can be omitted when you [add a PQ rule](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) |
 | Query | [Full-text query](../../Searching/Full_text_matching/Basic_usage.md) of the rule. You can think of it as the value of a [MATCH clause](../../Searching/Full_text_matching/Basic_usage.md) or [JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). If [per field operators](../../Searching/Full_text_matching/Operators.md) are used inside the query, the full text fields need to be declared in the percolate table configuration. If the stored query is supposed to do only attribute filtering (no full-text querying), the query value can be empty or simply omitted. The value of this field should correspond to the expected document schema which you specify when you create a percolate table |
 | Filters | Filters is an optional string containing attribute filters and/or expressions the same way they are defined in the [WHERE clause](../../Searching/Filters.md#WHERE) or [JSON filtering](../../Searching/Filters.md#HTTP-JSON). The value of this field should correspond to the expected document schema which you specify when you create a percolate table |
 | Tags | Optional. Tags represent a list of string labels separated by comma that can be used for filtering/deleting PQ rules. The tags can be returned along with matching documents when you [Percolate query](../../Searching/Percolate_query.md) |
@@ -35,14 +35,14 @@ CREATE TABLE products(title text, meta json) type='pq';
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 ##### Creating a percolate table via JSON over HTTP:
 
 ```json
 POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {

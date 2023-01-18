@@ -19,7 +19,7 @@ Stop word files list (space separated). Optional, default is empty. You can spec
 
 Stop words file format is simple plain text. The encoding must be UTF-8. File data will be tokenized with respect to [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
 
-Stop word files can either be created manually, or semi-automatically. [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the table, sorted by the keyword frequency, see [--buildstops](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
+Stop word files can either be created manually, or semi-automatically. [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the table, sorted by the keyword frequency, see [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
 
 
 <!-- intro -->
@@ -31,7 +31,7 @@ Stop word files can either be created manually, or semi-automatically. [indexer]
 CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -154,7 +154,7 @@ For example, to use stop words for Italian language just put the following line 
 CREATE TABLE products(title text, price float) stopwords = 'it'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -223,7 +223,7 @@ If you need to use stop words for multiple languages you should list all their a
 CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -298,7 +298,7 @@ Position increment on [stopwords](../../Creating_a_table/NLP_and_tokenization/Ig
 CREATE TABLE products(title text, price float) stopwords = 'en' stopword_step = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "
@@ -379,7 +379,7 @@ stopwords_unstemmed directive changed this behaviour. When it's enabled, stop wo
 CREATE TABLE products(title text, price float) stopwords = 'en' stopwords_unstemmed = '1'
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

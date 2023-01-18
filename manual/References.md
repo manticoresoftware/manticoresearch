@@ -14,10 +14,10 @@
 * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
 
 ##### Data management
-* [INSERT](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
-* [REPLACE](Updating_documents/REPLACE.md) - Replaces existing documents with new ones
-* [UPDATE](Updating_documents/UPDATE.md) - Does in-place update in documents
-* [DELETE](Deleting_documents.md) - Deletes documents
+* [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
+* [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces existing documents with new ones
+* [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Does in-place update in documents
+* [DELETE](Data_creation_and_modification/Deleting_documents.md) - Deletes documents
 * [TRUNCATE TABLE](Emptying_a_table.md) - Deletes all documents from table
 
 ##### Backup
@@ -49,8 +49,8 @@
 * [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
 ##### Importing to a real-time table
-* [ATTACH TABLE](Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) - Moves data from a plain table to a real-time table
-* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Imports previously created RT or PQ table into a server running in the RT mode
+* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) - Moves data from a plain table to a real-time table
+* [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Imports previously created RT or PQ table into a server running in the RT mode
 
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
@@ -59,13 +59,13 @@
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 
 ##### Plain table rotate
-* [RELOAD TABLE](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates a plain table
-* [RELOAD TABLES](Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates all plain tables
+* [RELOAD TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates a plain table
+* [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates all plain tables
 
 ##### Transactions
-* [BEGIN](Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Begins a transaction
-* [COMMIT](Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Finishes a transaction
-* [ROLLBACK](Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Rolls back a transaction
+* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Begins a transaction
+* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Finishes a transaction
+* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Rolls back a transaction
 
 ##### CALL
 * [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - Suggests spell-corrected words
@@ -88,13 +88,13 @@
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP
 * [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
-* [/insert](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
-* [/pq/tbl_name/doc](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
-* [/update](Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
-* [/replace](Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time table
-* [/pq/tbl_name/doc/N?refresh=1](Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
-* [/delete](Deleting_documents.md) - Deletes a document in a table
-* [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
+* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
+* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
+* [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
+* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md#HTTP-JSON) - Replaces a document in a real-time table
+* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
+* [/delete](Data_creation_and_modification/Deleting_documents.md) - Deletes a document in a table
+* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
 
@@ -109,7 +109,7 @@
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
-* [attr_update_reserve](Updating_documents/UPDATE.md#attr_update_reserve)
+* [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
@@ -314,44 +314,44 @@ To be put to section `common {}` in configuration file:
 * [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - What to do if JSON format errors are found
 * [plugin_dir](Server_settings/Common.md#plugin_dir) - Location for the dynamic libraries and UDFs
 
-## [Indexer](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
+## [Indexer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
 `indexer` is a tool to create [plain tables](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
 
 ##### Indexer settings in configuration file
 To be put to section `indexer {}` in configuration file:
-* [lemmatizer_cache](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lemmatizer cache size
-* [max_file_field_buffer](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum file field adaptive buffer size
-* [max_iops](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum indexation I/O operations per second
-* [max_iosize](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed I/O operation size
-* [max_xmlpipe2_field](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed field size for XMLpipe2 source type
-* [mem_limit](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexing RAM usage limit
-* [on_file_field_error](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - How to handle IO errors in file fields
-* [write_buffer](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Write buffer size
-* [ignore_non_plain](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - To ignore warnings about non-plain tables
+* [lemmatizer_cache](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lemmatizer cache size
+* [max_file_field_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum file field adaptive buffer size
+* [max_iops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum indexation I/O operations per second
+* [max_iosize](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed I/O operation size
+* [max_xmlpipe2_field](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed field size for XMLpipe2 source type
+* [mem_limit](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexing RAM usage limit
+* [on_file_field_error](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - How to handle IO errors in file fields
+* [write_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Write buffer size
+* [ignore_non_plain](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - To ignore warnings about non-plain tables
 
 ##### Indexer start parameters
 ```bash
 indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 ```
-* [--all](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Rebuilds all tables from the config
-* [--buildstops](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed.
-* [--buildfreqs](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Adds the quantity present in the table for --buildstops
-* [--config, -c](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Path to configuration file
-* [--dump-rows](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Dumps rows fetched by SQL source(s) into the specified file
-* [--help](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lists all the parameters
-* [--keep-attrs](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows to reuse existing attributes on reindexing
-* [--keep-attrs-names](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows to specify attributes to reuse from the existing table
-* [--merge-dst-range](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Runs the filter range given upon merging
-* [--merge-killlists](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Changes the way kill lists are processed when merging tables
-* [--merge](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Merges two plain tables into one
-* [--nohup](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexer won't send SIGHUP if this option is on
-* [--noprogress](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents displaying progress details
-* [--print-queries](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prints out SQL queries that indexer sends to the database
-* [--print-rt ](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Outputs data fetched from sql source(s) as INSERTs to a real-time table
-* [--quiet](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents displaying anything
-* [--rotate](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Forces tables rotation after all the tables are built
-* [--sighup-each](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Forces rotation of each table after it's built
-* [-v](Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Shows indexer version
+* [--all](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Rebuilds all tables from the config
+* [--buildstops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed.
+* [--buildfreqs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Adds the quantity present in the table for --buildstops
+* [--config, -c](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Path to configuration file
+* [--dump-rows](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Dumps rows fetched by SQL source(s) into the specified file
+* [--help](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lists all the parameters
+* [--keep-attrs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows to reuse existing attributes on reindexing
+* [--keep-attrs-names](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows to specify attributes to reuse from the existing table
+* [--merge-dst-range](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Runs the filter range given upon merging
+* [--merge-killlists](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Changes the way kill lists are processed when merging tables
+* [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Merges two plain tables into one
+* [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexer won't send SIGHUP if this option is on
+* [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents displaying progress details
+* [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prints out SQL queries that indexer sends to the database
+* [--print-rt ](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Outputs data fetched from sql source(s) as INSERTs to a real-time table
+* [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents displaying anything
+* [--rotate](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Forces tables rotation after all the tables are built
+* [--sighup-each](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Forces rotation of each table after it's built
+* [-v](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Shows indexer version
 
 ## Table converter from Manticore v2 / Sphinx v2
 `index_converter` is a tool for converting tables created with Sphinx/Manticore Search 2.x to Manticore Search 3.x table format.

@@ -22,16 +22,16 @@ Query OK, 0 rows affected (0.02 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "DROP TABLE products"
 ```
 
-<!-- response HTTP -->
-```http
+<!-- response JSON -->
+```JSON
 {
 "total":0,
 "error":"",
@@ -122,9 +122,9 @@ DROP TABLE IF EXISTS products;
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```http
 POST /cli -d "DROP TABLE IF EXISTS products"

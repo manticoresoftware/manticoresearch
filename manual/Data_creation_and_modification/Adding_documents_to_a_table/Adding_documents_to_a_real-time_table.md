@@ -1,18 +1,18 @@
 # Adding documents to a real-time table
 
-> If you are looking for information about adding documents to a plain table please read section about [adding data from external storages](../Adding_data_from_external_storages/Plain_tables_creation.md).
+> If you are looking for information about adding documents to a plain table please read section about [adding data from external storages](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md).
 
 <!-- example insert -->
-Adding documents in a real-time manner is only supported for [Real-Time](../Creating_a_table/Local_tables/Real-time_table.md) and [percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into a table with provided field values. Note that it is not necessary for a table to already exist before adding documents to it. If the table does not exist, Manticore will attempt to create it automatically. For more information, see [Auto schema](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Adding documents in a real-time manner is only supported for [Real-Time](../../Creating_a_table/Local_tables/Real-time_table.md) and [percolate](../../Creating_a_table/Local_tables/Percolate_table.md) tables. Corresponding SQL command or HTTP endpoint or a client's functions inserts new rows (documents) into a table with provided field values. Note that it is not necessary for a table to already exist before adding documents to it. If the table does not exist, Manticore will attempt to create it automatically. For more information, see [Auto schema](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 
-You can insert a single or [multiple documents](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) with values for all fields of the table or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
+You can insert a single or [multiple documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) with values for all fields of the table or only part of them. In this case the other fields will be filled with their default values (0 for scalar types, empty string for text types).
 
 Expressions are currently not supported in `INSERT` and the values should be explicitly specified.
 
-The ID field/value can be omitted as RT and PQ tables support [auto-id](../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../Updating_documents/REPLACE.md) for that.
+The ID field/value can be omitted as RT and PQ tables support [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. You can use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) for that.
 
-When you use the HTTP JSON protocol, 2 different request formats are available: a common Manticore format and an Elasticsearch-like one. You can see both formats demonstrated in the examples.
+When using the HTTP JSON protocol, two different request formats are available: a common Manticore format and an Elasticsearch-like one. Both formats are demonstrated in the examples.
 
 Also, if you use JSON and the Manticore request format, note that the `doc` node is mandatory and all the values should be provided inside it.
 
@@ -42,13 +42,11 @@ Query OK, 1 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
-#Common Manticore format
-
 POST /insert 
 {
   "index":"products",
@@ -80,25 +78,11 @@ POST /insert
   }
 }
 
-#Elasticsearch-like format
-
-POST /products/_create/3 
-{
-  "title": "Yellow Bag with Tassel",
-  "price": 19.85
-}
-
-POST /products/_create/ 
-{
-  "title": "Red Bag with Tassel",
-  "price": 19.85
-}
-
 ```
-<!-- response HTTP -->
+
+<!-- response JSON -->
 
 ```json
-#Common Manticore format
 {
   "_index": "products",
   "_id": 1,
@@ -121,7 +105,30 @@ POST /products/_create/
   "status": 201
 }
 
-#Elasticsearch-like format
+```
+
+<!-- intro -->
+##### Elasticsearch:
+
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/3 
+{
+  "title": "Yellow Bag with Tassel",
+  "price": 19.85
+}
+
+POST /products/_create/ 
+{
+  "title": "Red Bag with Tassel",
+  "price": 19.85
+}
+
+```
+<!-- response Elasticsearch -->
+
+```json
 {
 "_id":3,
 "_index":"products",
@@ -224,7 +231,7 @@ sqlresult = indexApi.insert(newdoc);
 
 ## Auto schema
 
-Manticore has a mechanism for automatically creating tables when a specified table in the `INSERT` statement does not yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
+Manticore has a mechanism for automatically creating tables when a specified table in the `INSERT` statement does not yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
 
 <!-- example auto-schema -->
 
@@ -290,7 +297,7 @@ select * from t
 1 row in set (0.00 sec)
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /insert  -d
@@ -311,7 +318,7 @@ POST /insert  -d
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {"_index":"t","_id":2,"created":true,"result":"created","status":201}
@@ -321,10 +328,10 @@ POST /insert  -d
 
 ## Auto ID
 <!-- example autoid -->
-There is an auto ID generation functionality for column ID of documents inserted or replaced into an real-time or a [Percolate table](../Creating_a_table/Local_tables/Percolate_table.md). The generator produces a unique ID of a document with some guarantees and should not be considered an auto-incremented ID.
+There is an auto ID generation functionality for column ID of documents inserted or replaced into an real-time or a [Percolate table](../../Creating_a_table/Local_tables/Percolate_table.md). The generator produces a unique ID of a document with some guarantees and should not be considered an auto-incremented ID.
 
 The value of ID generated is guaranteed to be unique under the following conditions:
-* [server_id](../Server_settings/Searchd.md#server_id) value of the current server is in range of 0 to 127 and is unique among nodes in the cluster or it uses the default value generated from MAC address as a seed
+* [server_id](../../Server_settings/Searchd.md#server_id) value of the current server is in range of 0 to 127 and is unique among nodes in the cluster or it uses the default value generated from MAC address as a seed
 * system time does not change for the Manticore node between server restarts
 * auto ID is generated fewer than 16 million times per second between search server restarts
 
@@ -356,8 +363,8 @@ select * from products;
 +---------------------+-----------+---------------------------+
 ```
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /insert
@@ -378,7 +385,7 @@ GET /search
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -448,8 +455,8 @@ sqlresult = indexApi.insert(newdoc);
 You can insert into a real-time table not just a single document, but as many as you want. It's ok to insert into a real-time table in batches of tens of thousands of documents. What's important to know in this case:
 * the larger the batch the higher is the latency of each insert operation
 * the larger the batch the higher indexation speed you can expect
-* each batch insert operation is considered a single [transaction](../Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or in case of a failure none of them will be added
-* you might want to increase [max_packet_size](../Server_settings/Searchd.md#max_packet_size) value to allow bigger batches
+* each batch insert operation is considered a single [transaction](../../Data_creation_and_modification/Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or in case of a failure none of them will be added
+* you might want to increase [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) value to allow bigger batches
 
 <!-- intro -->
 ### Bulk insert examples
@@ -477,32 +484,34 @@ Query OK, 3 rows affected (0.01 sec)
 Expressions are not currently supported in `INSERT` and values should be explicitly specified.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
-The syntax is in general the same as for [inserting a single document](../Quick_start_guide.md#Add-documents), just provide more lines one for each document and use `/bulk` endpoint instead of `/insert` and enclose each document into node "insert". Note that it also requires:
+##### JSON:
+<!-- request JSON -->
+The syntax is in general the same as for [inserting a single document](../../Quick_start_guide.md#Add-documents), just provide more lines one for each document and use `/bulk` endpoint instead of `/insert` and enclose each document into node "insert". Note that it also requires:
 * Content-Type: application/x-ndjson
 * The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline \n and maybe \r.
 
+Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different tables, however transactions are possible only over single table, so if you specify more, manticore will collect operations directed to one table into single txn, and when table changes, it will commit collected and start new transaction over new table.
+
+
 ```json
-#Common Manticore format
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
 {"insert": {"index":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
 {"insert":{"index":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
 '
 
-#Elasticsearcgh-like format
-POST /_bulk
+POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "index" : { "_index" : "products" } }
-{ "title" : "Yellow Bag", "price": 12 }
-{ "create" : { "_index" : "products" } }
-{ "title" : "Red Bag", "price": 12.5, "id": 3 }
+{"insert":{"index":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
+{"insert":{"index":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
+{"insert":{"index":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
+{"insert":{"index":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
+{"insert":{"index":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
 '
 ```
-<!-- response HTTP -->
+
+<!-- response JSON -->
 ```json
-#Common Manticore format
 {
   "items": [
     {
@@ -520,7 +529,48 @@ POST /_bulk
   "errors": false
 }
 
-#Elasticsearcgh-like format
+{
+  "items": [
+    {
+      "bulk": {
+        "_index": "test1",
+        "_id": 23,
+        "created": 3,
+        "deleted": 0,
+        "updated": 0,
+        "result": "created",
+        "status": 201
+      }
+    },
+    {
+      "bulk": {
+        "_index": "test2",
+        "_id": 25,
+        "created": 2,
+        "deleted": 0,
+        "updated": 0,
+        "result": "created",
+        "status": 201
+      }
+    }
+  ],
+  "errors": false
+}
+
+```
+
+<!-- request Elasticsearch -->
+```json
+POST /_bulk
+-H "Content-Type: application/x-ndjson" -d '
+{ "index" : { "_index" : "products" } }
+{ "title" : "Yellow Bag", "price": 12 }
+{ "create" : { "_index" : "products" } }
+{ "title" : "Red Bag", "price": 12.5, "id": 3 }
+'
+```
+<!-- response Elasticsearch -->
+```json
 {
 "items":[
     {
@@ -556,51 +606,6 @@ POST /_bulk
 ],
 "errors":false,
 "took":1
-}
-```
-
-Notice, bulk endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Also notice, that you can direct operations to several different tables, however transactions are possible only over single table, so if you specify more, manticore will collect operations directed to one table into single txn, and when table changes, it will commit collected and start new transaction over new table.
-
-```json
-POST /bulk
--H "Content-Type: application/x-ndjson" -d '
-{"insert":{"index":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
-{"insert":{"index":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
-{"insert":{"index":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
-{"insert":{"index":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
-{"insert":{"index":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
-'
-```
-
-<!-- response HTTP -->
-
-```json
-{
-  "items": [
-    {
-      "bulk": {
-        "_index": "test1",
-        "_id": 23,
-        "created": 3,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "_index": "test2",
-        "_id": 25,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "errors": false
 }
 ```
 
@@ -671,8 +676,8 @@ Multi-value attributes (MVA) are inserted as arrays of numbers.
 INSERT INTO products(title, sizes) VALUES('shoes', (40,41,42,43));
 ```
 <!-- intro -->
-##### HTTP
-<!-- request HTTP -->
+##### JSON
+<!-- request JSON -->
 ```json
 
 POST /insert
@@ -735,7 +740,7 @@ sqlresult = indexApi.insert(newdoc);
 
 <!-- example JSON_insert -->
 ## Inserting JSON
-JSON value can be inserted as as an [escaped](../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
+JSON value can be inserted as as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
 
 <!-- intro -->
 ### Examples
@@ -746,8 +751,8 @@ JSON value can be inserted as as an [escaped](../Searching/Full_text_matching/Es
 INSERT INTO products VALUES (1, 'shoes', '{"size": 41, "color": "red"}');
 ```
 <!-- intro -->
-##### HTTP
-<!-- request HTTP -->
+##### JSON
+<!-- request JSON -->
 JSON value can be inserted as as JSON object
 ```json
 POST /insert

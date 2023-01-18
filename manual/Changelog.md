@@ -17,7 +17,7 @@ This release also includes more than 60 bug fixes and numerous features, many of
   - [Commit 2b95fb8c](https://gitlab.com/manticoresearch/dev/-/commit/2b95fb8c2ba422c9c5a66e2b61c1f7922f31c7aa) Added CBO hints for fine-tuning its behaviour.
 * [Commit 5aafb17d](https://gitlab.com/manticoresearch/dev/-/commit/5aafb17d81b601e399e212a344a4738f65576cdd) [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) to rebuild secondary indexes whenever you want, for example:
   - when you migrate from Manticore 5 to the newer version,
-  - when you did [UPDATE](../Updating_documents/UPDATE.md#UPDATE) (i.e. [in-place update, not replace](../Updating_documents/REPLACE_vs_UPDATE.md)) of an attribute in the index
+  - when you did [UPDATE](../Data_creation_and_modification/Updating_documents/UPDATE.md#UPDATE) (i.e. [in-place update, not replace](../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)) of an attribute in the index
 * [Issue #821](https://github.com/manticoresoftware/manticoresearch/issues/821) New tool manticore-backup for [backing up and restoring Manticore instance](../Securing_and_compacting_a_table/Backup_and_restore.md)
 * SQL command [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) to do backups from inside Manticore.
 * SQL command [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) as an easy way to see running queries rather than threads.
@@ -593,7 +593,7 @@ sys     0m0.001s
 - [new mode](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) `blend_mode='trim_all'`
 - added [support for escaping JSON path](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL) with backticks
 - [indextool --check](Miscellaneous_tools.md#indextool) can work in RT mode
-- [FORCE/IGNORE INDEX(id)](Updating_documents/UPDATE.md#FORCE-and-IGNORE-INDEX) for SELECT/UPDATE
+- [FORCE/IGNORE INDEX(id)](Data_creation_and_modification/Updating_documents/UPDATE.md#FORCE-and-IGNORE-INDEX) for SELECT/UPDATE
 - chunk id for a merged disk chunk is now unique
 - [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
 

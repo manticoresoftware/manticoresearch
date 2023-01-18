@@ -163,7 +163,7 @@ Let's now create a table called "products" with 2 fields:
 * title - full-text field which will contain our product's title
 * price - of type "float"
 
-(Note that it is possible to omit creating a table with an explicit create statement. For more information, see [Auto schema](Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).)
+(Note that it is possible to omit creating a table with an explicit create statement. For more information, see [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).)
 
 <!-- intro -->
 ##### SQL:
@@ -257,9 +257,9 @@ Query OK, 3 rows affected (0.01 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 `"id":0` or no id forces automatic ID generation.
 
 ```json
@@ -294,7 +294,7 @@ POST /insert
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -413,9 +413,9 @@ select id, highlight(), price from products where match('remove hair');
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -428,7 +428,7 @@ POST /search
   }
 }
 ```
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -589,9 +589,9 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /update
@@ -605,7 +605,7 @@ POST /update
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -684,9 +684,9 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /delete
@@ -705,7 +705,7 @@ POST /delete
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {

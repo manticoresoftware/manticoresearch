@@ -59,7 +59,7 @@ Integer, in milliseconds (or [special_suffixes](../Server_settings/Special_suffi
 ### attr_flush_period
 
 <!-- example conf attr_flush_period -->
-When calling [Update](../Updating_documents/UPDATE.md) to update document attributes in real-time, the changes are first written to in-memory copy of attributes.  The updates are done in a memory mapped file, which means that the OS decides when to write these changes to disk. Once `searchd` shuts down normally (via `SIGTERM` being sent) it forces writing all the changes to disk.
+When calling [Update](../Data_creation_and_modification/Updating_documents/UPDATE.md) to update document attributes in real-time, the changes are first written to in-memory copy of attributes.  The updates are done in a memory mapped file, which means that the OS decides when to write these changes to disk. Once `searchd` shuts down normally (via `SIGTERM` being sent) it forces writing all the changes to disk.
 
 It is also possible to tell `searchd` to periodically write these changes  back to disk to avoid them being lost. The time between those intervals is set with `attr_flush_period`, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)).
 

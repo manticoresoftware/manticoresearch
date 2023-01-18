@@ -20,16 +20,16 @@ sql_query_killlist = \
 ```
 
 ## Removing documents in a plain table
-A plain table can contain a directive called [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target) that will tell the server it can provide a list of document ids that should be removed from certain existing tables. The table can use either it's document ids as the source for this list or provide a separate [list](../../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list).
+A plain table can contain a directive called [killlist_target](../../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target) that will tell the server it can provide a list of document ids that should be removed from certain existing tables. The table can use either it's document ids as the source for this list or provide a separate [list](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list).
 
 ### killlist_target
 
 <!-- example killlist_target 1 -->
 Sets the table(s) that the kill-list will be applied to. Optional, default value is empty.
 
-When you use [plain tables](../../Creating_a_table/Local_tables/Plain_table.md) you often need to maintain not a single table, but a set of them to be able to add/update/delete new documents sooner (read about [delta table updates](../../Adding_data_from_external_storages/Main_delta.md)). In order to suppress matches in the previous (**main**) table that were updated or deleted in the next (**delta**) table you need to:
+When you use [plain tables](../../../Creating_a_table/Local_tables/Plain_table.md) you often need to maintain not a single table, but a set of them to be able to add/update/delete new documents sooner (read about [delta table updates](../../../Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)). In order to suppress matches in the previous (**main**) table that were updated or deleted in the next (**delta**) table you need to:
 
-1.  Create a kill-list in the **delta** table using [sql_query_killlist](../../Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)
+1.  Create a kill-list in the **delta** table using [sql_query_killlist](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)
 2.  Specify **main** table as `killlist_target` in **delta** table settings:
 
 

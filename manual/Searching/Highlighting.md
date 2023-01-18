@@ -27,9 +27,9 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('try');
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -40,7 +40,7 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -243,9 +243,9 @@ SELECT HIGHLIGHT({limit=50}) FROM books WHERE MATCH('try|gets|down|said');
 ```
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -256,7 +256,7 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -657,9 +657,9 @@ To highlight full-text search results in JSON queries via HTTP, field contents h
 Highlighted snippets are returned in the `highlight` property of the `hits` array.
 
 <!-- intro -->
-##### HTTP:
+##### JSON:
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -673,7 +673,7 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -811,8 +811,8 @@ class SearchResponse {
 To highlight all possible fields, pass an empty object as `highlight` propery.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -823,7 +823,7 @@ POST /search
 }
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -976,8 +976,8 @@ Note, by default the highlighting works the way it tries to highlight the result
 `highlight_query` makes it possible to highlight against a query other than our search query. Syntax is the same as in the main `query`.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1082,8 +1082,8 @@ searchResponse = searchApi.search(searchRequest);
 `pre_tags` and `post_tags` set opening and closing tags for highlighted text snippets. They work similar to `before_match` and    `after_match` options. Optional, defaults are `<b>` and `</b>`.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1199,8 +1199,8 @@ searchResponse = searchApi.search(searchRequest);
 `no_match_size` works similar to the `allow_empty` option. If set to 0, acts as `allow_empty=1`, i.e. allows empty string to be returned as 	highlighting result when a snippet could not be generated. Otherwise, the beginning of the field will be returned. Optional, default is 1.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1313,8 +1313,8 @@ searchResponse = searchApi.search(searchRequest);
 `order` sets the sorting order of extracted snippets. If set to `"score"`, sorts the extracted snippets in order of relevance. Optional. 	Works similar to `weight_order` option.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1425,8 +1425,8 @@ searchResponse = searchApi.search(searchRequest);
 `fragment_size` sets maximum snippet size in symbols. Can be global or per-field. Per-field options override global options. Optional, default is 256. 	Works similar to `limit` option.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1532,8 +1532,8 @@ searchResponse = searchApi.search(searchRequest);
 `number_of_fragments`: Limits the maximum number of snippets in the result. Just as `fragment_size`, can be global or per-field. Optional, default is 0 (no limit). 	Works similar to `limit_snippets` option.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1645,8 +1645,8 @@ searchResponse = searchApi.search(searchRequest);
 Options such as `limit`, `limit_words`, and `limit_snippets` can be set as global or per-field options. Global options are used as per-field limits unless per-field options override them. In the example the `title` field is highlighted with default limit settings while the `content` field uses a different limit.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -1759,8 +1759,8 @@ searchResponse = searchApi.search(searchRequest);
 Global limits can also be forced by specifying `limits_per_field=0`. Setting this option means that all combined highlighting results must be within the specified limits. The downside is that you may get several snippets highlighted in one field and none in another if the highlighting engine decides that they are more relevant.
 
 <!-- intro -->
-##### HTTP:
-<!-- request HTTP -->
+##### JSON:
+<!-- request JSON -->
 
 ```json
 POST /search

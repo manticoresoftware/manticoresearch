@@ -25,13 +25,13 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- intro-->
 ##### Creating a real-time table via JSON over HTTP:
-<!-- request HTTP -->
+<!-- request JSON -->
 
-```http
+```JSON
 POST /cli -d "CREATE TABLE products(title text, price float)  morphology='stem_en'"
 ```
 
-<!-- response HTTP -->
+<!-- response JSON -->
 
 ```json
 {
@@ -92,17 +92,17 @@ table products {
 <!-- end -->
 
 ### 👍 What you can do with a real-time table:
-* [Add](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) documents
+* [Add](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) documents
 * [Update](../../Quick_start_guide.md#Update) attributes and full-text fields
 * [Delete](../../Quick_start_guide.md#Delete) documents
 * [Truncate](../../Emptying_a_table.md) table
 * [Change schema online](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode) with help of the command `ALTER`
 * [Define table](../../Creating_a_table/Local_tables/Real-time_table.md) in a configuration file
-* Use [UUID](../../Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID provisioning
+* Use [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID provisioning
 
 ### ⛔ What you cannot do with a real-time table:
-* Index data with help of [indexer](../../Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)
-* Link it with [sources](../../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md) for easy indexing from external storages
+* Index data with help of [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)
+* Link it with [sources](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md) for easy indexing from external storages
 * Update it's [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target), it's just not needed as the real-time table takes controls of it automatically
 
 #### Real-time table files structure

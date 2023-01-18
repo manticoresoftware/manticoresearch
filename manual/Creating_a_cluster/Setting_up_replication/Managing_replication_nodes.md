@@ -13,7 +13,7 @@
 ALTER CLUSTER posts UPDATE nodes
 ```
 
-<!-- request HTTP -->
+<!-- request JSON -->
 
 ```json
 POST /cli -d "

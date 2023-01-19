@@ -105,6 +105,12 @@ searchd
 	select `weight` from testrt;
 	select * from testrt;
 	drop table testrt;
+
+	<!-- regression for filter over stored field -->
+	create table a(b text);
+	insert into a(b) values ('c');
+	delete from a where b='c';
+	drop table a;
 </sphinxql>
 </queries>
 

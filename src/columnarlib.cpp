@@ -146,8 +146,10 @@ static CSphString TryDifferentPaths ( const CSphString & sLibfile )
 
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+	if ( sphFileExists ( sPath.cstr() ) )
+		return sPath;
 
-	return sPath;
+	return "";
 }
 
 
@@ -156,6 +158,9 @@ bool InitColumnar ( CSphString & sError )
 	assert ( !g_pColumnarLib );
 
 	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR );
+	if ( sLibfile.IsEmpty() )
+		return true;
+
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );
 	if ( !tHandle.Get() )
 	{

@@ -74,17 +74,23 @@ variables:
 .collect_deb:
   extends: [ .collect_job ]
   script:
-    - /bin/bash dist/upload_repo_deb.sh
+    - wget https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_deb
+    - chmod +x upload_repo_deb
+    - MAKE_BUNDLE=1 /bin/bash ./upload_repo_deb
 
 .collect_rpm:
   extends: [ .collect_job ]
   script:
-    - /bin/bash dist/upload_repo_rpm.sh
+    - wget https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_rpm
+    - chmod +x upload_repo_rpm
+    - MAKE_BUNDLE=1 /bin/bash ./upload_repo_rpm
 
 .collect_arc:
   extends: [ .collect_job ]
   script:
-    - /bin/bash dist/upload_repo_arc.sh
+    - wget https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_arc
+    - chmod +x upload_repo_arc
+    - /bin/bash ./upload_repo_arc
 
 # ==================== Mac OS X ======================
 

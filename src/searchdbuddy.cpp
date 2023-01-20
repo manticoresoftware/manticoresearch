@@ -513,7 +513,7 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 	}
 
 	CSphString sDump;
-	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump );
+	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), SPH_HTTP_STATUS_200, bNeedHttpResponse, dResult );

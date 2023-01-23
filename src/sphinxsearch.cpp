@@ -1485,92 +1485,175 @@ struct RankerState_Proximity_fn : public ISphExtra
 //////////////////////////////////////////////////////////////////////////
 
 // sph04, proximity + exact boost
-struct RankerState_ProximityBM25Exact_fn : public ISphExtra
+template <bool HANDLE_DUPES>
+class RankerState_ProximityBM25Exact_T : public ISphExtra
 {
-	BYTE m_uLCS[SPH_MAX_FIELDS];
-	BYTE m_uCurLCS;
-	int m_iExpDelta;
-	int m_iLastHitPos;
-	DWORD m_uMinExpPos;
-	int m_iFields;
-	const int * m_pWeights;
-	DWORD m_uHeadHit;
-	DWORD m_uExactHit;
-	int m_iMaxQuerypos;
-
+public:
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString &, DWORD )
 	{
+		m_tExactHit.Init ( iFields );
+
+		ResetDocFactors();
+
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
-		m_uCurLCS = 0;
 		m_iExpDelta = -INT_MAX;
 		m_iLastHitPos = -1;
 		m_uMinExpPos = 0;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
-		m_uHeadHit = 0;
-		m_uExactHit = 0;
 
 		// tricky bit
 		// in expr and export rankers, this gets handled by the overridden (!) SetQwordsIDF()
 		// but in all the other ones, we need this, because SetQwordsIDF() won't touch the state by default
 		// FIXME? this is actually MaxUniqueQpos, queries like [foo|foo|foo] might break
-		m_iMaxQuerypos = pRanker->m_iMaxQpos;
+		m_iMaxQpos = pRanker->m_iMaxQpos;
 		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
 	{
-		// upd LCS
 		DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
-		int iPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
-		int iDelta = iPosWithField - pHlist->m_uQuerypos;
+		int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
+		DWORD uPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
 
-		if ( iDelta==m_iExpDelta && HITMAN::GetPosWithField ( pHlist->m_uHitpos )>=m_uMinExpPos )
+		if_const ( !HANDLE_DUPES )
 		{
-			if ( iPosWithField>m_iLastHitPos )
-				m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
-			if ( HITMAN::IsEnd ( pHlist->m_uHitpos )
-				&& (int)pHlist->m_uQuerypos==m_iMaxQuerypos
-				&& HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
+			// update LCS
+			int iDelta = uPosWithField - pHlist->m_uQuerypos;
+			if ( iDelta==m_iExpDelta )
 			{
-				m_uExactHit |= ( 1UL << HITMAN::GetField ( pHlist->m_uHitpos ) );
+				if ( (int)uPosWithField>m_iLastHitPos )
+					m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
+				if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
+					m_tExactHit.BitSet ( uField );
+			} else
+			{
+				if ( (int)uPosWithField>m_iLastHitPos )
+					m_uCurLCS = BYTE(pHlist->m_uWeight);
+				if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
+					m_tExactHit.BitSet ( uField );
 			}
-		} else
+
+			if ( m_uCurLCS>m_uLCS[uField] )
+				m_uLCS[uField] = m_uCurLCS;
+
+			m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+			m_iLastHitPos = uPosWithField;
+		}
+		else
 		{
-			if ( iPosWithField>m_iLastHitPos )
-				m_uCurLCS = BYTE(pHlist->m_uWeight);
-			if ( HITMAN::GetPos ( pHlist->m_uHitpos )==1 )
+			// reset accumulated data from previous field
+			if ( (DWORD)HITMAN::GetField ( m_uCurPos )!=uField )
 			{
-				m_uHeadHit |= ( 1UL << HITMAN::GetField ( pHlist->m_uHitpos ) );
-				if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQuerypos==1 )
-					m_uExactHit |= ( 1UL << HITMAN::GetField ( pHlist->m_uHitpos ) );
+				m_uCurPos = 0;
+				m_uLcsTailPos = 0;
+				m_uCurQposMask = 0;
+				m_uCurLCS = 0;
 			}
+
+			if ( (DWORD)uPosWithField!=m_uCurPos )
+			{
+				// next new and shiny hitpos in line
+				// FIXME!? what do we do with longer spans? keep looking? reset?
+				if ( m_uCurLCS<2 )
+				{
+					m_uLcsTailPos = m_uCurPos;
+					m_uLcsTailQposMask = m_uCurQposMask;
+					m_uCurLCS = 1;
+				}
+				m_uCurQposMask = 0;
+				m_uCurPos = uPosWithField;
+				if ( m_uLCS [ uField ]<pHlist->m_uWeight )
+					m_uLCS [ uField ] = BYTE ( pHlist->m_uWeight );
+			}
+
+			// add that qpos to current qpos mask (for the current hitpos)
+			m_uCurQposMask |= ( 1UL << pHlist->m_uQuerypos );
+
+			// and check if that results in a better lcs match now
+			int iDelta = ( m_uCurPos-m_uLcsTailPos );
+			if ( iDelta && iDelta<32 && ( m_uCurQposMask >> iDelta ) & m_uLcsTailQposMask )
+			{
+				// cool, it matched!
+				m_uLcsTailQposMask = ( 1UL << pHlist->m_uQuerypos ); // our lcs span now ends with a specific qpos
+				m_uLcsTailPos = m_uCurPos; // and in a specific position
+				m_uCurLCS = BYTE ( m_uCurLCS+pHlist->m_uWeight ); // and it's longer
+				m_uCurQposMask = 0; // and we should avoid matching subsequent hits on the same hitpos
+
+				// update per-field vector
+				if ( m_uCurLCS>m_uLCS[uField] )
+					m_uLCS[uField] = m_uCurLCS;
+			}
+
+			if ( iDelta==m_iExpDelta )
+			{
+				if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
+					m_tExactHit.BitSet ( uField );
+			} else
+			{
+				if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
+					m_tExactHit.BitSet ( uField );
+			}
+
+			m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
 		}
 
 		if ( m_uCurLCS>m_uLCS[uField] )
 			m_uLCS[uField] = m_uCurLCS;
 
-		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		m_iLastHitPos = iPosWithField;
+		if ( !m_dMinHitPos[uField] )
+			m_dMinHitPos[uField] = iPos;
+
 		m_uMinExpPos = HITMAN::GetPosWithField ( pHlist->m_uHitpos ) + 1;
 	}
 
 	int Finalize ( const CSphMatch & tMatch )
 	{
-		m_uCurLCS = 0;
 		m_iExpDelta = -1;
 		m_iLastHitPos = -1;
 
 		int iRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
 		{
-			iRank += (int)( 4*m_uLCS[i] + 2*((m_uHeadHit>>i)&1) + ((m_uExactHit>>i)&1) )*m_pWeights[i];
+			iRank += (int)( 4*m_uLCS[i] + 2*( m_dMinHitPos[i]==1?1:0 ) + ( m_tExactHit.BitGet(i)?1:0 ))*m_pWeights[i];
 			m_uLCS[i] = 0;
 		}
-		m_uHeadHit = 0;
-		m_uExactHit = 0;
+
+		ResetDocFactors();
 
 		return tMatch.m_iWeight + iRank*SPH_BM25_SCALE;
+	}
+
+private:
+	BYTE		m_uLCS[SPH_MAX_FIELDS];
+	int			m_dMinHitPos[SPH_MAX_FIELDS];
+	BYTE		m_uCurLCS;
+	int			m_iExpDelta;
+	int			m_iLastHitPos;
+	DWORD		m_uMinExpPos;
+	int			m_iFields;
+	const int *	m_pWeights;
+	DWORD		m_uCurPos;
+	DWORD		m_uLcsTailPos;
+	DWORD		m_uLcsTailQposMask;
+	DWORD		m_uCurQposMask;
+	int			m_iMaxQpos;
+	CSphBitvec	m_tExactHit;
+
+	void ResetDocFactors()
+	{
+		// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
+		m_uCurLCS = 0;
+		if_const ( HANDLE_DUPES )
+		{
+			m_uCurPos = 0;
+			m_uLcsTailPos = 0;
+			m_uLcsTailQposMask = 0;
+			m_uCurQposMask = 0;
+		}
+
+		m_tExactHit.Clear();
+		memset ( m_dMinHitPos, 0, sizeof(m_dMinHitPos) );
 	}
 };
 
@@ -4288,7 +4371,10 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 			break;
 
 		case SPH_RANK_SPH04:
-			pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_fn, true >> ( tXQ, tTermSetup, bSkipQCache );
+			if ( bGotDupes )
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<true>, true>> ( tXQ, tTermSetup, bSkipQCache );
+			else
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<false>, true>> ( tXQ, tTermSetup, bSkipQCache );
 			break;
 
 		case SPH_RANK_EXPR:

@@ -144,10 +144,12 @@ static CSphString TryDifferentPaths ( const CSphString & sLibfile )
 	if ( sphFileExists ( sPath.cstr() ) )
 		return sPath;
 
+#if _WIN32
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
 	if ( sphFileExists ( sPath.cstr() ) )
 		return sPath;
+#endif
 
 	return "";
 }

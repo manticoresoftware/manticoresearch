@@ -4521,9 +4521,6 @@ bool MinimizeSchemas ( AggrResult_t & tRes )
 			bAllEqual = false;
 	}
 
-	if ( !bSchemaBaseSet && iResults>0 )
-		tRes.m_tSchema = tRes.m_dResults[0].m_tSchema;
-
 	return bAllEqual;
 }
 

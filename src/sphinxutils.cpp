@@ -1641,21 +1641,21 @@ CSphString AppendWinInstallDir ( const CSphString & sDir )
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-const char * sphGetConfigFile ( const char * szHint )
+CSphString sphGetConfigFile ( const char * szHint )
 {
 	if ( szHint )
-		return szHint;
+		return RealPath(szHint);
 
 	// fallback to defaults if there was no explicit config specified
 #ifdef SYSCONFDIR
 	static const char* sConfigFile = SYSCONFDIR "/manticore.conf";
 	if ( sphIsReadable ( sConfigFile ) )
-		return sConfigFile;
+		return RealPath(sConfigFile);
 #endif
 
 	static const char* sWorkingConfiFile = "./manticore.conf";
 	if ( sphIsReadable ( sWorkingConfiFile ) )
-		return sWorkingConfiFile;
+		return RealPath(sWorkingConfiFile);
 
 #if _WIN32
 	if ( !GetWinInstallDir().IsEmpty() )
@@ -1663,7 +1663,7 @@ const char * sphGetConfigFile ( const char * szHint )
 		static CSphString sConf;
 		sConf.SetSprintf ( "%s/etc/manticoresearch/manticore.conf", GetWinInstallDir().cstr() );
 		if ( sphIsReadable ( sConf.cstr() ) )
-			return sConf.cstr();
+			return RealPath(sConf);
 	}
 #endif
 
@@ -1690,38 +1690,45 @@ bool ParseConfig ( CSphConfig* pConfig, CSphString sFileName, const VecTraits_T<
 enum class Indexes_e : bool { eNeed, eNotNeed };
 
 template<Indexes_e eNeed>
-inline static CSphConfig LoadConfig ( const char * szPathToConfigFile, bool bTraceToStdout, const char ** ppActualConfigFile = nullptr )
+inline static CSphConfig LoadConfig ( const CSphString & sPath, bool bTraceToStdout, CSphString & sActualPath )
 {
 	// fallback to defaults if there was no explicit config specified
-	szPathToConfigFile = sphGetConfigFile ( szPathToConfigFile );
+	sActualPath = sphGetConfigFile ( sPath.cstr() );
 
 	if ( bTraceToStdout )
-		fprintf ( stdout, "using config file '%s'...\n", szPathToConfigFile );
+		fprintf ( stdout, "using config file '%s'...\n", sActualPath.cstr() );
 
 	// load config
-	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( szPathToConfigFile );
+	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( sActualPath );
 	CSphConfig hConf;
-	if ( !ParseConfig ( &hConf, szPathToConfigFile, dConfig ) )
-		sphDie ( "failed to parse config file '%s': %s", szPathToConfigFile, TlsMsg::szError() );
+	if ( !ParseConfig ( &hConf, sActualPath, dConfig ) )
+		sphDie ( "failed to parse config file '%s': %s", sActualPath.cstr(), TlsMsg::szError() );
 
 	if constexpr ( eNeed==Indexes_e::eNeed )
 		if ( !hConf ( "index" ) )
-			sphDie ( "no tables found in config file '%s'", szPathToConfigFile );
-
-	if ( ppActualConfigFile )
-		*ppActualConfigFile = szPathToConfigFile;
+			sphDie ( "no tables found in config file '%s'", sActualPath.cstr() );
 
 	return hConf;
 }
 
-CSphConfig sphLoadConfig ( const char* szPathToConfigFile, bool bTraceToStdout, const char** ppActualConfigFile )
+
+CSphConfig sphLoadConfig ( const CSphString & sPath, bool bTraceToStdout, CSphString & sActualPath )
 {
-	return LoadConfig<Indexes_e::eNeed> ( szPathToConfigFile, bTraceToStdout, ppActualConfigFile );
+	return LoadConfig<Indexes_e::eNeed> ( sPath, bTraceToStdout, sActualPath );
 }
 
-CSphConfig sphLoadConfigWithoutIndexes ( const char* szPathToConfigFile, bool bTraceToStdout )
+
+CSphConfig sphLoadConfig ( const CSphString & sPath, bool bTraceToStdout )
 {
-	return LoadConfig<Indexes_e::eNotNeed> ( szPathToConfigFile, bTraceToStdout );
+	CSphString sActualPath;
+	return LoadConfig<Indexes_e::eNeed> ( sPath, bTraceToStdout, sActualPath );
+}
+
+
+CSphConfig sphLoadConfigWithoutIndexes ( const CSphString & sPath, bool bTraceToStdout )
+{
+	CSphString sActualPath;
+	return LoadConfig<Indexes_e::eNotNeed> ( sPath, bTraceToStdout, sActualPath );
 }
 
 //////////////////////////////////////////////////////////////////////////

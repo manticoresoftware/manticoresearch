@@ -1737,7 +1737,7 @@ static void ShowHelp ()
 
 int main ( int argc, char ** argv )
 {
-	const char * sOptConfig = NULL;
+	CSphString sOptConfig;
 	bool bMerge = false;
 	CSphVector<CSphFilterSettings> dMergeDstFilters;
 
@@ -1771,7 +1771,7 @@ int main ( int argc, char ** argv )
 		{
 			sOptConfig = argv[++i];
 			if ( !sphIsReadable ( sOptConfig ) )
-				sphDie ( "config file '%s' does not exist or is not readable", sOptConfig );
+				sphDie ( "config file '%s' does not exist or is not readable", sOptConfig.cstr() );
 
 		} else if ( strcasecmp ( argv[i], "--merge" )==0 && (i+2)<argc )
 		{
@@ -1933,10 +1933,10 @@ int main ( int argc, char ** argv )
 
 	SetupLemmatizerBase();
 
-	auto hConf = sphLoadConfig ( sOptConfig, !g_bQuiet, &sOptConfig );
+	auto hConf = sphLoadConfig ( sOptConfig, !g_bQuiet, sOptConfig );
 
 	if ( !hConf ( "source" ) )
-		sphDie ( "no tables found in config file '%s'", sOptConfig );
+		sphDie ( "no tables found in config file '%s'", sOptConfig.cstr() );
 
 	sphCheckDuplicatePaths ( hConf );
 

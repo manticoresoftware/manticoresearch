@@ -305,11 +305,12 @@ std::pair<bool, CSphVector<char>> FetchAndCheckIfChanged ( const CSphString& sFi
 /////////////////////////////////////////////////////////////////////////////
 
 /// Provided or default config file
-const char *	sphGetConfigFile ( const char * szHint = nullptr );
+CSphString		sphGetConfigFile ( const char * szHint = nullptr );
 
 /// load config file (will die inside if an error happened)
-CSphConfig		sphLoadConfig ( const char * szPathToConfigFile, bool bTraceToStdout, const char ** pszPathToActualConfig=nullptr );
-CSphConfig		sphLoadConfigWithoutIndexes ( const char* szPathToConfigFile, bool bTraceToStdout );
+CSphConfig		sphLoadConfig ( const CSphString & sPath, bool bTraceToStdout, CSphString & sActualPath );
+CSphConfig		sphLoadConfig ( const CSphString & sPath, bool bTraceToStdout );
+CSphConfig		sphLoadConfigWithoutIndexes ( const CSphString & sPath, bool bTraceToStdout );
 
 /// load config file into provided hConfig (on error hConfig is unchanged)
 bool			ParseConfig ( CSphConfig* pConfig, CSphString sFileName, const VecTraits_T<char>& dData );

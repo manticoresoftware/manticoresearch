@@ -7863,7 +7863,10 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<
 
 	// remove disabled analyzers
 	for ( size_t i = 0; i < dFilterMap.size(); )
-		if ( dSIInfo[i].m_eType!=SecondaryIndexType_e::ANALYZER )
+	{
+		bool bAnalyzer = dSIInfo[i].m_eType==SecondaryIndexType_e::ANALYZER;
+		bool bRowIdFilter = dFilterMap[i]!=-1 && dFilters[dFilterMap[i]].m_sAttrName=="@rowid";
+		if ( !bAnalyzer && !bRowIdFilter )
 		{
 			int iColumnarFilter = dFilterMap[i];
 			dFilterMap.erase ( dFilterMap.begin()+i );
@@ -7872,6 +7875,7 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<
 		}
 		else
 			i++;
+	}
 
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return nullptr;

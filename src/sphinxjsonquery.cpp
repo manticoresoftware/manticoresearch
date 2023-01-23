@@ -1652,6 +1652,23 @@ void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson
 
 } // static
 
+CSphString JsonEncodeResultError ( const CSphString & sError, int iStatus )
+{
+	JsonEscapedBuilder tOut;
+	CSphString sResult;
+
+	tOut.StartBlock ( ",", "{ \"error\":", "}" );
+	tOut.AppendEscaped ( sError.cstr(), EscBld::eEscape );
+
+	tOut.AppendName ( "status" );
+	tOut << iStatus;
+
+	tOut.FinishBlock ( false );
+
+	tOut.MoveTo ( sResult ); // since simple return tOut.cstr() will cause copy of string, then returning it.
+	return sResult;
+}
+
 static CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType=nullptr, int * pStatus=nullptr, const char * sIndex=nullptr )
 {
 	JsonEscapedBuilder tOut;

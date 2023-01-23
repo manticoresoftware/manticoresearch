@@ -10802,7 +10802,7 @@ void AttributeConverter_c::Finalize()
 
 /////////////////////////////////////////////////////////////////////
 
-static bool InsertToPQ ( SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t * pAccum, CSphVector<int64_t> & dIds, const CSphMatch & tDoc, const CSphAttrLocator & tIdLoc, const CSphVector<const char *> & dStrings,
+static bool InsertToPQ ( const SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t * pAccum, CSphVector<int64_t> & dIds, const CSphMatch & tDoc, const CSphAttrLocator & tIdLoc, const CSphVector<const char *> & dStrings,
 	const CSphSchema & tSchemaInt, bool bReplace, CSphString & sError )
 {
 	CSphVector<CSphFilterSettings> dFilters;
@@ -10875,7 +10875,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	tOut.Ok ( iDeleted );
 }
 
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;

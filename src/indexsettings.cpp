@@ -1949,7 +1949,13 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		if ( i || bHasAttrs )
 			sRes << ",\n";
 
-		sRes << tField.m_sName << " text";
+		CSphString sQuotedName;
+		if ( IsDDLToken ( tField.m_sName ) )
+			sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
+		else
+			sQuotedName = tField.m_sName;
+
+		sRes << sQuotedName << " text";
 		AddFieldSettings ( sRes, tField );
 	}
 

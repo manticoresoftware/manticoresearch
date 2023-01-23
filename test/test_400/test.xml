@@ -181,6 +181,13 @@ searchd
 	drop table t1;
 	drop table t2;
 
+	<!-- another regression for DLL tokens in backticks -->
+	create table t(`text` text);
+	show create table t;
+	alter table t rt_mem_limit='1G';
+	show create table t;
+	drop table t;
+
 	<!-- regression for count distinct over empty indexes -->
 	create table t1(f text, a int);
 	create table t2 like t1;

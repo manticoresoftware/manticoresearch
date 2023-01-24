@@ -30,8 +30,8 @@
 ^Adding_documents_to_a_table/(.*?)$ Data_creation_and_modification/Adding_documents_to_a_table/$1
 ^Adding_data_from_external_storages/(.*?)$ Data_creation_and_modification/Adding_data_from_external_storages/$1
 ^Updating_documents/(.*?)$ Data_creation_and_modification/Updating_documents/$1
-^Transactions$ Data_creation_and_modification/Transactions
-^Deleting_documents$ Data_creation_and_modification/Deleting_documents
+^Transactions(.*?)$ Data_creation_and_modification/Transactions$1
+^Deleting_documents(.*?)$ Data_creation_and_modification/Deleting_documents$1
 ^Data_creation_and_modification/Adding_data_from_external_storages/Rotating_an_index(.*?)$ Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table$1
 ^Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data(.*?)$ Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data$1
 ^Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_from_indexes/Merging_indexes(.*?)$ Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables$1

@@ -632,14 +632,23 @@ void sphMemStatDump ( int iFD )
 
 #elif !DISABLE_MEMROUTINES
 
-void* operator new ( size_t iSize )
+void* operator new ( std::size_t iSize )
 {
-	void* pResult = ::malloc ( iSize );
+	if (iSize)
+		++iSize;
+
+	void* pResult = std::malloc ( iSize );
 	if ( !pResult )
 		sphDieRestart ( "out of memory (unable to allocate " UINT64_FMT " bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
 	return pResult;
 }
 
+void operator delete ( void* pPtr ) noexcept
+{
+	std::free ( pPtr );
+}
+
+/* According to https://en.cppreference.com/w/cpp/memory/new/operator_new, code below is not necessary
 
 void* operator new[] ( size_t iSize )
 {
@@ -649,17 +658,12 @@ void* operator new[] ( size_t iSize )
 	return pResult;
 }
 
-void operator delete ( void* pPtr ) throw()
-{
-	if ( pPtr )
-		::free ( pPtr );
-}
-
 void operator delete[] ( void* pPtr ) throw()
 {
 	if ( pPtr )
 		::free ( pPtr );
 }
+ */
 
 #endif // DISABLE_MEMROUTINES
 

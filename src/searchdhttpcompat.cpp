@@ -232,6 +232,8 @@ int GetVersion ( const nljson & tDoc )
 	return iVer;
 }
 
+static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError );
+
 static bool InsertDoc ( const CSphString & sSrc, bool bReplace, CSphString & sError )
 {
 	DocID_t tTmpID;
@@ -240,10 +242,13 @@ static bool InsertDoc ( const CSphString & sSrc, bool bReplace, CSphString & sEr
 		return false;
 
 	assert ( tTmpID>=0 );
-
-	JsonObj_c tResult = JsonNull;
 	tStmt.m_eStmt = ( bReplace ? STMT_REPLACE : STMT_INSERT );
 
+	return InsertDoc ( tStmt, sError );
+}
+
+static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError )
+{
 	std::unique_ptr<StmtErrorReporter_i> pReporter ( CreateHttpErrorReporter() );
 	sphHandleMysqlInsert ( *pReporter.get(), tStmt );
 
@@ -966,13 +971,22 @@ static void FixupKibana ( const StrVec_t & dIndexes, nljson & tFullQuery )
 	}
 }
 
-static void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult, const char * sIndex, bool bHeadReply )
+static void ReportError ( const CSphString & sError, const char * sErrorType, ESphHttpStatus eStatus, CSphVector<BYTE> & dResult, const char * sIndex, bool bHeadReply )
 {
 	CompatWarning ( "%s", sError.cstr() );
 
 	int iStatus = HttpGetStatusCodes ( eStatus );
 	CSphString sReply = JsonEncodeResultError ( sError, sErrorType, iStatus, sIndex );
 	HttpBuildReplyHead ( dResult, eStatus, sReply.cstr(), sReply.Length(), bHeadReply );
+}
+
+static void ReportCompatError ( const CSphString & sError, ESphHttpStatus eStatus, CSphVector<BYTE> & dResult )
+{
+	CompatWarning ( "%s", sError.cstr() );
+
+	int iStatus = HttpGetStatusCodes ( eStatus );
+	CSphString sReply = JsonEncodeResultError ( sError, iStatus );
+	HttpBuildReplyHead ( dResult, eStatus, sReply.cstr(), sReply.Length(), false );
 }
 
 static void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult, const char * sIndex )
@@ -1001,7 +1015,13 @@ static void ReportMissedIndex ( const CSphString & sIndex, const StrVec_t & dUrl
 {
 	ReportMissedIndex ( sIndex, dUrlParts, false, dResult );
 }
- 
+
+static void ReportIncorrectMethod ( const char * sURI, const char * sMethod, const char * sAllowed, CSphVector<BYTE> & dResult )
+{
+	CSphString sMsg;
+	sMsg.SetSprintf ( "Incorrect HTTP method for uri [%s] and method [%s], allowed: [%s]", sURI, sMethod, sAllowed );
+	ReportCompatError ( sMsg, SPH_HTTP_STATUS_405, dResult );
+}
 
 static StrVec_t ExpandIndexes ( const CSphString & sSrcIndexes, CSphString & sResIndex )
 {
@@ -2406,21 +2426,22 @@ struct CompatInsert_t
 
 static void ProcessInsertIntoIdx ( const CompatInsert_t & tIns, CSphVector<BYTE> & dResult )
 {
-	StringBuilder_c tSrc;
-		tSrc.Appendf ( R"({"index" : "%s", )", tIns.m_sIndex.cstr() );
+	SqlStmt_t tStmt;
+	tStmt.m_eStmt = ( tIns.m_bReplace ? STMT_REPLACE : STMT_INSERT );
 
+	tStmt.m_sIndex = tIns.m_sIndex;
+	tStmt.m_tQuery.m_sIndexes = tIns.m_sIndex;
+
+	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
+	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
+	tId.m_iType = SqlInsert_t::CONST_INT;
 	if ( tIns.m_sId )
-		tSrc.Appendf ( R"( "id" : %s, )" , tIns.m_sId );
+		tId.m_iVal = strtoll ( tIns.m_sId, NULL, 10 );
 
-	tSrc += R"( "doc" : )";
-	tSrc += tIns.m_sBody.cstr();
-	tSrc += "}";
+	JsonObj_c tSource ( tIns.m_sBody.cstr() );
 
 	CSphString sError;
-	bool bInserted = InsertDoc ( tSrc.cstr(), tIns.m_bReplace, sError );
-
-	if ( !bInserted )
-		CompatWarning ( "doc '%s', error: %s", tIns.m_sId, sError.cstr() );
+	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, false, sError ) && InsertDoc ( tStmt, sError ) );
 
 	if ( !bInserted )
 	{
@@ -2438,7 +2459,7 @@ static void ProcessInsertIntoIdx ( const CompatInsert_t & tIns, CSphVector<BYTE>
 		tRes["_version"] = 1;
 		tRes["_seq_no"] = 0;
 		tRes["_primary_term"] = 1;
-		tRes["result"] = ( ( tIns.m_bReplace ) ? "created" : "updated" );
+		tRes["result"] = ( ( tIns.m_bReplace && tIns.m_sId ) ? "updated" : "created" );
 		tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
 
 		CSphString sRes ( tRes.dump().c_str() );
@@ -2454,6 +2475,9 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 		return true;
 	}
 
+	bool bDocReq = ( dUrlParts[1]=="_doc" );
+
+	CSphString sError;
 	CSphString sIndex;
 	StrVec_t dIndexes = ExpandIndexes ( dUrlParts[0], sIndex );
 
@@ -2463,9 +2487,30 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 		return true;
 	}
 
-	CompatInsert_t tIns ( tParser.GetBody(), sIndex, ( dUrlParts[1]=="_doc" ) );
+	CompatInsert_t tIns ( tParser.GetBody(), sIndex, bDocReq );
 	if ( dUrlParts.GetLength()>2 )
 		tIns.m_sId = dUrlParts[2].cstr();
+
+	// index/_doc without id allowed only for POST
+	if ( bDocReq && tIns.m_sId==nullptr && tParser.GetRequestType()!=HTTP_POST )
+	{
+		ReportIncorrectMethod ( tParser.GetFullURL().cstr(), http_method_str ( (http_method)tParser.GetRequestType() ), "POST", dResult );
+		return true;
+	}
+
+	// index/_create without id not allowed
+	if ( !bDocReq && tIns.m_sId==nullptr )
+	{
+		if ( tParser.GetRequestType()==HTTP_POST )
+		{
+			sError.SetSprintf ( "Rejecting mapping update to [%s] as the final mapping would have more than 1 type: [_doc, _create]", sIndex.cstr() );
+			ReportError ( sError, "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
+		} else
+		{
+			ReportIncorrectMethod ( tParser.GetFullURL().cstr(), http_method_str ( (http_method)tParser.GetRequestType() ), "POST", dResult );
+		}
+		return true;
+	}
 
 	if ( !IsKibanTable ( dIndexes ) )
 	{
@@ -2475,8 +2520,6 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 
 	nljson tSrc = nljson::parse ( tParser.GetBody().cstr() );
 	int iVersion = 1;
-
-	CSphString sError;
 
 	// check \ get document version vs _create \ _doc
 	DocIdVer_t dIds;

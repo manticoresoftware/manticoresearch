@@ -1,0 +1,6 @@
+buddy 0.3.1 23012306 9825cef
+backup 0.5.1 23012006 0f7f0cf
+---
+! Do not change the separator that splits this desc from the data.
+This file should contain one line per package with a version lock.
+You can find proper values for each dep on https://repo.manticoresearch.com

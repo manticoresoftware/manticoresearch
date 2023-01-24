@@ -1818,6 +1818,70 @@ static void AddEngineSettings ( StringBuilder_c & sRes, const CSphColumnInfo & t
 }
 
 
+static bool IsDDLToken ( const CSphString & sTok )
+{
+	static const CSphString dTokens[] = 
+	{
+		"ADD",
+		"ALTER",
+		"AS",
+		"AT",
+		"ATTRIBUTE",
+		"BIGINT",
+		"BIT",
+		"BOOL",
+		"CLUSTER",
+		"COLUMN",
+		"COLUMNAR",
+		"CREATE",
+		"DOUBLE",
+		"DROP",
+		"ENGINE",
+		"EXISTS",
+		"FAST_FETCH",
+		"FLOAT", 
+		"FROM", 
+		"FUNCTION",
+		"HASH", 
+		"IMPORT", 
+		"INDEXED",
+		"INTEGER",
+		"INT",
+		"IF",
+		"JOIN",
+		"JSON",
+		"KILLLIST_TARGET",
+		"LIKE",
+		"MULTI",
+		"MULTI64",
+		"NOT",
+		"PLUGIN",
+		"REBUILD",
+		"RECONFIGURE",
+		"RETURNS",
+		"RTINDEX",
+		"SECONDARY",
+		"SONAME",
+		"STORED",
+		"STRING",
+		"TABLE",
+		"TEXT",
+		"TIMESTAMP",
+		"TYPE",
+		"UINT",
+		"UPDATE"
+	};
+
+	CSphString sToken = sTok;
+	sToken.ToUpper();
+	for ( const auto & i : dTokens )
+		if ( i==sToken )
+			return true;
+
+	return false;
+}
+
+
 CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
 	assert ( pIndex );
@@ -1845,19 +1909,26 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		if ( bHasAttrs )
 			sRes << ",\n";
 
+		CSphString sQuotedName;
+		if ( IsDDLToken ( tAttr.m_sName ) )
+			sQuotedName.SetSprintf ( "`%s`", tAttr.m_sName.cstr() );
+		else
+			sQuotedName = tAttr.m_sName;
+
 		const CSphColumnInfo * pField = tSchema.GetField ( tAttr.m_sName.cstr() );
 		if ( pField && tAttr.m_eAttrType==SPH_ATTR_STRING )
 		{
-			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr) << " attribute";
+			sRes << sQuotedName << " " << GetAttrTypeName(tAttr) << " attribute";
+
 			AddFieldSettings ( sRes, *pField );
 			dExclude.Add(pField);
 		}
 		else
 		{
 			if ( tAttr.m_sName==sphGetDocidName() )
-				sRes << tAttr.m_sName;
+				sRes << sQuotedName;
 			else
-				sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+				sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
 		}
 
 		AddStorageSettings ( sRes, tAttr, *pIndex, !!pField, iNumColumnar );
@@ -1878,7 +1949,13 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		if ( i || bHasAttrs )
 			sRes << ",\n";
 
-		sRes << tField.m_sName << " text";
+		CSphString sQuotedName;
+		if ( IsDDLToken ( tField.m_sName ) )
+			sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
+		else
+			sQuotedName = tField.m_sName;
+
+		sRes << sQuotedName << " text";
 		AddFieldSettings ( sRes, tField );
 	}
 

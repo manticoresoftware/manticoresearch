@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json compat interface populate</name>
+
+<skip_indexer/>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index test1
+{
+    type = rt
+    path = <data_path/>/test1
+    rt_field = title
+	rt_field = content
+    rt_attr_uint = int_col
+}
+</config>
+
+<httpqueries>
+
+<query endpoint="test1/_doc" content="application/json" method="POST">
+{  "int_col" : 1, "content" : "bulk doc 10" }</query>
+<query endpoint="test1/_doc/11" content="application/json" method="POST">
+{  "int_col" : 1, "content" : "bulk doc 11" }</query>
+<query endpoint="test1/_doc" content="application/json" method="PUT">
+{  "int_col" : 1, "content" : "bulk doc 20" }</query>
+<query endpoint="test1/_doc/21" content="application/json" method="PUT">
+{  "int_col" : 1, "content" : "bulk doc 21" }</query>
+
+<query endpoint="test1/_create" content="application/json" method="POST">
+{  "int_col" : 1, "content" : "bulk doc 30" }</query>
+<query endpoint="test1/_create/31" content="application/json" method="POST">
+{  "int_col" : 1, "content" : "bulk doc 31" }</query>
+<query endpoint="test1/_create" content="application/json" method="PUT">
+{  "int_col" : 1, "content" : "bulk doc 40" }</query>
+<query endpoint="test1/_create/41" content="application/json" method="PUT">
+{  "int_col" : 1, "content" : "bulk doc 41" }</query>
+
+<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "101" } }</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "102" } }
+
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "101" } }
+{ "int_col" : "101" }
+{ "delete" : { "_index" : "test1", "_id" : "11" } }
+{ "create" : { "_index" : "test1", "_id" : "103" } }
+{ "int_col" : "103" }
+{ "update" : {"_index" : "test1", "_id" : "51"} }
+{ "doc" : {"int_col" : 141} }
+{ "update" : {"_index" : "test1", "_id" : "101"} }
+{ "doc" : {"int_col" : 1101} }
+
+</bulk>
+
+<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "111" } }
+{ "int_col" : "111" }
+{ "delete" : { "_index" : "test1", "_id" : "21" } }
+{ "delete" : { "_index" : "test1", "_id" : "31" } }
+{ "index" : { "_index" : "test1", "_id" : "112" } }
+{ "int_col" : "113" }
+
+</bulk>
+
+<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+</httpqueries>
+
+</test>

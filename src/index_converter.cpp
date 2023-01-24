@@ -2571,7 +2571,7 @@ int main ( int argc, char ** argv )
 	const CSphConfigType * pIndexes = nullptr;
 	if ( !sConfig.IsEmpty() )
 	{
-		CSphConfig hConfig = sphLoadConfig ( sConfig.cstr(), true );
+		CSphConfig hConfig = sphLoadConfig ( sConfig, true );
 		pIndexes = hConfig ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )

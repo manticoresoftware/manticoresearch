@@ -2732,8 +2732,18 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	tDoc.m_sIndex = tIndex.StrVal();
 	
 	JsonObj_c tId = tAction.GetItem ( "_id" );
-	if ( tId && tId.IsNum() )
-		tDoc.m_tDocid = tId.IntVal();
+	if ( tId )
+	{
+		if ( tId.IsNum() )
+			tDoc.m_tDocid = tId.IntVal();
+		else if ( tId.IsStr() )
+			tDoc.m_tDocid = strtoll ( tId.SzVal(), NULL, 10 );
+		else
+		{
+			sError.SetSprintf ( "_id should be an int or string" );
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -2784,12 +2794,20 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 
 	} else if ( sAction=="update" )
 	{
-		if ( !sphParseJsonUpdate ( FromSz ( sLine ), tStmt, tDocId, sError ) )
+		JsonObj_c tUpd ( FromSz ( sLine ) );
+		tUpd.AddStr ( "index", tStmt.m_sIndex );
+		tUpd.AddInt ( "id", tDocId );
+		if ( !ParseJsonUpdate ( tUpd, tStmt, tDocId, sError ) )
 			return false;
+
 	} else if ( sAction=="delete" )
 	{
-		if ( !sphParseJsonDelete ( FromSz ( sLine ), tStmt, tDocId, sError ) )
-			return false;
+		tStmt.m_eStmt = STMT_DELETE;
+		tStmt.m_tQuery.m_sSelect = "id";
+		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_VALUES;
+		tFilter.m_dValues.Add ( tDocId );
+		tFilter.m_sAttrName = "id";
 	}
 
 	return true;
@@ -2867,7 +2885,7 @@ static bool Validate( const OptionsHash_t & hOpts, const Str_t & tSource, CSphVe
 	if ( !Ends ( tSource, "\n" ) )
 	{
 		ReportLogError ( "The bulk request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400, false, hOpts, tSource, dReply );
-		return true;
+		return false;
 	}
 
 	return true;
@@ -2886,13 +2904,13 @@ bool HttpHandlerEsBulk_c::Process()
 	
 	CSphVector<BulkDoc_t> dDocs;
 	dDocs.Reserve ( dLines.GetLength() / 2 );
-	bool bMetaLine = true;
+	bool bNextLineMeta = true;
 	for ( const Str_t & tLine : dLines )
 	{
-		if ( !bMetaLine )
+		if ( !bNextLineMeta )
 		{
 			dDocs.Last().m_tDocLine = tLine;
-			bMetaLine = true;
+			bNextLineMeta = true;
 		} else
 		{
 			// skip empty lines if they are meta information
@@ -2906,20 +2924,28 @@ bool HttpHandlerEsBulk_c::Process()
 				ReportLogError ( m_sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false, m_hOptions, m_tSource, m_dData );
 				return false;
 			}
-			bMetaLine = false;
+			if ( tDoc.m_sAction=="delete" )
+			{
+				tDoc.m_tDocLine = tLine;
+				bNextLineMeta = true;
+			} else
+			{
+				bNextLineMeta = false;
+			}
 		}
 	}
 	CSphVector<BulkTnx_t> dTnx;
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
-	for ( int i=1; i<dDocs.GetLength(); i++ )
+	for ( const BulkDoc_t * pCurDoc = pLastDoc + 1; pCurDoc<dDocs.End(); pCurDoc++ )
 	{
-		const BulkDoc_t & tCurDoc = dDocs[i];
-		if ( pLastDoc->m_sIndex==tCurDoc.m_sIndex && pLastDoc->m_sAction==tCurDoc.m_sAction )
+		// chain the same statements to the same index but not the updates
+		if ( pLastDoc->m_sIndex==pCurDoc->m_sIndex && pLastDoc->m_sAction==pCurDoc->m_sAction && pCurDoc->m_sAction!="update" )
 			continue;
 
 		BulkTnx_t & tTnx = dTnx.Add();
 		tTnx.m_iFrom = pLastDoc - dDocs.Begin();
-		tTnx.m_iCount = i - tTnx.m_iFrom;
+		tTnx.m_iCount = pCurDoc - pLastDoc;
+		pLastDoc = pCurDoc;
 	}
 	if ( pLastDoc )
 	{
@@ -2973,13 +2999,13 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 	tRoot.AddItem ( tAction );
 }
 
-static void AddEsError ( int iReply, const CSphString & sError, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
+static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
 	char sBuf[70];
 	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
 
 	JsonObj_c tErrorObj;
-	tErrorObj.AddStr ( "type", "mapper_parsing_exception" );
+	tErrorObj.AddStr ( "type", sErrorType );
 	tErrorObj.AddStr ( "reason", sError.cstr() );
 
 	JsonObj_c tRes;
@@ -2992,7 +3018,10 @@ static void AddEsError ( int iReply, const CSphString & sError, const BulkDoc_t 
 	JsonObj_c tAction;
 	tAction.AddItem ( tDoc.m_sAction.cstr(), tRes );
 
-	tRoot.ReplaceItem ( iReply, tAction );
+	if ( iReply!=-1 )
+		tRoot.ReplaceItem ( iReply, tAction );
+	else
+		tRoot.AddItem ( tAction );
 }
 
 bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems )
@@ -3007,6 +3036,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		assert ( !sIdx.IsEmpty() );
 		ProcessBegin ( sIdx );
 
+		bool bUpdate = false;
 		bOk &= dErrors.IsEmpty();
 		dErrors.Resize ( 0 );
 		for ( int i = 0; i<tTnx.m_iCount; i++ )
@@ -3045,6 +3075,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			case STMT_UPDATE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
 				bAction = ProcessUpdate ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError );
+				bUpdate = true;
 				break;
 
 			case STMT_DELETE:
@@ -3066,21 +3097,28 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), DocID_t(), tResult, m_sError );
 		if ( bCommited )
 		{
-			for ( int i=0; i<tTnx.m_iCount; i++ )
-				AddEsReply ( dDocs[tTnx.m_iFrom], tItems );
+			if ( bUpdate && !GetLastUpdated() )
+			{
+				assert ( tTnx.m_iCount==1 );
+				const BulkDoc_t & tUpdDoc = dDocs[tTnx.m_iFrom];
+				CSphString sUpdError;
+				sUpdError.SetSprintf ( "[_doc][" INT64_FMT "]: document missing", tUpdDoc.m_tDocid );
+				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
+			} else
+			{
+				for ( int i=0; i<tTnx.m_iCount; i++ )
+					AddEsReply ( dDocs[tTnx.m_iFrom+i], tItems );
+			}
 		} else
 		{
 			for ( int i=0; i<tTnx.m_iCount; i++ )
 			{
-				JsonObj_c tTmp ( JsonNull );
-				tItems.AddItem ( tTmp );
-				assert ( tItems.Size()==tTnx.m_iFrom+i+1 );
-				AddEsError ( tTnx.m_iFrom+i, tResult.GetStrItem ( "error", m_sError, false ).StrVal(), dDocs[tTnx.m_iFrom+i], tItems );
+				AddEsError ( -1, tResult.GetStrItem ( "error", m_sError, false ).StrVal(), "mapper_parsing_exception", dDocs[tTnx.m_iFrom+i], tItems );
 			}
 		}
 
 		for ( const auto & tErr : dErrors )
-			AddEsError ( tErr.first, tErr.second, dDocs[tErr.first], tItems );
+			AddEsError ( tErr.first, tErr.second, "mapper_parsing_exception", dDocs[tErr.first], tItems );
 	}
 
 	bOk &= dErrors.IsEmpty();

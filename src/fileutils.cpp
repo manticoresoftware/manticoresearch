@@ -836,14 +836,20 @@ const char * GetExtension ( const CSphString & sFullPath )
 	return pDot+1;
 }
 
+
 CSphString RealPath ( const CSphString& sPath )
 {
-#if !_WIN32
+#if _WIN32
+	char szFullPath[_MAX_PATH];
+	if ( _fullpath( szFullPath, sPath.cstr(), _MAX_PATH ) )
+		return szFullPath;
+#else
 	char szPath[PATH_MAX];
 	auto szResult = realpath ( sPath.cstr(), szPath );
 	if ( szResult )
 		return szResult;
 #endif
+
 	return sPath;
 }
 

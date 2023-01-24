@@ -1331,8 +1331,14 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
     {
         $curl_desc[CURLOPT_POST] = 1;
         $curl_desc[CURLOPT_POSTFIELDS] = $http_query;
+    } else if ( $http_method=="PUT" )
+    {
+        $curl_desc[CURLOPT_CUSTOMREQUEST] = "PUT";
+        $curl_desc[CURLOPT_POSTFIELDS] = $http_query;
     } else
+    {
         $curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_query;
+    }
 
 	if ( $use_ssl )
 	{
@@ -2003,6 +2009,14 @@ class SphinxConfig
             case 'var':
                 $this->PopulateVar($q,function($foo) { return $this->GenerateQueryText ($foo); });
                 return;
+            case 'bulk': // bulk as is
+            {
+                $this->_queries[] = array (
+                    "query" => iconv ( 'utf-8', $encoding, $q->nodeValue ),
+                    "attrs" => $attrs,
+                    "type" => 'query');
+                return;
+            }               
             default:
                 return;
         }
@@ -2354,10 +2368,10 @@ class SphinxConfig
 			return false;
 		}
 
-		$query = trim($query['query']);
+		$query = $query['query'];
 
 		$http_method = strtoupper($http_method);
-		if ( !($http_method=="POST" || $http_method=="GET") )
+		if ( !($http_method=="POST" || $http_method=="GET" || $http_method=="PUT") )
         {
             $error = "Unknown HTTP method: ".$http_method;
             return false;

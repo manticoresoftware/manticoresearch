@@ -65,8 +65,10 @@ const CSphString & CompatDateFormat();
 
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus );
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus, const char * sIndex );
+CSphString JsonEncodeResultError ( const CSphString & sError, int iStatus );
 
 bool ParseJsonInsertSource ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, bool bReplace, bool bCompat, CSphString & sError );
+bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 
 #endif
 

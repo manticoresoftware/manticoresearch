@@ -1446,16 +1446,30 @@ bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType &eType, int6
 
 //////////////////////////////////////////////////////////////////////////
 
+#if DISABLE_MEMROUTINES
 static void * cJsonMalloc ( size_t uSize )
+{
+	return malloc (uSize);
+}
+
+static void cJsonFree ( void * pPtr )
+{
+	free ( pPtr );
+}
+
+#else
+
+static void* cJsonMalloc ( size_t uSize )
 {
 	return new BYTE[uSize];
 }
 
-
-static void cJsonFree ( void * pPtr )
+static void cJsonFree ( void* pPtr )
 {
-	delete [] (BYTE *)pPtr;
+	delete[] (BYTE*)pPtr;
 }
+
+#endif
 
 
 void sphInitCJson()
@@ -1953,7 +1967,7 @@ CSphString JsonObj_c::AsString ( bool bFormat ) const
 			szResult = cJSON_PrintUnformatted ( m_pRoot );
 
 		CSphString sResult ( szResult );
-		SafeDeleteArray ( szResult );
+		cJsonFree ( szResult );
 		return sResult;
 	}
 

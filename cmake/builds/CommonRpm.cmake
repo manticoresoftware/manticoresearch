@@ -19,6 +19,9 @@ endif ()
 # Common rpm-specific build variables
 set ( CPACK_GENERATOR RPM )
 
+set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}_${BUDDY_VERDATE}.${BUDDY_VERHASH}" )
+set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" ) 
+
 set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_RPM_FILE_NAME RPM-DEFAULT )
 if (RELEASE_DIST)
@@ -43,7 +46,7 @@ set ( CPACK_RPM_SERVER_PACKAGE_DEBUG OFF )
 
 set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
-set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-backup" )
+set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-backup = ${DEP_BACKUP_VERSION}" )
 set ( CPACK_RPM_TOOLS_PACKAGE_OBSOLETES "sphinx" )
 
 set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
@@ -58,7 +61,7 @@ set ( CPACK_RPM_COMMON_PACKAGE_ARCHITECTURE noarch )
 set ( CPACK_RPM_COMMON_PACKAGE_CONFLICTS "sphinx" )
 
 set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
-set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata, manticore-buddy" )
+set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata, manticore-buddy = ${DEP_BUDDY_VERSION}" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "sphinx" )
 set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore-all" )
 set ( CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF )

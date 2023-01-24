@@ -68,6 +68,7 @@ CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErro
 CSphString JsonEncodeResultError ( const CSphString & sError, int iStatus );
 
 bool ParseJsonInsertSource ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, bool bReplace, bool bCompat, CSphString & sError );
+bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 
 #endif
 

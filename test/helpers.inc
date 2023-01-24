@@ -2009,6 +2009,14 @@ class SphinxConfig
             case 'var':
                 $this->PopulateVar($q,function($foo) { return $this->GenerateQueryText ($foo); });
                 return;
+            case 'bulk': // bulk as is
+            {
+                $this->_queries[] = array (
+                    "query" => iconv ( 'utf-8', $encoding, $q->nodeValue ),
+                    "attrs" => $attrs,
+                    "type" => 'query');
+                return;
+            }               
             default:
                 return;
         }
@@ -2360,7 +2368,7 @@ class SphinxConfig
 			return false;
 		}
 
-		$query = trim($query['query']);
+		$query = $query['query'];
 
 		$http_method = strtoupper($http_method);
 		if ( !($http_method=="POST" || $http_method=="GET" || $http_method=="PUT") )

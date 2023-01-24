@@ -48,6 +48,41 @@ index test1
 
 <query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
 
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "101" } }</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "102" } }
+
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "101" } }
+{ "int_col" : "101" }
+{ "delete" : { "_index" : "test1", "_id" : "11" } }
+{ "create" : { "_index" : "test1", "_id" : "103" } }
+{ "int_col" : "103" }
+{ "update" : {"_index" : "test1", "_id" : "51"} }
+{ "doc" : {"int_col" : 141} }
+{ "update" : {"_index" : "test1", "_id" : "101"} }
+{ "doc" : {"int_col" : 1101} }
+
+</bulk>
+
+<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "111" } }
+{ "int_col" : "111" }
+{ "delete" : { "_index" : "test1", "_id" : "21" } }
+{ "delete" : { "_index" : "test1", "_id" : "31" } }
+{ "index" : { "_index" : "test1", "_id" : "112" } }
+{ "int_col" : "113" }
+
+</bulk>
+
+<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
 </httpqueries>
 
 </test>

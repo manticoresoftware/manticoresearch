@@ -28,6 +28,9 @@ endfunction ()
 # Common debian-specific build variables
 set ( CPACK_GENERATOR DEB )
 
+set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}-${BUDDY_VERDATE}-${BUDDY_VERHASH}" )
+set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}-${BACKUP_VERDATE}-${BACKUP_VERHASH}" ) 
+
 set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_DEBIAN_FILE_NAME DEB-DEFAULT )
 set ( CPACK_DEBIAN_DEBUGINFO_PACKAGE ON )
@@ -66,7 +69,7 @@ set ( CPACK_DEBIAN_SERVER_PACKAGE_BREAKS "${breaks}" )
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
 seta ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
-set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-backup" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-backup (= ${DEP_BACKUP_VERSION} )" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_REPLACES "${breaks}" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_BREAKS "${breaks}" )
@@ -88,7 +91,7 @@ set ( CPACK_DEBIAN_COMMON_PACKAGE_BREAKS "${breaks}" )
 set ( CPACK_DEBIAN_COMMON_PACKAGE_ARCHITECTURE all )
 
 set ( CPACK_DEBIAN_META_PACKAGE_NAME "manticore" )
-seta ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server (= ${CPACK_PACKAGE_VERSION}), manticore-tools (= ${CPACK_PACKAGE_VERSION}), manticore-dev (= ${CPACK_PACKAGE_VERSION}), manticore-icudata-65l, manticore-buddy" )
+seta ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server (= ${CPACK_PACKAGE_VERSION}), manticore-tools (= ${CPACK_PACKAGE_VERSION}), manticore-dev (= ${CPACK_PACKAGE_VERSION}), manticore-icudata-65l, manticore-buddy (= ${DEP_BUDDY_VERSION})" )
 #set ( CPACK_DEBIAN_META_PACKAGE_ARCHITECTURE all )
 set ( CPACK_DEBIAN_META_PACKAGE_DEBUG OFF )
 set ( CPACK_DEBIAN_META_PACKAGE_SECTION metapackages )

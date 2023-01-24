@@ -160,19 +160,26 @@ private:
 		m_pCounterThread.store ( nullptr, std::memory_order_relaxed );
 	}
 
+	MiniTimer_c* PopNextAction() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	{
+		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
+		if ( m_dTimeouts.IsEmpty() )
+			return nullptr;
+
+		auto pRoot = (MiniTimer_c*)m_dTimeouts.Root();
+		m_dTimeouts.Pop();
+		return pRoot;
+	}
+
 	/// abandon and release all events (on shutdown)
-	void AbortScheduled() NO_THREAD_SAFETY_ANALYSIS
+	void AbortScheduled() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		DEBUGT << "AbortScheduled()";
 		assert ( IsInterrupted() );
 
-		while ( !m_dTimeouts.IsEmpty() )
-		{
-			auto* pScheduled = (MiniTimer_c*)m_dTimeouts.Root();
-			m_dTimeouts.Pop();
-			if ( pScheduled->m_fnOnTimer )
-				pScheduled->m_fnOnTimer();
-		}
+		for ( MiniTimer_c* pRoot = PopNextAction(); pRoot; pRoot = PopNextAction() )
+			if ( pRoot->m_fnOnTimer )
+				pRoot->m_fnOnTimer();
 	}
 
 public:
@@ -227,8 +234,6 @@ public:
 
 	void Remove ( MiniTimer_c& tTimer ) EXCLUDES ( m_tTimeoutsGuard, TimerThread )
 	{
-		if ( IsInterrupted() )
-			return;
 
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		DEBUGT << ((tTimer.m_iTimeoutIdx >= 0) ? "Removed from queue: " : "Not in queue: ") << &tTimer << " deadline " << timestamp_t ( tTimer.m_iTimeoutTimeUS );

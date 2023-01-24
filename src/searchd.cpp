@@ -19762,6 +19762,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !ParseConfig ( &g_hCfg, g_sConfigFile, dConfig ) )
 		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
+	dConfig.Reset(); // make valgrind happy (that is not a leak, but produce 'still reachable' message)
+
 	const CSphConfig& hConf = g_hCfg;
 
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
@@ -20245,6 +20247,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	BuddyStart ( g_sBuddyPath, ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry, g_iThreads );
 
 	g_bJsonConfigLoadedOk = true;
+
+	dListenerDescs.Reset(); // make valgrind happy
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

@@ -11,7 +11,7 @@ wordforms = path/to/dict*.txt
 ```
 
 <!-- example wordforms -->
-Word Forms Dictionary. Optional, default is empty.
+Word forms dictionary. Optional, default is empty.
 
 The dictionaries are used to normalize incoming words both during indexing and searching. Therefore, when it comes to a [plain table](../../Creating_a_table/Local_tables/Plain_table.md), it's required to rotate the table in order to pick up changes in the word forms file.
 

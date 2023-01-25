@@ -12,7 +12,7 @@ SHOW META [ LIKE pattern ]
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5; 
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5;
 SHOW META;
 ```
 
@@ -123,7 +123,7 @@ Additional `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100; 
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100;
 
 SHOW META;
 ```
@@ -243,7 +243,7 @@ SHOW META LIKE 'total%';
 ```
 
 <!-- end -->
-	
+
 ## SHOW META and facets
 
 <!-- example show meta facets -->
@@ -300,7 +300,7 @@ SHOW META LIKE 'multiplier';
 
 <!-- example of show meta vs query optimizer -->
 
-When the [query optimizer](../Searching/Cost_based_optimizer.md) decides to use `DocidIndex`, `ColumnarScan` or `SecondaryIndex` in place of a plain filter, this is reflected in the `SHOW META` command.
+When the [cost-based query optimizer](../Searching/Cost_based_optimizer.md) decides to use `DocidIndex`, `ColumnarScan` or `SecondaryIndex` in place of a plain filter, this is reflected in the `SHOW META` command.
 
 The `index` variable lists the names and types of secondary indexes used while executing the query. The percent shows how many disk chunks (in the case of an RT index) or pseudo shards (in the case of a plain index) the secondary index was used on.
 
@@ -336,8 +336,8 @@ SHOW META;
 
 `SHOW META` can be used after executing a [CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)  statement. In this case, it provides a different output.
 
-`SHOW META` after a `CALL PQ` statement contains: 
- 
+`SHOW META` after a `CALL PQ` statement contains:
+
 * `Total` - total time spent on matching the document(s)
 * `Queries matched `- how many stored queries match the document(s)
 * `Document matches` - how many documents matched the queries stored in the table

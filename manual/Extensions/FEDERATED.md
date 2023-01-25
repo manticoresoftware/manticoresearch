@@ -70,7 +70,7 @@ The FEDERATED table should have columns with the same names as a remote Manticor
 Manticore server identifies query from a FEDERATED client by user name "FEDERATED". `CONNECTION` string parameter is to be used to specify Manticore host, SQL port and tables for queries coming through the connection. The connection string syntax is as follows:
 
 ```ini
-CONNECTION="mysql://FEDERATED@HOST:PORT/DB/INDEXNAME"
+CONNECTION="mysql://FEDERATED@HOST:PORT/DB/TABLENAME"
 ```
 
 Since Manticore doesn't have the concept of database, the `DB` string can be random as it will be ignored by Manticore, but MySQL requires a value in the `CONNECTION` string definition. As seen in the example, full `SELECT` SQL query should be put into a WHERE clause against column `query`.

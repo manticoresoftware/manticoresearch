@@ -79,7 +79,7 @@ Manticore 3.x recognizes and parses special suffixes which makes easier to use n
 #### Convert one table at a time
 
 ```ini
-$ index_converter --config /home/myuser/manticore.conf --index indexname
+$ index_converter --config /home/myuser/manticore.conf --index tablename
 ```
 
 #### Convert all tables

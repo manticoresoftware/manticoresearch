@@ -8,6 +8,8 @@ The `manticore-backup` tool, which is included in the Manticore Search [official
 
 **If you followed [the official installation instructions](https://manticoresearch.com/install/) you should have already everything installed and don't need to worry.** Otherwise, [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [manticore-executor](https://github.com/manticoresoftware/executor) which is a part of package `manticore-extra` and you need to make sure either of them is available.
 
+`manticore-backup` is not available for Windows.
+
 ### How to use
 
 First, make sure you're running `manticore-backup` on the same server where the Manticore instance you are about to back up is running.

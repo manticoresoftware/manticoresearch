@@ -1099,12 +1099,13 @@ seamless_rotate = 1
 ### secondary_indexes
 <!-- example conf secondary_indexes -->
 
-This option enables the use of secondary indexes for search queries. It is optional and the default is 1 (enabled). Note that you don't need to enable it for indexing as it is always enabled. The [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is required for this feature. There are three modes available:
+This option enables/disables the use of secondary indexes for search queries. It is optional and the default is 1 (enabled). Note that you don't need to enable it for indexing as it is always enabled as long as the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is installed. The latter is also required for using the indexes on searching. There are three modes available:
 
-* 0: disable the use of secondary indexes on search. They can be enabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
-* 1: enable the use of secondary indexes on search. They can be disabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
+* `0`: disable the use of secondary indexes on search. They can be enabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
+* `1`: enable the use of secondary indexes on search. They can be disabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
 * `force`: same as enable, but any errors during the loading of secondary indexes will be reported and the whole index will not be loaded into the daemon
 
+Note that secondary indexes are not effective for full-text queries.
 
 <!-- intro -->
 ##### Example:

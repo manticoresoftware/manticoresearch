@@ -61,9 +61,10 @@ searchd {
 
 Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
-* `/sql` accepts only SELECTs and returns response in HTTP JSON format. Parameter `query` should be url-encoded.
-* `/sql?mode=raw` accepts any SQL query and returns response in raw format similar to what you get via mysql. Parameter `query` should be url-encoded.
-* `/cli` accepts any SQL query and returns response in raw format similar to what you get via mysql. The query should not be url-encoded. This endpoint is to be used for doing manual actions via browser or command line http clients like `curl`.
+* `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format. The query parameter should be URL-encoded.
+* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. The `query` parameter should also be URL-encoded.
+* The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter should not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
+
 
 ### /sql
 

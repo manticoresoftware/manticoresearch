@@ -19,20 +19,20 @@ The commands are as follows:
 
 *   `--checkconfig` just loads and verifies the config file to check if it's valid, without syntax errors.
 *   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps. Additional parameter `--skip-uniq` will skip unique (df=1) words.
-*   `--build-infixes INDEXNAME` build infixes for an existing dict=keywords table (upgrades .sph, .spi in place). You can use this option for legacy table files that already use dict=keywords, but now need to support infix searching too; updating the table files with indextool may prove easier or faster than regenerating them from scratch with indexer.
+*   `--build-infixes TABLENAME` build infixes for an existing dict=keywords table (upgrades .sph, .spi in place). You can use this option for legacy table files that already use dict=keywords, but now need to support infix searching too; updating the table files with indextool may prove easier or faster than regenerating them from scratch with indexer.
 *   `--dumpheader FILENAME.sph` quickly dumps the provided table header file without touching any other table files or even the configuration file. The report provides a breakdown of all the table settings, in particular the entire attribute and field list.
 *   `--dumpconfig FILENAME.sph` dumps the table definition from the given table header file in (almost) compliant `sphinx.conf` file format.
-*   `--dumpheader INDEXNAME` dumps table header by table name with looking up the header path in the configuration file.
-*   `--dumpdict INDEXNAME` dumps dictionary. Additional `-stats` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used for creation of IDF files.
-*   `--dumpdocids INDEXNAME` dumps document IDs by table name.
-*   `--dumphitlist INDEXNAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as text.
-*   `--dumphitlist INDEXNAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as internal numeric ID.
+*   `--dumpheader TABLENAME` dumps table header by table name with looking up the header path in the configuration file.
+*   `--dumpdict TABLENAME` dumps dictionary. Additional `-stats` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used for creation of IDF files.
+*   `--dumpdocids TABLENAME` dumps document IDs by table name.
+*   `--dumphitlist TABLENAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as text.
+*   `--dumphitlist TABLENAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as internal numeric ID.
 *   `--docextract TBL DOCID` runs usual table check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document. Then all of the words are placed in the order according to their fields and positions, and result is printed, grouping by field.
-*   `--fold INDEXNAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
-*   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given table, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the table header.
+*   `--fold TABLENAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
+*   `--htmlstrip TABLENAME` filters stdin using HTML stripper settings for a given table, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the table header.
 *   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `--skip-uniq` will skip unique (df=1) words.
-*   `--morph INDEXNAME` applies morphology to the given stdin and prints the result to stdout.
-*   `--check INDEXNAME` checks the table data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT tables, RAM and disk chunks. Additional options:
+*   `--morph TABLENAME` applies morphology to the given stdin and prints the result to stdout.
+*   `--check TABLENAME` checks the table data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT tables, RAM and disk chunks. Additional options:
     - `--check-id-dups` checks if there are duplicate ids
     - `--check-disk-chunk CHUNK_NAME` checks only specific disk chunk of an RT table. The argument is a disk chunk numeric extension of the RT table to check.
 *   `--strip-path` strips the path names from all the file names referenced from the table (stopwords, wordforms, exceptions, etc). This is useful for checking tables built on another machine with possibly different path layouts.

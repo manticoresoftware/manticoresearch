@@ -1,6 +1,6 @@
 # Cost-based optimizer
 
-When Manticore executes a fullscan query, it can either use plain scan to check every document against the filters, or it can use additional data and/or algorithms to speed up the query execution. To decide which approach to take, Manticore uses a query cost-based optimizer (CBO).
+When Manticore executes a fullscan query, it can either use plain scan to check every document against the filters, or it can use additional data and/or algorithms to speed up the query execution. To decide which approach to take, Manticore uses a query cost-based optimizer ("CBO" also known as "query optimizer").
 
 The CBO may decide to replace one or more query filters with one of the following entities if it determines that it will improve performance:
 

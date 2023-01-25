@@ -116,6 +116,7 @@ static Endpoint_t g_dEndpoints[] =
 		{ "bulk", "json/bulk" },
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
+		{ "cli_json", nullptr },
 		{ "_bulk", nullptr }
 };
 
@@ -2149,8 +2150,8 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		sQuery = sData;
 	};
 
-	// SPH_HTTP_ENDPOINT_SQL SPH_HTTP_ENDPOINT_CLI these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
-	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
+	// SPH_HTTP_ENDPOINT_SQL SPH_HTTP_ENDPOINT_CLI SPH_HTTP_ENDPOINT_CLI_JSON these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
+	if ( eEndpoint==SPH_HTTP_ENDPOINT_SQL || eEndpoint==SPH_HTTP_ENDPOINT_CLI || eEndpoint==SPH_HTTP_ENDPOINT_CLI_JSON )
 	{
 		auto sWholeData = tSource.ReadAll();
 		StoreRawQuery ( tOptions, sWholeData );
@@ -2174,6 +2175,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		}
 
 	case SPH_HTTP_ENDPOINT_CLI:
+	case SPH_HTTP_ENDPOINT_CLI_JSON:
 		{
 			pOption = tOptions ( "raw_query" );
 			if ( pOption )
@@ -2245,6 +2247,9 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, O
 		}
 		return tRes;
 	}
+	// will be processed by buddy right after source data got parsed
+	if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
+		return tRes;
 
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
 	tRes.m_bOk = pHandler->Process();
@@ -2260,7 +2265,7 @@ bool sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 	hOptions.Add ( sEndpoint, "endpoint" );
 
 	BlobStream_c tQuery { sQuery };
-	return ProcessHttpQueryBuddy ( tQuery, hOptions, dResult, false, HTTP_GET ).m_bOk;
+	return ProcessHttpQueryBuddy ( tQuery, hOptions, dResult, false, HTTP_GET );
 }
 
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
@@ -2288,7 +2293,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		return true;
 	}
 
-	return ProcessHttpQueryBuddy ( *pSource, m_hOptions, dResult, true, m_eType ).m_bOk;
+	return ProcessHttpQueryBuddy ( *pSource, m_hOptions, dResult, true, m_eType );
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )

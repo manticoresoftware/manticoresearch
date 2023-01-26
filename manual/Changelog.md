@@ -8,27 +8,27 @@ Starting with this release, Manticore Search comes with Manticore Buddy, a sidec
 This release also includes more than 130 bug fixes and numerous features, many of which can be considered major.
 
 ### Major Changes
-* 🔬 Experimental: you can now execute Elasticsearch-compatible insert and replace JSON queries which enables using Manticore with tools like Logstash, Filebeat and other tools from the Beats family. Enabled by default. You can disable it using `SET GLOBAL ES_COMPAT=off`.
+* 🔬 Experimental: you can now execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=Elasticsearch#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md?client=Elasticsearch#REPLACE) JSON queries which enables using Manticore with tools like Logstash, Filebeat and other tools from the Beats family. Enabled by default. You can disable it using `SET GLOBAL ES_COMPAT=off`.
 * Support for [Manticore Columnar Library 2.0.0](https://github.com/manticoresoftware/columnar/) with numerous fixes and improvements in [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes). **⚠️ BREAKING CHANGE**: Secondary indexes are ON by default as of this release. Make sure you do [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) if you are upgrading from Manticore 5. See below for more details.
-* [Commit c436](https://gitlab.com/manticoresearch/dev/-/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [searchd.auto_schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+* [Commit c436](https://github.com/manticoresoftware/manticoresearch/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [searchd.auto_schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 * Vast revamp of [cost-based optimizer](../Searching/Cost_based_optimizer.md) which lowers query response time in many cases.
   - [Issue #1008](https://github.com/manticoresoftware/manticoresearch/issues/1008) Parallelization performance estimate in CBO.
   - [Issue #1014](https://github.com/manticoresoftware/manticoresearch/issues/1014) CBO is now aware of [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) and can act smarter.
-  - [Commit cef9](https://gitlab.com/manticoresearch/columnar/-/commit/cef9b54dc3a4ee9138ebc4df3a671715b996d6b3) Encoding stats of columnar tables/fields are now stored in the meta data to help CBO make smarter decisions.
-  - [Commit 2b95](https://gitlab.com/manticoresearch/dev/-/commit/2b95fb8c2ba422c9c5a66e2b61c1f7922f31c7aa) Added CBO hints for fine-tuning its behaviour.
+  - [Commit cef9](https://github.com/manticoresoftware/columnar/commit/cef9b54dc3a4ee9138ebc4df3a671715b996d6b3) Encoding stats of columnar tables/fields are now stored in the meta data to help CBO make smarter decisions.
+  - [Commit 2b95](https://github.com/manticoresoftware/manticoresearch/commit/2b95fb8c2ba422c9c5a66e2b61c1f7922f31c7aa) Added CBO hints for fine-tuning its behaviour.
 * [Telemetry](../Telemetry.md#Telemetry): we are excited to announce the addition of telemetry in this release. This feature allows us to collect anonymous and depersonalized metrics that will help us improve the performance and user experience of our product. Rest assured, all data collected is **completely anonymous and will not be linked to any personal information**. This feature can be [easily turned off](../Telemetry.md#Telemetry) in the settings if desired.
-* [Commit 5aaf](https://gitlab.com/manticoresearch/dev/-/commit/5aafb17d81b601e399e212a344a4738f65576cdd) [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) to rebuild secondary indexes whenever you want, for example:
+* [Commit 5aaf](https://github.com/manticoresoftware/manticoresearch/commit/5aafb17d81b601e399e212a344a4738f65576cdd) [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) to rebuild secondary indexes whenever you want, for example:
   - when you migrate from Manticore 5 to the newer version,
   - when you did [UPDATE](../Data_creation_and_modification/Updating_documents/UPDATE.md#UPDATE) (i.e. [in-place update, not replace](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)) of an attribute in the index
 * [Issue #821](https://github.com/manticoresoftware/manticoresearch/issues/821) New tool `manticore-backup` for [backing up and restoring Manticore instance](../Securing_and_compacting_a_table/Backup_and_restore.md)
 * SQL command [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) to do backups from inside Manticore.
 * SQL command [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) as an easy way to see running queries rather than threads.
 * [Issue #551](https://github.com/manticoresoftware/manticoresearch/issues/551) SQL command `KILL` to kill a long-running `SELECT`s.
-* [Commit 43ff](https://gitlab.com/manticoresearch/dev/-/commit/43ff59bf1e8641c3bda5e55d31474e085a613120) Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time.
+* Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time.
 
 ### Minor changes
 * [Issue #822](https://github.com/manticoresoftware/manticoresearch/issues/822) SQL commands [FREEZE/UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup.
-* [Commit 46c9](https://gitlab.com/manticoresearch/dev/-/commit/46c9909197ebfaa8af7e8e31289eb380f7f05827) New settings `accurate_aggregation` and `max_matches_increase_threshold`  for controlled aggregation accuracy.
+* [Commit c470](https://github.com/manticoresoftware/manticoresearch/commit/c47052f18ad4868134de1a97e8d7da570e531dfa) New settings `accurate_aggregation` and `max_matches_increase_threshold`  for controlled aggregation accuracy.
 * [Issue #718](https://github.com/manticoresoftware/manticoresearch/issues/718) Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 * As we recently added support for secondary indexes, things became confusing as "index" could refer to a secondary index, a full-text index, or a plain/real-time `index`. To reduce confusion, we are renaming the latter to "table". The following SQL/command line commands are affected by this change. Their old versions are deprecated, but still functional:
   - `index <table name>` => `table <table name>`,
@@ -58,30 +58,30 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Issue #1012](https://github.com/manticoresoftware/manticoresearch/issues/1012) Added secondary index progress to the output of [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 * [Issue #1013](https://github.com/manticoresoftware/manticoresearch/issues/1013) Previously a table record could be removed by Manticore from the index list if it couldn't start serving it on start. The new behaviour is to keep it in the list to try to load it on the next start.
 * [indextool --docextract](../Miscellaneous_tools.md#indextool) returns all the words and hits belonging to requested document.
-* [Commit 2b29](https://gitlab.com/manticoresearch/dev/-/commit/2b296ee20e520b85bcbb4383e87095d31e7165dc) Environment variable `dump_corrupt_meta` enables dumping a corrupted table meta data to log in case searchd can't load the index.
-* [Commit c7a3](https://gitlab.com/manticoresearch/dev/-/commit/c7a3136eefe0eb2f69e3d99fae9c10beb5821ea6) `DEBUG META` can show `max_matches` and pseudo sharding statistics.
-* [Commit 6bca](https://gitlab.com/manticoresearch/dev/-/commit/6bca4848dc5c8396dbc1e057be4b9b2d579794e8) A better error instead of the confusing "Index header format is not json, will try it as binary...".
+* [Commit 2b29](https://github.com/manticoresoftware/manticoresearch/commit/2b296ee20e520b85bcbb4383e87095d31e7165dc) Environment variable `dump_corrupt_meta` enables dumping a corrupted table meta data to log in case searchd can't load the index.
+* [Commit c7a3](https://github.com/manticoresoftware/manticoresearch/commit/c7a3136eefe0eb2f69e3d99fae9c10beb5821ea6) `DEBUG META` can show `max_matches` and pseudo sharding statistics.
+* [Commit 6bca](https://github.com/manticoresoftware/manticoresearch/commit/6bca4848dc5c8396dbc1e057be4b9b2d579794e8) A better error instead of the confusing "Index header format is not json, will try it as binary...".
 * [Commit bef3](https://github.com/manticoresoftware/lemmatizer-uk/commit/bef3ff0386d3ee87ec57619782100972c1122e47) Ukirainian lemmatizer path has been changed.
-* [Commit 4ae7](https://gitlab.com/manticoresearch/dev/-/commit/4ae789595329a2951e194d1191ddb3121459a560) Secondary indexes statistics has been added to [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META).
+* [Commit 4ae7](https://github.com/manticoresoftware/manticoresearch/commit/4ae789595329a2951e194d1191ddb3121459a560) Secondary indexes statistics has been added to [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META).
 * [Commit 2e7c](https://github.com/manticoresoftware/manticoresearch/commit/2e7c585e) JSON interface can now be easily visualized using Swagger Editor https://manual.manticoresearch.com/dev/Openapi#OpenAPI-specification.
 
 ### Changes related with Manticore Columnar Library
 * Refactoring of Secondary indexes integration with Columnar storage.
 * [Commit efe2](https://github.com/manticoresoftware/columnar/commit/efe26b2a) Manticore Columnar Library optimization which can lower response time by partial preliminary min/max evaluation.
 * [Commit 2757](https://github.com/manticoresoftware/columnar/commit/2757b99b) If a disk chunk merge is interrupted, the daemon now cleans up the MCL-related tmp files.
-* [Commit e9c6](https://gitlab.com/manticoresearch/dev/-/commit/e9c672014b63e2b49e7a5a53880583af86c3ab4e) Columnar and secondary libraries versions are dumped to log on crash.
+* [Commit e9c6](https://github.com/manticoresoftware/manticoresearch/commit/e9c672014b63e2b49e7a5a53880583af86c3ab4e) Columnar and secondary libraries versions are dumped to log on crash.
 * [Commit f5e8](https://github.com/manticoresoftware/columnar/commit/f5e84eeb8b6cb102f13e3468246702427527fef9) Added support for quick doclist rewinding to secondary indexes.
-* [Commit 06df](https://gitlab.com/manticoresearch/dev/-/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) Queries like `select attr, count(*) from plain_index` (w/o filtering) are now faster in case you are using MCL.
+* [Commit 06df](https://github.com/manticoresoftware/manticoresearch/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) Queries like `select attr, count(*) from plain_index` (w/o filtering) are now faster in case you are using MCL.
 * [Commit 0a76](https://github.com/manticoresoftware/manticoresearch/commit/0a76ecb9adbe886868b962dd425de5f475bbf55e) @@autocommit in HandleMysqlSelectSysvar for compatibility with .net connector for mysql greater than 8.25
 
 ### Packaging-related changes
-* [Commit 4d19](https://gitlab.com/manticoresearch/dev/-/commit/4d19f5cbe49a31228aa09253f061165bfe80e51b) **⚠️ BREAKING CHANGE**: Support for Debian Stretch and Ubuntu Xenial has been discontinued.
+* [Commit 4d19](https://github.com/manticoresoftware/manticoresearch/commit/4d19f5cbe49a31228aa09253f061165bfe80e51b) **⚠️ BREAKING CHANGE**: Support for Debian Stretch and Ubuntu Xenial has been discontinued.
 * RHEL 9 support including Centos 9, Alma Linux 9 and Oracle Linux 9.
 * [Issue #924](https://github.com/manticoresoftware/manticoresearch/issues/924) Debian Bookworm support.
 * [Issue #636](https://github.com/manticoresoftware/manticoresearch/issues/636) Packaging: arm64 builds for Linuxes and MacOS.
 * [Simplified package building for contributors](../Installation/Compiling_from_sources.md#Building-using-CI-docker).
 * It's now possible to install a specific version using APT.
-* [Commit a6b8](https://gitlab.com/manticoresearch/dev/-/commit/a6b84a9a8c11e172026412165332fb737a9f26dd) Windows installer (previously we provided just an archive).
+* [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows installer (previously we provided just an archive).
 * Switched to compiling using CLang 15.
 
 

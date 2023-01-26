@@ -47,7 +47,7 @@ Query OK, 1 rows affected (0.00 sec)
 <!-- request JSON -->
 
 ```json
-POST /insert 
+POST /insert
 {
   "index":"products",
   "id":1,
@@ -68,7 +68,7 @@ POST /insert
   }
 }
 
-POST /insert 
+POST /insert
 {
   "index":"products",
   "id":0,
@@ -113,13 +113,13 @@ POST /insert
 <!-- request Elasticsearch -->
 
 ```json
-POST /products/_create/3 
+POST /products/_create/3
 {
   "title": "Yellow Bag with Tassel",
   "price": 19.85
 }
 
-POST /products/_create/ 
+POST /products/_create/
 {
   "title": "Red Bag with Tassel",
   "price": 19.85

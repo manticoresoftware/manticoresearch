@@ -4,8 +4,7 @@
 
 `REPLACE` works similar to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the old document with the same ID as a new document as deleted before inserting a new document.
 
-If you use HTTP JSON protocol, 2 different request formats are available: a common Manticore query and an Elasticsearch-like one. You can see both formats demonstrated in the examples.
-
+When using the HTTP JSON protocol, two different request formats are available: a Manticore format and an Elasticsearch-like format. Both formats can be seen in the provided examples.
 
 <!-- intro -->
 ##### SQL:

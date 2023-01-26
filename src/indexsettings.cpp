@@ -1902,9 +1902,6 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
-
-		if ( tAttr.m_sName==sphGetDocidName() && ( tAttr.m_eEngine==AttrEngine_e::DEFAULT && ( !tAttr.IsColumnar() || (tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED ) ) ) )
-			continue;
 	
 		if ( bHasAttrs )
 			sRes << ",\n";
@@ -1924,12 +1921,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			dExclude.Add(pField);
 		}
 		else
-		{
-			if ( tAttr.m_sName==sphGetDocidName() )
-				sRes << sQuotedName;
-			else
-				sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
-		}
+			sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
 
 		AddStorageSettings ( sRes, tAttr, *pIndex, !!pField, iNumColumnar );
 		AddEngineSettings ( sRes, tAttr );

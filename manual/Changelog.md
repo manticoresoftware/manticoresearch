@@ -161,6 +161,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Issue #1006](https://github.com/manticoresoftware/manticoresearch/issues/1006) no error for delete query
 * [Issue #1010](https://github.com/manticoresoftware/manticoresearch/issues/1010) Fixed ICU data file location in Windows builds
 * [PR #1018](https://github.com/manticoresoftware/manticoresearch/pull/1018) Handshake send problem
+* [Issue #1020](https://github.com/manticoresoftware/manticoresearch/issues/1020) Display id in show create table
 * [Commit 4739](https://github.com/manticoresoftware/manticoresearch/commit/4739dafd) Thread gets stuck on shutdown while replication is busy between nodes
 * [Commit ab87](https://github.com/manticoresoftware/manticoresearch/commit/ab87836782e7ae43fe5f9dea739eed0d336b42c1) Mixing floats and ints in a JSON range filter could make Manticore ignore the filter
 * [Commit d001](https://github.com/manticoresoftware/manticoresearch/commit/d00101c2905f6393ce3fca23c4f6dcb2506f4bd9) Float filters in JSON were inaccurate

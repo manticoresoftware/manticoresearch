@@ -62,7 +62,7 @@ macro ( return_if_all_api_found )
 	if (_HAS_COLUMNAR AND _HAS_SECONDARY)
 		include ( FeatureSummary )
 		set_package_properties ( columnar PROPERTIES TYPE RUNTIME
-				DESCRIPTION "column-oriented storage library, aiming to provide decent performance with low memory footprint at big data volume, and secondary index library"
+				DESCRIPTION "column-oriented storage library with a low memory footprint, designed to handle large volumes of data and a secondary index library"
 				URL "https://github.com/manticoresoftware/columnar/"
 				)
 		trace ( columnar::columnar_api )

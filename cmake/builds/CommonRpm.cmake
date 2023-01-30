@@ -19,6 +19,8 @@ endif ()
 # Common rpm-specific build variables
 set ( CPACK_GENERATOR RPM )
 
+# Parse version dependencies from file and assign it to vars
+include( builds/VersionDeps )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}_${BUDDY_VERDATE}.${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" ) 
 

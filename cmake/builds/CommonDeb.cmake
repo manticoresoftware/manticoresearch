@@ -28,6 +28,8 @@ endfunction ()
 # Common debian-specific build variables
 set ( CPACK_GENERATOR DEB )
 
+# Parse version dependencies from file and assign it to vars
+include( builds/VersionDeps )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}-${BUDDY_VERDATE}-${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}-${BACKUP_VERDATE}-${BACKUP_VERHASH}" ) 
 

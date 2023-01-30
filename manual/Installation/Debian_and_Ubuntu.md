@@ -31,10 +31,8 @@ sudo apt update
 
 Then install Manticore Search:
 ```
-sudo apt install manticore manticore-columnar-lib
+sudo apt install manticore manticore-extra
 ```
-
-You can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it.
 
 If you are upgrading to Manticore version 5 or higher it's recommended to remove all the old Manticore packages before you install the new ones since package structure got changed in version 5.0.0:
 
@@ -50,7 +48,7 @@ If you prefer "Nightly" (development) versions do:
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 sudo dpkg -i manticore-dev-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym
+sudo apt install manticore manticore-extra manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym
 ```
 
 ### Standalone DEB packages

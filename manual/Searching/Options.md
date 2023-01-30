@@ -188,7 +188,7 @@ Manticore may increase `max_matches` to improve groupby and/or aggregation accur
 of groupby attribute is less than this threshold. Loss of accuracy may occur when pseudo sharding executes the query in several threads or RT table performs
 parallel searches in disk chunks.
 
-If the number of unique values of groupby attribute is less than the treshold, `max_matches` will be set to this number. Otherwise, default `max_matches` will be used.
+If the number of unique values of groupby attribute is less than the threshold, `max_matches` will be set to this number. Otherwise, default `max_matches` will be used.
 
 If `max_matches` was set explicitly in query options, this threshold has no effect.
 

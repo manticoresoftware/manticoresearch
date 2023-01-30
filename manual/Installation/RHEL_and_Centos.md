@@ -18,10 +18,8 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 
 Then install Manticore Search:
 ```bash
-sudo yum install manticore manticore-columnar-lib
+sudo yum install manticore manticore-extra
 ```
-
-You can skip `manticore-columnar-lib` - package for the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), if you are sure you don't need it.
 
 If you are upgrading to Manticore version 5 or higher it's recommended to remove all the old Manticore packages before you install the new ones since package structure got changed in version 5.0.0:
 

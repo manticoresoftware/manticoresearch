@@ -3,7 +3,7 @@
 ## Via Homebrew package manager
 
 ```bash
-brew install manticoresearch
+brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra
 ```
 
 Afterwards you can start Manticore as a brew service:

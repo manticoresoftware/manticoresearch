@@ -111,7 +111,7 @@ Manticore versions:
 
 ## BACKUP SQL command reference
 
-You can also back up your data through MySQL by running the simple command `BACKUP TO /path/to/backup`.
+You can also back up your data through SQL by running the simple command `BACKUP TO /path/to/backup`.
 
 ### General syntax of BACKUP
 

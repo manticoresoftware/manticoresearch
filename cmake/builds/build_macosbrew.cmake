@@ -4,7 +4,14 @@ message ( STATUS "Installing via Homebrew" )
 
 if (NOT installed)
 	# start with short route - set all paths
+
+	# the following temporary replacement of CMAKE_INSTALL_PREFIX to HOMEBREW_PREFIX is needed mainly
+	# for FULL_SHARE_DIR to become just /opt/homebrew/share/ instead of smth like /opt/homebrew/Cellar/manticoresearch/5.0.3-2023012600-6ffa0d1/share
+	SET ( CMAKE_INSTALL_PREFIX_ORIGINAL "${CMAKE_INSTALL_PREFIX}" )
+	SET ( CMAKE_INSTALL_PREFIX "${HOMEBREW_PREFIX}" )
 	include ( GNUInstallDirs )
+	SET ( CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX_ORIGINAL}" )
+	
 	SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/manticore/data" )
 

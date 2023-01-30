@@ -22,8 +22,6 @@ if (NOT installed)
 	set ( installed ON )
 endif ()
 
-string(REGEX REPLACE "/Cellar/manticoresearch/[^/]+/" "/" FULL_SHARE_DIR ${FULL_SHARE_DIR})
-
 if (only_set_paths)
 	return ()
 endif ()

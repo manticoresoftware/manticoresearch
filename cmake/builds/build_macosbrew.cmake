@@ -14,13 +14,13 @@ if (NOT installed)
 	
 	set ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 	
-	# we have to use the external _LOCALSTATEDIR set by Homebrew, otherwise the value may be incorrect (https://manticoresearch.slack.com/archives/C5EEXJG31/p1675084036163049)
-	set ( LOCALDATADIR "$ENV{_LOCALSTATEDIR}/manticore/data" )
 
 	# these guys came from homebrew formula
 	set ( CMAKE_INSTALL_FULL_SYSCONFDIR ${_SYSCONFDIR} )
 	set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR ${_LOCALSTATEDIR} )
 	set ( CMAKE_INSTALL_FULL_RUNSTATEDIR ${_RUNSTATEDIR} )
+	# we have to use the external _LOCALSTATEDIR, otherwise the value may be incorrect (https://manticoresearch.slack.com/archives/C5EEXJG31/p1675084036163049)
+	set ( LOCALDATADIR "${_LOCALSTATEDIR}/manticore/data" )
 	set ( installed ON )
 endif ()
 

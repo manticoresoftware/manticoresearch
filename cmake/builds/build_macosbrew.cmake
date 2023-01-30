@@ -7,17 +7,15 @@ if (NOT installed)
 
 	# the following temporary replacement of CMAKE_INSTALL_PREFIX to HOMEBREW_PREFIX is needed mainly
 	# for FULL_SHARE_DIR to become just /opt/homebrew/share/ instead of smth like /opt/homebrew/Cellar/manticoresearch/5.0.3-2023012600-6ffa0d1/share
-	if(DEFINED ENV{HOMEBREW_PREFIX})
-		SET ( CMAKE_INSTALL_PREFIX_ORIGINAL "${CMAKE_INSTALL_PREFIX}" )
-		SET ( CMAKE_INSTALL_PREFIX "$ENV{HOMEBREW_PREFIX}" )
-		include ( GNUInstallDirs )
-		SET ( CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX_ORIGINAL}" )
-	else ()
-		include ( GNUInstallDirs )	
-	endif ()
+	set ( CMAKE_INSTALL_PREFIX_ORIGINAL "${CMAKE_INSTALL_PREFIX}" )
+	set ( CMAKE_INSTALL_PREFIX "$ENV{HOMEBREW_PREFIX}" )
+	include ( GNUInstallDirs )
+	set ( CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX_ORIGINAL}" )
 	
-	SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
-	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/manticore/data" )
+	set ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
+	
+	# we have to use the external _LOCALSTATEDIR set by Homebrew, otherwise the value may be incorrect (https://manticoresearch.slack.com/archives/C5EEXJG31/p1675084036163049)
+	set ( LOCALDATADIR "$ENV{_LOCALSTATEDIR}/manticore/data" )
 
 	# these guys came from homebrew formula
 	set ( CMAKE_INSTALL_FULL_SYSCONFDIR ${_SYSCONFDIR} )

@@ -39,21 +39,22 @@ Manticore Search is an easy to use open source fast database for search. Good al
   - **5x faster** than Elasticsearch for [medium-size data](https://db-benchmarks.com/test-hn/#manticore-search-columnar-storage-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **4x faster** than Elasticsearch for [big data](https://db-benchmarks.com/test-taxi/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **up to 2x faster** max throughput than Elasticsearch's for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance#get-started)❗)
-* Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to **lower response time** as much as possible, when needed.
-* Powerful and fast full-text search which **works fine for small and big datasets**
-* Traditional **row-wise storage** for small, medium and big size datasets
-* **Columnar storage** support via the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can fit in RAM)
-* Easy to use secondary indexes (you don't need to create them manually)
-* Cost-based optimizer for search queries
-* SQL-first: Manticore's **native syntax is SQL**. It speaks SQL over HTTP and uses the MySQL protocol (you can use your preferred MySQL client)
-* **Clients** for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir) and [Go](https://github.com/manticoresoftware/go-sdk)
-* **JSON over HTTP**: to provide a more programmatic way to manage your data and schemas, Manticore provides a HTTP JSON protocol
-* Written fully in C++: **starts fast, doesn't take much RAM**, and low-level optimizations provide good performance
-* **Real-time inserts**: after an INSERT is made, the document is accessible immediately
-* [Interactive courses](https://play.manticoresearch.com/) for **easier learning**
-* **Built-in replication and load balancing**
-* **Can sync** from MySQL/PostgreSQL/ODBC/xml/csv out of the box
-* Not fully ACID-compliant, but **supports transactions and binlog** for safe writes
+* With its modern multithreading architecture and efficient query parallelization capabilities, Manticore is able to fully utilize all your CPU cores to achieve the quickest response times possible.
+* The powerful and speedy full-text search works seamlessly with both small and large datasets.
+* Row-wise storage for small, medium and big size datasets.
+* For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
+* Performance secondary indexes are automatically created, saving you time and effort.
+* The cost-based query optimizer optimizes search queries for optimal performance.
+* Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
+* With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/go-sdk), integration with Manticore Search becomes easy.
+* Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management.
+* Built in C++, Manticore Search starts quickly and uses minimal RAM, with low-level optimizations contributing to its impressive performance.
+* With real-time inserts, newly added documents are immediately accessible.
+* Interactive courses are available through [Interactive courses](https://play.manticoresearch.com/) to make learning a breeze.
+* Manticore also boasts built-in replication and load balancing for added reliability.
+* Data can be synced from sources such as MySQL, PostgreSQL, ODBC, xml, and csv with ease.
+* While not fully ACID-compliant, Manticore still supports transactions and binlog to ensure safe writes.
+* Effortless data backup and recovery with built-in tools and SQL commands
 
 [Craigslist](https://www.craigslist.org/), [Socialgist](https://socialgist.com/), [PubChem](https://pubchem.ncbi.nlm.nih.gov/), [Rozetka](https://rozetka.com.ua/) and many others use Manticore for efficient searching and stream filtering.
 
@@ -87,11 +88,13 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 * Security:
   - [https support](https://play.manticoresearch.com/https/)
   - [read-only mode](https://manual.manticoresearch.com/Security/Read_only)
+* Data safety:
+  - [manticore-backup tool and SQL command BACKUP](https://manual.manticoresearch.com/Securing_and_compacting_a_table/Backup_and_restore) to back up and restore your data
 * Data storages:
   - row-wise - requires more RAM, provides faster performance
   - columnar - requires less RAM, still provides decent performance, but lower than the row-wise storage for some kinds of queries
   - docstore - doesn't require RAM at all, but allows only fetching original value, not sorting/grouping/filtering
-* Optimizations:
+* Performance optimizations:
   - [Secondary indexes](https://manual.manticoresearch.com/Server_settings/Searchd#secondary_indexes)
   - Cost-based optimizer determines the most efficient execution plan of a search query
 * Data types:

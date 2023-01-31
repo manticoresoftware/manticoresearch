@@ -1,8 +1,8 @@
 # Introduction
 
-Manticore Search is a multi-storage database designed specifically for search, including full-text search.
+Manticore Search is a multi-storage database specifically designed for search, with robust full-text search capabilities.
 
-Manticore Search is an [open-source database](https://github.com/manticoresoftware/manticoresearch/) that was created in 2017 as a continuation of [Sphinx Search](https://sphinxsearch.com/) engine. We took all the best from it, significantly improved its functionality, [fixed hundreds of bugs](https://manual.manticoresearch.com/Changelog), rewrote the code almost completely and kept it open-source! That all has made Manticore Search a modern, fast, light-weight and full-featured database with outstanding full-text search capabilities.
+As an open-source database (available on [GitHub](https://github.com/manticoresoftware/manticoresearch/)), Manticore Search was created in 2017 as a continuation of [Sphinx Search](https://sphinxsearch.com/) engine. Our development team took all the best features of Sphinx and significantly improved its functionality, fixing hundreds of bugs along the way (as detailed in our [Changelog](https://manual.manticoresearch.com/Changelog)). With nearly complete code rewrites, Manticore Search is now a modern, fast, and light-weight database with full features and exceptional full-text search capabilities.
 
 ## Our key features are:
 #### Powerful and fast full-text searching which works fine for small and big datasets
@@ -17,57 +17,68 @@ Manticore Search is an [open-source database](https://github.com/manticoresoftwa
   * [Proper Chinese segmentation](Creating_a_table/NLP_and_tokenization/CJK.md)
   * [Text highlighting](Searching/Highlighting.md)
 
-#### Modern MPP architecture
-Modern MPP architecture and smart query parallelization capabilities allow to fully utilize all your CPU cores to lower response time as much as possible, when needed.
+#### Multithreading
+Manticore Search utilizes a smart query parallelization to lower response time and fully utilize all CPU cores when needed.
 
-#### Row-wise storage
-Traditional row-wise storage for small, medium and big size datasets.
+#### Cost-based query optimizer
+A cost-based query optimizer uses statistical data about the indexed data to evaluate the relative costs of different execution plans for a given query. This allows the optimizer to determine the most efficient plan for retrieving the desired results, taking into account factors such as the size of the indexed data, the complexity of the query, and the available resources.
 
-#### Column-oriented storage
-Columnar storage support via the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for bigger datasets (much bigger than can fit in RAM).
+#### Storage options
+Manticore offers both row-wise and column-oriented storage options to accommodate datasets of various sizes. Traditional row-wise storage is available for small, medium, and large datasets, while columnar storage support is provided via the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) for even larger datasets.
+
+#### Automatic secondary indexes
+[Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) uses [Piecewise Geometric Model index](https://github.com/gvinciguerra/PGM-index), which exploits a learned mapping between the indexed keys and their location in memory. The succinctness of this mapping, coupled with a peculiar recursive construction algorithm, makes the PGM-index a data structure that dominates traditional indexes by orders of magnitude in space while still offering the best query and update time performance. Secondary indexes are ON by default for all numeric fields.
 
 #### SQL-first
-The native Manticore's syntax is SQL. It speaks SQL over HTTP and MySQL protocol. You can use your preferred mysql client to connect to Manticore Search server via SQL protocol in any programming language.
+Manticore's native syntax is SQL and it supports SQL over HTTP and MySQL protocol, allowing for connection through popular mysql clients in any programming language.
 
 #### JSON over HTTP
-To provide more programmatic way to manage your data and schemas Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) protocol. It is very similar to the one from Elasticsearch.
+For a more programmatic approach to managing data and schemas, Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) protocol, similar to that of Elasticsearch.
+
+#### Elasticsearch-compatible writes
+You can execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash, Filebeat and other tools from the Beats family.
 
 #### Declarative and imperative schema management
-You can create / update / delete tables online as well as providing schemas in a configuration file.
+Easily create, update, and delete tables online or through a configuration file.
 
-#### Power of C++
-Being written fully in C++, Manticore Search starts fast and doesn't take much RAM. Low-level optimizations give good performance.
+#### The benefits of C++ and the convenience of PHP
+The Manticore Search daemon is developed in C++, offering fast start times and efficient memory utilization. The utilization of low-level optimizations further boosts performance. Another crucial component, called [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy), is written in PHP and is utilized for high-level functionality that does not require lightning-fast response times or extremely high processing power. Although contributing to the C++ code may pose a challenge, adding a new SQL/JSON command using Manticore Buddy should be a straightforward process.
 
-#### Real-time inserts
-After a new document is added or updated it can be read immediately.
+#### Real-Time inserts
+Newly added or updated documents can be immediately read.
 
-#### Interactive courses
-We provide [interactive courses](https://play.manticoresearch.com/) for easier learning.
+#### Interactive courses for easy learning
+We offer [free interactive courses](https://play.manticoresearch.com/) to make learning effortless.
 
-#### ACID compliance
-Manticore is not fully ACID-compliant, but it supports isolated transactions for atomic changes and binary logging for safe writes.
+#### Transactions
+While Manticore is not fully ACID-compliant, it supports isolated transactions for atomic changes and binary logging for safe writes.
 
-#### Built-in replication and load balancing
-Data can be distributed across servers and data-centers. Any Manticore Search node can be both a load balancer and a data node. Manticore implements virtually synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using [Galera library](https://galeracluster.com/) which guarantees consistency between all data nodes, no data loss and gives good replication performance.
+#### Built-In replication and load balancing
+Data can be distributed across servers and data centers with any Manticore Search node acting as both a load balancer and a data node. Manticore implements virtually synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using the [Galera library](https://galeracluster.com/), ensuring data consistency across all nodes, preventing data loss, and providing exceptional replication performance.
 
-#### Can sync from MySQL/PostgreSQL/ODBC/xml/csv out of the box
-Manticore `indexer` tool and rich configuration syntax helps to sync existing data from MySQL, PostgreSQL, any database which speaks ODBC and any other technology which can generate a simple XML or CSV.
+#### Built-in backup capabilities
+Manticore is equipped with an external tool [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md), and the [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL command to simplify the process of backing up and restoring your data.
 
-#### Integrations
-You can integrate Manticore Search with MySQL/MariaDB server via a [FEDERATED engine](Extensions/FEDERATED.md) or use Manticore through [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
+#### Out-of-the-box data sync
+The `indexer` tool and comprehensive configuration syntax of Manticore make it easy to sync data from sources like MySQL, PostgreSQL, ODBC-compatible databases, XML, and CSV.
 
-#### Stream filtering
-Manticore has a special table type called "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" which implements search in reverse when you table your queries rather than data. It's an extremely powerful tool for full-text data stream filtering: just put all your queries in the table, process your data stream by sending each batch of documents to Manticore Search and you'll get only those back that match some of your stored queries.
+#### Integration options
+You can integrate Manticore Search with a MySQL/MariaDB server using the [FEDERATED engine](Extensions/FEDERATED.md) or via [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
+
+#### Stream filtering made easy
+Manticore offers a special table type, the "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" table, which allows you to search queries instead of data, making it an efficient tool for filtering full-text data streams. Simply store your queries in the table, process your data stream by sending each batch of documents to Manticore Search, and receive only the results that match your stored queries.
 
 # Possible applications:
-Manticore's possible applications are not limited by, but include:
+Manticore has a variety of use cases, including:
 
   * [Full-text search](https://play.manticoresearch.com/fulltextintro/)
-    * when used with small data volume you can benefit from powerful full-text search syntax and low RAM consumption (as little as 7-8 megabytes)
-    * when used with big data you can benefit from Manticore's high availability capabilities and ability to serve very large tables, each taking hundreds of gigabytes of RAM
-  * OLAP: using Manicore Search + [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), you can handle terabytes of data on a single or multiple servers for data analysis
+    * With small data volumes, enjoy the benefits of powerful full-text search syntax and low memory consumption (as low as 7-8 MB).
+    * With large data, benefit from Manticore's high availability and ability to handle massive tables.
+  * OLAP: Use Manticore Search and the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) to analyze terabytes of data on a single or multiple servers.
   * [Faceted search](https://play.manticoresearch.com/faceting/)
   * [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   * [Spell correction](https://play.manticoresearch.com/didyoumean/)
   * [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
   * [Data stream filtering](https://play.manticoresearch.com/pq/)
+
+<!-- proofread -->

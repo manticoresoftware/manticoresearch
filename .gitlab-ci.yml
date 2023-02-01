@@ -312,7 +312,6 @@ deploy_hook:
   variables:
     WHAT: $WHAT
     REPO_NAME: $REPO_NAME
-    DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
   rules:
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: on_success

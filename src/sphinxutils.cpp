@@ -1597,13 +1597,13 @@ bool CSphConfigParser::Parse ()
 void CheckWinInstall()
 {
 	HKEY hKey;
-	LONG iRes = RegOpenKeyExW ( HKEY_LOCAL_MACHINE, L"SOFTWARE\\WOW6432Node\\Manticore Software LTD\\manticore", 0, KEY_READ, &hKey );
+	LONG iRes = RegOpenKeyExW ( HKEY_LOCAL_MACHINE, L"SOFTWARE\\WOW6432Node\\Manticore Software LTD", 0, KEY_READ, &hKey );
 	if ( iRes!=ERROR_SUCCESS )
 		return;
 
 	WCHAR szBuffer[512];
 	DWORD uBufferSize = sizeof(szBuffer);
-	iRes = RegQueryValueExW ( hKey, L"", 0, NULL, (LPBYTE)szBuffer, &uBufferSize);
+	iRes = RegQueryValueExW ( hKey, L"manticore", 0, NULL, (LPBYTE)szBuffer, &uBufferSize);
 	if ( iRes!=ERROR_SUCCESS )
 		return;
 

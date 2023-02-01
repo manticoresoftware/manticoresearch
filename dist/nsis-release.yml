@@ -1,0 +1,42 @@
+stages:
+  - build
+  - deploy
+
+.collect_job:
+  variables:
+    GIT_STRATEGY: fetch
+  stage: deploy
+  tags:
+    - dev-host
+  rules:
+    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: on_success
+
+.collect_arc:
+  extends: [ .collect_job ]
+  script:
+    - wget https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_arc
+    - chmod +x upload_repo_arc
+    - /bin/bash ./upload_repo_arc
+
+
+build_nsis:
+  stage: build
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/build_nsis:0.1.3
+  rules:
+    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: on_success
+  script:
+    - mkdir build
+    - /bin/bash /nsis_src_parser.sh
+  artifacts:
+    paths:
+      - build/manticore-*.exe
+    when: on_success
+    expire_in: 12 hrs
+
+collect_nsis:
+  extends: [ .collect_arc ]
+  needs: [ build_nsis ]

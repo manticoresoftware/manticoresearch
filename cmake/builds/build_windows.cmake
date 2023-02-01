@@ -20,7 +20,7 @@ if (only_set_paths)
 	return ()
 endif ()
 
-set ( CPACK_GENERATOR "ZIP;NSIS" )
+set ( CPACK_GENERATOR "ZIP" )
 set ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-x64" )
 
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL ON )

@@ -72,6 +72,10 @@ Section "Manticore Search"
   Push "manticore.zip"
   Push "manticore_src.txt"
   Call unpackInstall
+
+  CreateDirectory "$INSTDIR\var\data"
+  CreateDirectory "$INSTDIR\var\log\manticore"
+  CreateDirectory "$INSTDIR\var\run\manticore"
   
   ; Write the installation path into the registry
   WriteRegStr HKLM "SOFTWARE\Manticore Software LTD" "manticore" "$INSTDIR"

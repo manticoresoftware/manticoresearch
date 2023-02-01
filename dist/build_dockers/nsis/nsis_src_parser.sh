@@ -55,7 +55,7 @@ echo -n "$WIN_REPO$MCL_PACKAGE_NAME" > "${NSIS_BUILD_DIR}/mcl_src.txt"
 echo -e "${GREEN}Run nsis build$NC"
 makensis "$NSIS_BUILD_DIR/nsisscript.nsi"
 
-COMMIT_DATE=$(git show -s --date=short --format=%cd a5a0daeb | sed 's/-//g' | cut -c 3-8)
+COMMIT_DATE=$(git show -s --date=short --format=%cd $CI_COMMIT_SHORT_SHA | sed 's/-//g' | cut -c 3-8)
 MANTICORE_VERSION=$(cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d'"' -f2)
 
 if [ -f "$NSIS_BUILD_DIR/manticore_installer.exe" ]; then

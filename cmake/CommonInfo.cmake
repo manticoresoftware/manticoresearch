@@ -17,7 +17,7 @@ set ( CPACK_PACKAGE_DESCRIPTION "${INFO_BANNER}" )
 set ( CPACK_COMPONENT_GROUP_HELPERS_DISPLAY_NAME "Converter" )
 set ( CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application" )
 set ( CPACK_COMPONENT_CONVERTER_SUMMARY "${MANTICORESEARCH} index converter" )
-set ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} includes the tool \"index_converter\" necessary for converting indexes created before version 3.0." )
+set ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "${THIS_PKG} includes the tool 'index_converter' necessary for converting indexes created before version 3.0." )
 
 # meta
 set ( CPACK_COMPONENT_GROUP_META_DISPLAY_NAME "Metapackage" )

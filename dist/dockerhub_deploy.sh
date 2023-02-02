@@ -26,6 +26,13 @@ cd docker
 
 BUILD_FAILED=false
 
+if [[ ! $(docker ps | grep manticore_build) ]]; then
+    echo "Buildx builder not found. Try to run it manually"
+    docker buildx create  --name manticore_build --platform linux/amd64,linux/arm64
+    docker buildx use manticore_build
+    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+fi
+
 for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
   echo "Start to build $BUILD_TAG from branch ${tags[$BUILD_TAG]}"
 
@@ -33,21 +40,15 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
 
     for ((i = 0; i < 3; i++)); do
       echo "Started to buid manticoresearch/manticore:$BUILD_TAG"
-      docker build --build-arg DEV=1 --no-cache -t manticoresearch/manticore:$BUILD_TAG . && break
+
+      docker buildx build --build-arg DEV=1 --push --platform linux/arm64,linux/amd64 --tag  manticoresearch/manticore:$BUILD_TAG . && break
+
       if [ $i==2 ]; then
         echo "Docker build are failed"
         BUILD_FAILED=true
       fi
     done
 
-    for ((i = 0; i < 3; i++)); do
-      echo "Started to push manticoresearch/manticore:$BUILD_TAG"
-      docker push manticoresearch/manticore:$BUILD_TAG && break
-      if [ $i==2 ]; then
-        echo "Docker push are failed"
-        BUILD_FAILED=true
-      fi
-    done
 
   else
     echo "Can't find branch for tag $BUILD_TAG"

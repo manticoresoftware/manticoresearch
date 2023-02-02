@@ -333,6 +333,17 @@ collect_bookworm:
 
 # ==================== Docker image ======================
 
+nsis_release:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: on_success
+  trigger:
+    include: dist/nsis-release.yml
+  needs:
+    - job: collect_windows
+
+
 build_docker:
   stage: deploy
   needs:

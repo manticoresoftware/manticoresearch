@@ -79,11 +79,11 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * RHEL 9 support including Centos 9, Alma Linux 9 and Oracle Linux 9.
 * [Issue #924](https://github.com/manticoresoftware/manticoresearch/issues/924) Debian Bookworm support.
 * [Issue #636](https://github.com/manticoresoftware/manticoresearch/issues/636) Packaging: arm64 builds for Linuxes and MacOS.
+* [PR #26](https://github.com/manticoresoftware/docker/pull/26) Multi-architecture (x86_64 / arm64) docker image.
 * [Simplified package building for contributors](../Installation/Compiling_from_sources.md#Building-using-CI-docker).
 * It's now possible to install a specific version using APT.
 * [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows installer (previously we provided just an archive).
 * Switched to compiling using CLang 15.
-
 
 ### Bugfixes
 * [Issue #479](https://github.com/manticoresoftware/manticoresearch/issues/479) Field with name `text`

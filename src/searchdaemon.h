@@ -1397,7 +1397,6 @@ bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
 std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
 int64_t GetDocID ( const char * sID );
-void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
@@ -1485,28 +1484,8 @@ void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char
 using HttpOptionsHash_t = SmallStringHash_T<CSphString>;
 struct http_parser;
 
-struct HttpRequestParsed_t
-{
-	HttpRequestParsed_t ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
-		: m_sBody ( sBody )
-		, m_iType ( iReqType )
-		, m_hOpts ( hOpts )
-	{}
-	const CSphString &		GetBody() const { return m_sBody; }
-	int						GetRequestType() const { return m_iType; }
-	const CSphString &		GetFullURL() const { return m_hOpts["full_url"]; }
-	const SmallStringHash_T<CSphString> &	GetOptions() const { return m_hOpts; }
-
-	CSphString m_sBody;
-	int m_iType { 0 };
-	const SmallStringHash_T<CSphString> & m_hOpts;
-};
-
-void ProcessCompatHttp ( const HttpRequestParsed_t & tParser, CSphVector<BYTE> & dResult );
 void UriPercentReplace ( Str_t & sEntity, bool bAlsoPlus=true );
-void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody );
-void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody, const VecTraits_T<BYTE> & dResult );
-int GetLogFD ();
+void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody );
 
 enum MysqlColumnType_e
 {

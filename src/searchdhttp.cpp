@@ -946,99 +946,91 @@ void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, C
 }
 
 
-class HttpHandler_c
+void HttpHandler_c::SetErrorFormat ( bool bNeedHttpResponse )
 {
-public:
-	virtual ~HttpHandler_c() = default;
-
-	virtual bool Process () = 0;
-
-	void SetErrorFormat ( bool bNeedHttpResponse )
-	{
-		m_bNeedHttpResponse = bNeedHttpResponse;
-	}
+	m_bNeedHttpResponse = bNeedHttpResponse;
+}
 	
-	CSphVector<BYTE> & GetResult()
+CSphVector<BYTE> & HttpHandler_c::GetResult()
+{
+	return m_dData;
+}
+
+const CSphString & HttpHandler_c::GetError () const
+{
+	return m_sError;
+}
+
+void HttpHandler_c::ReportError ( const char * szError, ESphHttpStatus eStatus )
+{
+	m_sError = szError;
+	ReportError ( eStatus );
+}
+
+void HttpHandler_c::ReportError ( ESphHttpStatus eStatus )
+{
+	if ( m_bNeedHttpResponse )
+		sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
+	else
 	{
-		return m_dData;
+		m_dData.Resize ( m_sError.Length() );
+		memcpy ( m_dData.Begin(), m_sError.cstr(), m_dData.GetLength() );
 	}
+}
 
-	const CSphString & GetError () const
+void HttpHandler_c::FormatError ( ESphHttpStatus eStatus, const char * sError, ... )
+{
+	va_list ap;
+	va_start ( ap, sError );
+	m_sError.SetSprintfVa ( sError, ap );
+	va_end ( ap );
+
+	if ( m_bNeedHttpResponse )
+		sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
+	else
 	{
-		return m_sError;
+		int iLen = m_sError.Length();
+		m_dData.Resize ( iLen+1 );
+		memcpy ( m_dData.Begin(), m_sError.cstr(), iLen );
+		m_dData[iLen] = '\0';
 	}
+}
 
-protected:
-	bool				m_bNeedHttpResponse {false};
-	CSphVector<BYTE>	m_dData;
-	CSphString			m_sError;
+void HttpHandler_c::BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
+{
+	ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
+}
 
-	void ReportError ( const char * szError, ESphHttpStatus eStatus )
+void HttpHandler_c::BuildReply ( const char* szResult, ESphHttpStatus eStatus )
+{
+	ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
+}
+
+void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
+{
+	ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
+}
+
+void HttpHandler_c::BuildReply ( Str_t sResult, ESphHttpStatus eStatus )
+{
+	ReplyBuf ( sResult, eStatus, m_bNeedHttpResponse, m_dData );
+}
+
+// check whether given served index is exist and has requested type
+bool HttpHandler_c::CheckValid ( const ServedIndex_c* pServed, const CSphString& sIndex, IndexType_e eType )
+{
+	if ( !pServed )
 	{
-		m_sError = szError;
-		ReportError ( eStatus );
+		FormatError ( SPH_HTTP_STATUS_500, "no such table '%s'", sIndex.cstr () );
+		return false;
 	}
-
-	void ReportError ( ESphHttpStatus eStatus )
+	if ( pServed->m_eType!=eType )
 	{
-		if ( m_bNeedHttpResponse )
-			sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
-		else
-		{
-			m_dData.Resize ( m_sError.Length() );
-			memcpy ( m_dData.Begin(), m_sError.cstr(), m_dData.GetLength() );
-		}
+		FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
+		return false;
 	}
-
-	void FormatError ( ESphHttpStatus eStatus, const char * sError, ... )
-	{
-		va_list ap;
-		va_start ( ap, sError );
-		m_sError.SetSprintfVa ( sError, ap );
-		va_end ( ap );
-
-		if ( m_bNeedHttpResponse )
-			sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
-		else
-		{
-			int iLen = m_sError.Length();
-			m_dData.Resize ( iLen+1 );
-			memcpy ( m_dData.Begin(), m_sError.cstr(), iLen );
-			m_dData[iLen] = '\0';
-		}
-	}
-
-	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
-	{
-		ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
-	}
-
-	void BuildReply ( const char* szResult, ESphHttpStatus eStatus )
-	{
-		ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
-	}
-
-	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
-	{
-		ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
-	}
-
-	// check whether given served index is exist and has requested type
-	bool CheckValid ( const ServedIndex_c* pServed, const CSphString& sIndex, IndexType_e eType )
-	{
-		if ( !pServed )
-		{
-			FormatError ( SPH_HTTP_STATUS_500, "no such table '%s'", sIndex.cstr () );
-			return false;
-		}
-		if ( pServed->m_eType!=eType )
-		{
-			FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
-			return false;
-		}
-		return true;
-	}
-};
+	return true;
+}
 
 std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
 {
@@ -2120,22 +2112,19 @@ struct BulkTnx_t
 };
 
 
-class HttpHandlerEsBulk_c : public HttpHandler_c, public HttpJsonUpdateTraits_c, public HttpJsonTxnTraits_c
+class HttpHandlerEsBulk_c : public HttpCompatBaseHandler_c, public HttpJsonUpdateTraits_c, public HttpJsonTxnTraits_c
 {
-protected:
-	Str_t m_tSource;
-	const OptionsHash_t & m_hOptions;
-
 public:
-	HttpHandlerEsBulk_c ( Str_t tSource, const OptionsHash_t & hOptions )
-		: m_tSource ( tSource )
-		, m_hOptions ( hOptions )
+	HttpHandlerEsBulk_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
+		: HttpCompatBaseHandler_c ( sBody, iReqType, hOpts )
 	{}
 
 	bool Process () override;
 
 private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
+	bool Validate();
+	void ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly );
 };
 
 static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
@@ -2213,7 +2202,12 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		return std::make_unique<HttpHandlerPQ_c> ( sQuery, tOptions ); // json
 
 	case SPH_HTTP_ENDPOINT_ES_BULK:
-		return std::make_unique<HttpHandlerEsBulk_c> ( tSource.ReadAll(), tOptions );
+		SetQuery ( tSource.ReadAll() );
+		return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
+
+	case SPH_HTTP_ENDPOINT_TOTAL:
+		SetQuery ( tSource.ReadAll() );
+		return CreateCompatHandler ( sQuery, eRequestType, tOptions );
 
 	default:
 		break;
@@ -2282,11 +2276,6 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( m_hOptions["endpoint"] );
 	if ( IsLogManagementEnabled() && eEndpoint==SPH_HTTP_ENDPOINT_TOTAL && m_sEndpoint.Ends ( "_bulk" ) )
 		eEndpoint = SPH_HTTP_ENDPOINT_ES_BULK;
-	if ( IsLogManagementEnabled() && eEndpoint==SPH_HTTP_ENDPOINT_TOTAL )
-	{
-		ProcessCompatHttp ( HttpRequestParsed_t ( pSource->ReadAll(), m_eType, m_hOptions ), dResult );
-		return true;
-	}
 
 	return ProcessHttpQueryBuddy ( *pSource, m_hOptions, dResult, true, m_eType ).m_bOk;
 }
@@ -2839,32 +2828,32 @@ bool Ends ( const Str_t tVal, const char * sSuffix )
 	return strncmp ( tVal.first + tVal.second - iSuffix, sSuffix, iSuffix )==0;
 }
 
-static void ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly, const OptionsHash_t & hOpts, Str_t tReq, CSphVector<BYTE> & dResult )
+void HttpHandlerEsBulk_c::ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly )
 {
 	if ( !bLogOnly )
-		ReportError ( sError, sErrorType, eStatus, dResult );
+		ReportError ( sError, sErrorType, eStatus );
 
-	for ( char * sCur = (char *)tReq.first; sCur<tReq.first+tReq.second; sCur++ )
+	for ( char * sCur = (char *)GetBody().first; sCur<GetBody().first+GetBody().second; sCur++ )
 	{
 		if ( *sCur=='\0' )
 			*sCur = '\n';
 	}
 
-	const CSphString * pUrl = hOpts ( "full_url" );
-	sphWarning ( "%s\n%s\n%s", sError, ( pUrl ? pUrl->scstr() : "" ), tReq.first );
+	const CSphString * pUrl = GetOptions() ( "full_url" );
+	sphWarning ( "%s\n%s\n%s", sError, ( pUrl ? pUrl->scstr() : "" ), GetBody().first );
 }
 
-static bool Validate( const OptionsHash_t & hOpts, const Str_t & tSource, CSphVector<BYTE> & dReply )
+bool HttpHandlerEsBulk_c::Validate()
 {
 	CSphString sError;
 
 	// case insitive option get: content-type
-	CSphString * pOptContentType = hOpts ( "Content-Type" );
+	CSphString * pOptContentType = GetOptions() ( "Content-Type" );
 	if ( !pOptContentType )
-		pOptContentType = hOpts ( "content-type" );
+		pOptContentType = GetOptions() ( "content-type" );
 	if ( !pOptContentType )
 	{
-		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", SPH_HTTP_STATUS_400, false, hOpts, tSource, dReply );
+		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 
@@ -2873,18 +2862,18 @@ static bool Validate( const OptionsHash_t & hOpts, const Str_t & tSource, CSphVe
 	if ( !dOptContentType.Contains ( "application/x-ndjson" ) && !dOptContentType.Contains ( "application/json" ) )
 	{
 		sError.SetSprintf ( "Content-Type header [%s] is not supported", pOptContentType->cstr() );
-		ReportLogError ( sError.cstr(), "illegal_argument_exception", SPH_HTTP_STATUS_400, false, hOpts, tSource, dReply );
+		ReportLogError ( sError.cstr(), "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 
-	if ( IsEmpty ( tSource ) )
+	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportLogError ( "request body is required", "parse_exception", SPH_HTTP_STATUS_400, false, hOpts, tSource, dReply );
+		ReportLogError ( "request body is required", "parse_exception", SPH_HTTP_STATUS_400, false );
 		return false;
 	}
-	if ( !Ends ( tSource, "\n" ) )
+	if ( !Ends ( GetBody(), "\n" ) )
 	{
-		ReportLogError ( "The bulk request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400, false, hOpts, tSource, dReply );
+		ReportLogError ( "The bulk request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 
@@ -2893,14 +2882,14 @@ static bool Validate( const OptionsHash_t & hOpts, const Str_t & tSource, CSphVe
 
 bool HttpHandlerEsBulk_c::Process()
 {
-	if ( !Validate ( m_hOptions, m_tSource, m_dData ) )
+	if ( !Validate() )
 		return false;
 
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
-	tCrashQuery.m_dQuery = { (const BYTE *)m_tSource.first, m_tSource.second };
+	tCrashQuery.m_dQuery = S2B ( GetBody() );
 
 	CSphVector<Str_t> dLines;
-	SplitNdJson ( m_tSource.first, m_tSource.second, [&] ( const char * sLine, int iLen ) { dLines.Add ( Str_t ( sLine, iLen ) ); } );
+	SplitNdJson ( GetBody(), [&] ( const char * sLine, int iLen ) { dLines.Add ( Str_t ( sLine, iLen ) ); } );
 	
 	CSphVector<BulkDoc_t> dDocs;
 	dDocs.Reserve ( dLines.GetLength() / 2 );
@@ -2921,7 +2910,7 @@ bool HttpHandlerEsBulk_c::Process()
 			BulkDoc_t & tDoc = dDocs.Add();
 			if ( !ParseMetaLine ( tLine.first, tDoc, m_sError ) )
 			{
-				ReportLogError ( m_sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false, m_hOptions, m_tSource, m_dData );
+				ReportLogError ( m_sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
 				return false;
 			}
 			if ( tDoc.m_sAction=="delete" )
@@ -2964,7 +2953,7 @@ bool HttpHandlerEsBulk_c::Process()
 	BuildReply ( tRoot.AsString(), ( bOk ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 ) );
 
 	if ( !bOk )
-		ReportLogError ( "failed to commit", "", SPH_HTTP_STATUS_400, true, m_hOptions, m_tSource, m_dData );
+		ReportLogError ( "failed to commit", "", SPH_HTTP_STATUS_400, true );
 
 	return true;
 
@@ -3126,12 +3115,12 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 	return bOk;
 }
 
-void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction )
+void SplitNdJson ( Str_t sBody, SplitAction_fn && fnAction )
 {
-	const char * sBodyEnd = sBody + iLen;
-	while ( sBody<sBodyEnd )
+	const char * sBodyEnd = sBody.first + sBody.second;
+	while ( sBody.first<sBodyEnd )
 	{
-		const char* sNext = sBody;
+		const char * sNext = sBody.first;
 		// break on CR or LF
 		while ( sNext<sBodyEnd && *sNext != '\r' && *sNext != '\n' )
 			sNext++;
@@ -3140,12 +3129,12 @@ void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction )
 			break;
 
 		*(const_cast<char*>(sNext)) = '\0';
-		fnAction ( sBody, sNext-sBody );
-		sBody = sNext + 1;
+		fnAction ( sBody.first, sNext-sBody.first );
+		sBody.first = sNext + 1;
 
 		// skip new lines
-		while ( sBody<sBodyEnd && *sBody == '\n' )
-			sBody++;
+		while ( sBody.first<sBodyEnd && *sBody.first == '\n' )
+			sBody.first++;
 	}
 }
 

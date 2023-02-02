@@ -24,13 +24,13 @@ build_nsis:
   stage: build
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/build_nsis:0.2.0
+  image: registry.gitlab.com/manticoresearch/dev/build_nsis:1.0.0
   rules:
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: on_success
   script:
     - mkdir build
-    - /bin/bash /nsis_src_parser.sh
+    - /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
   artifacts:
     paths:
       - build/manticore-*.exe

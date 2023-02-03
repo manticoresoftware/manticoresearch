@@ -1,14 +1,14 @@
 # Backup and restore
 
-It is crucial to regularly back up your tables in order to be able to recover them in the event of problems such as system crashes, hardware failure, or data corruption/loss for any reason. Backups are also essential before upgrading Manticore Search to a new version that introduces a change in table format, and can also be used to transfer your data to another system when you want to migrate to a new server.
+It's crucial to regularly back up your tables to recover them in case of system crashes, hardware failure, or data corruption/loss. Backups are also necessary before upgrading to a new version of Manticore Search that changes the table format, and for transferring data to another system when migrating to a new server.
 
-The `manticore-backup` tool, which is included in the Manticore Search [official packages](https://manticoresearch.com/install/) can help you automate the process of backing up tables for a Manticore instance running in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), giving you peace of mind in case of any outages or crashes.
+The `manticore-backup` tool, included in the official Manticore Search [packages](https://manticoresearch.com/install), automates the process of backing up tables for an instance running in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
 
 ### Installation
 
-**If you followed [the official installation instructions](https://manticoresearch.com/install/) you should have already everything installed and don't need to worry.** Otherwise, [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [manticore-executor](https://github.com/manticoresoftware/executor) which is a part of package `manticore-extra` and you need to make sure either of them is available.
+**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), which is a part of the `manticore-extra` package, and you need to ensure that one of these is available.
 
-`manticore-backup` is not available for Windows, but you can use the [BACKUP](../../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL command.
+Note that `manticore-backup` is not available for Windows yet.
 
 ### How to use
 
@@ -18,10 +18,10 @@ Second, we recommend running the tool under the `root` user so the tool can tran
 
 <!-- example backup1 -->
 
-The only mandatory argument is `--backup-dir` - the path to put the backup in. In this case, if you omit all the other arguments `manticore-backup` will:
-* find Manticore instance running with a default config
-* create a subdirectory in the `--backup-dir` directory with a timestamp in the name
-* back up all tables found in the instance
+The only required argument for `manticore-backup` is `--backup-dir`, which specifies the destination for the backup. If you don't provide any additional arguments, `manticore-backup` will:
+- locate a Manticore instance running with the default configuration
+- create a subdirectory in the `--backup-dir` directory with a timestamped name
+- backup all tables found in the instance
 
 <!-- request Example -->
 ```bash
@@ -60,7 +60,7 @@ Manticore versions:
 <!-- end -->
 
 <!-- example backup2 -->
-If you want to select specific tables to back up, you can use the `--tables` flag followed by a comma-separated list of tables, e.g. `--tables=tbl1,tbl2`. This will only back up the specified tables and skip all others.
+To back up specific tables only, use the `--tables` flag followed by a comma-separated list of tables, for example `--tables=tbl1,tbl2`. This will only backup the specified tables and ignore the rest.
 
 <!-- request Example -->
 ```bash
@@ -113,6 +113,8 @@ Manticore versions:
 
 You can also back up your data through SQL by running the simple command `BACKUP TO /path/to/backup`.
 
+Note, this command is not supported in Windows yet.
+
 ### General syntax of BACKUP
 
 ```sql
@@ -125,28 +127,26 @@ BACKUP
   TO path_to_backup
 ```
 
-For example, you can run a backup of tables `a` and `b` to the `/backup` directory using the following command:
+For instance, to back up tables `a` and `b` to the ``/backup` directory, run the following command:
 
 ```sql
 BACKUP TABLES a, b TO /backup
 ```
 
-Options allow you to control the backup process and tune certain aspects:
+There are options available to control and adjust the backup process, such as:
 
-* `async` makes the backup non-blocking, allowing you to receive a response with the query id immediately and run other queries while the backup is in progress. The default value is `0`.
-* `compress` enables file compression using zstd. The default value is `0`.
-
-For example, you can run a backup of all tables in async mode with compression enabled to the `/tmp` directory:
-
+* `async`: makes the backup non-blocking, allowing you to receive a response with the query ID immediately and run other queries while the backup is ongoing. The default value is `0`.
+* `compress`: enables file compression using zstd. The default value is `0`.
+For example, to run a backup of all tables in async mode with compression enabled to the `/tmp` directory:
 
 ```sql
 BACKUP OPTION async = yes, compress = yes TO /tmp
 ```
 
-### Important notes
+### Important considerations
 
-1. We do not support special symbols or spaces in the path.
-2. You must have Manticore Buddy launched (it is enabled by default).
+1. The path should not contain special symbols or spaces, as they are not supported.
+2. Ensure that Manticore Buddy is launched (it is by default).
 
 ## Restore
 
@@ -175,13 +175,14 @@ Available backups: 3
 <!-- end -->
 
 <!-- example restore -->
-To start a restore job, you need to run `--restore=backup name`, where `backup name` is the name of the backup directory inside the `--backup-dir`. Note that:
-1. There should be no Manticore instance running on the same host and port as the ones you are restoring.
-2. The old manticore.json file should not exist.
-3. The old configuration file should not exist.
-4. The old data directory should exist and should be empty.
 
-Only if all the conditions are met, will the restore happen. Don't worry the tool will give you hints so you don't need to remember it. What's important is to not overwrite your existing files, that's why there's the requirement to remove them beforehand if they still exist.
+To start a restore job, run `manticore-backup` with the flag `--restore=backup name`, where `backup name` is the name of the backup directory within the `--backup-dir`. Note that:
+1. There can't be any Manticore instance running on the same host and port as the one being restored.
+2. The old `manticore.json` file must not exist.
+3. The old configuration file must not exist.
+4. The old data directory must exist and be empty.
+
+If all conditions are met, the restore will proceed. The tool will provide hints, so you don't have to memorize them. It's crucial to avoid overwriting existing files, so make sure to remove them prior to the restore if they still exist. Hence all the conditions.
 
 <!-- request Example -->
 ```bash
@@ -211,3 +212,5 @@ Manticore config
 ```
 
 <!-- end -->
+
+<!-- proofread -->

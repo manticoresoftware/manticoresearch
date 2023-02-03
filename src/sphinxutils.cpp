@@ -1627,14 +1627,14 @@ CSphString AppendWinInstallDir ( const CSphString & sDir )
 	sPath1.ToLower();
 	sPath2.ToLower();
 
-	if ( sPath1.Begins ( sPath2.cstr() ) )
+	if ( sPath1.Begins ( sPath2.cstr() ) && sPath1.cstr()[sPath2.Length()]=='/' )
 		return sDir;
 
-	const char * DEFAULT_INSTALL_PATH = "c:/manticore";
+	const char * DEFAULT_INSTALL_PATH = "c:/manticore/";
 	if ( !sPath1.Begins(DEFAULT_INSTALL_PATH) )
 		return sDir;
 
-	CSphString sCut = sPath1.SubString ( strlen(DEFAULT_INSTALL_PATH), sPath1.Length()-strlen(DEFAULT_INSTALL_PATH) );
+	CSphString sCut = sPath1.SubString ( strlen(DEFAULT_INSTALL_PATH)-1, sPath1.Length()-strlen(DEFAULT_INSTALL_PATH)+1 );
 	sCut.SetSprintf ( "%s%s", sPath2.cstr(), sCut.cstr() );
 	return sCut;
 }

@@ -48,7 +48,7 @@ set ( CPACK_RPM_SERVER_PACKAGE_DEBUG OFF )
 
 set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
-set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-backup >= ${DEP_BACKUP_VERSION}, manticore-backup < {$BACKUP_VERNUM_MAX}" )
+set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-backup >= ${DEP_BACKUP_VERSION}, manticore-backup < ${BACKUP_VERNUM_MAX}" )
 set ( CPACK_RPM_TOOLS_PACKAGE_OBSOLETES "sphinx" )
 
 set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )

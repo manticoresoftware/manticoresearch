@@ -7,7 +7,7 @@ Manticore team usually doesn't provide new version packages for old Linuxes (aft
 you can try to use [Homebrew](https://brew.sh/) for installing Manticore Search:
 
 ```bash
-brew install manticoresearch
+brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra
 ```
 
 and then start it:

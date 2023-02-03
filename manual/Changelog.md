@@ -1,7 +1,7 @@
 # Changelog
 
 # Version 6.0.0
-Released: **SOON**
+Released: Feb 3 2023
 
 Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require super low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump, DBeaver, Grafana mysql connector. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
@@ -79,11 +79,11 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * RHEL 9 support including Centos 9, Alma Linux 9 and Oracle Linux 9.
 * [Issue #924](https://github.com/manticoresoftware/manticoresearch/issues/924) Debian Bookworm support.
 * [Issue #636](https://github.com/manticoresoftware/manticoresearch/issues/636) Packaging: arm64 builds for Linuxes and MacOS.
+* [PR #26](https://github.com/manticoresoftware/docker/pull/26) Multi-architecture (x86_64 / arm64) docker image.
 * [Simplified package building for contributors](../Installation/Compiling_from_sources.md#Building-using-CI-docker).
 * It's now possible to install a specific version using APT.
 * [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows installer (previously we provided just an archive).
 * Switched to compiling using CLang 15.
-
 
 ### Bugfixes
 * [Issue #479](https://github.com/manticoresoftware/manticoresearch/issues/479) Field with name `text`

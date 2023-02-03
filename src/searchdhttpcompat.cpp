@@ -51,7 +51,6 @@ enum class CompatMode_e
 static CompatMode_e g_eMode = CompatMode_e::DEFAULT;
 static std::array<const char *, (int)CompatMode_e::COUNT> g_dModeNames = { "on", "off", "dashboards" };
 
-static CSphString g_sLogHttpFilter;
 static CSphString g_sKbnTableName = ".kibana";
 static CSphString g_sKbnTableAlias = ".kibana_1";
 static std::vector<CSphString> g_dKbnTablesNames { ".kibana_task_manager", ".apm-agent-configuration", g_sKbnTableName };
@@ -64,6 +63,54 @@ static bool LOG_LEVEL_COMPAT = val_from_env ( "MANTICORE_LOG_ES_COMPAT", false )
 #define COMPATINFO LOGINFO ( COMPAT, COMPATINFO )
 
 #define CompatWarning( ... ) do if ( LOG_LEVEL_COMPAT ) sphWarning_impl (__VA_ARGS__); while(0)
+
+struct CompatInsert_t;
+
+class HttpCompatHandler_c : public HttpCompatBaseHandler_c
+{
+public:
+	HttpCompatHandler_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts );
+	bool Process () final;
+	static void SetLogFilter ( const CSphString & sVal );
+
+private:
+	bool ProcessEndpoints();
+
+	void ReportMissedIndex ( const CSphString & sIndex );
+	void ReportIncorrectMethod ( const char * sAllowed );
+	void ReportMissedScript ( const CSphString & sIndex );
+	
+	void EmptyReply();
+
+	void ProcessMSearch ();
+	void ProcessEmptyHead();
+	bool ProcessKbnTableDoc();
+	void ProcessCat();
+	void ProcessAliasGet();
+	void ProcessILM();
+	void ProcessCCR();
+	void ProcessKbnTableGet();
+	void ProcessSearch();
+	void ProcessCount();
+	bool ProcessInsert();
+	void ProcessInsertIntoIdx ( const CompatInsert_t & tIns );
+	void ProcessKbnTableMGet();
+	void ProcessPutTemplate();
+	void ProcessIgnored();
+	bool ProcessCreateTable();
+	bool ProcessDeleteDoc();
+	bool ProcessUpdateDoc();
+	void ProcessDeleteTable();
+	void ProcessAliasSet();
+	void ProcessRefresh ( const CSphString * pName );
+	void ProcessFields();
+
+	static CSphMutex m_tReqStatLock;
+	static SmallStringHash_T<int> m_tReqStat;
+	static CSphString m_sLogHttpFilter;
+};
+
+Str_t FromStd ( const std::string & sVal ) { return { sVal.c_str(), sVal.length() }; }
 
 //////////////////////////////////////////////////////////////////////////
 // compatibility mode
@@ -154,7 +201,8 @@ static void CreateKbnTable ( const CSphString & sParent, bool bRoot, const nljso
 			tAttr.m_tAttr.m_eAttrType = SPH_ATTR_JSON;
 		} else
 		{
-			CompatWarning ( "skipped column '%s' %s", sName.cstr(), tVal.value().dump().c_str() );
+			std::string sVal = tVal.value().dump();
+			CompatWarning ( "skipped column '%s' %s", sName.cstr(), sVal.c_str() );
 		}
 	}
 }
@@ -223,7 +271,7 @@ int64_t GetDocID ( const char * sID )
 	return iID;
 }
 
-int GetVersion ( const nljson & tDoc )
+static int GetVersion ( const nljson & tDoc )
 {
 	int iVer = 1;
 	if ( tDoc.contains ( "_version" ) )
@@ -234,11 +282,11 @@ int GetVersion ( const nljson & tDoc )
 
 static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError );
 
-static bool InsertDoc ( const CSphString & sSrc, bool bReplace, CSphString & sError )
+static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 {
 	DocID_t tTmpID;
 	SqlStmt_t tStmt;
-	if ( !sphParseJsonInsert ( sSrc.cstr(), tStmt, tTmpID, false, true, sError ) )
+	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, true, sError ) )
 		return false;
 
 	assert ( tTmpID>=0 );
@@ -277,8 +325,8 @@ static bool InsertDoc ( const CSphString & sIndex, const ComplexFields_t & dFiel
 			tVal["doc"][tField.second.cstr()] = tSrc[tField.first].dump().c_str();
 	}
 
-	CSphString sSrc = tVal.dump().c_str();
-	return InsertDoc ( sSrc, bReplace, sError );
+	std::string sSrc  = tVal.dump();
+	return InsertDoc ( FromStd ( sSrc ), bReplace, sError );
 }
 
 static void InsertIntoKbnTable ( const CSphString & sIndex, const nljson & tTbl, const ComplexFields_t & dFields )
@@ -435,16 +483,19 @@ void SaveCompatHttp ( JsonObj_c & tRoot )
 	}
 }
 
-void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody, const VecTraits_T<BYTE> & dResult )
+static void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody, const VecTraits_T<BYTE> & dResult )
 {
+	if ( !LOG_LEVEL_COMPAT )
+		return;
+
 	JsonEscapedBuilder sReq;
 	sReq += R"({"request": {)";
 	sReq.Appendf ( R"( "method": "%s")", http_method_str ( (http_method)iReqType ) );
 	sReq.Appendf ( R"(, "url": "%s")", sURL.cstr() );
-	if ( !sBody.IsEmpty() )
+	if ( !IsEmpty ( sBody ) )
 	{
 		sReq.StartBlock ( nullptr, R"(, "postData": { "text": )", " }" );
-		sReq.AppendEscaped ( sBody.cstr(), EscBld::eEscape );
+		sReq.AppendEscaped ( sBody.first, EscBld::eEscape );
 		sReq.FinishBlock ( false );
 	}
 	sReq += "}";
@@ -464,7 +515,7 @@ void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody,
 	CompatWarning ( "--->\n%s\n<---", sReq.cstr() );
 }
 
-void DumpHttp ( int iReqType, const CSphString & sURL, const CSphString & sBody )
+void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody )
 {
 	DumpHttp ( iReqType, sURL, sBody, VecTraits_T<BYTE>() );
 }
@@ -971,58 +1022,6 @@ static void FixupKibana ( const StrVec_t & dIndexes, nljson & tFullQuery )
 	}
 }
 
-static void ReportError ( const CSphString & sError, const char * sErrorType, ESphHttpStatus eStatus, CSphVector<BYTE> & dResult, const char * sIndex, bool bHeadReply )
-{
-	CompatWarning ( "%s", sError.cstr() );
-
-	int iStatus = HttpGetStatusCodes ( eStatus );
-	CSphString sReply = JsonEncodeResultError ( sError, sErrorType, iStatus, sIndex );
-	HttpBuildReplyHead ( dResult, eStatus, sReply.cstr(), sReply.Length(), bHeadReply );
-}
-
-static void ReportCompatError ( const CSphString & sError, ESphHttpStatus eStatus, CSphVector<BYTE> & dResult )
-{
-	CompatWarning ( "%s", sError.cstr() );
-
-	int iStatus = HttpGetStatusCodes ( eStatus );
-	CSphString sReply = JsonEncodeResultError ( sError, iStatus );
-	HttpBuildReplyHead ( dResult, eStatus, sReply.cstr(), sReply.Length(), false );
-}
-
-static void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult, const char * sIndex )
-{
-	ReportError ( sError, sErrorType, eStatus, dResult, sIndex, false );
-}
-
-
-void ReportError ( const CSphString & sError, const char * sErrorType , ESphHttpStatus eStatus, CSphVector<BYTE> & dResult )
-{
-	ReportError ( sError, sErrorType, eStatus, dResult, nullptr, false );
-}
-
-static void ReportMissedIndex ( const CSphString & sIndex, const StrVec_t & dUrlParts, bool bHeadReply, CSphVector<BYTE> & dResult )
-{
-	StringBuilder_c sLocation ( "/", "/", "/" );
-	dUrlParts.Apply ( [&sLocation] ( const CSphString & sItem ) { sLocation << sItem; } );
-	CompatWarning ( "missed index '%s' at '%s'", sIndex.cstr(), sLocation.cstr() );
-
-	CSphString sMsg;
-	sMsg.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-	ReportError ( sMsg.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_404, dResult, sIndex.cstr(), bHeadReply );
-}
-
-static void ReportMissedIndex ( const CSphString & sIndex, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
-{
-	ReportMissedIndex ( sIndex, dUrlParts, false, dResult );
-}
-
-static void ReportIncorrectMethod ( const char * sURI, const char * sMethod, const char * sAllowed, CSphVector<BYTE> & dResult )
-{
-	CSphString sMsg;
-	sMsg.SetSprintf ( "Incorrect HTTP method for uri [%s] and method [%s], allowed: [%s]", sURI, sMethod, sAllowed );
-	ReportCompatError ( sMsg, SPH_HTTP_STATUS_405, dResult );
-}
-
 static StrVec_t ExpandIndexes ( const CSphString & sSrcIndexes, CSphString & sResIndex )
 {
 	StrVec_t dLocalIndexes;
@@ -1159,18 +1158,16 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	FixupKibana ( dIndexes, tReq );
 	FixupFilter ( dIndexes, tReq );
 	ReplaceAtColumnNames ( tReq );
-		
-	CSphString sReqFixed = tReq.dump().c_str();
-	JsonObj_c tMntReq = JsonObj_c ( sReqFixed.cstr() );
 
 	JsonQuery_c tQuery;
 	tQuery.m_eQueryType = QUERY_JSON;
-	tQuery.m_sRawQuery = sReqFixed;
+	tQuery.m_sRawQuery = tReq.dump().c_str();
+	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
 	bool bProfile = false;
 	if ( !sphParseJsonQuery ( tMntReq, tQuery, bProfile, sError, sWarning ) )
 	{
-		CompatWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), sReqFixed.cstr() );
+		CompatWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 		sRes = JsonEncodeResultError ( sError, "parse_exception", 400 );
 		return false;
 	}
@@ -1192,7 +1189,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	{
 		if ( !pAggr->m_iSuccesses )
 		{
-			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), sReqFixed.cstr() );
+			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 			break;
 		}
 	}
@@ -1200,17 +1197,17 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	return true;
 }
 
-static bool ProcessMSearch ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessMSearch ()
 {
-	if ( tParser.GetBody().IsEmpty() )
+	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400, dResult );
-		return true;
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return;
 	}
-	if ( !tParser.GetBody().Ends( "\n" ) )
+	if ( !Ends ( GetBody(), "\n" ) )
 	{
-		ReportError ( "The msearch request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
-		return true;
+		ReportError ( "The msearch request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
+		return;
 	}
 
 	int64_t tmStarted = sphMicroTimer();
@@ -1218,14 +1215,14 @@ static bool ProcessMSearch ( const HttpRequestParsed_t & tParser, const StrVec_t
 	//const HttpOptionsHash_t & hOpts = tParser.GetOptions();
 
 	CSphString sDefaultIndex;
-	if ( dUrlParts.GetLength()>1 )
-		sDefaultIndex = dUrlParts[0];
+	if ( GetUrlParts().GetLength()>1 )
+		sDefaultIndex = GetUrlParts()[0];
 
 	//bool bRestTotalHitsInt = IsTrue ( hOpts, "rest_total_hits_as_int" );
 
 	CSphVector<nljson> tSourceReq;
 	int iSourceLine = 0;
-	SplitNdJson ( tParser.GetBody().cstr(), tParser.GetBody().Length(),
+	SplitNdJson ( GetBody(),
 		[&] ( const char * sLine, int iLen )
 		{
 			nljson tItem = nljson::parse ( sLine );
@@ -1242,15 +1239,15 @@ static bool ProcessMSearch ( const HttpRequestParsed_t & tParser, const StrVec_t
 
 	if ( iSourceLine<2 )
 	{
-		ReportError ( "Validation Failed: 1: no requests added;", "action_request_validation_exception", SPH_HTTP_STATUS_400, dResult );
-		return true;
+		ReportError ( "Validation Failed: 1: no requests added;", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+		return;
 	}
 
 	CSphFixedVector<CSphString> dRes ( tSourceReq.GetLength() );
 	for ( int i=0; i<dRes.GetLength(); i++ )
 	{
 		nljson & tReq = tSourceReq[i];
-		DoSearch ( sDefaultIndex, tReq, tParser.GetFullURL(), dRes[i] );
+		DoSearch ( sDefaultIndex, tReq, GetFullURL(), dRes[i] );
 	}
 
 	int64_t tmTook = sphMicroTimer() - tmStarted;
@@ -1273,9 +1270,7 @@ static bool ProcessMSearch ( const HttpRequestParsed_t & tParser, const StrVec_t
 	tReply += "]\n";
 	tReply += "}";
 
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, tReply.cstr(), tReply.GetLength(), false );
-
-	return true;
+	BuildReply ( tReply, SPH_HTTP_STATUS_200 );
 }
 
 typedef CSphVector< std::pair < CSphString, int > > DocIdVer_t;
@@ -1419,11 +1414,12 @@ static void TableGetDoc ( const CSphString & sId, const CSphIndex * pIndex, cons
 	}
 }
 
-static bool ProcessKbnTableDoc ( const StrVec_t & dUrlParts, bool bHeadReply, CSphVector<BYTE> & dResult )
+bool HttpCompatHandler_c::ProcessKbnTableDoc()
 {
-	const CSphString & sId = dUrlParts.Last();
+	assert ( GetUrlParts().GetLength() );
+	const CSphString & sId = GetUrlParts().Last();
 
-	CSphString sIndex = dUrlParts[0];
+	CSphString sIndex = GetUrlParts()[0];
 	{
 		ScRL_t tLock ( g_tLockAlias );
 		const CSphString * pAliasIndex = g_hAlias ( sIndex );
@@ -1484,7 +1480,7 @@ static bool ProcessKbnTableDoc ( const StrVec_t & dUrlParts, bool bHeadReply, CS
 	JsonEscapedBuilder tReply;
 	tReply += tDoc.dump().c_str();
 
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, tReply.cstr(), tReply.GetLength(), bHeadReply );
+	BuildReplyHead ( Str_t ( tReply ), SPH_HTTP_STATUS_200 );
 
 	return true;
 }
@@ -1503,9 +1499,9 @@ static nljson ReportGetDocError ( const CSphString & sError, const char * sError
 	return tRes;
 }
 
-static bool ProcessKbnTableMGet ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessKbnTableMGet()
 {
-	nljson tReq = nljson::parse ( tParser.GetBody().cstr() );
+	nljson tReq = nljson::parse ( GetBody().first );
 	
 	nljson::json_pointer tDocs ( "/docs" );
 	nljson::json_pointer tIds ( "/ids" );
@@ -1515,21 +1511,21 @@ static bool ProcessKbnTableMGet ( const HttpRequestParsed_t & tParser, const Str
 
 	if ( !bCaseDocs && !bCaseIds )
 	{
-		ReportError ( "unknown key for a START_ARRAY, expected [docs] or [ids]", "parsing_exception", SPH_HTTP_STATUS_400, dResult );
-		return true;
+		ReportError ( "unknown key for a START_ARRAY, expected [docs] or [ids]", "parsing_exception", SPH_HTTP_STATUS_400 );
+		return;
 	}
 
 	CSphString sError;
 	CSphString sIndex;
 	if ( bCaseIds )
 	{
-		if ( dUrlParts.GetLength()<2 )
+		if ( GetUrlParts().GetLength()<2 )
 		{
-			ReportError ( "Validation Failed: 1: index is missing for doc 0;", "action_request_validation_exception", SPH_HTTP_STATUS_400, dResult );
-			return true;
+			ReportError ( "Validation Failed: 1: index is missing for doc 0;", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+			return;
 		}
 
-		sIndex = dUrlParts[2];
+		sIndex = GetUrlParts()[2];
 		ScRL_t tLock ( g_tLockAlias );
 		const CSphString * pAliasIndex = g_hAlias ( sIndex );
 		if ( pAliasIndex )
@@ -1537,17 +1533,17 @@ static bool ProcessKbnTableMGet ( const HttpRequestParsed_t & tParser, const Str
 
 		if ( sIndex.IsEmpty() )
 		{
-			sError.SetSprintf ( "no such index [%s]", dUrlParts[2].cstr() );
-			ReportError ( sError.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_400, dResult );
-			return true;
+			sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
+			ReportError ( sError.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_400 );
+			return;
 		}
 
 		auto tIndex ( GetServed ( sIndex ) );
 		if ( !tIndex )
 		{
-			sError.SetSprintf ( "no such index [%s]", dUrlParts[2].cstr() );
-			ReportError ( sError.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_400, dResult  );
-			return true;
+			sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
+			ReportError ( sError.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_400 );
+			return;
 		}
 	}
 
@@ -1567,14 +1563,14 @@ static bool ProcessKbnTableMGet ( const HttpRequestParsed_t & tParser, const Str
 			if ( !tDoc.contains ( tDocId ) )
 			{
 				sError.SetSprintf ( "Validation Failed: 1: id is missing for doc %d;", iDoc );
-				ReportError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, dResult  );
-				return true;
+				ReportError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+				return;
 			}
 			if ( !tDoc.contains ( tDocIdx ) )
 			{
 				sError.SetSprintf ( "Validation Failed: 1: index is missing for doc %d;", iDoc );
-				ReportError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, dResult  );
-				return true;
+				ReportError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+				return;
 			}
 
 			sId = tDoc[tDocId].get<std::string>().c_str();
@@ -1633,18 +1629,15 @@ static bool ProcessKbnTableMGet ( const HttpRequestParsed_t & tParser, const Str
 	JsonEscapedBuilder tReply;
 	tReply += tRes.dump().c_str();
 
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, tReply.cstr(), tReply.GetLength(), false );
-
-	return true;
+	BuildReply ( Str_t ( tReply ), SPH_HTTP_STATUS_200 );
 }
 
-static void ProcessPutTemplate ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessPutTemplate()
 {
-	assert ( dUrlParts.GetLength() );
+	assert ( GetUrlParts().GetLength() );
+	const CSphString & sTblName = GetUrlParts()[1];
 
-	const CSphString & sTblName = dUrlParts[1];
-
-	nljson tTbl = nljson::parse ( tParser.GetBody().cstr() );
+	nljson tTbl = nljson::parse ( GetBody().first );
 	if ( !tTbl.contains ( "order" ) )
 		tTbl["order"] = 0;
 	if ( !tTbl.contains ( "version" ) )
@@ -1655,20 +1648,14 @@ static void ProcessPutTemplate ( const HttpRequestParsed_t & tParser, const StrV
 		g_tKbnTable["templates"][sTblName.cstr()] = tTbl;
 	}
 
-	JsonEscapedBuilder tReply;
-	tReply += R"({"acknowledged":true})";
-
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, tReply.cstr(), tReply.GetLength(), false );
+	const char * sRes = "{\"acknowledged\":true}";
+	BuildReply ( FromSz  ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static void ProcessIgnored ( CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessIgnored()
 {
-	nljson tReplyJs = R"({"took":0, "ignored":true, "errors":false})"_json;
-
-	JsonEscapedBuilder tReply;
-	tReply += tReplyJs.dump().c_str();
-
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, tReply.cstr(), tReply.GetLength(), false );
+	const char * sRes = "{\"took\":0, \"ignored\":true, \"errors\":false}";
+	BuildReply ( FromSz ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
 static bool ProcessFilterPath ( const nljson & tNode, const VecTraits_T<CSphString> & dParts, int iPart, nljson & tPart )
@@ -1748,9 +1735,9 @@ static int ProcessFilter ( const CSphString * sFilters, nljson & tRes )
 	return 1;
 }
 
-static bool ProcessKbnTableGet ( const StrVec_t & dUrlParts, const CSphString * sFilters, bool bHeadReply, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessKbnTableGet()
 {
-	const CSphString & sSrcIndexName = dUrlParts[0];
+	const CSphString & sSrcIndexName = GetUrlParts()[0];
 
 	nljson::json_pointer tTblName;
 	{
@@ -1768,8 +1755,8 @@ static bool ProcessKbnTableGet ( const StrVec_t & dUrlParts, const CSphString * 
 
 		if ( tTblName.empty() || !g_tKbnTable.contains ( tTblName ) )
 		{
-			ReportMissedIndex ( sSrcIndexName, dUrlParts, bHeadReply, dResult );
-			return true;
+			ReportMissedIndex ( sSrcIndexName );
+			return;
 		}
 	}
 
@@ -1786,11 +1773,11 @@ static bool ProcessKbnTableGet ( const StrVec_t & dUrlParts, const CSphString * 
 		}
 
 		// get inner object
-		if ( dUrlParts.GetLength()>1 )
+		if ( GetUrlParts().GetLength()>1 )
 		{
 			nljson::json_pointer tInner = tTblName;
-			for ( int i=1; i<dUrlParts.GetLength(); i++ )
-				tInner /= dUrlParts[i].cstr();
+			for ( int i=1; i<GetUrlParts().GetLength(); i++ )
+				tInner /= GetUrlParts()[i].cstr();
 
 			if ( tRes.contains ( tInner ) )
 			{
@@ -1800,13 +1787,12 @@ static bool ProcessKbnTableGet ( const StrVec_t & dUrlParts, const CSphString * 
 		}
 	}
 
-	ProcessFilter ( sFilters, tRes );
+	ProcessFilter ( GetOptions() ( "filter_path" ), tRes );
 
 	JsonEscapedBuilder tReply;
 	tReply += tRes.dump().c_str();
 
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, tReply.cstr(), tReply.GetLength(), bHeadReply );
-	return true;
+	BuildReplyHead ( Str_t ( tReply ), SPH_HTTP_STATUS_200 );
 }
 
 static int ProcessFilterSource ( const CSphString * sSourceFilter, nljson & tRes )
@@ -1959,58 +1945,55 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	tRes["_shards"]["successful"] = iIndexes;
 	tRes["hits"]["total"]["value"] = iDocsTotal;
 
-	StringBuilder_c sRes;
-	sRes += tRes.dump().c_str();
-
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.GetLength(), false );
+	std::string sRes = tRes.dump();
+	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.c_str(), sRes.length(), false );
 
 	return true;
 }
 
-static bool ProcessSearch ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessSearch()
 {
-	if ( tParser.GetBody().IsEmpty() )
+	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400, dResult );
-		return true;
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return;
 	}
 
-	const CSphString & sIndex = dUrlParts[0];
-	nljson tReq = nljson::parse ( tParser.GetBody().cstr() );
+	const CSphString & sIndex = GetUrlParts()[0];
+	nljson tReq = nljson::parse ( GetBody().first );
 
-	if ( EmulateIndexCount ( sIndex, tReq, dResult ) )
-		return true;
+	if ( EmulateIndexCount ( sIndex, tReq, GetResult() ) )
+		return;
 
 	CSphString sRes;
-	if ( !DoSearch ( sIndex, tReq, tParser.GetFullURL(), sRes ) )
+	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
-		HttpBuildReply ( dResult, SPH_HTTP_STATUS_400, sRes.cstr(), sRes.Length(), false );
-		return true;
+		BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_400 );
+		return;
 	}
 
 	// filter_path and _source uri params
-	ProcessKbnResult ( tParser.GetOptions()( "_source" ), tParser.GetOptions()( "filter_path" ), sRes );
+	ProcessKbnResult ( GetOptions()( "_source" ), GetOptions()( "filter_path" ), sRes );
 
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
-	return true;
+	BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static bool ProcessCount ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessCount()
 {
-	if ( tParser.GetBody().IsEmpty() )
+	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400, dResult );
-		return true;
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return;
 	}
 
-	const CSphString & sIndex = dUrlParts[0];
-	nljson tReq = nljson::parse ( tParser.GetBody().cstr() );
+	const CSphString & sIndex = GetUrlParts()[0];
+	nljson tReq = nljson::parse ( GetBody().first );
 
 	CSphString sRes;
-	if ( !DoSearch ( sIndex, tReq, tParser.GetFullURL(), sRes ) )
+	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
-		HttpBuildReply ( dResult, SPH_HTTP_STATUS_400, sRes.cstr(), sRes.Length(), false );
-		return true;
+		BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_400 );
+		return;
 	}
 
 	nljson tRef = nljson::parse ( sRes.cstr() );
@@ -2025,9 +2008,8 @@ static bool ProcessCount ( const HttpRequestParsed_t & tParser, const StrVec_t &
 	}
 
 	// filter_path and _source uri params
-	ProcessKbnResult ( tParser.GetOptions()( "_source" ), tParser.GetOptions()( "filter_path" ), sRes );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
-	return true;
+	ProcessKbnResult ( GetOptions()( "_source" ), GetOptions()( "filter_path" ), sRes );
+	BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
 static void CatAliases ( bool bJson, StringBuilder_c & sRes )
@@ -2338,37 +2320,36 @@ static void CatIndexes ( bool bJson, const char * sFilter, const CSphString * pC
 		sRes += tJsonRes.dump().c_str();
 }
 
-static bool ProcessCat ( const StrVec_t & dUrlParts, const HttpOptionsHash_t & hOpts, const CSphString & sFullURL, bool bHeadReply, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessCat()
 {
-	assert ( dUrlParts.GetLength()>=2 );
-	bool bJson = IsEq ( hOpts, "format", "json" );
+	assert ( GetUrlParts().GetLength()>=2 );
+	bool bJson = IsEq ( GetOptions(), "format", "json" );
 
 	StringBuilder_c sRes;
 
-	if ( dUrlParts[1]=="aliases" )
+	if ( GetUrlParts()[1]=="aliases" )
 	{
 		CatAliases ( bJson, sRes );
-	} else if ( dUrlParts[1]=="master" )
+	} else if ( GetUrlParts()[1]=="master" )
 	{
 		CatMaster ( bJson, sRes );
-	} else if ( dUrlParts[1]=="templates" )
+	} else if ( GetUrlParts()[1]=="templates" )
 	{
-		CatTemplates ( bJson, ( dUrlParts.GetLength()>=3 ? dUrlParts[2].cstr() : nullptr ), sRes );
-	} else if ( dUrlParts[1]=="indices" )
+		CatTemplates ( bJson, ( GetUrlParts().GetLength()>=3 ? GetUrlParts()[2].cstr() : nullptr ), sRes );
+	} else if ( GetUrlParts()[1]=="indices" )
 	{
-		CatIndexes ( bJson, ( dUrlParts.GetLength()>=3 ? dUrlParts[2].cstr() : nullptr ), hOpts ( "h" ), sRes );
+		CatIndexes ( bJson, ( GetUrlParts().GetLength()>=3 ? GetUrlParts()[2].cstr() : nullptr ), GetOptions() ( "h" ), sRes );
 	} else
 	{
-		sRes.Sprintf ( "Incorrect HTTP method for uri [%s] and method [GET], allowed: [POST]", sFullURL.cstr() );
-		HttpErrorReply ( dResult, SPH_HTTP_STATUS_405, sRes.cstr() );
-		return true;
+		sRes.Sprintf ( "Incorrect HTTP method for uri [%s] and method [GET], allowed: [POST]", GetFullURL().cstr() );
+		HttpErrorReply ( GetResult(), SPH_HTTP_STATUS_405, sRes.cstr() );
+		return;
 	}
 
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.GetLength(), bHeadReply );
-	return true;
+	BuildReplyHead ( Str_t ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static void ProcessEmptyHead ( bool bHeadReply, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessEmptyHead ()
 {
 	nljson tJsonRes = R"(
 {
@@ -2390,10 +2371,8 @@ static void ProcessEmptyHead ( bool bHeadReply, CSphVector<BYTE> & dResult )
 }
 )"_json;
 
-	StringBuilder_c sRes;
-	sRes += tJsonRes.dump().c_str();
-
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.GetLength(), bHeadReply );
+	std::string sRes = tJsonRes.dump();
+	BuildReplyHead ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
 static bool GetIndexComplexFields ( const CSphString & sIndex, ComplexFields_t & dFields )
@@ -2414,17 +2393,17 @@ static bool GetIndexComplexFields ( const CSphString & sIndex, ComplexFields_t &
 
 struct CompatInsert_t
 {
-	const CSphString & m_sBody;
+	Str_t m_sBody;
 	const CSphString & m_sIndex;
 	const bool m_bReplace;
 	const char * m_sId { nullptr };
 
-	CompatInsert_t ( const CSphString & sBody, const CSphString & sIndex, bool bReplace )
+	CompatInsert_t ( Str_t sBody, const CSphString & sIndex, bool bReplace )
 		: m_sBody ( sBody ), m_sIndex ( sIndex ), m_bReplace ( bReplace )
 	{}
 };
 
-static void ProcessInsertIntoIdx ( const CompatInsert_t & tIns, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessInsertIntoIdx ( const CompatInsert_t & tIns )
 {
 	SqlStmt_t tStmt;
 	tStmt.m_eStmt = ( tIns.m_bReplace ? STMT_REPLACE : STMT_INSERT );
@@ -2438,14 +2417,14 @@ static void ProcessInsertIntoIdx ( const CompatInsert_t & tIns, CSphVector<BYTE>
 	if ( tIns.m_sId )
 		tId.m_iVal = strtoll ( tIns.m_sId, NULL, 10 );
 
-	JsonObj_c tSource ( tIns.m_sBody.cstr() );
+	JsonObj_c tSource ( tIns.m_sBody.first );
 
 	CSphString sError;
 	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, false, sError ) && InsertDoc ( tStmt, sError ) );
 
 	if ( !bInserted )
 	{
-		ReportError ( sError.cstr(), "x_content_parse_exception", SPH_HTTP_STATUS_400, dResult, tIns.m_sIndex.cstr() );
+		ReportError ( sError.cstr(), "x_content_parse_exception", SPH_HTTP_STATUS_400, tIns.m_sIndex.cstr() );
 	} else
 	{
 		DocID_t tLastDoc = 0;
@@ -2462,63 +2441,63 @@ static void ProcessInsertIntoIdx ( const CompatInsert_t & tIns, CSphVector<BYTE>
 		tRes["result"] = ( ( tIns.m_bReplace && tIns.m_sId ) ? "updated" : "created" );
 		tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
 
-		CSphString sRes ( tRes.dump().c_str() );
-		HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
+		std::string sRes = tRes.dump();
+		BuildReply ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 	}
 }
 
-static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+bool HttpCompatHandler_c::ProcessInsert()
 {
-	if ( tParser.GetBody().IsEmpty() )
+	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400, dResult );
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
 		return true;
 	}
 
-	bool bDocReq = ( dUrlParts[1]=="_doc" );
+	bool bDocReq = ( GetUrlParts()[1]=="_doc" );
 
 	CSphString sError;
 	CSphString sIndex;
-	StrVec_t dIndexes = ExpandIndexes ( dUrlParts[0], sIndex );
+	StrVec_t dIndexes = ExpandIndexes ( GetUrlParts()[0], sIndex );
 
 	if ( sIndex.IsEmpty() )
 	{
-		ReportMissedIndex ( dUrlParts[0], dUrlParts, dResult );
+		ReportMissedIndex ( GetUrlParts()[0] );
 		return true;
 	}
 
-	CompatInsert_t tIns ( tParser.GetBody(), sIndex, bDocReq );
-	if ( dUrlParts.GetLength()>2 )
-		tIns.m_sId = dUrlParts[2].cstr();
+	CompatInsert_t tIns ( GetBody(), sIndex, bDocReq );
+	if ( GetUrlParts().GetLength()>2 )
+		tIns.m_sId = GetUrlParts()[2].cstr();
 
 	// index/_doc without id allowed only for POST
-	if ( bDocReq && tIns.m_sId==nullptr && tParser.GetRequestType()!=HTTP_POST )
+	if ( bDocReq && tIns.m_sId==nullptr && GetRequestType()!=HTTP_POST )
 	{
-		ReportIncorrectMethod ( tParser.GetFullURL().cstr(), http_method_str ( (http_method)tParser.GetRequestType() ), "POST", dResult );
+		ReportIncorrectMethod ( "POST" );
 		return true;
 	}
 
 	// index/_create without id not allowed
 	if ( !bDocReq && tIns.m_sId==nullptr )
 	{
-		if ( tParser.GetRequestType()==HTTP_POST )
+		if ( GetRequestType()==HTTP_POST )
 		{
 			sError.SetSprintf ( "Rejecting mapping update to [%s] as the final mapping would have more than 1 type: [_doc, _create]", sIndex.cstr() );
-			ReportError ( sError, "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
+			ReportError ( sError.cstr(), "illegal_argument_exception", SPH_HTTP_STATUS_400 );
 		} else
 		{
-			ReportIncorrectMethod ( tParser.GetFullURL().cstr(), http_method_str ( (http_method)tParser.GetRequestType() ), "POST", dResult );
+			ReportIncorrectMethod ( "POST" );
 		}
 		return true;
 	}
 
 	if ( !IsKibanTable ( dIndexes ) )
 	{
-		 ProcessInsertIntoIdx ( tIns, dResult );
+		 ProcessInsertIntoIdx ( tIns );
 		 return true;
 	}
 
-	nljson tSrc = nljson::parse ( tParser.GetBody().cstr() );
+	nljson tSrc = nljson::parse ( GetBody().first );
 	int iVersion = 1;
 
 	// check \ get document version vs _create \ _doc
@@ -2541,7 +2520,7 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 		{
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", tIns.m_sId, iVersion );
-			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, dResult, sIndex.cstr() );
+			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, sIndex.cstr() );
 			return true;
 		}
 	}
@@ -2559,7 +2538,7 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 	{
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", tIns.m_sId, iVersion );
-		ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, dResult, sIndex.cstr() );
+		ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, sIndex.cstr() );
 	} else
 	{
 		nljson tRes;
@@ -2569,25 +2548,25 @@ static bool ProcessInsert ( const HttpRequestParsed_t & tParser, const StrVec_t 
 		tRes["_version"] = iVersion;
 		tRes["_seq_no"] = 0;
 		tRes["_primary_term"] = 1;
-		tRes["result"] = ( ( dUrlParts[1]=="_create" || iVersion==1 ) ? "created" : "updated" );
+		tRes["result"] = ( ( GetUrlParts()[1]=="_create" || iVersion==1 ) ? "created" : "updated" );
 		tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
 
-		CSphString sRes ( tRes.dump().c_str() );
-		HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
+		std::string sRes = tRes.dump();
+		BuildReply ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 	}
 
 	return true;
 }
 
-static bool ProcessDeleteDoc ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+bool HttpCompatHandler_c::ProcessDeleteDoc()
 {
 	CSphString sIndex;
-	ExpandIndexes ( dUrlParts[0], sIndex );
-	const CSphString & sId = dUrlParts[2];
+	ExpandIndexes ( GetUrlParts()[0], sIndex );
+	const CSphString & sId = GetUrlParts()[2];
 
 	if ( sIndex.IsEmpty() )
 	{
-		ReportMissedIndex ( dUrlParts[0], dUrlParts, dResult );
+		ReportMissedIndex ( GetUrlParts()[0] );
 		return true;
 	}
 
@@ -2626,7 +2605,7 @@ static bool ProcessDeleteDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		if ( pReporter->IsError() )
 		{
 			CompatWarning ( "doc '%s', error: %s", sId.cstr(), pReporter->GetError() );
-			ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400, dResult );
+			ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
 			return true;
 		}
 	}
@@ -2641,8 +2620,8 @@ static bool ProcessDeleteDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	tRes["result"] = ( dIds.GetLength() ? "deleted" : "not_found" );
 	tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
 
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
+	std::string sRes = tRes.dump();
+	BuildReply ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 
 	return true;
 }
@@ -2751,34 +2730,23 @@ static void ReportUpated ( const char * sId, int iVersion, const char * sIndex, 
 
 	tRes["get"] = tGet;
 
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
+	std::string sRes = tRes.dump();
+	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.c_str(), sRes.length(), false );
 }
 
-static void ReportMissedScript ( const CSphString & sIndex,  const CSphString & sBody, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
-{
-	StringBuilder_c sLocation ( "/", "/", "/" );
-	dUrlParts.Apply ( [&sLocation] ( const CSphString & sItem ) { sLocation << sItem; } );
-	nljson tReq = nljson::parse ( sBody.cstr() );
-	CompatWarning ( "missed script '%s' at '%s' body '%s'", sIndex.cstr(), sLocation.cstr(), tReq.dump().c_str() );
-
-	ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
-}
-
-
-static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec_t & dUrlParts, CSphVector<BYTE> & dResult )
+bool HttpCompatHandler_c::ProcessUpdateDoc()
 {
 	CSphString sIndex;
-	ExpandIndexes ( dUrlParts[0], sIndex );
-	const CSphString & sId = dUrlParts[2];
+	ExpandIndexes ( GetUrlParts()[0], sIndex );
+	const CSphString & sId = GetUrlParts()[2];
 
 	if ( sIndex.IsEmpty() )
 	{
-		ReportMissedIndex ( dUrlParts[0], dUrlParts, dResult );
+		ReportMissedIndex ( GetUrlParts()[0] );
 		return true;
 	}
 
-	nljson tUpd = nljson::parse ( tParser.GetBody().cstr() );
+	nljson tUpd = nljson::parse ( GetBody().first );
 
 	bool bHasScript = tUpd.contains ( "script" );
 
@@ -2786,7 +2754,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	nljson::json_pointer tScriptParamsName ( "/script/params" );
 	if ( bHasScript &&( !tUpd.contains ( tScriptName ) || !tUpd.contains ( tScriptParamsName )  ) )
 	{
-		ReportMissedScript ( sIndex, tParser.GetBody(), dUrlParts, dResult );
+		ReportMissedScript ( sIndex );
 		return true;
 	}
 
@@ -2799,7 +2767,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		pUpdateScript = g_hScripts ( sScript );
 		if ( !pUpdateScript )
 		{
-			ReportMissedScript ( sIndex, tParser.GetBody(), dUrlParts, dResult );
+			ReportMissedScript ( sIndex );
 			return true;
 		}
 	}
@@ -2819,7 +2787,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		CompatWarning ( "doc '%s' source '%s' missed", sId.cstr(), tSrcName.to_string().c_str() );
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
-		ReportError ( sMsg.cstr(), "document_missing_exception", SPH_HTTP_STATUS_404, dResult );
+		ReportError ( sMsg.cstr(), "document_missing_exception", SPH_HTTP_STATUS_404 );
 		return true;
 	}
 
@@ -2839,11 +2807,11 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
-			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, dResult, sIndex.cstr() );
+			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, sIndex.cstr() );
 			return true;
 		} else
 		{
-			ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "created", tSrc, dResult );
+			ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "created", tSrc, GetResult() );
 			return true;
 		}
 	}
@@ -2851,13 +2819,13 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 	if ( dIds.GetLength()!=1 )
 	{
 		CompatWarning ( "multiple %d documents found for '%s'", dIds.GetLength(), sId.cstr() );
-		ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
+		ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
 		return false;
 	}
 	if ( dIds[0].first!=sId )
 	{
 		CompatWarning ( "wrong document found '%s' for '%s'", dIds[0].first.cstr(), sId.cstr() );
-		ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
+		ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
@@ -2891,7 +2859,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, sError ) ) )
 		{
 			CompatWarning ( "%s", sError.cstr() );
-			ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400, dResult );
+			ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
 			return true;
 		}
 	} else if ( tUpd.contains ( "doc" ) )
@@ -2903,7 +2871,7 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 		CompatWarning ( "doc '%s' source 'doc' missed", sId.cstr() );
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
-		ReportError ( sMsg.cstr(), "document_missing_exception", SPH_HTTP_STATUS_404, dResult );
+		ReportError ( sMsg.cstr(), "document_missing_exception", SPH_HTTP_STATUS_404 );
 		return true;
 	}
 
@@ -2914,12 +2882,12 @@ static bool ProcessUpdateDoc ( const HttpRequestParsed_t & tParser, const StrVec
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
-			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, dResult, sIndex.cstr() );
+			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", SPH_HTTP_STATUS_409, sIndex.cstr() );
 			return true;
 	}
 
 
-	ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "updated", tSrc, dResult );
+	ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "updated", tSrc, GetResult() );
 	return true;
 }
 
@@ -2949,8 +2917,11 @@ static void DropTable ( const CSphString & sName )
 	}
 }
 
-static bool ProcessCreateTable ( const HttpRequestParsed_t & tParser, const CSphString & sName, CSphVector<BYTE> & dResult )
+bool HttpCompatHandler_c::ProcessCreateTable()
 {
+	assert ( GetUrlParts().GetLength() );
+	const CSphString & sName = GetUrlParts()[0];
+
 	bool bDropExistTable = false;
 	CSphString sError;
 	{
@@ -2962,13 +2933,13 @@ static bool ProcessCreateTable ( const HttpRequestParsed_t & tParser, const CSph
 			if ( !bDropExistTable )
 			{
 				sError.SetSprintf ( "index [%s] already exists", sName.cstr() );
-				ReportError ( sError.cstr(), "resource_already_exists_exception", SPH_HTTP_STATUS_400, dResult, sName.cstr() );
+				ReportError ( sError.cstr(), "resource_already_exists_exception", SPH_HTTP_STATUS_400, sName.cstr() );
 				return true;
 			}
 		}
 	}
 
-	nljson tTbl = nljson::parse ( tParser.GetBody().cstr() );
+	nljson tTbl = nljson::parse ( GetBody().first );
 
 	// direct create index path (wo template)
 	if ( !tTbl.contains( "mappings" ) )
@@ -3003,44 +2974,43 @@ static bool ProcessCreateTable ( const HttpRequestParsed_t & tParser, const CSph
 })"_json;
 	tRes["index"] = sName.cstr();
 
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
+	std::string sRes = tRes.dump();
+	BuildReply ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 	return true;
 }
 
-static bool ProcessDeleteTable ( const CSphString & sName, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessDeleteTable()
 {
+	const CSphString & sName = GetUrlParts()[0];
 	CSphString sError;
 	{
 		auto tIndex ( GetServed ( sName ) );
 		if ( !tIndex )
 		{
 			sError.SetSprintf ( "no such index [%s]", sName.cstr() );
-			ReportError ( sError.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_404, dResult, sName.cstr() );
-			return true;
+			ReportError ( sError.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_404, sName.cstr() );
+			return;
 		}
 	}
 
 	DropTable ( sName );
 
-	nljson tRes = R"({ "acknowledged": true })"_json;
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
-	return true;
+	const char * sRes = "{ \"acknowledged\": true }";
+	BuildReply ( FromSz ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static bool ProcessAliasGet ( const StrVec_t & dUrlParts, bool bHeadReply, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessAliasGet()
 {
 	CSphString sIndex;
 	StrVec_t dFilters;
-	if ( dUrlParts.GetLength()>=2 && dUrlParts[1]=="_alias" )
+	if ( GetUrlParts().GetLength()>=2 && GetUrlParts()[1]=="_alias" )
 	{
-		sIndex = dUrlParts[0];
-		if ( dUrlParts.GetLength()>=3 )
-			sphSplit ( dFilters, dUrlParts[2].cstr(), "," );
-	} else if ( dUrlParts.GetLength()>=2 && dUrlParts[0]=="_alias" )
+		sIndex = GetUrlParts()[0];
+		if ( GetUrlParts().GetLength()>=3 )
+			sphSplit ( dFilters, GetUrlParts()[2].cstr(), "," );
+	} else if ( GetUrlParts().GetLength()>=2 && GetUrlParts()[0]=="_alias" )
 	{
-		sphSplit ( dFilters, dUrlParts[1].cstr(), "," );
+		sphSplit ( dFilters, GetUrlParts()[1].cstr(), "," );
 	}
 	dFilters.Apply ( [] ( CSphString & sItem ) {
 		if ( sItem=="_all" )
@@ -3068,9 +3038,8 @@ static bool ProcessAliasGet ( const StrVec_t & dUrlParts, bool bHeadReply, CSphV
 		}
 	}
 
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), bHeadReply );
-	return true;
+	std::string sRes = tRes.dump();
+	BuildReplyHead ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
 // FIXME!!! add support of these forms too
@@ -3079,9 +3048,9 @@ static bool ProcessAliasGet ( const StrVec_t & dUrlParts, bool bHeadReply, CSphV
 // PUT /<index>/_aliases/<alias>
 // POST /<index>/_aliases/<alias>
 
-static bool ProcessAliasSet ( const HttpRequestParsed_t & tParser, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessAliasSet()
 {
-	nljson tAliases = nljson::parse ( tParser.GetBody().cstr() );
+	nljson tAliases = nljson::parse ( GetBody().first );
 	if ( tAliases.contains( "actions" ) )
 	{
 		// FIXME!!! add support of aliases and indices options
@@ -3092,8 +3061,8 @@ static bool ProcessAliasSet ( const HttpRequestParsed_t & tParser, CSphVector<BY
 			const auto & tItem = tIt.value().cbegin();
 			if ( !tItem.value().contains ( tIndexName ) || !tItem.value().contains ( tAliasName )  )
 			{
-				ReportError ( "[aliases] failed to parse field [actions]", "x_content_parse_exception", SPH_HTTP_STATUS_400, dResult );
-				return true;
+				ReportError ( "[aliases] failed to parse field [actions]", "x_content_parse_exception", SPH_HTTP_STATUS_400 );
+				return;
 			}
 
 			CSphString sIndex = tItem.value()[tIndexName].get<std::string>().c_str();
@@ -3103,8 +3072,8 @@ static bool ProcessAliasSet ( const HttpRequestParsed_t & tParser, CSphVector<BY
 				auto tIndex ( GetServed ( sIndex ) );
 				if ( !tIndex )
 				{
-					ReportMissedIndex ( sIndex, StrVec_t(), dResult );
-					return true;
+					ReportMissedIndex ( sIndex );
+					return;
 				}
 			}
 
@@ -3134,8 +3103,8 @@ static bool ProcessAliasSet ( const HttpRequestParsed_t & tParser, CSphVector<BY
 					{
 						CSphString sError;
 						sError.SetSprintf ( "aliases [%s] missing", sAlias.cstr() );
-						ReportError ( sError.cstr(), "aliases_not_found_exception", SPH_HTTP_STATUS_404, dResult );
-						return true;
+						ReportError ( sError.cstr(), "aliases_not_found_exception", SPH_HTTP_STATUS_404 );
+						return;
 					}
 				}
 
@@ -3153,19 +3122,17 @@ static bool ProcessAliasSet ( const HttpRequestParsed_t & tParser, CSphVector<BY
 				DropTable ( sIndex );
 			} else
 			{
-				ReportError ( "[aliases] failed to parse field [actions]", "x_content_parse_exception", SPH_HTTP_STATUS_400, dResult );
-				return true;
+				ReportError ( "[aliases] failed to parse field [actions]", "x_content_parse_exception", SPH_HTTP_STATUS_400 );
+				return;
 			}
 		}
 	}
 
-	nljson tRes = R"({ "acknowledged": true })"_json;
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
-	return true;
+	const char * sRes = "{ \"acknowledged\": true }";
+	BuildReply ( FromSz ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static bool ProcessRefresh ( const CSphString * pName, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessRefresh ( const CSphString * pName )
 {
 	CSphString sError;
 	if ( pName )
@@ -3173,26 +3140,22 @@ static bool ProcessRefresh ( const CSphString * pName, CSphVector<BYTE> & dResul
 		auto tIndex ( GetServed ( *pName ) );
 		if ( !tIndex )
 		{
-			ReportMissedIndex ( *pName, StrVec_t(), dResult );
-			return true;
+			ReportMissedIndex ( *pName );
+			return;
 		}
 	}
 
-	nljson tRes = R"({ "_shards": { "total": 1, "successful": 1, "failed": 0 } })"_json;
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
-	return true;
+	const char * sRes = "{ \"_shards\": { \"total\": 1, \"successful\": 1, \"failed\": 0 } }";
+	BuildReply ( FromSz ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static bool ProcessCCR ( bool bHeadReply, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessCCR()
 {
-	nljson tRes = R"({ "follower_indices": [] })"_json;
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), bHeadReply );
-	return true;
+	const char * sRes = "{ \"follower_indices\": [] }";
+	BuildReplyHead ( FromSz ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static bool ProcessILM ( bool bHeadReply, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessILM()
 {
 	nljson tItems = R"({})"_json;
 
@@ -3210,16 +3173,8 @@ static bool ProcessILM ( bool bHeadReply, CSphVector<BYTE> & dResult )
 
 	nljson tRes = R"({})"_json;
 	tRes["indices"] = tItems;
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), bHeadReply );
-	return true;
-}
-
-static void EmptyReply ( bool bHeadReply, CSphVector<BYTE> & dResult )
-{
-	nljson tRes = R"({})"_json;
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReplyHead ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), bHeadReply );
+	std::string sRes = tRes.dump();
+	BuildReplyHead ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
 static nljson GetFieldDesc ( const CSphColumnInfo & tCol, bool bField )
@@ -3321,8 +3276,10 @@ static const char * FixupAtName ( const char * sName, StringBuilder_c & tTmpName
 }
 
 // FIXME!!! add support of Elastic \ Kibana tables
-static bool ProcessFields ( const CSphString & sIndex, CSphVector<BYTE> & dResult )
+void HttpCompatHandler_c::ProcessFields()
 {
+	const CSphString & sIndex = GetUrlParts()[0];
+
 	nljson tRes = R"({"indices":[], "fields":{}})"_json;
 
 	StringBuilder_c tTmpName;
@@ -3382,184 +3339,157 @@ static bool ProcessFields ( const CSphString & sIndex, CSphVector<BYTE> & dResul
 	if ( !sError.IsEmpty() )
 		CompatWarning ( "%s", sError.cstr() );
 
-	CSphString sRes ( tRes.dump().c_str() );
-	HttpBuildReply ( dResult, SPH_HTTP_STATUS_200, sRes.cstr(), sRes.Length(), false );
-	return true;
+	std::string sRes = tRes.dump();
+	BuildReply ( FromStd ( sRes ), SPH_HTTP_STATUS_200 );
 }
 
-static bool ProcessHttp ( const HttpRequestParsed_t & tParser, CSphVector<BYTE> & dResult )
+bool HttpCompatHandler_c::ProcessEndpoints()
 {
-	const HttpOptionsHash_t & hOpts = tParser.GetOptions();
-	const CSphString & sEndpoint = hOpts["endpoint"];
-	StrVec_t dUrlParts = SplitURL ( sEndpoint );
-
-	if ( dUrlParts.GetLength() && dUrlParts.Last().Ends ( "_msearch" ) )
-		return ProcessMSearch ( tParser, dUrlParts, dResult );
-
-	if ( tParser.GetRequestType()==HTTP_GET || tParser.GetRequestType()==HTTP_HEAD )
+	if ( m_dUrlParts.GetLength() && m_dUrlParts.Last().Ends ( "_msearch" ) )
 	{
-		const bool bHeadReply = ( tParser.GetRequestType()==HTTP_HEAD );
-		if ( !dUrlParts.GetLength() )
+		ProcessMSearch();
+		return true;
+	}
+
+	if ( GetRequestType()==HTTP_GET || GetRequestType()==HTTP_HEAD )
+	{
+		if ( !m_dUrlParts.GetLength() )
 		{
-			ProcessEmptyHead ( bHeadReply, dResult );
+			ProcessEmptyHead();
 			return true;
 		}
 
-		if ( dUrlParts.GetLength()>1 && dUrlParts[1].Begins( "_" ) &&
-			dUrlParts[1]=="_doc" &&
-			( dUrlParts[0]==g_sKbnTableName || dUrlParts[0]==g_sKbnTableAlias ) &&
-			ProcessKbnTableDoc ( dUrlParts, bHeadReply, dResult ) )
+		if ( m_dUrlParts.GetLength()>1 && m_dUrlParts[1].Begins( "_" ) &&
+			m_dUrlParts[1]=="_doc" &&
+			( m_dUrlParts[0]==g_sKbnTableName || m_dUrlParts[0]==g_sKbnTableAlias ) &&
+			ProcessKbnTableDoc() )
 				return true;
 
-		if ( dUrlParts.GetLength()>=2 && dUrlParts[0]=="_cat" && ProcessCat ( dUrlParts, hOpts, tParser.GetFullURL(), bHeadReply, dResult ) )
-			return true;
-
-		if ( ( dUrlParts.GetLength() && dUrlParts[0]=="_alias" ) || ( dUrlParts.GetLength()>=2 && dUrlParts[1]=="_alias" ) )
+		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[0]=="_cat" )
 		{
-			ProcessAliasGet ( dUrlParts, bHeadReply, dResult );
+			ProcessCat();
 			return true;
 		}
 
-		if ( ( dUrlParts.GetLength() && dUrlParts[0]=="_rollup" ) || ( dUrlParts.GetLength()>=2 && dUrlParts[1]=="_rollup" )
-			|| ( dUrlParts.GetLength() && dUrlParts[0]=="_ingest" ) )
+		if ( ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_alias" ) || ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_alias" ) )
 		{
-			EmptyReply ( bHeadReply, dResult );
+			ProcessAliasGet();
 			return true;
 		}
 
-		if ( dUrlParts.GetLength()>=2 && dUrlParts[1]=="_ilm" )
+		if ( ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_rollup" ) || ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_rollup" )
+			|| ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_ingest" ) )
 		{
-			ProcessILM ( bHeadReply, dResult );
+			EmptyReply();
 			return true;
 		}
 
-		if ( dUrlParts.GetLength()>=2 && dUrlParts[1]=="_ccr" )
+		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_ilm" )
 		{
-			ProcessCCR ( bHeadReply, dResult );
+			ProcessILM();
 			return true;
 		}
 
-		if ( dUrlParts.GetLength() && ProcessKbnTableGet ( dUrlParts, hOpts ( "filter_path" ), bHeadReply, dResult ) )
+		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_ccr" )
+		{
+			ProcessCCR();
 			return true;
+		}
+
+		if ( m_dUrlParts.GetLength() )
+		{
+			ProcessKbnTableGet();
+			return true;
+		}
 	}
 
-	if ( tParser.GetRequestType()==HTTP_POST && dUrlParts.GetLength()>1 && dUrlParts[1]=="_search" && ProcessSearch ( tParser, dUrlParts, dResult ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_POST && dUrlParts.GetLength()>1 && dUrlParts[1]=="_count" && ProcessCount ( tParser, dUrlParts, dResult ) )
-		return true;
-
-	if ( ( tParser.GetRequestType()==HTTP_POST || tParser.GetRequestType()==HTTP_PUT )
-		&& dUrlParts.GetLength()>1 && ( dUrlParts[1]=="_doc" || dUrlParts[1]=="_create" )
-		&& ProcessInsert ( tParser, dUrlParts, dResult ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_POST && dUrlParts.GetLength()>0 && dUrlParts[0]=="_mget" && ProcessKbnTableMGet ( tParser, dUrlParts, dResult ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_PUT )
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_search" )
 	{
-		if ( dUrlParts.GetLength()>1 && ( dUrlParts[0]=="_template" || dUrlParts[0]=="_monitoring" ) )
-		{
-			ProcessPutTemplate ( tParser, dUrlParts, dResult );
-			return true;
-		}
-
-		if ( dUrlParts.GetLength() && dUrlParts[0]=="_monitoring" )
-		{
-			ProcessIgnored ( dResult );
-			return true;
-		}
-
-		if ( dUrlParts.GetLength() && ProcessCreateTable ( tParser, dUrlParts[0], dResult ) )
-			return true;
+		ProcessSearch();
+		return true;
 	}
 
-	if ( tParser.GetRequestType()==HTTP_DELETE && dUrlParts.GetLength()>2 && dUrlParts[1]=="_doc" 
-		&& ProcessDeleteDoc ( tParser, dUrlParts, dResult ) )
-		return true;
-
-
-	if ( tParser.GetRequestType()==HTTP_POST && dUrlParts.GetLength()>2 && dUrlParts[1]=="_update" 
-		&& ProcessUpdateDoc ( tParser, dUrlParts, dResult ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_DELETE && dUrlParts.GetLength()==1 && ProcessDeleteTable ( dUrlParts[0], dResult ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_POST && dUrlParts.GetLength()>0 && dUrlParts[0]=="_aliases" && ProcessAliasSet ( tParser, dResult ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_POST &&
-		( ( dUrlParts.GetLength()>=2 && dUrlParts[1]=="_refresh" && ProcessRefresh ( dUrlParts.Begin(), dResult ) ) ||
-		( dUrlParts.GetLength()>=1 && dUrlParts[0]=="_refresh" && ProcessRefresh ( nullptr, dResult ) ) ) )
-		return true;
-
-	if ( tParser.GetRequestType()==HTTP_POST && dUrlParts.GetLength()>=2 && dUrlParts[1]=="_field_caps" && ProcessFields ( dUrlParts[0], dResult ) )
-		return true;
-
-	if ( ( tParser.GetRequestType()==HTTP_POST || tParser.GetRequestType()==HTTP_PUT ) && dUrlParts.GetLength() && dUrlParts[0]=="_monitoring" )
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_count" )
 	{
-		ProcessIgnored ( dResult );
+		ProcessCount();
 		return true;
 	}
 
+	if ( ( GetRequestType()==HTTP_POST || GetRequestType()==HTTP_PUT )
+		&& m_dUrlParts.GetLength()>1 && ( m_dUrlParts[1]=="_doc" || m_dUrlParts[1]=="_create" )
+		&& ProcessInsert() )
+		return true;
+
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>0 && m_dUrlParts[0]=="_mget" )
+	{
+		ProcessKbnTableMGet();
+		return true;
+	}
+
+	if ( GetRequestType()==HTTP_PUT )
+	{
+		if ( m_dUrlParts.GetLength()>1 && ( m_dUrlParts[0]=="_template" || m_dUrlParts[0]=="_monitoring" ) )
+		{
+			ProcessPutTemplate();
+			return true;
+		}
+
+		if ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_monitoring" )
+		{
+			ProcessIgnored();
+			return true;
+		}
+
+		if ( m_dUrlParts.GetLength() && ProcessCreateTable() )
+			return true;
+	}
+
+	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" 
+		&& ProcessDeleteDoc() )
+		return true;
+
+
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" 
+		&& ProcessUpdateDoc() )
+		return true;
+
+	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
+	{
+		ProcessDeleteTable();
+		return true;
+	}
+
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>0 && m_dUrlParts[0]=="_aliases" )
+	{
+		ProcessAliasSet();
+		return true;
+	}
+
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_refresh" )
+	{
+		ProcessRefresh ( m_dUrlParts.Begin() );
+		return true;
+	}
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=1 && m_dUrlParts[0]=="_refresh" )
+	{
+		ProcessRefresh ( nullptr );
+		return true;
+	}
+
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_field_caps" )
+	{
+		ProcessFields();
+		return true;
+	}
+
+	if ( ( GetRequestType()==HTTP_POST || GetRequestType()==HTTP_PUT ) && m_dUrlParts.GetLength() && m_dUrlParts[0]=="_monitoring" )
+	{
+		ProcessIgnored();
+		return true;
+	}
+
+	FormatError ( SPH_HTTP_STATUS_501, "%s - unsupported endpoint", GetFullURL().cstr() );
 	return false;
-}
-
-CSphMutex g_tReqStatLock;
-SmallStringHash_T<int> g_tReqStat;
-
-void ProcessCompatHttp ( const HttpRequestParsed_t & tParser, CSphVector<BYTE> & dResult )
-{
-	CSphString sRefBody;
-	bool bDumpHttp = false;
-	if ( !g_sLogHttpFilter.IsEmpty() && sphWildcardMatch ( tParser.GetOptions()["endpoint"].cstr(), g_sLogHttpFilter.cstr() ) )
-	{
-		bDumpHttp = true;
-		sRefBody = tParser.GetBody();
-	}
-
-	if ( !ProcessHttp ( tParser, dResult ) )
-	{
-		CSphString sError;
-		DumpHttp ( tParser.GetRequestType(), tParser.GetFullURL(), tParser.GetBody() );
-		sError.SetSprintf ( "%s - unsupported endpoint", tParser.GetFullURL().cstr() );
-		sphFatalLog ( "%s", sError.cstr() );
-		HttpErrorReply ( dResult, SPH_HTTP_STATUS_501, sError.cstr() );
-	} else if ( bDumpHttp )
-	{
-		DumpHttp ( tParser.GetRequestType(), tParser.GetFullURL(), sRefBody, dResult );
-	}
-
-	ScopedMutex_t tLock ( g_tReqStatLock );
-	int * pCounter = g_tReqStat ( tParser.GetFullURL() );
-	if ( pCounter )
-	{
-		*pCounter = (*pCounter) + 1;
-	} else
-	{
-		g_tReqStat.Add ( 1, tParser.GetFullURL() );
-	}
-}
-
-void SetLogHttpFilter ( const CSphString & sVal )
-{
-	if ( sVal=="dumpq" )
-	{
-		StringBuilder_c tOut ( "\n" );
-
-		ScopedMutex_t tLock ( g_tReqStatLock );
-		for ( const auto & tIt : g_tReqStat )
-			tOut.Appendf ( "%s, total = %d", tIt.first.cstr(), tIt.second );
-		tOut.Appendf ( "total %d\n", g_tReqStat.GetLength() );
-
-		sphSeek ( GetLogFD(), 0, SEEK_END );
-		sphWrite ( GetLogFD(), tOut.cstr(), tOut.GetLength() );
-
-		return;
-	}
-	g_sLogHttpFilter = sVal;
 }
 
 static void DropKbnTables()
@@ -3632,4 +3562,126 @@ bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 bool IsLogManagementEnabled ()
 {
 	return ( g_eMode!=CompatMode_e::OFF );
+}
+
+HttpCompatBaseHandler_c::HttpCompatBaseHandler_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
+	: m_sBody ( sBody )
+	, m_iReqType ( iReqType )
+	, m_hOpts ( hOpts )
+{
+	const CSphString & sEndpoint = m_hOpts["endpoint"];
+	m_dUrlParts = SplitURL ( sEndpoint );
+}
+
+HttpCompatHandler_c::HttpCompatHandler_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
+	: HttpCompatBaseHandler_c ( sBody, iReqType, hOpts )
+{
+}
+
+bool HttpCompatHandler_c::Process()
+{
+	CSphString sRefBody;
+	bool bDumpHttp = false;
+	if ( !m_sLogHttpFilter.IsEmpty() && sphWildcardMatch ( GetOptions()["endpoint"].cstr(), m_sLogHttpFilter.cstr() ) )
+	{
+		bDumpHttp = true;
+		sRefBody = GetBody();
+	}
+
+	bool bOk = ProcessEndpoints();
+	if ( !bOk || !m_sError.IsEmpty() )
+	{
+		bOk = false;
+		if ( m_sError.IsEmpty() )
+			FormatError ( SPH_HTTP_STATUS_501, "%s - unsupported endpoint", GetFullURL().cstr() );
+
+		COMPATINFO << m_sError.cstr();
+	}
+	
+	if ( !bOk || bDumpHttp )
+	{
+		if ( !bOk )
+			DumpHttp ( GetRequestType(), GetFullURL(), GetBody() );
+		else
+			DumpHttp ( GetRequestType(), GetFullURL(), FromStr ( sRefBody ), m_dData );
+	}
+
+	ScopedMutex_t tLock ( m_tReqStatLock );
+	m_tReqStat.AddUnique ( GetFullURL() )++;
+	return bOk;
+}
+
+void HttpCompatHandler_c::SetLogFilter ( const CSphString & sVal )
+{
+	if ( sVal=="dumpq" )
+	{
+		StringBuilder_c tOut ( "\n" );
+
+		ScopedMutex_t tLock ( m_tReqStatLock );
+		for ( const auto & tIt : m_tReqStat )
+			tOut.Appendf ( "%s, total = %d", tIt.first.cstr(), tIt.second );
+		tOut.Appendf ( "total %d\n", m_tReqStat.GetLength() );
+
+		COMPATINFO << tOut;
+		return;
+	}
+	m_sLogHttpFilter = sVal;
+}
+
+void HttpCompatBaseHandler_c::BuildReplyHead ( Str_t sRes, ESphHttpStatus eStatus )
+{
+	HttpBuildReplyHead ( GetResult(), eStatus, sRes.first, sRes.second, IsHead() );
+}
+
+void HttpCompatHandler_c::EmptyReply()
+{
+	const char * sRes = "{}";
+	BuildReplyHead ( FromSz ( sRes ), SPH_HTTP_STATUS_200 );
+}
+
+void HttpCompatBaseHandler_c::ReportError ( const char * sError, const char * sErrorType, ESphHttpStatus eStatus, const char * sIndex )
+{
+	m_sError = sError;
+	CompatWarning ( "%s at %s", m_sError.cstr(), GetFullURL().cstr() );
+
+	int iStatus = HttpGetStatusCodes ( eStatus );
+	CSphString sReply = ( sErrorType ? JsonEncodeResultError ( m_sError, sErrorType, iStatus, sIndex ) : JsonEncodeResultError ( m_sError, iStatus ) );
+	BuildReplyHead ( FromStr ( sReply ), eStatus );
+}
+
+void HttpCompatHandler_c::ReportMissedIndex ( const CSphString & sIndex )
+{
+	CSphString sMsg;
+	sMsg.SetSprintf ( "no such index [%s]", sIndex.cstr() );
+	ReportError ( sMsg.cstr(), "index_not_found_exception", SPH_HTTP_STATUS_404, sIndex.cstr() );
+}
+
+void HttpCompatHandler_c::ReportIncorrectMethod ( const char * sAllowed )
+{
+	CSphString sMsg;
+	sMsg.SetSprintf ( "Incorrect HTTP method for uri [%s] and method [%s], allowed: [%s]", GetFullURL().cstr(), http_method_str ( (http_method)GetRequestType() ), sAllowed );
+	ReportError ( sMsg.cstr(), nullptr, SPH_HTTP_STATUS_405, nullptr );
+}
+
+void HttpCompatHandler_c::ReportMissedScript ( const CSphString & sIndex )
+{
+	CompatWarning ( "missed script '%s' at '%s' body '%s'", sIndex.cstr(), GetFullURL().cstr(), GetBody().first );
+	ReportError ( "failed to execute script", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
+}
+
+CSphMutex HttpCompatHandler_c::m_tReqStatLock;
+SmallStringHash_T<int> HttpCompatHandler_c::m_tReqStat;
+CSphString HttpCompatHandler_c::m_sLogHttpFilter;
+
+std::unique_ptr<HttpHandler_c> CreateCompatHandler ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
+{
+	if ( IsLogManagementEnabled() )
+		return std::make_unique<HttpCompatHandler_c>( sBody, iReqType, hOpts );
+
+	return nullptr;
+}
+
+void SetLogHttpFilter ( const CSphString & sVal )
+{
+	HttpCompatHandler_c::SetLogFilter ( sVal );
 }

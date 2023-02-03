@@ -1,8 +1,8 @@
-buddy 0.3.5 23013110 2540aea
-backup 0.5.1 23012006 0f7f0cf
+buddy 0.3.5 23020209 47a370e
+backup 0.5.3 23020209 df3db9f
 mcl 1.16.1 230120 d0da462
 executor 0.3.5 221125 a40554c
 ---
-! Do not change the separator that splits this desc from the data.
+! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.
 You can find proper values for each dep on https://repo.manticoresearch.com

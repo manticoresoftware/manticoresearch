@@ -118,6 +118,56 @@ class Bson_c;
 void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
 
 using SplitAction_fn = std::function<void(const char *, int)>;
-void SplitNdJson ( const char * sBody, int iLen, SplitAction_fn && fnAction);
+void SplitNdJson ( Str_t sBody, SplitAction_fn && fnAction);
 bool HttpSetLogVerbosity ( const CSphString & sVal );
 void LogReplyStatus100();
+bool Ends ( const Str_t tVal, const char * sSuffix );
+
+class HttpHandler_c
+{
+public:
+
+	virtual ~HttpHandler_c() = default;
+	virtual bool Process () = 0;
+	void SetErrorFormat ( bool bNeedHttpResponse );
+	CSphVector<BYTE> & GetResult();
+	const CSphString & GetError () const;
+
+protected:
+	bool				m_bNeedHttpResponse {false};
+	CSphVector<BYTE>	m_dData;
+	CSphString			m_sError;
+
+	void ReportError ( const char * szError, ESphHttpStatus eStatus );
+	void ReportError ( ESphHttpStatus eStatus );
+	void FormatError ( ESphHttpStatus eStatus, const char * sError, ... );
+	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus );
+	void BuildReply ( const char* szResult, ESphHttpStatus eStatus );
+	void BuildReply ( Str_t sResult, ESphHttpStatus eStatus );
+	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus );
+	bool CheckValid ( const ServedIndex_c* pServed, const CSphString& sIndex, IndexType_e eType );
+};
+
+class HttpCompatBaseHandler_c : public HttpHandler_c
+{
+public:
+	HttpCompatBaseHandler_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts );
+
+protected:
+	Str_t					GetBody() const { return m_sBody; }
+	int						GetRequestType() const { return m_iReqType; }
+	const CSphString &		GetFullURL() const { return m_hOpts["full_url"]; }
+	const SmallStringHash_T<CSphString> &	GetOptions() const { return m_hOpts; }
+	const StrVec_t &		GetUrlParts() const { return m_dUrlParts; }
+
+	bool IsHead() { return GetRequestType()==HTTP_HEAD; }
+	void BuildReplyHead ( Str_t sRes, ESphHttpStatus eStatus );
+	void ReportError ( const char * sError, const char * sErrorType, ESphHttpStatus eStatus, const char * sIndex=nullptr );
+
+	Str_t m_sBody;
+	int m_iReqType { 0 };
+	const SmallStringHash_T<CSphString> & m_hOpts;
+	StrVec_t m_dUrlParts;
+};
+
+std::unique_ptr<HttpHandler_c> CreateCompatHandler ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts );

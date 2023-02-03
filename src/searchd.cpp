@@ -19590,6 +19590,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	Tracer::Init();
 
+#if _WIN32
+	CheckWinInstall();
+#endif
+
 	CSphString sError;
 	// initialize it before other code to fetch version string for banner
 	bool bColumnarError = !InitColumnar ( sError );
@@ -19702,10 +19706,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
-
-#if _WIN32
-	CheckWinInstall();
-#endif
 
 	SetupLemmatizerBase();
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );

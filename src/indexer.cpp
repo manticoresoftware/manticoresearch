@@ -1747,6 +1747,10 @@ int main ( int argc, char ** argv )
 	bool bDropSrc = false;
 	CSphString sDumpRows;
 
+#if _WIN32
+	CheckWinInstall();
+#endif
+
 	CSphString sError, sErrorSI;
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( sErrorSI );
@@ -1926,10 +1930,6 @@ int main ( int argc, char ** argv )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
 	sphCollationInit ();
-
-#if _WIN32
-	CheckWinInstall();
-#endif
 
 	SetupLemmatizerBase();
 

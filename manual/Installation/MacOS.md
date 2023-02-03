@@ -6,16 +6,17 @@
 brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra
 ```
 
-Afterwards you can start Manticore as a brew service:
+Start Manticore as a brew service:
 
 ```bash
 brew services start manticoresearch
 ```
 
-Manticore configuration file is `/usr/local/etc/manticoresearch/manticore.conf`.
+The default configuration file for Manticore is located at either `/usr/local/etc/manticoresearch/manticore.conf` or `/opt/homebrew/etc/manticoresearch/manticore.conf`.
 
-If you are plannning to use [indexer](../Creating_a_table/Local_tables/Plain_table.md) to fetch data from mysql, postgres or another DB using ODBC the additional libraries that you mad need are `mysql@5.7`, `libpq`, and `unixodbc` correspondingly.
+If you plan to use [indexer](../Creating_a_table/Local_tables/Plain_table.md) to fetch data from sources such as MySQL, PostgreSQL, or another database using ODBC, you may need additional libraries, such as `mysql@5.7`, `libpq`, and `unixodbc`, respectively.
 
+<!--
 ## From tarball with binaries
 
 Download it [from the website](https://manticoresearch.com/install/) and unpack to a folder:
@@ -41,3 +42,7 @@ FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticor
 ```
 
 Manticore configuration file is `./etc/manticoresearch/manticore.conf` after you unpack the archive.
+
+-->
+
+<!-- proofread -->

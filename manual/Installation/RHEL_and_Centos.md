@@ -6,6 +6,7 @@
 * CentOS 8 and RHEL 8
 * CentOS Stream 8
 * Amazon Linux 2
+* CentOS 9, RHEL 8, ALMA Linux 9
 
 ### YUM repository
 
@@ -34,7 +35,7 @@ If you prefer "Nightly" (development) versions do:
 
 ```bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum --enablerepo manticore-dev install manticore manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo
+sudo yum --enablerepo manticore-dev install manticore manticore-extra manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo
 ```
 
 ### Standalone RPM packages

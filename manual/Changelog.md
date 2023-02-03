@@ -1,7 +1,7 @@
 # Changelog
 
 # Version 6.0.0
-Released: **SOON**
+Released: Feb 3 2023
 
 Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require super low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump, DBeaver, Grafana mysql connector. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 

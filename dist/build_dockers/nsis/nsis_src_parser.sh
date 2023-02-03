@@ -19,35 +19,55 @@ MANTICORE_VERSION=$(cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d'"' -f2
 
 IS_RELEASE_DIGIT=$(echo "$MANTICORE_VERSION" | cut -d. -f3)
 if [[ $((IS_RELEASE_DIGIT % 2)) -eq 0 ]]; then
-  DESTINATION="release_candidate"
+  DESTINATION_REPOS=("release" "release_candidate")
 else
-  DESTINATION="dev"
+  DESTINATION_REPOS=("dev")
 fi
 
-echo "Commit: $CI_COMMIT_SHORT_SHA, Version: $MANTICORE_VERSION, Destination $DESTINATION"
 
-WIN_REPO="https://repo.manticoresearch.com/repository/manticoresearch_windows/$DESTINATION/x64/"
 
-REPO_CONTENT=$(curl $WIN_REPO 2>/dev/null)
 DEPS_PATH="deps.txt"
 BUDDY_COMMIT_SHA=$(cat $DEPS_PATH | grep buddy | cut -d" " -f4)
 EXECUTOR_COMMIT_SHA=$(cat $DEPS_PATH | grep executor | cut -d" " -f4)
 MCL_COMMIT_SHA=$(cat $DEPS_PATH | grep mcl | cut -d" " -f4)
 
-BUDDY_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $BUDDY_COMMIT_SHA | grep buddy | tail -n 1 | cut -d'"' -f2)
-EXECUTOR_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $EXECUTOR_COMMIT_SHA | grep executor | tail -n 1 | cut -d'"' -f2)
-MCL_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $MCL_COMMIT_SHA | grep columnar | grep libs.zip | tail -n 1 | cut -d'"' -f2)
-MANTICORE_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $CI_COMMIT_SHORT_SHA | grep main | tail -n 1 | cut -d'"' -f2)
+for DESTINATION in "${DESTINATION_REPOS[@]}"; do
+
+  BUDDY_PACKAGE_NAME=""
+  EXECUTOR_PACKAGE_NAME=""
+  MCL_PACKAGE_NAME=""
+  MANTICORE_PACKAGE_NAME=""
+
+
+  echo "Commit: $CI_COMMIT_SHORT_SHA, Version: $MANTICORE_VERSION, Search in $DESTINATION repo"
+
+  WIN_REPO="https://repo.manticoresearch.com/repository/manticoresearch_windows/$DESTINATION/x64/"
+
+  REPO_CONTENT=$(curl $WIN_REPO 2>/dev/null)
+
+
+  BUDDY_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $BUDDY_COMMIT_SHA | grep buddy | tail -n 1 | cut -d'"' -f2)
+  EXECUTOR_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $EXECUTOR_COMMIT_SHA | grep executor | tail -n 1 | cut -d'"' -f2)
+  MCL_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $MCL_COMMIT_SHA | grep columnar | grep libs.zip | tail -n 1 | cut -d'"' -f2)
+  MANTICORE_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $CI_COMMIT_SHORT_SHA | grep main | tail -n 1 | cut -d'"' -f2)
+
+
+  if [ -n "$MANTICORE_PACKAGE_NAME" ] && [ -n "$BUDDY_PACKAGE_NAME" ] && [ -n "$EXECUTOR_PACKAGE_NAME" ] && [ -n "$MCL_PACKAGE_NAME" ]; then
+      echo "All selected packages found in $DESTINATION repo"
+      break
+  fi
+
+done
+
 
 if [ -z "$MANTICORE_PACKAGE_NAME" ] || [ -z "$BUDDY_PACKAGE_NAME" ] || [ -z "$EXECUTOR_PACKAGE_NAME" ] || [ -z "$MCL_PACKAGE_NAME" ]; then
 
-  [ -z "$MANTICORE_PACKAGE_NAME" ] && echo -e "${RED}Can't parse Manticore package name. Exiting$NC \n"
-  [ -z "$BUDDY_PACKAGE_NAME" ] && echo -e "${RED}Can't parse Buddy package name. Exiting$NC \n"
-  [ -z "$EXECUTOR_PACKAGE_NAME" ] && echo -e "${RED}Can't parse Executor package name. Exiting$NC \n"
-  [ -z "$MCL_PACKAGE_NAME" ] && echo -e "${RED}Can't parse Columnar package name. Exiting$NC \n"
+  [ -z "$MANTICORE_PACKAGE_NAME" ] && echo -e "${RED}Can't found Manticore package in selected repository. Exiting$NC \n"
+  [ -z "$BUDDY_PACKAGE_NAME" ] && echo -e "${RED}Can't found Buddy package in selected repository. Exiting$NC \n"
+  [ -z "$EXECUTOR_PACKAGE_NAME" ] && echo -e "${RED}Can't found Executor package in selected repository. Exiting$NC \n"
+  [ -z "$MCL_PACKAGE_NAME" ] && echo -e "${RED}Can't found Columnar package in selected repository. Exiting$NC \n"
 
   exit 1
-
 fi
 
 echo -e "${GREEN}Save src to temp files$NC"

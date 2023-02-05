@@ -2827,6 +2827,12 @@ public:
 
 		dRhs.m_bUpdateDistinct = true;
 		dRhs.SetMerge(false);
+
+		// once we're done copying, cleanup
+		for ( int i = 0; i<m_iMaxUsed; ++i )
+			m_dData[i].ResetDynamic();
+
+		m_iMaxUsed = -1;
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override

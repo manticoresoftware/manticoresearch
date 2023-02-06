@@ -1,7 +1,7 @@
-buddy 0.3.5 23020209 47a370e
-backup 0.5.3 23020209 df3db9f
+buddy 0.3.4 23020311 4798582
+backup 0.5.2 23020311 4a37932
 mcl 2.0.0 230130 a7c703d
-executor 0.3.5 221125 a40554c
+executor 0.5.2 221125 a40554c
 ---
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.

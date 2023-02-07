@@ -539,7 +539,7 @@ Worker_c* Worker() noexcept
 }
 
 // start primary task
-void Go ( Handler fnHandler, Scheduler_i * pScheduler )
+void Go ( Handler&& fnHandler, Scheduler_i * pScheduler )
 {
 	if ( !pScheduler )
 		return;
@@ -549,7 +549,7 @@ void Go ( Handler fnHandler, Scheduler_i * pScheduler )
 }
 
 // start secondary subtasks (parallel search, pq processing, etc)
-void Co ( Handler fnHandler, Waiter_t tSignaller)
+void Co ( Handler&& fnHandler, Waiter_t tSignaller)
 {
 	auto pScheduler = CurrentScheduler ();
 	if ( !pScheduler )
@@ -560,7 +560,7 @@ void Co ( Handler fnHandler, Waiter_t tSignaller)
 }
 
 // resize stack and continue as fast as possible (continuation task in same thread, or post to vip queue)
-void Continue ( Handler fnHandler, int iStack )
+void Continue ( Handler&& fnHandler, int iStack )
 {
 	auto pScheduler = CurrentScheduler();
 	if ( !pScheduler )

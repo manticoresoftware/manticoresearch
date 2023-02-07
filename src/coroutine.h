@@ -207,18 +207,18 @@ Worker_c* CurrentWorker() noexcept;
 Worker_c* Worker() noexcept;
 
 // start handler in coroutine, first-priority
-void Go ( Handler handler, Scheduler_i* pScheduler );
+void Go ( Handler&& handler, Scheduler_i* pScheduler );
 
 // start task continuation in coroutine, second-priority
-void Co ( Handler handler, Waiter_t tSignaller );
+void Co ( Handler&& handler, Waiter_t tSignaller );
 
 // perform handler in dedicated coro with custom stack (scheduler is same, or global if none)
 // try to run immediately (if thread wasn't switched yet), or push to first-priority queue
-void Continue ( Handler fnHandler, int iStack=0 );
+void Continue ( Handler&& fnHandler, int iStack=0 );
 
 // if iStack<0, just immediately invoke the handler (that is bypass)
 template<typename HANDLER>
-void Continue ( int iStack, HANDLER handler );
+void Continue ( int iStack, HANDLER&& handler );
 
 // if iStack<0, just immediately invoke the handler (that is bypass). Returns boolean result from handler
 template<typename HANDLER>

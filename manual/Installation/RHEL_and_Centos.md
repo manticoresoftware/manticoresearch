@@ -2,11 +2,10 @@
 
 ### Supported releases:
 
-* CentOS 7 and RHEL 7
-* CentOS 8 and RHEL 8
-* CentOS Stream 8
+* CentOS 7, RHEL 7, Oracle Linux 7
+* CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
-* CentOS 9, RHEL 8, ALMA Linux 9
+* CentOS 9, RHEL 9, AlmaLinux 9
 
 ### YUM repository
 
@@ -22,7 +21,7 @@ Then install Manticore Search:
 sudo yum install manticore manticore-extra
 ```
 
-If you are upgrading to Manticore version 5 or higher it's recommended to remove all the old Manticore packages before you install the new ones since package structure got changed in version 5.0.0:
+If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
 
 ```bash
 sudo yum remove manticore*
@@ -39,7 +38,7 @@ sudo yum --enablerepo manticore-dev install manticore manticore-extra manticore-
 ```
 
 ### Standalone RPM packages
-You can also download standalone rpm files [from our site](https://manticoresearch.com/install/) and install them using tools `rpm` or `yum`.
+To download standalone RPM files from the Manticore repository, follow the instructions available at https://manticoresearch.com/install/.
 
 ### More packages you may need
 #### For indexer

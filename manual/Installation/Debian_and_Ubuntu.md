@@ -33,7 +33,7 @@ Then install Manticore Search:
 sudo apt install manticore manticore-extra
 ```
 
-If you are upgrading to Manticore version 5 or higher it's recommended to remove all the old Manticore packages before you install the new ones since package structure got changed in version 5.0.0:
+If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
 
 ```bash
 sudo apt remove manticore*
@@ -51,7 +51,7 @@ sudo apt install manticore manticore-extra manticore-server-core-dbgsym manticor
 ```
 
 ### Standalone DEB packages
-You can also download individual .deb files from [our site](https://manticoresearch.com/install/).
+To download standalone DEB files from the Manticore repository, follow the instructions available at https://manticoresearch.com/install/.
 
 ### More packages you may need
 #### For indexer

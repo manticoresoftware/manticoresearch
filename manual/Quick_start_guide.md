@@ -64,7 +64,7 @@ brew services start manticoresearch
 <!-- request Docker -->
 ```bash
 docker pull manticoresearch/manticore
-docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
+docker run -e EXTRA=1 --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
 For persisting your data directory read [how to use Manticore docker in production](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
@@ -163,7 +163,7 @@ Let's now create a table called "products" with 2 fields:
 * title - full-text field which will contain our product's title
 * price - of type "float"
 
-(Note that it is possible to omit creating a table with an explicit create statement. For more information, see [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).)
+Note that it is possible to omit creating a table with an explicit create statement. For more information, see [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 <!-- intro -->
 ##### SQL:

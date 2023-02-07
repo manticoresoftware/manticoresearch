@@ -1,14 +1,14 @@
 # Changelog
 
 # Version 6.0.0
-Released: Feb 6 2023
+Released: Feb 7 2023
 
 Starting with this release, Manticore Search comes with Manticore Buddy, a sidecar daemon written in PHP that handles high-level functionality that does not require super low latency or high throughput. Manticore Buddy operates behind the scenes, and you may not even realize it is running. Although it is invisible to the end user, it was a significant challenge to make Manticore Buddy easily installable and compatible with the main C++-based daemon. This major change will allow the team to develop a wide range of new high-level features, such as shards orchestration, access control and authentication, and various integrations like mysqldump, DBeaver, Grafana mysql connector. For now it already handles [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES), [BACKUP](../Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) and [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 This release also includes more than 130 bug fixes and numerous features, many of which can be considered major.
 
 ### Major Changes
-* 🔬 Experimental: you can now execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash, Filebeat and other tools from the Beats family. Enabled by default. You can disable it using `SET GLOBAL ES_COMPAT=off`.
+* 🔬 Experimental: you can now execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash (version < 7.13), Filebeat and other tools from the Beats family. Enabled by default. You can disable it using `SET GLOBAL ES_COMPAT=off`.
 * Support for [Manticore Columnar Library 2.0.0](https://github.com/manticoresoftware/columnar/) with numerous fixes and improvements in [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes). **⚠️ BREAKING CHANGE**: Secondary indexes are ON by default as of this release. Make sure you do [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) if you are upgrading from Manticore 5. See below for more details.
 * [Commit c436](https://github.com/manticoresoftware/manticoresearch/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [searchd.auto_schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 * Vast revamp of [cost-based optimizer](../Searching/Cost_based_optimizer.md) which lowers query response time in many cases.
@@ -84,6 +84,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * It's now possible to install a specific version using APT.
 * [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows installer (previously we provided just an archive).
 * Switched to compiling using CLang 15.
+* **⚠️ BREAKING CHANGE**: Custom Homebrew formulas including the formula for Manticore Columnar Library. To install Manticore, MCL and any other necessary components, use the following command `brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra`.
 
 ### Bugfixes
 * [Issue #479](https://github.com/manticoresoftware/manticoresearch/issues/479) Field with name `text`
@@ -162,6 +163,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Issue #1010](https://github.com/manticoresoftware/manticoresearch/issues/1010) Fixed ICU data file location in Windows builds
 * [PR #1018](https://github.com/manticoresoftware/manticoresearch/pull/1018) Handshake send problem
 * [Issue #1020](https://github.com/manticoresoftware/manticoresearch/issues/1020) Display id in show create table
+* [Issue #1024 crash 1](https://github.com/manticoresoftware/manticoresearch/issues/1024) Crash / Segmentation Fault on Facet search with larger number of results.
 * [Commit 4739](https://github.com/manticoresoftware/manticoresearch/commit/4739dafd) Thread gets stuck on shutdown while replication is busy between nodes
 * [Commit ab87](https://github.com/manticoresoftware/manticoresearch/commit/ab87836782e7ae43fe5f9dea739eed0d336b42c1) Mixing floats and ints in a JSON range filter could make Manticore ignore the filter
 * [Commit d001](https://github.com/manticoresoftware/manticoresearch/commit/d00101c2905f6393ce3fca23c4f6dcb2506f4bd9) Float filters in JSON were inaccurate

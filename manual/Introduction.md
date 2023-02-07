@@ -36,7 +36,7 @@ Manticore's native syntax is SQL and it supports SQL over HTTP and MySQL protoco
 For a more programmatic approach to managing data and schemas, Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) protocol, similar to that of Elasticsearch.
 
 #### Elasticsearch-compatible writes
-You can execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash, Filebeat and other tools from the Beats family.
+You can execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash (version < 7.13), Filebeat and other tools from the Beats family.
 
 #### Declarative and imperative schema management
 Easily create, update, and delete tables online or through a configuration file.

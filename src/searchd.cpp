@@ -3695,6 +3695,7 @@ void AggrResult_t::AddEmptyResultset ( const DocstoreReader_i * pDocstore, int i
 	auto & tOneRes = m_dResults.Add();
 	tOneRes.m_pDocstore = pDocstore;
 	tOneRes.m_iTag = iTag;
+	tOneRes.m_tSchema = m_tSchema;
 }
 
 
@@ -12986,17 +12987,9 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	// bummer! lets protect ourselves against that
 	CSphBitvec tAttrsToSend;
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
-	if ( tRes.GetLength() || bReturnZeroCount )
-		sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
+	assert ( bReturnZeroCount || tRes.m_tSchema.GetAttrsCount() );
+	sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
-	// field packets
-	if ( tRes.GetLength()==0 && !bReturnZeroCount )
-	{
-		// in case there are no matches, send a dummy schema
-		// result set header packet. We will attach EOF manually at the end.
-		dRows.HeadBegin ( bAddQueryColumn ? 2 : 1 );
-		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG );
-	} else
 	{
 		int iAttrsToSend = tAttrsToSend.BitCount();
 		if ( bAddQueryColumn )

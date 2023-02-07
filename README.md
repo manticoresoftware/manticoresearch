@@ -120,7 +120,7 @@ Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 To experiment with Manticore Search in Docker just run:
 
 ```
-docker run --name manticore --rm -d manticoresearch/manticore && sleep 3 && docker exec -it manticore mysql && docker stop manticore
+docker run -e EXTRA=1 --name manticore --rm -d manticoresearch/manticore && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; done && docker exec -it manticore mysql && docker stop manticore
 ```
 
 You can then: create an index, add data and run searches. For example:
@@ -137,9 +137,9 @@ select highlight(), year from movies where match('days') facet year;
 select * from movies where match('google');
 ```
 
-When you exit from the MySQL client, it stops and removes the container, so **use this way only for testing / sandboxing purposes**.
+Note that upon exiting the MySQL client, the Manticore container will be stopped and removed, resulting in no saved data, so **use this way only for testing / sandboxing purposes**.
 
-Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for more details including our recommendations on running it in production.
+Read [the full instruction for the docker image](https://github.com/manticoresoftware/docker) for more details including our recommendations on running it in production.
 
 ### Packages
 

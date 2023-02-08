@@ -11003,6 +11003,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
+	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
 	// setup prediction constrain
 	CSphQueryStats tQueryStats;
@@ -13487,7 +13488,7 @@ void IteratorStats_t::Merge ( const IteratorStats_t & tSrc )
 // CSphQueryResultMeta
 //////////////////////////////////////////////////////////////////////////
 
-void RemoveDictSpecials ( CSphString & sWord )
+void RemoveDictSpecials ( CSphString & sWord, bool bBigram )
 {
 	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
 	{
@@ -13495,7 +13496,9 @@ void RemoveDictSpecials ( CSphString & sWord )
 	} else if ( sWord.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
 	{
 		*const_cast<char *>( sWord.cstr() ) = '=';
-	} else
+	}
+
+	if ( bBigram )
 	{
 		const char * p = strchr ( sWord.cstr(), MAGIC_WORD_BIGRAM );
 		if ( p )
@@ -13503,7 +13506,7 @@ void RemoveDictSpecials ( CSphString & sWord )
 	}
 }
 
-const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sFixed )
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sFixed, bool bBigram )
 {
 	const CSphString * pFixed = &sWord;
 	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
@@ -13516,7 +13519,9 @@ const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & s
 		sFixed = sWord;
 		*const_cast<char *>( sFixed.cstr() ) = '=';
 		pFixed = &sFixed;
-	} else
+	}
+
+	if ( bBigram )
 	{
 		const char * p = strchr ( sWord.cstr(), MAGIC_WORD_BIGRAM );
 		if ( p )
@@ -13533,7 +13538,7 @@ const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & s
 void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
 {
 	CSphString sBuf;
-	const CSphString & tFixed = RemoveDictSpecials ( sWord, sBuf );
+	const CSphString & tFixed = RemoveDictSpecials ( sWord, sBuf, m_bBigram );
 	WordStat_t & tStats = m_hWordStats.AddUnique ( tFixed );
 	tStats.first += iDocs;
 	tStats.second += iHits;
@@ -13544,11 +13549,18 @@ void CSphQueryResultMeta::MergeWordStats ( const CSphQueryResultMeta & tOther )
 {
 	const auto & hOtherStats = tOther.m_hWordStats;
 	if ( !m_hWordStats.GetLength () )
+	{
 		// nothing has been set yet; just copy
 		m_hWordStats = hOtherStats;
-	else
-		for ( auto & tStat : hOtherStats )
-			AddStat ( tStat.first, tStat.second.first, tStat.second.second );
+	} else
+	{
+		for ( auto & tSrc : hOtherStats )
+		{
+			WordStat_t & tDst = m_hWordStats.AddUnique ( tSrc.first );
+			tDst.first += tSrc.second.first;
+			tDst.second += tSrc.second.second;
+		}
+	}
 }
 
 ///< sort wordstat to achieve reproducable result over different runs

@@ -36,7 +36,6 @@ index rt_bi
 {
 	type = rt
 	path			= <data_path/>/rt_bi
-	docinfo = extern
 	rt_mem_limit = 128k
 	
 	rt_field		= title
@@ -62,6 +61,44 @@ index dist_remote
 	agent_query_timeout		= 3000	
 }
 
+source src_bi2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table2
+	sql_attr_uint	= gid
+}
+
+index idx_bi2
+{
+	source = src_bi2
+	path			= <data_path/>/idx_bi2
+	
+	bigram_index = all
+	dict = keywords
+	min_infix_len = 2
+    expand_keywords = 1
+    index_exact_words = 1
+    morphology = stem_en
+}
+
+index rt_bi2
+{
+	type = rt
+	path			= <data_path/>/rt_bi2
+	rt_mem_limit = 128k
+	
+	rt_field		= title
+	rt_attr_uint	= gid
+	
+	bigram_index = all
+	dict = keywords
+	min_infix_len = 2
+    expand_keywords = 1
+    index_exact_words = 1
+    morphology = stem_en
+}
+
 </config>
 <db_create>
 CREATE TABLE `test_table` (
@@ -73,6 +110,17 @@ CREATE TABLE `test_table` (
 </db_create>
 <db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
 <db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' ), (3, 3, 'search with manticore like many' )</db_insert>
+
+<db_create>
+CREATE TABLE `test_table2` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table2`;</db_drop>
+<db_insert>INSERT INTO `test_table2` VALUES ( 1, 1, 'intel i3 10200'), (2, 2, 'intel i5 10500' ), (3, 3, 'intel pentium' )</db_insert>
 
 <queries><sphinxql>
 INSERT INTO rt_bi (id, gid, title) VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' );
@@ -87,6 +135,18 @@ CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as so
 <!-- regression keywords to distributed index via API -->
 CALL KEYWORDS ( 'manti*', 'dist_local', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
 CALL KEYWORDS ( 'manti*', 'dist_remote', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode );
+
+<!-- regression keywords to bigram index with expand -->
+INSERT INTO rt_bi2 (id, gid, title) VALUES ( 1, 1, 'intel i3 10200'), (2, 2, 'intel i5 10500' ), (3, 3, 'intel pentium' );
+SELECT * FROM idx_bi2 WHERE MATCH ('*intel*' ) ORDER BY id asc;
+SELECT * FROM rt_bi2 WHERE MATCH ('*intel*' ) ORDER BY id asc;
+</sphinxql>
+<sphinxql>
+CALL KEYWORDS ( '*intel*', 'idx_bi2', 1 AS stats, 'hits' AS sort_mode )
+</sphinxql>
+<sphinxql>
+CALL KEYWORDS ( '*intel*', 'rt_bi2', 1 AS stats, 'hits' AS sort_mode )
+
 </sphinxql></queries>
 
 </test>

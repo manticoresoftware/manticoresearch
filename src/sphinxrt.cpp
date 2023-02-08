@@ -7566,6 +7566,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	{
 		CSphMultiQueryArgs tFTArgs ( tArgs.m_iIndexWeight );
 		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
+		tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
 		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, GetName(), tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 	}
@@ -7617,7 +7618,7 @@ void RtIndex_c::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, const D
 	tInfo.m_iHits = bGetStats ? pQueryWord->m_iHits : 0;
 	tInfo.m_iQpos = iQpos;
 
-	RemoveDictSpecials ( tInfo.m_sNormalized );
+	RemoveDictSpecials ( tInfo.m_sNormalized, ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 }
 
 

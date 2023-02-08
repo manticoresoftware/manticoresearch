@@ -205,6 +205,7 @@ static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static int				g_iDumpDocs = 1000000000;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -16261,6 +16262,24 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			return true;
 		}
 	}
+	if ( bParsedOK && m_bDumpUser )
+	{
+		ARRAY_FOREACH ( i, dStmt )
+		{
+			SqlStmt_t & tStmt = dStmt[i];
+			if ( tStmt.m_eStmt!=STMT_SELECT )
+				continue;
+
+			if ( !tStmt.m_tQuery.m_bExplicitMaxMatches )
+			{
+				tStmt.m_tQuery.m_iLimit = g_iDumpDocs;
+				tStmt.m_tQuery.m_iMaxMatches = g_iDumpDocs;
+				tStmt.m_tQuery.m_bExplicitMaxMatches = true;
+			}
+
+			tStmt.m_tQuery.m_iCouncurrency = 1;
+		}
+	}
 
 	// handle multi SQL query
 	if ( bParsedOK && dStmt.GetLength()>1 )
@@ -16706,6 +16725,11 @@ bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )
 void session::SetFederatedUser ()
 {
 	GetClientSession()->m_bFederatedUser = true;
+}
+
+void session::SetDumpUser ()
+{
+	GetClientSession()->m_bDumpUser = true;
 }
 
 void session::SetAutoCommit ( bool bAutoCommit )

@@ -55,6 +55,14 @@ docker run -e EXTRA=1 --name manticore -v $(pwd)/manticore.conf:/etc/manticorese
 
 Make sure to remove `127.0.0.1:` if you want the ports to be available for external hosts.
 
+### Manticore Columnar Library and Manticore Buddy
+
+The Manticore Search Docker image doesn't come with the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) pre-installed, which is necessary if you require columnar storage and secondary indexes. However, it can easily be enabled during runtime by setting the environment variable `EXTRA=1`. For example, `docker run -e EXTRA=1 ... manticoresearch/manticore`. This will download and install the library in the data directory (which is typically mapped as a volume in production environments) and it won't be re-downloaded unless the Manticore Search version is changed.
+
+Using `EXTRA=1` also activates [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy), which is used for processing certain commands. For more information, refer to the [changelog](https://manual.manticoresearch.com/Changelog#Version-6.0.0).
+
+If you only need the MCL, you can use the environment variable `MCL=1`.
+
 ### Docker-compose
 
 In many cases you might want to use Manticore together with other images specified in a docker-compose YAML file. Here is the minimal recommended specification for Manticore Search in docker-compose.yml:

@@ -2737,9 +2737,17 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	return true;
 }
 
-static void AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId )
+static bool AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
 	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [&] ( const CSphString & sName ) { return sName=="id"; } );
+	
+	// can not set id at the same time via es meta and via document id property
+	if ( iDocidPos!=-1 && tDocId!=0 )
+	{
+		sError = "id has already been specified";
+		return false;
+	}
+
 	if ( iDocidPos!=-1 )
 	{
 		SqlInsert_t & tVal = tStmt.m_dInsertValues[iDocidPos];
@@ -2750,11 +2758,11 @@ static void AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId )
 			tVal.m_iType = SqlInsert_t::CONST_INT;
 		}
 		tDocId = tVal.m_iVal;
-		return;
+		return true;
 	}
 
 	if ( !tDocId )
-		return;
+		return true;
 
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
@@ -2762,6 +2770,7 @@ static void AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId )
 	tId.m_iVal = tDocId;
 
 	tStmt.m_iSchemaSz = tStmt.m_dInsertSchema.GetLength();
+	return true;
 }
 
 static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
@@ -2772,14 +2781,16 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 		JsonObj_c tRoot ( sLine );
 		if ( !ParseJsonInsertSource ( tRoot, tStmt, true, true, sError ) )
 			return false;
-		AddDocid ( tStmt, tDocId );
+		if ( !AddDocid ( tStmt, tDocId, sError ) )
+			return false;
 
 	}  else if ( sAction=="create" )
 	{
 		JsonObj_c tRoot ( sLine );
 		if ( !ParseJsonInsertSource ( tRoot, tStmt, false, true, sError ) )
 			return false;
-		AddDocid ( tStmt, tDocId );
+		if ( !AddDocid ( tStmt, tDocId, sError ) )
+			return false;
 
 	} else if ( sAction=="update" )
 	{

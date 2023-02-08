@@ -83,6 +83,13 @@ index test1
 
 <query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
 
+<!-- regression document id both ways -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "1002" } }
+{ "int_col" : "101", "id":1010 }
+
+</bulk>
+
 </httpqueries>
 
 </test>

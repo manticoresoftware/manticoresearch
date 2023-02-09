@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs daemon restart</name>
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</config>
+
+<queries>
+
+<sphinxql>
+create table test1 ( title text, tag uint );
+insert into test1 values (1,'word1',100);
+insert into test1 values (2,'word2',200);
+create table test2 ( title text, tag uint );
+insert into test2 values (3,'word3',300);
+insert into test2 values (4,'word4',400);
+create table d10 type='distributed' local='test1' local='test2';
+create table d11 type='distributed' local='test1' local='test2';
+create table d2 type='distributed' local='test1';
+create table d3 type='distributed' local='test2';
+
+show tables;
+</sphinxql>
+
+<sphinxql system="restart-daemon"/>
+
+<sphinxql>
+show tables;
+drop table d3;
+drop table d2;
+drop table d11;
+drop table d10;
+drop table test1;
+drop table test2;
+</sphinxql>
+
+</queries>
+
+</test>

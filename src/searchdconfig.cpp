@@ -511,7 +511,12 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "table '%s'(%d) warning: %s", i.Name(), dIndexes.GetLength(), sWarning.cstr() );
 
-		int iExists = dIndexes.GetFirst ( [&] ( const IndexDesc_t & tItem ) { return ( tItem.m_sName==tIndex.m_sName || tItem.m_sPath==tIndex.m_sPath ); } );
+		int iExists = dIndexes.GetFirst ( [&] ( const IndexDesc_t & tItem )
+		{
+			return ( tItem.m_sName==tIndex.m_sName ||
+				( ( tItem.m_eType==IndexType_e::PLAIN || tItem.m_eType==IndexType_e::RT ) && tItem.m_sPath==tIndex.m_sPath ) );
+		});
+
 		if ( iExists!=-1 )
 		{
 			const IndexDesc_t & tItem = dIndexes[iExists];

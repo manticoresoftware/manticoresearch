@@ -397,7 +397,7 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::HintRowID ( RowID_t tRowID )
 	if ( !m_tMerge.GetLength() )
 		return false;
 
-	if ( tRowID<=*m_tMerge.Root()->m_pRowID + m_tMerge.GetLength() )
+	if ( tRowID<=*m_tMerge.Last()->m_pRowID )
 		return true;
 
 	m_tMerge.Clear();
@@ -446,6 +446,9 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & d
 				*pRowID++ = *pState->m_pRowID++;
 		}
 		while ( pState->m_pRowID>=pState->m_pRowIDMax && pState->WarmupDocs() );
+
+		if ( !pState->m_pRowID )
+			m_tMerge.Pop();
 	}
 
 	if ( m_iRowsLeft!=INT_MAX )

@@ -114,11 +114,17 @@ void CSphQueue<T, COMP>::Pop()
 	}
 }
 
-
 /// get current root
 template<typename T, typename COMP>
 inline const T& CSphQueue<T, COMP>::Root() const
 {
 	assert ( m_iUsed && m_pData );
 	return m_pData[0];
+}
+
+template<typename T, typename COMP>
+inline const T & CSphQueue<T, COMP>::Last() const
+{
+	assert ( m_iUsed && m_pData );
+	return m_pData[m_iUsed-1];
 }

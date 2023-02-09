@@ -36,6 +36,7 @@ public:
 
 	/// get current root
 	const T& Root() const;
+	const T& Last() const;
 
 private:
 	T* m_pData = nullptr;

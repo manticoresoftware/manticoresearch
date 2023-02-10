@@ -16,3 +16,11 @@
 //////////////////////////////////////////////////////////////////////////
 
 char CSphString::EMPTY[] = "";
+
+void ToLower ( Str_t sVal )
+{
+	char * s = const_cast<char *> ( sVal.first );
+	const char * sEnd = s + sVal.second;
+	for ( ; s<sEnd; s++ )
+		*s = (char)tolower ( *s );
+}

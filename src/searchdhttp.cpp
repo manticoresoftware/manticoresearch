@@ -474,7 +474,7 @@ int HttpRequestParser_c::ParsedBodyLength() const
 
 bool HttpRequestParser_c::Expect100() const
 {
-	return m_hOptions.Exists ( "Expect" ) && m_hOptions["Expect"] == "100-continue";
+	return m_hOptions.Exists ( "expect" ) && m_hOptions["expect"] == "100-continue";
 }
 
 bool HttpRequestParser_c::KeepAlive() const
@@ -585,6 +585,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 			{
 				Str_t sVal { sLast, int ( sCur - sLast ) };
 				UriPercentReplace ( sVal );
+				ToLower ( sName );
 				hOptions.Add ( sVal, sName );
 				sLast = sCur + 1;
 				sName = dEmptyStr;
@@ -600,6 +601,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 
 	Str_t sVal { sLast, int ( sCur - sLast ) };
 	UriPercentReplace ( sVal );
+	ToLower ( sName );
 	hOptions.Add ( sVal, sName );
 }
 
@@ -692,7 +694,9 @@ inline void HttpRequestParser_c::FinishParserKeyVal()
 
 	HTTPINFO << "FinishParserKeyVal with '" << m_sCurField << "':'" << m_sCurValue << "'";
 
-	m_hOptions.Add ( (CSphString)m_sCurValue, (CSphString)m_sCurField );
+	CSphString sField = (CSphString)m_sCurField;
+	sField.ToLower();
+	m_hOptions.Add ( (CSphString)m_sCurValue, sField );
 	m_sCurField.Clear();
 	m_sCurValue.Clear();
 }
@@ -2066,10 +2070,10 @@ protected:
 
 	const char* IsNDJson() const
 	{
-		if ( !m_tOptions.Exists ( "Content-Type" ) )
+		if ( !m_tOptions.Exists ( "content-type" ) )
 			return "Content-Type must be set";
 
-		auto sContentType = m_tOptions["Content-Type"].ToLower();
+		auto sContentType = m_tOptions["content-type"].ToLower();
 		auto dParts = sphSplit ( sContentType.cstr(), ";" );
 		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
 			return "Content-Type must be application/x-ndjson";
@@ -2858,10 +2862,7 @@ bool HttpHandlerEsBulk_c::Validate()
 {
 	CSphString sError;
 
-	// case insitive option get: content-type
-	CSphString * pOptContentType = GetOptions() ( "Content-Type" );
-	if ( !pOptContentType )
-		pOptContentType = GetOptions() ( "content-type" );
+	CSphString * pOptContentType = GetOptions() ( "content-type" );
 	if ( !pOptContentType )
 	{
 		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );

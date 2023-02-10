@@ -48,7 +48,7 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 
 	if ( iLen )
 	{
-		if ( sBuf[iLen - 1] == '*' )
+		if ( sphIsWild ( sBuf[iLen - 1] ) )
 		{
 			iLen--;
 			sBuf[iLen] = '\0';

@@ -414,7 +414,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 
 static bool HasProhibitBuddy ( const OptionsHash_t & hOptions )
 {
-	CSphString * pProhibit = hOptions ( "User-Agent" );
+	CSphString * pProhibit = hOptions ( "user-agent" );
 	if ( !pProhibit )
 		return false;
 

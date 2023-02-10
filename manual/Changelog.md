@@ -1,5 +1,14 @@
 # Changelog
 
+# Version 6.0.2
+Released: Feb 10 2023
+
+### Bugfixes
+* [Issue #1024 crash 2](https://github.com/manticoresoftware/manticoresearch/issues/1024) Crash / Segmentation Fault on Facet search with larger number of results
+* ❗[Issue #1029](https://github.com/manticoresoftware/manticoresearch/issues/1029) - WARNING: Compiled-in value KNOWN_CREATE_SIZE (16) is less than measured (208). Consider to fix the value!
+* ❗[Issue #1032](https://github.com/manticoresoftware/manticoresearch/issues/1032) - Manticore 6.0.0 plain index crashes
+* ❗[Issue #1033](https://github.com/manticoresoftware/manticoresearch/issues/1033) - multiple distributed lost on daemon restart
+
 # Version 6.0.0
 Released: Feb 7 2023
 

@@ -2731,6 +2731,8 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 			tDoc.m_tDocid = tId.IntVal();
 		else if ( tId.IsStr() )
 			tDoc.m_tDocid = strtoll ( tId.SzVal(), NULL, 10 );
+		else if ( tId.IsNull() )
+			tDoc.m_tDocid = 0;
 		else
 		{
 			sError.SetSprintf ( "_id should be an int or string" );
@@ -2903,6 +2905,7 @@ bool HttpHandlerEsBulk_c::Process()
 	CSphVector<Str_t> dLines;
 	SplitNdJson ( GetBody(), [&] ( const char * sLine, int iLen ) { dLines.Add ( Str_t ( sLine, iLen ) ); } );
 	
+	CSphString sError;
 	CSphVector<BulkDoc_t> dDocs;
 	dDocs.Reserve ( dLines.GetLength() / 2 );
 	bool bNextLineMeta = true;
@@ -2920,9 +2923,9 @@ bool HttpHandlerEsBulk_c::Process()
 
 			// any bad meta result in general error
 			BulkDoc_t & tDoc = dDocs.Add();
-			if ( !ParseMetaLine ( tLine.first, tDoc, m_sError ) )
+			if ( !ParseMetaLine ( tLine.first, tDoc, sError ) )
 			{
-				ReportLogError ( m_sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
+				ReportLogError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
 				return false;
 			}
 			if ( tDoc.m_sAction=="delete" )

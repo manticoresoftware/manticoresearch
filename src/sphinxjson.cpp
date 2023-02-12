@@ -1650,6 +1650,11 @@ bool JsonObj_c::IsArray() const
 	return !!cJSON_IsArray ( m_pRoot );
 }
 
+bool JsonObj_c::IsNull() const
+{
+	return !!cJSON_IsNull ( m_pRoot );
+}
+
 
 JsonObj_c JsonObj_c::operator[] ( int iItem ) const
 {

@@ -65,6 +65,20 @@ select id from idx1 where match ('?uee%') order by id asc;
 select id from idx1 where match ('кири??ица');
 select id from idx1 where match ('кири????ица');
 select id from idx1 where match ('ки%и??и%ца');
-</sphinxql></queries>
+</sphinxql>
+
+<!-- regression wild tokens at the query -->
+
+<sphinxql>
+select id from idx1 where match ('aaue') order by id asc;
+select id from idx1 where match ('aaue *') order by id asc; show meta;
+select id from idx1 where match ('aaue ?') order by id asc; show meta;
+select id from idx1 where match ('aaue %') order by id asc; show meta;
+select id from idx1 where match ('*') order by id asc; show meta;
+select id from idx1 where match ('?') order by id asc; show meta;
+select id from idx1 where match ('%') order by id asc; show meta;
+</sphinxql>
+
+</queries>
 
 </test>

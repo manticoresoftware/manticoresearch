@@ -42,8 +42,8 @@ SphWordID_t DictStarV8_c::GetWordID ( BYTE* pWord )
 	if ( !iLen )
 		return 0;
 
-	bool bHeadStar = ( pWord[0] == '*' );
-	bool bTailStar = ( pWord[iLen - 1] == '*' ) && ( iLen > 1 );
+	bool bHeadStar = sphIsWild ( pWord[0] );
+	bool bTailStar = sphIsWild ( pWord[iLen - 1] ) && ( iLen > 1 );
 	bool bMagic = ( pWord[0] < ' ' );
 
 	if ( !bHeadStar && !bTailStar && !bMagic )

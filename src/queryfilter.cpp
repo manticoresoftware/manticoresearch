@@ -65,7 +65,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 					tInfo.m_iHits = tWordlist.m_dExpanded[i].m_iHits;
 					tInfo.m_iQpos = iQpos;
 
-					RemoveDictSpecials ( tInfo.m_sNormalized );
+					RemoveDictSpecials ( tInfo.m_sNormalized, ( m_pSettings->m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 				}
 			}
 
@@ -186,7 +186,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 				dKeywords[iTokenized].m_iHits = iHits;
 				dKeywords[iTokenized].m_sNormalized = sNormalizedWithMaxHits;
 
-				RemoveDictSpecials ( dKeywords[iTokenized].m_sNormalized );
+				RemoveDictSpecials ( dKeywords[iTokenized].m_sNormalized, ( m_pSettings->m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 			}
 		}
 	}
@@ -209,7 +209,7 @@ void CSphTemplateQueryFilter::AddKeywordStats ( BYTE* sWord, const BYTE* sTokeni
 	tInfo.m_iHits = 0;
 	tInfo.m_iQpos = iQpos;
 
-	RemoveDictSpecials ( tInfo.m_sNormalized );
+	RemoveDictSpecials ( tInfo.m_sNormalized, ( m_pSettings->m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 }
 
 void CSphPlainQueryFilter::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
@@ -236,5 +236,5 @@ void CSphPlainQueryFilter::AddKeywordStats ( BYTE * sWord, const BYTE * sTokeniz
 	tInfo.m_iHits = m_tFoldSettings.m_bStats ? m_pQueryWord->m_iHits : 0;
 	tInfo.m_iQpos = iQpos;
 
-	RemoveDictSpecials ( tInfo.m_sNormalized );
+	RemoveDictSpecials ( tInfo.m_sNormalized, ( m_pSettings->m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 }

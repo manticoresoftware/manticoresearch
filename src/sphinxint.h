@@ -836,8 +836,8 @@ inline CSphString SqlUnescape ( const char* sEscaped, int iLen )
 // DISK INDEX INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
-void RemoveDictSpecials ( CSphString & sWord );
-const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );
+void RemoveDictSpecials ( CSphString & sWord, bool bBigram );
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf, bool bBigram );
 
 
 DWORD sphParseMorphAot ( const char * );

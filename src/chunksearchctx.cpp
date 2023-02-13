@@ -32,15 +32,7 @@ void DiskChunkSearcherCtx_t::MergeChild ( DiskChunkSearcherCtx_t tChild ) const
 	auto & tChildRes = tChild.m_tMeta;
 
 	// word statistics
-	if ( m_tMeta.m_hWordStats.GetLength ())
-		for ( auto & tStat : m_tMeta.m_hWordStats )
-		{
-			const auto * pDstStat = tChildRes.m_hWordStats ( tStat.first );
-			if ( pDstStat )
-				m_tMeta.AddStat ( tStat.first, pDstStat->first, pDstStat->second );
-		}
-	else
-		m_tMeta.m_hWordStats = tChildRes.m_hWordStats;
+	m_tMeta.MergeWordStats ( tChildRes );
 
 	// other data (warnings, errors, etc.)
 	// errors

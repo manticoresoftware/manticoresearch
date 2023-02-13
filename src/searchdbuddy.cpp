@@ -31,7 +31,7 @@ static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
 static boost::asio::io_service g_tIOS;
-static std::vector<char> g_dPipeBuf ( 4096 );
+static std::vector<char> g_dPipeBuf ( 960 ); // should be less than log buffer size to prevent message clip
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
 enum class BuddyState_e
 {
@@ -245,7 +245,12 @@ void BuddyNextTick()
 
 	if ( g_pPipe )
 		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
-	g_tIOS.poll();
+
+	int iGot = 0;
+	do 
+	{
+		iGot = g_tIOS.poll_one();
+	} while ( !g_tIOS.stopped() );
 	g_tIOS.restart();
 
 	if ( g_eBuddy==BuddyState_e::STARTING && sphMicroTimer()>( g_tmStarting + g_iStartMaxTimeout * 1000 * 1000  ) )

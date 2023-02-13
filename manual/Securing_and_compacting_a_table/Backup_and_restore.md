@@ -127,7 +127,7 @@ BACKUP
   TO path_to_backup
 ```
 
-For instance, to back up tables `a` and `b` to the ``/backup` directory, run the following command:
+For instance, to back up tables `a` and `b` to the `/backup` directory, run the following command:
 
 ```sql
 BACKUP TABLES a, b TO /backup

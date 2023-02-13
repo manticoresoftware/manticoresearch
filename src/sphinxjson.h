@@ -479,6 +479,7 @@ public:
 	bool			IsArray() const;
 	bool			Empty() const;
 	const char *	Name() const;
+	bool			IsNull() const;
 
 	int64_t			IntVal() const;
 	bool			BoolVal() const;

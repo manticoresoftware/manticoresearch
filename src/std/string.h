@@ -187,4 +187,6 @@ CSphString SphSprintf ( const char* sTemplate, ... );
 using StrVec_t = CSphVector<CSphString>;
 using StrtVec_t = CSphVector<Str_t>;
 
+void ToLower ( Str_t sVal );
+
 #include "string_impl.h"

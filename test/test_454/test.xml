@@ -91,7 +91,7 @@ index test1
 </bulk>
 
 <!-- regression document id is null -->
-<query endpoint="cli" method="post">truncate table test1</query>
+<query endpoint="cli_json" method="post">truncate table test1</query>
 <bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
 { "index" : { "_index" : "test1", "_id" : null } }
 { "int_col" : "201" }

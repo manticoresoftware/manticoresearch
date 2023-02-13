@@ -89,13 +89,13 @@ Two"}')
 <query endpoint="sql" method="post">mode=raw&amp;query=select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
 
 <!-- expected to success since cli doesn't need + escaping -->
-<query endpoint="cli" method="post">select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
-<query endpoint="cli" method="post">select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
-<query endpoint="cli" method="post">select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
-<query endpoint="cli" method="post"/>
+<query endpoint="cli_json" method="post">select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="cli_json" method="post">select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="cli_json" method="post">select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
+<query endpoint="cli_json" method="post"/>
 
 <!-- cli with 'get' method -->
-<query endpoint="cli" method="get">select%20id,1+2%20as%20a,%20packedfactors()%20from%20test%20where%20match(%27tes*%27)%20option%20ranker=expr(%271%27)</query>
+<query endpoint="cli_json" method="get">select%20id,1+2%20as%20a,%20packedfactors()%20from%20test%20where%20match(%27tes*%27)%20option%20ranker=expr(%271%27)</query>
 
 <!-- any statement via mode=raw -->
 <query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>
@@ -106,7 +106,7 @@ Two"}')
 <query endpoint="sql" method="post">query=select%20avg%28id%29%20x%20from%20test%20group%20by%20gid%20order%20by%20x%20desc</query>
 
 <!-- error statement via mode=raw and cli-->
-<query endpoint="cli" method="post">desc testt</query>
+<query endpoint="cli_json" method="post">desc testt</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=desc testt</query>
 
 <!-- statement with characters in col need to be escaped-->

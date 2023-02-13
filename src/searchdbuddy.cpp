@@ -483,20 +483,37 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 	return true;
 }
 
-HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+bool ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	Str_t sSrcQuery = dEmptyStr;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( tSource, sSrcQuery, hOptions, dResult, bNeedHttpResponse, eRequestType );
 
 	if ( tRes.m_bOk || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || !HasBuddy() || HasProhibitBuddy ( hOptions ) || IsEmpty ( sSrcQuery ) )
-		return tRes;
+	{
+		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
+		{
+			if ( !HasBuddy() )
+			{
+				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );
+				sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
+
+			} else if ( HasProhibitBuddy ( hOptions ) )
+			{
+				tRes.m_sError.SetSprintf ( "can not process /cli endpoint with User-Agent:Manticore Buddy" );
+				sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
+			}
+		}
+		
+		assert ( dResult.GetLength()>0 );
+		return tRes.m_bOk;
+	}
 
 	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), FromStr ( sSrcQuery ) );
 
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
-		return tRes;
+		return tRes.m_bOk;
 	}
 
 	CSphString sError;
@@ -504,22 +521,20 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
-		return tRes;
+		return tRes.m_bOk;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
-		return tRes;
+		return tRes.m_bOk;
 	}
 
 	CSphString sDump;
-	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump );
+	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), SPH_HTTP_STATUS_200, bNeedHttpResponse, dResult );
-	tRes.m_bOk = true;
-	tRes.m_sError = "";
-	return tRes;
+	return true;
 }
 
 bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & tOut )

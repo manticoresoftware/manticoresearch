@@ -1411,6 +1411,7 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
+	void SetDumpUser();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

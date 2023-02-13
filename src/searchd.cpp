@@ -205,6 +205,7 @@ static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static int				g_iDumpDocs = 1000000000;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -3695,6 +3696,7 @@ void AggrResult_t::AddEmptyResultset ( const DocstoreReader_i * pDocstore, int i
 	auto & tOneRes = m_dResults.Add();
 	tOneRes.m_pDocstore = pDocstore;
 	tOneRes.m_iTag = iTag;
+	tOneRes.m_tSchema = m_tSchema;
 }
 
 
@@ -12986,17 +12988,9 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	// bummer! lets protect ourselves against that
 	CSphBitvec tAttrsToSend;
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
-	if ( tRes.GetLength() || bReturnZeroCount )
-		sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
+	assert ( bReturnZeroCount || tRes.m_tSchema.GetAttrsCount() );
+	sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
-	// field packets
-	if ( tRes.GetLength()==0 && !bReturnZeroCount )
-	{
-		// in case there are no matches, send a dummy schema
-		// result set header packet. We will attach EOF manually at the end.
-		dRows.HeadBegin ( bAddQueryColumn ? 2 : 1 );
-		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG );
-	} else
 	{
 		int iAttrsToSend = tAttrsToSend.BitCount();
 		if ( bAddQueryColumn )
@@ -16268,6 +16262,24 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			return true;
 		}
 	}
+	if ( bParsedOK && m_bDumpUser )
+	{
+		ARRAY_FOREACH ( i, dStmt )
+		{
+			SqlStmt_t & tStmt = dStmt[i];
+			if ( tStmt.m_eStmt!=STMT_SELECT )
+				continue;
+
+			if ( !tStmt.m_tQuery.m_bExplicitMaxMatches )
+			{
+				tStmt.m_tQuery.m_iLimit = g_iDumpDocs;
+				tStmt.m_tQuery.m_iMaxMatches = g_iDumpDocs;
+				tStmt.m_tQuery.m_bExplicitMaxMatches = true;
+			}
+
+			tStmt.m_tQuery.m_iCouncurrency = 1;
+		}
+	}
 
 	// handle multi SQL query
 	if ( bParsedOK && dStmt.GetLength()>1 )
@@ -16713,6 +16725,11 @@ bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )
 void session::SetFederatedUser ()
 {
 	GetClientSession()->m_bFederatedUser = true;
+}
+
+void session::SetDumpUser ()
+{
+	GetClientSession()->m_bDumpUser = true;
 }
 
 void session::SetAutoCommit ( bool bAutoCommit )

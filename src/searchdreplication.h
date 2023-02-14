@@ -48,7 +48,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
-void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
+void HandleCommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
 
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning );

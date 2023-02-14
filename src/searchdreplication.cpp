@@ -42,11 +42,15 @@ static int			g_iAnyNodesTimeout = 200;
 static int			g_iNodeRetry = 3;
 static int			g_iNodeRetryWait = 500;
 
-
 // debug options passed into Galera for our logreplication command line key
 static const char * g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
 // prefix added for Galera nodes
 static const char * g_sDefaultReplicationNodes = "gcomm://";
+
+// verbose logging of replcating transactions, ruled by this env variable
+static bool LOG_LEVEL_RPL_TNX = val_from_env ( "MANTICORE_LOG_RPL_TNX", false );
+#define LOG_COMPONENT_RPL_TNX ""
+#define RPL_TNX LOGMSG ( RPL_DEBUG, RPL_TNX, RPL_TNX )
 
 // cluster state this node sees
 enum class ClusterState_e
@@ -117,7 +121,7 @@ public:
 
 	// error that got reported to main thread
 	CSphMutex				m_tErrorLock;
-	CSphString				m_sError;
+	StringBuilder_c			m_sError { ";" };
 
 	void					UpdateIndexHashes();
 
@@ -619,10 +623,9 @@ static void LogGroupView ( const wsrep_view_info_t * pView )
 		pView->my_idx, pView->memb_num, (int64_t)pView->state_id.seqno, g_sClusterStatus[pView->status], (int)pView->state_gap );
 
 	StringBuilder_c sBuf;
-	sBuf += "\n";
 	const wsrep_member_info_t * pBoxes = pView->members;
 	for ( int i=0; i<pView->memb_num; i++ )
-		sBuf.Appendf ( "'%s', '%s' %s\n", pBoxes[i].name, pBoxes[i].incoming, ( i==pView->my_idx ? "*" : "" ) );
+		sBuf.Appendf ( "\n'%s', '%s' %s", pBoxes[i].name, pBoxes[i].incoming, ( i==pView->my_idx ? "*" : "" ) );
 
 	sphLogDebugRpl ( "%s", sBuf.cstr() );
 }
@@ -770,7 +773,7 @@ static wsrep_cb_status_t Apply_fn ( void * pCtx, const void * pData, size_t uSiz
 
 	bool bCommit = ( ( uFlags & WSREP_FLAG_COMMIT )!=0 );
 	bool bIsolated = ( ( uFlags & WSREP_FLAG_ISOLATION )!=0 );
-	sphLogDebugRpl ( "writeset at apply, seq " INT64_FMT ", size %d, flags %u, on %s", (int64_t)pMeta->gtid.seqno, (int)uSize, uFlags, ( bCommit ? "commit" : "rollback" ) );
+	RPL_TNX << "writeset at apply, seq " << (int64_t)pMeta->gtid.seqno << ", size " << (int)uSize << ", flags " << uFlags << ", on " << ( bCommit ? "commit" : "rollback" );
 
 	if ( !ParseCmdReplicated ( (const BYTE *)pData, (int) uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tQuery ) )
 		return WSREP_CB_FAILURE;
@@ -783,7 +786,7 @@ static wsrep_cb_status_t Commit_fn ( void * pCtx, const void * hndTrx, uint32_t 
 {
 	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pCtx;
 	wsrep_t * pWsrep = pLocalCtx->m_pCluster->m_pProvider;
-	sphLogDebugRpl ( "writeset at %s, seq " INT64_FMT ", flags %u", ( bCommit ? "commit" : "rollback" ), (int64_t)pMeta->gtid.seqno, uFlags );
+	RPL_TNX << "writeset at " << ( bCommit ? "commit" : "rollback" ) << ", seq " << (int64_t)pMeta->gtid.seqno << ", flags " << uFlags;
 
 	wsrep_cb_status_t eRes = WSREP_CB_SUCCESS;
 	if ( bCommit && pLocalCtx->m_tAcc.m_dCmd.GetLength() )
@@ -803,7 +806,7 @@ static wsrep_cb_status_t Commit_fn ( void * pCtx, const void * hndTrx, uint32_t 
 			pWsrep->applier_post_commit ( pWsrep, const_cast<void *>( hndTrx ) );
 		}
 
-		sphLogDebugRpl ( "seq " INT64_FMT ", committed %d, isolated %d", (int64_t)pMeta->gtid.seqno, (int)bOk, (int)bIsolated );
+		RPL_TNX << "seq " << (int64_t)pMeta->gtid.seqno << ", committed " << (int)bOk << ", isolated " << (int)bIsolated;
 
 		eRes = ( bOk ? WSREP_CB_SUCCESS : WSREP_CB_FAILURE );
 	}
@@ -1025,11 +1028,6 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 	memcpy ( tArgs.m_pCluster->m_dUUID.Begin(), WSREP_UUID_UNDEFINED.data, tArgs.m_pCluster->m_dUUID.GetLengthBytes() );
 
 	wsrep_gtid_t tStateID = { WSREP_UUID_UNDEFINED, WSREP_SEQNO_UNDEFINED };
-	CSphString sMyName;
-	sMyName.SetSprintf ( "daemon_%d_%s", GetOsThreadId(), tArgs.m_pCluster->m_sName.cstr() );
-
-	CSphString sThName; // shorter name without extra 'daemon_'
-	sThName.SetSprintf ( "%s_repl", tArgs.m_pCluster->m_sName.cstr() );
 
 	CSphString sConnectNodes;
 	if ( tArgs.m_sNodes.IsEmpty() )
@@ -1042,6 +1040,11 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	CSphString sIncoming;
 	sIncoming.SetSprintf ( "%s,%s:%d:replication", g_sIncomingProto.cstr(), g_sIncomingIP.cstr(), tArgs.m_iListenPort );
+	CSphString sMyName;
+	sMyName.SetSprintf ( "node_%s_%s_%d", g_sIncomingIP.cstr(), tArgs.m_pCluster->m_sName.cstr(), GetOsThreadId() );
+	CSphString sThName; // shorter name without extra prefix
+	sThName.SetSprintf ( "%s_repl", tArgs.m_pCluster->m_sName.cstr() );
+
 	sphLogDebugRpl ( "node incoming '%s', listen '%s', nodes '%s', name '%s'", sIncoming.cstr(), tArgs.m_sListenAddr.cstr(), sConnectNodes.scstr(), sMyName.cstr() );
 	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
 	{
@@ -1153,12 +1156,12 @@ static void ReplicateClusterDone ( ReplicationClusterPtr_t & pCluster )
 		pProvider->disconnect ( pProvider );
 	}
 
-	sphLogDebug ( "disconnect from cluster %s invoked", pCluster->m_sName.cstr() );
+	sphLogDebugRpl ( "disconnected from cluster %s", pCluster->m_sName.cstr() );
 }
 
 ReplicationCluster_t::~ReplicationCluster_t()
 {
-	sphLogDebug ( "cluster %s wait to finish", m_sName.cstr() );
+	sphLogDebugRpl ( "cluster '%s' wait to finish", m_sName.scstr() );
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
 	m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
@@ -1166,7 +1169,7 @@ ReplicationCluster_t::~ReplicationCluster_t()
 	HeartBeat();
 
 	wsrep_unload ( m_pProvider );
-	sphLogDebug ( "cluster %s finished, cluster deleted lib %p unloaded", m_sName.cstr(), m_pProvider );
+	sphLogDebugRpl ( "cluster '%s' finished, cluster deleted, lib %p unloaded", m_sName.scstr(), m_pProvider );
 }
 
 // check return code from Galera calls
@@ -1236,7 +1239,7 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 		CheckResult ( tRoll, tLogMeta, "post_rollback", sError );
 	}
 
-	sphLogDebugRpl ( "replicating %d, seq " INT64_FMT ", commands %d", (int)bOk, (int64_t)tLogMeta.gtid.seqno, iKeysCount );
+	RPL_TNX << "replicating " << (int)bOk << ", seq " << ( (int64_t)tLogMeta.gtid.seqno ) << ", commands " << iKeysCount;
 
 	if ( bOk )
 	{
@@ -1269,7 +1272,7 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 			CheckResult ( tRes, tLogMeta, "post_rollback", sError );
 		}
 
-		sphLogDebugRpl ( "%s seq " INT64_FMT, ( bOk ? "committed" : "rolled-back" ), (int64_t)tLogMeta.gtid.seqno );
+		RPL_TNX << ( bOk ? "committed" : "rolled-back" ) << " seq " << (int64_t)tLogMeta.gtid.seqno;
 	}
 
 	// FIXME!!! move ThreadID and to net loop handler exit
@@ -1437,18 +1440,18 @@ void ReplicationAbort()
 void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 {
 	Threads::CallCoroutine ( [] {
-		sphLogDebug ( "ReplicateClustersDelete invoked" );
 		Threads::SccWL_t wLock ( g_tClustersLock );
 		if ( !g_hClusters.GetLength() )
 			return;
 
+		sphLogDebugRpl ( "clusters (%d) delete invoked", g_hClusters.GetLength() );
 		for ( auto & tCluster : g_hClusters )
 		{
-			sphLogDebug ( "ReplicateClustersDelete for %s", tCluster.first.cstr() );
+			sphLogDebugRpl ( "cluster '%s' delete", tCluster.first.cstr() );
 			ReplicateClusterDone ( tCluster.second );
 		}
 
-		sphLogDebug ( "ReplicateClustersDelete done" );
+		sphLogDebugRpl ( "clusters delete done" );
 		g_hClusters.Reset();
 	} );
 }
@@ -1605,7 +1608,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 			StoredQueryDesc_t tPQ;
 			LoadStoredQuery ( pRequest, iRequestLen, tPQ );
-			sphLogDebugRpl ( "pq-add, table '%s', uid " INT64_FMT " query %s", pCmd->m_sIndex.cstr(), tPQ.m_iQUID, tPQ.m_sQuery.cstr() );
+			RPL_TNX << "pq-add, table '" << pCmd->m_sIndex.cstr() << "', uid " << tPQ.m_iQUID << " query " << tPQ.m_sQuery.cstr();
 
 			CSphString sError;
 			PercolateQueryArgs_t tArgs ( tPQ );
@@ -1622,31 +1625,31 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 		case ReplicationCommand_e::PQUERY_DELETE:
 			LoadDeleteQuery ( pRequest, iRequestLen, pCmd->m_dDeleteQueries, pCmd->m_sDeleteTags );
-			sphLogDebugRpl ( "pq-delete, table '%s', queries %d, tags %s", pCmd->m_sIndex.cstr(), pCmd->m_dDeleteQueries.GetLength(), pCmd->m_sDeleteTags.scstr() );
+			RPL_TNX << "pq-delete, table '" << pCmd->m_sIndex.cstr() << "', queries " << pCmd->m_dDeleteQueries.GetLength() << ", tags " << pCmd->m_sDeleteTags.scstr();
 			break;
 
 		case ReplicationCommand_e::TRUNCATE:
-			sphLogDebugRpl ( "pq-truncate, table '%s'", pCmd->m_sIndex.cstr() );
+			RPL_TNX << "pq-truncate, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
 		case ReplicationCommand_e::CLUSTER_ALTER_ADD:
 			pCmd->m_bCheckIndex = false;
-			sphLogDebugRpl ( "pq-cluster-alter-add, table '%s'", pCmd->m_sIndex.cstr() );
+			RPL_TNX << "pq-cluster-alter-add, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
 		case ReplicationCommand_e::CLUSTER_ALTER_DROP:
-			sphLogDebugRpl ( "pq-cluster-alter-drop, table '%s'", pCmd->m_sIndex.cstr() );
+			RPL_TNX << "pq-cluster-alter-drop, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
 		case ReplicationCommand_e::RT_TRX:
 			tAcc.LoadRtTrx ( pRequest, iRequestLen, uVer );
-			sphLogDebugRpl ( "rt trx, table '%s'", pCmd->m_sIndex.cstr() );
+			RPL_TNX << "rt trx, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
 		case ReplicationCommand_e::UPDATE_API:
 			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
 			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
-			sphLogDebugRpl ( "update, table '%s'", pCmd->m_sIndex.cstr() );
+			RPL_TNX << "update, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
 		case ReplicationCommand_e::UPDATE_QL:
@@ -1660,7 +1663,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
 			pCmd->m_pUpdateCond = &tQuery;
-			sphLogDebugRpl ( "update %s, table '%s'", ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ),  pCmd->m_sIndex.cstr() );
+			RPL_TNX << "update " << ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 		}
 
@@ -1751,16 +1754,14 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	// special path with wlocked index for truncate
 	if ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE )
 	{
-		sphLogDebugRpl ( "truncate-commit, table '%s'", tCmd.m_sIndex.cstr ());
+		RPL_TNX << "truncate-commit, table '" << tCmd.m_sIndex.cstr() << "'";
 		if ( !WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError ) )
 			sphWarning ( "%s", sError.cstr ());
 		return true;
 	}
 
 	assert ( tCmd.m_eCommand!=ReplicationCommand_e::TRUNCATE );
-	sphLogDebugRpl ( "commit, table '%s', uid " INT64_FMT ", queries %d, tags %s",
-		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ),
-		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
+	RPL_TNX << "commit, table '" << tCmd.m_sIndex.cstr() << "', uid " << ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ) << ", queries " << tCmd.m_dDeleteQueries.GetLength() << ", tags " << tCmd.m_sDeleteTags.scstr();
 
 	RIdx_T<RtIndex_i*> pIndex { pServed };
 	if ( !tAcc.SetupDocstore ( *pIndex, sError ) )
@@ -2673,12 +2674,12 @@ void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNe
 
 		if ( !ReplicateClusterInit ( tArgs, sError ) )
 		{
-			sphLogFatal ( "'%s' cluster start error: %s", tDesc.m_sName.cstr(), sError.cstr() );
+			sphLogFatal ( "'%s' cluster start error: %s, nodes '%s'", tDesc.m_sName.cstr(), sError.cstr(), tArgs.m_sNodes.cstr() );
 			DeleteClusterByName ( tDesc.m_sName );
 		} else
 		{
 			tClearIndexGuard.SkipCleanup();
-			sphLogDebugRpl ( "'%s' cluster started with %d tables", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength() );
+			sphLogDebugRpl ( "'%s' cluster started with %d tables, nodes '%s'", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength(), tArgs.m_sNodes.cstr() );
 		}
 	}
 
@@ -2817,6 +2818,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 	if ( !ReplicateClusterInit ( tArgs, sError ) )
 	{
+		sphLogFatal ( "'%s' cluster join error: %s, nodes '%s'", sCluster.cstr(), sError.cstr(), tArgs.m_sNodes.cstr() );
 		DeleteClusterByName ( sCluster );
 		return false;
 	}
@@ -2848,8 +2850,9 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		{
 			{
 				ScopedMutex_t tLock ( tArgs.m_pCluster->m_tErrorLock );
-				sError = tArgs.m_pCluster->m_sError;
+				sError = tArgs.m_pCluster->m_sError.cstr();
 			}
+			sphLogFatal ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), sError.cstr(), tArgs.m_sNodes.cstr() );
 			// need to wait recv thread to complete in case of error after worker started
 			tArgs.m_pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 			DeleteClusterByName ( sCluster );
@@ -3629,25 +3632,27 @@ public:
 	}
 };
 
-static void ReportClusterError ( const CSphString & sCluster, const CSphString & sError )
+static void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * sClient, int iCmd )
 {
 	if ( sError.IsEmpty() )
 		return;
+
+	sphLogFatal ( "'%s' cluster [%s], cmd: %d, error: %s", sCluster.cstr(), sClient, iCmd, sError.cstr() );
 
 	Threads::SccRL_t tLock ( g_tClustersLock );
 	if ( !g_hClusters.Exists ( sCluster ) )
 		return;
 
 	ReplicationClusterPtr_t pCluster ( g_hClusters[sCluster] );
-	if ( !pCluster->m_sError.IsEmpty() )
-		return;
-
 	ScopedMutex_t tErrorLock ( pCluster->m_tErrorLock );
-	pCluster->m_sError = sError;
+	if ( pCluster->m_sError.GetLength()>1024 ) // collect up to 1024 chars
+		pCluster->m_sError.Rewind();
+
+	pCluster->m_sError += sError.cstr();
 }
 
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
-void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
+void HandleCommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
 {
 	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTERPQ, tOut ) )
 		return;
@@ -3738,14 +3743,16 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 	}
 
 	if ( eClusterCmd!=CLUSTER_FILE_SEND || !bOk )
-		sphLogDebugRpl ( "remote cluster command %d, client %s - %s %s", (int)eClusterCmd, sClient, ( bOk ? "ok" : "error" ), ( bOk ? "" : sError.cstr() ) );
+		sphLogDebugRpl ( "remote cluster '%s' command %d, client %s - %s %s", tCmd.m_sCluster.scstr(), (int)eClusterCmd, sClient, ( bOk ? "ok" : "error:" ), ( bOk ? "" : sError.cstr() ) );
 
 	if ( !bOk )
 	{
+		CSphString sReplyError;
+		sReplyError.SetSprintf ( "[%s] %s", g_sIncomingIP.cstr(), sError.cstr() );
+
 		auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
-		tOut.SendString ( sError.cstr() );
-		sphLogFatal ( "%s", sError.cstr() );
-		ReportClusterError ( tCmd.m_sCluster, sError );
+		tOut.SendString ( sReplyError.cstr() );
+		ReportClusterError ( tCmd.m_sCluster, sError, sClient, (int)eClusterCmd );
 	}
 }
 
@@ -5489,6 +5496,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 
 void AbortSST ( wsrep_t * pProvider )
 {
+	sphLogDebugRpl ( "aborting SST (%s)", ( pProvider ? "valid" : "invalid" ) );
 	if ( !pProvider )
 		return;
 

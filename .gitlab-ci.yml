@@ -30,7 +30,7 @@ job_mirror:
   rules:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
     - if: $TEST==null && $CI_COMMIT_BRANCH == "dev"
-    - if: $TEST==null && $CI_COMMIT_BRANCH ==~ /^manticore-.*$/
+    - if: $TEST==null && $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   tags:
     - dev-host
   script:

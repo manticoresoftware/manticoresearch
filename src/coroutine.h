@@ -37,8 +37,6 @@ int MyStackSize();
 /// get size of used stack (threads or coro - depends from context)
 int64_t GetStackUsed();
 
-size_t GetDefaultCoroStackSize();
-
 // helper to align stack suze
 size_t AlignStackSize ( size_t iSize );
 
@@ -57,7 +55,8 @@ void StartJob ( Handler handler );
 // It should NOT switch context (i.e. no yield/resume)
 void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler );
 
-bool IsUnderValgrind();
+// if returns true - we could perform runtime calculation of stack sizes.
+bool StackMockingAllowed();
 
 // N of running threads in scheduler, or in global scheduler
 int NThreads ();

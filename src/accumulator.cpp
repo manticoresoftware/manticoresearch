@@ -146,6 +146,14 @@ bool RtAccum_t::SetupDocstore ( const RtIndex_i& tIndex, CSphString& sError )
 	return m_pDocstore->CheckFieldsLoaded ( sError );
 }
 
+static void ResetTailHit ( CSphWordHit * pHit )
+{
+	if ( pHit->m_tRowID!=pHit[1].m_tRowID || pHit->m_uWordID!=pHit[1].m_uWordID )
+		return;
+
+	if ( HITMAN::GetField ( pHit->m_uWordPos )==HITMAN::GetField ( pHit[1].m_uWordPos ) && HITMAN::IsEnd ( pHit[1].m_uWordPos ) )
+		pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
+}
 
 void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
 {
@@ -293,9 +301,9 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 
 			// need original hit for duplicate removal
 			tLastHit = *pHit;
-			// reset field end for not very last position
-			if ( HITMAN::IsEnd ( pHit->m_uWordPos ) && pHit != &pHits->Last() && pHit->m_tRowID == pHit[1].m_tRowID && pHit->m_uWordID == pHit[1].m_uWordID && HITMAN::IsEnd ( pHit[1].m_uWordPos ) )
-				pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
+			// reset field end for not very last position in this field
+			if ( HITMAN::IsEnd ( pHit->m_uWordPos ) && pHit!=&pHits->Last() )
+				ResetTailHit ( pHit );
 
 			// accumulate
 			m_dAccum.Add ( *pHit );

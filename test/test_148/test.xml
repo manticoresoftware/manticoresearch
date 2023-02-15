@@ -122,6 +122,32 @@ index rt
 	rt_field = description
 	dict = keywords
 }
+
+source src_field_plain
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_field
+    sql_attr_uint	    = idd
+}
+
+index field_plain
+{
+	source			= src_field_plain
+	path			= <data_path/>/field_plain
+	dict			= keywords
+}
+
+index field_rt
+{
+	type = rt
+	path			= <data_path/>/field_rt
+	rt_mem_limit = 128k
+	dict = keywords
+	rt_attr_uint	= idd
+	rt_field = q1
+    rt_field = q2
+}
 </config>
 
 <db_create>
@@ -139,9 +165,19 @@ CREATE TABLE start_end_table
 	body VARCHAR(64) NOT NULL
 );
 </db_create>
+<db_create>
+CREATE TABLE test_field
+(
+	id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	q1 VARCHAR(64) NOT NULL,
+    q2 VARCHAR(64) NOT NULL,
+    idd INT NOT NULL
+);
+</db_create>
 
 <db_drop>drop table if exists test_table;</db_drop>
 <db_drop>drop table if exists start_end_table;</db_drop>
+<db_drop>drop table if exists test_field;</db_drop>
 
 <db_insert>insert into test_table values ( 1, 'test_148/doc1.txt', 1 );</db_insert>
 <db_insert>insert into test_table values ( 2, 'test_148/doc2.txt', 2 );</db_insert>
@@ -151,6 +187,7 @@ CREATE TABLE start_end_table
 	insert into start_end_table (body) values ('ABB abc ABB')<db_insert/>
 	<repeat count="501">insert into start_end_table (body) values ('ABB')<db_insert/></repeat>
 </db_insert>
+<db_insert>insert into test_field values ( 1, 'test', 'test', 1 ), ( 2, 'test', 'test2', 2);</db_insert>
 
 <queries>
 	<sphinxql>
@@ -184,6 +221,11 @@ CREATE TABLE start_end_table
 	REPLACE INTO rt (id, title, description) VALUES (1, 'This is a simple test', 'This is a longer description of a simple test');
 	SELECT id FROM rt WHERE MATCH('@description test');
 	SELECT id FROM rt WHERE MATCH('@description[10] test');
+    
+	<!-- regression of field end remove -->
+	REPLACE INTO field_rt (id, q1, q2, idd) VALUES ( 1, 'test', 'test', 1 ), ( 2, 'test', 'test2', 2);
+	SELECT id FROM field_rt WHERE MATCH('@q1 ^test$') order by id asc;
+    SELECT id FROM field_plain WHERE MATCH('@q1 ^test$') order by id asc;
 	</sphinxql>
 </queries>
 </test>

@@ -82,12 +82,12 @@
 
 // Replaced by TRY_ACQUIRE
 #define EXCLUSIVE_TRYLOCK_FUNCTION( ... ) \
-  THREAD_ANNOTATION_ATTRIBUTE__ ( exclusive_trylock_function ( __VA_ARGS__ ) )
+    THREAD_ANNOTATION_ATTRIBUTE__ ( exclusive_trylock_function ( __VA_ARGS__ ) )
 
 // Replaced by TRY_ACQUIRE_SHARED
 #define SHARED_TRYLOCK_FUNCTION( ... ) \
-  THREAD_ANNOTATION_ATTRIBUTE__ ( shared_trylock_function ( __VA_ARGS__ ) )
+    THREAD_ANNOTATION_ATTRIBUTE__ ( shared_trylock_function ( __VA_ARGS__ ) )
 
 // Replaced by RELEASE and RELEASE_SHARED
 #define UNLOCK_FUNCTION( ... ) \
-	THREAD_ANNOTATION_ATTRIBUTE__ ( unlock_function ( __VA_ARGS__ ) )
+    THREAD_ANNOTATION_ATTRIBUTE__ ( unlock_function ( __VA_ARGS__ ) )

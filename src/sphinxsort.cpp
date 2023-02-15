@@ -1783,7 +1783,7 @@ void CSphGrouperMulti<PRED>::MultipleKeysFromMatch ( const CSphMatch & tMatch, C
 			{
 				SphGroupKey_t tStringKey = FetchStringKey ( tMatch, m_dLocators[i], SPH_FNV64_SEED );
 				if ( tStringKey!=SPH_FNV64_SEED )
-					dAllKeys[i].Add ( tStringKey );		
+					dAllKeys[i].Add ( tStringKey );
 			}
 			break;
 

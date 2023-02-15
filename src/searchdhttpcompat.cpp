@@ -332,8 +332,8 @@ static bool InsertDoc ( const CSphString & sIndex, const ComplexFields_t & dFiel
 static void InsertIntoKbnTable ( const CSphString & sIndex, const nljson & tTbl, const ComplexFields_t & dFields )
 {
 	CSphString sError;
-	int iDocs = 0;
-	int iFailed = 0;
+	[[maybe_unused]] int iDocs = 0;
+	[[maybe_unused]] int iFailed = 0;
 	const nljson & tHits = tTbl["hits"];
 	for ( auto & tDoc : tHits.items() )
 	{

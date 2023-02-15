@@ -526,17 +526,17 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 }
 
 
-static std::unique_ptr<FilterTreeNode_t> ConcatFilterTreeItems ( std::vector<std::unique_ptr<FilterTreeNode_t>> & dAdded, int iStart, bool bOr )
+static std::unique_ptr<FilterTreeNode_t> ConcatFilterTreeItems ( std::vector<std::unique_ptr<FilterTreeNode_t>> & dAdded, DWORD uStart, bool bOr )
 {
 	if ( dAdded.empty() )
 		return nullptr;
 
-	if ( iStart==dAdded.size()-1 )
-		return std::move ( dAdded[iStart] );
+	if ( uStart==dAdded.size()-1 )
+		return std::move ( dAdded[uStart] );
 
 	auto pRoot = std::make_unique<FilterTreeNode_t>();
-	pRoot->m_pLeft = std::move ( dAdded[iStart] );
-	pRoot->m_pRight = ConcatFilterTreeItems ( dAdded, iStart+1, bOr );
+	pRoot->m_pLeft = std::move ( dAdded[uStart] );
+	pRoot->m_pRight = ConcatFilterTreeItems ( dAdded, uStart+1, bOr );
 	pRoot->m_bOr = bOr;
 
 	return pRoot;

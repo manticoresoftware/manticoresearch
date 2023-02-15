@@ -75,7 +75,7 @@ Waiter_t DefferedContinuator() noexcept;
 void WaitForDeffered ( Waiter_t&& ) noexcept;
 
 // start dTasks, then yield until iN of them completed. Returns idx of the task which fired the trigger
-int WaitForN ( int iN, std::initializer_list<Handler> dTasks );
+int WaitForN ( DWORD uN, std::initializer_list<Handler> dTasks );
 
 // set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
 #define MODELING 0

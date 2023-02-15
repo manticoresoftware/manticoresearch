@@ -1,5 +1,12 @@
 # Changelog
 
+# Version 6.0.4
+
+Released: soon
+
+### Bugfixes
+* 
+
 # Version 6.0.2
 Released: Feb 10 2023
 

@@ -488,12 +488,21 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 	return true;
 }
 
+static const sph::StringSet g_dAllowedEndpoints = {
+	"/_license"
+};
+
+static bool RequestSkipBuddy ( Str_t sSrcQuery, const CSphString & sURL )
+{
+	return ( IsEmpty ( sSrcQuery ) && !g_dAllowedEndpoints[sURL] );
+}
+
 bool ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	Str_t sSrcQuery = dEmptyStr;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( tSource, sSrcQuery, hOptions, dResult, bNeedHttpResponse, eRequestType );
 
-	if ( tRes.m_bOk || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || !HasBuddy() || HasProhibitBuddy ( hOptions ) || IsEmpty ( sSrcQuery ) )
+	if ( tRes.m_bOk || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || !HasBuddy() || HasProhibitBuddy ( hOptions ) || RequestSkipBuddy ( sSrcQuery, hOptions["full_url"] ) )
 	{
 		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
 		{

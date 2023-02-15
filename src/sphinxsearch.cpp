@@ -1947,13 +1947,14 @@ int	FactorPool_c::GetElementSize() const
 void FactorPool_c::AddToHash ( const RowTagged_t & tRow, BYTE * pPacked )
 {
 	auto * pNew = (SphFactorHashEntry_t *)(pPacked+m_iElementSize);
-	memset ( pNew, 0, sizeof(SphFactorHashEntry_t) );
+	pNew->m_iRefCount = 0;
+	pNew->m_pPrev = nullptr;
+	pNew->m_pNext = nullptr;
 
 	DWORD uKey = FactorPoolHash ( tRow, m_dHash.GetLength() );
 	if ( m_dHash[uKey] )
 	{
 		SphFactorHashEntry_t * pStart = m_dHash[uKey];
-		pNew->m_pPrev = nullptr;
 		pNew->m_pNext = pStart;
 		pStart->m_pPrev = pNew;
 	}

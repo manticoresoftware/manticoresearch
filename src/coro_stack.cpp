@@ -12,6 +12,9 @@
 
 #include "std/env.h"
 
+// that is bug in protected_fixedsize on Win, this header is missed on inclusion
+#include <boost/assert.hpp>
+
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include <boost/context/fixedsize_stack.hpp>
 

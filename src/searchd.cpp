@@ -51,6 +51,7 @@
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
+#include "queryfilter.h"
 
 // services
 #include "taskping.h"
@@ -11221,7 +11222,6 @@ public:
 	CSphVector<CSphKeywordInfo> & m_dKeywords;
 };
 
-static void MergeKeywords ( CSphVector<CSphKeywordInfo> & dKeywords );
 static void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeywordInfo> & dKeywords );
 bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog )
 {
@@ -11281,7 +11281,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 
 		// process result sets
 		if ( dLocals.GetLength() + iAgentsReply>1 )
-			MergeKeywords ( dKeywords );
+			UniqKeywords ( dKeywords );
 
 		bOk = true;
 	}
@@ -11458,43 +11458,6 @@ bool KeywordsReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 	}
 
 	return true;
-}
-
-struct KeywordSorter_fn
-{
-	bool IsLess ( const CSphKeywordInfo & a, const CSphKeywordInfo & b ) const
-	{
-		return ( ( a.m_iQpos<b.m_iQpos )
-			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits>b.m_iHits )
-			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits==b.m_iHits && a.m_sNormalized<b.m_sNormalized ) );
-	}
-};
-
-void MergeKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
-{
-	CSphOrderedHash < CSphKeywordInfo, uint64_t, IdentityHash_fn, 256 > hWords;
-	ARRAY_FOREACH ( i, dSrc )
-	{
-		const CSphKeywordInfo & tInfo = dSrc[i];
-		uint64_t uKey = sphFNV64 ( &tInfo.m_iQpos, sizeof(tInfo.m_iQpos) );
-		uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
-
-		CSphKeywordInfo & tVal = hWords.AddUnique ( uKey );
-		if ( !tVal.m_iQpos )
-		{
-			tVal = tInfo;
-		} else
-		{
-			tVal.m_iDocs += tInfo.m_iDocs;
-			tVal.m_iHits += tInfo.m_iHits;
-		}
-	}
-
-	dSrc.Resize ( 0 );
-	for ( const auto& tWord : hWords )
-		dSrc.Add ( tWord.second );
-
-	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
 }
 
 struct KeywordSorterDocs_fn

@@ -238,3 +238,30 @@ void CSphPlainQueryFilter::AddKeywordStats ( BYTE * sWord, const BYTE * sTokeniz
 
 	RemoveDictSpecials ( tInfo.m_sNormalized, ( m_pSettings->m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 }
+
+void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
+{
+	CSphOrderedHash < CSphKeywordInfo, uint64_t, IdentityHash_fn, 256 > hWords;
+	ARRAY_FOREACH ( i, dSrc )
+	{
+		const CSphKeywordInfo & tInfo = dSrc[i];
+		uint64_t uKey = sphFNV64 ( &tInfo.m_iQpos, sizeof(tInfo.m_iQpos) );
+		uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
+
+		CSphKeywordInfo & tVal = hWords.AddUnique ( uKey );
+		if ( !tVal.m_iQpos )
+		{
+			tVal = tInfo;
+		} else
+		{
+			tVal.m_iDocs += tInfo.m_iDocs;
+			tVal.m_iHits += tInfo.m_iHits;
+		}
+	}
+
+	dSrc.Resize ( 0 );
+	for ( const auto& tWord : hWords )
+		dSrc.Add ( tWord.second );
+
+	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
+}

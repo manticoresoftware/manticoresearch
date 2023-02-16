@@ -1165,7 +1165,7 @@ void DocstoreBuilder_c::WriteSmallBlock()
 			tMemWriter.PutByte ( DOC_FLAG_ALL_EMPTY );
 		else
 		{
-			bool bNeedsBitmask = iEmptyFields && ( tEmptyFields.GetSizeBytes() < (DWORD)iEmptyFields );
+			bool bNeedsBitmask = iEmptyFields && ( tEmptyFields.GetSizeBytes() < iEmptyFields );
 
 			tMemWriter.PutByte ( bNeedsBitmask ? DOC_FLAG_EMPTY_BITMASK : 0 );
 			if ( bNeedsBitmask )

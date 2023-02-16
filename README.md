@@ -38,12 +38,12 @@ Manticore Search is an easy to use open source fast database for search. Good al
   - **15x faster** than Elasticsearch for [small dataset](https://db-benchmarks.com/test-hn-small/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **5x faster** than Elasticsearch for [medium-size data](https://db-benchmarks.com/test-hn/#manticore-search-columnar-storage-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **4x faster** than Elasticsearch for [big data](https://db-benchmarks.com/test-taxi/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **up to 2x faster** max throughput than Elasticsearch's for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance#get-started)❗)
+  - **up to 2x faster** max throughput than Elasticsearch's for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance)❗)
 * With its modern multithreading architecture and efficient query parallelization capabilities, Manticore is able to fully utilize all your CPU cores to achieve the quickest response times possible.
 * The powerful and speedy full-text search works seamlessly with both small and large datasets.
 * Row-wise storage for small, medium and big size datasets.
 * For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
-* Performance secondary indexes are automatically created, saving you time and effort.
+* Performant secondary indexes are automatically created, saving you time and effort.
 * The cost-based query optimizer optimizes search queries for optimal performance.
 * Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
 * With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/go-sdk), integration with Manticore Search becomes easy.
@@ -72,15 +72,15 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
   - A wide range of functions for filtering and data manipulation
 * Natural language processing (NLP):
-  - [Stemming](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Morphology)
-  - [Lemmatization](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Morphology)
-  - [Stopwords](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Ignoring_stop-words#stopwords)
-  - [Synonyms](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Exceptions)
-  - [Wordforms](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Wordforms#wordforms)
-  - [Advanced tokenization at character and word level](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Low-level_tokenization#charset_table)
+  - [Stemming](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Morphology)
+  - [Lemmatization](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Morphology)
+  - [Stopwords](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Ignoring_stop-words#stopwords)
+  - [Synonyms](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Exceptions)
+  - [Wordforms](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Wordforms#wordforms)
+  - [Advanced tokenization at character and word level](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Low-level_tokenization#charset_table)
   - [Proper Chinese segmentation](https://play.manticoresearch.com/icu-chinese/)
   - [Text highlighting](https://play.manticoresearch.com/highlighting/)
-* Stream filtering [using a "percolate" index](https://play.manticoresearch.com/pq/)
+* Stream filtering [using a "percolate" table](https://play.manticoresearch.com/pq/)
 * High-availability:
   - Data can be distributed across servers and data-centers
   - [Synchronous replication](https://play.manticoresearch.com/replication/)
@@ -104,7 +104,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - string and JSON
   - on-disk "[stored](https://play.manticoresearch.com/docstore/)" for key-value purpose
 * Integrations:
-  - [Sync from MySQL and PostgreSQL](https://manual.manticoresearch.com/Creating_an_index/Local_indexes/Plain_index)
+  - [Sync from MySQL and PostgreSQL](https://manual.manticoresearch.com/Creating_a_table/Local_tables/Plain_table#Plain-table)
   - [Sync from XML](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_XML_streams#XML-file-format)
   - [Sync from CSV](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_CSV,TSV#Fetching-from-TSV,CSV)
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
@@ -123,7 +123,7 @@ To experiment with Manticore Search in Docker just run:
 docker run -e EXTRA=1 --name manticore --rm -d manticoresearch/manticore && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; done && docker exec -it manticore mysql && docker stop manticore
 ```
 
-You can then: create an index, add data and run searches. For example:
+You can then: create a table, add data and run searches. For example:
 
 ```
 create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='en';

@@ -74,7 +74,7 @@ CostEstimate_c::CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInf
 bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const
 {
 	// this needs to be in sync with iterator construction code
-	const size_t BITMAP_ITERATOR_THRESH = 8;
+	const int BITMAP_ITERATOR_THRESH = 8;
 
 	bool bFitsIteratorThresh = false;
 	if ( tFilter.m_eType==SPH_FILTER_RANGE )

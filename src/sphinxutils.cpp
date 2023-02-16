@@ -1380,20 +1380,20 @@ bool CSphConfigParser::Parse ()
 	const char* pLineEnd = p;
 
 	std::array<char,L_TOKEN> sToken;
-	int iToken = 0;
+	DWORD uToken = 0;
 	int iCh = -1;
 
 	enum class States_e { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY };
 	auto eState = States_e::S_TOP;
 	std::array<States_e,8> eStack;
-	int iStack = 0;
+	DWORD uStack = 0;
 
 	int iValue = 0, iValueMax = 65535;
 	auto sValue = std::make_unique<char[]> ( iValueMax + 1 );
 
 	#define LOC_ERROR(...) { Err(__VA_ARGS__); break; }
-	auto LOC_PUSH = [&iStack, &eStack, &eState] ( States_e eNew ) { assert ( iStack<eStack.size() ); eStack[iStack++] = std::exchange(eState,eNew); };
-	auto LOC_POP = [&iStack, &eStack, &eState] { assert ( iStack > 0 ); eState = eStack[--iStack]; };
+	auto LOC_PUSH = [&uStack, &eStack, &eState] ( States_e eNew ) { assert ( uStack<eStack.size() ); eStack[uStack++] = std::exchange(eState,eNew); };
+	auto LOC_POP = [&uStack, &eStack, &eState] { assert ( uStack > 0 ); eState = eStack[--uStack]; };
 	auto LOC_BACK = [&p] { --p; };
 
 	for ( ; p < pDataEnd; ++p )
@@ -1416,7 +1416,7 @@ bool CSphConfigParser::Parse ()
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
-			iToken = 0;
+			uToken = 0;
 			LOC_PUSH ( States_e::S_TYPE );
 			LOC_PUSH ( States_e::S_TOK );
 			LOC_BACK();
@@ -1434,11 +1434,11 @@ bool CSphConfigParser::Parse ()
 		// handle S_TOK state
 		case States_e::S_TOK:
 		{
-			if ( !iToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in S_TOK pos 0)" );
-			if ( iToken==sToken.size() )	LOC_ERROR ( "token too long" );
-			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; LOC_BACK(); continue; }
-			if ( !iToken )					{ sToken[0] = '\0'; }
-											sToken [ iToken++ ] = *p; continue;
+			if ( !uToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in S_TOK pos 0)" );
+			if ( uToken==sToken.size() )	LOC_ERROR ( "token too long" );
+			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ uToken ] = '\0'; uToken = 0; LOC_BACK(); continue; }
+			if ( !uToken )					{ sToken[0] = '\0'; }
+											sToken [ uToken++ ] = *p; continue;
 		}
 
 		// handle S_TYPE state

@@ -710,24 +710,24 @@ void WaitForDeffered ( Waiter_t&& dWaiter ) noexcept
 	Coro::YieldWith ( [capturedWaiter = std::move ( dWaiter ) ] {} );
 }
 
-int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
+int WaitForN ( DWORD uN, std::initializer_list<Handler> dTasks )
 {
-	assert ( iN > 0 && "trigger N must be >0" );
-	assert ( dTasks.size() > 0 && dTasks.size() >= iN && "num of tasks to wait must be non-zero, and not greater than trigger" );
+	assert ( uN > 0 && "trigger N must be >0" );
+	assert ( dTasks.size() > 0 && dTasks.size() >= uN && "num of tasks to wait must be non-zero, and not greater than trigger" );
 	int iRes = -1;
 
 	// need to store parentSched, since Coro::YieldWith executed _outside_ coroutine, so it has _no_ scheduler!
 	auto pParentSched = Coro::CurrentScheduler();
 
-	Coro::YieldWith ( [&iRes, &dTasks, iN, pParentSched, fnResumer = CurrentRestarter()] {
-		SharedPtr_t<std::atomic<int>> pCounter { new std::atomic<int> };
+	Coro::YieldWith ( [&iRes, &dTasks, uN, pParentSched, fnResumer = CurrentRestarter()] {
+		SharedPtr_t<std::atomic<DWORD>> pCounter { new std::atomic<DWORD> };
 		pCounter->store ( 0, std::memory_order_release );
 		int i = 0;
 		for ( const auto& fnHandler : dTasks )
 		{
-			Coro::Go ( [pCounter, fnResumer, &fnHandler, i, iN, &iRes] {
+			Coro::Go ( [pCounter, fnResumer, &fnHandler, i, uN, &iRes] {
 				fnHandler();
-				if ( pCounter->fetch_add ( 1, std::memory_order_acq_rel ) == iN - 1 )
+				if ( pCounter->fetch_add ( 1, std::memory_order_acq_rel ) == uN - 1 )
 				{
 					iRes = i;
 					fnResumer();

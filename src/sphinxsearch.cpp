@@ -1947,13 +1947,14 @@ int	FactorPool_c::GetElementSize() const
 void FactorPool_c::AddToHash ( const RowTagged_t & tRow, BYTE * pPacked )
 {
 	auto * pNew = (SphFactorHashEntry_t *)(pPacked+m_iElementSize);
-	memset ( pNew, 0, sizeof(SphFactorHashEntry_t) );
+	pNew->m_iRefCount = 0;
+	pNew->m_pPrev = nullptr;
+	pNew->m_pNext = nullptr;
 
 	DWORD uKey = FactorPoolHash ( tRow, m_dHash.GetLength() );
 	if ( m_dHash[uKey] )
 	{
 		SphFactorHashEntry_t * pStart = m_dHash[uKey];
-		pNew->m_pPrev = nullptr;
 		pNew->m_pNext = pStart;
 		pStart->m_pPrev = pNew;
 	}
@@ -3875,9 +3876,9 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 	// field level factors
 	*pPack++ = (DWORD)m_iFields;
 	// v.6 set these depends on number of fields
-	for ( int i=0; i<m_tExactHit.GetSizeBytes()/sizeof(DWORD); i++ )
+	for ( DWORD i=0; i<m_tExactHit.GetSizeBytes()/sizeof(DWORD); i++ )
 		*pPack++ = *( m_tExactHit.Begin() + i );
-	for ( int i=0; i<m_tExactOrder.GetSizeBytes()/sizeof(DWORD); i++ )
+	for ( DWORD i=0; i<m_tExactOrder.GetSizeBytes()/sizeof(DWORD); i++ )
 		*pPack++ = *( m_tExactOrder.Begin() + i );
 
 	for ( int i=0; i<m_iFields; i++ )

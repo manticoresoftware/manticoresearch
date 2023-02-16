@@ -637,7 +637,7 @@ public:
 		m_uCapabilities |= uExtraCapabilities;
 
 		// fill scramble auth data (random)
-		int i = 0;
+		DWORD i = 0;
 		DWORD uRand = sphRand() | 0x01010101;
 		for ( ; i < AUTH_DATA_LEN - sizeof ( DWORD ); i += sizeof ( DWORD ) )
 		{

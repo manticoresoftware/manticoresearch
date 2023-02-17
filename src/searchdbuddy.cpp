@@ -30,7 +30,7 @@ static int g_iBuddyVersion = 1;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
-static boost::asio::io_service g_tIOS;
+static std::unique_ptr<boost::asio::io_service> g_pIOS;
 static std::vector<char> g_dPipeBuf ( 960 ); // should be less than log buffer size to prevent message clip
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
 enum class BuddyState_e
@@ -146,7 +146,7 @@ static Str_t TrimRight ( Str_t tSrc )
 	return Str_t ( tSrc.first, iLen );
 }
 
-static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
+static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size_t iSize )
 {
 	if ( tGotCode.failed() )
 		return;
@@ -194,6 +194,13 @@ static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size
 		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
 }
 
+static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
+{
+	ReadFromPipe ( tGotCode, iSize );
+	if ( g_pPipe && iSize )
+		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
+}
+
 static BuddyState_e BuddyCheckLive()
 {
 	assert ( g_eBuddy==BuddyState_e::WORK );
@@ -233,25 +240,16 @@ static void BuddyTryRestart()
 	}
 }
 
-static void NextShedule()
-{
-	int64_t tmCur = sphMicroTimer();
-	TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, BuddyNextTick );
-}
-
 void BuddyNextTick()
 {
 	auto pDesc = PublishSystemInfo ( "buddy check" );
 
-	if ( g_pPipe )
-		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
-
-	int iGot = 0;
-	do 
+	while ( !g_pIOS->stopped() )
 	{
-		iGot = g_tIOS.poll_one();
-	} while ( !g_tIOS.stopped() );
-	g_tIOS.restart();
+		if ( !g_pIOS->poll_one() )
+			break;
+	}
+	g_pIOS->restart();
 
 	if ( g_eBuddy==BuddyState_e::STARTING && sphMicroTimer()>( g_tmStarting + g_iStartMaxTimeout * 1000 * 1000  ) )
 	{
@@ -266,14 +264,23 @@ void BuddyNextTick()
 	BuddyTryRestart();
 
 	if ( g_eBuddy==BuddyState_e::STARTING || g_eBuddy==BuddyState_e::WORK )
-		NextShedule();
+	{
+		int64_t tmCur = sphMicroTimer();
+		TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, []() { BuddyNextTick(); } );
+	}
 }
 
 BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 {
 	std::string sCmd = sArgs;
 	g_pBuddy.reset();
-	g_pPipe.reset ( new boost::process::async_pipe ( g_tIOS ) );
+	if ( g_pIOS )
+	{
+		g_pIOS->stop();
+		g_pIOS.reset(); 
+	}
+	g_pIOS.reset ( new boost::asio::io_service );
+	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
 
 	std::unique_ptr<boost::process::child> pBuddy;
 	std::error_code tErrorCode;
@@ -294,6 +301,9 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 	g_tmStarting = sphMicroTimer();
 	g_pBuddy = std::move ( pBuddy );
+	if ( g_pPipe )
+		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
+
 	return BuddyState_e::STARTING;
 }
 
@@ -367,7 +377,8 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 	g_eBuddy = eBuddy;
 	g_iTask = TaskManager::RegisterGlobal ( "buddy service" );
 	assert ( g_iTask>=0 && "failed to create buddy service task" );
-	BuddyNextTick();
+	int64_t tmCur = sphMicroTimer();
+	TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, []() { BuddyNextTick(); } );
 }
 
 void BuddyStop ()

@@ -46,6 +46,8 @@ variables:
 
 .build_rhel:
   extends: [ .build ]
+  variables:
+    boost: boost_rhel_feb17
   before_script:
     - ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
     - cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0

@@ -14,7 +14,7 @@ ln -s /sysroot/boost_${boostver}.tar.gz boost_${boostver}.tar.gz
 tar -xf boost_${boostver}.tar.gz
 cd boost_${boostver}
 ./bootstrap.sh
-./b2 install $boostlibs
+./b2 install cflags=-fPIC $boostlibs
 
 echo "make link to shared boost includes"
 cd /usr/local

@@ -1774,6 +1774,135 @@ static void CalcCoeffsLookup()
 }
 
 
+static CSphQuery CreateFTTermQuery ( ESphRankMode eRanker, const char * szTerm )
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_sQuery = szTerm;
+	tQuery.m_eRanker = eRanker;
+	return tQuery;
+}
+
+
+static CSphQuery CreateFTQueryOR ( ESphRankMode eRanker )
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_sQuery = "hello | world";
+	tQuery.m_eRanker = eRanker;
+	return tQuery;
+}
+
+
+static CSphQuery CreateFTQueryAND ( ESphRankMode eRanker )
+{
+	CSphQuery tQuery;
+	tQuery.m_iCutoff = 0;
+	tQuery.m_sQuery = "hello world";
+	tQuery.m_eRanker = eRanker;
+	return tQuery;
+}
+
+
+static void CalcCoeffsFT()
+{
+	CSphString sPath = "hn";
+	std::unique_ptr<CSphIndex> pIndex = sphCreateIndexPhrase ( sPath, sPath );
+	StrVec_t dWarnings;
+	if ( !pIndex->Prealloc ( false, nullptr, dWarnings ) )
+		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+
+	pIndex->Preread();
+
+	float fCostOfPush = 0.0f;
+
+	{
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+		CSphQuery tQuery = CreateFullscanQuery();
+
+		const int REPEATS = 20;
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fCost = float(iTime) / iRsetItems*SCALE;
+		float fEstimatedCost = GetEstimatedCost ( tQuery, pIndex.get(), SecondaryIndexType_e::FILTER );
+		fCostOfPush = fCost;
+
+		PrintStats ( "Fullscan, 0 filters", iTime, fEstimatedCost, uHash );
+		printf ( "\tCOST_PUSH=%.3f\n", fCost );
+	}
+
+	float fCostOfRankerNone = 0.0f;
+	int64_t iRawTimeHello = 0;
+	{
+		const int REPEATS = 100;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFTTermQuery ( SPH_RANK_NONE, "hello" );
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		fCostOfRankerNone = float(iTime) / iRsetItems*SCALE - fCostOfPush;
+		iRawTimeHello = iTime - int64_t(fCostOfPush/SCALE*iRsetItems);
+
+		PrintStats ( "FT term, ranker=none", iTime, 0.0f, uHash );
+		printf ( "\tCOST_FT_TERM=%.3f\n", fCostOfRankerNone );
+	}
+
+	int64_t iRawTimeWorld = 0;
+	{
+		const int REPEATS = 100;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFTTermQuery ( SPH_RANK_NONE, "world" );
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		fCostOfRankerNone = float(iTime) / iRsetItems*SCALE - fCostOfPush;
+		iRawTimeWorld = iTime - int64_t(fCostOfPush/SCALE*iRsetItems);
+
+		PrintStats ( "FT term, ranker=none", iTime, 0.0f, uHash );
+		printf ( "\tCOST_FT_TERM=%.3f\n", fCostOfRankerNone );
+	}
+
+	{
+		const int REPEATS = 100;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFTTermQuery ( SPH_RANK_DEFAULT, "hello" );
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fCost = float(iTime) / iRsetItems*SCALE - fCostOfRankerNone;
+
+		PrintStats ( "FT term, ranker=default", iTime, 0.0f, uHash );
+		printf ( "\tCOST_RANKER_DEFAULT=%.3f\n", fCost );
+	}
+
+	{
+		const int REPEATS = 100;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFTTermQuery ( SPH_RANK_PROXIMITY, "hello" );
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fCost = float(iTime) / iRsetItems*SCALE - fCostOfRankerNone;
+
+		PrintStats ( "FT term, ranker=proximity", iTime, 0.0f, uHash );
+		printf ( "\tCOST_RANKER_PROXIMITY=%.3f\n", fCost );
+	}
+
+	{
+		const int REPEATS = 100;
+		int64_t iTime = 0;
+		uint64_t uHash = SPH_FNV64_SEED;
+
+		CSphQuery tQuery = CreateFTQueryOR ( SPH_RANK_NONE );
+		int64_t iRsetItems = RunGenericQuery ( tQuery, pIndex.get(), iTime, uHash, REPEATS );
+		float fCost = float(iTime - iRawTimeHello - iRawTimeWorld ) / iRsetItems*SCALE;
+
+		PrintStats ( "OR query, ranker=none", iTime, 0.0f, uHash );
+		printf ( "\tCOST_QUERY_OR=%.3f\n", fCost );
+	}
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 // BLOODY DIRTY HACK!!!
 // definitions of AggrResult_t members just copy-pasted 'as is' from searchdaemon.cpp
@@ -1787,7 +1916,7 @@ int AggrResult_t::GetLength () const
 
 void AggrResult_t::ClampMatches ( int iLimit )
 {
-	assert ( m_bSingle );
+	assert ( m_bSingle ); 
 	if ( !m_dResults.IsEmpty () )
 		m_dResults.First ().ClampMatches ( iLimit );
 }
@@ -1853,8 +1982,14 @@ int main ()
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
 #if 0
-	CalcCoeffsInit();
-	CalcCoeffsRowwise();
+	SetMaxChildrenThreads(1)0
+	WipeGlobalSchedulerOnShutdownAndFork()0
+	StartGlobalWorkPool()0
+
+	Threads::CallCoroutine ( [&] 0
+
+	CalcCoeffsInit()0
+	CalcCoeffsRowwise()0
 	CalcCoeffsColumnar();
 	CalcCoeffsColumnar2();
 	CalcCoeffsColumnar3();
@@ -1863,8 +1998,10 @@ int main ()
 	CalcCoeffsSI3();
 	CalcCoeffsSI4();
 	CalcCoeffsLookup();
-#endif
 
+	CalcCoeffsFT();
+	} );
+#endif
 
 	printf ( "\nSUCCESS\n" );
 	return 0;

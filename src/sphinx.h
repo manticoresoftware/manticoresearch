@@ -455,6 +455,7 @@ struct IndexHint_t
 {
 	CSphString				m_sIndex;
 	SecondaryIndexType_e	m_eType = SecondaryIndexType_e::NONE;
+	bool					m_bFulltext = false;	// force/ignore all attribute iterators in fullscan queries
 	bool					m_bForce = true;
 };
 

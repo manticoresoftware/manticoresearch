@@ -16,8 +16,12 @@
 #include "secondarylib.h"
 #include <math.h>
 
+
 class CostEstimate_c : public CostEstimate_i
 {
+	friend float CalcIntersectCost ( int64_t iDocs );
+	friend float CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
+
 public:
 			CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
 
@@ -40,17 +44,17 @@ private:
 	const CSphVector<SecondaryIndexInfo_t> &	m_dSIInfo;
 	const SelectIteratorCtx_t &					m_tCtx;
 
-	float	Cost_Filter ( int64_t iDocs, float fComplexity ) const			{ return COST_FILTER*fComplexity*iDocs*SCALE; }
-	float	Cost_BlockFilter ( int64_t iDocs, float fComplexity ) const		{ return Cost_Filter ( iDocs/DOCINFO_INDEX_FREQ, fComplexity ); }
-	float	Cost_ColumnarFilter ( int64_t iDocs, float fComplexity ) const	{ return COST_COLUMNAR_FILTER*fComplexity*iDocs*SCALE; }
-	float	Cost_Push ( int64_t iDocs ) const								{ return COST_PUSH*iDocs*SCALE; }
-	float	Cost_Intersect ( int64_t iDocs ) const							{ return COST_INTERSECT*iDocs*SCALE; }
-	float	Cost_IndexReadSingle ( int64_t iDocs ) const					{ return COST_INDEX_READ_SINGLE*iDocs*SCALE; }
-	float	Cost_IndexReadDenseBitmap ( int64_t iDocs ) const				{ return COST_INDEX_READ_DENSE_BITMAP*iDocs*SCALE; }
-	float	Cost_IndexReadSparse ( int64_t iDocs ) const					{ return COST_INDEX_READ_SPARSE*iDocs*SCALE; }
-	float	Cost_IndexUnionQueue ( int64_t iDocs ) const					{ return COST_INDEX_UNION_COEFF*iDocs*log2f(iDocs)*SCALE; }
-	float	Cost_LookupRead ( int64_t iDocs ) const							{ return COST_LOOKUP_READ*iDocs*SCALE; }
-	float	Cost_IndexIteratorInit ( int64_t iNumIterators ) const			{ return COST_INDEX_ITERATOR_INIT*iNumIterators*SCALE; }
+	static float	Cost_Filter ( int64_t iDocs, float fComplexity )		{ return COST_FILTER*fComplexity*iDocs*SCALE; }
+	static float	Cost_BlockFilter ( int64_t iDocs, float fComplexity )	{ return Cost_Filter ( iDocs/DOCINFO_INDEX_FREQ, fComplexity ); }
+	static float	Cost_ColumnarFilter ( int64_t iDocs, float fComplexity ){ return COST_COLUMNAR_FILTER*fComplexity*iDocs*SCALE; }
+	static float	Cost_Push ( int64_t iDocs )								{ return COST_PUSH*iDocs*SCALE; }
+	static float	Cost_Intersect ( int64_t iDocs )						{ return COST_INTERSECT*iDocs*SCALE; }
+	static float	Cost_IndexReadSingle ( int64_t iDocs )					{ return COST_INDEX_READ_SINGLE*iDocs*SCALE; }
+	static float	Cost_IndexReadDenseBitmap ( int64_t iDocs )				{ return COST_INDEX_READ_DENSE_BITMAP*iDocs*SCALE; }
+	static float	Cost_IndexReadSparse ( int64_t iDocs )					{ return COST_INDEX_READ_SPARSE*iDocs*SCALE; }
+	static float	Cost_IndexUnionQueue ( int64_t iDocs )					{ return COST_INDEX_UNION_COEFF*iDocs*log2f(iDocs)*SCALE; }
+	static float	Cost_LookupRead ( int64_t iDocs )						{ return COST_LOOKUP_READ*iDocs*SCALE; }
+	static float	Cost_IndexIteratorInit ( int64_t iNumIterators )		{ return COST_INDEX_ITERATOR_INIT*iNumIterators*SCALE; }
 
 	float	CalcIndexCost() const;
 	float	CalcFilterCost ( bool bFromIterator, float fDocsAfterIndexes ) const;
@@ -360,7 +364,8 @@ float CostEstimate_c::CalcQueryCost()
 	if ( iNumIndexes )
 		fCost += CalcIndexCost();
 
-	fCost += Cost_Push ( uint64_t(fDocsAfterFilters*m_tCtx.m_iTotalDocs) );
+	if ( m_tCtx.m_bCalcPushCost )
+		fCost += Cost_Push ( uint64_t(fDocsAfterFilters*m_tCtx.m_iTotalDocs) );
 
 	if ( !iNumIndexes && !iNumLookups ) // SI and docid lookups always run in a single thread
 		fCost = CalcMTCost(fCost);
@@ -424,4 +429,48 @@ bool SelectIteratorCtx_t::IsEnabled_Analyzer ( const CSphFilterSettings & tFilte
 CostEstimate_i * CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
 	return new CostEstimate_c ( dSIInfo, tCtx );
+}
+
+
+float CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 )
+{
+	if ( !tEst1.m_iDocs || !tEst2.m_iDocs )
+		return 0.0f;
+
+	int64_t iCorrectedDocs1 = tEst1.m_iDocs;
+	int64_t iCorrectedDocs2 = tEst2.m_iDocs;
+	float fCorrectedCost1 = tEst1.m_fCost;
+	float fCorrectedCost2 = tEst2.m_fCost;
+
+	float fIntersection = float(tEst1.m_iDocs)/iTotalDocs*float(tEst2.m_iDocs)/iTotalDocs;
+	int64_t iHintCalls = tEst1.m_iDocs * tEst1.m_iTerms / iDocsPerBlock1 + tEst2.m_iDocs * tEst2.m_iTerms / iDocsPerBlock2;
+
+	const float THRESH = 0.05f;
+	if ( fIntersection > THRESH )
+	{
+		float fIntersection = float(tEst1.m_iDocs)/iTotalDocs*float(tEst2.m_iDocs)/iTotalDocs;
+
+		iCorrectedDocs1 = int64_t(tEst1.m_iDocs*fIntersection);
+		iCorrectedDocs2 = int64_t(tEst2.m_iDocs*fIntersection);
+
+		fCorrectedCost1 *= fIntersection;
+		fCorrectedCost2 *= fIntersection;
+
+	} else
+	{
+		// intersection of left and right result sets is small
+		// best case scenario: rowid ranges do not overlap; one hint call is enough to stop the search
+		// worst case scenario: rowid ranges fully overlap; hint calls do nothing
+		// let's evaluate mid scenario: hint calls have some effect, but we still have to evaluate half of all docs
+		// since we are comparing this estimate with full FT match cost, it will ok
+		iCorrectedDocs1 /= 2;
+		fCorrectedCost1 /= 2.0f;
+		iCorrectedDocs2 /= 2;
+		fCorrectedCost2 /= 2.0f;
+	}
+
+	const float COST_INTERSECT = 20.0f;
+	const float COST_HINTCALL = 35.0f;
+
+	return fCorrectedCost1 + fCorrectedCost2 + ( COST_INTERSECT*(iCorrectedDocs1+iCorrectedDocs2) + COST_HINTCALL*iHintCalls )*CostEstimate_c::SCALE;
 }

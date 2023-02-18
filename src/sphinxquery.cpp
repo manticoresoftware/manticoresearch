@@ -40,6 +40,14 @@ bool IsAllowOnlyNot()
 	return g_bOnlyNotAllowed;
 }
 
+NodeEstimate_t & NodeEstimate_t::operator+= ( const NodeEstimate_t & tRhs )
+{
+	m_fCost += tRhs.m_fCost;
+	m_iDocs += tRhs.m_iDocs;
+	m_iTerms += tRhs.m_iTerms;
+	return *this;
+}
+
 //////////////////////////////////////////////////////////////////////////
 void XQParseHelper_c::SetString ( const char * szString )
 {

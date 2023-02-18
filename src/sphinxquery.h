@@ -287,6 +287,16 @@ struct XQQuery_t : public ISphNoncopyable
 };
 
 
+struct NodeEstimate_t
+{
+	float	m_fCost = 0.0f;
+	int64_t	m_iDocs = 0;
+	int64_t	m_iTerms = 0;
+
+	NodeEstimate_t & operator+= ( const NodeEstimate_t & tRhs );
+};
+
+
 class QueryParser_i
 {
 public:

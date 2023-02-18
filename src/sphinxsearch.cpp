@@ -142,6 +142,8 @@ public:
 
 	void						FinalizeCache ( const ISphSchema & tSorterSchema ) override;
 
+	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
+
 public:
 	// FIXME? hide and friend?
 	SphZoneHit_e				IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan ) override;
@@ -156,7 +158,7 @@ public:
 
 protected:
 	std::unique_ptr<ExtNode_i>	m_pRoot;
-	std::unique_ptr<ExtNode_i>	m_pOriginalRoot;			///< set if we replace the
+	ExtNode_i *					m_pOriginalRoot = nullptr;			///< set if we replace the
 	const ExtDoc_t *			m_pDoclist = nullptr;
 	const ExtHit_t *			m_pHitlist = nullptr;
 	ExtDoc_t					m_dMyDocs[MAX_BLOCK_DOCS];			///< my local documents pool; for filtering
@@ -178,19 +180,40 @@ protected:
 	ZoneVVector_t				m_dZoneInfo {0};
 	bool						m_bZSlist;
 
+	static constexpr float		COST_SCALE = 1.0f/1000000.0f;
+
 	void						CleanupZones ( RowID_t tMaxRowID );
 	void						UpdateQcache ( int iMatches );
 
+	virtual float				CalcRankCost ( int64_t iDocs ) const = 0;
+
 	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override
 	{
-		if ( eType==EXTRA_SET_BOUNDARIES )
+		if ( eType==EXTRA_SET_BOUNDARIES || eType==EXTRA_SET_ITERATOR )
 		{
 			if ( !m_pRoot )
 				return true;
 
-			assert ( !m_pOriginalRoot );
-			m_pOriginalRoot = std::move ( m_pRoot );
-			m_pRoot = CreateRowIdFilterNode ( m_pOriginalRoot.get(), *(const RowIdBoundaries_t*)ppResult );
+			// if m_pOriginalRoot is not null, it means that it already holds the original root node
+			// so no need to modify it
+			ExtNode_i * pTopNode = nullptr;
+			bool bHadExtraNodes = false;
+			if ( m_pOriginalRoot )
+			{
+				pTopNode = m_pRoot.release();
+				bHadExtraNodes = true;
+			}
+			else
+			{
+				m_pOriginalRoot = m_pRoot.release();
+				pTopNode = m_pOriginalRoot;
+			}
+
+			if ( eType==EXTRA_SET_BOUNDARIES )
+				m_pRoot = CreateRowIdFilterNode ( pTopNode, *(const RowIdBoundaries_t*)ppResult, !bHadExtraNodes );
+			else
+				m_pRoot = CreatePseudoFTNode ( pTopNode, (RowidIterator_i*)*ppResult, !bHadExtraNodes );
+
 			return true;
 		}
 
@@ -227,6 +250,7 @@ public:
 	{}
 
 	int		GetMatches () override;
+	float	CalcRankCost ( int64_t iDocs ) const override { return 0.0f; }
 
 	bool	InitState ( const CSphQueryContext & tCtx, CSphString & ) override
 	{
@@ -239,12 +263,15 @@ public:
 
 class ExtRanker_None_c : public ExtRanker_T<false>
 {
+	using BASE = ExtRanker_T<false>;
+
 public:
 	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache )
 		: ExtRanker_T<false> ( tXQ, tSetup, bSkipQCache, false )
 	{}
 
 	int		GetMatches () override;
+	float	CalcRankCost ( int64_t iDocs ) const override { return float(iDocs)*BASE::COST_SCALE*13.0f; }
 };
 
 
@@ -261,6 +288,9 @@ public:
 	{
 		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError, tCtx.m_uPackedFactorFlags );
 	}
+
+	// FIXME! add specific costs for different rankers
+	float			CalcRankCost ( int64_t iDocs ) const override { return float(iDocs)*BASE::COST_SCALE*18.0f; }
 
 protected:
 	STATE				m_tState;
@@ -677,12 +707,18 @@ ExtRanker_c::~ExtRanker_c ()
 
 void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	if ( m_pOriginalRoot )
-		// restore the tree to its original state before switching to the next chunk
-		m_pRoot = std::move ( m_pOriginalRoot );
-
 	if ( m_pRoot )
-		m_pRoot->Reset ( tSetup );
+		m_pRoot->Reset(tSetup);
+
+	// restore the tree to its original state before switching to the next chunk
+	if ( m_pOriginalRoot )
+	{
+		// pseudo-fulltext nodes forget about their underlying nodes after Reset()
+		// so deleting m_pRoot deletes only pseudo-FT nodes and keeps the original tree
+		m_pRoot.reset();
+		m_pRoot = std::unique_ptr<ExtNode_i>(m_pOriginalRoot);
+		m_pOriginalRoot = nullptr;
+	}
 
 	ARRAY_FOREACH ( i, m_dZones )
 	{
@@ -729,6 +765,17 @@ void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 	}
 
 	SafeReleaseAndZero ( m_pQcacheEntry );
+}
+
+
+NodeEstimate_t ExtRanker_c::Estimate ( int64_t iTotalDocs ) const
+{
+	if ( !m_pRoot )
+		return { 0.0f, 0 };
+	
+	auto tRes = m_pRoot->Estimate(iTotalDocs);
+	tRes.m_fCost += CalcRankCost ( tRes.m_iDocs );
+	return tRes;
 }
 
 

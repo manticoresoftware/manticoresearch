@@ -76,6 +76,8 @@
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
+%token	TOK_HINT_FT
+%token	TOK_HINT_NO_FT
 %token	TOK_HINT_SECONDARY
 %token	TOK_HINT_NO_SECONDARY
 %token	TOK_HINT_DOCID
@@ -1205,6 +1207,14 @@ hint_item:
 	| TOK_HINT_NO_COLUMNAR '(' ident ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, false, $3 );
+		}
+	| TOK_HINT_FT
+		{
+			pParser->AddIndexHintFT ( true );
+		}
+	| TOK_HINT_NO_FT
+		{
+			pParser->AddIndexHintFT ( false );
 		}
 	;
 

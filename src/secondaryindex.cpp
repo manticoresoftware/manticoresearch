@@ -39,7 +39,7 @@ bool ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_
 class SecondaryIndexIterator_c : public RowidIterator_i
 {
 protected:
-	static const int MAX_COLLECTED = 512;
+	static const int MAX_COLLECTED = 1024;
 	CSphFixedVector<RowID_t> m_dCollected {MAX_COLLECTED};
 };
 

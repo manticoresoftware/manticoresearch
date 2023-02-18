@@ -50,13 +50,17 @@ struct SelectIteratorCtx_t
 	int										m_iCutoff = -1;
 	int64_t									m_iTotalDocs = 0;
 	int										m_iThreads = 1;
+	bool									m_bCalcPushCost = true;
 
 			SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> &	dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs, int iThreads );
 
 	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
 	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;
+	void	IgnorePushCost() { m_bCalcPushCost = false; }
 };
 
+struct NodeEstimate_t;
+CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
+float				CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
 
-CostEstimate_i * CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
 #endif // _costestimate_

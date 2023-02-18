@@ -18,6 +18,7 @@
 #include "attribute.h"
 #include "mini_timer.h"
 #include "coroutine.h"
+#include "secondaryindex.h"
 
 #include <math.h>
 
@@ -43,6 +44,8 @@ int g_iPredictorCostMatch	= 64;
 //////////////////////////////////////////////////////////////////////////
 
 #define SPH_BM25_K1				1.2f
+
+static const float COST_SCALE = 1.0f/1000000.0f;
 
 static volatile bool g_bInterruptNow = false;
 
@@ -175,43 +178,46 @@ protected:
 class ExtRowIdRange_c : public ExtNode_c
 {
 public:
-						ExtRowIdRange_c ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries );
+						ExtRowIdRange_c ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries, bool bClearOnReset );
 						~ExtRowIdRange_c() = default;
 
 	const ExtDoc_t *	GetDocsChunk() override;
-	const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) final { return m_pNotOwnedNode->GetHits(pDocs); }
+	const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) final		{ return m_pNode->GetHits(pDocs); }
 	void				Reset ( const ISphQwordSetup & tSetup ) final;
-	void				HintRowID ( RowID_t tRowID ) final				{ m_pNotOwnedNode->HintRowID(tRowID); }
-	int					GetQwords ( ExtQwordsHash_t & hQwords ) final	{ return m_pNotOwnedNode->GetQwords(hQwords); }
-	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) final { m_pNotOwnedNode->SetQwordsIDF(hQwords); }
-	void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const final { m_pNotOwnedNode->GetTerms ( hQwords, dTermDupes ); }
-	bool				GotHitless() final								{ return m_pNotOwnedNode->GotHitless(); }
-	uint64_t			GetWordID() const final							{ return m_pNotOwnedNode->GetWordID(); }
+	void				HintRowID ( RowID_t tRowID ) final				{ m_pNode->HintRowID(tRowID); }
+	int					GetQwords ( ExtQwordsHash_t & hQwords ) final	{ return m_pNode->GetQwords(hQwords); }
+	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) final { m_pNode->SetQwordsIDF(hQwords); }
+	void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const final { m_pNode->GetTerms ( hQwords, dTermDupes ); }
+	bool				GotHitless() final								{ return m_pNode->GotHitless(); }
+	uint64_t			GetWordID() const final							{ return m_pNode->GetWordID(); }
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const final		{ return m_pNode->Estimate(iTotalDocs); }
 
 protected:
 	void				CollectHits ( const ExtDoc_t * pDocs ) final	{ assert ( 0 && "ExtRowIdRange_c doesn't collect hits" ); }
 
 private:
-	ExtNode_i *			m_pNotOwnedNode; // not owned; should not delete!
-	RowIdBoundaries_t	m_tBoundaries;
+	std::unique_ptr<ExtNode_i>	m_pNode;
+	RowIdBoundaries_t			m_tBoundaries;
+	bool						m_bClearOnReset = false;
 
 	inline const ExtDoc_t * FilterHead ( const ExtDoc_t * pDocStart );
 	inline const ExtDoc_t * FilterTail ( const ExtDoc_t * pDocStart );
 };
 
 
-ExtRowIdRange_c::ExtRowIdRange_c ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries )
-	: m_pNotOwnedNode ( pNode )
+ExtRowIdRange_c::ExtRowIdRange_c ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries, bool bClearOnReset )
+	: m_pNode ( pNode )
 	, m_tBoundaries ( tBoundaries )
+	, m_bClearOnReset ( bClearOnReset )
 {
-	assert ( m_pNotOwnedNode );
+	assert ( m_pNode );
 	pNode->HintRowID ( m_tBoundaries.m_tMinRowID );
 }
 
 
 const ExtDoc_t * ExtRowIdRange_c::GetDocsChunk()
 {
-	const ExtDoc_t * pDocs = m_pNotOwnedNode->GetDocsChunk();
+	const ExtDoc_t * pDocs = m_pNode->GetDocsChunk();
 	if ( !pDocs )
 		return nullptr;
 
@@ -224,11 +230,9 @@ const ExtDoc_t * ExtRowIdRange_c::GetDocsChunk()
 
 void ExtRowIdRange_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_pNotOwnedNode->Reset ( tSetup );
-
-	// this node is stored as the original root node in the ranker and restored on Reset
-	// so no mem leak here
-	m_pNotOwnedNode = nullptr;
+	m_pNode->Reset(tSetup);
+	if ( m_bClearOnReset )
+		m_pNode.release();
 }
 
 
@@ -245,7 +249,7 @@ const ExtDoc_t * ExtRowIdRange_c::FilterHead ( const ExtDoc_t * pDocStart )
 		if ( pDoc->m_tRowID!=INVALID_ROWID )
 			break;
 
-		pDoc = m_pNotOwnedNode->GetDocsChunk();
+		pDoc = m_pNode->GetDocsChunk();
 		if ( !pDoc )
 			return nullptr;
 	}
@@ -281,6 +285,60 @@ const ExtDoc_t * ExtRowIdRange_c::FilterTail ( const ExtDoc_t * pDocStart )
 
 //////////////////////////////////////////////////////////////////////////
 
+// outputs docids returned by rowid iterators
+class ExtIterator_c : public ExtNode_c
+{
+public:
+						ExtIterator_c ( RowidIterator_i * pIterator ) : m_pIterator ( pIterator ) { assert ( pIterator ); }
+
+	int					GetQwords ( ExtQwordsHash_t & hQwords )	override { return -1; }
+	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) override {}
+	void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const override {}
+	uint64_t			GetWordID () const override { return 0; }
+	const ExtDoc_t *	GetDocsChunk() override;
+	const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) final { return nullptr; }
+	void				Reset ( const ISphQwordSetup & tSetup ) override {}
+	void				HintRowID ( RowID_t tRowID ) override { m_pIterator->HintRowID(tRowID); }
+	bool				GotHitless() override { return false; }
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { return { 0.0f, 0, 0 }; }
+
+protected:
+	RowidIterator_i *	m_pIterator = nullptr;	// not owned by the node
+	bool				m_bWarmup = true;
+	RowIdBlock_t		m_dIteratorRowIDs;
+	int					m_iDocOffset = 0;
+
+	void				CollectHits ( const ExtDoc_t * pDocs ) final	{ assert ( 0 && "ExtRowIdRange_c doesn't collect hits" ); }
+};
+
+
+const ExtDoc_t * ExtIterator_c::GetDocsChunk()
+{
+	if ( m_bWarmup )
+	{
+		if ( !m_pIterator->GetNextRowIdBlock(m_dIteratorRowIDs) )
+			return nullptr;
+
+		m_iDocOffset = 0;
+		m_bWarmup = false;
+	}
+
+	RowID_t * pStart = m_dIteratorRowIDs.Begin()+m_iDocOffset;
+	RowID_t * pEnd = pStart + Min ( MAX_BLOCK_DOCS-1, m_dIteratorRowIDs.GetLength()-m_iDocOffset );
+	ExtDoc_t * pDocStart = m_dDocs;
+	while ( pStart < pEnd )
+		*pDocStart++ = { *pStart++, 0, 0.0f };
+
+	if ( pEnd==m_dIteratorRowIDs.End() )
+		m_bWarmup = true;
+	else
+		m_iDocOffset = pEnd-m_dIteratorRowIDs.Begin();
+
+	return ReturnDocsChunk ( pDocStart-m_dDocs, "filter" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 /// single keyword streamer
 template<bool USE_BM25>
 class ExtTerm_T : public ExtNode_c, ISphNoncopyable
@@ -305,6 +363,7 @@ public:
 	uint64_t			GetWordID () const override;
 	void				HintRowID ( RowID_t tRowID ) override;
 	void				SetCollectHits() override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 
 	void				DebugDump ( int iLevel ) override;
 
@@ -421,6 +480,7 @@ public:
 	uint64_t			GetWordID() const override;
 	void 				SetAtomPos ( int iPos ) override;
 	int					GetAtomPos() const override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { return m_tNode.Estimate(iTotalDocs); }
 
 protected:
 	NODE				m_tNode;
@@ -445,11 +505,10 @@ public:
 class ExtTwofer_c : public ExtNode_c
 {
 public:
-						ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
+						ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond );
 						ExtTwofer_c () {} ///< to be used in pair with Init();
-						~ExtTwofer_c () override;
 
-	void				Init ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
+	void				Init ( ExtNode_i * pLeft, ExtNode_i * pRight );
 	void				Reset ( const ISphQwordSetup & tSetup ) override;
 	int					GetQwords ( ExtQwordsHash_t & hQwords ) override;
 	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) override;
@@ -458,12 +517,13 @@ public:
 	void				HintRowID ( RowID_t tRowID ) override;
 	uint64_t			GetWordID() const override;
 	void				SetCollectHits() override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 
 	void				SetNodePos ( WORD uPosLeft, WORD uPosRight );
 
 protected:
-	ExtNode_i *			m_pLeft = nullptr;
-	ExtNode_i *			m_pRight = nullptr;
+	std::unique_ptr<ExtNode_i> m_pLeft;
+	std::unique_ptr<ExtNode_i> m_pRight;
 	const ExtDoc_t *	m_pDocL = nullptr;
 	const ExtDoc_t *	m_pDocR = nullptr;
 	WORD				m_uNodePosL = 0;
@@ -476,13 +536,44 @@ protected:
 class ExtAnd_c : public ExtTwofer_c
 {
 public:
-						ExtAnd_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pLeft, pRight, tSetup ) {}
+						ExtAnd_c ( ExtNode_i * pLeft, ExtNode_i * pRight ) : ExtTwofer_c ( pLeft, pRight ) {}
 						ExtAnd_c() {} ///< to be used with Init()
 
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 	void				DebugDump ( int iLevel ) override;
 };
+
+// AND that returns hits from right node only
+class ExtAndRightHits_c : public ExtAnd_c
+{
+public:
+						ExtAndRightHits_c ( ExtNode_i * pLeft, ExtNode_i * pRight, bool bClearOnReset );
+
+	int					GetQwords ( ExtQwordsHash_t & hQwords ) override	{ assert(m_pRight); return m_pRight->GetQwords(hQwords); }
+	const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) override			{ assert(m_pRight); return m_pRight->GetHits(pDocs); }
+	void				Reset ( const ISphQwordSetup & tSetup ) override;
+	void				DebugDump ( int iLevel ) override					{ DebugDumpT ( "ExtAndRightHits", iLevel ); }
+
+private:
+	bool	m_bClearOnReset = false;
+};
+
+
+ExtAndRightHits_c::ExtAndRightHits_c ( ExtNode_i * pLeft, ExtNode_i * pRight, bool bClearOnReset )
+	: ExtAnd_c ( pLeft, pRight )
+	, m_bClearOnReset ( bClearOnReset )
+{}
+
+
+void ExtAndRightHits_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	assert(m_pRight);
+	m_pRight->Reset(tSetup);
+	if ( m_bClearOnReset )
+		m_pRight.release();
+}
 
 
 template < bool USE_BM25, bool TEST_FIELDS >
@@ -503,6 +594,7 @@ public:
 	void				HintRowID ( RowID_t tRowID ) override;
 	void				SetCollectHits() override;
 	void				DebugDump ( int iLevel ) override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 
 private:
 	struct NodeInfo_t
@@ -615,7 +707,7 @@ public:
 	ExtAndZonespan_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup, const XQNode_t * pNode )
 		: ExtConditional_T<TERM_POS_NONE,ExtAndZonespanned_c> ( NULL, pNode, tSetup )
 	{
-		m_tNode.Init ( pFirst, pSecond, tSetup );
+		m_tNode.Init ( pFirst, pSecond );
 		m_tNode.m_pZoneChecker = tSetup.m_pZoneChecker;
 		m_tNode.m_dZones = pNode->m_dSpec.m_dZones;
 	}
@@ -626,11 +718,12 @@ public:
 class ExtOr_c : public ExtTwofer_c
 {
 public:
-						ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
+						ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight );
 
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
 	void				DebugDump ( int iLevel ) override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 };
 
 
@@ -638,7 +731,7 @@ public:
 class ExtMaybe_c : public ExtOr_c
 {
 public:
-						ExtMaybe_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
+						ExtMaybe_c ( ExtNode_i * pLeft, ExtNode_i * pRight );
 
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				DebugDump ( int iLevel ) override;
@@ -649,7 +742,7 @@ public:
 class ExtAndNot_c : public ExtTwofer_c
 {
 public:
-						ExtAndNot_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
+						ExtAndNot_c ( ExtNode_i * pLeft, ExtNode_i * pRight );
 
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
@@ -676,6 +769,7 @@ public:
 	bool				GotHitless () override { return false; }
 	void				HintRowID ( RowID_t tRowID ) override;
 	uint64_t			GetWordID() const override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { assert(m_pNode); return m_pNode->Estimate(iTotalDocs); }
 
 protected:
 	ExtNode_i *			m_pNode	{nullptr};					///< my and-node for all the terms
@@ -844,6 +938,7 @@ public:
 	uint64_t			GetWordID () const override;
 	bool				GotHitless () override { return false; }
 	void				HintRowID ( RowID_t tRowID ) override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 
 	static int			GetThreshold ( const XQNode_t & tNode, int iQwords );
 
@@ -884,6 +979,7 @@ public:
 	bool						GotHitless () override { return false; }
 	uint64_t					GetWordID () const override;
 	void						HintRowID ( RowID_t tRowID ) override;
+	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
 
 protected:
 	CSphVector<ExtNode_i *>		m_dChildren;
@@ -915,6 +1011,7 @@ public:
 	bool				GotHitless () override { return false; }
 	void				HintRowID ( RowID_t tRowID ) override;
 	void				DebugDump ( int iLevel ) override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 
 protected:
 	void				FilterHits ( const ExtDoc_t * pDoc1, const ExtDoc_t * pDoc2, const ExtHit_t * & pHit1, const ExtHit_t * & pHit2, const ExtHit_t * & pDotHit, DWORD uSentenceEnd, RowID_t tRowID, int & iDoc );
@@ -944,7 +1041,7 @@ private:
 class ExtNotNear_c : public ExtTwofer_c, public BufferedNode_c
 {
 public:
-						ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, const ISphQwordSetup & tSetup, int iDist );
+						ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, int iDist );
 
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
@@ -1075,9 +1172,9 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 		// AND result with the words that had no hitlist
 		if ( dTerms.GetLength () )
 		{
-			pResult = new ExtAnd_c ( pResult, dTerms[0], tSetup );
+			pResult = new ExtAnd_c ( pResult, dTerms[0] );
 			for ( int i=1; i<dTerms.GetLength (); i++ )
-				pResult = new ExtAnd_c ( pResult, dTerms[i], tSetup );
+				pResult = new ExtAnd_c ( pResult, dTerms[i] );
 		}
 
 		if ( pQueryNode->GetCount() )
@@ -1140,8 +1237,9 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	{
 		ExtNode_i * pNode = ExtNode_i::Create ( dQwords[0], pQueryNode, tSetup, bUseBM25 );
 		for ( int i=1; i<dQwords.GetLength(); i++ )
-			pNode = new ExtAnd_c ( pNode, ExtNode_i::Create ( dQwords[i], pQueryNode, tSetup, bUseBM25 ), tSetup );
-		pResult = new ExtAnd_c ( pResult, pNode, tSetup );
+			pNode = new ExtAnd_c ( pNode, ExtNode_i::Create ( dQwords[i], pQueryNode, tSetup, bUseBM25 ) );
+
+		pResult = new ExtAnd_c ( pResult, pNode );
 	}
 
 	if ( pQueryNode->GetCount() )
@@ -1438,6 +1536,7 @@ public:
 						ExtPayload_T ( const XQNode_t * pNode, const ISphQwordSetup & tSetup );
 
 	const ExtDoc_t *	GetDocsChunk() final;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const final { return { 0.0f, 0, 0 }; }
 };
 
 
@@ -1798,9 +1897,9 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				for ( int i=1; i<dTerms.GetLength(); i++ )
 				{
 					if ( !bOrOperator )
-						pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
+						pCur = new ExtAnd_c ( pCur, dTerms[i] );
 					else
-						pCur = new ExtOr_c ( pCur, dTerms[i], tSetup );
+						pCur = new ExtOr_c ( pCur, dTerms[i] );
 				}
 
 				if ( pNode->GetCount() )
@@ -1879,7 +1978,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 					if ( bZonespan )
 						pCur = new ExtAndZonespan_c ( pCur, dTerms[i], tSetup, pNode->m_dChildren[0] );
 					else
-						pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
+						pCur = new ExtAnd_c ( pCur, dTerms[i] );
 
 				// zonespan has Extra data which is not (yet?) covered by common-node optimizations,
 				// so we need to avoid those for zonespan
@@ -1914,13 +2013,13 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			}
 			switch ( pNode->GetOp() )
 			{
-				case SPH_QUERY_OR:			pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
-				case SPH_QUERY_MAYBE:		pCur = new ExtMaybe_c ( pCur, pNext, tSetup ); break;
-				case SPH_QUERY_AND:			pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
-				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
+				case SPH_QUERY_OR:			pCur = new ExtOr_c ( pCur, pNext ); break;
+				case SPH_QUERY_MAYBE:		pCur = new ExtMaybe_c ( pCur, pNext ); break;
+				case SPH_QUERY_AND:			pCur = new ExtAnd_c ( pCur, pNext ); break;
+				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext ); break;
 				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
 				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
-				case SPH_QUERY_NOTNEAR:		pCur = new ExtNotNear_c ( pCur, pNext, tSetup, pNode->m_iOpArg ); break;
+				case SPH_QUERY_NOTNEAR:		pCur = new ExtNotNear_c ( pCur, pNext, pNode->m_iOpArg ); break;
 				default:					assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 			}
 		}
@@ -2232,6 +2331,12 @@ template<bool USE_BM25>
 void ExtTerm_T<USE_BM25>::SetCollectHits()
 {
 	m_bCollectHits = true;
+}
+
+template<bool USE_BM25>
+NodeEstimate_t ExtTerm_T<USE_BM25>::Estimate ( int64_t iTotalDocs ) const
+{
+	return { float(m_pQword->m_iDocs)*COST_SCALE*60.0f, m_pQword->m_iDocs, 1 };
 }
 
 template<bool USE_BM25>
@@ -2596,15 +2701,15 @@ int ExtConditional_T<T, NODE>::GetAtomPos() const
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup )
+ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond )
 {
-	Init ( pFirst, pSecond, tSetup );
+	Init ( pFirst, pSecond );
 }
 
-inline void	ExtTwofer_c::Init ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup )
+inline void	ExtTwofer_c::Init ( ExtNode_i * pLeft, ExtNode_i * pRight )
 {
-	m_pLeft = pLeft;
-	m_pRight = pRight;
+	m_pLeft = std::unique_ptr<ExtNode_i>(pLeft);
+	m_pRight = std::unique_ptr<ExtNode_i>(pRight);
 	m_pDocL = nullptr;
 	m_pDocR = nullptr;
 	m_uNodePosL = 0;
@@ -2612,12 +2717,6 @@ inline void	ExtTwofer_c::Init ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISp
 	m_iAtomPos = ( pLeft && pLeft->GetAtomPos() ) ? pLeft->GetAtomPos() : 0;
 	if ( pRight && pRight->GetAtomPos() && pRight->GetAtomPos()<m_iAtomPos && m_iAtomPos!=0 )
 		m_iAtomPos = pRight->GetAtomPos();
-}
-
-ExtTwofer_c::~ExtTwofer_c ()
-{
-	SafeDelete ( m_pLeft );
-	SafeDelete ( m_pRight );
 }
 
 void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
@@ -2696,6 +2795,21 @@ void ExtTwofer_c::SetCollectHits()
 		m_pRight->SetCollectHits();
 }
 
+
+NodeEstimate_t ExtTwofer_c::Estimate ( int64_t iTotalDocs ) const
+{
+	NodeEstimate_t tLeft = { 0.0f, 0, 0 };
+	if ( m_pLeft )
+		tLeft = m_pLeft->Estimate(iTotalDocs);
+
+	NodeEstimate_t tRight = { 0.0f, 0, 0 };
+	if ( m_pRight )
+		tRight = m_pRight->Estimate(iTotalDocs);
+
+	tLeft += tRight;
+	return tLeft;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 const ExtDoc_t * ExtAnd_c::GetDocsChunk()
@@ -2706,10 +2820,10 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk()
 	int iDoc = 0;
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
-		if ( !WarmupDocs ( pDocL, pDocR, m_pLeft ) )
+		if ( !WarmupDocs ( pDocL, pDocR, m_pLeft.get() ) )
 			break;
 
-		if ( !WarmupDocs ( pDocR, pDocL, m_pRight ) )
+		if ( !WarmupDocs ( pDocR, pDocL, m_pRight.get() ) )
 			break;
 
 		assert ( pDocL && pDocR );
@@ -2834,6 +2948,19 @@ void ExtAnd_c::CollectHits ( const ExtDoc_t * pDocs )
 
 	if ( m_bQPosReverse )
 		m_dHits.Sort ( CmpAndHitReverse_fn() );
+}
+
+
+NodeEstimate_t ExtAnd_c::Estimate ( int64_t iTotalDocs ) const
+{
+	assert ( m_pLeft && m_pRight );
+
+	auto tLeftEstimate = m_pLeft->Estimate(iTotalDocs);
+	auto tRightEstimate = m_pRight->Estimate(iTotalDocs);
+
+	float fRatio = float(tLeftEstimate.m_fCost)/iTotalDocs*float(tRightEstimate.m_fCost)/iTotalDocs;
+	float fCost = CalcFTIntersectCost ( tLeftEstimate, tRightEstimate, iTotalDocs, MAX_BLOCK_DOCS, MAX_BLOCK_DOCS );
+	return { fCost, int64_t(fRatio*iTotalDocs), tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
 }
 
 
@@ -3528,6 +3655,38 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::DebugDump ( int iLevel )
 }
 
 
+static float CalcQwordReadCost ( ISphQword * pQword )
+{
+	assert(pQword);
+	return float(pQword->m_iDocs)*COST_SCALE*55.0f;
+}
+
+template <bool USE_BM25,bool TEST_FIELDS>
+NodeEstimate_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::Estimate ( int64_t iTotalDocs ) const
+{
+	float fRatio = 1.0f;
+	float fCostLeft = 0.0f;
+	ARRAY_FOREACH ( i, m_dNodes )
+	{
+		const auto & tNode = m_dNodes[i];
+		assert(tNode.m_pQword);
+
+		if (!i)
+			fCostLeft = CalcQwordReadCost ( tNode.m_pQword );
+		else
+		{
+			float fCostRight = CalcQwordReadCost ( tNode.m_pQword );
+			NodeEstimate_t tEst1 = { fCostLeft, int64_t(fRatio*iTotalDocs), i };
+			NodeEstimate_t tEst2 = { fCostRight, tNode.m_pQword->m_iDocs, 1 };
+			fCostLeft = CalcFTIntersectCost ( tEst1, tEst2, iTotalDocs, MAX_BLOCK_DOCS, MAX_BLOCK_DOCS );
+		}
+
+		fRatio *= float(tNode.m_pQword->m_iDocs) / iTotalDocs;
+	}
+
+	return { fCostLeft, int64_t(fRatio*iTotalDocs), m_dNodes.GetLength() };
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 bool ExtAndZonespanned_c::IsSameZonespan ( const ExtHit_t * pHit1, const ExtHit_t * pHit2 ) const
@@ -3600,8 +3759,8 @@ void ExtAndZonespanned_c::DebugDump ( int iLevel )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtOr_c::ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup )
-	: ExtTwofer_c ( pLeft, pRight, tSetup )
+ExtOr_c::ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight )
+	: ExtTwofer_c ( pLeft, pRight )
 {}
 
 const ExtDoc_t * ExtOr_c::GetDocsChunk()
@@ -3692,10 +3851,27 @@ void ExtOr_c::DebugDump ( int iLevel )
 	DebugDumpT ( "ExtOr", iLevel );
 }
 
+
+NodeEstimate_t ExtOr_c::Estimate ( int64_t iTotalDocs ) const
+{
+	assert ( m_pLeft && m_pRight );
+
+	auto tLeftEstimate = m_pLeft->Estimate(iTotalDocs);
+	auto tRightEstimate = m_pRight->Estimate(iTotalDocs);
+
+	float fIntersection = float(tLeftEstimate.m_iDocs)/iTotalDocs*float(tRightEstimate.m_iDocs)/iTotalDocs;
+	int64_t iIntersectionDocs = int64_t(fIntersection*iTotalDocs);
+
+	int64_t iResDocs = tLeftEstimate.m_iDocs+tRightEstimate.m_iDocs>=iIntersectionDocs ? tLeftEstimate.m_iDocs+tRightEstimate.m_iDocs-iIntersectionDocs : iIntersectionDocs;
+
+	float fMergeCost = float(tLeftEstimate.m_iDocs + tRightEstimate.m_iDocs)*COST_SCALE*10.0f;
+	return { tLeftEstimate.m_fCost + tRightEstimate.m_fCost + fMergeCost, iResDocs, tLeftEstimate.m_iTerms + tRightEstimate.m_iTerms };
+}
+
 //////////////////////////////////////////////////////////////////////////
 
-ExtMaybe_c::ExtMaybe_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup )
-	: ExtOr_c ( pLeft, pRight, tSetup )
+ExtMaybe_c::ExtMaybe_c ( ExtNode_i * pLeft, ExtNode_i * pRight )
+	: ExtOr_c ( pLeft, pRight )
 {}
 
 // returns documents from left subtree only
@@ -3713,11 +3889,11 @@ const ExtDoc_t * ExtMaybe_c::GetDocsChunk()
 	bool bRightEmpty = false;
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
-		if ( !WarmupDocs ( pDocL, m_pLeft ) )
+		if ( !WarmupDocs ( pDocL, m_pLeft.get() ) )
 			break;
 
 		if ( !bRightEmpty )
-			bRightEmpty = !WarmupDocs ( pDocR, m_pRight );
+			bRightEmpty = !WarmupDocs ( pDocR, m_pRight.get() );
 
 		if ( !bRightEmpty )
 		{
@@ -3753,8 +3929,8 @@ void ExtMaybe_c::DebugDump ( int iLevel )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtAndNot_c::ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup )
-	: ExtTwofer_c ( pFirst, pSecond, tSetup )
+ExtAndNot_c::ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond )
+	: ExtTwofer_c ( pFirst, pSecond )
 {}
 
 const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
@@ -3769,10 +3945,10 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
 	int iDoc = 0;
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
-		if ( !WarmupDocs ( pDocL, m_pLeft ) )
+		if ( !WarmupDocs ( pDocL, m_pLeft.get() ) )
 			break;
 
-		WarmupDocs ( pDocR, m_pRight );
+		WarmupDocs ( pDocR, m_pRight.get() );
 
 		// if there's nothing to filter against, simply copy leftovers
 		if ( !HasDocs(pDocR) )
@@ -3917,7 +4093,7 @@ inline void ExtNWay_c::ConstructNode ( const CSphVector<ExtNode_i *> & dNodes, c
 	for ( DWORD i=1; i<uLeaves; i++ )
 	{
 		uRPos = dPositions[i];
-		pCur = pCurEx = new ExtAnd_c ( pCur, dNodes[uRPos++], tSetup ); // ++ for zero-based to 1-based
+		pCur = pCurEx = new ExtAnd_c ( pCur, dNodes[uRPos++] ); // ++ for zero-based to 1-based
 		pCurEx->SetNodePos ( uLPos, uRPos );
 		uLPos = 0;
 	}
@@ -4605,6 +4781,17 @@ void ExtQuorum_c::HintRowID ( RowID_t tRowID )
 }
 
 
+NodeEstimate_t ExtQuorum_c::Estimate ( int64_t iTotalDocs ) const
+{
+	NodeEstimate_t tEst;
+	for ( auto & i : m_dChildren )
+		if ( i.m_pTerm )
+			tEst += i.m_pTerm->Estimate(iTotalDocs);
+
+	return tEst;
+}
+
+
 const ExtDoc_t * ExtQuorum_c::GetDocsChunk()
 {
 	// warmup
@@ -5120,6 +5307,16 @@ void ExtOrder_c::HintRowID ( RowID_t tRowID )
 		i->HintRowID ( tRowID );
 }
 
+
+NodeEstimate_t ExtOrder_c::Estimate ( int64_t iTotalDocs ) const
+{
+	NodeEstimate_t tEst;
+	for ( const auto & i : m_dChildren )
+		tEst += i->Estimate(iTotalDocs);
+
+	return tEst;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const FieldMask_t& uFields, const ISphQwordSetup & tSetup, const char * sUnit )
@@ -5203,6 +5400,17 @@ void ExtUnit_c::DebugDump ( int iLevel )
 }
 
 
+NodeEstimate_t ExtUnit_c::Estimate ( int64_t iTotalDocs ) const
+{
+	assert ( m_pArg1 && m_pArg2 && m_pDot );
+
+	NodeEstimate_t tRes;
+	tRes += m_pArg1->Estimate(iTotalDocs);
+	tRes += m_pArg2->Estimate(iTotalDocs);
+	tRes += m_pDot->Estimate(iTotalDocs);
+
+	return tRes;
+}
 
 /// skips hits within current document while their position is less or equal than the given limit
 /// returns true if a matching hit (with big enough position, and in current document) was found
@@ -5464,8 +5672,8 @@ void ExtUnit_c::CollectHits ( const ExtDoc_t * pDocs )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtNotNear_c::ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, const ISphQwordSetup & tSetup, int iDist )
-	: ExtTwofer_c ( pMust, pNot, tSetup )
+ExtNotNear_c::ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, int iDist )
+	: ExtTwofer_c ( pMust, pNot )
 	, m_iDist ( iDist )
 {
 	m_sNodeName.SetSprintf ( "NOTNEAR/%d", m_iDist );
@@ -5534,7 +5742,7 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
-		if ( !WarmupDocs ( pDocL, pHitL, m_pLeft ) )
+		if ( !WarmupDocs ( pDocL, pHitL, m_pLeft.get() ) )
 			break;
 		
 		if ( !bRightEmpty )
@@ -5542,7 +5750,7 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 			if ( HasDocs(pDocL) )
 				m_pRight->HintRowID ( pDocL->m_tRowID );
 
-			bRightEmpty = !WarmupDocs ( pDocR, pHitR, m_pRight );
+			bRightEmpty = !WarmupDocs ( pDocR, pHitR, m_pRight.get() );
 		}
 
 		RowID_t tNotRowID = ( bRightEmpty ? INVALID_ROWID : pDocR->m_tRowID );
@@ -5670,6 +5878,7 @@ public:
 	bool				GotHitless () override;
 	uint64_t			GetWordID() const override;
 	void				SetCollectHits() override;
+	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { return { 0.0f, 0, 0 }; }
 
 private:
 	NodeCacheContainer_c * m_pNode;
@@ -6042,9 +6251,15 @@ ExtNode_i * CSphQueryNodeCache::CreateProxy ( ExtNode_i * pChild, const XQNode_t
 
 //////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<ExtNode_i> CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries )
+std::unique_ptr<ExtNode_i> CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries, bool bClearOnReset )
 {
-	return std::make_unique<ExtRowIdRange_c> ( pNode, tBoundaries );
+	return std::make_unique<ExtRowIdRange_c> ( pNode, tBoundaries, bClearOnReset );
+}
+
+
+std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator, bool bClearOnReset )
+{
+	return std::make_unique<ExtAndRightHits_c> ( new ExtIterator_c(pIterator), pNode, bClearOnReset );
 }
 
 /// Immediately interrupt current operation

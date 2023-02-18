@@ -2,6 +2,8 @@
 
 When Manticore executes a fullscan query, it can either use plain scan to check every document against the filters, or it can use additional data and/or algorithms to speed up the query execution. To decide which approach to take, Manticore uses a query cost-based optimizer ("CBO" also known as "query optimizer").
 
+The cost-based optimizer can also improve the performance of full-text queries. See below for more details.
+
 The CBO may decide to replace one or more query filters with one of the following entities if it determines that it will improve performance:
 
 1. A **docid index**, which uses a special docid-only secondary index stored in files with the `.spt` extension. In addition to improving filters on document ids, the docid index is also used to speed up document id to row id lookups, and to speed up the application of large killlists on daemon startup.
@@ -14,12 +16,15 @@ The optimizer estimates the cost of each execution path using different attribut
 2. Information from PGM (secondary indexes), which is used to estimate the number of document lists to read. This helps to estimate doclist merge performance and to choose the correct merge algorithm (priority queue merge or bitmap merge).
 3. Columnar encoding statistics, which are used to estimate columnar data decompression performance.
 4. A columnar min-max tree. The CBO uses histograms to estimate the number of documents left after the filter was applied, but it also needs to estimate how many documents the filter had to process. For columnar attributes, partial evaluation of the min-max tree is used for that purpose.
+5. Full-text dictionary. The CBO uses term stats to estimate the cost of evaluating the full-text tree.
 
 The optimizer calculates the execution cost for every filter used in a query. Because certain filters can be replaced with several different entities (e.g., for a document id, Manticore can use a plain scan, a docid index lookup, a columnar scan (if the document id is columnar), and a secondary index), the optimizer evaluates every available combination. Note that there is a maximum limit of 1024 combinations.
 
 To estimate query execution costs, the optimizer calculates the estimated costs of the most significant operations that are performed when the query is executed. It uses preset constants to represent the cost of each operation.
 
 The optimizer compares the costs of each execution path and chooses the path with the lowest cost to execute the query.
+
+When working with full-text queries that have filters by attributes, the query optimizer decides between two possible execution paths. One is to execute the full-text query, retrieve the matches, and use filters. The other is to replace filters with one or more entities described above, fetch rowids from them, and inject them into the full-text matching tree. That way, full-text search results will be intersected with full-scan results. The query optimizer estimates the cost of full-text tree evaluation and the best possible path for computing filter results. Using this data, the optimizer chooses the execution path.
 
 Another thing to consider is multithreaded query execution (when `pseudo_sharding` is enabled). The CBO knows that some queries can be executed in multiple threads and takes that into account. The CBO favors smaller query execution times (i.e., latency) over throughput. For example, if a query using a columnar scan can be executed in multiple threads (and occupy multiple CPU cores) and is faster than a query executed in a single thread using secondary indexes, multithreaded execution will be preferred.
 

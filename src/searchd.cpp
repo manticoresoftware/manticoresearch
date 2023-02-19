@@ -19245,18 +19245,6 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 }
 
 
-static CSphString FixupFilename ( const CSphString & sFilename )
-{
-	CSphString sFixed = sFilename;
-
-#if _WIN32
-	sFixed = AppendWinInstallDir(sFixed);
-#endif
-
-	return sFixed;
-}
-
-
 void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
 	CSphString sLog = "searchd.log";
@@ -19274,8 +19262,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 #else
 			g_bLogSyslog = true;
 #endif
-		} else
-			sLog = FixupFilename ( hSearchd["log"].cstr() );
+		}
 	}
 
 	umask ( 066 );
@@ -19349,7 +19336,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( !v )
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
-	CSphString sPidFile = FixupFilename ( v->cstr () );
+	CSphString sPidFile = v->cstr();
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
 		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
@@ -19818,7 +19805,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// create the pid
 	if ( bOptPIDFile )
 	{
-		g_sPidFile = FixupFilename ( hSearchdpre["pid_file"].cstr() );
+		g_sPidFile = hSearchdpre["pid_file"].cstr();
 
 		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
@@ -19873,9 +19860,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				g_bQuerySyslog = true;
 			else
 			{
-#if _WIN32
-				sQueryLog = AppendWinInstallDir(sQueryLog);
-#endif
 				g_iQueryLogFile = open ( sQueryLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
 					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );

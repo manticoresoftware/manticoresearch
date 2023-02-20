@@ -72,8 +72,6 @@ variables:
       when: manual
     - if: $CI_COMMIT_BRANCH == "master"
       when: on_success
-    - if: $CI_COMMIT_BRANCH == "dev"
-      when: on_success
       
 .collect_deb:
   extends: [ .collect_job ]
@@ -360,7 +358,6 @@ build_docker:
     - if: $REPO_NAME=='$REPO_NAME'
     - if: $WHAT=='$WHAT'
     - if: $WHAT==null && $CI_COMMIT_BRANCH == "master"
-    - if: $WHAT==null && $CI_COMMIT_BRANCH == "dev"
   tags:
     - dev-host
   script:

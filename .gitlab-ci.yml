@@ -4,7 +4,6 @@ workflow:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "master" && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/ && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
-    - if: $CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
     - if: $TEST
     - if: $WHAT
 
@@ -30,7 +29,6 @@ job_mirror:
   needs: [ ]
   rules:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
-    - if: $TEST==null && $CI_COMMIT_BRANCH == "dev"
     - if: $TEST==null && $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   tags:
     - dev-host

@@ -118,6 +118,7 @@ public:
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
+	void			AddIndexHintFT ( bool bForce );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddCount ();
@@ -817,6 +818,14 @@ void SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const 
 		tHint.m_eType = eType;
 		tHint.m_bForce = bForce;
 	}
+}
+
+
+void SqlParser_c::AddIndexHintFT ( bool bForce )
+{
+	IndexHint_t & tHint = m_pQuery->m_dIndexHints.Add();
+	tHint.m_bFulltext = true;
+	tHint.m_bForce = bForce;
 }
 
 

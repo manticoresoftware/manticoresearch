@@ -189,7 +189,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 		tReporter.Fail ( "%s attribute should be BIGINT", sphGetDocidName() );
 
 	const CSphColumnInfo * pBlobLocator = nullptr;
-	int nBlobAttrs = 0;
+	[[maybe_unused]] int nBlobAttrs = 0;
 
 	if ( tSchema.HasBlobAttrs() )
 	{

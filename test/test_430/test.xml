@@ -171,6 +171,15 @@ select brand_id from test_col where price&gt;500;
 show meta;
 select brand_id from test_col where price&gt;500 /*+ NO_ColumnarScan(price) */;
 show meta;
+
+select title from META:all where match('two') and property='Ten';
+show meta;
+
+select title from META:all where match('two') and property='Ten' /*+ OptimizeFulltextFilters */;
+show meta;
+
+select title from META:all where match('two') and property='Ten' /*+ NO_OptimizeFulltextFilters */;
+show meta;
 </sphinxql></queries>
 
 </test>

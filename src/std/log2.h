@@ -24,6 +24,10 @@ int sphLog2 ( unsigned long uValue );
 int sphLog2 ( unsigned long long uValue );
 
 /// signed ints just casted to unsigned
+constexpr int sphLog2const ( int iValue );
+constexpr int sphLog2const ( long iValue );
+constexpr int sphLog2const ( long long iValue );
+
 int sphLog2 ( int iValue );
 int sphLog2 ( long iValue );
 int sphLog2 ( long long iValue );

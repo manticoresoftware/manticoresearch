@@ -37,8 +37,6 @@ int MyStackSize();
 /// get size of used stack (threads or coro - depends from context)
 int64_t GetStackUsed();
 
-size_t GetDefaultCoroStackSize();
-
 // helper to align stack suze
 size_t AlignStackSize ( size_t iSize );
 
@@ -57,7 +55,8 @@ void StartJob ( Handler handler );
 // It should NOT switch context (i.e. no yield/resume)
 void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler );
 
-bool IsUnderValgrind();
+// if returns true - we could perform runtime calculation of stack sizes.
+bool StackMockingAllowed();
 
 // N of running threads in scheduler, or in global scheduler
 int NThreads ();
@@ -75,7 +74,7 @@ Waiter_t DefferedContinuator() noexcept;
 void WaitForDeffered ( Waiter_t&& ) noexcept;
 
 // start dTasks, then yield until iN of them completed. Returns idx of the task which fired the trigger
-int WaitForN ( int iN, std::initializer_list<Handler> dTasks );
+int WaitForN ( DWORD uN, std::initializer_list<Handler> dTasks );
 
 // set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
 #define MODELING 0

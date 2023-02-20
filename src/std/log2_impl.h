@@ -125,6 +125,21 @@ inline int sphLog2 ( unsigned long long uValue )
 #endif
 #endif
 
+constexpr inline int sphLog2const ( int iValue )
+{
+	return sphLog2const ( static_cast<unsigned> ( iValue ) );
+}
+
+constexpr inline int sphLog2const ( long iValue )
+{
+	return sphLog2const ( static_cast<unsigned long> ( iValue ) );
+}
+
+constexpr inline int sphLog2const ( long long iValue )
+{
+	return sphLog2const ( static_cast<unsigned long long> ( iValue ) );
+}
+
 inline int sphLog2 ( int iValue )
 {
 	return sphLog2 ( static_cast<unsigned> ( iValue ) );

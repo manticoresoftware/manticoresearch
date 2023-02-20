@@ -7566,6 +7566,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	{
 		CSphMultiQueryArgs tFTArgs ( tArgs.m_iIndexWeight );
 		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
+		tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
 		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, GetName(), tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 	}
@@ -7617,7 +7618,7 @@ void RtIndex_c::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, const D
 	tInfo.m_iHits = bGetStats ? pQueryWord->m_iHits : 0;
 	tInfo.m_iQpos = iQpos;
 
-	RemoveDictSpecials ( tInfo.m_sNormalized );
+	RemoveDictSpecials ( tInfo.m_sNormalized, ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 }
 
 
@@ -7640,20 +7641,6 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 		m_pIndex->AddKeywordStats ( sWord, sTokenized, m_pDict, m_tFoldSettings.m_bStats, iQpos, m_pQword, dKeywords, m_tGuard );
 	}
 };
-
-
-static void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringHash_T<CSphKeywordInfo> & hKeywords )
-{
-	for ( CSphKeywordInfo & tSrc : dKeywords )
-	{
-		CSphKeywordInfo & tDst = hKeywords.AddUnique ( tSrc.m_sNormalized );
-		tDst.m_sTokenized = std::move ( tSrc.m_sTokenized );
-		tDst.m_sNormalized = std::move ( tSrc.m_sNormalized );
-		tDst.m_iQpos = tSrc.m_iQpos;
-		tDst.m_iDocs += tSrc.m_iDocs;
-		tDst.m_iHits += tSrc.m_iHits;
-	}
-}
 
 
 bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const RtGuard_t& tGuard ) const
@@ -7773,27 +7760,18 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	} else
 	{
 		// bigram and expanded might differs need to merge infos
+		int iWasKeywords = dKeywords.GetLength();
 		CSphVector<CSphKeywordInfo> dChunkKeywords;
-		SmallStringHash_T<CSphKeywordInfo> hKeywords;
 		for ( auto& pChunk: tGuard.m_dDiskChunks )
 		{
 			pChunk->Cidx().GetKeywords ( dChunkKeywords, (const char*)sModifiedQuery, tSettings, pError );
-			HashKeywords ( dChunkKeywords, hKeywords );
+			dKeywords.Append ( dChunkKeywords );
 			dChunkKeywords.Resize ( 0 );
 		}
 
-		if ( hKeywords.GetLength() )
-		{
-			// merge keywords from RAM parts with disk keywords into hash
-			HashKeywords ( dKeywords, hKeywords );
-			dKeywords.Resize ( 0 );
-			dKeywords.Reserve ( hKeywords.GetLength() );
-
-			for ( const auto& tKeyword : hKeywords )
-				dKeywords.Add ( tKeyword.second );
-
-			sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
-		}
+		// merge keywords from RAM parts with disk keywords
+		if ( iWasKeywords!=dKeywords.GetLength() )
+			UniqKeywords ( dKeywords );
 	}
 
 	return true;

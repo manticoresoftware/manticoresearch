@@ -51,6 +51,7 @@
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
+#include "queryfilter.h"
 
 // services
 #include "taskping.h"
@@ -205,6 +206,7 @@ static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static int				g_iDumpDocs = 1000000000;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -3695,6 +3697,7 @@ void AggrResult_t::AddEmptyResultset ( const DocstoreReader_i * pDocstore, int i
 	auto & tOneRes = m_dResults.Add();
 	tOneRes.m_pDocstore = pDocstore;
 	tOneRes.m_iTag = iTag;
+	tOneRes.m_tSchema = m_tSchema;
 }
 
 
@@ -9270,7 +9273,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandClusterPq ( tOut, uCommandVer, tBuf, tSess.szClientName () ); break;
+		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName () ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 		default:						assert ( 0 && "internal error: unhandled command" ); break;
@@ -11219,7 +11222,6 @@ public:
 	CSphVector<CSphKeywordInfo> & m_dKeywords;
 };
 
-static void MergeKeywords ( CSphVector<CSphKeywordInfo> & dKeywords );
 static void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeywordInfo> & dKeywords );
 bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog )
 {
@@ -11279,7 +11281,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 
 		// process result sets
 		if ( dLocals.GetLength() + iAgentsReply>1 )
-			MergeKeywords ( dKeywords );
+			UniqKeywords ( dKeywords );
 
 		bOk = true;
 	}
@@ -11456,43 +11458,6 @@ bool KeywordsReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 	}
 
 	return true;
-}
-
-struct KeywordSorter_fn
-{
-	bool IsLess ( const CSphKeywordInfo & a, const CSphKeywordInfo & b ) const
-	{
-		return ( ( a.m_iQpos<b.m_iQpos )
-			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits>b.m_iHits )
-			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits==b.m_iHits && a.m_sNormalized<b.m_sNormalized ) );
-	}
-};
-
-void MergeKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
-{
-	CSphOrderedHash < CSphKeywordInfo, uint64_t, IdentityHash_fn, 256 > hWords;
-	ARRAY_FOREACH ( i, dSrc )
-	{
-		const CSphKeywordInfo & tInfo = dSrc[i];
-		uint64_t uKey = sphFNV64 ( &tInfo.m_iQpos, sizeof(tInfo.m_iQpos) );
-		uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
-
-		CSphKeywordInfo & tVal = hWords.AddUnique ( uKey );
-		if ( !tVal.m_iQpos )
-		{
-			tVal = tInfo;
-		} else
-		{
-			tVal.m_iDocs += tInfo.m_iDocs;
-			tVal.m_iHits += tInfo.m_iHits;
-		}
-	}
-
-	dSrc.Resize ( 0 );
-	for ( const auto& tWord : hWords )
-		dSrc.Add ( tWord.second );
-
-	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
 }
 
 struct KeywordSorterDocs_fn
@@ -12986,17 +12951,9 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	// bummer! lets protect ourselves against that
 	CSphBitvec tAttrsToSend;
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
-	if ( tRes.GetLength() || bReturnZeroCount )
-		sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
+	assert ( bReturnZeroCount || tRes.m_tSchema.GetAttrsCount() );
+	sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
-	// field packets
-	if ( tRes.GetLength()==0 && !bReturnZeroCount )
-	{
-		// in case there are no matches, send a dummy schema
-		// result set header packet. We will attach EOF manually at the end.
-		dRows.HeadBegin ( bAddQueryColumn ? 2 : 1 );
-		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG );
-	} else
 	{
 		int iAttrsToSend = tAttrsToSend.BitCount();
 		if ( bAddQueryColumn )
@@ -16268,6 +16225,24 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			return true;
 		}
 	}
+	if ( bParsedOK && m_bDumpUser )
+	{
+		ARRAY_FOREACH ( i, dStmt )
+		{
+			SqlStmt_t & tStmt = dStmt[i];
+			if ( tStmt.m_eStmt!=STMT_SELECT )
+				continue;
+
+			if ( !tStmt.m_tQuery.m_bExplicitMaxMatches )
+			{
+				tStmt.m_tQuery.m_iLimit = g_iDumpDocs;
+				tStmt.m_tQuery.m_iMaxMatches = g_iDumpDocs;
+				tStmt.m_tQuery.m_bExplicitMaxMatches = true;
+			}
+
+			tStmt.m_tQuery.m_iCouncurrency = 1;
+		}
+	}
 
 	// handle multi SQL query
 	if ( bParsedOK && dStmt.GetLength()>1 )
@@ -16713,6 +16688,11 @@ bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )
 void session::SetFederatedUser ()
 {
 	GetClientSession()->m_bFederatedUser = true;
+}
+
+void session::SetDumpUser ()
+{
+	GetClientSession()->m_bDumpUser = true;
 }
 
 void session::SetAutoCommit ( bool bAutoCommit )
@@ -19265,18 +19245,6 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 }
 
 
-static CSphString FixupFilename ( const CSphString & sFilename )
-{
-	CSphString sFixed = sFilename;
-
-#if _WIN32
-	sFixed = AppendWinInstallDir(sFixed);
-#endif
-
-	return sFixed;
-}
-
-
 void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
 	CSphString sLog = "searchd.log";
@@ -19294,8 +19262,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 #else
 			g_bLogSyslog = true;
 #endif
-		} else
-			sLog = FixupFilename ( hSearchd["log"].cstr() );
+		}
 	}
 
 	umask ( 066 );
@@ -19369,7 +19336,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( !v )
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
-	CSphString sPidFile = FixupFilename ( v->cstr () );
+	CSphString sPidFile = v->cstr();
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
 		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
@@ -19838,7 +19805,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// create the pid
 	if ( bOptPIDFile )
 	{
-		g_sPidFile = FixupFilename ( hSearchdpre["pid_file"].cstr() );
+		g_sPidFile = hSearchdpre["pid_file"].cstr();
 
 		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
@@ -19893,9 +19860,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				g_bQuerySyslog = true;
 			else
 			{
-#if _WIN32
-				sQueryLog = AppendWinInstallDir(sQueryLog);
-#endif
 				g_iQueryLogFile = open ( sQueryLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
 					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );

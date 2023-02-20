@@ -479,6 +479,7 @@ public:
 	bool			IsArray() const;
 	bool			Empty() const;
 	const char *	Name() const;
+	bool			IsNull() const;
 
 	int64_t			IntVal() const;
 	bool			BoolVal() const;
@@ -612,6 +613,7 @@ public:
 
 	// format back to json
 	bool BsonToJson ( CSphString& ) const;
+	bool BsonToJson ( CSphString& , bool bQuot ) const;
 
 	// save as standalone (root) bson.
 	bool BsonToBson ( BYTE* ) const;

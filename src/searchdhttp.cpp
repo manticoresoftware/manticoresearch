@@ -116,6 +116,7 @@ static Endpoint_t g_dEndpoints[] =
 		{ "bulk", "json/bulk" },
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
+		{ "cli_json", nullptr },
 		{ "_bulk", nullptr }
 };
 
@@ -474,7 +475,7 @@ int HttpRequestParser_c::ParsedBodyLength() const
 
 bool HttpRequestParser_c::Expect100() const
 {
-	return m_hOptions.Exists ( "Expect" ) && m_hOptions["Expect"] == "100-continue";
+	return m_hOptions.Exists ( "expect" ) && m_hOptions["expect"] == "100-continue";
 }
 
 bool HttpRequestParser_c::KeepAlive() const
@@ -585,6 +586,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 			{
 				Str_t sVal { sLast, int ( sCur - sLast ) };
 				UriPercentReplace ( sVal );
+				ToLower ( sName );
 				hOptions.Add ( sVal, sName );
 				sLast = sCur + 1;
 				sName = dEmptyStr;
@@ -600,6 +602,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 
 	Str_t sVal { sLast, int ( sCur - sLast ) };
 	UriPercentReplace ( sVal );
+	ToLower ( sName );
 	hOptions.Add ( sVal, sName );
 }
 
@@ -692,7 +695,9 @@ inline void HttpRequestParser_c::FinishParserKeyVal()
 
 	HTTPINFO << "FinishParserKeyVal with '" << m_sCurField << "':'" << m_sCurValue << "'";
 
-	m_hOptions.Add ( (CSphString)m_sCurValue, (CSphString)m_sCurField );
+	CSphString sField = (CSphString)m_sCurField;
+	sField.ToLower();
+	m_hOptions.Add ( (CSphString)m_sCurValue, sField );
 	m_sCurField.Clear();
 	m_sCurValue.Clear();
 }
@@ -2066,10 +2071,10 @@ protected:
 
 	const char* IsNDJson() const
 	{
-		if ( !m_tOptions.Exists ( "Content-Type" ) )
+		if ( !m_tOptions.Exists ( "content-type" ) )
 			return "Content-Type must be set";
 
-		auto sContentType = m_tOptions["Content-Type"].ToLower();
+		auto sContentType = m_tOptions["content-type"].ToLower();
 		auto dParts = sphSplit ( sContentType.cstr(), ";" );
 		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
 			return "Content-Type must be application/x-ndjson";
@@ -2138,8 +2143,8 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		sQuery = sData;
 	};
 
-	// SPH_HTTP_ENDPOINT_SQL SPH_HTTP_ENDPOINT_CLI these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
-	if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL || eEndpoint == SPH_HTTP_ENDPOINT_CLI )
+	// SPH_HTTP_ENDPOINT_SQL SPH_HTTP_ENDPOINT_CLI SPH_HTTP_ENDPOINT_CLI_JSON these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
+	if ( eEndpoint==SPH_HTTP_ENDPOINT_SQL || eEndpoint==SPH_HTTP_ENDPOINT_CLI || eEndpoint==SPH_HTTP_ENDPOINT_CLI_JSON )
 	{
 		auto sWholeData = tSource.ReadAll();
 		StoreRawQuery ( tOptions, sWholeData );
@@ -2163,6 +2168,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		}
 
 	case SPH_HTTP_ENDPOINT_CLI:
+	case SPH_HTTP_ENDPOINT_CLI_JSON:
 		{
 			pOption = tOptions ( "raw_query" );
 			if ( pOption )
@@ -2239,6 +2245,9 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, O
 		}
 		return tRes;
 	}
+	// will be processed by buddy right after source data got parsed
+	if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
+		return tRes;
 
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
 	tRes.m_bOk = pHandler->Process();
@@ -2254,7 +2263,7 @@ bool sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 	hOptions.Add ( sEndpoint, "endpoint" );
 
 	BlobStream_c tQuery { sQuery };
-	return ProcessHttpQueryBuddy ( tQuery, hOptions, dResult, false, HTTP_GET ).m_bOk;
+	return ProcessHttpQueryBuddy ( tQuery, hOptions, dResult, false, HTTP_GET );
 }
 
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
@@ -2277,7 +2286,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 	if ( IsLogManagementEnabled() && eEndpoint==SPH_HTTP_ENDPOINT_TOTAL && m_sEndpoint.Ends ( "_bulk" ) )
 		eEndpoint = SPH_HTTP_ENDPOINT_ES_BULK;
 
-	return ProcessHttpQueryBuddy ( *pSource, m_hOptions, dResult, true, m_eType ).m_bOk;
+	return ProcessHttpQueryBuddy ( *pSource, m_hOptions, dResult, true, m_eType );
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
@@ -2727,6 +2736,8 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 			tDoc.m_tDocid = tId.IntVal();
 		else if ( tId.IsStr() )
 			tDoc.m_tDocid = strtoll ( tId.SzVal(), NULL, 10 );
+		else if ( tId.IsNull() )
+			tDoc.m_tDocid = 0;
 		else
 		{
 			sError.SetSprintf ( "_id should be an int or string" );
@@ -2858,10 +2869,7 @@ bool HttpHandlerEsBulk_c::Validate()
 {
 	CSphString sError;
 
-	// case insitive option get: content-type
-	CSphString * pOptContentType = GetOptions() ( "Content-Type" );
-	if ( !pOptContentType )
-		pOptContentType = GetOptions() ( "content-type" );
+	CSphString * pOptContentType = GetOptions() ( "content-type" );
 	if ( !pOptContentType )
 	{
 		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
@@ -2902,6 +2910,7 @@ bool HttpHandlerEsBulk_c::Process()
 	CSphVector<Str_t> dLines;
 	SplitNdJson ( GetBody(), [&] ( const char * sLine, int iLen ) { dLines.Add ( Str_t ( sLine, iLen ) ); } );
 	
+	CSphString sError;
 	CSphVector<BulkDoc_t> dDocs;
 	dDocs.Reserve ( dLines.GetLength() / 2 );
 	bool bNextLineMeta = true;
@@ -2919,9 +2928,9 @@ bool HttpHandlerEsBulk_c::Process()
 
 			// any bad meta result in general error
 			BulkDoc_t & tDoc = dDocs.Add();
-			if ( !ParseMetaLine ( tLine.first, tDoc, m_sError ) )
+			if ( !ParseMetaLine ( tLine.first, tDoc, sError ) )
 			{
-				ReportLogError ( m_sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
+				ReportLogError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
 				return false;
 			}
 			if ( tDoc.m_sAction=="delete" )

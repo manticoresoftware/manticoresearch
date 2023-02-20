@@ -455,6 +455,7 @@ struct IndexHint_t
 {
 	CSphString				m_sIndex;
 	SecondaryIndexType_e	m_eType = SecondaryIndexType_e::NONE;
+	bool					m_bFulltext = false;	// force/ignore all attribute iterators in fullscan queries
 	bool					m_bForce = true;
 };
 
@@ -642,6 +643,7 @@ public:
 	QueryProfile_c *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
+	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );

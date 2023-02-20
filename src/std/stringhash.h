@@ -48,6 +48,9 @@ public:
 		return pEntry ? pEntry->second : false;
 	}
 
+	StringSet ( std::initializer_list<const char *> dVals );
+	StringSet() = default;
+
 	using BASE::Delete;
 	using BASE::Reset;
 	using BASE::GetLength;

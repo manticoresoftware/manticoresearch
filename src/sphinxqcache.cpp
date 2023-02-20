@@ -74,6 +74,7 @@ public:
 	int							GetMatches() final;
 	void						Reset ( const ISphQwordSetup & tSetup ) final { ResetImpl ( tSetup ); }
 	bool						IsCache() const final { return true; }
+	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const final { return { 0.0f, 0, 0 }; }
 };
 
 /// query cache instance

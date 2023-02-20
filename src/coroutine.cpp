@@ -11,14 +11,8 @@
 #include "coroutine.h"
 #include "sphinxstd.h"
 #include "task_info.h"
+#include "coro_stack.h"
 #include <atomic>
-
-#ifdef HAVE_VALGRIND_VALGRIND_H
-#define BOOST_USE_VALGRIND 1
-#include <valgrind/valgrind.h>
-#else
-#define BOOST_USE_VALGRIND 0
-#endif
 
 #include <boost/context/detail/fcontext.hpp>
 
@@ -28,30 +22,17 @@
 
 namespace Threads {
 
-static const size_t STACK_ALIGN = 16; // stack align - let it be 16 bytes for convenience
-#define LOG_COMPONENT_CORO "Stack: " << m_dStack.GetLength() << " (" << m_eState << ") "
+#define LOG_COMPONENT_CORO "Stack: " << m_tStack.first.size << " (" << m_eState << ") "
 
-size_t AlignStackSize ( size_t iSize )
+bool StackMockingAllowed()
 {
-	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
-}
-
-bool IsUnderValgrind()
-{
-#if BOOST_USE_VALGRIND
+#if HAVE_VALGRIND_VALGRIND_H
 	if (!!RUNNING_ON_VALGRIND)
-		return true;
+		return false;
 #endif
-	return !!getenv ( "NO_STACK_CALCULATION" );
+	return !val_from_env ( "NO_STACK_CALCULATION", false );
 }
 
-// stack size - 128K
-static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 128;
-
-size_t GetDefaultCoroStackSize()
-{
-	return DEFAULT_CORO_STACK_SIZE;
-}
 
 //////////////////////////////////////////////////////////////
 /// Coroutine - uses boost::context to switch between jobs
@@ -65,12 +46,7 @@ class CoRoutine_c
 
 	State_e m_eState = State_e::Paused;
 	Handler m_fnHandler;
-	VecTraits_T<BYTE> m_dStack;
-	CSphFixedVector<BYTE> m_dStackStorage {0};
-
-#if BOOST_USE_VALGRIND
-	unsigned m_uValgrindStackID = 0;
-#endif
+	CoroStack_t m_tStack;
 
 	using Ctx_t = fcontext_t;
 	Ctx_t m_tCoroutineContext;
@@ -93,50 +69,25 @@ private:
 		m_tExternalContext = jump_fcontext ( m_tExternalContext, nullptr ).fctx;
 	}
 
-	inline void ValgrindRegisterStack()
-	{
-#if BOOST_USE_VALGRIND
-		if ( !m_dStackStorage.IsEmpty ())
-			m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStackStorage.begin (), &m_dStackStorage.Last ());
-#endif
-	}
-
-	inline void ValgrindDeregisterStack ()
-	{
-#if BOOST_USE_VALGRIND
-		if ( !m_dStackStorage.IsEmpty ())
-			VALGRIND_STACK_DEREGISTER( m_uValgrindStackID );
-#endif
-	}
-
-	void CreateContext ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	void CreateContext ( Handler fnHandler, CoroStack_t tStack )
 	{
 		m_fnHandler = std::move ( fnHandler );
-		m_dStack = dStack;
-		ValgrindRegisterStack ();
-		m_tCoroutineContext = make_fcontext ( &m_dStack.Last (), m_dStack.GetLength (), [] ( transfer_t pT ) {
+		m_tStack = tStack;
+		m_tCoroutineContext = make_fcontext ( m_tStack.first.sp, m_tStack.first.size, [] ( transfer_t pT ) {
 			static_cast<CoRoutine_c *>(pT.data)->WorkerLowest ( pT.fctx );
 		} );
 	}
 
 public:
-	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 )
-		: m_dStackStorage ( iStack ? (int) AlignStackSize ( iStack ) : DEFAULT_CORO_STACK_SIZE )
+	CoRoutine_c ( Handler fnHandler, CoroStack_t tStack )
 	{
-		CreateContext ( std::move ( fnHandler ), m_dStackStorage );
+		CreateContext ( std::move ( fnHandler ), tStack );
 	}
 
-	CoRoutine_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
-	{
-		CreateContext ( std::move ( fnHandler ), dStack );
-	}
-
-#if BOOST_USE_VALGRIND
 	~CoRoutine_c()
 	{
-		ValgrindDeregisterStack ();
+		DeallocateStack ( m_tStack );
 	}
-#endif
 
 	void Run ()
 	{
@@ -160,14 +111,14 @@ public:
 		m_eState = State_e::Running;
 	}
 
-	BYTE* GetTopOfStack() const
+	const BYTE* GetTopOfStack() const noexcept
 	{
-		return m_dStack.End();
+		return static_cast<const BYTE*> ( m_tStack.first.sp );
 	}
 
-	int GetStackSize() const
+	int GetStackSize() const noexcept
 	{
-		return m_dStack.GetLength();
+		return m_tStack.first.size;
 	}
 };
 
@@ -299,7 +250,7 @@ private:
 		: SchedulerOperation_t ( &Worker_c::DoComplete )
 		, m_pScheduler ( pScheduler )
 		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
-		, m_tCoroutine { std::move (fnHandler), 0 }
+		, m_tCoroutine { std::move (fnHandler), AllocateStack(0) }
 		{
 			assert ( m_pScheduler );
 		}
@@ -312,7 +263,7 @@ private:
 		, m_pScheduler ( pScheduler )
 		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
 		, m_tTracer ( std::move(tTracer))
-		, m_tCoroutine { std::move (fnHandler), iStack }
+		, m_tCoroutine { std::move (fnHandler), AllocateStack(iStack) }
 		{
 			assert ( m_pScheduler );
 		}
@@ -320,7 +271,7 @@ private:
 	// called solely for mocking - no scheduler, not possible to yield. Just provided stack and executor
 	Worker_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 		: SchedulerOperation_t ( &Worker_c::DoComplete )
-		, m_tCoroutine { std::move ( fnHandler ), dStack }
+		, m_tCoroutine { std::move ( fnHandler ), MockedStack ( dStack ) }
 	{
 		assert ( !m_pScheduler );
 	}
@@ -482,7 +433,7 @@ public:
 		return [this] { Continue(); };
 	}
 
-	BYTE * GetTopOfStack () const noexcept
+	const BYTE * GetTopOfStack () const noexcept
 	{
 		return m_tCoroutine.GetTopOfStack();
 	}
@@ -759,24 +710,24 @@ void WaitForDeffered ( Waiter_t&& dWaiter ) noexcept
 	Coro::YieldWith ( [capturedWaiter = std::move ( dWaiter ) ] {} );
 }
 
-int WaitForN ( int iN, std::initializer_list<Handler> dTasks )
+int WaitForN ( DWORD uN, std::initializer_list<Handler> dTasks )
 {
-	assert ( iN > 0 && "trigger N must be >0" );
-	assert ( dTasks.size() > 0 && dTasks.size() >= iN && "num of tasks to wait must be non-zero, and not greater than trigger" );
+	assert ( uN > 0 && "trigger N must be >0" );
+	assert ( dTasks.size() > 0 && dTasks.size() >= uN && "num of tasks to wait must be non-zero, and not greater than trigger" );
 	int iRes = -1;
 
 	// need to store parentSched, since Coro::YieldWith executed _outside_ coroutine, so it has _no_ scheduler!
 	auto pParentSched = Coro::CurrentScheduler();
 
-	Coro::YieldWith ( [&iRes, &dTasks, iN, pParentSched, fnResumer = CurrentRestarter()] {
-		SharedPtr_t<std::atomic<int>> pCounter { new std::atomic<int> };
+	Coro::YieldWith ( [&iRes, &dTasks, uN, pParentSched, fnResumer = CurrentRestarter()] {
+		SharedPtr_t<std::atomic<DWORD>> pCounter { new std::atomic<DWORD> };
 		pCounter->store ( 0, std::memory_order_release );
 		int i = 0;
 		for ( const auto& fnHandler : dTasks )
 		{
-			Coro::Go ( [pCounter, fnResumer, &fnHandler, i, iN, &iRes] {
+			Coro::Go ( [pCounter, fnResumer, &fnHandler, i, uN, &iRes] {
 				fnHandler();
-				if ( pCounter->fetch_add ( 1, std::memory_order_acq_rel ) == iN - 1 )
+				if ( pCounter->fetch_add ( 1, std::memory_order_acq_rel ) == uN - 1 )
 				{
 					iRes = i;
 					fnResumer();

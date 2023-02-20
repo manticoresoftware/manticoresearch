@@ -85,12 +85,15 @@ public:
 	virtual void 				SetAtomPos ( int iPos ) = 0;
 	virtual int					GetAtomPos() const = 0;
 	virtual void				SetCollectHits() {}				// call this if ranker needs hits
+	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;
 
 	virtual void				DebugDump ( int iLevel ) = 0;
 };
 
 struct RowIdBoundaries_t;
-std::unique_ptr<ExtNode_i> CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries );
+class RowidIterator_i;
+std::unique_ptr<ExtNode_i> CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries, bool bClearOnReset );
+std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator, bool bClearOnReset );
 
 class NodeCacheContainer_c;
 

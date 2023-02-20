@@ -1370,6 +1370,7 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_JSON_BULK,
 	SPH_HTTP_ENDPOINT_PQ,
 	SPH_HTTP_ENDPOINT_CLI,
+	SPH_HTTP_ENDPOINT_CLI_JSON,
 	SPH_HTTP_ENDPOINT_ES_BULK,
 
 	SPH_HTTP_ENDPOINT_TOTAL
@@ -1410,6 +1411,7 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
+	void SetDumpUser();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

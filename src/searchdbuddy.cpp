@@ -30,8 +30,8 @@ static int g_iBuddyVersion = 1;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
-static boost::asio::io_service g_tIOS;
-static std::vector<char> g_dPipeBuf ( 4096 );
+static std::unique_ptr<boost::asio::io_service> g_pIOS;
+static std::vector<char> g_dPipeBuf ( 960 ); // should be less than log buffer size to prevent message clip
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
 enum class BuddyState_e
 {
@@ -146,7 +146,7 @@ static Str_t TrimRight ( Str_t tSrc )
 	return Str_t ( tSrc.first, iLen );
 }
 
-static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
+static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size_t iSize )
 {
 	if ( tGotCode.failed() )
 		return;
@@ -194,6 +194,13 @@ static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size
 		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
 }
 
+static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
+{
+	ReadFromPipe ( tGotCode, iSize );
+	if ( g_pPipe && iSize )
+		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
+}
+
 static BuddyState_e BuddyCheckLive()
 {
 	assert ( g_eBuddy==BuddyState_e::WORK );
@@ -233,20 +240,16 @@ static void BuddyTryRestart()
 	}
 }
 
-static void NextShedule()
-{
-	int64_t tmCur = sphMicroTimer();
-	TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, BuddyNextTick );
-}
-
 void BuddyNextTick()
 {
 	auto pDesc = PublishSystemInfo ( "buddy check" );
 
-	if ( g_pPipe )
-		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
-	g_tIOS.poll();
-	g_tIOS.restart();
+	while ( !g_pIOS->stopped() )
+	{
+		if ( !g_pIOS->poll_one() )
+			break;
+	}
+	g_pIOS->restart();
 
 	if ( g_eBuddy==BuddyState_e::STARTING && sphMicroTimer()>( g_tmStarting + g_iStartMaxTimeout * 1000 * 1000  ) )
 	{
@@ -261,14 +264,23 @@ void BuddyNextTick()
 	BuddyTryRestart();
 
 	if ( g_eBuddy==BuddyState_e::STARTING || g_eBuddy==BuddyState_e::WORK )
-		NextShedule();
+	{
+		int64_t tmCur = sphMicroTimer();
+		TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, []() { BuddyNextTick(); } );
+	}
 }
 
 BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 {
 	std::string sCmd = sArgs;
 	g_pBuddy.reset();
-	g_pPipe.reset ( new boost::process::async_pipe ( g_tIOS ) );
+	if ( g_pIOS )
+	{
+		g_pIOS->stop();
+		g_pIOS.reset(); 
+	}
+	g_pIOS.reset ( new boost::asio::io_service );
+	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
 
 	std::unique_ptr<boost::process::child> pBuddy;
 	std::error_code tErrorCode;
@@ -289,6 +301,9 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 	g_tmStarting = sphMicroTimer();
 	g_pBuddy = std::move ( pBuddy );
+	if ( g_pPipe )
+		g_pPipe->async_read_some( boost::asio::buffer ( g_dPipeBuf ), BuddyPipe_fn );
+
 	return BuddyState_e::STARTING;
 }
 
@@ -362,7 +377,8 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 	g_eBuddy = eBuddy;
 	g_iTask = TaskManager::RegisterGlobal ( "buddy service" );
 	assert ( g_iTask>=0 && "failed to create buddy service task" );
-	BuddyNextTick();
+	int64_t tmCur = sphMicroTimer();
+	TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, []() { BuddyNextTick(); } );
 }
 
 void BuddyStop ()
@@ -405,7 +421,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	}
 
 	CSphString sConnID;
-	sConnID.SetSprintf ( "Request-ID: %d", session::GetConnID() );
+	sConnID.SetSprintf ( "Request-ID: %d_%u", session::GetConnID(), sphCRC32 ( sQuery.first, sQuery.second, sphRand() ) );
 	CSphFixedVector<const char *> dHeaders ( 1 );
 	dHeaders[0] = sConnID.cstr();
 
@@ -414,7 +430,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 
 static bool HasProhibitBuddy ( const OptionsHash_t & hOptions )
 {
-	CSphString * pProhibit = hOptions ( "User-Agent" );
+	CSphString * pProhibit = hOptions ( "user-agent" );
 	if ( !pProhibit )
 		return false;
 
@@ -483,20 +499,46 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 	return true;
 }
 
-HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+static const sph::StringSet g_dAllowedEndpoints = {
+	"/_license"
+};
+
+static bool RequestSkipBuddy ( Str_t sSrcQuery, const CSphString & sURL )
+{
+	return ( IsEmpty ( sSrcQuery ) && !g_dAllowedEndpoints[sURL] );
+}
+
+bool ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	Str_t sSrcQuery = dEmptyStr;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( tSource, sSrcQuery, hOptions, dResult, bNeedHttpResponse, eRequestType );
 
-	if ( tRes.m_bOk || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || !HasBuddy() || HasProhibitBuddy ( hOptions ) || IsEmpty ( sSrcQuery ) )
-		return tRes;
+	if ( tRes.m_bOk || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || !HasBuddy() || HasProhibitBuddy ( hOptions ) || RequestSkipBuddy ( sSrcQuery, hOptions["full_url"] ) )
+	{
+		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
+		{
+			if ( !HasBuddy() )
+			{
+				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );
+				sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
+
+			} else if ( HasProhibitBuddy ( hOptions ) )
+			{
+				tRes.m_sError.SetSprintf ( "can not process /cli endpoint with User-Agent:Manticore Buddy" );
+				sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
+			}
+		}
+		
+		assert ( dResult.GetLength()>0 );
+		return tRes.m_bOk;
+	}
 
 	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), FromStr ( sSrcQuery ) );
 
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
-		return tRes;
+		return tRes.m_bOk;
 	}
 
 	CSphString sError;
@@ -504,22 +546,20 @@ HttpProcessResult_t ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
-		return tRes;
+		return tRes.m_bOk;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
-		return tRes;
+		return tRes.m_bOk;
 	}
 
 	CSphString sDump;
-	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump );
+	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), SPH_HTTP_STATUS_200, bNeedHttpResponse, dResult );
-	tRes.m_bOk = true;
-	tRes.m_sError = "";
-	return tRes;
+	return true;
 }
 
 bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & tOut )

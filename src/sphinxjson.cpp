@@ -1650,6 +1650,11 @@ bool JsonObj_c::IsArray() const
 	return !!cJSON_IsArray ( m_pRoot );
 }
 
+bool JsonObj_c::IsNull() const
+{
+	return !!cJSON_IsNull ( m_pRoot );
+}
+
 
 JsonObj_c JsonObj_c::operator[] ( int iItem ) const
 {
@@ -2854,7 +2859,12 @@ void Bson_c::ForSome ( CondNamedAction_f&& fAction ) const
 	bson::ForSome ( m_dData, std::move ( fAction ) );
 }
 
-bool Bson_c::BsonToJson ( CSphString &sResult ) const
+bool Bson_c::BsonToJson ( CSphString & sResult ) const
+{
+	return BsonToJson ( sResult, true );
+}
+
+bool Bson_c::BsonToJson ( CSphString & sResult, bool bQuot ) const
 {
 	JsonEscapedBuilder sBuilder;
 	if ( !m_dData.first )
@@ -2864,7 +2874,7 @@ bool Bson_c::BsonToJson ( CSphString &sResult ) const
 	if ( m_dData.second==JSON_EOF )
 		sBuilder << "{}";
 	else
-		sphJsonFieldFormat ( sBuilder, m_dData.first, m_dData.second );
+		sphJsonFieldFormat ( sBuilder, m_dData.first, m_dData.second, bQuot );
 
 	sBuilder.MoveTo ( sResult );
 	return true;

@@ -4,6 +4,10 @@
 #pragma warning(disable:4702) // unreachable code
 #endif
 
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
 %}
 
 %lex-param	{ struct SqlDebugParser_c * pParser }

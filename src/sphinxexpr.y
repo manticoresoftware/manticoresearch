@@ -2,6 +2,11 @@
 #if _WIN32
 #pragma warning(push,1)
 #endif
+
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
 %}
 
 %lex-param		{ ExprParser_t * pParser }

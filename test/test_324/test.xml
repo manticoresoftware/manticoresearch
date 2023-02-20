@@ -76,6 +76,36 @@ index dist3
 	agent = 127.0.0.1:<my_port />:test2
 	local = test3
 }
+
+index rt_a1
+{
+	type = rt
+	path			= <data_path/>/rt_a1
+	rt_mem_limit = 128k
+	
+	rt_field		= title
+	rt_attr_uint	= gid
+	dict = keywords
+}
+
+index rt_a2
+{
+	type = rt
+	path			= <data_path/>/rt_a2
+	rt_mem_limit = 128k
+	
+	rt_field		= title
+	rt_attr_uint	= gid
+	dict = keywords
+}
+
+index dist4
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:rt_a1
+	agent = 127.0.0.1:<my_port />:rt_a2
+}
+
 </config>
 
 <db_create>
@@ -104,6 +134,16 @@ CALL KEYWORDS ( '*qu* test', 'dist3', 1 AS stats, 0 AS fold_wildcards );
 CALL KEYWORDS ( '*qu* te*', 'dist1', 1 AS stats, 1 AS fold_wildcards );
 CALL KEYWORDS ( '*qu* te*', 'dist2', 1 AS stats, 1 AS fold_wildcards );
 CALL KEYWORDS ( '*qu* te*', 'dist3', 1 AS stats, 1 AS fold_wildcards );
+
+<!-- regression wrong stats from duplicates -->
+insert into rt_a1 values ( 1,'abc', 11 ),  ( 2,'abc', 11 );
+insert into rt_a2 values ( 1,'abc', 11 ),  ( 2,'abc', 11 ), ( 3,'abc', 11 );
+flush ramchunk rt_a1;
+flush ramchunk rt_a2;
+
+call keywords ( 'abc abc', 'rt_a1', 1 as stats );
+call keywords ( 'abc abc', 'dist4', 1 as stats );
+
 </sphinxql></queries>
 
 </test>

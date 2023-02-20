@@ -540,7 +540,6 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen );
 #if _WIN32
 void		CheckWinInstall();
 CSphString	GetWinInstallDir();
-CSphString	AppendWinInstallDir ( const CSphString & sDir );
 #endif
 
 #endif // _sphinxutils_

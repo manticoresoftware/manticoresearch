@@ -33,7 +33,8 @@ T Min ( T a, T b )
 template<typename T, typename U>
 typename std::common_type<T, U>::type Min ( T a, U b )
 {
-	return a < b ? a : b;
+	using common_type = typename std::common_type<T, U>::type;
+	return static_cast<common_type>(a) < static_cast<common_type>(b) ? a : b;
 }
 template<typename T>
 T Max ( T a, T b )
@@ -43,7 +44,8 @@ T Max ( T a, T b )
 template<typename T, typename U>
 typename std::common_type<T, U>::type Max ( T a, U b )
 {
-	return a < b ? b : a;
+	using common_type = typename std::common_type<T, U>::type;
+	return static_cast<common_type>(a) < static_cast<common_type>(b) ? b : a;
 }
 #define SafeDelete( _x )		do { if ( _x ) { delete ( _x ); ( _x ) = nullptr; } } while ( 0 )
 #define SafeDeleteArray( _x )	do { if ( _x ) { delete[] ( _x ); ( _x ) = nullptr; } } while ( 0 )

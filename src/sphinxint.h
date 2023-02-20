@@ -113,7 +113,8 @@ enum ExtraData_e
 	EXTRA_SET_RANKER_PLUGIN_OPTS,
 
 	EXTRA_GET_POOL_SIZE,
-	EXTRA_SET_BOUNDARIES
+	EXTRA_SET_BOUNDARIES,
+	EXTRA_SET_ITERATOR
 };
 
 /// generic COM-like interface
@@ -836,8 +837,8 @@ inline CSphString SqlUnescape ( const char* sEscaped, int iLen )
 // DISK INDEX INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
-void RemoveDictSpecials ( CSphString & sWord );
-const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );
+void RemoveDictSpecials ( CSphString & sWord, bool bBigram );
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf, bool bBigram );
 
 
 DWORD sphParseMorphAot ( const char * );

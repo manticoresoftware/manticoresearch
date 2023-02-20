@@ -44,3 +44,15 @@ struct CSphPlainQueryFilter : public ISphQueryFilter
 
 	void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) override;
 };
+
+struct KeywordSorter_fn
+{
+	bool IsLess ( const CSphKeywordInfo & a, const CSphKeywordInfo & b ) const
+	{
+		return ( ( a.m_iQpos<b.m_iQpos )
+			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits>b.m_iHits )
+			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits==b.m_iHits && a.m_sNormalized<b.m_sNormalized ) );
+	}
+};
+
+void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc );

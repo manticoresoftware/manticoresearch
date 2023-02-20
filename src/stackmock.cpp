@@ -12,6 +12,7 @@
 
 #include "stackmock.h"
 #include "sphinxexpr.h"
+#include "coro_stack.h"
 #include "coroutine.h"
 #include "searchdsql.h"
 #include "attribute.h"
@@ -25,7 +26,7 @@
 class StackMeasurer_c
 {
 protected:
-	CSphFixedVector<BYTE> m_dMockStack { (int) Threads::GetDefaultCoroStackSize () };
+	CSphFixedVector<BYTE> m_dMockStack { (int) Threads::DEFAULT_CORO_STACK_SIZE };
 	int m_iComplexity;
 
 protected:
@@ -318,7 +319,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ( const char* szReport, co
 	int iSize = COMPILEDVAL;
 	int iNewSize = 0;
 	bool bMocked = false;
-	if ( !( COMPILEDVAL && Threads::IsUnderValgrind() ) )
+	if ( !COMPILEDVAL || Threads::StackMockingAllowed() )
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_" << szEnv;
@@ -331,17 +332,17 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ( const char* szReport, co
 
 #ifdef NDEBUG
 			if ( COMPILEDVAL && COMPILEDVAL < iNewSize )
-				sphWarning ( "Compiled-in value %s (%d) is less than measured (%d). Consider to fix the value!", szEnv, COMPILEDVAL, iNewSize );
+				sphWarning ( "Compiled-in value %s (%d) is less than measured (%d). Please, tell us about it!", szEnv, COMPILEDVAL, iNewSize );
 #endif
 		}
 		iSize = iNewSize;
 		if ( bMocked )
-			sphLogDebug ( "%s is %d. Consider to add env MANTICORE_%s=%d to store this value persistent for this binary", szReport, iSize, szEnv, iNewSize );
+			sphInfo ( "%s is %d. Consider to add env MANTICORE_%s=%d to store this value persistent for this binary", szReport, iSize, szEnv, iNewSize );
 		else
-			sphLogDebug ( "%s %d (from env MANTICORE_%s)", szReport, iSize, szEnv );
+			sphInfo ( "%s %d (from env MANTICORE_%s)", szReport, iSize, szEnv );
 	} else
 	{
-		sphLogDebug ( "%s is %d (compiled-in)", szReport, iSize );
+		sphInfo ( "%s is %d (compiled-in)", szReport, iSize );
 	}
 
 	MOCK::PublishValue ( iSize );

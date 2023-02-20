@@ -150,7 +150,7 @@ static const wsrep_uuid_t WSREP_UUID_UNDEFINED = {{0,}};
 /*! UUID string representation length, terminating '\0' not included */
 #define WSREP_UUID_STR_LEN 36
 
-static int wsrep_uuid_scan ( const char* str, size_t str_len, wsrep_uuid_t* uuid ) { return WSREP_NOT_IMPLEMENTED; }
+[[maybe_unused]] static int wsrep_uuid_scan ( const char* str, size_t str_len, wsrep_uuid_t* uuid ) { return WSREP_NOT_IMPLEMENTED; }
 static int wsrep_uuid_print ( const wsrep_uuid_t* uuid, char* str, size_t str_len ) { return WSREP_NOT_IMPLEMENTED; }
 
 #define WSREP_MEMBER_NAME_LEN 32  //!< maximum logical member name length

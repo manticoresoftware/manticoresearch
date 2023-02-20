@@ -19,3 +19,14 @@ int CSphStrHashFunc::Hash ( const CSphString& sKey )
 {
 	return sKey.IsEmpty() ? 0 : sphCRC32 ( sKey.cstr() );
 }
+
+namespace sph
+{
+
+StringSet::StringSet ( std::initializer_list<const char *> dVals )
+{
+	for ( const char * sVal : dVals )
+		Add ( sVal );
+}
+
+}

@@ -387,6 +387,14 @@ You can do `columnar_attrs = *` to store fields of all supported data types in t
 
 `id` is also supported.
 
+#### columnar_strings_no_hash
+
+```ini
+columnar_strings_no_hash = attr1, attr2, attr3
+```
+
+By default, all string attributes stored in columnar storage store pre-calculated hashes. These hashes are used for grouping and filtering. However, they occupy extra space, and if you don't need to group by that attribute, you can save space by disabling hash generation.
+
 ### Creating a real-time table online via CREATE TABLE
 
 <!-- example rt_mode -->

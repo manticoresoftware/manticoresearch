@@ -63,6 +63,29 @@ Fail1:
 Ok:
 FunctionEnd
 
+Function createConfig
+  StrCpy $R0 "$INSTDIR\etc\manticoresearch\manticore.conf"
+  FileOpen $0 $R0 w
+  FileWrite $0 "searchd$\n"
+  FileWrite $0 "{$\n"
+  FileWrite $0 "    listen = 127.0.0.1:9312$\n"
+  FileWrite $0 "    listen = 127.0.0.1:9306:mysql$\n"
+  FileWrite $0 "    listen = 127.0.0.1:9308:http$\n"
+  FileWrite $0 "    log = $INSTDIR/var/log/manticore/searchd.log$\n"
+  FileWrite $0 "    query_log = $INSTDIR/var/log/manticore/query.log$\n"
+  FileWrite $0 "    pid_file = $INSTDIR/var/run/manticore/searchd.pid$\n"
+  FileWrite $0 "    data_dir = $INSTDIR/var/data$\n"
+  FileWrite $0 "    query_log_format = sphinxql$\n"
+  FileWrite $0 "}$\n"
+  IfErrors Fail1
+  Goto Ok
+
+Fail1:
+  MessageBox MB_OK "Error! Unable to write to $R0!"
+  Abort
+  
+Ok:
+FunctionEnd
 
 Section "Manticore Search"
   SectionIn RO
@@ -76,6 +99,8 @@ Section "Manticore Search"
   CreateDirectory "$INSTDIR\var\data"
   CreateDirectory "$INSTDIR\var\log\manticore"
   CreateDirectory "$INSTDIR\var\run\manticore"
+
+  Call createConfig
   
   ; Write the installation path into the registry
   WriteRegStr HKLM "SOFTWARE\Manticore Software LTD" "manticore" "$INSTDIR"

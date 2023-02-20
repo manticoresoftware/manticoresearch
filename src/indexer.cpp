@@ -1582,10 +1582,6 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 
 	CSphString sPidFile = hSearchd["pid_file"].cstr();
 
-#if _WIN32
-	sPidFile = AppendWinInstallDir(sPidFile);
-#endif
-
 	// read in PID
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )

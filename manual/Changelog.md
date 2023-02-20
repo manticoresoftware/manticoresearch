@@ -11,6 +11,7 @@ Released: soon
 * [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) fixed bulk processing at HTTP for document with id explicitly set to null
 * [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) fixed term statistics at CALL KEYWORDS for multiple same terms
 * [Commit 0fde](https://github.com/manticoresoftware/manticoresearch/commit/0fde0b5) fixed memory leak at daemon on reading output of the buddy console
+* [Commit 6cdc](https://github.com/manticoresoftware/manticoresearch/commit/394c6cdc) Default config is now created by windows installer; paths are no longer substituted in runtime.
 
 
 # Version 6.0.2
@@ -86,7 +87,6 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Commit bef3](https://github.com/manticoresoftware/lemmatizer-uk/commit/bef3ff0386d3ee87ec57619782100972c1122e47) Ukirainian lemmatizer path has been changed.
 * [Commit 4ae7](https://github.com/manticoresoftware/manticoresearch/commit/4ae789595329a2951e194d1191ddb3121459a560) Secondary indexes statistics has been added to [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META).
 * [Commit 2e7c](https://github.com/manticoresoftware/manticoresearch/commit/2e7c585e) JSON interface can now be easily visualized using Swagger Editor https://manual.manticoresearch.com/dev/Openapi#OpenAPI-specification.
-* [Commit 6cdc](https://github.com/manticoresoftware/manticoresearch/commit/394c6cdc) Default config is now created by windows installer; paths are no longer substituted in runtime.
 
 ### Changes related with Manticore Columnar Library
 * Refactoring of Secondary indexes integration with Columnar storage.

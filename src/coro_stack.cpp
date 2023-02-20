@@ -20,7 +20,7 @@
 
 namespace Threads {
 
-static StackFlavour_E g_eStackFlavour = val_from_env ( "MANTICORE_GUARDED_STACK", true ) ? StackFlavour_E::protected_fixedsize : StackFlavour_E::fixedsize;
+static StackFlavour_E g_eStackFlavour = val_from_env ( "MANTICORE_GUARDED_STACK", false ) ? StackFlavour_E::protected_fixedsize : StackFlavour_E::fixedsize;
 
 inline size_t AlignStackSize ( size_t iSize )
 {

@@ -1,5 +1,18 @@
 # Changelog
 
+# Version 6.0.4
+
+Released: soon
+
+### Bugfixes
+* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588) [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) fixed bad character at the search meta and call keywords for bigram index
+* [Commit 5bd9](https://github.com/manticoresoftware/manticoresearch/commit/5bd9de1) fixed query with wildcard characters create separate search term
+* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) fixed reject of HTTP reqests with lowercase field names headers 
+* [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) fixed bulk processing at HTTP for document with id explicitly set to null
+* [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) fixed term statistics at CALL KEYWORDS for multiple same terms
+* [Commit 0fde](https://github.com/manticoresoftware/manticoresearch/commit/0fde0b5) fixed memory leak at daemon on reading output of the buddy console
+
+
 # Version 6.0.2
 Released: Feb 10 2023
 

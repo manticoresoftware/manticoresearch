@@ -19245,7 +19245,8 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 #else
 			g_bLogSyslog = true;
 #endif
-		}
+		} else
+			sLog = hSearchd["log"].cstr();
 	}
 
 	umask ( 066 );

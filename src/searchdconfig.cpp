@@ -135,7 +135,7 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 		sNewValue << sNew;
 	}
 
-	return sNewValue.cstr();
+	return RealPath ( sNewValue.cstr() );
 }
 
 

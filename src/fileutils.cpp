@@ -842,7 +842,18 @@ CSphString RealPath ( const CSphString& sPath )
 #if _WIN32
 	char szFullPath[_MAX_PATH];
 	if ( _fullpath( szFullPath, sPath.cstr(), _MAX_PATH ) )
+	{
+		char * pStart = szFullPath;
+		while ( *pStart )
+		{
+			if ( *pStart=='\\' )
+				*pStart = '/';
+
+			pStart++;
+		}
+
 		return szFullPath;
+	}
 #else
 	char szPath[PATH_MAX];
 	auto szResult = realpath ( sPath.cstr(), szPath );

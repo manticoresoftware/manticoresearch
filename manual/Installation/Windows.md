@@ -3,7 +3,7 @@
 1. Download the [Manticore Search Installer](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-6.0.0-230206-8de9df201-x64.exe) and run it. Follow the installation instructions.
 2. Choose the directory to install to.
 3. Select the components you want to install. We recommend installing all of them.
-4. Manticore comes with a preconfigured `manticore.conf` file in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode). No additional configuration is required. However, the configuration file has several hardcoded paths, such as `log = C:/manticore/var/log/manticore/searchd.log`, that point to folders inside `C:\manticore`. If you install Manticore to a different folder, Manticore will automatically correct these paths on startup, so there's no need to modify them manually.
+4. Manticore comes with a preconfigured `manticore.conf` file in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode). No additional configuration is required.
 
 ## Installing as a Windows service
 

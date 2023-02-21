@@ -1066,7 +1066,10 @@ static bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sErro
 
 	// set incoming address
 	if ( g_bHasIncoming )
+	{
 		sOptions.Appendf ( "ist.recv_addr=%s", g_sIncomingIP.cstr() );
+		sOptions.Appendf ( "ist.recv_bind=0.0.0.0" );
+	}
 
 	// change default cache size 
 	if ( !tArgs.m_pCluster->m_tOptions.m_hOptions.Exists ( "gcache.size" ) )
@@ -2511,7 +2514,10 @@ static void SetListener ( const VecTraits_T<ListenerDesc_t> & dListeners )
 			else
 				g_sListenReplicationIP = "127.0.0.1";
 
-			sphWarning ( "can not set '0.0.0.0' as Galera IP, '%s' used", g_sListenReplicationIP.cstr() );
+			if ( g_sIncomingIP.IsEmpty() )
+				sphWarning ( "can not set '0.0.0.0' as Galera IP, '%s' used", g_sListenReplicationIP.cstr() );
+			else
+				sphLogDebugRpl ( "set '%s' as Galera IP", g_sListenReplicationIP.cstr() );
 		}
 
 		bGotReplicationPorts = true;

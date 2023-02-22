@@ -207,6 +207,7 @@ struct ListenerDesc_t
 {
 	Proto_e m_eProto = Proto_e::UNKNOWN;
 	CSphString m_sUnix;
+	CSphString m_sAddr;
 	DWORD m_uIP = 0;
 	int m_iPort = 0;
 	int m_iPortsCount = 0;

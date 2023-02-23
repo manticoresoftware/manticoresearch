@@ -12,6 +12,7 @@
 
 #include "searchdtask.h"
 #include "netreceive_ql.h"
+#include "client_session.h"
 
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/read_until.hpp>
@@ -411,6 +412,8 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 		tBuddyQuery.NamedString ( "type", bHttp ? "unknown json request" : "unknown sql request" );
 		tBuddyQuery.NamedString ( "error", sQueryError );
 		tBuddyQuery.NamedVal ( "version", g_iBuddyVersion );
+		if ( !bHttp )
+			tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
 
 		{
 			tBuddyQuery.Named ( "message" );

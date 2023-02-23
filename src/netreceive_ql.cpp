@@ -1061,8 +1061,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
-			if ( tResponse.GetUsername() == "mysqldump" )
-				session::SetDumpUser();
+			session::SetDumpUser ( tResponse.GetUsername() );
 			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
 			tSess.SetPersistent ( tOut.Flush () );
 			bAuthed = true;

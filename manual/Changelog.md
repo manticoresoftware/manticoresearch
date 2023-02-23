@@ -5,13 +5,13 @@
 Released: soon
 
 ### Bugfixes
-* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588) [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) fixed bad character at the search meta and call keywords for bigram index
-* [Commit 5bd9](https://github.com/manticoresoftware/manticoresearch/commit/5bd9de1) fixed query with wildcard characters create separate search term
-* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) fixed reject of HTTP reqests with lowercase field names headers 
-* [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) fixed bulk processing at HTTP for document with id explicitly set to null
-* [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) fixed term statistics at CALL KEYWORDS for multiple same terms
-* [Commit 0fde](https://github.com/manticoresoftware/manticoresearch/commit/0fde0b5) fixed memory leak at daemon on reading output of the buddy console
-* [Commit 6cdc](https://github.com/manticoresoftware/manticoresearch/commit/394c6cdc) Default config is now created by windows installer; paths are no longer substituted in runtime.
+* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588), [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) fixed bad character at the search meta and call keywords for bigram index
+* [Issue #1056](https://github.com/manticoresoftware/manticoresearch/issues/1056) Question mark unexpected behavior
+* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) Lowercase HTTP headers are rejected  
+* [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) Fixed bulk writes processing in the JSON interface for documents with id explicitly set to null
+* [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) Fixed term statistics in CALL KEYWORDS for multiple same terms
+* [Commit 0fde](https://github.com/manticoresoftware/manticoresearch/commit/0fde0b5) Fixed memory leak at daemon on reading output of the Buddy console
+* [Commit f381](https://github.com/manticoresoftware/manticoresearch/commit/f381ad2) Default config is now created by Windows installer; paths are no longer substituted in runtime.
 
 
 # Version 6.0.2

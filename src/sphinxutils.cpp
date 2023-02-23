@@ -115,7 +115,8 @@ void sphSplit ( StrVec_t & dOut, const char * sIn )
 	}
 }
 
-void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
+template<bool BOUNDS>
+void SplitApply_T ( const char * sIn, int iSize, const char * sBounds, StrFunctor && dFunc )
 {
 	if ( !sIn )
 		return;
@@ -129,19 +130,45 @@ void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
 	while ( p < pEnd )
 	{
 		// skip non-alphas
-		while ( ( p<pEnd ) && !sphIsAlpha ( *p ) )
-			p++;
+		if constexpr ( BOUNDS )
+		{
+			while ( ( p<pEnd ) && strchr ( sBounds, *p )!=nullptr )
+				p++;
+		} else
+		{
+			while ( ( p<pEnd ) && !sphIsAlpha ( *p ) )
+				p++;
+		}
+
 		if ( p>=pEnd )
 			break;
 
 		// this is my next token
-		assert ( sphIsAlpha ( *p ) );
+		assert ( sphIsAlpha ( *p ) || ( sBounds && strchr ( sBounds, *p )==nullptr ) );
 		const char * sNext = p;
-		while ( ( p<pEnd ) && sphIsAlpha ( *p ) )
-			++p;
+		if constexpr ( BOUNDS )
+		{
+			while ( ( p<pEnd ) && strchr ( sBounds, *p )==nullptr )
+				++p;
+		} else
+		{
+			while ( ( p<pEnd ) && sphIsAlpha ( *p ) )
+				++p;
+		}
+
 		if ( sNext!=p )
 			dFunc ( sNext, int ( p - sNext ) );
 	}
+}
+
+void sphSplitApply ( const char * sIn, int iSize, StrFunctor && dFunc )
+{
+	SplitApply_T<false> ( sIn, iSize, nullptr, std::move( dFunc ) );
+}
+
+void sphSplitApply ( const char * sIn, int iSize, const char * sBounds, StrFunctor && dFunc )
+{
+	SplitApply_T<true> ( sIn, iSize, sBounds, std::move ( dFunc ) );
 }
 
 

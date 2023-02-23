@@ -2857,7 +2857,7 @@ void HttpHandlerEsBulk_c::ReportLogError ( const char * sError, const char * sEr
 	}
 
 	const CSphString * pUrl = GetOptions() ( "full_url" );
-	sphWarning ( "%s\n%s\n%s", sError, ( pUrl ? pUrl->scstr() : "" ), GetBody().first );
+	HTTPINFO << sError << "\n" << ( pUrl ? pUrl->scstr() : "" ) << "\n" << GetBody().first;
 }
 
 bool HttpHandlerEsBulk_c::Validate()
@@ -2970,8 +2970,7 @@ bool HttpHandlerEsBulk_c::Process()
 	if ( !bOk )
 		ReportLogError ( "failed to commit", "", SPH_HTTP_STATUS_400, true );
 
-	return true;
-
+	return bOk;
 }
 
 static const JsonObj_c g_tShards ( "{ \"total\": 1, \"successful\": 1, \"failed\": 0 }" );

@@ -207,6 +207,7 @@ struct ListenerDesc_t
 {
 	Proto_e m_eProto = Proto_e::UNKNOWN;
 	CSphString m_sUnix;
+	CSphString m_sAddr;
 	DWORD m_uIP = 0;
 	int m_iPort = 0;
 	int m_iPortsCount = 0;
@@ -1411,7 +1412,7 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
-	void SetDumpUser();
+	void SetDumpUser ( const CSphString & sUser );
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

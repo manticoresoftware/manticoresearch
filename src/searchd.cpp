@@ -16724,9 +16724,11 @@ void session::SetFederatedUser ()
 	GetClientSession()->m_bFederatedUser = true;
 }
 
-void session::SetDumpUser ()
+void session::SetDumpUser ( const CSphString & sUser )
 {
-	GetClientSession()->m_bDumpUser = true;
+	ClientSession_c * pSession = GetClientSession();
+	pSession->m_sUser = sUser;
+	pSession->m_bDumpUser = ( sUser=="mysqldump" );
 }
 
 void session::SetAutoCommit ( bool bAutoCommit )

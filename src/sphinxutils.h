@@ -149,6 +149,7 @@ StrVec_t sphSplit ( const char * sIn, int iLen, const char * sBounds );
 /// perform sphSplit by whitespaces, but applies a functor instead of add a chunk to the vector
 using StrFunctor = std::function<void ( const char*, int )>;
 void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
+void sphSplitApply ( const char * sIn, int iSize, const char * sBounds, StrFunctor && dFunc );
 
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );

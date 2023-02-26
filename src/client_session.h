@@ -30,6 +30,7 @@ public:
 	bool m_bFederatedUser = false;
 	bool m_bDumpUser = false;
 	CSphString m_sFederatedQuery;
+	CSphString m_sUser;
 
 public:
 	bool m_bAutoCommit = true;

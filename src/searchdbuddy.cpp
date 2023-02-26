@@ -12,6 +12,7 @@
 
 #include "searchdtask.h"
 #include "netreceive_ql.h"
+#include "client_session.h"
 
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/read_until.hpp>
@@ -30,8 +31,10 @@ static int g_iBuddyVersion = 1;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
+static const int g_iPipeBufSize = 2048;
 static std::unique_ptr<boost::asio::io_service> g_pIOS;
-static std::vector<char> g_dPipeBuf ( 960 ); // should be less than log buffer size to prevent message clip
+static std::vector<char> g_dPipeBuf ( g_iPipeBufSize );
+static CSphVector<char> g_dLogBuf;
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
 enum class BuddyState_e
 {
@@ -129,21 +132,62 @@ static std::pair<Str_t, Str_t> GetLines ( Str_t tSrc )
 	return tLines;
 }
 
-static Str_t TrimRight ( Str_t tSrc )
+static void AddTail ( Str_t tLine )
 {
-	char * sStart = const_cast<char *>( tSrc.first );
-	if ( !tSrc.second )
+	char * pDst = g_dLogBuf.AddN ( tLine.second );
+	memcpy ( pDst, tLine.first, tLine.second );
+}
+
+static bool HasLineEnd ( Str_t tBuf, Str_t tLine )
+{
+	const char * sEnd = tBuf.first + tBuf.second;
+	return ( ( tLine.first + tLine.second )<sEnd );
+}
+
+static void LogPipe ( Str_t tSrc )
+{
+	CSphVector<Str_t> dLines;
+	sphSplitApply ( tSrc.first, tSrc.second, "\n\r", [&dLines] ( const char * pLine, int iLen ) { dLines.Add ( Str_t { pLine, iLen } ); } );
+
+	if ( !dLines.GetLength() )
+		return;
+
+	// whole pipe buffer without line end - collect into line buffer
+	Str_t tLine0 = dLines[0];
+	if ( !HasLineEnd ( tSrc, tLine0 ) )
 	{
-		sStart[tSrc.second] = '\0';
-		return tSrc;
+		AddTail ( tLine0 );
+		return;
 	}
 
-	const char * sEnd = sStart + tSrc.second - 1;
-	while ( sStart<=sEnd && isspace ( (unsigned char)*sEnd ) )
-		sEnd--;
+	// join pipe buffer with line buffer collected so far
+	if ( g_dLogBuf.GetLength() )
+	{
+		sphInfo ( "[BUDDY] %.*s%.*s", g_dLogBuf.GetLength(), g_dLogBuf.Begin(), tLine0.second, tLine0.first );
+		g_dLogBuf.Resize ( 0 );
+	} else
+	{
+		sphInfo ( "[BUDDY] %.*s", tLine0.second, tLine0.first );
+	}
 
-	int iLen = sEnd - sStart + 1;
-	return Str_t ( tSrc.first, iLen );
+	if ( dLines.GetLength()==1 )
+		return;
+
+	for ( int i=1; i<dLines.GetLength()-1; i++ )
+	{
+		Str_t tLine = dLines[i];
+		sphInfo ( "[BUDDY] %.*s", tLine.second, tLine.first );
+	}
+
+	Str_t tLineLast = dLines.Last();
+	// last line could be without line end - collect into line buffer
+	if ( HasLineEnd ( tSrc, tLineLast ) )
+	{
+		sphInfo ( "[BUDDY] %.*s", tLineLast.second, tLineLast.first );
+	} else
+	{
+		AddTail ( tLineLast );
+	}
 }
 
 static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size_t iSize )
@@ -159,8 +203,7 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	// regular work log all lines from the buddy output
 	if ( g_eBuddy!=BuddyState_e::STARTING )
 	{
-		Str_t sLine = TrimRight ( sLineRef );
-		sphInfo ( "[BUDDY] %.*s", sLine.second, sLine.first ); // FIXME!!! add split line by line
+		LogPipe ( sLineRef );
 		return;
 	}
 
@@ -356,6 +399,7 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 		return;
 	}
 
+	g_dLogBuf.Reserve ( g_iPipeBufSize );
 	g_sPath = sPath;
 
 	g_sStartArgs.SetSprintf ( "%s --listen=%s %s --threads=%d",
@@ -411,6 +455,8 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 		tBuddyQuery.NamedString ( "type", bHttp ? "unknown json request" : "unknown sql request" );
 		tBuddyQuery.NamedString ( "error", sQueryError );
 		tBuddyQuery.NamedVal ( "version", g_iBuddyVersion );
+		if ( !bHttp )
+			tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
 
 		{
 			tBuddyQuery.Named ( "message" );

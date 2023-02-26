@@ -5,9 +5,17 @@
 Released: soon
 
 ### Bugfixes
-* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588) [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) fixed bad character at the search meta and call keywords for bigram index
-* [Commit 5bd9](https://github.com/manticoresoftware/manticoresearch/commit/5bd9de1) fixed query with wildcard characters create separate search term
-* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) fixed reject of HTTP reqests with lowercase field names headers 
+* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588), [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) fixed bad character at the search meta and call keywords for bigram index
+* [Issue #1056](https://github.com/manticoresoftware/manticoresearch/issues/1056) Question mark unexpected behavior
+* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) Lowercase HTTP headers are rejected  
+* [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) Fixed bulk writes processing in the JSON interface for documents with id explicitly set to null
+* [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) Fixed term statistics in CALL KEYWORDS for multiple same terms
+* [Issue #1039](https://github.com/manticoresoftware/manticoresearch/issues/1039) Fixed memory leak at daemon on reading output of the Buddy console
+* [Commit f381](https://github.com/manticoresoftware/manticoresearch/commit/f381ad2) Default config is now created by Windows installer; paths are no longer substituted in runtime.
+* [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95) [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks
+* [Commit 20d2](https://github.com/manticoresoftware/manticoresearch/commit/20d246c) Fixed compat mode bulk request to pass into buddy on error
+* [Commit aa0c](https://github.com/manticoresoftware/manticoresearch/commit/aa0cdfb) Fixed daemon to log messages from buddy console into daemon log line by line
+
 
 # Version 6.0.2
 Released: Feb 10 2023

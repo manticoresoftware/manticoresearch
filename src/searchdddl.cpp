@@ -185,7 +185,7 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & 
 
 bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType )
 {
-	return SetupAlterTable ( tIndex, tAttr, (ESphAttr)tType.m_iValue, tType.m_iType );
+	return SetupAlterTable ( tIndex, tAttr, (ESphAttr)tType.GetValueInt(), tType.m_iType );
 }
 
 
@@ -197,7 +197,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	ToString ( sName, tName );
 	sName.ToLower ();
 
-	auto eAttrType = (ESphAttr) tCol.m_iValue;
+	auto eAttrType = (ESphAttr) tCol.GetValueInt();
 	auto iType = tCol.m_iType;
 
 	ItemOptions_t tOpts = m_tItemOptions;
@@ -343,7 +343,7 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 {
 	SqlInsert_t & tIns = dVec.Add();
 	tIns.m_iType = tNode.m_iType;
-	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
+	tIns.CopyValueInt(tNode);
 	tIns.m_fVal = tNode.m_fValue;
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );

@@ -350,12 +350,12 @@ chunk_key:
 	TOK_DOT_NUMBER
 		{
 			pParser->AddDotIntSubkey ($1);
-			pParser->m_pStmt->m_iIntParam = $1.m_iValue;
+			pParser->m_pStmt->m_iIntParam = $1.GetValueInt();
 		}
 	| TOK_CHUNK TOK_CONST_INT
 		{
 			pParser->AddIntSubkey ($2);
-			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
+			pParser->m_pStmt->m_iIntParam = $2.GetValueInt();
 		}
 	;
 
@@ -567,19 +567,19 @@ opt_outer_limit:
 	// nothing
 	| TOK_LIMIT TOK_CONST_INT
 		{
-			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;
+			pParser->m_pQuery->m_iOuterLimit = $2.GetValueInt();
 			pParser->m_pQuery->m_bHasOuter = true;
 		}
 	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
 		{
-			pParser->m_pQuery->m_iOuterOffset = $2.m_iValue;
-			pParser->m_pQuery->m_iOuterLimit = $4.m_iValue;
+			pParser->m_pQuery->m_iOuterOffset = $2.GetValueInt();
+			pParser->m_pQuery->m_iOuterLimit = $4.GetValueInt();
 			pParser->m_pQuery->m_bHasOuter = true;
 		}
 	| TOK_LIMIT TOK_CONST_INT TOK_OFFSET TOK_CONST_INT
 		{
-			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;
-			pParser->m_pQuery->m_iOuterOffset = $4.m_iValue;
+			pParser->m_pQuery->m_iOuterLimit = $2.GetValueInt();
+			pParser->m_pQuery->m_iOuterOffset = $4.GetValueInt();
 			pParser->m_pQuery->m_bHasOuter = true;
 		}
 	;
@@ -669,14 +669,14 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues.Add ( $3.m_iValue );
+			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
 	| expr_ident TOK_NE bool_or_integer_value
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues.Add ( $3.m_iValue );
+			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
 		}
 	| expr_ident TOK_IN '(' const_list ')'
@@ -738,32 +738,32 @@ filter_item:
 		}
 	| expr_ident TOK_BETWEEN const_int TOK_AND const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1, $3.m_iValue, $5.m_iValue, false ) )
+			if ( !pParser->AddIntRangeFilter ( $1, $3.GetValueInt(), $5.GetValueInt(), false ) )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_BETWEEN const_int TOK_AND const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1, $4.m_iValue, $6.m_iValue, true ) )
+			if ( !pParser->AddIntRangeFilter ( $1, $4.GetValueInt(), $6.GetValueInt(), true ) )
 				YYERROR;
 		}
 	| expr_ident '>' const_int
 		{
-			if ( !pParser->AddIntFilterGreater ( $1, $3.m_iValue, false ) )
+			if ( !pParser->AddIntFilterGreater ( $1, $3.GetValueInt(), false ) )
 				YYERROR;
 		}
 	| expr_ident '<' const_int
 		{
-			if ( !pParser->AddIntFilterLesser ( $1, $3.m_iValue, false ) )
+			if ( !pParser->AddIntFilterLesser ( $1, $3.GetValueInt(), false ) )
 				YYERROR;
 		}
 	| expr_ident TOK_GTE const_int
 		{
-			if ( !pParser->AddIntFilterGreater ( $1, $3.m_iValue, true ) )
+			if ( !pParser->AddIntFilterGreater ( $1, $3.GetValueInt(), true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_LTE const_int
 		{
-			if ( !pParser->AddIntFilterLesser ( $1, $3.m_iValue, true ) )
+			if ( !pParser->AddIntFilterLesser ( $1, $3.GetValueInt(), true ) )
 				YYERROR;
 		}
 	| expr_ident '=' const_float
@@ -783,12 +783,12 @@ filter_item:
 		}
 	| expr_ident TOK_BETWEEN const_int TOK_AND const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_iValue, $5.m_fValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( $1, $3.GetValueInt(), $5.m_fValue, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_BETWEEN const_float TOK_AND const_int
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_fValue, $5.m_iValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_fValue, $5.GetValueInt(), true ) )
 				YYERROR;
 		}
 	| expr_ident '>' const_float
@@ -836,14 +836,14 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues.Add ( $3.m_iValue );
+			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
 	| const_int TOK_NE const_int
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues.Add ( $3.m_iValue );
+			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
 		}
 
@@ -852,7 +852,7 @@ filter_item:
 		{
 			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
-			f->m_dValues.Add ( $3.m_iValue );
+			f->m_dValues.Add ( $3.GetValueInt() );
 		}
 	| mva_aggr TOK_NE const_int
 		{
@@ -862,8 +862,8 @@ filter_item:
 			// thus, along with setting the exclude flag on, we also need to invert the function
 			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ANY : SPH_MVAFUNC_ALL;
-			f->m_bExclude = true;
-			f->m_dValues.Add ( $3.m_iValue );
+			f->m_bExclude = true;         
+			f->m_dValues.Add ( $3.GetValueInt() );
 		}
 	| mva_aggr TOK_IN '(' const_list ')'
 		{
@@ -883,7 +883,7 @@ filter_item:
 		}
 	| mva_aggr TOK_BETWEEN const_int TOK_AND const_int
 		{
-			AddMvaRange ( pParser, $1, $3.m_iValue, $5.m_iValue );
+			AddMvaRange ( pParser, $1, $3.GetValueInt(), $5.GetValueInt() );
 		}
 	| mva_aggr TOK_NOT TOK_BETWEEN const_int TOK_AND const_int
 		{
@@ -891,24 +891,24 @@ filter_item:
 			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_RANGE );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ANY : SPH_MVAFUNC_ALL;
 			f->m_bExclude = true;
-			f->m_iMinValue = $4.m_iValue;
-			f->m_iMaxValue = $6.m_iValue;
+			f->m_iMinValue = $4.GetValueInt();
+			f->m_iMaxValue = $6.GetValueInt();
 		}
 	| mva_aggr '<' const_int
 		{
-			AddMvaRange ( pParser, $1, INT64_MIN, $3.m_iValue-1 );
+			AddMvaRange ( pParser, $1, INT64_MIN, $3.GetValueInt()-1 );
 		}
 	| mva_aggr '>' const_int
 		{
-			AddMvaRange ( pParser, $1, $3.m_iValue+1, INT64_MAX );
+			AddMvaRange ( pParser, $1, $3.GetValueInt()+1, INT64_MAX );
 		}
 	| mva_aggr TOK_LTE const_int
 		{
-			AddMvaRange ( pParser, $1, INT64_MIN, $3.m_iValue );
+			AddMvaRange ( pParser, $1, INT64_MIN, $3.GetValueInt() );
 		}
 	| mva_aggr TOK_GTE const_int
 		{
-			AddMvaRange ( pParser, $1, $3.m_iValue, INT64_MAX );
+			AddMvaRange ( pParser, $1, $3.GetValueInt(), INT64_MAX );
 		}
 	| TOK_REGEX '(' json_field ',' TOK_QUOTED_STRING ')'
 		{
@@ -960,18 +960,12 @@ const_int:
 	TOK_CONST_INT
 		{
 			$$.m_iType = TOK_CONST_INT;
-			if ( (uint64_t)$1.m_iValue > (uint64_t)LLONG_MAX )
-				$$.m_iValue = LLONG_MAX;
-			else
-				$$.m_iValue = $1.m_iValue;
+			$$.SetValueInt ( $1.GetValueUint(), false );
 		}
 	| '-' TOK_CONST_INT
 		{
 			$$.m_iType = TOK_CONST_INT;
-			if ( (uint64_t)$2.m_iValue > (uint64_t)LLONG_MAX )
-				$$.m_iValue = LLONG_MIN;
-			else
-				$$.m_iValue = -$2.m_iValue;
+			$$.SetValueInt ( $2.GetValueUint(), true );
 		}
 	;
 
@@ -993,11 +987,11 @@ const_list:
 		{
 			assert ( !$$.m_pValues );
 			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
-			$$.m_pValues->Add ( $1.m_iValue ); 
+			$$.m_pValues->Add ( $1.GetValueInt() ); 
 		}
 	| const_list ',' const_int
 		{
-			$$.m_pValues->Add ( $3.m_iValue );
+			$$.m_pValues->Add ( $3.GetValueInt() );
 		}
 	;
 
@@ -1006,11 +1000,11 @@ string_list:
 		{
 			assert ( !$$.m_pValues );
 			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
-			$$.m_pValues->Add ( $1.m_iValue );
+			$$.m_pValues->Add ( $1.GetValueInt() );
 		}
 	| string_list ',' TOK_QUOTED_STRING
 		{
-			$$.m_pValues->Add ( $3.m_iValue );
+			$$.m_pValues->Add ( $3.GetValueInt() );
 		}
 	;
 
@@ -1023,7 +1017,7 @@ opt_int:
 	// empty
 	| TOK_CONST_INT
 		{
-			pParser->SetGroupbyLimit ( $1.m_iValue );
+			pParser->SetGroupbyLimit ( $1.GetValueInt() );
 		}
 	;
 
@@ -1098,15 +1092,15 @@ opt_limit_clause:
 limit_clause:
 	TOK_LIMIT TOK_CONST_INT
 		{
-			pParser->SetLimit ( 0, $2.m_iValue );
+			pParser->SetLimit ( 0, $2.GetValueInt() );
 		}
 	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
 		{
-			pParser->SetLimit ( $2.m_iValue, $4.m_iValue );
+			pParser->SetLimit ( $2.GetValueInt(), $4.GetValueInt() );
 		}
 	| TOK_LIMIT TOK_CONST_INT TOK_OFFSET TOK_CONST_INT
 		{
-			pParser->SetLimit ( $4.m_iValue, $2.m_iValue );
+			pParser->SetLimit ( $4.GetValueInt(), $2.GetValueInt() );
 		}
 	;
 
@@ -1137,9 +1131,9 @@ option_item:
 		}
 	| ident_no_option '=' '(' named_const_list ')'
 		{
-			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4.m_iValue ) ) )
+			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4.GetValueInt() ) ) )
 				YYERROR;
-			pParser->FreeNamedVec ( $4.m_iValue );
+			pParser->FreeNamedVec ( $4.GetValueInt() );
 		}
 	| ident_no_option '=' identcol '(' TOK_QUOTED_STRING ')'
 		{
@@ -1156,12 +1150,12 @@ option_item:
 named_const_list:
 	named_const
 		{
-			$$.m_iValue = pParser->AllocNamedVec ();
-			pParser->AddConst ( $$.m_iValue, $1 );
+			$$.SetValueInt ( pParser->AllocNamedVec() );
+			pParser->AddConst ( $$.GetValueInt(), $1 );
 		}
 	| named_const_list ',' named_const
 		{
-			pParser->AddConst( $$.m_iValue, $3 );
+			pParser->AddConst( $$.GetValueInt(), $3 );
 		}
 	;
 
@@ -1169,7 +1163,7 @@ named_const:
 	identcol '=' const_int
 		{
 			$$ = $1;
-			$$.m_iValue = $3.m_iValue;
+			$$.SetValueInt ( $3.GetValueInt() );
 		}
 	;
 
@@ -1403,7 +1397,7 @@ set_stmt:
 	TOK_SET ident_set '=' bool_or_integer_value
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
-			pParser->m_pStmt->m_iSetValue = $4.m_iValue;
+			pParser->m_pStmt->m_iSetValue = $4.GetValueInt();
 		}
 	| TOK_SET ident_set '=' set_string_value
 		{
@@ -1439,7 +1433,7 @@ set_global_stmt:
 	| TOK_SET TOK_GLOBAL ident_set '=' const_int
 		{
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
-			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
+			pParser->m_pStmt->m_iSetValue = $5.GetValueInt();
 		}
 	| TOK_SET index_or_table identidx TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
 		{
@@ -1459,7 +1453,7 @@ set_global_stmt:
 			pParser->SetStatement ( $5, SET_CLUSTER_UVAR );
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
 			pParser->ToString ( pParser->m_pStmt->m_sSetName, $5 ).Unquote();
-			pParser->m_pStmt->m_sSetValue.SetSprintf ( INT64_FMT, $7.m_iValue );
+			pParser->m_pStmt->m_sSetValue.SetSprintf ( INT64_FMT, $7.GetValueInt() );
 		}
 	;
 
@@ -1469,9 +1463,9 @@ set_string_value:
 	;
 
 bool_or_integer_value:
-	TOK_TRUE			{ $$.m_iValue = 1; }
-	| TOK_FALSE			{ $$.m_iValue = 0; }
-	| const_int			{ $$.m_iValue = $1.m_iValue; }
+	TOK_TRUE			{ $$.SetValueInt(1); }
+	| TOK_FALSE			{ $$.SetValueInt(0); }
+	| const_int			{ $$.SetValueInt ( $1.GetValueInt() ); }
 	;
 
 set_value:
@@ -1541,7 +1535,7 @@ insert_vals_list:
 	;
 
 insert_val:
-	const_int			{ $$.m_iType = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
+	const_int			{ $$.m_iType = TOK_CONST_INT; $$.CopyValueInt ( $1 ); }
 	| const_float			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
 	| '(' const_list ')'		{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
@@ -1678,8 +1672,8 @@ update_item:
 	identcol '=' const_int
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.m_iValue );
-			DWORD uHi = (DWORD)( $3.m_iValue>>32 );
+			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.GetValueInt() );
+			DWORD uHi = (DWORD)( $3.GetValueInt()>>32 );
 			if ( uHi )
 			{
 				pParser->m_pStmt->AttrUpdate().m_dPool.Add ( uHi );
@@ -1707,8 +1701,8 @@ update_item:
 	| json_expr '=' const_int // duplicate ident code (avoiding s/r conflict)
 		{
 			// it is performance-critical to forcibly inline this
-			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.m_iValue );
-			DWORD uHi = (DWORD)( $3.m_iValue>>32 );
+			pParser->m_pStmt->AttrUpdate().m_dPool.Add ( (DWORD)$3.GetValueInt() );
+			DWORD uHi = (DWORD)( $3.GetValueInt()>>32 );
 			if ( uHi )
 			{
 				pParser->m_pStmt->AttrUpdate().m_dPool.Add ( uHi );
@@ -2075,7 +2069,7 @@ kill_connid:
 	TOK_KILL opt_word_query TOK_CONST_INT
 		{
 			pParser->m_pStmt->m_eStmt = STMT_KILL;
-			pParser->m_pStmt->m_iIntParam = $3.m_iValue;
+			pParser->m_pStmt->m_iIntParam = $3.GetValueInt();
 		}
     ;
 

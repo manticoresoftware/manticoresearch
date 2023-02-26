@@ -46,6 +46,7 @@ extern "C"
 #define cJSON_Object  (7)
 #define cJSON_Raw     (8) /* raw json */
 #define cJSON_Integer (9)
+#define cJSON_UInteger (10)
 
 #define cJSON_IsReference 256
 #define cJSON_StringIsConst 512
@@ -175,6 +176,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_IsBool(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsNull(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsNumber(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsInteger(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsUInteger(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsNumeric(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsString(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsArray(const cJSON * const item);
@@ -188,6 +190,7 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateFalse(void);
 CJSON_PUBLIC(cJSON *) cJSON_CreateBool(cJSON_bool boolean);
 CJSON_PUBLIC(cJSON *) cJSON_CreateNumber(double num);
 CJSON_PUBLIC(cJSON *) cJSON_CreateInteger(long long num);
+CJSON_PUBLIC(cJSON *) cJSON_CreateUInteger(unsigned long long num);
 CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string);
 /* raw json */
 CJSON_PUBLIC(cJSON *) cJSON_CreateRaw(const char *raw);

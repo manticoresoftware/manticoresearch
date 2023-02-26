@@ -1567,6 +1567,13 @@ void JsonObj_c::AddInt ( const char * szName, int64_t iValue )
 }
 
 
+void JsonObj_c::AddUint ( const char * szName, uint64_t uValue )
+{
+	assert ( m_pRoot );
+	cJSON_AddItemToObject ( m_pRoot, szName, CreateUint(uValue).Leak() );
+}
+
+
 void JsonObj_c::AddBool ( const char * szName, bool bValue )
 {
 	assert ( m_pRoot );
@@ -1605,7 +1612,14 @@ int JsonObj_c::Size() const
 bool JsonObj_c::IsInt() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsInteger ( m_pRoot );
+	return cJSON_IsInteger(m_pRoot);
+}
+
+
+bool JsonObj_c::IsUint() const
+{
+	assert ( m_pRoot );
+	return cJSON_IsUInteger(m_pRoot);
 }
 
 
@@ -1832,6 +1846,12 @@ bool JsonObj_c::HasItem ( const char * szItem ) const
 JsonObj_c JsonObj_c::CreateInt ( int64_t iInt )
 {
 	return JsonObj_c ( cJSON_CreateInteger(iInt) );
+}
+
+
+JsonObj_c JsonObj_c::CreateUint ( uint64_t uInt )
+{
+	return JsonObj_c ( cJSON_CreateUInteger(uInt) );
 }
 
 

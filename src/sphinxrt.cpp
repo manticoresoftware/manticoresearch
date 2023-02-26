@@ -1801,7 +1801,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
 				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
 			{
-				sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tDocID );
+				sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tDocID );
 				return false; // already exists and not deleted; INSERT fails
 			}
 		}

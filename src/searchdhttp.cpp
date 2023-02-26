@@ -2762,13 +2762,15 @@ static bool AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError 
 	if ( iDocidPos!=-1 )
 	{
 		SqlInsert_t & tVal = tStmt.m_dInsertValues[iDocidPos];
+
 		// check and convert to int
 		if ( tVal.m_iType!=SqlInsert_t::CONST_INT )
 		{
-			tVal.m_iVal = GetDocID ( tVal.m_sVal.cstr() );
+			tVal.SetValueInt ( GetDocID ( tVal.m_sVal.cstr() ), false );
 			tVal.m_iType = SqlInsert_t::CONST_INT;
 		}
-		tDocId = tVal.m_iVal;
+
+		tDocId = (int64_t)tVal.GetValueUint();
 		return true;
 	}
 
@@ -2778,7 +2780,7 @@ static bool AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError 
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
 	tId.m_iType = SqlInsert_t::CONST_INT;
-	tId.m_iVal = tDocId;
+	tId.SetValueInt(tDocId);
 
 	tStmt.m_iSchemaSz = tStmt.m_dInsertSchema.GetLength();
 	return true;

@@ -719,7 +719,21 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t &
 	if ( !ParseIndex ( tRoot, tStmt, sError ) )
 		return false;
 
-	JsonObj_c tId = tRoot.GetIntItem ( "id", sError );
+	JsonObj_c tId = tRoot.GetItem ( "id" );
+	if ( tId )
+	{
+		if ( !tId.IsInt() && !tId.IsUint() )
+		{
+			sError = "Document ids should be integer";
+			return false;
+		}
+
+		if ( tId.IsInt() && tId.IntVal()<0 )
+		{
+			sError = "Negative document ids are not allowed";
+			return false;
+		}
+	}
 
 	if ( tId )
 		tDocId = tId.IntVal();
@@ -961,7 +975,7 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
 	tId.m_iType = SqlInsert_t::CONST_INT;
-	tId.m_iVal = tDocId;
+	tId.SetValueInt ( (uint64_t)tDocId, false );
 
 	// "doc" is optional
 	JsonObj_c tSource = tRoot.GetItem("doc");
@@ -1010,7 +1024,7 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 			} else if ( tItem.IsInt() || tItem.IsBool() )
 			{
 				tNewValue.m_iType = SqlInsert_t::CONST_INT;
-				tNewValue.m_iVal = tItem.IntVal();
+				tNewValue.SetValueInt ( tItem.IntVal() );
 			} else if ( tItem.IsArray() && !bCompat )
 			{
 				tNewValue.m_iType = SqlInsert_t::CONST_MVA;
@@ -1064,9 +1078,12 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 	if ( !ParseCluster ( tRoot, tStmt, sError ) )
 		return false;
 
-	JsonObj_c tId = tRoot.GetIntItem ( "id", sError );
+	JsonObj_c tId = tRoot.GetItem ( "id" );
 	if ( tId )
 	{
+		if ( !ParseIndexId ( tRoot, tStmt, tDocId, sError ) )
+			return false;
+
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
 		tFilter.m_eType = SPH_FILTER_VALUES;
 		tFilter.m_dValues.Add ( tId.IntVal() );
@@ -1809,7 +1826,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		} else if ( pId )
 		{
 			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-			tOut.Sprintf ( R"("_id":"%l","_score":%d)", tDocID, tMatch.m_iWeight );
+			tOut.Sprintf ( R"("_id":"%U","_score":%d)", tDocID, tMatch.m_iWeight );
 		}
 		else
 			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
@@ -1899,7 +1916,7 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	JsonObj_c tObj;
 
 	tObj.AddStr ( "_index", szIndex );
-	tObj.AddInt ( "_id", tDocId );
+	tObj.AddUint ( "_id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
 	tObj.AddInt ( "status", bReplace ? 200 : 201 );

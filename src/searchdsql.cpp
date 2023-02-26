@@ -18,6 +18,103 @@
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
+
+void SqlNode_t::SetValueInt ( int64_t iValue )
+{
+	m_uValue = abs(iValue);
+	m_bNegative = iValue<0;
+}
+
+
+void SqlNode_t::SetValueInt ( uint64_t uValue, bool bNegative )
+{
+	m_uValue = uValue;
+	m_bNegative = bNegative;
+}
+
+
+int64_t SqlNode_t::GetValueInt() const
+{
+	if ( m_bNegative )
+	{
+		if ( m_uValue > (uint64_t)LLONG_MAX )
+			return LLONG_MIN;
+
+		return -int64_t(m_uValue);
+	}
+	else
+	{
+		if ( m_uValue > (uint64_t)LLONG_MAX )
+			return LLONG_MAX;
+
+		return int64_t(m_uValue);
+	}
+}
+
+
+uint64_t SqlNode_t::GetValueUint() const
+{
+	assert ( !m_bNegative );
+	return m_uValue;
+}
+
+
+void SqlNode_t::CopyValueInt ( const SqlNode_t & tRhs )
+{
+	m_uValue = tRhs.m_uValue;
+	m_bNegative = tRhs.m_bNegative;
+}
+
+/////////////////////////////////////////////////////////////////////
+
+void SqlInsert_t::SetValueInt ( uint64_t uValue, bool bNegative )
+{
+	m_uValue = uValue;
+	m_bNegative = bNegative;
+}
+
+
+void SqlInsert_t::SetValueInt ( int64_t iValue )
+{
+	m_uValue = abs(iValue);
+	m_bNegative = iValue<0;
+}
+
+
+int64_t SqlInsert_t::GetValueInt() const
+{
+	if ( m_bNegative )
+	{
+		if ( m_uValue > (uint64_t)LLONG_MAX )
+			return LLONG_MIN;
+
+		return -int64_t(m_uValue);
+	}
+	else
+	{
+		if ( m_uValue > (uint64_t)LLONG_MAX )
+			return LLONG_MAX;
+
+		return int64_t(m_uValue);
+	}
+}
+
+
+uint64_t SqlInsert_t::GetValueUint() const
+{
+	assert ( !m_bNegative );
+	return m_uValue;
+}
+
+
+void SqlInsert_t::CopyValueInt ( const SqlNode_t & tRhs )
+{
+	m_uValue = tRhs.m_uValue;
+	m_bNegative = tRhs.m_bNegative;
+}
+
+/////////////////////////////////////////////////////////////////////
+
 SqlStmt_t::SqlStmt_t()
 {
 	m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
@@ -321,7 +418,7 @@ void SqlParser_c::AddStringSubkey ( const SqlNode_t & tNode ) const
 
 void SqlParser_c::AddIntSubkey ( const SqlNode_t & tNode ) const
 {
-	m_pStmt->m_dIntSubkeys.Add ( tNode.m_iValue );
+	m_pStmt->m_dIntSubkeys.Add ( tNode.GetValueInt() );
 }
 
 void SqlParser_c::AddDotIntSubkey ( const SqlNode_t & tNode ) const
@@ -731,7 +828,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	else if ( eAddRes==AddOption_e::ADDED )
 		return true;
 	
-	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, tValue.m_iValue, m_pStmt->m_eStmt, *m_pParseError );
+	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, tValue.GetValueInt(), m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAddRes==AddOption_e::FAILED )
 		return false;
 	else if ( eAddRes==AddOption_e::ADDED )
@@ -744,7 +841,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
-		m_pStmt->m_iThreadsCols = Max ( (int)tValue.m_iValue, 0 );
+		m_pStmt->m_iThreadsCols = Max ( (int)tValue.GetValueInt(), 0 );
 		break;
 
 	case Option_e::FORMAT: //} else if ( sOpt=="format" ) // for SHOW THREADS
@@ -845,7 +942,7 @@ void SqlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 {
 	SqlInsert_t & tIns = dVec.Add();
 	tIns.m_iType = tNode.m_iType;
-	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
+	tIns.CopyValueInt(tNode);
 	tIns.m_fVal = tNode.m_fValue;
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
@@ -1008,7 +1105,7 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 
 	dVec.Add();
 	ToString ( dVec.Last().first, tValue ).ToLower();
-	dVec.Last().second = (int) tValue.m_iValue;
+	dVec.Last().second = (int) tValue.GetValueInt();
 }
 
 void SqlParser_c::SetStatement ( const YYSTYPE & tName, SqlSet_e eSet )

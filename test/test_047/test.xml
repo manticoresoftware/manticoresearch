@@ -5,6 +5,7 @@
 
 <requires>
 <non-rt/>
+<http/>
 </requires>
 
 <config>
@@ -38,6 +39,13 @@ index rt
 	type			= rt
 	rt_field		= body
 	path			= <data_path/>/rt
+}
+
+index rt2
+{
+	type			= rt
+	rt_field		= body
+	path			= <data_path/>/rt2
 }
 </config>
 
@@ -120,6 +128,61 @@ INSERT INTO test_table (id, text) VALUES
 	select * from rt where id&lt;-1 order by id asc;
 </sphinxql>
 </queries>
+
+<httpqueries>
+<query endpoint="json/insert">
+{
+	"index":"rt2",
+	"id":9223372036854775806
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"rt2",
+	"id":9223372036854775807
+}
+</query>
+
+<!-- id is improperly encoded as string because of php limitations -->
+<query endpoint="json/insert">
+{
+	"index":"rt2",
+	"id":9223372036854775808
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"rt2",
+	"id":-1
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"rt2",
+	"id":-9223372036854775808
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index":"rt2",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "id": { "lt": 0 } } }
+      ]
+    }
+  }
+}
+</query>
+
+</httpqueries>
 
 </test>
 

@@ -260,11 +260,14 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
 {
     double number = 0;
 	long long number_int = 0;
+    unsigned long long number_uint = 0;
     unsigned char *after_end = NULL;
     unsigned char number_c_string[64];
     unsigned char decimal_point = get_decimal_point();
     size_t i = 0;
     int is_float = 0;
+    int has_minus = 0;
+    int is_unsigned_int = 0;
 
     if ((input_buffer == NULL) || (input_buffer->content == NULL))
     {
@@ -283,6 +286,9 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
                 is_float = 1;
 				number_c_string[i] = 'e';
 				break;
+            case '-':
+                if ( !i )
+                    has_minus = 1;
             case '0':
             case '1':
             case '2':
@@ -294,7 +300,6 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
             case '8':
             case '9':
             case '+':
-            case '-':
                 number_c_string[i] = buffer_at_offset(input_buffer)[i];
                 break;
 
@@ -318,14 +323,31 @@ loop_end:
 
     if ( !is_float )
     {
-        if ( number >= (double)(LLONG_MAX) || number <= LLONG_MIN )
-		    is_float = 1;
+        if ( !has_minus )
+        {
+            number_uint = strtoull((const char*)number_c_string, (char**)&after_end, 10);
+            if ( errno == ERANGE )
+                is_float = 1;
+            else
+            {
+                if (number_c_string == after_end) 
+                    return false; /* parse_error */
+
+                if ( number_uint < (unsigned long long)LLONG_MAX )
+                    number_int = (long long)number_uint;
+                else
+                    is_unsigned_int = 1;
+            }
+        }
         else
         {
             number_int = strtoll((const char*)number_c_string, (char**)&after_end, 10);
-            if (number_c_string == after_end)
+            if (errno == ERANGE)
+                is_float = 1;
+            else
             {
-                return false; /* parse_error */
+                if (number_c_string == after_end) 
+                    return false; /* parse_error */
             }
         }
     }
@@ -352,8 +374,16 @@ loop_end:
     }
     else
     {
-        item->valueint = number_int;
-        item->type = cJSON_Integer;
+        if ( is_unsigned_int )
+        {
+            item->valueint = (long long)number_uint;
+            item->type = cJSON_UInteger;
+        }
+        else
+        {
+            item->valueint = number_int;
+            item->type = cJSON_Integer;
+        }
     }
 
     input_buffer->offset += (size_t)(after_end - number_c_string);
@@ -558,7 +588,7 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
 }
 
 /* Render the integer nicely from the given item into a string. */
-static cJSON_bool print_integer(const cJSON * const item, printbuffer * const output_buffer)
+static cJSON_bool print_integer(const cJSON * const item, printbuffer * const output_buffer, int is_unsigned)
 {
     unsigned char *output_pointer = NULL;
     long long value = item->valueint;
@@ -578,7 +608,10 @@ static cJSON_bool print_integer(const cJSON * const item, printbuffer * const ou
     }
     else
     {
-        length = sprintf((char*)number_buffer, "%lld", value );
+        if (is_unsigned)
+            length = sprintf((char*)number_buffer, "%llu", value );
+        else
+            length = sprintf((char*)number_buffer, "%lld", value );
     }
 
     /* sprintf failed or buffer overrun occured */
@@ -1374,7 +1407,10 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
             return print_number(item, output_buffer);
 
 		case cJSON_Integer:
-            return print_integer(item, output_buffer);
+            return print_integer(item, output_buffer,0);
+
+        case cJSON_UInteger:
+            return print_integer(item, output_buffer,1);
 
         case cJSON_Raw:
         {
@@ -2261,6 +2297,19 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateInteger(long long num)
     return item;
 }
 
+CJSON_PUBLIC(cJSON *) cJSON_CreateUInteger(unsigned long long num)
+{
+    cJSON *item = cJSON_New_Item(&global_hooks);
+    if(item)
+    {
+        item->type = cJSON_UInteger;
+        item->valuedouble = (double)num;
+        item->valueint = num;
+    }
+
+    return item;
+}
+
 CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string)
 {
     cJSON *item = cJSON_New_Item(&global_hooks);
@@ -2681,6 +2730,15 @@ CJSON_PUBLIC(cJSON_bool) cJSON_IsInteger(const cJSON * const item)
     return (item->type & 0xFF) == cJSON_Integer;
 }
 
+CJSON_PUBLIC(cJSON_bool) cJSON_IsUInteger(const cJSON * const item)
+{
+    if (item == NULL)
+    {
+        return false;
+    }
+
+    return (item->type & 0xFF) == cJSON_UInteger;
+}
 
 CJSON_PUBLIC(cJSON_bool) cJSON_IsNumeric(const cJSON * const item)
 {
@@ -2742,6 +2800,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
         case cJSON_NULL:
         case cJSON_Number:
         case cJSON_Integer:
+        case cJSON_UInteger:
         case cJSON_String:
         case cJSON_Raw:
         case cJSON_Array:
@@ -2774,6 +2833,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
             return false;
 
         case cJSON_Integer:
+        case cJSON_UInteger:
             if (a->valueint == b->valueint)
             {
                 return true;

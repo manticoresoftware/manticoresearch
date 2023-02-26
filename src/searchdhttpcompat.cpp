@@ -262,13 +262,9 @@ static void CreateKbnTable ( CreateTableSettings_t & tOpts, const nljson & tTbl,
 		AddComplexField ( tField.m_sName.cstr(), dFields );
 }
 
-int64_t GetDocID ( const char * sID )
+static uint64_t GetDocID ( const char * szID )
 {
-	int64_t iID = (int64_t)sphFNV64 ( sID );
-	if ( iID<0 )
-		iID = -iID;
-
-	return iID;
+	return sphFNV64(szID);
 }
 
 static int GetVersion ( const nljson & tDoc )
@@ -313,7 +309,7 @@ static bool InsertDoc ( const CSphString & sIndex, const ComplexFields_t & dFiel
 {
 	nljson tVal;
 	tVal["index"] = sIndex.cstr();
-	tVal["id"] = GetDocID ( sId );
+	tVal["id"] = GetDocID(sId);
 	tVal["doc"] = tSrc;
 	tVal["doc"]["_id"] = sId;
 	tVal["doc"]["_version"] = iVersion;
@@ -1371,7 +1367,7 @@ static bool GetIndexDoc ( const CSphIndex * pIndex, const char * sID, int64_t iS
 		return false;
 	}
 
-	DocID_t tDocid = GetDocID ( sID );
+	DocID_t tDocid = (DocID_t)GetDocID(sID);
 
 	DocstoreDoc_t tDoc;
 	pIndex->GetDoc ( tDoc, tDocid, &dFieldIds, iSessionUID, false );
@@ -2415,7 +2411,7 @@ void HttpCompatHandler_c::ProcessInsertIntoIdx ( const CompatInsert_t & tIns )
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
 	tId.m_iType = SqlInsert_t::CONST_INT;
 	if ( tIns.m_sId )
-		tId.m_iVal = strtoll ( tIns.m_sId, NULL, 10 );
+		tId.SetValueInt ( strtoull ( tIns.m_sId, NULL, 10 ), false );
 
 	JsonObj_c tSource ( tIns.m_sBody.first );
 
@@ -2596,7 +2592,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
 		tFilter.m_sAttrName = "id";
 		tFilter.m_eType = SPH_FILTER_VALUES;
-		tFilter.m_dValues.Add ( GetDocID ( sId.cstr() ) );
+		tFilter.m_dValues.Add ( (int64_t)GetDocID ( sId.cstr() ) );
 		tFilter.m_bExclude = false;
 
 		std::unique_ptr<StmtErrorReporter_i> pReporter ( CreateHttpErrorReporter() );

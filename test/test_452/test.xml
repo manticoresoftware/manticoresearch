@@ -49,6 +49,20 @@ index test3
 	rt_attr_uint = idd
     rt_attr_uint = tag
 }
+
+source src_test4
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table2
+	sql_attr_uint  = tag
+}
+
+index test4
+{
+	source 			= src_test4
+	path			= <data_path/>/test4
+}
 </config>
 
 <db_create>
@@ -61,10 +75,23 @@ CREATE TABLE `test_table1` (
 );
 </db_create>
 
-
+<db_create>
+CREATE TABLE `test_table2` (
+  `id` int,
+  `title` varchar(255),
+  `tag` int
+);
+</db_create>
 
 <db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
 <db_insert>insert into test_table1 (id,title, tag, flag) values(1,'abc', 1, 1),(2,'abc', 1, 1),(3,'abc', 2, 0),(4,'abc', 1, 1),(5,'abc', 2, 0)</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table2</db_drop>
+<db_insert>
+	<var name="vals">( 1, 'real word and more', 1)</var>
+	<repeat count="1000" vars="i t" inc="2 2" init="10 10"><var name="vals" delimiter=",">( <i/>, 'dummy word not another', <t/> )</var></repeat>
+	insert into test_table2 values <vals/>
+</db_insert>
 
 <queries>
 <sphinxql>select * from test1 where flag=1 /*+ SecondaryIndex(flag) */</sphinxql>
@@ -81,6 +108,12 @@ DELETE FROM test3 WHERE id in (11,12,13);
 ALTER TABLE test3 REBUILD SECONDARY;
 
 SELECT * FROM test3 WHERE idd &gt; 0 ORDER BY id ASC /*+ SecondaryIndex(idd) */
+</sphinxql>
+
+<sphinxql>
+select * from test4 where tag in (2006) order by id desc /*+ SecondaryIndex(tag) */;
+select * from test4 where tag in (2007) order by id desc /*+ SecondaryIndex(tag) */;
+select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag) */;
 </sphinxql>
 
 </queries>

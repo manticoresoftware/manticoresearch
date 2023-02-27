@@ -1147,7 +1147,7 @@ bool CSphConfigParser::AddSection ( const char * szType, const char * szSection 
 		m_tConf.Add ( CSphConfigType(), m_sSectionType ); // FIXME! be paranoid, verify that it returned true
 
 	if ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) )
-		return TlsMsg::Err ( "section '%s' (type='%s') already exists", szSection, szType );
+		return TlsMsg::Err ( "section '%s' (type='%s') already exists", m_sSectionName.cstr(), m_sSectionType.cstr() );
 	m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName ); // FIXME! be paranoid, verify that it returned true
 
 	return true;

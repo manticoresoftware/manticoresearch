@@ -80,3 +80,19 @@ uint64_t sphToUInt64 ( const char * szNumber, CSphString * pError )
 
 	return uNumber;
 }
+
+
+uint64_t StrToDocID ( const char * szNumber, CSphString & sError )
+{
+	if ( szNumber && *szNumber=='-' )
+	{
+		sError = "Negative document ids are not allowed";
+		return 0;
+	}
+
+	uint64_t uDocID = sphToUInt64 ( szNumber, &sError );
+	if ( !sError.IsEmpty() )
+		return 0;
+
+	return uDocID;
+}

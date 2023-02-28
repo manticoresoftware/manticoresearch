@@ -169,6 +169,7 @@ private:
 
 	FILE *				m_pPipe = nullptr;			///< incoming stream
 	CSphString			m_sError;
+	CSphString			m_sDocIDError;
 	StrVec_t			m_dDefaultAttrs;
 	StrVec_t			m_dInvalid;
 	StrVec_t			m_dWarned;
@@ -681,7 +682,11 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( bool & bEOF, CSphString & sError )
 					break;
 
 				case SPH_ATTR_BIGINT:
-					m_dAttrs[i] = sphToInt64 ( sAttrValue.cstr(), &sWarn );
+					if ( i )
+						m_dAttrs[i] = sphToInt64 ( sAttrValue.cstr(), &sWarn );
+					else // negative number checks not necessary here as they were done before
+						m_dAttrs[i] = (int64_t)StrToDocID ( sAttrValue.cstr(), sWarn );
+
 					if ( !sWarn.IsEmpty() )
 						sphWarn ( "%s", sWarn.cstr() );
 
@@ -955,7 +960,6 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		assert ( !m_pCurDocument );
 		m_pCurDocument = new Document_t;
-
 		m_pCurDocument->m_tDocID = INT64_MAX;
 		m_pCurDocument->m_dFields.Resize ( m_tSchema.GetFieldsCount() );
 		// for safety
@@ -966,12 +970,10 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		if ( pAttrs[0] && pAttrs[1] && pAttrs[0][0] && pAttrs[1][0] )
 			if ( !strcmp ( pAttrs[0], "id" ) )
 			{
-				m_pCurDocument->m_tDocID = sphToInt64 ( pAttrs[1] );
+				uint64_t uDocID = StrToDocID ( pAttrs[1], m_sDocIDError );
+				m_pCurDocument->m_tDocID = (DocID_t)uDocID;
 				m_pCurDocument->m_dAttrs[0] = pAttrs[1];
 			}
-
-		if ( m_pCurDocument->m_tDocID==0 )
-			Error ( "attribute 'id' required in <sphinx:document>" );
 	}
 	return;
 
@@ -1056,8 +1058,18 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 
 	case ELEM_DOCUMENT:
 		m_bInDocument = false;
-		if ( m_pCurDocument )
-			m_dParsedDocuments.Add ( m_pCurDocument );
+		if ( !m_sDocIDError.IsEmpty() )
+		{
+			sphWarn ( "%s", DecorateMessage ( m_sDocIDError.cstr() ) );
+			m_sDocIDError = "";
+			delete m_pCurDocument;
+		}
+		else
+		{
+			if ( m_pCurDocument )
+				m_dParsedDocuments.Add ( m_pCurDocument );
+		}
+
 		m_pCurDocument = nullptr;
 		return;
 

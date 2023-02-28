@@ -786,20 +786,14 @@ bool CSphSource_SQL::StoreAttribute ( int iAttr )
 			CSphString sWarn;
 			if ( bDocId )
 			{
-				if ( szNumber && *szNumber=='-' )
-				{
-					sphWarn ( "Negative document ids are not allowed" );
-					return false;
-				}
-
-				uint64_t uDocID = sphToUInt64 ( szNumber, &sWarn );
-				m_dAttrs[iAttr] = (int64_t)uDocID;
+				uint64_t uDocID = StrToDocID ( szNumber, sWarn );
 				if ( !sWarn.IsEmpty() )
 				{
 					sphWarn ( "%s", sWarn.cstr() );
 					return false;
 				}
 
+				m_dAttrs[iAttr] = (int64_t)uDocID;
 				m_tMaxFetchedID = (int64_t)Max ( (uint64_t)m_tMaxFetchedID, uDocID );
 			}
 			else

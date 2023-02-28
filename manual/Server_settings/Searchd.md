@@ -108,6 +108,8 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 <!-- example conf auto_schema -->
 Manticore supports the automatic creation of tables that do not yet exist but are specified in INSERT statements. This feature is enabled by default. To disable it, set `auto_schema = 0` explicitly in your configuration. To re-enable it, set `auto_schema = 1` or remove the `auto_schema` setting from the configuration.
 
+Note that `/bulk` HTTP endpoint does not support automatic creation of tables.
+
 <!-- request Disable -->
 ```ini
 auto_schema = 0 # disable automatic table creation

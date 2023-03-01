@@ -15,7 +15,9 @@ Released: soon
 * [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95) [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks
 * [Commit 20d2](https://github.com/manticoresoftware/manticoresearch/commit/20d246c) Fixed compat mode bulk request to pass into buddy on error
 * [Commit aa0c](https://github.com/manticoresoftware/manticoresearch/commit/aa0cdfb) Fixed daemon to log messages from buddy console into daemon log line by line
-
+* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed /pq HTTP endpoint to be an alias of the /json/pq HTTP endpoint
+* [Commit ee87](https://github.com/manticoresoftware/columnar/commit/ee87d11) Fixed crash on search with the secondary index
+* [Commit e7f9](https://github.com/manticoresoftware/manticoresearch/commit/e7f9815) Added buddy version to startup log entry
 
 # Version 6.0.2
 Released: Feb 10 2023

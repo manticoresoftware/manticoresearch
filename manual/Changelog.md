@@ -12,6 +12,7 @@ Released: soon
 * [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) Fixed term statistics in CALL KEYWORDS for multiple same terms
 * [Issue #1039](https://github.com/manticoresoftware/manticoresearch/issues/1039) Fixed memory leak at daemon on reading output of the Buddy console
 * [Commit f381](https://github.com/manticoresoftware/manticoresearch/commit/f381ad2) Default config is now created by Windows installer; paths are no longer substituted in runtime.
+* [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95) [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks
 
 # Version 6.0.2
 Released: Feb 10 2023

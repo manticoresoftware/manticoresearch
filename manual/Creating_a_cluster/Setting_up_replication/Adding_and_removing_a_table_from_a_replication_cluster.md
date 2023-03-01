@@ -1,9 +1,9 @@
 # Adding and removing a table from a replication cluster 
 
 <!-- example adding and removing a table from a replication cluster 1 -->
-`ALTER CLUSTER <cluster_name> ADD <table_name>` adds an existing local table to the cluster. The node which receives the ALTER query sends the table to the other nodes in the cluster. All the local tables with the same name on the other nodes of the cluster get replaced with the new table.
+`ALTER CLUSTER <cluster_name> ADD <table_name>` adds an existing local table to the cluster. The node that receives the ALTER query sends the table to the other nodes in the cluster. All the local tables with the same name on the other nodes of the cluster are replaced with the new table.
 
-After the table is replicated, write statements can be performed on any node but table name must be prefixed with the cluster name like `INSERT INTO <clusterName>:<table_name>`.
+Once the table is replicated, write statements can be performed on any node, but the table name must be prefixed with the cluster name, like `INSERT INTO <clusterName>:<table_name>`.
 
 
 <!-- intro -->
@@ -77,9 +77,9 @@ utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 <!-- end -->
 
 <!-- example adding and removing a table from a replication cluster 2 -->
-`ALTER CLUSTER <cluster_name> DROP <table_name>` forgets about a local table, i.e., it doesn't remove the table files on the nodes but just makes it an active non-replicated table.
+`ALTER CLUSTER <cluster_name> DROP <table_name>` forgets about a local table, meaning it does not remove the table files on the nodes, but rather just makes it an inactive, non-replicated table.
 
-After a table is removed from a cluster, it becomes a 'local' table and write statements must use just the table name as `INSERT INTO <table_name>`, without the cluster prefix.
+Once a table is removed from a cluster, it becomes a `local` table, and write statements must use just the table name, like  `INSERT INTO <table_name>`, without the cluster prefix.
 
 
 <!-- intro -->
@@ -149,3 +149,4 @@ utilsApi.sql("ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- end -->
+<!-- proofread -->

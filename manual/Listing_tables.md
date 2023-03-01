@@ -1,8 +1,8 @@
 # Listing tables
 
-Manticore Search has a single level of hierarchy of tables.
+Manticore Search has a single level of hierarchy for tables.
 
-There is no concept of grouping tables in databases like in other DBMS. Still, Manticore accepts `SHOW DATABASES` statements for interoperability with SQL dialect, but the statement doesn't return anything.
+Unlike other DBMS, there is no concept of grouping tables into databases in Manticore. However, for interoperability with SQL dialects, Manticore accepts `SHOW DATABASES` statements for interoperability with SQL dialect, statements, but the statement does not return any results.
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -13,7 +13,7 @@ General syntax:
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` statement enumerates all currently active tables along with their types. Existing table types are `local`, `distributed`, `rt`, `percolate` and `template`.
+The `SHOW TABLES`statement lists all currently active tables along with their types. The existing table types are `local`, `distributed`, `rt`, `percolate` and `template`.
 
 
 <!-- intro -->
@@ -204,7 +204,7 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'")
 {DESC | DESCRIBE} table [ LIKE pattern ]
 ```
 
-`DESCRIBE` statement lists table columns and their associated types. Columns are document ID, full-text fields, and attributes. The order matches that in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types are `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
+The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
 
 ```sql
 mysql> DESC rt;
@@ -225,7 +225,7 @@ An optional LIKE clause is supported. Refer to
 ### SELECT FROM name.table
 
 <!-- example name_table -->
-You can also see table schema by executing the query `select * from <table_name>.table`. The benefit of this method is that you can use `WHERE` for filtering:
+You can also view the table schema by executing the query `select * from <table_name>.table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
 
 <!-- request SQL -->
 ```sql
@@ -246,7 +246,7 @@ select * from tbl.table where type='text';
 
 <!-- example name_table2 -->
 
-You can also do many other things, consider `<your_table_name>.table` just a regular Manticore table where the columns are integer and string attributes.
+You can also perform many other actions on `<your_table_name>.table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
 
 <!-- request SQL -->
 
@@ -265,8 +265,7 @@ select * from tbl.table where properties any ('stored');
 SHOW CREATE TABLE name
 ```
 
-Prints the `CREATE TABLE` statement that creates the named table.
-
+Prints the `CREATE TABLE` statement used to create the specified table.
 
 <!-- intro -->
 ##### SQL:
@@ -288,7 +287,7 @@ f text indexed stored
 
 ### Percolate table schemas
 
-If you apply `DESC` statement to a percolate table it will show the outer table schema, i.e. the schema of stored queries. It's static and the same for all local percolate tables:
+If you use the `DESC` statement on a percolate table, it will display the outer table schema, which is the schema of stored queries. This schema is static and the same for all local percolate tables:
 
 ```sql
 mysql> DESC pq;
@@ -303,7 +302,7 @@ mysql> DESC pq;
 4 rows in set (0.00 sec)
 ```
 
-If you're looking for an expected document schema use
+If you want to view the expected document schema, use the following command:
 `DESC <pq table name> table`:
 
 ```sql
@@ -329,3 +328,4 @@ mysql> desc pq table like '%title%';
 +-------+------+----------------+
 1 row in set (0.00 sec)
 ```
+<!-- proofread -->

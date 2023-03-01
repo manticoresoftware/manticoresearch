@@ -1,9 +1,9 @@
 # Joining a replication cluster
 
 <!-- example joining a replication cluster 1 -->
-To join an existing cluster you should specify at least:
-* [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)
-* and `host:port` of another working node of the cluster you are joining
+To join an existing cluster, you must specify at least:
+* The [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)of the cluster
+* The `host:port` of another node in the cluster you are joining
 
 <!-- intro -->
 ##### SQL:
@@ -71,7 +71,7 @@ utilsApi.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
 <!-- end -->
 
 <!-- example joining a replication cluster 1_1 -->
-In case of a single replication cluster, i.e. in most cases the above is just enough. In case you are creating multiple replication clusters [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) needs to be set as well and the directory should be available.
+In most cases, the above is sufficient when there is a single replication cluster. However, if you are creating multiple replication clusters, you must also set the [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) and ensure that the directory is available.
 
 <!-- request SQL -->
 ```sql
@@ -79,16 +79,16 @@ JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path
 ```
 <!-- end -->
 
-A node joins a cluster by getting data from another specified node and, if successful, it updates node lists in all other cluster nodes similar to how it's done manually via [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md). This list is used to rejoin nodes to the cluster on restart.
+A node joins a cluster by obtaining data from a specified node and, if successful, updates the node lists across all other cluster nodes in the same way as if it was done manually through [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md). This list is used to re-join nodes to the cluster upon restart.
 
 There are two lists of nodes:
-* `cluster_<name>_nodes_set`: used to rejoin nodes to the cluster  on restart, it is updated across all nodes same way as [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) does. `JOIN CLUSTER` does the same update automatically. [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) shows this list as `cluster_<name>_nodes_set`.
-* `cluster_<name>_nodes_view`: list of all active nodes used for replication. This list doesn't require manual management. [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) actually copies this list of nodes to the list of nodes used to rejoin on restart. [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) shows this list as `cluster_<name>_nodes_view`.
+1.`cluster_<name>_nodes_set`: used to re-join nodes to the cluster upon restart. It is updated across all nodes in the same way as [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) does. `JOIN CLUSTER` command performs this update automatically. The [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) displays this list as `cluster_<name>_nodes_set`.
+2. `cluster_<name>_nodes_view`:  this list contains all active nodes used for replication and does not require manual management. [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) actually copies this list of nodes to the list of nodes used to re-join upon restart. The [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) displays this list as `cluster_<name>_nodes_view`.
 
 <!-- example joining a replication cluster  2 -->
-When nodes are located in different network segments or in different datacenters, [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) option may be set explicitly. That allows to minimize traffic between nodes and to use gateway nodes for datacenters intercommunication. The following command joins an existing cluster using the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) option.
+When nodes are located in different network segments or data centers, the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) option may be set explicitly. This minimizes traffic between nodes and utilizes gateway nodes for intercommunication between data centers. The following code joins an existing cluster using the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) option.
 
-> **Note:** that when this syntax is used, `cluster_<name>_nodes_set` list is not updated automatically. Use [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) to update it.
+> **Note:** The cluster `cluster_<name>_nodes_set` list is not updated automatically when this syntax is used. To update it, use [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md).
 
 
 <!-- intro -->
@@ -156,4 +156,5 @@ utilsApi.sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;
 ```
 <!-- end -->
 
-`JOIN CLUSTER` works synchronously and completes as soon as the node receives all data from the other nodes in the cluster and is in sync with them.
+The `JOIN CLUSTER` command works synchronously and completes as soon as the node receives all data from the other nodes in the cluster and is in sync with them.
+<!-- proofread -->

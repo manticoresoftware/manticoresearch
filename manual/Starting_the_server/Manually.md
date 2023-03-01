@@ -6,17 +6,18 @@ You can also start Manticore Search by calling `searchd` (Manticore Search serve
 searchd [OPTIONS]
 ```
 
-Note that without setting a path to the configuration file `searchd` will try to find it in several locations, depending on the operation system.
+Note that without specifying a path to the configuration file, `searchd` will try to find it in several locations depending on the operating system.
+
 
 ## searchd command line options
 
 
 The options available to `searchd` in all operation systems are:
 
-* `--help` (`-h` for short) lists all of the parameters that can be called in your particular build of `searchd`.
+* `--help` (`-h` for short) lists all of the parameters that can be used in your particular build of`searchd`.
 * `--version` (`-v` for short) shows Manticore Search version information.
-* `--config <file>` (`-c <file>` for short) tells `searchd` to use the given file as its configuration.
-* `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file, so you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
+* `--config <file>` (`-c <file>` for short) tells `searchd` to use the specified file as its configuration.
+* `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
 
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --stop
@@ -44,12 +45,12 @@ $ searchd --config /etc/manticoresearch/manticore.conf --status
 ```bash
 $ searchd --console --pidfile
 ```
-* `--console` is used to force `searchd` into console mode; typically Manticore runs as a conventional server application and logs information into log files (as specified in configuration file). Sometimes though, when debugging issues in the configuration or the server itself or trying to diagnose hard-to-track-down problems it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running `searchd`.)  You can invoke so:
+* `--console` is used to force `searchd` into console mode. Typically, Manticore runs as a conventional server application and logs information into log files (as specified in the configuration file). However, when debugging issues in the configuration or the server itself, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running `searchd`.)  You can invoke it as:
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --console
 ```
-* `--logdebug`, `--logreplication`, `--logdebugv`, and `--logdebugvv` options enable additional debug output in the server log. They differ by the logging verboseness level. These are debugging options, they pollute the log a lot, and thus they should *not* be normally enabled. (The normal use case for these is to enable them temporarily on request, to assist with some particularly complicated debugging session.)
-* `--iostats` is used in conjunction with the logging options (the `query_log` will need to have been activated in `manticore.conf`) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and a little bit bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap. To enable it you can start `searchd` so:
+* `--logdebug`, `--logreplication`, `--logdebugv`, and `--logdebugvv` options enable additional debug output in the server log. They differ by the logging verboseness level. These are debugging options and should not be normally enabled, as they can pollute the log a lot. They can be used temporarily on request to assist with complicated debugging sessions.
+* `--iostats` is used in conjunction with the logging options (the `query_log` must have been activated in  `manticore.conf`) to provide more detailed information on a per-query basis about the input/output operations carried out in the course of that query, with a slight performance hit and slightly bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap. To enable it, you can start `searchd` as follows:
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --iostats
 ```
@@ -62,8 +63,8 @@ $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
     ```bash
     $ searchd --port 9313
     ```
-* `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allow you to specify not only the port, but full path, as IP address and port, or Unix-domain socket path, that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number or just a port number or Unix socket path. If you specify port number, but not the address searchd will listen on all network interfaces. Unix path is identified by a leading slash. As the last param you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
-* `--force-preread` forbids the server to serve any incoming connection until prereading of table files completes. By default, at startup the server accepts connections while table files are lazy loaded into memory. This opens extends the behavior and makes it wait until the files are loaded.
+* `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allows you to specify not only the port, but the full path, IP address and port, or Unix-domain socket path that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number, just a port number, or a Unix socket path. If you specify a port number but not the address, searchd will listen on all network interfaces. A Unix path is identified by a leading slash. As the last parameter, you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
+* `--force-preread` forbids the server from serving any incoming connection until prereading of table files completes. By default, at startup, the server accepts connections while table files are lazy-loaded into memory. This extends the behavior and makes it wait until the files are loaded.
 * `--index (--table) <table>` (or `-i (-t) <table>` for short) forces this instance of `searchd`  to only serve the specified table. Like `--port`, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself.
 * `--strip-path` strips the path names from all the file names referenced from the table (stopwords, wordforms, exceptions, etc). This is useful for picking up tables built on another machine with possibly different path layouts.
 * `--replay-flags=<OPTIONS>` switch can be used to specify a list of extra binary log replay options. The supported options are:
@@ -91,24 +92,24 @@ C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
    --config C:\Manticore\manticore.conf
 ```
 
-If you want to have the I/O stats every time you start `searchd`, you need to specify its option on the same line as the `--install` command thus:
+If you want to have the I/O stats every time you start `searchd`, you need to specify the option on the same line as the `--install` command thus:
 
 ```bat
 C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
    --config C:\Manticore\manticore.conf --iostats
 ```
-* `--delete` removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with `--install`. Note, this does not uninstall the software or delete the tables. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or until `searchd` is called with `--stop`). If the service was installed with a custom name (with `--servicename`), the same name will need to be specified with `--servicename` when calling to uninstall. Example:
+* `--delete` removes the service from the Microsoft Management Console and other places where services are registered, after previously being installed with `--install`. Note that this does not uninstall the software or delete the tables. It means the service will not be called from the services system, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot or until `--stop`). If the service was installed with a custom name (with `--servicename`), the same name will need to be specified with `--servicename` when calling to uninstall. Example:
 ```bat
 C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --delete
 ```
-* `--servicename <name>` applies the given name to `searchd` when installing or deleting the service, as would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log into the system, or a system with multiple `searchd` instances, a more descriptive name may be applicable. Note that unless combined with `--install` or `--delete`, this option does not do anything.  Example:
+* `--servicename <name>` applies the given name to `searchd` when installing or deleting the service, as it would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log in to the system, or a system with multiple `searchd` instances, a more descriptive name may be applicable. Note that unless combined with `--install` or `--delete`, this option does not do anything.  Example:
 ```bat
 C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
    --config C:\Manticore\manticore.conf --servicename ManticoreSearch
 ```
-* `--ntservice` is the option that is passed by the Management Console to `searchd` to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service would be started, although if you wanted to call this as a regular service from the command-line (as the complement to `--console`) you could do so in theory.
-* `--safetrace` forces `searchd` to only use system backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
-* `--nodetach` switch (Linux only) tells `searchd` not to detach into background. This will also cause log entry to be printed out to console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a docker container to capture its output.
+* `--ntservice` is an option that is passed by the Microsoft Management Console to `searchd` to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service is started, although if you wanted to call this as a regular service from the command-line (as the complement to `--console`) you could do so in theory.
+* `--safetrace` forces `searchd` to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
+* `--nodetach` switch (Linux only) tells `searchd` not to detach into the background. This will also cause log entries to be printed out to the console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a Docker container to capture its output.
 
 ## Signals
 
@@ -116,10 +117,9 @@ C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
 
 * SIGTERM - Initiates a clean shutdown. New queries will not be handled, but queries that are already started will not be forcibly interrupted.
 * SIGHUP - Initiates tables rotation. Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors.
-* SIGUSR1 - Forces reopen of searchd log and query log files, letting you implement log file rotation.
+* SIGUSR1 - Forces reopen of searchd log and query log files, allowing for log file rotation.
 
 ## Environment variables
 
-* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` enables detailed logging while searchd is shutting down. It's useful in case of some shutdown problems:
-  - when Manticore shutdowns too long
-  - or when it freezes at shutdown
+* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` enables detailed logging while searchd is shutting down. It's useful in case of some shutdown problems, such as when Manticore takes too long to shut down or freezes during the shutdown process.
+<!-- proofread -->

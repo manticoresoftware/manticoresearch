@@ -1,6 +1,6 @@
 # Mirroring
 
-[Agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) mirrors can be used interchangeably when processing a search query. Manticore instance (can be multiple) hosting the distributed table where the mirrored agents are defined keeps track of mirror status (alive or dead) and response times, and does automatic failover and load balancing based on that.
+[Agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) mirrors can be used interchangeably when processing a search query. The Manticore instance(s) hosting the distributed table where the mirrored agents are defined keeps track of mirror status (alive or dead) and response times, and performs automatic failover and load balancing based on this information.
 
 ## Agent mirrors
 
@@ -8,21 +8,21 @@
 agent = node1|node2|node3:9312:shard2
 ```
 
-The above example declares that 'node1:9312', 'node2:9312', and 'node3:9312' all have a table called shard2, and can be used as interchangeable mirrors. If any single of those servers go down, the queries will be distributed between the other two. When it gets back up, master will detect that and begin routing queries to all three nodes again.
+The above example declares that `node1:9312`, `node2:9312`, and `node3:9312` all have a table called shard2, and can be used as interchangeable mirrors. If any of these servers go down, the queries will be distributed between the remaining two. When the server comes back online, the master will detect it and begin routing queries to all three nodes again.
 
-Mirror may also include individual table list, as:
+A mirror may also include an individual table list, as follows:
 
 ```ini
 agent = node1:9312:node1shard2|node2:9312:node2shard2
 ```
 
-This works essentially the same as the previous example, but different table names will be used when querying different severs: node1shard2 when querying node1:9312, and node2shard when querying node2:9312.
+This works similarly to the previous example, but different table names will be used when querying different servers. For example, node1shard2 will be used when querying node1:9312, and node2shard will be used when querying node2:9312.
 
-By default, all queries are routed to the best of the mirrors. The best one is picked based on the recent statistics, as controlled by the [ha_period_karma](../../Server_settings/Searchd.md#ha_period_karma) config directive. Master stores a number of metrics (total query count, error count, response time, etc) recently observed for every agent. It groups those by time spans, and karma is that time span length. The best agent mirror is then determined dynamically based on the last 2 such time spans. Specific algorithm that will be used to pick a mirror can be configured [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) directive.
+By default, all queries are routed to the best of the mirrors. The best mirror is selected based on recent statistics, as controlled by the [ha_period_karma](../../Server_settings/Searchd.md#ha_period_karma) config directive. The master stores metrics (total query count, error count, response time, etc.) for each agent and groups these by time spans. The karma is the length of the time span. The best agent mirror is then determined dynamically based on the last two such time spans. The specific algorithm used to pick a mirror can be configured with the [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) directive.
 
-The karma period is in seconds and defaults to 60 seconds. Master stores up to 15 karma spans with per-agent statistics for instrumentation purposes (see `SHOW AGENT STATUS` statement). However, only the last 2 spans out of those are ever used for HA/LB logic.
+The karma period is in seconds and defaults to 60 seconds. The master stores up to 15 karma spans with per-agent statistics for instrumentation purposes (see `SHOW AGENT STATUS` statement). However, only the last two spans out of these are used for HA/LB logic.
 
-When there are no queries, master sends a regular ping command every [ha_ping_interval](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) milliseconds in order to have some statistics and at least check, whether the remote host is still alive. ha_ping_interval defaults to 1000 msec. Setting it to 0 disables pings and statistics will only be accumulated based on actual queries.
+When there are no queries, the master sends a regular ping command every  [ha_ping_interval](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) milliseconds in order to collect statistics and check if the remote host is still alive. The ha_ping_interval defaults to 1000 msec. Setting it to 0 disables pings, and statistics will only be accumulated based on actual queries.
 
 Example:
 
@@ -38,3 +38,4 @@ agent = node3:9312|node4:9312:shard2
 # config on node3, node4
 agent = node1:9312|node2:9312:shard1
 ```
+<!-- proofread -->

@@ -2,24 +2,24 @@
 
 ## About this manual
 
-The manual is arranged as a reflection of the most likely way you would use Manticore:
-* starting from some basic information about it and how to install and connect
-* through some essential things like adding documents and running searches
-* to some performance optimization tips and tricks and extending Manticore with help of plugins and custom functions
+The manual is arranged to reflect the most likely way you would use Manticore:
 
+* starting with basic information about it and how to install and connect
+* essential things like adding documents and running searches
+* performance optimization tips, tricks and extending Manticore with the help of plugins and custom functions
 
 ##### Do not skip ✔️
-Key sections of the manual are marked with sign ✔️ in the menu for your convenience since their corresponding functionality is most used. If you are new to Manticore **we highly recommend to not skip them**.
+Key sections of the manual are marked with ✔️ sign in the menu for your convenience since their corresponding functionality is most used. If you are new to Manticore **we highly recommend not skiping them**.
 
 ##### Quick start guide
-If you are looking for a quick understanding of how Manticore works in general [⚡ Quick start guide](Quick_start_guide.md) section should be good to read.
+If you are looking for a quick understanding of how Manticore works in general [⚡ Quick start guide](Quick_start_guide.md) is a good place to start.
 
 ##### Using examples
 Each query example has a little icon 📋 in the top-right corner:
 
 ![Copy example](copy_example.png)
 
-You can use it to copy examples to clipboard. **If the query is an HTTP request it will be copied as a CURL command**. You can configure the host/port if you press ⚙️.
+You can use it to copy examples to the clipboard. **If the query is an HTTP request it will be copied as a CURL command**. You can configure the host/port if you press ⚙️.
 
 ##### Search in this manual
 
@@ -54,3 +54,5 @@ Manticore provides multiple ways and interfaces to manage your schemas and data,
   * manage your schemas and do other DBA routines as it's the easiest way to do that
   * design your queries as SQL is much closer to natural language than the JSON DSL which is important when you design something new. You can use Manticore SQL via any MySQL client or [/sql](Connecting_to_the_server/MySQL_protocol.md).
 * **JSON**. Most functionality is also available via JSON domain specific language. This is especially useful when you integrate Manticore with your application as with JSON you can do it more programmatically than with SQL. The best practice is to **first explore how to do something via SQL and then use JSON to integrate it into your application.**
+
+<!-- proofread -->

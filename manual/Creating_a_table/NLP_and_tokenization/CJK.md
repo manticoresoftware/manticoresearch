@@ -1,9 +1,9 @@
 # Chinese, Japanese and Korean (CJK) languages
 
-Manticore has built-in support for indexing CJK texts. There are two ways how CJK text can be processed:
+Manticore provides built-in support for indexing CJK texts, allowing you to process CJK texts in two different ways:
 
 <!-- example cjk 1 -->
-* Precise segmentation using ICU library (only Chinese is supported for now)
+1. Precise segmentation using the ICU library. Currently, only Chinese is supported.
 
 
 <!-- intro -->
@@ -78,8 +78,8 @@ table products {
 <!-- end -->
 
 <!-- example cjk 2 -->
-* Basic support with N-grams options [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-There are separate charset tables(`chinese`, `korean`, `japanese`) that can be used for each CJK-language or, alternatively, common `cjk` charset table can be applied. 
+2. Basic support using the N-gram options [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+For each CJK language, there are separate character set tables (`chinese`, `korean`, `japanese`) that can be used, or you can use the common `cjk` character set table. 
 
 
 <!-- intro -->
@@ -154,7 +154,7 @@ table products {
 <!-- end -->
 
 <!-- example cjk 3 -->
-There's also built-in [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) for Chinese with alias `zh`.
+Additionally, there is built-in support for Chinese [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)  with the alias `zh`.
 
 
 <!-- intro -->
@@ -230,3 +230,4 @@ table products {
 }
 ```
 <!-- end -->
+<!-- proofread -->

@@ -1,12 +1,12 @@
 # Ignoring stop words
 
-Stop words are the words that are skipped during indexing and searching. Typically you'd put most frequent words to the stop words list, because they do not add much value to search results but consume a lot of resources to process.
+Stop words are words that are ignored during indexing and searching, typically due to their high frequency and low value to search results. 
 
-[Stemming](../../Creating_a_table/NLP_and_tokenization/Morphology.md) is by default applied when parsing stop words file. That might however lead to undesired results. You can turn that off with [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
+Manticore Search applies [stemming](../../Creating_a_table/NLP_and_tokenization/Morphology.md) to stop words by default, which can lead to undesired results, but this can be turned off using the [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
 
-Small enough files are stored in the table header, see [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) for details.
+Small stop word files are stored in the table header, and there is a limit to the size of files that can be embedded, as defined by the [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) option.
 
-While stop words are not indexed, they still do affect the keyword positions. For instance, assume that "the" is a stop word, that document 1 contains the line "in office", and that document 2 contains "in the office". Searching for "in office" as for an exact phrase will only return the first document, as expected, even though "the" in the second one is skipped as a stop word. That behavior can be tweaked through the [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step) directive.
+Stop words are not indexed, but they do affect keyword positions. For example, if "the" is a stop word, and document 1 contains the phrase "in office" while document 2 contains the phrase "in the office," searching for "in office" as an exact phrase will only return the first document, even though "the" is skipped as a stop word in the second document. This behavior can be modified using the [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step) directive.
 
 ## stopwords
 
@@ -15,11 +15,11 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 ```
 
 <!-- example stopwords -->
-Stop word files list (space separated). Optional, default is empty. You can specify several file names, separated by spaces. All the files will be loaded. In the RT mode only absolute paths are allowed.
+The stopwords setting is optional and by default empty. It allows you to specify the path to one or more stop word files, separated by spaces. All the files will be loaded. In the real-time mode, only absolute paths are allowed.
 
-Stop words file format is simple plain text. The encoding must be UTF-8. File data will be tokenized with respect to [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
+The stop word file format is simple plain text with UTF-8 encoding. The file data will be tokenized with respect to the [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
 
-Stop word files can either be created manually, or semi-automatically. [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the table, sorted by the keyword frequency, see [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
+Stop word files can be created manually or semi-automatically. The [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the table, sorted by the keyword frequency. Top keywords from that dictionary can usually be used as stop words. See [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
 
 
 <!-- intro -->
@@ -286,7 +286,7 @@ stopword_step={0|1}
 ```
 
 <!-- example stopword_step -->
-Position increment on [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords). Optional, allowed values are 0 and 1, default is 1.
+The position_increment setting on [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) is optional, and the allowed values are 0 and 1, with the default being 1.
 
 
 <!-- intro -->
@@ -365,10 +365,9 @@ stopwords_unstemmed={0|1}
 <!-- example stopwords_unstemmed -->
 Whether to apply stop words before or after stemming. Optional, default is 0 (apply stop word filter after stemming).
 
-By default, stop words are stemmed themselves, and applied to tokens *after* stemming (or any other morphology processing). In other words, by default, a token is stopped when stem(token) is equal to stem(stopword). That can lead to unexpected results when a token gets (erroneously) stemmed to a stopped root. For example, 'Andes' might get stemmed to 'and', so when 'and' is a stopword, 'Andes' is also skipped.
+By default, stop words are stemmed themselves, and then applied to tokens *after* stemming (or any other morphology processing). This means that a token is stopped when stem(token) is equal to stem(stopword). This default behavior can lead to unexpected results when a token is erroneously stemmed to a stopped root. For example, "Andes" might get stemmed to "and", so when "and" is a stopword, "Andes" is also skipped.
 
-stopwords_unstemmed directive changed this behaviour. When it's enabled, stop words are applied before stemming (and therefore to the original word forms), and the tokens are skipped when token is equal to stopword.
-
+However, you can change this behavior by enabling the `stopwords_unstemmed` directive. When this is enabled, stop words are applied before stemming (and therefore to the original word forms), and the tokens are skipped when the token is equal to the stopword.
 
 <!-- intro -->
 ##### SQL:
@@ -436,3 +435,4 @@ table products {
 }
 ```
 <!-- end -->
+<!-- proofread -->

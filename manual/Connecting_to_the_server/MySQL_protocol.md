@@ -1,18 +1,18 @@
 # MySQL protocol
 
-Manticore Search implements an SQL interface using MySQL protocol, which allows any MySQL client, library or connector to be used for connecting to Manticore Search and work with it as if it would be MySQL server, not Manticore.
+Manticore Search implements an SQL interface using the MySQL protocol, allowing any MySQL library or connector and many MySQL clients to be used to connect to Manticore Search and work with it as if it were a MySQL server, not Manticore.
 
-However the SQL dialect is different. It implements only a subset of SQL commands or functions available in MySQL. In addition, there are clauses and functions that are specific to Manticore Search. The most eloquent example is the `MATCH()` clause which allows setting the full-text search.
+However, the SQL dialect is different and implements only a subset of the SQL commands or functions available in MySQL. Additionally, there are clauses and functions that are specific to Manticore Search, such as the `MATCH()` clause for full-text search.
 
-Manticore Search doesn't support server-side prepared statements. Client-side prepared statements can be used with Manticore. It must be noted that Manticore implements the multi value (MVA) data type for which there is no equivalent in MySQL or libraries implementing prepared statements. In these cases, the MVA values will need to be crafted in the raw query.
+Manticore Search does not support server-side prepared statements, but client-side prepared statements can be used. It is important to note that Manticore implements the multi-value (MVA) data type, which has no equivalent in MySQL or libraries implementing prepared statements. In these cases, the MVA values must be crafted in the raw query.
 
-Some MySQL clients/connectors demand values for user/password and/or database name. Since Manticore Search does not have the concept of database and there is no user access control yet implemented, these can be set  arbitrarily as Manticore will simply ignore the values.
+Some MySQL clients/connectors require values for user/password and/or database name. Since Manticore Search does not have the concept of databases and there is no user access control implemented, these values can be set arbitrarily as Manticore will simply ignore them.
 
 ## Configuration
 
 **The default port for the SQL interface is 9306** and it's enabled by default. 
 
-In the searchd section of the configuration file the MySQL port can be defined by `listen` directive like this:
+You can configure the MySQL port in the searchd section of the configuration file using the `listen` directive like this:
 
 ```ini
 searchd {
@@ -22,10 +22,10 @@ searchd {
 }
 ``` 
 
-Because Manticore doesn't have yet user authentication implemented make sure the MySQL port can't be accessed by anyone outside your network.
+Keep in mind that Manticore doesn't have user authentication, so make sure that the MySQL port is not accessible to anyone outside of your network.
 
 ### VIP connection
-A separate MySQL port can be used to perform 'VIP' connections. A connection to this port bypasses the thread pool and always forcibly creates a new dedicated thread. That's useful for managing in case of a severe overload when the server would either stall or not let you connect via a regular port.
+A separate MySQL port can be used for performing "VIP" connections. When connecting to this port, the thread pool is bypassed, and a new dedicated thread is always created. This is useful in cases of severe overload, where the server would either stall or prevent a connection through the regular port.
 
 ```ini
 searchd {
@@ -45,13 +45,13 @@ mysql -P9306 -h0
 
 ## Secured MySQL connection
 
-The MySQL protocol supports [SSL encryption](../Security/SSL.md). The secured connections can be made on the same `mysql` listening port.
+The MySQL protocol supports [SSL encryption](../Security/SSL.md). Secure connections can be made on the same `mysql` listening port.
 
 ## Compressed MySQL connection
 
-Compression can be used with MySQL Connections and available to clients by default. The client just need to specify the connection to use compression.
+Compression can be used with MySQL connections and is available to clients by default. The client just needs to specify that the connection should use compression.
 
-An example with the MySQL client:
+An example using the MySQL client:
 
 ```shell
 mysql -P9306 -h0 -C
@@ -92,3 +92,4 @@ Manticore SQL over MySQL supports C-style comment syntax. Everything from an ope
 ```sql
 SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 ```
+<!-- proofread -->

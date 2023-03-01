@@ -3,7 +3,7 @@
 <!-- example install -->
 ## Install and start Manticore
 
-You can install and start Manticore easily in Ubuntu, Centos, Debian, Windows and MacOS or use Manticore as a docker container.
+You can install and start Manticore easily on various operating systems, including Ubuntu, Centos, Debian, Windows, and MacOS. Additionally, you can also use Manticore as a Docker container.
 
 <!-- intro -->
 ### Ubuntu
@@ -43,12 +43,13 @@ sudo systemctl start manticore
 ### Windows
 
 <!-- request Windows -->
-* Download Windows archive from https://manticoresearch.com/install/
-* Extract all from the archive to C:\Manticore
+* Download the Windows archive from https://manticoresearch.com/install/
+* Extract all files from the archive to `C:\Manticore`
+* Run the following command to install Manticore as a service:
 * ```bash
   C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
   ```
-* Start Manticore from the Services snap-in of the Microsoft Management Console
+* Start Manticore from the Services snap-in of the Microsoft Management Console.
 
 <!-- intro -->
 ### MacOS
@@ -66,7 +67,7 @@ brew services start manticoresearch
 docker pull manticoresearch/manticore
 docker run -e EXTRA=1 --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
-For persisting your data directory read [how to use Manticore docker in production](Starting_the_server/Docker.md#Production-use)
+For persisting your data directory, read [how to use Manticore docker in production](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
 
 <!-- example connect -->
@@ -90,7 +91,7 @@ mysql -h0 -P9306
 ##### Connect via JSON over HTTP
 
 <!-- request HTTP -->
-HTTP is a stateless protocol so it doesn't require any special connection phase:
+HTTP is a stateless protocol, so it doesn't require any special connection phase. You can simply send a HTTP request to the server and receive the response. To communicate with Manticore using the HTTP interface, you can use any HTTP client library in your programming language of choice to send GET or POST requests to the server and parse the JSON responses:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -391,7 +392,7 @@ indexApi.insert(newdoc);
 <!-- example search -->
 ## Search
 
-Let's find one of the documents. The query we will use is 'remove hair'. As you can see it finds document with title 'Pet Hair Remover Glove' and highlights 'Hair remover' in it even though the query has "remove", not "remover". This is because when we created the table we turned on using English stemming (`morphology "stem_en"`).
+Let's find one of the documents. The query we will use is 'remove hair'. As you can see, it finds a document with the title 'Pet Hair Remover Glove' and highlights 'Hair remover' in it, even though the query has "remove", not "remover". This is because when we created the table, we turned on using English stemming (`morphology "stem_en"`).
 
 <!-- intro -->
 ##### SQL:
@@ -769,3 +770,4 @@ indexApi.delete(deleteRequest);
 
 ```
 <!-- end -->
+<!-- proofread -->

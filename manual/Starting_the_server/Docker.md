@@ -10,13 +10,13 @@ The default configuration includes a sample Real-Time table and listens on the d
   * `9308` for connections via HTTP
   * `9312` for connections via a binary protocol (e.g. in case you run a cluster)
 
-The image comes with libraries for easy indexing data from MySQL, PostgreSQL XML and CSV files.
+The image comes with libraries for easy indexing data from MySQL, PostgreSQL, XML and CSV files.
 
 # How to run Manticore Search Docker image
 
 ## Quick usage
 
-The below is the simplest way to start Manticore in a container and log in to it via mysql client:
+The below is the simplest way to start Manticore in a container and log in to it via the mysql client:
 
 ```bash
 docker run -e EXTRA=1 --name manticore --rm -d manticoresearch/manticore && echo "Waiting for Manticore docker to start. Consider mapping the data_dir to make it start faster next time" && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; echo -n .; done && echo && docker exec -it manticore mysql && docker stop manticore
@@ -24,13 +24,13 @@ docker run -e EXTRA=1 --name manticore --rm -d manticoresearch/manticore && echo
 
 Note that upon exiting the MySQL client, the Manticore container will be stopped and removed, resulting in no saved data. For information on using Manticore in a production environment, please see below.
 
-The image comes with a sample table which can be loaded like this:
+The image comes with a sample table that can be loaded like this:
 
 ```sql
 mysql> source /sandbox.sql
 ```
 
-Also the mysql client has in history several sample queries that you can run on the above table, just use Up/Down keys in the client to see and run them.
+Also, the mysql client has several sample queries in its history that you can run on the above table, just use Up/Down keys in the client to see and run them.
 
 ## Production use
 
@@ -39,7 +39,7 @@ Also the mysql client has in history several sample queries that you can run on 
 
 For data persistence the folder `/var/lib/manticore/` should be mounted to local storage or other desired storage engine.
 
-Configuration file inside the instance is located at  `/etc/manticoresearch/manticore.conf`. For custom settings, this file should be mounted to own configuration file.
+The configuration file inside the instance is located at   `/etc/manticoresearch/manticore.conf`. For custom settings, this file should be mounted to your own configuration file.
 
 The ports are 9306/9308/9312 for SQL/HTTP/Binary, expose them depending on how you are going to use Manticore. For example:
 
@@ -65,7 +65,7 @@ If you only need the MCL, you can use the environment variable `MCL=1`.
 
 ### Docker-compose
 
-In many cases you might want to use Manticore together with other images specified in a docker-compose YAML file. Here is the minimal recommended specification for Manticore Search in docker-compose.yml:
+In many cases, you may want to use Manticore in conjunction with other images specified in a Docker Compose YAML file. Below is the minimal recommended configuration for Manticore Search in a docker-compose.yml file:
 
 ```yaml
 version: '2.2'
@@ -93,12 +93,11 @@ services:
 #      - ./manticore.conf:/etc/manticoresearch/manticore.conf # uncomment if you use a custom config
 ```
 
-Besides using the exposed ports 9306 and 9308 you can log into the instance by running `docker-compose exec manticore mysql`.
+Besides using the exposed ports 9306 and 9308, you can log into the instance by running `docker-compose exec manticore mysql`.
 
 ### HTTP protocol
 
-
-HTTP protocol is exposed on port 9308. You can map the port locally and connect with curl:
+HTTP protocol is exposed on port 9308. You can map the port locally and connect using curl.:
 
 ```bash
 docker run -e EXTRA=1 --name manticore -p 9308:9308 -d manticoresearch/manticore
@@ -132,14 +131,14 @@ POST /search -d '{"index":"testrt","query":{"match":{"*":"hello world"}}}'
 
 ### Logging
 
-By default, the server is set to send it's logging to `/dev/stdout`, which can be viewed from the host with:
+By default, the server is set to send its logging to `/dev/stdout`, which can be viewed from the host with:
 
 
 ```bash
 docker logs manticore
 ```
 
-The query log can be diverted to Docker log by passing variable `QUERY_LOG_TO_STDOUT=true`.
+The query log can be diverted to Docker log by passing the variable `QUERY_LOG_TO_STDOUT=true`.
 
 
 ### Multi-node cluster with replication
@@ -244,7 +243,7 @@ For best performance, table components can be "mlocked" into memory. When Mantic
 
 ## Configuring Manticore Search with Docker
 
-If you want to run Manticore with your custom config containing tables definition you will need to mount the configuration to the instance:
+If you want to run Manticore with a custom configuration that includes table definitions, you will need to mount the configuration to the instance:
 
 ```bash
 docker run -e EXTRA=1 --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data/:/var/lib/manticore -p 127.0.0.1:9306:9306 -d manticoresearch/manticore
@@ -265,10 +264,9 @@ The settings must be prefixed with their section name, example for in case of `m
 docker run -e EXTRA=1 --name manticore  -p 127.0.0.1:9306:9306  -e searchd_mysql_version_string='5.5.0' -d manticoresearch/manticore
 ```
 
-In case of `listen` directive, you can pass using Docker variable `searchd_listen`  new listening interfaces in addition to the default ones. Multiple interfaces can be declared separated by semi-colon ("|").
-For listening only on  network address, the `$ip` (retrieved internally from `hostname -i`) can be used as address alias.
+In case of the `listen` directive, new listening interfaces using the Docker variable `searchd_listen`  in addition to the default ones. Multiple interfaces can be declared, separated by a semi-colon ("|"). To listen only on a network address, the `$ip` (retrieved internally from `hostname -i`) can be used as address alias.
 
-For example `-e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'` will add an additional SQL interface on port 9307, an SQL VIP listener on port 5443 running only on the instance's IP and an HTTP listener on port 9316, beside the defaults on 9306 and 9308, respectively.
+For example `-e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'` will add an additional SQL interface on port 9307, an SQL VIP listener on port 5443 running only on the instance's IP, and an HTTP listener on port 9316, in addition to the defaults on 9306 and 9308, respectively.
 
 ```bash
 $ docker run -e EXTRA=1 --rm -p 1188:9307  -e searchd_mysql_version_string='5.5.0' -e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'  manticore
@@ -284,3 +282,4 @@ prereading 0 indexes
 prereaded 0 indexes in 0.000 sec
 accepting connections
 ```
+<!-- proofread -->

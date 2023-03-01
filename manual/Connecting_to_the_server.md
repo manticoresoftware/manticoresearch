@@ -1,7 +1,7 @@
 # Connecting to the server
 
 <!-- example connect -->
-With default configuration Manticore is waiting for your connections on:
+With default configuration, Manticore is waiting for your connections on:
 
   * port 9306 for MySQL clients
   * port 9308 for HTTP/HTTPS connections
@@ -19,7 +19,7 @@ mysql -h0 -P9306
 ##### Connect via JSON over HTTP
 
 <!-- request HTTP -->
-HTTP is a stateless protocol so it doesn't require any special connection phase:
+HTTP is a stateless protocol, so it doesn't require any special connection phase:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -80,10 +80,11 @@ client.setBasePath("http://127.0.0.1:9308");
 ```
 <!-- intro -->
 ##### Connect via Docker
-If you are familiar with Docker you can use Manticore's [official Docker image](https://github.com/manticoresoftware/docker) to run Manticore. Here is how you can connect to Manticore's docker via MySQL:
+If you are familiar with Docker, you can use Manticore's [official Docker image](https://github.com/manticoresoftware/docker) to run Manticore. Here is how you can connect to Manticore's docker via MySQL:
 <!-- request docker -->
 Run Manticore container and use built-in MySQL client to connect to the node.
 ```bash
 docker run -e EXTRA=1 --name manticore -d manticoresearch/manticore && docker exec -it manticore mysql
 ```
 <!-- end -->
+<!-- proofread -->

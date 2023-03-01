@@ -7,17 +7,17 @@
 
 ## Installing as a Windows service
 
-To install the `searchd` (Manticore Search server) as a Windows service, run the following command:
+To install `searchd` (Manticore Search server) as a Windows service, run:
 
 ```bat
 \path\to\searchd.exe --install --config \path\to\config --servicename Manticore
 ```
 
-Make sure to use the full path to the configuration file, or `searchd.exe` won't be able to locate it when it starts as a service.
+Make sure to use the full path of the configuration file, otherwise `searchd.exe`  will not be able to locate it when it starts as a service.
 
-After installation, you can start the service from the Microsoft Management Console's Services snap-in.
+After installation, the service can be started from the Services snap-in of the Microsoft Management Console.
 
-Once started, you can access Manticore using the MySQL command-line interface:
+Once started, you can access Manticore using the MySQL command line interface:
 
 ```bat
 mysql -P9306 -h127.0.0.1

@@ -95,6 +95,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Commit f5e8](https://github.com/manticoresoftware/columnar/commit/f5e84eeb8b6cb102f13e3468246702427527fef9) Added support for quick doclist rewinding to secondary indexes.
 * [Commit 06df](https://github.com/manticoresoftware/manticoresearch/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) Queries like `select attr, count(*) from plain_index` (w/o filtering) are now faster in case you are using MCL.
 * [Commit 0a76](https://github.com/manticoresoftware/manticoresearch/commit/0a76ecb9adbe886868b962dd425de5f475bbf55e) @@autocommit in HandleMysqlSelectSysvar for compatibility with .net connector for mysql greater than 8.25
+* **⚠️ BREAKING CHANGE**: [MCL Issue #17](https://github.com/manticoresoftware/columnar/issues/17) MCL: add SSE code to columnar scan. MCL now requires at least SSE4.2.
 
 ### Packaging-related changes
 * [Commit 4d19](https://github.com/manticoresoftware/manticoresearch/commit/4d19f5cbe49a31228aa09253f061165bfe80e51b) **⚠️ BREAKING CHANGE**: Support for Debian Stretch and Ubuntu Xenial has been discontinued.
@@ -117,7 +118,6 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * ❗[Issue #996](https://github.com/manticoresoftware/manticoresearch/issues/996) PQ index out of memory
 * ❗[Commit 1041](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` has been broken all the time since Sphinx. Fixed.
 * [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) MCL: crash on select when too many ft fields
-* [MCL Issue #17](https://github.com/manticoresoftware/columnar/issues/17) MCL: add SSE code to columnar scan
 * [Issue #470](https://github.com/manticoresoftware/manticoresearch/issues/470) sql_joined_field can't be stored
 * [Issue #713](https://github.com/manticoresoftware/manticoresearch/issues/713) Crash when using LEVENSHTEIN()
 * [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpected and cant to normal restart

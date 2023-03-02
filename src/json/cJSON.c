@@ -58,6 +58,8 @@
 
 #include "cJSON.h"
 
+#include <errno.h>
+
 /* define our own boolean type */
 #define true ((cJSON_bool)1)
 #define false ((cJSON_bool)0)

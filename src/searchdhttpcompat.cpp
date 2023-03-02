@@ -262,7 +262,7 @@ static void CreateKbnTable ( CreateTableSettings_t & tOpts, const nljson & tTbl,
 		AddComplexField ( tField.m_sName.cstr(), dFields );
 }
 
-static uint64_t GetDocID ( const char * szID )
+uint64_t GetDocID ( const char * szID )
 {
 	return sphFNV64(szID);
 }

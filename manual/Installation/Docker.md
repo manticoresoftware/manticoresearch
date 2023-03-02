@@ -2,10 +2,10 @@
 
 Docker images of Manticore Search are publicly available on [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/) built from [Manticore Search docker GitHub repository](https://github.com/manticoresoftware/docker).
 
-To fetch Manticore image execute:
+To fetch Manticore image execute the following command:
 
 ```bash
 docker pull manticoresearch/manticore
 ```
 
-See [Using Manticore in Docker](../Starting_the_server/Docker.md) for more details about using Manticore in Docker.
+For more details about using Manticore in Docker, refer to the section [Using Manticore in Docker](../Starting_the_server/Docker.md).

@@ -9,6 +9,8 @@ Attribute updates are supported for RT, PQ and plain tables. All attribute types
 
 **Note that document id cannot be updated.**
 
+**Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.**
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

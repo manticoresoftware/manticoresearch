@@ -2,16 +2,16 @@
 
 <!-- example Example -->
 
-[Node status](../../Node_info_and_management/Node_status.md) outputs, among other information, cluster status variables.
+You can view the cluster status information by checking the node status. This can be done using the [Node status](../../Node_info_and_management/Node_status.md) command, which displays various information about the node, including the cluster status variables.
 
-The output format is `cluster_name_variable_name` `variable_value`. Most of them are described in [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). Additionally we display:
+The output format for the cluster status variables is as follows:  `cluster_name_variable_name` `variable_value`. Most of the variables are described in the [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). In addition to these variables, Manticore Search also displays:
 
-* cluster_name - [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) of the cluster
-* node_state - current state of the node: `closed`, `destroyed`, `joining`, `donor`, `synced`
-* indexes_count - number of tables managed by the cluster
-* indexes - list of table names managed by the cluster
-* nodes_set - list of nodes in the cluster defined with cluster `CREATE`, `JOIN` or `ALTER UPDATE` commands
-* nodes_view - actual list of nodes in cluster which this node sees
+* cluster_name - the name of the cluster, as defined in the [replication setup](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) 
+* node_state - the current state of the node: `closed`, `destroyed`, `joining`, `donor`, `synced`
+* indexes_count - the number of tables managed by the cluster
+* indexes - a list of table names managed by the cluster
+* nodes_set - the list of nodes in the cluster defined using the `CREATE`, `JOIN` or `ALTER UPDATE` commands
+* nodes_view - the actual list of nodes in the cluster that the current node can see.
 
 
 <!-- intro -->
@@ -190,3 +190,4 @@ utilsApi.sql("SHOW STATUS");
   warning= }
 ```
 <!-- end -->
+<!-- proofread -->

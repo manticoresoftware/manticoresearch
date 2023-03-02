@@ -1,58 +1,56 @@
 # Setting up replication
 
-Write transaction (any result of `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently replication is supported for `percolate` and `rt` tables in Linux an MacOS. Manticore Search packages for Windows do not provide replication support.
+With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate` and `rt` tables in Linux and macOS. However, Manticore Search packages for Windows do not provide replication support.
 
-Manticore's replication is based on [Galera library](https://github.com/codership/galera) and features the following:
+Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 
-* true multi-master - read and write to any node at any time
-* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) - no slave lag, no data is lost after a node crash
-* hot standby - no downtime during failover (since there is no failover)
-* tightly coupled - all the nodes hold the same state. No diverged data between nodes allowed
-* automatic node provisioning - no need to manually back up the database and restore it on a new node
-* easy to use and deploy
-* detection and automatic eviction of unreliable nodes
-* certification based replication
+* True Multi-Master: Read and write to any node at any time.
+* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) No slave lag and no data loss after a node crash. 
+* Hot Standby: No downtime during failover (since there is no failover).
+* Tightly Coupled: All nodes hold the same state and no diverged data between nodes is allowed. 
+* Automatic Node Provisioning: No need to manually backup the database and restore it on a new node.
+* Easy to Use and Deploy. 
+* Detection and Automatic Eviction of Unreliable Nodes. 
+* Certification-based Replication.
 
-To use replication in Manticore Search:
+To set up replication in Manticore Search:
 
-* [data_dir](../../Server_settings/Searchd.md#data_dir) option should be set in section "searchd" of the configuration file. Replication is not supported in the plain mode
-* there should be either:
-  - a [listen](../../Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an IP address accessible by other nodes
-  - or [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address
-* optionally you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will try to use the MAC address (or a random number if that fails) to generate the `server_id`.
+* The [data_dir](../../Server_settings/Searchd.md#data_dir) option must be set in the "searchd" section of the configuration file. Replication is not supported in plain mode.
+* A [listen](../../Server_settings/Searchd.md#listen)  directive must be specified, containing an IP address accessible by other nodes, or a [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address.
+* Optionally, you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will attempt to use the MAC address or a random number to generate the `server_id`.
 
-If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range should be defined and the address/port range pairs should not intersect between different nodes on the same server. As a rule of thumb, the port range should specify no less than two ports per cluster.
+If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster.
 
 ## Replication cluster
 
-Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on per-table basis, meaning that one table can be assigned to only one cluster. There is no restriction on how many tables a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate or real-time table belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
+A replication cluster is a group of nodes in which a write transaction is replicated. Replication is set up on a per-table basis, meaning that one table can only belong to one cluster. There is no limit on the number of tables that a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` on any percolate or real-time table that belongs to a cluster are replicated to all the other nodes in that cluster. Replication is multi-master, so writes to any node or multiple nodes simultaneously will work just as well.
 
-In most cases you [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) with `CREATE CLUSTER <cluster name>` and [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) with `JOIN CLUSTER <cluster name> at 'host:port'`, but in rare cases you may want to fine-tune the behaviour of `CREATE/JOIN CLUSTER`. The options are:
+To create a cluster, you can typically use the command [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) with `CREATE CLUSTER <cluster name>`, and to join a cluster, you can use [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) with `JOIN CLUSTER <cluster name> at 'host:port'`. However, in some rare cases, you may want to fine-tune the behavior of `CREATE/JOIN CLUSTER`. The available options are:
 
 ### name
 
-Specifies cluster name. Should be unique.
+This option specifies the name of the cluster. It should be unique among all the clusters in the system.
 
 ### path
 
-Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming tables from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](../../Server_settings/Searchd.md#data_dir). Should be specified in the form of a path to an existing directory relative to the [data_dir](../../Server_settings/Searchd.md#data_dir).
+The path option specifies the data directory for [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming tables from other nodes. This value should be unique among all the clusters in the system and should be specified as a relative path to the [data_dir](../../Server_settings/Searchd.md#data_dir). directory. By default, it is set to the value of [data_dir](../../Server_settings/Searchd.md#data_dir).
 
 ### nodes
 
-List of address:port pairs for all the nodes in the cluster (comma separated). Node's API interface should be used for this option. It can contain the current node's address too. This list is used to join a node to the cluster and rejoin it after restart.
+The `nodes` option is a list of address:port pairs for all the nodes in the cluster, separated by commas. This list should be obtained using the node's API interface and can include the address of the current node as well. It is used to join the node to the cluster and to rejoin it after a restart.
 
 ### options
 
-Other options that are passed over directly to Galera replication plugin as described here [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
+The `options` option allows you to pass additional options directly to the Galera replication plugin, as described in the [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
 
 ## Write statements
 
 <!-- example write statements 1 -->
-For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that change the content of a cluster's table should use `cluster_name:index_name` expression in place of a table name to make sure the change is propagated to all replicas in the cluster. An error will be triggered otherwise.
+When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:index_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
 
-All write statements for HTTP interface to a cluster's table should set `cluster` property along with `table` name. An error will be triggered otherwise.
+In the HTTP interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
 
-[Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) generated for a table in a cluster should be valid as soon as [server_id](../../Server_settings/Searchd.md#server_id) is not misconfigured.
+The [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for a table in a cluster should be valid as long as the [server_id](../../Server_settings/Searchd.md#server_id) is correctly configured.
 
 <!-- intro -->
 ##### SQL:
@@ -139,9 +137,9 @@ indexApi.delete(deleteRequest);
 ## Read statements
 
 <!-- example write statements 2 -->
-Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can use either regular table names not prepended with a cluster name or `cluster_name:index_name`. In this case `cluster_name` is just ignored.
+Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can either use regular table names that are not prepended with a cluster name, or they can use the  `cluster_name:index_name`format. If the latter is used, the `cluster_name` component is ignored.
 
-In HTTP endpoint `json/search` you can specify `cluster` property if you like, but can also omit it.
+When using the HTTP endpoint `json/search`, the `cluster` property can be specified if desired, but it can also be omitted.
 
 
 <!-- intro -->
@@ -175,9 +173,9 @@ POST /search -d '
 ## Cluster parameters
 
 <!-- example cluster parameters 1 -->
-Replication plugin options can be changed using `SET` statement (see the example).
+Replication plugin options can be adjusted using the `SET` statement.
 
-See [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html) for a list of available options.
+A list of available options can be found in the [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html) .
 
 
 <!-- intro -->
@@ -200,11 +198,11 @@ SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 ## Cluster with diverged nodes
 
 <!-- example cluster with diverged nodes  1 -->
-Sometimes replicated nodes can diverge from each other. The state of all the nodes might turn into `non-primary` due to a network split between nodes, a cluster crash, or if the replication plugin hits an exception when determining the `primary component`. Then it's necessary to select a node and promote it to the `primary component`.
+It's possible for replicated nodes to diverge from one another, leading to a state where all nodes are labeled as `non-primary`. This can occur as a result of a network split between nodes, a cluster crash, or if the replication plugin experiences an exception when determining the `primary component`. In such a scenario, it's necessary to select a node and promote it to the role of `primary component`.
 
-To determine which node needs to be a reference, compare the `last_committed` cluster status variable value on all nodes. If all the servers are already running there's no need to start the cluster again. You just need to promote the most advanced node to the `primary component` with `SET` statement (see the example).
+To identify the node that needs to be promoted, you should compare the `last_committed` cluster status variable value on all nodes. If all the servers are currently running, there's no need to restart the cluster. Instead, you can simply promote the node with the highest last_committed value to the `primary component` using the `SET` statement (as demonstrated in the example).
 
-All other nodes will reconnect to the node and resync their data based on this node.
+The other nodes will then reconnect to the primary component and resynchronize their data based on this node.
 
 
 <!-- intro -->
@@ -227,7 +225,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Replication and cluster
 
 <!-- example replication and cluster 1 -->
-To use replication define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the config. Define [data_dir](../../Server_settings/Searchd.md#data_dir) folder for incoming tables.
+To use replication, you need to define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one  [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the configuration file. Also, specify the  [data_dir](../../Server_settings/Searchd.md#data_dir) folder to receive incoming tables.
 
 
 <!-- intro -->
@@ -245,8 +243,7 @@ searchd {
 <!-- end -->
 
 <!-- example replication and cluster 2 -->
-Create a cluster at the server that has local tables that need to be replicated
-
+To replicate tables, you must create a cluster on the server that has the local tables to be replicated.
 
 <!-- intro -->
 ##### SQL:
@@ -303,7 +300,7 @@ utilsApi.sql("CREATE CLUSTER posts");
 <!-- end -->
 
 <!-- example replication and cluster 3 -->
-Add these local tables to cluster
+Add these local tables to the cluster
 
 
 <!-- intro -->
@@ -380,7 +377,7 @@ utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 <!-- end -->
 
 <!-- example replication and cluster 4 -->
-All other nodes that want replica of cluster's tables should join cluster as
+All other nodes that wish to receive a replica of the cluster's tables should join the cluster as follows:
 
 
 <!-- intro -->
@@ -440,7 +437,7 @@ utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 <!-- end -->
 
 <!-- example replication and cluster 5 -->
-When running queries for SQL prepend the table name with the cluster name `posts:` or use `cluster` property for HTTP request object.
+When running queries, prepend the table name with the cluster name `posts`: or use the `cluster` property for HTTP request object.
 
 
 <!-- intro -->
@@ -511,4 +508,5 @@ sqlresult = indexApi.insert(newdoc);
 ```
 <!-- end -->
 
-Now all such queries that modify tables in the cluster are replicated to all nodes in the cluster.
+All queries that modify tables in the cluster are now replicated to all nodes in the cluster.
+<!-- proofread -->

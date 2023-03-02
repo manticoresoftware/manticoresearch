@@ -2620,16 +2620,20 @@ bool HttpHandlerPQ_c::Process()
 	CSphString * sEndpoint = m_tOptions ( "endpoint" );
 	if ( !sEndpoint || sEndpoint->IsEmpty() )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "invalid empty endpoint, should be /json/pq/index_name/operation");
+		FormatError ( SPH_HTTP_STATUS_400, "invalid empty endpoint, should be pq/index_name/operation");
 		return false;
 	}
 
-	assert ( sEndpoint->Begins ( "json/pq/" ) );
+	assert ( sEndpoint->Begins ( "json/pq/" ) || sEndpoint->Begins ( "pq/" ) );
+	const char * sEndpointMethod = sEndpoint->cstr() + sizeof("pq/") - 1;
+	if ( sEndpoint->Begins ( "json/pq/" ) )
+		sEndpointMethod = sEndpoint->cstr() + sizeof("json/pq/") - 1;
+
 	StrVec_t dPoints;
-	sphSplit ( dPoints, sEndpoint->cstr() + sizeof("json/pq/") - 1, "/" );
+	sphSplit ( dPoints, sEndpointMethod, "/" );
 	if ( dPoints.GetLength()<2 )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "invalid endpoint '%s', should be /json/pq/index_name/operation", sEndpoint->scstr() );
+		FormatError ( SPH_HTTP_STATUS_400, "invalid endpoint '%s', should be pq/index_name/operation", sEndpoint->scstr() );
 		return false;
 	}
 

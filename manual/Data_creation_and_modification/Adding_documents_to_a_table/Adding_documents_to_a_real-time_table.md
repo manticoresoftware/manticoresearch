@@ -242,6 +242,8 @@ If you try to INSERT multiple rows with different, incompatible value types for 
 * uint -> bigint -> float
 * string -> text
 
+Note that `/bulk` HTTP endpoint does not support automatic creation of tables.
+
 <!-- intro -->
 ##### SQL:
 
@@ -457,6 +459,8 @@ You can insert into a real-time table not just a single document, but as many as
 * the larger the batch the higher indexation speed you can expect
 * each batch insert operation is considered a single [transaction](../../Data_creation_and_modification/Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or in case of a failure none of them will be added
 * you might want to increase [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) value to allow bigger batches
+
+Note that `/bulk` HTTP endpoint does not support automatic creation of tables. Only `/_bulk` HTTP endpoint and SphinxQL interface support automatic creation of tables.
 
 <!-- intro -->
 ### Bulk insert examples

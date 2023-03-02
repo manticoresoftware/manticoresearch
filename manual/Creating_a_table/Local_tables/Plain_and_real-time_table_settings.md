@@ -81,9 +81,9 @@ Value: **plain** (default), rt
 path = path/to/table
 ```
 
-Absolute or relative path without extension where to store the table or where to look for it
+The path to where the table will be stored or located, either absolute or relative, without the extension.
 
-Value: path to the table, **mandatory**
+Value: The path to the table, **mandatory**
 
 #### stored_fields
 
@@ -93,13 +93,13 @@ stored_fields = title, content
 
 <!-- example stored_fields -->
 
-By default when a table is defined in a configuration file, full-text fields' original content is both indexed and stored. This setting lets you specify the fields that should have their original values stored.
+By default, the original content of full-text fields is indexed and stored when a table is defined in a configuration file. This setting allows you to specify the fields that should have their original values stored.
 
-Value: comma separated list of **full-text** fields that should be stored. Empty value (i.e. `stored_fields = `) disables storing original values for all the fields.
+Value: A comma-separated list of **full-text** fields that should be stored. An empty value (i.e. `stored_fields =` ) disables the storage of original values for all fields.
 
-Note, in case of a real-time table the fields listed in `stored_fields` should be also declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+Note: In the case of a real-time table, the fields listed in `stored_fields` should also be declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
 
-Note also, that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` can be only used for full-text fields.
+Also, note that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` can only be used for full-text fields.
 
 See also [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) for document storage compression options.
 
@@ -181,25 +181,25 @@ table products {
 stored_only_fields = title,content
 ```
 
-List of fields that will be stored in the table, but will not be indexed. Similar to [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields) except when a field is specified in `stored_only_fields` it is only stored, not indexed and can't be searched with full-text queries. It can only be returned with search results.
+List of fields that will be stored in the table, but not indexed. This setting works similarly to [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields) except that when a field is specified in `stored_only_fields` t will only be stored, not indexed, and cannot be searched using full-text queries. It can only be retrieved in search results.
 
-Value: comma separated list of fields that should be stored only, not indexed. Default is empty. Note, in case of a real-time table the fields listed in `stored_only_fields` should be also declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+The value is a comma-separated list of fields that should be stored only, not indexed. By default, this value is empty. If a real-time table is being defined, the fields listed in `stored_only_fields` must also be declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
 
-Note also, that you don't need to list attributes in `stored_only_fields`, since their original values are stored anyway. If to compare `stored_only_fields` to string attributes the former (stored field):
-* is stored on disk and doesn't require memory
-* is stored compressed
-* can be only fetched, you can't sort/filter/group by the value
+Note also, that you don't need to list attributes in`stored_only_fields`,since their original values are stored anyway. If to compare `stored_only_fields`  to string attributes the former (stored field):
+* is stored on disk and does not take up memory
+* is stored in a compressed format
+* can only be fetched, it cannot be used for sorting, filtering or grouping
 
-The latter (string attribute) is:
-* stored on disk and in memory
-* stored uncompressed
-* can be used for sorting, grouping, filtering and anything else you want to do with attributes.
+In contrast, the latter (string attribute):
+* is stored on disk and in memory
+* is stored in an uncompressed format
+* can be used for sorting, grouping, filtering, and any other actions you want to take with attributes.
 
 ### Real-time table settings:
 
 #### optimize_cutoff
 
-Max number of RT table disk chunks. Read more [here](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks).
+The maximum number of disk chunks for the RT table. Learn more [here](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks).
 
 #### rt_field
 
@@ -207,9 +207,9 @@ Max number of RT table disk chunks. Read more [here](../../Securing_and_compacti
 rt_field = subject
 ```
 
-Full-text fields to be indexed. The names must be unique. The order is preserved; and so field values in `INSERT` statements without an explicit list of inserted columns will have to be in the same order as configured.
+This field declaration determines the full-text fields that will be indexed. The field names must be unique, and the order is preserved. When inserting data, the field values must be in the same order as specified in the configuration.
 
-Full-text field declaration. Multi-value, optional.
+This is a multi-value, optional field.
 
 #### rt_attr_uint
 
@@ -217,9 +217,9 @@ Full-text field declaration. Multi-value, optional.
 rt_attr_uint = gid
 ```
 
-Unsigned integer attribute declaration
+This declaration defines an unsigned integer attribute.
 
-Value: field_name or field_name:N, can be multiple records. N is the max number of bits to keep.
+Value: the field name or field_name:N (where N is the maximum number of bits to keep).
 
 #### rt_attr_bigint
 
@@ -227,9 +227,9 @@ Value: field_name or field_name:N, can be multiple records. N is the max number 
 rt_attr_bigint = gid
 ```
 
-BIGINT attribute declaration
+This declaration defines a BIGINT attribute.
 
-Value: field name, multiple records allowed
+Value: field name, multiple records allowed.
 
 #### rt_attr_multi
 
@@ -237,9 +237,9 @@ Value: field name, multiple records allowed
 rt_attr_multi = tags
 ```
 
-Multi-valued attribute (MVA) declaration. Declares the UNSIGNED INTEGER (unsigned 32-bit) MVA attribute. Multi-value (ie. there may be more than one such attribute declared), optional.
+Declares a multi-valued attribute (MVA) with unsigned 32-bit integer values.
 
-Value: field name, multiple records allowed.
+Value: field name. Multiple records allowed.
 
 #### rt_attr_multi_64
 
@@ -247,9 +247,9 @@ Value: field name, multiple records allowed.
 rt_attr_multi_64 = wide_tags
 ```
 
-Multi-valued attribute (MVA) declaration. Declares the BIGINT (signed 64-bit) MVA attribute. Multi-value (ie. there may be more than one such attribute declared), optional.
+Declares a multi-valued attribute (MVA) with signed 64-bit BIGINT values.
 
-Value: field name, multiple records allowed.
+Value: field name. Multiple records allowed.
 
 #### rt_attr_float
 
@@ -258,9 +258,9 @@ rt_attr_float = lat
 rt_attr_float = lon
 ```
 
-Floating point attribute declaration. Multi-value (an arbitrary number of attributes is allowed), optional. Declares a single precision, 32-bit IEEE 754 format float attribute.
+Declares floating point attributes with single precision, 32-bit IEEE 754 format.
 
-Value: field name, multiple records allowed.
+Value: field name. Multiple records allowed.
 
 #### rt_attr_bool
 
@@ -268,9 +268,9 @@ Value: field name, multiple records allowed.
 rt_attr_bool = available
 ```
 
-Boolean attribute declaration. Multi-value (there might be multiple attributes declared), optional. Declares a 1-bit unsigned integer attribute.
+Declares a boolean attribute with 1-bit unsigned integer values.
 
-Value: field name, multiple records allowed.
+Value: field name.
 
 #### rt_attr_string
 
@@ -278,9 +278,9 @@ Value: field name, multiple records allowed.
 rt_attr_string = title
 ```
 
-String attribute declaration. Multi-value (an arbitrary number of attributes is allowed), optional.
+String attribute declaration.
 
-Value: field name, multiple records allowed.
+Value: field name.
 
 #### rt_attr_json
 
@@ -288,9 +288,9 @@ Value: field name, multiple records allowed.
 rt_attr_json = properties
 ```
 
-JSON attribute declaration. Multi-value (ie. there may be more than one such attribute declared), optional.
+Declares a JSON attribute.
 
-Value: field name, multiple records allowed.
+Value: field name.
 
 #### rt_attr_timestamp
 
@@ -298,9 +298,9 @@ Value: field name, multiple records allowed.
 rt_attr_timestamp = date_added
 ```
 
-Timestamp attribute declaration. Multi-value (an arbitrary number of attributes is allowed), optional.
+Declares a timestamp attribute.
 
-Value: field name, multiple records allowed.
+Value: field name.
 
 #### rt_mem_limit
 
@@ -308,47 +308,42 @@ Value: field name, multiple records allowed.
 rt_mem_limit = 512M
 ```
 
-RAM chunk size limit. Optional, default is 128M.
+Memory limit for a RAM chunk of the table. Optional, default is 128M.
 
-RT table keeps some data in memory ("RAM chunk") and also maintains a number of on-disk tables ("disk chunks"). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT table will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
+RT tables store some data in memory, known as the "RAM chunk," and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
-The limit is pretty strict: RT table never allocates more memory than it’s limited to. The memory is not preallocated either, hence, specifying 512 MB limit and only inserting 3 MB of data should result in allocating 3 MB, not 512 MB.
+Please note that the limit is strict, and RT tables will never allocate more memory than what is specified in the rt_mem_limit. Additionally, memory is not preallocated, so specifying a 512MB limit and only inserting 3MB of data will result in allocating only 3MB, not 512MB.
 
-The `rt_mem_limit` is never exceeded, but the actual RAM chunk can be significantly lower than the limit. Real-time table learns by your data insertion pace and adapts the actual limit to decrease RAM consumption and increase data write speed. How it works:
-* By default RAM chunk size is 50% of `rt_mem_limit`. It's called "`rt_mem_limit` rate".
-* As soon as RAM chunk accumulates `rt_mem_limit * rate` data (50% of `rt_mem_limit` by default) Manticore starts saving the RAM chunk as a new disk chunk.
-* While a new disk chunk is being saved, Manticore checks how many new/replaced documents have appeared.
-* Upon saving a new disk chunk we update the `rt_mem_limit` rate.
-* The rate is reset to 50% as soon as you restart the searchd.
+The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be significantly lower than the limit. RT tables adapt to the data insertion pace and adjust the actual limit dynamically to minimize memory usage and maximize data write speed. This is how it works:
+* By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit`".
+* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit`  by default), Manticore starts saving the RAM chunk as a new disk chunk.
+* While a new disk chunk is being saved, Manticore assesses the number of new/updated documents.
+* After saving a new disk chunk, the `rt_mem_limit` rate is updated.
+* The rate is reset to 50% each time you restart the searchd.
 
-For example, if we saved 90M docs to a disk chunk and 10M more docs arrived while saving, the rate is 90%, so next time we collect up to 90% of `rt_mem_limit` before starting flushing. The higher is the speed of insertion, the lower is the `rt_mem_limit` rate. The rate varies in the range of 33.3% to 95%. You can see table's current rate in [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md).
+For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of data arrives while the save is in progress, the rate would be 90%. Next time, the RT table will collect up to 90% of `rt_mem_limit` before flushing the data. The faster the insertion pace, the lower the `rt_mem_limit` rate. The rate varies between 33.3% to 95%. You can view the current rate of a table using the [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) command.
 
 ##### How to change rt_mem_limit and optimize_cutoff
 
-In the RT mode RAM chunk size limit and max number of disk chunks can be changed using `ALTER TABLE` . To set `rt_mem_limit` to 1 gigabyte for table 't' run query `ALTER TABLE t rt_mem_limit='1G'`. To change max number of chunks - `ALTER TABLE t optimize_cutoff='5'`.
+In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
 
-In the plain mode `rt_mem_limit` and `optimize_cutoff` can be changed so:
-
-* change the value in the table configuration
-* run `ALTER TABLE <index_name> RECONFIGURE`
+In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <index_name> RECONFIGURE`
 
 ##### Important notes about RAM chunks
 
-* RT table is quite similar to a [distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table) table consisting of multiple local tables. The local tables are called "disk chunks".
-* RAM chunk internally consists of multiple "segments".
-* While disk chunks are stored on disk, the segments of RAM chunk are special RAM-only "tables".
-* Any transaction you make to a real-time table generates a new segment. RAM chunk segments are merged after each transaction commit. Therefore it is beneficial to do bulk INSERTs of hundreds/thousands documents rather than hundreds/thousands different inserts with 1 document to avoid the overhead from merging RAM chunk segments.
-* When the number of segments gets greater than 32, the segments get merged, so the count is not greater than 32.
-* RT table always has a single RAM-chunk (may be empty) and one or multiple disk chunks.
-* Merging larger segments take longer, that's why it may be suboptimal to have very large RAM chunk (and therefore `rt_mem_limit`).
-* Number of disk chunks depends on the amount of data in the table and `rt_mem_limit` setting.
-* Searchd flushes RAM chunk to disk (not as a disk chunk, just persists) on shutdown and periodically according to [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period). Flushing several gigabytes to disk may take some time.
-* Large RAM chunk will put more pressure on the storage:
-  - when flushing the RAM chunk to disk into the `.ram` file
-  - when the RAM chunk is full and is dumped to disk as a disk chunk.
-* Until flushed RAM chunk is not persisted on disk there's a [binary log](../../Logging/Binary_logging.md) as its backup for the case of a sudden daemon shutdown. In this case the larger you have `rt_mem_limit`, the longer will it take to replay the binlog on start to recover the RAM chunk.
-* RAM chunk may be performing slightly slower than a disk chunk.
-* Even though a RAM chunk doesn't take more memory than `rt_mem_limit` Manticore itself can take more in some cases, e.g. if you begin a transaction to insert data and don't commit it for some time, then the data you have already transmitted within the transaction to Manticore is kept in memory.
+* Real-time tables are similar to [distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table) consisting of multiple local tables, also known as disk chunks.
+* Each RAM chunk is made up of multiple segments, which are special RAM-only tables.
+* While disk chunks are stored on disk, RAM chunks are stored in memory.
+* Each transaction made to a real-time table generates a new segment, and RAM chunk segments are merged after each transaction commit. It is more efficient to perform bulk INSERTs of hundreds or thousands of documents rather than multiple separate INSERTs with one document to reduce the overhead from merging RAM chunk segments.
+* When the number of segments exceeds 32, they will be merged to keep the count below 32. 
+* Real-time tables always have one RAM chunk (which may be empty) and one or more disk chunks. 
+* Merging larger segments takes longer, so it's best to avoid having a very large RAM chunk (and therefore `rt_mem_limit`).
+* The number of disk chunks depends on the data in the table and the `rt_mem_limit` setting.
+* Searchd flushes the RAM chunk to disk (as a persisted file, not as a disk chunk) on shutdown and periodically according to the [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period) setting. Flushing several gigabytes to disk may take some time.
+* A large RAM chunk puts more pressure on storage, both when flushing to disk into the `.ram` file and when the RAM chunk is full and dumped to disk as a disk chunk.
+* The RAM chunk is backed up by a [binary log](../../Logging/Binary_logging.md) until it is flushed to disk, and a larger `rt_mem_limit`, setting will increase the time it takes to replay the binary log and recover the RAM chunk.
+* The RAM chunk may be slightly slower than a disk chunk.
+* Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit` Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
 
 ### Plain table settings:
 
@@ -360,9 +355,9 @@ source = srcpart2
 source = srcpart3
 ```
 
-Specifies document source to get documents from when the current table is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
+The source field specifies the source from which documents will be obtained during indexing of the current table. There must be at least one source. The sources can be of different types (e.g. one could be MySQL, another PostgreSQL). For more information on indexing from external storages, [indexing from external storages here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
 
-Value: name of the source to build the table from, **mandatory**. Can be multiple records.
+Value: The name of the source is **mandatory**. Multiple values are allowed.
 
 #### killlist_target
 
@@ -370,7 +365,7 @@ Value: name of the source to build the table from, **mandatory**. Can be multipl
 killlist_target = main:kl
 ```
 
-Sets the table(s) that the kill-list will be applied to. Suppresses matches in the targeted table that are updated or deleted in the current table. In `:kl` mode the documents to suppress are taken from the [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). In `:id` mode all document ids from the current table are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+This setting determines the table(s) to which the kill-list will be applied. Matches in the targeted table that are updated or deleted in the current table will be suppressed. In `:kl` mode, the documents to suppress are taken from the [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). In `:id` mode, all document IDs from the current table are suppressed in the targeted one. If neither is specified, both modes will take effect. [Learn more about kill-lists here](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
 Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
 
@@ -381,11 +376,11 @@ columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 ```
 
-Specifies what attributes should be stored in [the columnar storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) instead of the default row-wise storage.
+This configuration setting determines which attributes should be stored in [the columnar storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) instead of the row-wise storage.
 
-You can do `columnar_attrs = *` to store fields of all supported data types in the columnar storage.
+You can set `columnar_attrs = *` to store all supported data types in the columnar storage.
 
-`id` is also supported.
+Additionally, `id` is a supported attribute to store in the columnar storage.
 
 #### columnar_strings_no_hash
 
@@ -406,11 +401,11 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 
 ##### Data types:
 
-Read [more about data types here](../../Creating_a_table/Data_types.md).
+For more information on data types, see [more about data types here](../../Creating_a_table/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
-| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". | string |
+| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | Options: indexed, stored. Default: **both**. To keep text stored, but indexed, specify "stored" only. To keep text indexed only, specify "indexed" only. | string |
 | [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| integer	 | int, uint |
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| big integer	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | float  |   |
@@ -430,15 +425,15 @@ Read [more about data types here](../../Creating_a_table/Data_types.md).
 CREATE TABLE products (title text, price float) morphology='stem_en'
 ```
 
-creates table "products" with two fields: "title" (full-text) and "price" (float) and setting "morphology" with value "stem_en"
+This creates the "products" table with two fields: "title" (full-text) and "price" (float), and sets the "morphology" to "stem_en".
 
 ```sql
 CREATE TABLE products (title text indexed, description text stored, author text, price float)
 ```
-creates table "products" with three fields:
-* field "title" - indexed, but not stored
-* field "description" - stored, but not indexed
-* field "author" - both stored and indexed
+This creates the "products" table with three fields:
+* "title" is indexed, but not stored.
+* "description" is stored, but not indexed.
+* "author" is both stored and indexed.
 <!-- end -->
 
 
@@ -449,28 +444,28 @@ create table ... engine='columnar';
 create table ... engine='rowwise';
 ```
 
-Changes default [attribute storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the table. Can be overridden by specifying `engine` [separately for each attribute](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
+The engine setting changes the default [attribute storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the table. You can also specify `engine` [separately for each attribute](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
 
-See [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) on how to enable columnar storage for a plain table.
+For information on how to enable columnar storage for a plain table, see  [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) .
 
 Values:
-* columnar - enables columnar storage for all table attributes except for [json](../../Creating_a_table/Data_types.md#JSON)
-* **rowwise (default)** - doesn't change anything, i.e. makes Manticore use the traditional row-wise storage for the table
+* columnar - Enables columnar storage for all table attributes, except for [json](../../Creating_a_table/Data_types.md#JSON)
+* **rowwise (default)** - Doesn't change anything and uses the traditional row-wise storage for the table.
 
 
 # Other settings
-The following settings are similar for both real-time and plain table in either mode: whether specified in a configuration file or online via `CREATE` or `ALTER` command.
+The following settings are applicable for both real-time and plain tables, regardless of whether they are specified in a configuration file or set online using the `CREATE` or `ALTER` command.
 
 ## Performance related
 
 ### Accessing table files
-Manticore uses two access modes to read table data - seek+read and mmap.
+Manticore supports two access modes for reading table data: seek+read and mmap.
 
-In seek+read mode the server performs system call `pread` to read document lists and keyword positions, i.e. `*.spd` and `*.spp` files. Internal read buffers are used to optimize reading. The size of these buffers can be tuned with options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). There is also option [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that allows to control how Manticore opens files at start.
+In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the`*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.
 
-In the mmap access mode the search server just maps table's file into memory with `mmap` system call and OS caches file contents by itself. Options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock table's data in memory via `mlock` privileged call which prevents swapping out the cached data to disk by OS.
+In mmap access mode, the search server maps the table's file into memory using the `mmap` system call, and the OS caches the file contents. The options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock the table's data in memory using the`mlock` privileged call, which prevents the OS from swapping the cached data out to disk.
 
-To control what access mode will be used **access_plain_attrs**, **access_blob_attrs**, **access_doclists** and **access_hitlists** options are available with the following values:
+To control which access mode to use, the options **access_plain_attrs**, **access_blob_attrs**, **access_doclists** and **access_hitlists**  are available, with the following values:
 
 | Value | Description |
 | - | - |
@@ -499,19 +494,19 @@ Here is a table which can help you select your desired mode:
 
 ##### The recommendations are:
 
-* If you want **the best search response time** and have enough memory - use [row-wise](../../Creating_a_table/Data_types.md#JSON) attributes and `mlock` for attributes and for doclists/hitlists
-* If you **can't afford lower performance on start** and are ready to wait longer on start until it's warmed up - use [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). If you want searchd to be able to restart faster - stay with `mmap_preread`
-* If you want to **save RAM**, but still have enough RAM for all the attributes - do not use `mlock`, then your OS will decide what should be in memory at any given moment of time depending on what is read from disk more frequently
-* If row-wise **attributes don't fit into RAM** - use [columnar attributes](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
-* If full-text search **performance is not a priority** and you want to save RAM - use `access_doclists/access_hitlists=file`
+* For the **fastest search response time** and ample memory availability, use [row-wise](../../Creating_a_table/Data_types.md#JSON) attributes and lock them in memory using `mlock`. Additionally, use mlock for doclists/hitlists.
+* If you prioritize **can't afford lower performance after start** and are willing to sacrifice longer startup time, use the [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). option. If you desire faster searchd restart, stick to the default  `mmap_preread` option.
+* If you are looking to **conserve memory**, while still having enough memory for all attributes, skip the use of `mlock`. The operating system will determine what should be kept in memory based on frequent disk reads.
+* If row-wise attributes  **do not fit into memory**, opt for [columnar attributes](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
+* If full-text search **performance is not a concern**, and you wish to save memory, use `access_doclists/access_hitlists=file`
 
-The default mode is to:
-* mmap
-* preread non-columnar attributes
-* seek+read columnar attributes with no preread
-* seek+read doclists/hitlists with no preread
+The default mode offers a balance of:
+* mmap,
+* Prereading non-columnar attributes,
+* Seeking and reading columnar attributes with no preread,
+* Seeking and reading doclists/hitlists with no preread.
 
-which provides decent search performance, optimal memory usage and faster searchd restart in most cases.
+This provides a decent search performance, optimal memory utilization, and faster searchd restart in most scenarios.
 
 ### Other performance related settings
 
@@ -521,7 +516,7 @@ which provides decent search performance, optimal memory usage and faster search
 attr_update_reserve = 256k
 ```
 
-Sets the space to be reserved for blob attribute updates. Optional, default value is 128k. When blob attributes (multi-value attributes (MVA), strings, JSON) are updated, their length may change. If the updated string (or MVA or JSON) is shorter than the old one, it overwrites the old one in the `*.spb` file. But if the updated string is longer, the updates are written to the end of the `*.spb` file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files. To avoid frequent resizes, you can specify the extra space to be reserved at the end of the .spb file by using this setting.
+This setting reserves extra space for updates to blob attributes such as multi-value attributes (MVA), strings, and JSON. The default value is 128k. When updating these attributes, their length may change. If the updated string is shorter than the previous one, it will overwrite the old data in the `*.spb` file. If the updated string is longer, it will be written to the end of the `*.spb` file. This file is memory-mapped, making resizing it a potentially slow process, depending on the operating system's memory-mapped file implementation. To avoid frequent resizing, you can use this setting to reserve extra space at the end of the .spb file.
 
 Value: size, default **128k**.
 
@@ -531,7 +526,7 @@ Value: size, default **128k**.
 docstore_block_size = 32k
 ```
 
-Size of the block of documents used by document storage. Optional, default is 16kb. When stored_fields or stored_only_fields are specified, original document text is stored inside the table. To use less disk space, documents are compressed. To get more efficient disk access and better compression ratios on small documents, documents are concatenated into blocks. When indexing, documents are collected until their total size reaches the threshold. After that, this block of documents is compressed. This option can be used to get better compression ratio (by increasing block size) or to get faster access to document text (by decreasing block size).
+This setting controls the size of blocks used by the document storage. The default value is 16kb. When original document text is stored using stored_fields or stored_only_fields, it is stored within the table and compressed for efficiency. To optimize disk access and compression ratios for small documents, these documents are concatenated into blocks. The indexing process collects documents until their total size reaches the threshold specified by this option. At that point, the block of documents is compressed. This option can be adjusted to achieve better compression ratios (by increasing the block size) or faster access to document text (by decreasing the block size).
 
 Value: size, default **16k**.
 
@@ -541,9 +536,9 @@ Value: size, default **16k**.
 docstore_compression = lz4hc
 ```
 
-Type of compression used to compress blocks of documents used by document storage. When stored_fields or stored_only_fields are specified, document storage stores compressed document blocks. 'lz4' has fast compression and decompression speeds, 'lz4hc' (high compression) has the same fast decompression but compression speed is traded for better compression ratio. 'none' disables compression.
+This setting determines the type of compression used for compressing blocks of documents stored in document storage. If stored_fields or stored_only_fields are specified, the document storage stores compressed document blocks. 'lz4' offers fast compression and decompression speeds, while 'lz4hc' (high compression) sacrifices some compression speed for a better compression ratio. 'none' disables compression completely.
 
-Value: **lz4** (default),  lz4hc, none.
+Values: **lz4** (default), lz4hc, none.
 
 #### docstore_compression_level
 
@@ -551,9 +546,9 @@ Value: **lz4** (default),  lz4hc, none.
 docstore_compression_level = 12
 ```
 
-Compression level in document storage when 'lz4hc' compression is used. When 'lz4hc' compression is used, compression level can be fine-tuned to get better performance or better compression ratio. Does not work with 'lz4' compression.
+The compression level used when 'lz4hc' compression is applied in document storage. By adjusting the compression level, you can find the right balance between performance and compression ratio when using 'lz4hc' compression. Note that this option is not applicable when using 'lz4' compression.
 
-Value: 1-12 (default **9**).
+Value: An integer between 1 and 12, with a default of **9**.
 
 #### preopen
 
@@ -561,9 +556,9 @@ Value: 1-12 (default **9**).
 preopen = 1
 ```
 
-This option tells searchd that it should pre-open all table files on startup (or rotation) and keep them open while it runs. Currently, the default mode is not to pre-open the files. Pre-opened tables take a few (currently 2) file descriptors per table. However, they save on per-query open() calls; and also they are invulnerable to subtle race conditions that may happen during table rotation under high load. On the other hand, when serving many tables (100s to 1000s), it still might be desired to open them on per-query basis in order to save file descriptors
+This setting indicates that searchd should open all table files on startup or rotation, and keep them open while running. By default, the files are not pre-opened. Pre-opened tables require a few file descriptors per table, but they eliminate the need for per-query open() calls and are immune to race conditions that might occur during table rotation under high load. However, if you are serving many tables, it may still be more efficient to open them on a per-query basis in order to conserve file descriptors.
 
-Value: **0** (default), 1.
+Value: **0** (default), or 1.
 
 #### read_buffer_docs
 
@@ -571,9 +566,9 @@ Value: **0** (default), 1.
 read_buffer_docs = 1M
 ```
 
-Per-keyword read buffer size for document lists. The higher the value the higher per-query RAM use is, but possibly lower IO time
+Buffer size for storing the list of documents per keyword. Increasing this value will result in higher memory usage during query execution, but may reduce I/O time.
 
-Value: size, default **256k**, min 8k.
+Value: size, default **256k**, minimum value is 8k.
 
 #### read_buffer_hits
 
@@ -581,9 +576,9 @@ Value: size, default **256k**, min 8k.
 read_buffer_hits = 1M
 ```
 
-Per-keyword read buffer size for hit lists. The higher the value the higher per-query RAM use is, but possibly lower IO time
+Buffer size for storing the list of hits per keyword. Increasing this value will result in higher memory usage during query execution, but may reduce I/O time.
 
-Value: size, default **256k**, min 8k.
+Value: size, default **256k**, minimum value is 8k.
 
 ### Plain table disk footprint settings
 
@@ -595,13 +590,13 @@ Value: size, default **256k**, min 8k.
 inplace_enable = {0|1}
 ```
 
-Whether to enable in-place table inversion. Optional, default is 0 (use separate temporary files).
+Enables in-place table inversion. Optional, default is 0 (uses separate temporary files).
 
-`inplace_enable` greatly reduces indexing disk footprint for a plain table, at a cost of slightly slower indexing (it uses around 2x less disk, but yields around 90-95% the original performance).
+The `inplace_enable` option reduces the disk footprint during indexing of plain tables, while slightly slowing down indexing (it uses approximately 2 times less disk, but yields around 90-95% of the original performance).
 
-Indexing involves two major phases. The first phase collects, processes, and partially sorts documents by keyword, and writes the intermediate result to temporary files (.tmp\*). The second phase fully sorts the documents, and creates the final table files. Thus, rebuilding a production table on the fly involves around 3x peak disk footprint: 1st copy for the intermediate temporary files, 2nd copy for newly constructed copy, and 3rd copy for the old table that will be serving production queries in the meantime. (Intermediate data is comparable in size to the final table.) That might be too much disk footprint for big data collections, and `inplace_enable` allows to reduce it. When enabled, it reuses the temporary files, outputs the final data back to them, and renames them on completion. However, this might require additional temporary data chunk relocation, which is where the performance impact comes from.
+Indexing is comprised of two primary phases. During the first phase, documents are collected, processed, and partially sorted by keyword, and the intermediate results are written to temporary files (.tmp*). During the second phase, the documents are fully sorted and the final table files are created. Rebuilding a production table on-the-fly requires approximately 3 times the peak disk footprint: first for the intermediate temporary files, second for the newly constructed copy, and third for the old table that will be serving production queries in the meantime. (Intermediate data is comparable in size to the final table.) This may be too much disk footprint for large data collections, and the `inplace_enable` option can be used to reduce it. When enabled, it reuses the temporary files, outputs the final data back to them, and renames them upon completion. However, this may require additional temporary data chunk relocation, which is where the performance impact comes from.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+This directive has no effect on [searchd](../../Starting_the_server/Manually.md), it only affects the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -627,10 +622,9 @@ table products {
 inplace_hit_gap = size
 ```
 
-[In-place inversion](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable) fine-tuning option. Controls preallocated hitlist gap size. Optional, default is 0.
+The option [In-place inversion](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable) fine-tuning option. Controls preallocated hitlist gap size. Optional, default is 0.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
-
+This directive only affects the [searchd](../../Starting_the_server/Manually.md) tool, and does not have any impact on the  [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 <!-- intro -->
 ##### CONFIG:
@@ -656,10 +650,9 @@ table products {
 inplace_reloc_factor = 0.1
 ```
 
-Controls relocation buffer size within indexing memory arena. Optional, default is 0.1.
+The inplace_reloc_factor setting determines the size of the relocation buffer within the memory arena used during indexing. The default value is 0.1. 
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
-
+This option is optional and only affects the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) tool, not the [searchd](../../Starting_the_server/Manually.md)  server.
 
 <!-- intro -->
 ##### CONFIG:
@@ -685,9 +678,9 @@ table products {
 inplace_write_factor = 0.1
 ```
 
-Controls in-place write buffer size within indexing memory arena. Optional, default is 0.1.
+Controls the size of the buffer used for in-place writing during indexing. Optional, with a default value of 0.1.
 
-This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+It's important to note that this directive only impacts the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) tool and not the [searchd](../../Starting_the_server/Manually.md) server.
 
 
 <!-- intro -->
@@ -750,3 +743,4 @@ The following settings are supported. They are all described in section [NLP and
 * [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields)
 * [stored_only_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
 * [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
+<!-- proofread -->

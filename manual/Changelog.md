@@ -15,7 +15,9 @@ Released: soon
 * [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95) [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks
 * [Commit 20d2](https://github.com/manticoresoftware/manticoresearch/commit/20d246c) Fixed compat mode bulk request to pass into buddy on error
 * [Commit aa0c](https://github.com/manticoresoftware/manticoresearch/commit/aa0cdfb) Fixed daemon to log messages from buddy console into daemon log line by line
-
+* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed /pq HTTP endpoint to be an alias of the /json/pq HTTP endpoint
+* [Commit ee87](https://github.com/manticoresoftware/columnar/commit/ee87d11) Fixed crash on search with the secondary index
+* [Commit e7f9](https://github.com/manticoresoftware/manticoresearch/commit/e7f9815) Added buddy version to startup log entry
 
 # Version 6.0.2
 Released: Feb 10 2023
@@ -34,7 +36,7 @@ Starting with this release, Manticore Search comes with Manticore Buddy, a sidec
 This release also includes more than 130 bug fixes and numerous features, many of which can be considered major.
 
 ### Major Changes
-* 🔬 Experimental: you can now execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash (version < 7.13), Filebeat and other tools from the Beats family. Enabled by default. You can disable it using `SET GLOBAL ES_COMPAT=off`.
+* 🔬 Experimental: you can now execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?example=Elasticsearch#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md?example=Elasticsearch#REPLACE) JSON queries which enables using Manticore with tools like Logstash (version < 7.13), Filebeat and other tools from the Beats family. Enabled by default. You can disable it using `SET GLOBAL ES_COMPAT=off`.
 * Support for [Manticore Columnar Library 2.0.0](https://github.com/manticoresoftware/columnar/) with numerous fixes and improvements in [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes). **⚠️ BREAKING CHANGE**: Secondary indexes are ON by default as of this release. Make sure you do [ALTER TABLE table_name REBUILD SECONDARY](../Updating_table_schema_and_settings.md#Rebuild-secondary-index) if you are upgrading from Manticore 5. See below for more details.
 * [Commit c436](https://github.com/manticoresoftware/manticoresearch/commit/c436f9023536f767610451911955ae36d90aa638) Auto-schema: you can now skip creating a table, just insert the first document and Manticore will create the table automatically based on its fields. Read more about this in detail [here](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). You can turn it on/off using [searchd.auto_schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 * Vast revamp of [cost-based optimizer](../Searching/Cost_based_optimizer.md) which lowers query response time in many cases.
@@ -99,6 +101,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Commit f5e8](https://github.com/manticoresoftware/columnar/commit/f5e84eeb8b6cb102f13e3468246702427527fef9) Added support for quick doclist rewinding to secondary indexes.
 * [Commit 06df](https://github.com/manticoresoftware/manticoresearch/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) Queries like `select attr, count(*) from plain_index` (w/o filtering) are now faster in case you are using MCL.
 * [Commit 0a76](https://github.com/manticoresoftware/manticoresearch/commit/0a76ecb9adbe886868b962dd425de5f475bbf55e) @@autocommit in HandleMysqlSelectSysvar for compatibility with .net connector for mysql greater than 8.25
+* **⚠️ BREAKING CHANGE**: [MCL Issue #17](https://github.com/manticoresoftware/columnar/issues/17) MCL: add SSE code to columnar scan. MCL now requires at least SSE4.2.
 
 ### Packaging-related changes
 * [Commit 4d19](https://github.com/manticoresoftware/manticoresearch/commit/4d19f5cbe49a31228aa09253f061165bfe80e51b) **⚠️ BREAKING CHANGE**: Support for Debian Stretch and Ubuntu Xenial has been discontinued.
@@ -121,7 +124,6 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * ❗[Issue #996](https://github.com/manticoresoftware/manticoresearch/issues/996) PQ index out of memory
 * ❗[Commit 1041](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` has been broken all the time since Sphinx. Fixed.
 * [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) MCL: crash on select when too many ft fields
-* [MCL Issue #17](https://github.com/manticoresoftware/columnar/issues/17) MCL: add SSE code to columnar scan
 * [Issue #470](https://github.com/manticoresoftware/manticoresearch/issues/470) sql_joined_field can't be stored
 * [Issue #713](https://github.com/manticoresoftware/manticoresearch/issues/713) Crash when using LEVENSHTEIN()
 * [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpected and cant to normal restart

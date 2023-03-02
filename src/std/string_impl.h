@@ -32,6 +32,13 @@ inline bool StrEqN ( const char* l, const char* r )
 	return strcasecmp ( l, r ) == 0;
 }
 
+inline bool StrEq ( Str_t l, const char * r )
+{
+	if ( IsEmpty ( l ) || !r )
+		return ( ( !r && IsEmpty ( l ) ) || ( IsEmpty ( l ) && !*r ) );
+	return strncmp ( l.first, r, l.second ) == 0;
+}
+
 inline Str_t FromStr ( const CSphString& sString )
 {
 	return { sString.cstr(), (int)sString.Length() };

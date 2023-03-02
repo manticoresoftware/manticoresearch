@@ -80,23 +80,15 @@ struct PreservedStd_t : boost::process::detail::handler, boost::process::detail:
 	}
 };
 
-static CSphString CheckLine ( Str_t sLine )
+static std::pair<Str_t, Str_t> CheckLine ( Str_t sLine )
 {
-	char sBuddyAddrHead[] = "started ";
-	const char * sGot = strstr ( sLine.first, sBuddyAddrHead );
-	if ( sGot )
-	{
-		int iHeaderLen = sizeof ( sBuddyAddrHead ) - 1;
-		const char * sAddrStart = sGot + iHeaderLen;
-		int iAddrLen = sLine.second - iHeaderLen;
-		assert ( iAddrLen>0 );
+	CSphVector<Str_t> dWords;
+	sphSplitApply ( sLine.first, sLine.second, " \n\r", [&dWords] ( const char * pLine, int iLen ) { dWords.Add ( Str_t { pLine, iLen } ); } );
 
-		CSphString sAddr;
-		sAddr.SetBinary ( sAddrStart, iAddrLen );
-		return sAddr;
-	}
+	if ( dWords.GetLength()>=4 && StrEq ( dWords[0], "Buddy" ) && StrEq ( dWords[2], "started" ) )
+		return std::make_pair ( dWords[1], dWords[3] );
 
-	return CSphString();
+	return std::make_pair ( Str_t(), Str_t() );
 }
 
 static std::pair<Str_t, Str_t> GetLines ( Str_t tSrc )
@@ -210,21 +202,21 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	auto [sLine, sLinesTail] = GetLines ( sLineRef );
 
 	// at the BuddyState_e::STARTING parsing buddy output
-	CSphString sAddr = CheckLine ( sLine );
-	sAddr.Trim();
-	if ( sAddr.IsEmpty() )
+	auto [sBuddyVer, sBuddyAddr] = CheckLine ( sLine );
+	if ( IsEmpty ( sBuddyAddr ) )
 	{
 		g_eBuddy = BuddyState_e::FAILED;
-		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%.*s'", sLineRef.second, sLineRef.first );
+		sphWarning ( "[BUDDY] invalid output, should be 'Buddy ver, started address:port', got '%.*s'", sLineRef.second, sLineRef.first );
 		return;
 	}
 
 	CSphString sError;
+	CSphString sAddr ( sBuddyAddr );
 	ListenerDesc_t tListen = ParseListener ( sAddr.cstr(), &sError );
 	if ( tListen.m_eProto==Proto_e::UNKNOWN || !sError.IsEmpty() )
 	{
 		g_eBuddy = BuddyState_e::FAILED;
-		sphWarning ( "[BUDDY] invalid output, should be 'address:port', got '%.*s', parse error: %s", sLineRef.second, sLineRef.first, sError.cstr() );
+		sphWarning ( "[BUDDY] invalid output, should be 'Buddy ver, started address:port', got '%.*s', parse error: %s", sLineRef.second, sLineRef.first, sError.cstr() );
 		return;
 	}
 
@@ -232,7 +224,7 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	g_sUrlBuddy = GetUrl( tListen );
 	g_eBuddy = BuddyState_e::WORK;
 	g_iRestartCount = 0;
-	sphInfo ( "[BUDDY] started '%s' at %s", g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
+	sphInfo ( "[BUDDY] started %.*s '%s' at %s", sBuddyVer.second, sBuddyVer.first, g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
 	if ( sLinesTail.second )
 		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
 }

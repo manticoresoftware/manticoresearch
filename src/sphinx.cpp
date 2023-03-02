@@ -7156,6 +7156,7 @@ inline void CalcContextItem ( CSphMatch & tMatch, const CSphQueryContext::CalcIt
 		break;
 
 	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_UINT64:
 	case SPH_ATTR_JSON_FIELD:
 		tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
 		break;

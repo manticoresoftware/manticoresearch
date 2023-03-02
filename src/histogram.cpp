@@ -493,11 +493,11 @@ int HistogramStreamed_T<T>::LerpCounter ( int iBucket, T tVal ) const
 	const HSBucket_T<T> & tBucketR = m_dBuckets[iBucket+1];
 	assert ( tBucketL.m_tCentroid<=tVal && tVal<=tBucketR.m_tCentroid );
 
-	T tDistL = tVal - tBucketL.m_tCentroid;
-	T tDist = tBucketR.m_tCentroid - tBucketL.m_tCentroid;
+	double fDistL = (double)tVal - (double)tBucketL.m_tCentroid;
+	double fDist = (double)tBucketR.m_tCentroid - (double)tBucketL.m_tCentroid;
 
-	float fLerp = (float)tDistL / (float)tDist;
-	assert ( fLerp>=0.0f && fLerp<=1.0f );
+	double fLerp = fDistL / fDist;
+	assert ( fLerp>=0.0 && fLerp<=1.0 );
 
 	return int ( fLerp * tBucketR.m_iCount + ( 1.0f - fLerp ) * tBucketL.m_iCount );
 }

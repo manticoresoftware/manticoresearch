@@ -14,9 +14,11 @@
 
 #include "sphinxdefs.h"
 
-DWORD 	sphToDword ( const char * s );
-int64_t sphToInt64 ( const char * szNumber, CSphString * pError=nullptr );
-float 	sphToFloat ( const char * s );
+DWORD 		sphToDword ( const char * s );
+int64_t		sphToInt64 ( const char * szNumber, CSphString * pError=nullptr );
+uint64_t	sphToUInt64 ( const char * szNumber, CSphString * pError=nullptr );
+uint64_t	StrToDocID ( const char * szNumber, CSphString & sError );
+float 		sphToFloat ( const char * s );
 
 /// float vs dword conversion
 FORCE_INLINE DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; return u.d; }

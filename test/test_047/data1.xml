@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="title"/>
+</sphinx:schema>
+
+, 
+, 
+60000000000, Doc 60000000000
+60000000001, Doc 60000000001
+9223372036854775806, Doc 9223372036854775806
+9223372036854775807, Doc 9223372036854775807
+9223372036854775808, Doc 9223372036854775808
+
+
+<sphinx:document id="50000000000">
+<title>Doc 50000000000</title>
+</sphinx:document>
+
+<sphinx:document id="50000000001">
+<title>Doc 50000000001</title>
+</sphinx:document>
+
+<sphinx:document id="60000000000">
+<title>Doc 60000000000</title>
+</sphinx:document>
+
+<sphinx:document id="60000000001">
+<title>Doc 60000000001</title>
+</sphinx:document>
+
+<sphinx:document id="9223372036854775806">
+<title>Doc 9223372036854775806</title>
+</sphinx:document>
+
+<sphinx:document id="9223372036854775807">
+<title>Doc 9223372036854775807</title>
+</sphinx:document>
+
+<sphinx:document id="9223372036854775808">
+<title>Doc 9223372036854775808</title>
+</sphinx:document>
+
+<sphinx:document id="-1">
+<title>Doc -1</title>
+</sphinx:document>
+
+<sphinx:document id="-9223372036854775808">
+<title>Doc -9223372036854775808</title>
+</sphinx:document>
+
+<sphinx:document id="0">
+<title>Doc 0</title>
+</sphinx:document>
+
+</sphinx:docset>

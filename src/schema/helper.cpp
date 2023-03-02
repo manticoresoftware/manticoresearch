@@ -31,7 +31,7 @@ void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo>& dAttrs, CSphVect
 		iBits = tLoc.m_iBitCount;
 	if ( tCol.m_eAttrType == SPH_ATTR_BOOL )
 		iBits = 1;
-	if ( tCol.m_eAttrType == SPH_ATTR_BIGINT || tCol.m_eAttrType == SPH_ATTR_JSON_FIELD || tCol.m_eAttrType==SPH_ATTR_DOUBLE )
+	if ( tCol.m_eAttrType == SPH_ATTR_BIGINT || tCol.m_eAttrType == SPH_ATTR_UINT64 || tCol.m_eAttrType == SPH_ATTR_JSON_FIELD || tCol.m_eAttrType==SPH_ATTR_DOUBLE )
 		iBits = 64;
 
 	if ( tCol.IsDataPtr() )

@@ -867,10 +867,11 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		if ( $keep_json_ctrls )
 		{
 			$json_handler = new SafeJsonHandler();
-			$rows = $json_handler->Decode ( $set["rows"], 1 );	
+			$rows = $json_handler->Decode ( $set["rows"], 1, 512, JSON_BIGINT_AS_STRING );
 		}
 		else
-			$rows = json_decode ( $set["rows"], 1 );
+			$rows = json_decode ( $set["rows"], 1, 512, JSON_BIGINT_AS_STRING );
+
 		if ( isset ( $rows["hits"] ) && isset ( $rows["hits"]["hits"] ) )
 		{
 			foreach ( $rows["hits"]["hits"] as &$hit )
@@ -889,10 +890,11 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		if ( $keep_json_ctrls )
 		{
 			$json_handler = new SafeJsonHandler();
-			$rows = $json_handler->Decode ( $set["rows"], 1 );	
+			$rows = $json_handler->Decode ( $set["rows"], 1, 512, JSON_BIGINT_AS_STRING );
 		}
 		else
-			$rows = json_decode ( $set["rows"], 1 );
+			$rows = json_decode ( $set["rows"], 1, 512, JSON_BIGINT_AS_STRING );
+
 		foreach	( $rows as &$row )
 		{
 			if ( isset ( $row["data"] ) )
@@ -1280,10 +1282,10 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 		if ( $keep_json_ctrls )
 		{
 			$json_handler = new SafeJsonHandler();
-			$rows = $json_handler->Decode ( $result['rows'], 1 );	
+			$rows = $json_handler->Decode ( $result['rows'], 1, 512, JSON_BIGINT_AS_STRING );
 		}
 		else
-        	$rows = json_decode ( $result['rows'], 1 );
+        	$rows = json_decode ( $result['rows'], 1, 512, JSON_BIGINT_AS_STRING );
 	}
 
 	if ( array_key_exists ("agent", $result ) )
@@ -2289,10 +2291,10 @@ class SphinxConfig
         if ( $keep_json_ctrls )
         {
 			$json_handler = new SafeJsonHandler();
-		   	$decoded_rows = $json_handler->Decode ( $query_result['rows'] );
+		   	$decoded_rows = $json_handler->Decode ( $query_result['rows'], null, 512, JSON_BIGINT_AS_STRING );
 		}
 		else
-			$decoded_rows = json_decode ( $query_result['rows'] );
+			$decoded_rows = json_decode ( $query_result['rows'], null, 512, JSON_BIGINT_AS_STRING );
 
         if ( !$decoded_rows )
         {
@@ -2329,10 +2331,10 @@ class SphinxConfig
         if ( $keep_json_ctrls )
         {
 			$json_handler = new SafeJsonHandler();
-		   	$decoded_rows = $json_handler->Decode ( $query_result['rows'] );
+		   	$decoded_rows = $json_handler->Decode ( $query_result['rows'], null, 512, JSON_BIGINT_AS_STRING );
 		}
 		else
-			$decoded_rows = json_decode ( $query_result['rows'] );
+			$decoded_rows = json_decode ( $query_result['rows'], null, 512, JSON_BIGINT_AS_STRING );
 
         if ( !$decoded_rows )
         {

@@ -192,4 +192,6 @@ protected:
 
 private:
 	bool					m_bSqlConnected = false;	///< am i connected?
+
+	bool					StoreAttribute ( int iAttr );
 };

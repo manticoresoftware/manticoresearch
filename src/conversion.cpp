@@ -59,3 +59,40 @@ int64_t sphToInt64 ( const char * szNumber, CSphString * pError )
 
 	return iNumber;
 }
+
+
+uint64_t sphToUInt64 ( const char * szNumber, CSphString * pError )
+{
+	if ( !szNumber )
+		return 0;
+
+	char * szEndPtr = nullptr;
+	errno = 0;
+
+	uint64_t uNumber = strtoull ( szNumber, &szEndPtr, 10 );
+	if ( pError )
+	{
+		if ( szNumber==szEndPtr )
+			pError->SetSprintf ( "invalid number \"%s\", " UINT64_FMT " assumed", szNumber, uNumber );
+		else if ( errno==ERANGE )
+			pError->SetSprintf ( "overflow detected \"%s\", " UINT64_FMT " assumed", szNumber, uNumber );
+	}
+
+	return uNumber;
+}
+
+
+uint64_t StrToDocID ( const char * szNumber, CSphString & sError )
+{
+	if ( szNumber && *szNumber=='-' )
+	{
+		sError = "Negative document ids are not allowed";
+		return 0;
+	}
+
+	uint64_t uDocID = sphToUInt64 ( szNumber, &sError );
+	if ( !sError.IsEmpty() )
+		return 0;
+
+	return uDocID;
+}

@@ -3481,6 +3481,7 @@ enum Tokh_e : BYTE
 	FUNC_LEAST,
 	FUNC_GREATEST,
 	FUNC_UINT,
+	FUNC_UINT64,
 	FUNC_QUERY,
 
 	FUNC_CURTIME,
@@ -3608,7 +3609,8 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "least",			FUNC_LEAST			},
 	{ "greatest",		FUNC_GREATEST		},
 	{ "uint",			FUNC_UINT			},
-	{ "query",			FUNC_QUERY			 },
+	{ "uint64",			FUNC_UINT64			},
+	{ "query",			FUNC_QUERY			},
 
 	{ "curtime",		FUNC_CURTIME		 },
 	{ "utc_time",		FUNC_UTC_TIME		 },
@@ -3663,7 +3665,7 @@ int HashGen()
 {
 	printf ( "struct func { char *name; int num; };\n%%%%\n" );
 	for ( int i=0; i<int( sizeof ( g_dKeyValTokens )/sizeof ( g_dKeyValTokens[0] )); ++i )
-	printf ( "%s, %d\n", g_dKeyValTokens[i].first, i );
+	printf ( "%s, %d\n", g_dKeyValTokens[i].m_sName, i );
 	printf ( "%%%%\n" );
 	printf ( "void main()\n" );
 	printf ( "{\n" );
@@ -3684,49 +3686,49 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 	assert ( sKey.first && sKey.second && sKey.first[0] );
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
-    {
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108,  16, 108,
-            38,   5, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 14,   5,   5, 0,  21,
-            38,  39,  50,  21, 108, 108,  14,  23, 2,  30,
-            12,  10,   9,   1,   0,  30,  50,  35, 34,  31,
-            7, 108, 108, 108, 108,  22, 108,  14,   5,   5,
-            0,  21,  38,  39,  50,  21, 108, 108,  14,  23,
-            2,  30,  12,  10,   9,   1,   0,  30,  50,  35,
-            34,  31,   7, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-            108, 108, 108, 108, 108, 108
-    };
+	{
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108,  16, 108,
+		38,   5,   0, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 14,   5,   5,	0,  21,
+		38,  39,  50,  21, 108, 108,  14,  23,	2,  30,
+		12,  10,   9,   1,   0,  30,  50,  35, 34,  31,
+		7, 108, 108, 108, 108,  22, 108,  14,   5,   5,
+		0,  21,  38,  39,  50,  21, 108, 108,  14,  23,
+		2,  30,  12,  10,   9,   1,   0,  30,  50,  35,
+		34,  31,   7, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
+		108, 108, 108, 108, 108, 108
+	};
 
 	const static short dIndexes[] =
     {
-            -1, -1, -1, -1, -1, 78, -1, 12, 4, 75,
-            5, 32, 22, 40, 10, 65, 38, 76, 6, 1,
-            58, 39, -1, 42, 82, 31, 80, 28, -1, 70,
-            23, 43, 36, 49, 83, 57, 51, 46, -1, 62,
-            72, 77, 53, 30, 2, 59, 29, 35, 9, 33,
-            11, 44, 21, 13, 63, 67, 68, 47, 17, 81,
-            55, 27, 73, 69, 54, 15, 61, 52, 50, 56,
-            41, 64, 48, 14, 8, 0, 34, 71, 37, 60,
-            16, -1, 3, -1, -1, 25, 45, 66, 19, -1,
-            -1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
-            -1, -1, -1, 79, 18, -1, -1, 74,
-    };
+		-1, -1, -1, -1, -1, 79, -1, 12, 4, 76,
+		5, 32, 22, 40, 10, 66, 38, 77, 6, 1,
+		59, 39, -1, 42, 83, 31, 81, 28, -1, 71,
+		23, 43, 36, 49, 84, 58, 51, 46, 52, 63,
+		73, 78, 54, 30, 2, 60, 29, 35, 9, 33,
+		11, 44, 21, 13, 64, 68, 69, 47, 17, 82,
+		56, 27, 74, 70, 55, 15, 62, 53, 50, 57,
+		41, 65, 48, 14, 8, 0, 34, 72, 37, 61,
+		16, -1, 3, -1, -1, 25, 45, 67, 19, -1,
+		-1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
+		-1, -1, -1, 80, 18, -1, -1, 75,
+	};
 
 	auto * s = (const BYTE*) sKey.first;
 	auto iLen = sKey.second;
@@ -3848,6 +3850,7 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"least",		*/		1,	TOK_FUNC,		/*FUNC_LEAST,			*/	SPH_ATTR_STRINGPTR },
 	{ /*"greatest",		*/		1,	TOK_FUNC,		/*FUNC_GREATEST,		*/	SPH_ATTR_STRINGPTR },
 	{ /*"uint",			*/		1,	TOK_FUNC,		/*FUNC_UINT,			*/	SPH_ATTR_INTEGER },
+	{ /*"uint64",		*/		1,	TOK_FUNC,		/*FUNC_UINT64,			*/	SPH_ATTR_UINT64 },
 	{ /*"query",		*/		0,	TOK_FUNC,		/*FUNC_QUERY,			*/	SPH_ATTR_STRINGPTR },
 
 	{ /*"curtime",		*/		0,	TOK_FUNC,		/*FUNC_CURTIME,			*/	SPH_ATTR_STRINGPTR },
@@ -3888,7 +3891,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "second", "min", "max", "pow", "idiv", "if", "madd", "mul3", "interval", "in", "bitdot", "remap"
 		, "geodist", "exist", "poly2d", "geopoly2d", "contains", "zonespanlist", "concat", "to_string"
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
-		, "uint", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
+		, "uint", "uint64", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
 		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein" };
 
@@ -6831,6 +6834,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_INTEGER:
 	case FUNC_DOUBLE:
 	case FUNC_UINT:
+	case FUNC_UINT64:
 		SafeAddRef ( dArgs[0] );
 		return dArgs[0];
 

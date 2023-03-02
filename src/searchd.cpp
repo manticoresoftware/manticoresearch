@@ -1963,6 +1963,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			break;
 
 		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_UINT64:
 			tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
 			break;
 
@@ -3449,6 +3450,9 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 	case SPH_ATTR_DOUBLE:
 		return iVer<0x122 ? SPH_ATTR_FLOAT : SPH_ATTR_DOUBLE;
 
+	case SPH_ATTR_UINT64:
+		return iVer<0x123 ? SPH_ATTR_BIGINT : SPH_ATTR_UINT64;
+
 	default: return tCol.m_eAttrType;
 	} 
 }
@@ -3529,6 +3533,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 		break;
 
 	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_UINT64:
 		tOut.SendUint64 ( tMatch.GetAttr(tLoc) );
 		break;
 
@@ -13009,6 +13014,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 			case SPH_ATTR_FLOAT:	eType = MYSQL_COL_FLOAT; break;
 			case SPH_ATTR_DOUBLE:	eType = MYSQL_COL_DOUBLE; break;
 			case SPH_ATTR_BIGINT:	eType = MYSQL_COL_LONGLONG; break;
+			case SPH_ATTR_UINT64:	eType = MYSQL_COL_UINT64; break;
 			default: break;
 			}
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
@@ -13052,6 +13058,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 			case SPH_ATTR_BIGINT:
 				dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
+				break;
+
+			case SPH_ATTR_UINT64:
+				dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
 				break;
 
 			case SPH_ATTR_FLOAT:
@@ -14789,6 +14799,7 @@ void HandleMysqlSelectDual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		}
 		case SPH_ATTR_INTEGER:	tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
 		case SPH_ATTR_BIGINT:	tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
+		case SPH_ATTR_UINT64:	tOut.PutNumAsString ( (uint64_t)pExpr->Int64Eval ( tMatch ) ); break;
 		case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
 		case SPH_ATTR_DOUBLE:	tOut.PutDoubleAsString ( pExpr->Eval ( tMatch ) ); break;
 		default:

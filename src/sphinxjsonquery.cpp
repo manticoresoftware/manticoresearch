@@ -1316,6 +1316,10 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 		tOut.NtoA ( tMatch.GetAttr(tLoc) );
 		break;
 
+	case SPH_ATTR_UINT64:
+		tOut.NtoA ( (uint64_t)tMatch.GetAttr(tLoc) );
+		break;
+
 	case SPH_ATTR_FLOAT:
 		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) );
 		break;

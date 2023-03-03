@@ -629,9 +629,10 @@ Resumer_fn MakeCoroExecutor ( Handler fnHandler )
 	return [pWorker] () -> bool { return pWorker->Resume(); };
 }
 
-static void CallPlainCoroutine ( Handler fnHandler )
+void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 {
-	auto pScheduler = GlobalWorkPool ();
+	if ( !pScheduler )
+		pScheduler = GlobalWorkPool();
 	CSphAutoEvent tEvent;
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
 	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
@@ -649,7 +650,7 @@ void CallCoroutine ( Handler fnHandler )
 {
 	if ( !Coro::Worker_c::CurrentWorker () )
 	{
-		CallPlainCoroutine(std::move(fnHandler));
+		CallPlainCoroutine ( std::move ( fnHandler ) );
 		return;
 	}
 	auto pScheduler = Coro::CurrentScheduler ();

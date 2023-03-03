@@ -2,12 +2,15 @@
 
 # Version X
 
+### Major new features
+* Query optimizer now works for fulltext queries
+
 ### Minor changes
 * Added [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
 
 ### Behaviour changes
-* Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
-
+* **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
+* **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
 
 # Version 6.0.4
 

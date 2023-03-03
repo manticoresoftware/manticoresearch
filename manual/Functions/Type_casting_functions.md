@@ -13,7 +13,10 @@ Forcibly promotes given argument to 64-bit signed type. Intended to help enforce
 Forcibly promotes the argument to string type
 
 ### UINT()
-Forcibly reinterprets given argument to 64-bit unsigned type.
+Converts the given argument to 32-bit unsigned integer type.
+
+### UINT64()
+Converts the given argument to 64-bit unsigned integer type.
 
 ### SINT()
 Forcibly reinterprets its 32-bit unsigned integer argument as signed, and also expands it to 64-bit type (because 32-bit type is unsigned). It's easily illustrated by the following example: 1-2 normally evaluates to 4294967295, but `SINT(1-2)` evaluates to -1.

@@ -272,7 +272,7 @@ Below is the list of data types supported by Manticore Search:
 ## Document ID
 
 <!-- example id -->
-Document identifier is a mandatory attribute. Document IDs must be **unique signed 64-bit integers**. Document ID can be specified explicitly, but if it's not, it's still enabled. Document IDs can't be [UPDATE](../Data_creation_and_modification/Updating_documents/UPDATE.md)'ed.
+The document identifier is a mandatory attribute, and document IDs must be **unique 64-bit unsigned integers**. Document IDs can be explicitly specified, but if not, they are still enabled. Document IDs cannot be updated. Note that when retrieving document IDs, they are treated as signed 64-bit integers, which means they may be negative. Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to cast them to unsigned 64-bit integers if necessary.
 
 <!-- request Explicit ID -->
 

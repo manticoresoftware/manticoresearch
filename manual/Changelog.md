@@ -1,5 +1,14 @@
 # Changelog
 
+# Version X
+
+### Minor changes
+* Added [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
+
+### Behaviour changes
+* Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
+
+
 # Version 6.0.4
 
 Released: soon

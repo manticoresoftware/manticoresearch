@@ -11922,8 +11922,10 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 }
 
 
-static CSphString ConcatWarnings ( const StrVec_t & dWarnings )
+static CSphString ConcatWarnings ( StrVec_t & dWarnings )
 {
+	dWarnings.Uniq();
+
 	StringBuilder_c sRes ( "; " );
 	for ( const auto & i : dWarnings )
 		sRes << i;
@@ -14562,9 +14564,9 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 }
 
 // fwd
-static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
+static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError );
 
-void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
 		return;
@@ -14573,6 +14575,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
 	CSphString sError;
+	StrVec_t dWarnings;
 	const CSphString & sIndex = tStmt.m_sIndex;
 
 	if ( bReconfigure )
@@ -14581,7 +14584,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		pCmd->m_tReconfigure->m_bChangeSchema = true;
 	}
 
-	if ( bReconfigure && !PrepareReconfigure ( sIndex.cstr(), *pCmd->m_tReconfigure, sError ) )
+	if ( bReconfigure && !PrepareReconfigure ( sIndex.cstr(), *pCmd->m_tReconfigure, &dWarnings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -14609,11 +14612,13 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto* pAccum = tAcc.GetAcc();
 	pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 
+	sWarning = ConcatWarnings ( dWarnings );
+
 	bool bRes = HandleCmdReplicate ( *pAccum, sError );
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
-		tOut.Ok();
+		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
 
@@ -15511,26 +15516,37 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 }
 
 
-static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, CSphString & sWarning, CSphString & sError )
+static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
 {
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 
-	// fixme: report warnings
-	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
-	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
-	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-	tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
+	{
+		CSphString sWarning;
+		tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
+		tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
+		tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
+		tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
 
-	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, tSettings.m_tIndex, sError, !tSettings.m_bChangeSchema, false ) )
+		if ( pWarnings && !sWarning.IsEmpty() )
+			pWarnings->Add(sWarning);
+	}
+
+	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, tSettings.m_tIndex, pWarnings, sError, !tSettings.m_bChangeSchema, false ) )
 	{
 		sError.SetSprintf ( "failed to parse table '%s' schema, error: '%s'", szIndex, sError.cstr() );
 		return false;
 	}
 
-	if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
 	{
-		sError.SetSprintf ( "failed to parse table '%s' settings, error: '%s'", szIndex, sError.cstr() );
-		return false;
+		CSphString sWarning;
+		if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
+		{
+			sError.SetSprintf ( "failed to parse table '%s' settings, error: '%s'", szIndex, sError.cstr() );
+			return false;	
+		}
+
+		if ( pWarnings && !sWarning.IsEmpty() )
+			pWarnings->Add(sWarning);
 	}
 
 	tSettings.m_tSchema.SetupFlags ( tSettings.m_tIndex, false, nullptr );
@@ -15539,7 +15555,7 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 }
 
 
-static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
+static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
 {
 	CSphConfig hCfg;
 	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
@@ -15561,8 +15577,7 @@ static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings &
 		return false;
 	}
 
-	CSphString sWarning;
-	return PrepareReconfigure ( szIndex, hCfg["index"][szIndex], tSettings, sWarning, sError );
+	return PrepareReconfigure ( szIndex, hCfg["index"][szIndex], tSettings, pWarnings, sError );
 }
 
 // ALTER RTINDEX/TABLE <idx> RECONFIGURE
@@ -15588,16 +15603,16 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	CSphString sError;
+	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
 	CSphReconfigureSetup tSetup;
 
-	if ( !PrepareReconfigure ( szIndex, tSettings, sError ) )
+	if ( !PrepareReconfigure ( szIndex, tSettings, &dWarnings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
 
-	StrVec_t dWarnings;
 	WIdx_T<RtIndex_i*> pRT { pServed };
 	if ( !pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError ) && sError.IsEmpty() )
 	{
@@ -15607,6 +15622,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		}
 	}
+
 	sWarning = ConcatWarnings ( dWarnings );
 	if ( sError.IsEmpty() )
 		tOut.Ok ( 0, dWarnings.GetLength() );
@@ -15791,14 +15807,11 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
-	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, sWarning, sError ) )
+	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
-
-	if ( !sWarning.IsEmpty() )
-		dWarnings.Add(sWarning);
 
 	CSphReconfigureSetup tSetup;
 	bool bSame = pRtIndex->IsSameSettings ( tSettings, tSetup, dWarnings, sError );
@@ -16458,7 +16471,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_TRUNCATE_RTINDEX:
-		HandleMysqlTruncate ( tOut, *pStmt );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlTruncate ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_OPTIMIZE_INDEX:
@@ -17470,7 +17484,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
-	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, sError, bPercolate, bPercolate ) )
+	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, bPercolate, bPercolate ) )
 	{
 		sphWarning ( "table '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return false;

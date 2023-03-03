@@ -302,6 +302,7 @@ Threads::SchedRole CurlStrand() RETURN_CAPABILITY ( CurlMulti().CurlStrand() )
 // Notice, that curl manages connections itself, we don't open/accept anything here, but just provide async io.
 class CurlSocket_c final: public ISphNetAction
 {
+	const CurlMulti_c* m_pCurlMulti;
 	CSphRefcountedPtr<CSphNetLoop> m_pNetLoop;
 	int m_iNotifiedCurlEvents = CURL_POLL_NONE;
 	int m_iLastEngaged = CURL_POLL_NONE;
@@ -315,7 +316,9 @@ protected:
 public:
 	CurlSocket_c ( int iSock, const CurlMulti_c* pOwner )
 		: ISphNetAction ( iSock )
+		, m_pCurlMulti ( pOwner )
 	{
+		assert ( m_pCurlMulti );
 		auto pNetLoop = GetAvailableNetLoop();
 		SafeAddRef ( pNetLoop );
 		m_pNetLoop = pNetLoop;
@@ -351,7 +354,7 @@ public:
 	}
 
 public:
-	void Engage ( int iCurlWhat, bool bExternal = true ) REQUIRES ( CurlStrand() )
+	void Engage ( int iCurlWhat, bool bExternal = true ) REQUIRES ( m_pCurlMulti->CurlStrand() )
 	{
 		SOCKET_DEBUG << ( bExternal ? "external" : "internal" ) << " -> " << CurlPollName ( iCurlWhat );
 		m_iLastEngaged = iCurlWhat;
@@ -376,15 +379,15 @@ private:
 		SOCKET_DEBUG << "got events " << m_uGotEvents << ", " << CurlPollName ( iCurlEvents );
 		m_iNotifiedCurlEvents = iCurlEvents;
 		AddRef();
-		Threads::Coro::Go ( [this, iCurlEvents]() REQUIRES ( CurlStrand() ) {
+		Threads::Coro::Go ( [this, iCurlEvents]() REQUIRES ( m_pCurlMulti->CurlStrand() ) {
 			CSphRefcountedPtr<ISphNetAction> pWorkKeeper { this };
-			CurlMulti().SocketAction ( m_iSock, iCurlEvents );
+			m_pCurlMulti->SocketAction ( m_iSock, iCurlEvents );
 			CurlNotified();
 		},
-			CurlStrand() );
+			m_pCurlMulti->CurlStrand() );
 	}
 
-	void CurlNotified() REQUIRES ( CurlStrand() )
+	void CurlNotified() REQUIRES ( m_pCurlMulti->CurlStrand() )
 	{
 		SOCKET_DEBUG;
 		m_iNotifiedCurlEvents = CURL_POLL_NONE;
@@ -392,13 +395,13 @@ private:
 			Engage ( m_iLastEngaged, false );
 	}
 
-	void Remove() REQUIRES ( CurlStrand() )
+	void Remove() REQUIRES ( m_pCurlMulti->CurlStrand() )
 	{
 		SOCKET_INFO;
 		m_iLastEngaged = CURL_POLL_REMOVE;
 		m_uIOChange = NetPollEvent_t::SET_NONE;
 		m_pNetLoop->AddAction ( this );
-		CurlMulti().WriteSocketCookie ( m_iSock, nullptr );
+		m_pCurlMulti->WriteSocketCookie ( m_iSock, nullptr );
 		Release();
 	}
 };
@@ -431,6 +434,7 @@ static int DebugCbJump ( CURL* handle, curl_infotype type, char* data, size_t si
 struct CurlConn_t
 {
 	CURL*			m_pCurlEasy;
+	CurlMulti_c*	m_pCurlMulti = nullptr;
 	CSphString		m_sUrl;
 	char			m_sError[CURL_ERROR_SIZE];
 	CURLcode		m_uReturnCode = CURLE_OK;
@@ -509,16 +513,19 @@ struct CurlConn_t
 
 void CurlConn_t::RunQuery() REQUIRES ( CurlStrand() )
 {
-	CONN_INFO << "Add to multi " << &CurlMulti() << " for " << m_sUrl;
-	auto iRes = sph_curl_multi_add_handle ( CurlMulti().GetMultiPtr(), m_pCurlEasy );
+	m_pCurlMulti = &CurlMulti();
+	CONN_INFO << "Add to multi " << m_pCurlMulti << " for " << m_sUrl;
+	auto iRes = sph_curl_multi_add_handle ( m_pCurlMulti->GetMultiPtr(), m_pCurlEasy );
 	CONN_INFO << "Add complete -> " << iRes;
 }
 
 void CurlConn_t::Done ( CURLcode uResult ) REQUIRES ( CurlStrand() )
 {
+	assert ( m_pCurlMulti );
 	m_uReturnCode = uResult;
 	CONN_INFO << "DONE: (" << uResult << ") " << m_sError;
-	sph_curl_multi_remove_handle ( CurlMulti().GetMultiPtr(), m_pCurlEasy );
+	sph_curl_multi_remove_handle ( m_pCurlMulti->GetMultiPtr(), m_pCurlEasy );
+	m_pCurlMulti = nullptr;
 	m_tWaker.Wake ( true );
 }
 

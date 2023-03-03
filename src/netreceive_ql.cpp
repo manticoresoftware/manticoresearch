@@ -377,6 +377,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 		case MYSQL_COL_DECIMAL:
 		case MYSQL_COL_FLOAT:
 		case MYSQL_COL_DOUBLE:
+		case MYSQL_COL_UINT64:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
 		case MYSQL_COL_STRING: iColLen = 255;

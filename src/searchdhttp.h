@@ -87,8 +87,14 @@ class CharStream_c
 {
 protected:
 	bool m_bDone = false;
+	AsyncNetInputBuffer_c * m_pIn;
+	CSphString m_sError;
 
 public:
+	CharStream_c ( AsyncNetInputBuffer_c * pIn )
+		: m_pIn ( pIn )
+	{}
+
 	virtual ~CharStream_c() = default;
 
 	// return next chunk of data
@@ -98,6 +104,9 @@ public:
 	virtual Str_t ReadAll() = 0;
 
 	inline bool Eof() const { return m_bDone; }
+
+	bool GetError() const;
+	const CSphString & GetErrorMessage() const;
 };
 
 struct HttpProcessResult_t
@@ -107,7 +116,6 @@ struct HttpProcessResult_t
 	CSphString m_sError;
 };
 
-CharStream_c * CreateBlobStream ( const Str_t & sData );
 void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
 

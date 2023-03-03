@@ -30,8 +30,7 @@ static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // ve
 #define LOG_COMPONENT_HTTP ""
 #define HTTPINFO LOGINFO ( HTTP, HTTP )
 
-static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "404 Not Found", "405 Method Not Allowed", "409 Conflict", "500 Internal Server Error",
-								 "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
+static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "404 Not Found", "405 Method Not Allowed", "409 Conflict", "413 Request Entity Too Large", "500 Internal Server Error", "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
 
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
@@ -49,6 +48,7 @@ int HttpGetStatusCodes ( ESphHttpStatus eStatus )
 	case SPH_HTTP_STATUS_404: return 404;
 	case SPH_HTTP_STATUS_405: return 405;
 	case SPH_HTTP_STATUS_409: return 409;
+	case SPH_HTTP_STATUS_413: return 413;
 	case SPH_HTTP_STATUS_500: return 500;
 	case SPH_HTTP_STATUS_501: return 501;
 	case SPH_HTTP_STATUS_503: return 503;
@@ -137,17 +137,28 @@ ESphHttpEndpoint StrToHttpEndpoint ( const CSphString& sEndpoint )
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
 
+bool CharStream_c::GetError() const
+{
+	return ( ( m_pIn && m_pIn->GetError() ) || !m_sError.IsEmpty() );
+}
+
+const CSphString & CharStream_c::GetErrorMessage() const
+{
+	if ( m_pIn && m_pIn->GetError() )
+		return m_pIn->GetErrorMessage();
+	else
+		return m_sError;
+}
+
 /// stub - returns feed string
 class BlobStream_c final: public CharStream_c
 {
 	Str_t m_sData;
 
 public:
-	explicit BlobStream_c ( const CSphString& sData )
-		: m_sData { FromStr ( sData ) }
-	{}
-	explicit BlobStream_c ( const Str_t & sData )
-		: m_sData ( sData )
+	BlobStream_c ( const CSphString & sData )
+		: CharStream_c ( nullptr )
+		, m_sData { FromStr ( sData ) }
 	{}
 
 	Str_t Read() final
@@ -168,33 +179,27 @@ public:
 		return sData;
 	}
 };
-
-CharStream_c * CreateBlobStream ( const Str_t & sData )
-{
-	return new BlobStream_c ( sData );
-}
-
 /// stream with known content length and no special massage over socket
 class RawSocketStream_c final : public CharStream_c
 {
-	AsyncNetInputBuffer_c& m_tIn;
 	int m_iContentLength;
 	bool m_bTerminated = false;
 	BYTE m_uOldTerminator = 0;
 
 public:
-	RawSocketStream_c ( AsyncNetInputBuffer_c& tIn, int iContentLength )
-		: m_tIn { tIn }
+	RawSocketStream_c ( AsyncNetInputBuffer_c * pIn, int iContentLength )
+		: CharStream_c ( pIn )
 		, m_iContentLength ( iContentLength )
 	{
+		assert ( pIn );
 		m_bDone = !m_iContentLength;
 	}
 
 	~RawSocketStream_c() final
 	{
 		if ( m_bTerminated )
-			m_tIn.Terminate ( 0, m_uOldTerminator );
-		m_tIn.DiscardProcessed ( 0 );
+			m_pIn->Terminate ( 0, m_uOldTerminator );
+		m_pIn->DiscardProcessed ( 0 );
 	}
 
 	Str_t Read() final
@@ -202,26 +207,27 @@ public:
 		if ( m_bDone )
 			return dEmptyStr;
 
-		m_tIn.DiscardProcessed ( 0 );
-		if ( !m_tIn.HasBytes() && m_tIn.ReadAny()<0 )
+		m_pIn->DiscardProcessed ( 0 );
+		if ( !m_pIn->HasBytes() && m_pIn->ReadAny()<0 )
 		{
-			sphWarning ( "failed to receive HTTP request (error='%s')", sphSockError() );
+			if ( !m_pIn->GetError() )
+				m_sError.SetSprintf ( "failed to receive HTTP request (error='%s')", sphSockError() );
 			m_bDone = true;
 			return dEmptyStr;
 		}
 
-		auto iChunk = Min ( m_iContentLength, m_tIn.HasBytes() );
+		auto iChunk = Min ( m_iContentLength, m_pIn->HasBytes() );
 		m_iContentLength -= iChunk;
 		m_bDone = !m_iContentLength;
 
 		// Temporary write \0 at the end, since parser wants z-terminated buf
 		if ( m_bDone )
 		{
-			m_uOldTerminator = m_tIn.Terminate ( iChunk, '\0' );
+			m_uOldTerminator = m_pIn->Terminate ( iChunk, '\0' );
 			m_bTerminated = true;
 		}
 
-		return B2S ( m_tIn.PopTail ( iChunk ) );
+		return B2S ( m_pIn->PopTail ( iChunk ) );
 	}
 
 	Str_t ReadAll() final
@@ -232,28 +238,28 @@ public:
 		// that is oneshot read - we sure, we're done
 		m_bDone = true;
 
-		if ( m_iContentLength && !m_tIn.ReadFrom ( m_iContentLength ) ) {
-			sphWarning ( "failed to receive HTTP request (error='%s')", sphSockError() );
+		if ( m_iContentLength && !m_pIn->ReadFrom ( m_iContentLength ) )
+		{
+			if ( !m_pIn->GetError() )
+				m_sError.SetSprintf ( "failed to receive HTTP request (error='%s')", sphSockError() );
 			return dEmptyStr;
 		}
 
-		m_uOldTerminator = m_tIn.Terminate ( m_iContentLength, '\0' );
+		m_uOldTerminator = m_pIn->Terminate ( m_iContentLength, '\0' );
 		m_bTerminated = true;
-		return B2S ( m_tIn.PopTail ( m_iContentLength ) );
+		return B2S ( m_pIn->PopTail ( m_iContentLength ) );
 	}
 };
 
 /// stream with known content length and no special massage over socket
 class ChunkedSocketStream_c final: public CharStream_c
 {
-	AsyncNetInputBuffer_c& m_tIn;
 	CSphVector<BYTE>	m_dData;	// used only in ReadAll() call
 	int m_iLastParsed;
 	bool m_bBodyDone;
 	CSphVector<Str_t> m_dBodies;
 	http_parser_settings m_tParserSettings;
 	http_parser* m_pParser;
-	const char* m_szError = nullptr;
 
 private:
 	// callbacks
@@ -295,17 +301,19 @@ private:
 		if ( m_iLastParsed != sData.second )
 		{
 			HTTPINFO << "ParseBody error: parsed " << m_iLastParsed << ", chunk " << sData.second;
-			m_szError = http_errno_description ( (http_errno)m_pParser->http_errno );
+			if ( !m_pIn->GetError() )
+				m_sError = http_errno_description ( (http_errno)m_pParser->http_errno );
 		}
 	}
 
 public:
-	ChunkedSocketStream_c ( AsyncNetInputBuffer_c& tIn, http_parser* pParser, bool bBodyDone, CSphVector<Str_t> dBodies, int iLastParsed )
-		: m_tIn { tIn }
+	ChunkedSocketStream_c ( AsyncNetInputBuffer_c * pIn, http_parser * pParser, bool bBodyDone, CSphVector<Str_t> dBodies, int iLastParsed )
+		: CharStream_c ( pIn )
 		, m_iLastParsed ( iLastParsed )
 		, m_bBodyDone ( bBodyDone )
 		, m_pParser ( pParser )
 	{
+		assert ( pIn );
 		m_dBodies = std::move ( dBodies );
 		http_parser_settings_init ( &m_tParserSettings );
 		m_tParserSettings.on_body = cbParserBody;
@@ -315,8 +323,8 @@ public:
 
 	void DiscardLast()
 	{
-		m_tIn.PopTail ( std::exchange ( m_iLastParsed, 0 ) );
-		m_tIn.DiscardProcessed ( 0 );
+		m_pIn->PopTail ( std::exchange ( m_iLastParsed, 0 ) );
+		m_pIn->DiscardProcessed ( 0 );
 	}
 
 	~ChunkedSocketStream_c() final
@@ -338,16 +346,11 @@ public:
 			}
 
 			DiscardLast();
-			if ( !m_tIn.HasBytes() )
+			if ( !m_pIn->HasBytes() )
 			{
-				auto iStart = sphMicroTimer();
-				switch ( m_tIn.ReadAny() )
+				switch ( m_pIn->ReadAny() )
 				{
 				case -1:
-					if ( m_tIn.GetError() )
-					{
-						HTTPINFO << "failed to receive HTTP request -1 (error=" << sphSockError() << ") after " << ( (int)( sphMicroTimer() - iStart ) ) << " us";
-					}
 				case 0:
 					m_bDone = true;
 					return dEmptyStr;
@@ -355,7 +358,7 @@ public:
 					break;
 				}
 			}
-			ParseBody ( m_tIn.Tail() );
+			ParseBody ( m_pIn->Tail() );
 		}
 
 		auto sResult = m_dBodies.First();
@@ -375,8 +378,6 @@ public:
 
 		if ( m_bDone )
 			return sFirst;
-
-		sphWarning ( "Reading whole body with chunked transfer-encoding is non-effective" );
 
 		m_dData.Append ( sFirst );
 		do
@@ -1873,7 +1874,7 @@ public:
 		{
 			if ( IsEmpty ( m_sCurChunk ) )
 			{
-				if ( m_tIn.Eof() )
+				if ( m_tIn.Eof() || m_tIn.GetError() )
 					break;
 				m_sCurChunk = m_tIn.Read();
 				m_iTotallyRead += m_sCurChunk.second;
@@ -1927,6 +1928,9 @@ public:
 		HTTPINFO << "Termination chunk " << m_iJsons << " " << sResult;
 		return sResult;
 	}
+
+	bool GetError() const { return m_tIn.GetError(); }
+	const CSphString & GetErrorMessage() const { return m_tIn.GetErrorMessage(); }
 };
 
 
@@ -1942,15 +1946,21 @@ public:
 		, m_tOptions ( tOptions )
 	{}
 
+	bool CheckReportError()
+	{
+		if ( !m_tSource.GetError() )
+			return false;
+
+		ReportError ( m_tSource.GetErrorMessage().cstr(), SPH_HTTP_STATUS_400 );
+		return true;
+	}
+
 	bool Process ()
 	{
 		TRACE_CONN ( "conn", "HttpHandler_JsonBulk_c::Process" );
-		const char* szError = IsNDJson ();
-		if ( szError )
-		{
-			ReportError ( szError, SPH_HTTP_STATUS_400 );
+
+		if ( !CheckNDJson() )
 			return false;
-		}
 
 		if ( m_tSource.Eof() )
 		{
@@ -1969,6 +1979,9 @@ public:
 		while ( !m_tSource.Eof() )
 		{
 			auto tQuery = m_tSource.Read();
+			if ( CheckReportError() )
+				return false;
+
 			if ( IsEmpty ( tQuery ) )
 				continue;
 			++iInserted;
@@ -2069,16 +2082,23 @@ protected:
 		tRoot.AddItem ( tItem );
 	}
 
-	const char* IsNDJson() const
+	bool CheckNDJson()
 	{
 		if ( !m_tOptions.Exists ( "content-type" ) )
-			return "Content-Type must be set";
+		{
+			ReportError ( "Content-Type must be set", SPH_HTTP_STATUS_400 );
+			return false;
+		}
 
 		auto sContentType = m_tOptions["content-type"].ToLower();
 		auto dParts = sphSplit ( sContentType.cstr(), ";" );
 		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
-			return "Content-Type must be application/x-ndjson";
-		return nullptr;
+		{
+			ReportError ( "Content-Type must be application/x-ndjson", SPH_HTTP_STATUS_400 );
+			return false;
+		}
+
+		return true;
 	}
 };
 
@@ -2147,6 +2167,8 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 	if ( eEndpoint==SPH_HTTP_ENDPOINT_SQL || eEndpoint==SPH_HTTP_ENDPOINT_CLI || eEndpoint==SPH_HTTP_ENDPOINT_CLI_JSON )
 	{
 		auto sWholeData = tSource.ReadAll();
+		if ( tSource.GetError() )
+			return nullptr;
 		StoreRawQuery ( tOptions, sWholeData );
 		HttpRequestParser_c::ParseList ( sWholeData, tOptions );
 	}
@@ -2178,7 +2200,10 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 			{
 				SetQuery ( tSource.ReadAll() );
 			}
-			return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
+			if ( tSource.GetError() )
+				return nullptr;
+			else
+				return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
 		}
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
@@ -2190,30 +2215,48 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 	case SPH_HTTP_ENDPOINT_JSON_INSERT:
 	case SPH_HTTP_ENDPOINT_JSON_REPLACE:
 		SetQuery ( tSource.ReadAll() );
-		return std::make_unique<HttpHandler_JsonInsert_c> ( sQuery, eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE ); // json
+		if ( tSource.GetError() )
+			return nullptr;
+		else
+			return std::make_unique<HttpHandler_JsonInsert_c> ( sQuery, eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_UPDATE:
 		SetQuery ( tSource.ReadAll() );
-		return std::make_unique<HttpHandler_JsonUpdate_c> ( sQuery ); // json
+		if ( tSource.GetError() )
+			return nullptr;
+		else
+			return std::make_unique<HttpHandler_JsonUpdate_c> ( sQuery ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_DELETE:
 		SetQuery ( tSource.ReadAll() );
-		return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery ); // json
+		if ( tSource.GetError() )
+			return nullptr;
+		else
+			return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_BULK:
 		return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
 
 	case SPH_HTTP_ENDPOINT_PQ:
 		SetQuery ( tSource.ReadAll() );
-		return std::make_unique<HttpHandlerPQ_c> ( sQuery, tOptions ); // json
+		if ( tSource.GetError() )
+			return nullptr;
+		else
+			return std::make_unique<HttpHandlerPQ_c> ( sQuery, tOptions ); // json
 
 	case SPH_HTTP_ENDPOINT_ES_BULK:
 		SetQuery ( tSource.ReadAll() );
-		return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
+		if ( tSource.GetError() )
+			return nullptr;
+		else
+			return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
 
 	case SPH_HTTP_ENDPOINT_TOTAL:
 		SetQuery ( tSource.ReadAll() );
-		return CreateCompatHandler ( sQuery, eRequestType, tOptions );
+		if ( tSource.GetError() )
+			return nullptr;
+		else
+			return CreateCompatHandler ( sQuery, eRequestType, tOptions );
 
 	default:
 		break;
@@ -2240,8 +2283,17 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, O
 		} else
 		{
 			DumpHttp ( eRequestType, sEndpoint, tSource.ReadAll() );
-			tRes.m_sError.SetSprintf ( "/%s - unsupported endpoint", sEndpoint.cstr() );
-			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
+			ESphHttpStatus eErrorCode = SPH_HTTP_STATUS_501;
+			if ( tSource.GetError() )
+			{
+				tRes.m_sError = tSource.GetErrorMessage();
+				if ( tRes.m_sError.Begins ( "length out of bounds" ) )
+					eErrorCode = SPH_HTTP_STATUS_413;
+			} else
+			{
+				tRes.m_sError.SetSprintf ( "/%s - unsupported endpoint", sEndpoint.cstr() );
+			}
+			sphHttpErrorReply ( dResult, eErrorCode, tRes.m_sError.cstr() );
 		}
 		return tRes;
 	}
@@ -2262,7 +2314,7 @@ bool sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 	OptionsHash_t hOptions;
 	hOptions.Add ( sEndpoint, "endpoint" );
 
-	BlobStream_c tQuery { sQuery };
+	BlobStream_c tQuery ( sQuery );
 	return ProcessHttpQueryBuddy ( tQuery, hOptions, dResult, false, HTTP_GET );
 }
 
@@ -2273,13 +2325,13 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	if ( m_tParser.flags & F_CHUNKED )
 	{
-		pSource = std::make_unique<ChunkedSocketStream_c> ( tIn, &m_tParser, m_bBodyDone, std::move ( m_dParsedBodies ), m_iLastParsed );
+		pSource = std::make_unique<ChunkedSocketStream_c> ( &tIn, &m_tParser, m_bBodyDone, std::move ( m_dParsedBodies ), m_iLastParsed );
 	} else
 	{
 		// for non-chunked - need to throw out beginning of the packet (with header). Only body rest in the buffer.
 		tIn.PopTail ( m_iLastParsed - ParsedBodyLength() );
 		int iFullLength = ParsedBodyLength() + ( (int)m_tParser.content_length > 0 ? (int)m_tParser.content_length : 0 );
-		pSource = std::make_unique<RawSocketStream_c> ( tIn, iFullLength );
+		pSource = std::make_unique<RawSocketStream_c> ( &tIn, iFullLength );
 	}
 
 	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( m_hOptions["endpoint"] );

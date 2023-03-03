@@ -970,6 +970,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		return;
 	}
 
+	CSphString sError;
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 	int iPacketLen;
@@ -1008,8 +1009,10 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			// inlined AsyncReadMySQLPacketHeader
 			if ( !tIn.ReadFrom ( iPacketLen+4 ))
 			{
-				sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)",
-						sClientIP, iCID, sphSockError ());
+				sError.SetSprintf ( "bailing on failed MySQL header, %s", ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
+				sphWarning ( "conn %s(%d): %s", sClientIP, iCID, sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				tOut.Flush ();
 				return;
 			}
 			tIn.SetBufferPos ( iStartPacketPos + iPacketLen ); // will read at the end of the buffer
@@ -1025,8 +1028,10 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			// receive package body
 			if ( !tIn.ReadFrom ( iPacketLen ))
 			{
-				sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')",
-						sClientIP, iCID, iPacketLen, sphSockError ());
+				sError.SetSprintf ( "failed to receive MySQL request body, expected length %d, %s", iPacketLen, ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
+				sphWarning ( "conn %s(%d): %s)", sClientIP, iCID, sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				tOut.Flush ();
 				return;
 			}
 		}
@@ -1080,6 +1085,12 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		}
 
 		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf.get() ) );
+
+		pBuf->SyncErrorState();
+		if ( tIn.GetError() )
+			sphWarning ( "%s", tIn.GetErrorMessage().cstr() );
+		pBuf->ResetError();
+
 	} while ( tSess.GetPersistent() );
 }
 

@@ -197,6 +197,7 @@ class AsyncNetBuffer_c : public AsyncNetInputBuffer_c, public NetGenericOutputBu
 {
 public:
 	void SyncErrorState();
+	void ResetError();
 };
 
 std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapper_c> pSock );

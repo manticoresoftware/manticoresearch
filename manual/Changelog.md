@@ -2,6 +2,9 @@
 
 # Version X
 
+### Bugfixes
+* [Commit 2ea2] Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
+
 ### Major new features
 * Query optimizer now works for fulltext queries
 

@@ -1164,7 +1164,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
 	const auto& hIndex = hConf["index"][sIndex];
@@ -1174,7 +1174,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 	{
 		CSphSchema tSchema;
 		CSphIndexSettings tSettings;
-		if ( bFromJson || sphRTSchemaConfigure ( hIndex, tSchema, tSettings, sError, false, false ) )
+		if ( bFromJson || sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, false, false ) )
 			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024, bDictKeywords );
 	} else
 	{
@@ -1460,7 +1460,11 @@ int main ( int argc, char ** argv )
 		if ( hConf["index"][sIndex].Exists ( "dict" ) )
 			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
 
-		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, sError );
+		StrVec_t dWarnings;
+		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, &dWarnings, sError );
+
+		for ( const auto & i : dWarnings )
+			fprintf ( stdout, "WARNING: table '%s': %s\n", sIndex.cstr(), i.cstr() );
 
 		if ( !pIndex )
 			sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );

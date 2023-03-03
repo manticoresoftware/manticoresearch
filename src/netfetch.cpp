@@ -191,6 +191,7 @@ private:
 	CURLM* m_pCurlMulti;
 	Threads::RoledSchedulerSharedPtr_t m_tStrand;
 	MiniTimer_c m_tTimer;
+	static bool m_bInitialized;
 
 	CurlSocket_c* MakeAsyncSocket ( curl_socket_t tCurlSocket ) const;
 
@@ -258,6 +259,7 @@ public:
 		sph_curl_multi_setopt ( m_pCurlMulti, CURLMOPT_TIMERDATA, this );
 
 		m_tStrand = MakeAloneScheduler ( GlobalWorkPool(), "curl_serial" );
+		m_bInitialized = true;
 		MULTI_INFO;
 	}
 
@@ -285,7 +287,14 @@ public:
 	{
 		return m_pCurlMulti;
 	}
+
+	inline static bool IsInitialized()
+	{
+		return m_bInitialized;
+	}
 };
+
+bool CurlMulti_c::m_bInitialized = false;
 
 CurlMulti_c& CurlMulti()
 {
@@ -431,6 +440,8 @@ static int DebugCbJump ( CURL* handle, curl_infotype type, char* data, size_t si
 }
 #endif
 
+using CurlConnListHook_t = boost::intrusive::slist_member_hook<>;
+
 struct CurlConn_t
 {
 	CURL*			m_pCurlEasy;
@@ -440,7 +451,7 @@ struct CurlConn_t
 	CURLcode		m_uReturnCode = CURLE_OK;
 	CSphVector<BYTE> m_dData;
 	Threads::Coro::Waker_c m_tWaker;
-
+	CurlConnListHook_t	m_tHook;
 
 	int WriteCb ( ByteBlob_t dData )
 	{
@@ -510,17 +521,30 @@ struct CurlConn_t
 	}
 };
 
+static bool operator== ( const CurlConn_t& tA, const CurlConn_t& tB ) noexcept
+{
+	return tA.m_pCurlEasy == tB.m_pCurlEasy;
+}
+
+using CurlConnList_t = boost::intrusive::slist<CurlConn_t,
+	boost::intrusive::member_hook<CurlConn_t, CurlConnListHook_t, &CurlConn_t::m_tHook>,
+	boost::intrusive::constant_time_size<false>,
+	boost::intrusive::cache_last<false>>;
+
+CurlConnList_t g_tCurlConnections GUARDED_BY ( CurlStrand() );
 
 void CurlConn_t::RunQuery() REQUIRES ( CurlStrand() )
 {
 	m_pCurlMulti = &CurlMulti();
 	CONN_INFO << "Add to multi " << m_pCurlMulti << " for " << m_sUrl;
+	g_tCurlConnections.push_front ( *this );
 	auto iRes = sph_curl_multi_add_handle ( m_pCurlMulti->GetMultiPtr(), m_pCurlEasy );
 	CONN_INFO << "Add complete -> " << iRes;
 }
 
 void CurlConn_t::Done ( CURLcode uResult ) REQUIRES ( CurlStrand() )
 {
+	g_tCurlConnections.remove ( *this ); // this op requires operator==
 	assert ( m_pCurlMulti );
 	m_uReturnCode = uResult;
 	CONN_INFO << "DONE: (" << uResult << ") " << m_sError;
@@ -669,6 +693,22 @@ std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, con
 	dOptions.Add ( { CURLOPT_HTTPHEADER, (intptr_t)tHeaders.CurlSlist() } );
 
 	return InvokeCurl ( std::move ( sUrl ), dOptions );
+}
+
+void ShutdownCurl()
+{
+	if ( !CurlMulti_c::IsInitialized() )
+		return;
+
+	Threads::CallPlainCoroutine ( []() REQUIRES ( CurlStrand() ) {
+		while ( !g_tCurlConnections.empty() )
+		{
+			auto& tConn = g_tCurlConnections.front();
+			strcpy ( tConn.m_sError, "Interrupted due to shutdown" );
+			tConn.Done ( CURLE_ABORTED_BY_CALLBACK );
+		}
+	},
+		CurlStrand() );
 }
 
 #else // WITH_CURL

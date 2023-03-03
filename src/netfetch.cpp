@@ -265,9 +265,7 @@ public:
 
 	~CurlMulti_c()
 	{
-		sph_curl_multi_cleanup ( m_pCurlMulti );
-		sph_curl_global_cleanup();
-		MULTI_INFO;
+		Deinit();
 	}
 
 	void WriteSocketCookie ( curl_socket_t tCurlSocket, void* pCookie ) const REQUIRES ( CurlStrand() )
@@ -291,6 +289,17 @@ public:
 	inline static bool IsInitialized()
 	{
 		return m_bInitialized;
+	}
+
+	void Deinit()
+	{
+		MULTI_INFO;
+		if ( !m_bInitialized )
+			return;
+		sph_curl_multi_cleanup ( m_pCurlMulti );
+		sph_curl_global_cleanup();
+		m_bInitialized = false;
+		MULTI_INFO;
 	}
 };
 
@@ -701,12 +710,15 @@ void ShutdownCurl()
 		return;
 
 	Threads::CallPlainCoroutine ( []() REQUIRES ( CurlStrand() ) {
+		if ( !CurlMulti_c::IsInitialized() )
+			return;
 		while ( !g_tCurlConnections.empty() )
 		{
 			auto& tConn = g_tCurlConnections.front();
 			strcpy ( tConn.m_sError, "Interrupted due to shutdown" );
 			tConn.Done ( CURLE_ABORTED_BY_CALLBACK );
 		}
+		CurlMulti().Deinit();
 	},
 		CurlStrand() );
 }

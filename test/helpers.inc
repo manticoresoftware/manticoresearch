@@ -918,6 +918,31 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
 	}
+
+	if ( isset ( $set["http_endpoint"] ) && $set["http_endpoint"]=="cli_json" )
+	{
+		if ( $keep_json_ctrls )
+		{
+			$json_handler = new SafeJsonHandler();
+			$rows = $json_handler->Decode ( $set["rows"], 1, 512, JSON_BIGINT_AS_STRING );
+		}
+		else
+			$rows = json_decode ( $set["rows"], 1, 512, JSON_BIGINT_AS_STRING );
+
+		foreach	( $rows as &$row )
+		{
+			if ( isset ( $row["data"] ) && is_array($row["data"]) )
+			{
+				foreach ( $row["data"] as &$data_row )
+					ksort($data_row);
+			}
+
+			if ( isset ( $row["columns"] ) && is_array($row["columns"]) )
+				usort($row["columns"],  function($a, $b) { return strcmp ( key($a), key($b) ); } );
+		}
+
+		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
+	}
 }
 
 

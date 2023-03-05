@@ -11,6 +11,7 @@
 
 ### Minor changes
 * Added [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
+* String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.

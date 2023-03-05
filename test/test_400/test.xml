@@ -118,7 +118,7 @@ searchd
 	create table test1(title string attribute indexed);
 	show create table test1;
 	desc test1;
-	insert into test1 values(1,'title','title');
+	insert into test1 values(1,'title');
 	select * from test1 where match('title');
 	drop table test1;
 

@@ -10,7 +10,7 @@
 * Query optimizer now works for fulltext queries
 
 ### Minor changes
-* Added [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
+* Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
 * String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
 
 ### Behaviour changes

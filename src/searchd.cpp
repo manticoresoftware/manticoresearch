@@ -10499,10 +10499,17 @@ static void PopulateMapsFromIndexSchema ( CSphVector<int> & dAttrSchema, CSphVec
 	int iAttrId = dFieldSchema.GetLength()+1;
 	for ( int i = 1; i < dAttrSchema.GetLength(); i++ )
 	{
-		if ( sphIsInternalAttr( tSchema.GetAttr(i) ) )
+		if ( sphIsInternalAttr ( tSchema.GetAttr(i) ) )
 			dAttrSchema[i]=-1;
 		else
-			dAttrSchema[i] = iAttrId++;
+		{
+			// check for string field/attr with the same name
+			int iFieldId = tSchema.GetFieldIndex ( tSchema.GetAttr(i).m_sName.cstr() );
+			if ( iFieldId!=-1 )
+				dAttrSchema[i] = iFieldId+1;
+			else
+				dAttrSchema[i] = iAttrId++;
+		}
 	}
 }
 
@@ -10952,6 +10959,14 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.GetFieldsCount();
 	if ( pIndex->GetSettings().m_bIndexFieldLens )
 		iSchemaSz -= tSchema.GetFieldsCount();
+
+	// check for 'string indexed attribute'
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && tSchema.GetField ( tAttr.m_sName.cstr() ) )
+			iSchemaSz--;
+	}
 
 	if ( tSchema.GetAttr ( sphGetBlobLocatorName() ) )
 		iSchemaSz--;
@@ -11700,12 +11715,30 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 }
 
 
-static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField )
+static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
+{
+	StringBuilder_c sProps(" ");
+	if ( tAttr.IsColumnar() )
+		sProps << "columnar";
+
+	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
+		sProps << "fast_fetch";
+
+	if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
+		sProps << "no_hash";
+
+	return sProps.cstr();
+}
+
+
+static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema )
 {
 	if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
 		return;
 
-	dOut.Add ( "text" );
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
+	dOut.Add ( pAttr ? "string" : "text" );
+
 	StringBuilder_c sProperties ( " " );
 	DWORD uFlags = tField.m_uFieldFlags;
 	if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
@@ -11713,14 +11746,26 @@ static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField )
 
 	if ( uFlags & CSphColumnInfo::FIELD_STORED )
 		sProperties << "stored";
+
+	if ( pAttr )
+	{
+		sProperties << "attribute";
+		CSphString sProps = DescribeAttributeProperties ( *pAttr );
+		if ( !sProps.IsEmpty() )
+			sProperties << sProps;
+	}
+
 	dOut.Add ( sProperties.cstr () );
 }
 
 
-static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr )
+static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema )
 {
 	if ( sphIsInternalAttr ( tAttr ) )
 		return;
+
+	if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
+		return; // already described it as a field property
 
 	if ( dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
 	{
@@ -11732,17 +11777,7 @@ static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr )
 		} else
 			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
 
-		StringBuilder_c sProps(" ");
-		if ( tAttr.IsColumnar() )
-			sProps << "columnar";
-
-		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
-			sProps << "fast_fetch";
-
-		if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
-			sProps << "no_hash";
-
-		dOut.Add ( sProps.cstr() );
+		dOut.Add ( DescribeAttributeProperties(tAttr) );
 	}
 }
 
@@ -11756,14 +11791,14 @@ void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool b
 	if ( !bIsTemplate )
 	{
 		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		AddAttributeDesc ( dOut, tSchema.GetAttr(0) );
+		AddAttributeDesc ( dOut, tSchema.GetAttr(0), tSchema );
 	}
 
 	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-		AddFieldDesc ( dOut, tSchema.GetField(i) );
+		AddFieldDesc ( dOut, tSchema.GetField(i), tSchema );
 
 	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
-		AddAttributeDesc ( dOut, tSchema.GetAttr(i) );
+		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema );
 }
 
 
@@ -15435,39 +15470,35 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
 	sAttrToRemove.ToLower();
 
-	bool bIsAttr = true;
-	const CSphColumnInfo * pAttr = pIdx->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
-	if ( !pAttr )
+	auto pAttr = pIdx->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
+	auto pField = pIdx->GetMatchSchema().GetField ( sAttrToRemove.cstr() );
+	if ( !pAttr && !pField )
 	{
-		pAttr = pIdx->GetMatchSchema ().GetField ( sAttrToRemove.cstr () );
-		if ( !pAttr )
-		{
-			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
-			return;
-		}
-		bIsAttr = false;
+		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
+		return;
 	}
 
-	if ( bIsAttr && ( sAttrToRemove==sphGetDocidName () || sphIsInternalAttr ( *pAttr ) ) )
+	if ( pAttr && ( sAttrToRemove==sphGetDocidName () || sphIsInternalAttr ( *pAttr ) ) )
 	{
 		sError.SetSprintf ( "unable to remove built-in attribute '%s'", sAttrToRemove.cstr() );
 		return;
 	}
 
-	if ( bIsAttr && pIdx->GetMatchSchema().GetAttrsCount()==1 )
+	if ( pAttr && pIdx->GetMatchSchema().GetAttrsCount()==1 )
 	{
 		sError.SetSprintf ( "unable to remove last attribute '%s'", sAttrToRemove.cstr() );
 		return;
 	}
 
-	if ( bIsAttr )
+	if ( pAttr )
 	{
 		AttrAddRemoveCtx_t tCtx;
 		tCtx.m_sName = sAttrToRemove;
 		tCtx.m_eType = pAttr->m_eAttrType;
 		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
-	else
+	
+	if ( pField )
 		pIdx->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
 

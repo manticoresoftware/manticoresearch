@@ -3,8 +3,8 @@
 # Version X
 
 ### Bugfixes
-* [Commit 2ea2] Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
-* [Issue #1052] (https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
+* [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
+* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
 
 ### Major new features
 * Query optimizer now works for fulltext queries

@@ -584,7 +584,7 @@ void TemplateDictTraits_c::LoadStopwords ( const CSphVector<SphWordID_t>& dStopw
 }
 
 
-void TemplateDictTraits_c::WriteStopwords ( CSphWriter& tWriter ) const
+void TemplateDictTraits_c::WriteStopwords ( Writer_i & tWriter ) const
 {
 	tWriter.PutDword ( (DWORD)m_iStopwords );
 	for ( int i = 0; i < m_iStopwords; ++i )
@@ -1031,7 +1031,7 @@ bool TemplateDictTraits_c::LoadWordforms ( const StrVec_t& dFiles, const CSphEmb
 }
 
 
-void TemplateDictTraits_c::WriteWordforms ( CSphWriter& tWriter ) const
+void TemplateDictTraits_c::WriteWordforms ( Writer_i & tWriter ) const
 {
 	if ( !m_pWordforms )
 	{

@@ -24,7 +24,7 @@ public:
 
 	bool SetCaseFolding ( const char* sConfig, CSphString& sError ) final;
 	bool LoadSynonyms ( const char* sFilename, const CSphEmbeddedFiles* pFiles, StrVec_t& dWarnings, CSphString& sError ) final;
-	void WriteSynonyms ( CSphWriter& tWriter ) const final;
+	void WriteSynonyms ( Writer_i & tWriter ) const final;
 	void WriteSynonyms ( JsonEscapedBuilder & tOut ) const final;
 	void CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenizerClone eMode );
 

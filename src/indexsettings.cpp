@@ -599,7 +599,7 @@ void CSphFieldFilterSettings::Load ( CSphReader & tReader )
 }
 
 
-void CSphFieldFilterSettings::Save ( CSphWriter & tWriter ) const
+void CSphFieldFilterSettings::Save ( Writer_i & tWriter ) const
 {
 	tWriter.PutDword ( m_dRegexps.GetLength() );
 	for ( const auto & i : m_dRegexps )
@@ -1376,7 +1376,7 @@ bool IndexSettingsContainer_c::CheckPaths()
 
 //////////////////////////////////////////////////////////////////////////
 
-static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
+static void WriteFileInfo ( Writer_i & tWriter, const CSphSavedFile & tInfo )
 {
 	tWriter.PutOffset ( tInfo.m_uSize );
 	tWriter.PutOffset ( tInfo.m_uCTime );
@@ -1384,7 +1384,7 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 	tWriter.PutDword ( tInfo.m_uCRC32 );
 }
 
-void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
+void operator<< ( JsonEscapedBuilder & tOut, const CSphSavedFile & tInfo )
 {
 	auto _ = tOut.Object ();
 	tOut.NamedValNonDefault ( "size", tInfo.m_uSize );
@@ -1395,7 +1395,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c & pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
 
@@ -1454,7 +1454,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFiel
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveDictionarySettings ( CSphWriter & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit )
+void SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c & pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	const CSphDictSettings & tSettings = pDict->GetSettings ();

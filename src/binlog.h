@@ -28,10 +28,10 @@ namespace Binlog {
 		REPLAY_IGNORE_ALL_ERRORS = 0xFF
 	};
 
-	using FnWriteCommit = std::function<void (CSphWriter&)>;
+	using FnWriteCommit = std::function<void (Writer_i&)>;
 
 	template < typename T >
-	static void SaveVector ( CSphWriter &tWriter, const VecTraits_T<T> &tVector )
+	static void SaveVector ( Writer_i & tWriter, const VecTraits_T<T> &tVector )
 	{
 		STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE (T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 		tWriter.ZipOffset ( tVector.GetLength() );
@@ -59,7 +59,7 @@ namespace Binlog {
 	int64_t NextFlushTimestamp();
 
 	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
-	void Commit (Blop_e eOp, int64_t * pTID, const char * sIndexName, bool bIncTID, FnWriteCommit&& fnSaver);
+	bool Commit ( Blop_e eOp, int64_t * pTID, const char * sIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
 
 	/// replay stored binlog
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );

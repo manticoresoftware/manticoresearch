@@ -116,7 +116,7 @@ public:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
-
+class Writer_i;
 class CSphFieldFilterSettings : public SettingsWriter_c
 {
 public:
@@ -124,7 +124,7 @@ public:
 
 	bool			Setup  ( const CSphConfigSection & hIndex, CSphString & sWarning );
 	void			Load ( CSphReader & tReader );
-	void			Save ( CSphWriter & tWriter ) const;
+	void			Save ( Writer_i & tWriter ) const;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
@@ -422,9 +422,10 @@ private:
 class ISphTokenizer;
 class CSphDict;
 class CSphIndex;
+class Writer_i;
 
-void		SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
-void		SaveDictionarySettings ( CSphWriter & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
+void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
+void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
 void		DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );

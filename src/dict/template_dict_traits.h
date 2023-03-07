@@ -26,10 +26,10 @@ protected:
 public:
 	void LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final;
 	void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) final;
-	void WriteStopwords ( CSphWriter& tWriter ) const final;
+	void WriteStopwords ( Writer_i & tWriter ) const final;
 	void WriteStopwords ( JsonEscapedBuilder& tOut ) const final;
 	bool LoadWordforms ( const StrVec_t& dFiles, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex ) final;
-	void WriteWordforms ( CSphWriter& tWriter ) const final;
+	void WriteWordforms ( Writer_i & tWriter ) const final;
 	void WriteWordforms ( JsonEscapedBuilder& tOut ) const final;
 	const CSphWordforms* GetWordforms() final { return m_pWordforms; }
 	void DisableWordforms() final { m_bDisableWordforms = true; }

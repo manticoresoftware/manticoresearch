@@ -51,7 +51,7 @@ public:
 
 	virtual void	Kill ( const CSphVector<RowID_t> & dKilled ) = 0;
 	virtual void	Save ( MemoryWriter_c & tWriter ) const = 0;
-	virtual void	Save ( CSphWriter & tWriter ) const = 0;
+	virtual void	Save ( Writer_i & tWriter ) const = 0;
 	virtual void	Load ( MemoryReader_c & tReader ) = 0;
 	virtual void	Load ( CSphReader & tReader ) = 0;
 	virtual int64_t	AllocatedBytes() const = 0;
@@ -132,7 +132,7 @@ public:
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
-	void	Save ( CSphWriter & tWriter ) const override		{ SaveData(tWriter); }
+	void	Save ( Writer_i & tWriter ) const override	{ SaveData(tWriter); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 	int64_t	AllocatedBytes() const override				{ return m_dValues.GetLengthBytes64(); }
@@ -246,7 +246,7 @@ public:
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
-	void	Save ( CSphWriter & tWriter ) const override		{ SaveData(tWriter); }
+	void	Save ( Writer_i & tWriter ) const override	{ SaveData(tWriter); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
 	int64_t	AllocatedBytes() const override				{ return m_dData.GetLengthBytes64() + m_dLengths.GetLengthBytes64(); }
@@ -366,7 +366,7 @@ public:
 
 	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
-	void	Save ( CSphWriter & tWriter ) const override		{ SaveData(tWriter); }
+	void	Save ( Writer_i & tWriter ) const override	{ SaveData(tWriter); }
 	int64_t	AllocatedBytes() const override				{ return m_dData.GetLengthBytes64() + m_dLengths.GetLengthBytes64(); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
 	void	Load ( CSphReader & tReader ) override		{ LoadData(tReader); }
@@ -533,7 +533,7 @@ public:
 	bool			EarlyReject ( const std::vector<common::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
 	bool			IsFilterDegenerate ( const common::Filter_t & tFilter ) const override { return false; }
 
-	void			Save ( CSphWriter & tWriter ) override;
+	void			Save ( Writer_i & tWriter ) override;
 	int64_t			AllocatedBytes() const override;
 	
 protected:
@@ -610,7 +610,7 @@ bool ColumnarRT_c::GetAttrInfo ( const std::string & sName, columnar::AttrInfo_t
 }
 
 
-void ColumnarRT_c::Save ( CSphWriter & tWriter )
+void ColumnarRT_c::Save ( Writer_i & tWriter )
 {
 	tWriter.PutDword ( m_dAttrs.GetLength() );
 	m_dAttrs.for_each ( [&tWriter]( const auto& pAttr ){ pAttr->Save(tWriter); } );

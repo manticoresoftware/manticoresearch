@@ -1876,8 +1876,8 @@ static void SaveInsertDeleteQueries ( const VecTraits_T<QUERY> & dNewQueries, co
 	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
 }
 
-template<typename QUERY>
-static void SaveInsertDeleteQueries ( const VecTraits_T<QUERY> & dNewQueries, const VecTraits_T<int64_t> & dDeleteQueries, const VecTraits_T<uint64_t> & dDeleteTags, CSphWriter & tWriter )
+template<typename QUERY, typename WRITER>
+static void SaveInsertDeleteQueries ( const VecTraits_T<QUERY> & dNewQueries, const VecTraits_T<int64_t> & dDeleteQueries, const VecTraits_T<uint64_t> & dDeleteTags, WRITER & tWriter )
 {
 	SaveInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tWriter );
 }
@@ -2038,7 +2038,8 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		}
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
-		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, GetName(), true, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( CSphWriter& tWriter ) {
+		CSphString sError;
+		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, GetName(), true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
@@ -2974,7 +2975,8 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 // fixme? Retire this, then SaveIndexSettings/SaveTokenizersettings/SaveDictionarySettings for plain CSphWriter, only json left
 void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
 {
-	Binlog::Commit(Binlog::RECONFIGURE,&m_iTID,GetName(),false,[&tSetup] (CSphWriter& tWriter) {
+	CSphString sError;
+	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, GetName(), false, sError, [&tSetup] ( Writer_i & tWriter ) {
 		// reconfigure data
 		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
 		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );

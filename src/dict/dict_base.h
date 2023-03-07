@@ -78,14 +78,14 @@ public:
 	virtual void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) = 0;
 
 	/// write stopwords to a file
-	virtual void WriteStopwords ( CSphWriter& tWriter ) const = 0;
+	virtual void WriteStopwords ( Writer_i & tWriter ) const = 0;
 	virtual void WriteStopwords ( JsonEscapedBuilder& tOut ) const = 0;
 
 	/// load wordforms from a given list of files
 	virtual bool LoadWordforms ( const StrVec_t&, const CSphEmbeddedFiles* pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char* szIndex ) = 0;
 
 	/// write wordforms to a file
-	virtual void WriteWordforms ( CSphWriter& tWriter ) const = 0;
+	virtual void WriteWordforms ( Writer_i & tWriter ) const = 0;
 	virtual void WriteWordforms ( JsonEscapedBuilder& tOut ) const = 0;
 
 	/// get wordforms
@@ -185,10 +185,10 @@ public:
 	SphWordID_t GetWordID ( const BYTE*, int, bool ) override { return 0; };
 	void LoadStopwords ( const char*, const TokenizerRefPtr_c&, bool ) override {};
 	void LoadStopwords ( const CSphVector<SphWordID_t>& ) override {};
-	void WriteStopwords ( CSphWriter& ) const override {};
+	void WriteStopwords ( Writer_i & ) const override {};
 	void WriteStopwords ( JsonEscapedBuilder& ) const override {};
 	bool LoadWordforms ( const StrVec_t&, const CSphEmbeddedFiles*, const TokenizerRefPtr_c&, const char* ) override { return false; };
-	void WriteWordforms ( CSphWriter& ) const override {};
+	void WriteWordforms ( Writer_i & ) const override {};
 	void WriteWordforms ( JsonEscapedBuilder& ) const override {};
 	int SetMorphology ( const char*, CSphString& ) override { return ST_OK; }
 	void Setup ( const CSphDictSettings& tSettings ) override { m_tSettings = tSettings; };

@@ -151,8 +151,24 @@ public:
 };
 
 
+class Writer_i : ISphNoncopyable
+{
+public:
+	virtual void	PutByte ( BYTE uValue ) = 0;
+	virtual void	PutBytes ( const void * pData, int64_t iSize ) = 0;
+	virtual void	PutWord ( WORD uValue ) = 0;
+	virtual void	PutDword ( DWORD uValue ) = 0;
+	virtual void	PutOffset ( SphOffset_t uValue ) = 0;
+	virtual void	PutString ( const char * szString ) = 0;
+	virtual void	PutString ( const CSphString & sString ) = 0;
+
+	virtual void	ZipInt ( DWORD uValue ) = 0;
+	virtual void	ZipOffset ( uint64_t uValue ) = 0;
+};
+
+
 /// file writer with write buffering and int encoder
-class CSphWriter : ISphNoncopyable
+class CSphWriter : public Writer_i
 {
 public:
 	virtual			~CSphWriter ();		///< if error flag is set, or if file is not closed by CloseFile, it will be automatically deleted (unlinked).
@@ -164,20 +180,20 @@ public:
 	void			SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CSphString & sError );
 	void			CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
 
-	void			PutByte ( BYTE uValue );
-	void			PutBytes ( const void * pData, int64_t iSize );
-	void			PutWord ( WORD uValue ) { PutBytes ( &uValue, sizeof(WORD) ); }
-	void			PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
-	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
-	void			PutString ( const char * szString );
-	void			PutString ( const CSphString & sString );
+	void			PutByte ( BYTE uValue ) override;
+	void			PutBytes ( const void * pData, int64_t iSize ) override;
+	void			PutWord ( WORD uValue ) override { PutBytes ( &uValue, sizeof(WORD) ); }
+	void			PutDword ( DWORD uValue ) override { PutBytes ( &uValue, sizeof(DWORD) ); }
+	void			PutOffset ( SphOffset_t uValue ) override { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
+	void			PutString ( const char * szString ) override;
+	void			PutString ( const CSphString & sString ) override;
 	void			PutString ( Str_t tString ) { PutBytes ( tString.first, tString.second ); };
 	void			Tag ( const char * sTag );
 
 	void			SeekTo ( SphOffset_t iPos, bool bTruncate = false );
 
-	void			ZipInt ( DWORD uValue );
-	void			ZipOffset ( uint64_t uValue );
+	void			ZipInt ( DWORD uValue ) override;
+	void			ZipOffset ( uint64_t uValue ) override;
 
 	bool			IsError () const	{ return m_bError; }
 	SphOffset_t		GetPos () const		{ return m_iPos; }
@@ -216,7 +232,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
 /// write blob to file honoring throttling
-bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError );
+bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * szName, CSphString & sError );
 
 /// read blob from file honoring throttling
 size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount );

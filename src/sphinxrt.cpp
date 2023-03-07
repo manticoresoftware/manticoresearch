@@ -1138,7 +1138,7 @@ public:
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
-	int					CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes ); // returns total killed documents
+	bool				CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError );
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
@@ -1376,7 +1376,7 @@ private:
 	void						SetMemLimit ( int64_t iMemLimit );
 	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
-	void 						BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes );
+	bool 						BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError );
 	bool						StopOptimize();
 	void						UpdateUnlockedCount();
 	bool						CheckSegmentConsistency ( const RtSegment_t* pNewSeg, bool bSilent=true ) const;
@@ -2749,7 +2749,15 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
 	pAcc->m_dAccumKlist.Uniq ();
 
 	// now on to the stuff that needs locking and recovery
-	auto iKilled = CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes );
+	int iKilled = 0;
+	CSphString sError;
+	if ( !CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes, iKilled, sError ) )
+	{
+		if ( pError )
+			*pError = sError;
+		return false;
+	}
+
 	if ( pDeleted )
 		*pDeleted = iKilled;
 
@@ -3092,7 +3100,7 @@ int CommitID() {
 }
 } // namespace
 
-int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes ) REQUIRES_SHARED ( pNewSeg->m_tLock )
+bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError ) REQUIRES_SHARED ( pNewSeg->m_tLock )
 {
 	// store statistics, because pNewSeg just might get merged
 	const int iId = CommitID();
@@ -3132,10 +3140,11 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID
 	RTLOGV << "CommitReplayable";
 
 	// first of all, binlog txn data for recovery
-	BinlogCommit ( pNewSeg, dAccKlist, iAddTotalBytes );
+	if ( !BinlogCommit ( pNewSeg, dAccKlist, iAddTotalBytes, sError ) )
+		return false;
 
 	// 1. Apply kill-list to existing chunks/segments
-	int iTotalKilled = ApplyKillList ( dAccKlist );
+	iTotalKilled = ApplyKillList ( dAccKlist );
 
 	// 2. Add new RAM-segment (if any). As we 1-st kill, then add - whole change is *not* atomic, ACID is broken here.
 	if ( pNewSeg )
@@ -3159,8 +3168,7 @@ int RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID
 	// backoff segments merging and m.b. saving disk chunk (that is not our deal, other worker will do it).
 	StartMergeSegments ( pNewSeg ? MergeSeg_e::NEWSEG : MergeSeg_e::KILLED );
 
-	// tell about DELETE affected_rows
-	return iTotalKilled;
+	return true;
 }
 
 void RtIndex_c::RollBack ( RtAccum_t * pAcc )
@@ -8742,10 +8750,10 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 	return dChunk.GetStats().m_iTotalDocuments - tStatus.m_iDead;
 }
 
-void RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes ) REQUIRES ( pSeg->m_tLock )
+bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	Binlog::Commit ( Binlog::COMMIT, &m_iTID, GetName(), false, [pSeg,&dKlist,iAddTotalBytes,this] (CSphWriter& tWriter) REQUIRES ( pSeg->m_tLock )
+	return Binlog::Commit ( Binlog::COMMIT, &m_iTID, GetName(), false, sError, [pSeg,&dKlist,iAddTotalBytes,this] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		if ( !pSeg || !pSeg->m_uRows )
 			tWriter.ZipOffset ( 0 );
@@ -8869,7 +8877,8 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 
 		// actually replay
 		FakeRL_t _ ( pSeg.operator RtSegment_t*()->m_tLock);
-		CommitReplayable ( pSeg, dKlist, iAddTotalBytes );
+		int iKilled = 0;
+		CommitReplayable ( pSeg, dKlist, iAddTotalBytes, iKilled, sError );
 		tRes.m_bApply = true;
 	}
 	return tRes;

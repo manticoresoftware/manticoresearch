@@ -94,7 +94,7 @@ bool CSphTokenizerBase::LoadSynonyms ( const char* sFilename, const CSphEmbedded
 }
 
 
-void CSphTokenizerBase::WriteSynonyms ( CSphWriter& tWriter ) const
+void CSphTokenizerBase::WriteSynonyms ( Writer_i & tWriter ) const
 {
 	if ( m_pExc )
 		m_pExc->Export ( tWriter );

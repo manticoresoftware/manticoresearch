@@ -126,7 +126,7 @@ void MemoryWriter_c::PutString ( const char * sVal )
 }
 
 
-void MemoryWriter_c::PutBytes ( const void * pData, int iLen )
+void MemoryWriter_c::PutBytes ( const void * pData, int64_t iLen )
 {
 	if ( !iLen )
 		return;

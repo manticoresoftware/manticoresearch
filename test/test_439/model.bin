@@ -1,46 +1,46 @@
 a:1:{i:0;a:51:{i:0;a:2:{s:8:"sphinxql";s:11:"show tables";s:10:"total_rows";i:0;}i:1;a:2:{s:8:"sphinxql";s:64:"create table test1 ( title text, tag integer ) engine='columnar'";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:63:"create table test2 ( title text, tag integer ) engine='rowwise'";s:14:"total_affected";i:0;}i:3;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}}}i:4;a:3:{s:8:"sphinxql";s:10:"desc test2";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:5;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:75:"CREATE TABLE test1 (
 id bigint,
-tag integer,
-title text
+title text,
+tag integer
 ) engine='columnar'";}}}i:6;a:3:{s:8:"sphinxql";s:23:"show create table test2";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test2";s:12:"Create Table";s:74:"CREATE TABLE test2 (
 id bigint,
-tag integer,
-title text
+title text,
+tag integer
 ) engine='rowwise'";}}}i:7;a:2:{s:8:"sphinxql";s:30:"create table test11 like test1";s:14:"total_affected";i:0;}i:8;a:2:{s:8:"sphinxql";s:30:"create table test22 like test2";s:14:"total_affected";i:0;}i:9;a:3:{s:8:"sphinxql";s:11:"desc test11";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}}}i:10;a:3:{s:8:"sphinxql";s:11:"desc test22";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:11;a:3:{s:8:"sphinxql";s:24:"show create table test11";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:6:"test11";s:12:"Create Table";s:76:"CREATE TABLE test11 (
 id bigint,
-tag integer,
-title text
+title text,
+tag integer
 ) engine='columnar'";}}}i:12;a:3:{s:8:"sphinxql";s:24:"show create table test22";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:6:"test22";s:12:"Create Table";s:75:"CREATE TABLE test22 (
 id bigint,
-tag integer,
-title text
+title text,
+tag integer
 ) engine='rowwise'";}}}i:13;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:14;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}i:15;a:2:{s:8:"sphinxql";s:17:"drop table test11";s:14:"total_affected";i:0;}i:16;a:2:{s:8:"sphinxql";s:17:"drop table test22";s:14:"total_affected";i:0;}i:17;a:2:{s:8:"sphinxql";s:75:"create table test1 ( title text, uid integer, tags json ) engine='columnar'";s:14:"total_affected";i:0;}i:18;a:3:{s:8:"sphinxql";s:9:"show meta";s:10:"total_rows";i:5;s:4:"rows";a:4:{i:0;a:2:{s:13:"Variable_name";s:7:"warning";s:5:"Value";s:84:"columnar storage does not support json type ('tags' attribute specified as columnar)";}i:1;a:2:{s:13:"Variable_name";s:5:"total";s:5:"Value";s:1:"0";}i:2;a:2:{s:13:"Variable_name";s:11:"total_found";s:5:"Value";s:1:"0";}i:3;a:2:{s:13:"Variable_name";s:14:"total_relation";s:5:"Value";s:2:"eq";}}}i:19;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"uid";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}i:3;a:3:{s:5:"Field";s:4:"tags";s:4:"Type";s:4:"json";s:10:"Properties";s:0:"";}}}i:20;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:86:"CREATE TABLE test1 (
 id bigint,
+title text,
 uid integer,
-tags json,
-title text
+tags json
 ) engine='columnar'";}}}i:21;a:2:{s:8:"sphinxql";s:29:"create table test2 like test1";s:14:"total_affected";i:0;}i:22;a:3:{s:8:"sphinxql";s:9:"show meta";s:10:"total_rows";i:5;s:4:"rows";a:4:{i:0;a:2:{s:13:"Variable_name";s:7:"warning";s:5:"Value";s:84:"columnar storage does not support json type ('tags' attribute specified as columnar)";}i:1;a:2:{s:13:"Variable_name";s:5:"total";s:5:"Value";s:1:"0";}i:2;a:2:{s:13:"Variable_name";s:11:"total_found";s:5:"Value";s:1:"0";}i:3;a:2:{s:13:"Variable_name";s:14:"total_relation";s:5:"Value";s:2:"eq";}}}i:23;a:3:{s:8:"sphinxql";s:10:"desc test2";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"uid";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}i:3;a:3:{s:5:"Field";s:4:"tags";s:4:"Type";s:4:"json";s:10:"Properties";s:0:"";}}}i:24;a:3:{s:8:"sphinxql";s:23:"show create table test2";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test2";s:12:"Create Table";s:86:"CREATE TABLE test2 (
 id bigint,
+title text,
 uid integer,
-tags json,
-title text
+tags json
 ) engine='columnar'";}}}i:25;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:26;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}i:27;a:2:{s:8:"sphinxql";s:96:"create table test1 ( title text, tag1 integer engine='columnar', tag2 integer engine='rowwise' )";s:14:"total_affected";i:0;}i:28;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:4:"tag1";s:4:"Type";s:4:"uint";s:10:"Properties";s:8:"columnar";}i:3;a:3:{s:5:"Field";s:4:"tag2";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:29;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:107:"CREATE TABLE test1 (
 id bigint,
+title text,
 tag1 integer engine='columnar',
-tag2 integer engine='rowwise',
-title text
+tag2 integer engine='rowwise'
 )";}}}i:30;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:31;a:2:{s:8:"sphinxql";s:96:"create table test1 ( title text, tag1 integer, tag2 integer engine='rowwise' ) engine='columnar'";s:14:"total_affected";i:0;}i:32;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:4:"tag1";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}i:3;a:3:{s:5:"Field";s:4:"tag2";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:33;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:107:"CREATE TABLE test1 (
 id bigint,
+title text,
 tag1 integer,
-tag2 integer engine='rowwise',
-title text
+tag2 integer engine='rowwise'
 ) engine='columnar'";}}}i:34;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:35;a:2:{s:8:"sphinxql";s:96:"create table test1 ( title text, tag1 integer, tag2 integer engine='columnar' ) engine='rowwise'";s:14:"total_affected";i:0;}i:36;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:4:"tag1";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}i:3;a:3:{s:5:"Field";s:4:"tag2";s:4:"Type";s:4:"uint";s:10:"Properties";s:8:"columnar";}}}i:37;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:107:"CREATE TABLE test1 (
 id bigint,
+title text,
 tag1 integer,
-tag2 integer engine='columnar',
-title text
+tag2 integer engine='columnar'
 ) engine='rowwise'";}}}i:38;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:39;a:2:{s:8:"sphinxql";s:50:"create table t(f text, s string) engine='columnar'";s:14:"total_affected";i:0;}i:40;a:2:{s:8:"sphinxql";s:40:"insert into t values (1,'text','string')";s:14:"total_affected";i:1;}i:41;a:3:{s:8:"sphinxql";s:15:"select * from t";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:3:{s:2:"id";s:1:"1";s:1:"s";s:6:"string";s:1:"f";s:4:"text";}}}i:42;a:2:{s:8:"sphinxql";s:12:"drop table t";s:14:"total_affected";i:0;}i:43;a:2:{s:8:"sphinxql";s:90:"create table idx(f text, columnar_integer_attribute_with_bitmask bit(1) engine='columnar')";s:14:"total_affected";i:0;}i:44;a:3:{s:8:"sphinxql";s:8:"desc idx";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:1:"f";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:39:"columnar_integer_attribute_with_bitmask";s:4:"Type";s:6:"uint:1";s:10:"Properties";s:8:"columnar";}}}i:45;a:3:{s:8:"sphinxql";s:21:"show create table idx";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:3:"idx";s:12:"Create Table";s:104:"CREATE TABLE idx (
 id bigint,
-columnar_integer_attribute_with_bitmask bit(1) engine='columnar',
-f text
+f text,
+columnar_integer_attribute_with_bitmask bit(1) engine='columnar'
 )";}}}i:46;a:2:{s:8:"sphinxql";s:14:"drop table idx";s:14:"total_affected";i:0;}i:47;a:2:{s:8:"sphinxql";s:54:"create table col(id, f text, j json engine='columnar')";s:14:"total_affected";i:0;}i:48;a:3:{s:8:"sphinxql";s:9:"show meta";s:10:"total_rows";i:5;s:4:"rows";a:4:{i:0;a:2:{s:13:"Variable_name";s:7:"warning";s:5:"Value";s:81:"columnar storage does not support json type ('j' attribute specified as columnar)";}i:1;a:2:{s:13:"Variable_name";s:5:"total";s:5:"Value";s:1:"0";}i:2;a:2:{s:13:"Variable_name";s:11:"total_found";s:5:"Value";s:1:"0";}i:3;a:2:{s:13:"Variable_name";s:14:"total_relation";s:5:"Value";s:2:"eq";}}}i:49;a:3:{s:8:"sphinxql";s:8:"desc col";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:1:"f";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:1:"j";s:4:"Type";s:4:"json";s:10:"Properties";s:0:"";}}}i:50;a:2:{s:8:"sphinxql";s:14:"drop table col";s:14:"total_affected";i:0;}}}

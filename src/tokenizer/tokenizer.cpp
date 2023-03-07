@@ -100,7 +100,10 @@ CSphLowercaser& ISphTokenizer::StagingLowercaser()
 LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const
 {
 	assert ( m_pLC );
-	m_pStagingLC = nullptr;
+	{
+		ScopedMutex_t _ { m_tStagingLock };
+		m_pStagingLC = nullptr;
+	}
 	return m_pLC;
 }
 

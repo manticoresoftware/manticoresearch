@@ -209,6 +209,7 @@ protected:
 private:
 	LowercaserRefcountedConstPtr			m_pLC;						///< my lowercaser
 	mutable LowercaserRefcountedPtr			m_pStagingLC;				///< preparing my lowercaser.
+	mutable CSphMutex				m_tStagingLock;				///< lock to prevent race condition when destructing staging lowercaser
 
 protected:
 	CSphLowercaser &				StagingLowercaser();

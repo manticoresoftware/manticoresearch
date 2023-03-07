@@ -35,6 +35,8 @@ Released: soon
 * [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed /pq HTTP endpoint to be an alias of the /json/pq HTTP endpoint
 * [Commit ee87](https://github.com/manticoresoftware/columnar/commit/ee87d11) Fixed crash on search with the secondary index
 * [Commit e7f9](https://github.com/manticoresoftware/manticoresearch/commit/e7f9815) Added buddy version to startup log entry
+* [Commit fdd9](https://github.com/manticoresoftware/manticoresearch/commit/fdd9087) Fixed compat mode to pass errors into buddy
+* [Commit 1912](https://github.com/manticoresoftware/manticoresearch/commit/1912b3c) Added compatibility mode to work with Logstash, Beat and Kibana
 
 # Version 6.0.2
 Released: Feb 10 2023

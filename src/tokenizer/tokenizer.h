@@ -83,7 +83,7 @@ public:
 	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) = 0;
 
 	/// write synonyms to file
-	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const = 0;
+	virtual void					WriteSynonyms ( Writer_i & tWriter ) const = 0;
 	virtual void 					WriteSynonyms ( JsonEscapedBuilder & tOut ) const = 0;
 
 	/// set phrase boundary chars

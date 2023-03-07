@@ -148,6 +148,16 @@ BACKUP OPTION async = yes, compress = yes TO /tmp
 1. The path should not contain special symbols or spaces, as they are not supported.
 2. Ensure that Manticore Buddy is launched (it is by default).
 
+### How backup maintains consistency of tables
+
+To ensure consistency of tables during backup, Manticore Search's backup tools use the innovative [FREEZE and UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) commands. Unlike the traditional lock and unlock tables feature of e.g. MySQL, `FREEZE` stops flushing data to disk while still permitting writing (to some extent) and selecting updated data from the table.
+
+However, if your RAM chunk size grows beyond the `rt_mem_limit` threshold during lengthy backup operations involving many inserts, data may be flushed to disk, and write operations will be blocked until flushing is complete. Despite this, the tool maintains a balance between table locking, data consistency, and database write availability while the table is frozen.
+
+When you use `manticore-backup` or the SQL `BACKUP` command, the `FREEZE` command is executed once and freezes all tables you are backing up simultaneously. The backup process subsequently backs up each table one by one, releasing the freeze after successfully backing up each table.
+
+If backup fails or gets interrupted, the tool tries to unfreeze all the tables.
+
 ## Restore
 
 <!-- example restore_list -->

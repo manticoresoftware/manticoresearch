@@ -3783,7 +3783,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema )
 }
 
 
-void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings )
+void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings )
 {
 	tWriter.PutDword ( tSettings.RawMinPrefixLen() );
 	tWriter.PutDword ( tSettings.m_iMinInfixLen );
@@ -12476,11 +12476,11 @@ public:
 
 	void LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
-	void WriteStopwords ( CSphWriter & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
+	void WriteStopwords ( Writer_i & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
 	void WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteStopwords ( tOut ); }
 	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const TokenizerRefPtr_c& pTokenizer, const char * szIndex ) final
 		{ return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, szIndex ); }
-	void WriteWordforms ( CSphWriter & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
+	void WriteWordforms ( Writer_i & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
 	void WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteWordforms ( tOut ); }
 	int SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pBase->SetMorphology ( szMorph, sMessage ); }
 	void Setup ( const CSphDictSettings & tSettings ) final { m_pBase->Setup ( tSettings ); }

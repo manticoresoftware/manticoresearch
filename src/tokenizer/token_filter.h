@@ -22,11 +22,9 @@
 /// token filter base (boring proxy stuff)
 class CSphTokenFilter : public ISphTokenizer
 {
-protected:
-	TokenizerRefPtr_c		m_pTokenizer;
-
 public:
 	explicit				CSphTokenFilter ( TokenizerRefPtr_c pTokenizer )						: m_pTokenizer { std::move ( pTokenizer ) } {}
+
 	bool					SetCaseFolding ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
 	void					AddPlainChars ( const char * szChars ) override							{ m_pTokenizer->AddPlainChars ( szChars ); }
 	void					AddSpecials ( const char * sSpecials ) override							{ m_pTokenizer->AddSpecials ( sSpecials ); }
@@ -34,7 +32,7 @@ public:
 	bool					SetNgramChars ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
 	void					SetNgramLen ( int iLen ) override										{ m_pTokenizer->SetNgramLen ( iLen ); }
 	bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) override { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, dWarnings, sError ); }
-	void					WriteSynonyms ( CSphWriter & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
+	void					WriteSynonyms ( Writer_i & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
 	void 					WriteSynonyms ( JsonEscapedBuilder & tOut ) const final					{ return m_pTokenizer->WriteSynonyms ( tOut ); }
 	bool					SetBoundary ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
 	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }
@@ -60,4 +58,7 @@ public:
 	BYTE *					GetToken () override										{ return m_pTokenizer->GetToken(); }
 
 	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const override { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
+
+protected:
+	TokenizerRefPtr_c		m_pTokenizer;
 };

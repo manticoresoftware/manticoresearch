@@ -14,6 +14,7 @@
 #define _memio_
 
 #include "sphinxstd.h"
+#include "fileio.h"
 
 class MemoryReader_c
 {
@@ -52,21 +53,21 @@ T GetVal( MemoryReader_c& tReader );
 template<typename VECTOR>
 void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn );
 
-class MemoryWriter_c
+class MemoryWriter_c : public Writer_i
 {
 public:
 			MemoryWriter_c ( CSphVector<BYTE> & dBuf );
 
 	int		GetPos();
-	void	ZipOffset ( uint64_t uVal );
-	void	ZipInt ( DWORD uVal );
-	void	PutString ( const CSphString & sVal );
-	void	PutString ( const char * szVal );
-	void	PutDword ( DWORD uVal );
-	void	PutOffset ( SphOffset_t uValue );
-	void	PutWord ( WORD uVal );
-	void	PutBytes ( const void * pData, int iLen );
-	void	PutByte ( BYTE uVal );
+	void	ZipOffset ( uint64_t uVal ) override;
+	void	ZipInt ( DWORD uVal ) override;
+	void	PutString ( const CSphString & sVal ) override;
+	void	PutString ( const char * szVal ) override;
+	void	PutDword ( DWORD uVal ) override;
+	void	PutOffset ( SphOffset_t uValue ) override;
+	void	PutWord ( WORD uVal ) override;
+	void	PutBytes ( const void * pData, int64_t iLen ) override;
+	void	PutByte ( BYTE uVal ) override;
 	void	PutUint64 ( uint64_t uVal );
 
 	template<typename T>
@@ -100,8 +101,8 @@ class MemoryWriter2_c : public MemoryWriter_c
 public:
 			MemoryWriter2_c ( CSphVector<BYTE> & dBuf );
 
-	void	ZipOffset ( uint64_t uVal );
-	void	ZipInt ( DWORD uVal );
+	void	ZipOffset ( uint64_t uVal ) override;
+	void	ZipInt ( DWORD uVal ) override;
 };
 
 #include "memio_impl.h"

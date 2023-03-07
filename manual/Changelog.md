@@ -46,6 +46,7 @@ Released: Feb 10 2023
 * ❗[Issue #1029](https://github.com/manticoresoftware/manticoresearch/issues/1029) - WARNING: Compiled-in value KNOWN_CREATE_SIZE (16) is less than measured (208). Consider to fix the value!
 * ❗[Issue #1032](https://github.com/manticoresoftware/manticoresearch/issues/1032) - Manticore 6.0.0 plain index crashes
 * ❗[Issue #1033](https://github.com/manticoresoftware/manticoresearch/issues/1033) - multiple distributed lost on daemon restart
+* ❗[Issue #1064](https://github.com/manticoresoftware/manticoresearch/issues/1064) - race condition in tokenizer lowercase tables
 
 # Version 6.0.0
 Released: Feb 7 2023

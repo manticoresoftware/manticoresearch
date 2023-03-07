@@ -86,28 +86,31 @@ void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 
 CSphLowercaser& ISphTokenizer::StagingLowercaser()
 {
-	if ( !m_pStagingLC )
-	{
-		LowercaserRefcountedPtr pLC { new CSphLowercaser };
-		if ( m_pLC )
-			pLC->SetRemap ( m_pLC );
-		m_pLC = m_pStagingLC = pLC.Leak();
-	}
-	return *m_pStagingLC;
-}
+	LowercaserRefcountedPtr pNewCreatedLC;
+	CSphLowercaser* pStagingLC = m_pStagingLC.load ( std::memory_order_relaxed );
+	do {
+		if ( pStagingLC )
+			return *pStagingLC;
 
+		pNewCreatedLC = new CSphLowercaser;
+		if ( m_pLC )
+			pNewCreatedLC->SetRemap ( m_pLC );
+	} while ( !m_pStagingLC.compare_exchange_weak ( pStagingLC, pNewCreatedLC, std::memory_order_relaxed ) );
+	m_pLC = pNewCreatedLC;
+	return *pNewCreatedLC;
+}
 
 LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const
 {
 	assert ( m_pLC );
-	m_pStagingLC = nullptr;
 	return m_pLC;
 }
 
 void ISphTokenizer::SetLC ( LowercaserRefcountedConstPtr rhs )
 {
-	assert ( !m_pStagingLC && !m_pLC );
+	assert ( !m_pLC );
 	m_pLC = std::move ( rhs );
+	m_pStagingLC.store ( nullptr, std::memory_order_relaxed ); // we NEVER const_cast LC. That is critically important!
 }
 
 bool ISphTokenizer::AddSpecialsSPZ ( const char* sSpecials, const char* sDirective, CSphString& sError )

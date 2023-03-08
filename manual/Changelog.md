@@ -5,6 +5,7 @@
 ### Bugfixes
 * [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
 * [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
+* [gl #3287] Crash on possibly out of space disk
 
 ### Major new features
 * Query optimizer now works for fulltext queries
@@ -12,6 +13,8 @@
 ### Minor changes
 * Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
 * String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
+* Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.
+* When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.

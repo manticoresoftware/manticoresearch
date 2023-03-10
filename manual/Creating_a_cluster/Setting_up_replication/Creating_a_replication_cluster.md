@@ -1,9 +1,9 @@
 # Creating a replication cluster
 
 <!-- example creating a replication cluster 1 -->
-To create a replication cluster you should set at least its [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name).
+To create a replication cluster, you must set its [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name) at a minimum.
 
-In case of a single cluster or if you are creating the first cluster, [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) option may be omitted, in this case [data_dir](../../Server_settings/Searchd.md#data_dir) option will be used as the cluster path. For all subsequent clusters you need to specify [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) and this path should be available. [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option may be also set to enumerate all the nodes in the cluster.
+If you are creating a single cluster or the first cluster, you may omit the [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) option. In this case, the [data_dir](../../Server_settings/Searchd.md#data_dir) option will be used as the cluster path. However, for all subsequent clusters, you must specify the [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) and the path must be available. The [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option may also be set to list all nodes in the cluster.
 
 
 <!-- intro -->
@@ -92,4 +92,6 @@ utilsApi.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clic
 ```
 <!-- end -->
 
-If a cluster is created without the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option, the first node that gets joined to the cluster will be saved as [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes).
+If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.
+
+<!-- proofread -->

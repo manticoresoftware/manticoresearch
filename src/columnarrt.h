@@ -23,7 +23,7 @@ class ColumnarRT_i : public columnar::Columnar_i
 {
 public:
 	virtual int64_t		AllocatedBytes() const = 0;
-	virtual void		Save ( CSphWriter & tWriter ) = 0;
+	virtual void		Save ( Writer_i & tWriter ) = 0;
 };
 
 class MemoryReader_c;

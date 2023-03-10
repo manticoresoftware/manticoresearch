@@ -62,7 +62,7 @@ void ExceptionsTrie_c::Export ( WRITER&& W, CSphVector<BYTE>& dPrefix, int iNode
 	}
 }
 
-void ExceptionsTrie_c::Export ( CSphWriter & w ) const
+void ExceptionsTrie_c::Export ( Writer_i & w ) const
 {
 	CSphVector<BYTE> dPrefix;
 	int iCount = 0;

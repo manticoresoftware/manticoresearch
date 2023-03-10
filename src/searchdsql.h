@@ -29,14 +29,20 @@ struct SqlNode_t
 {
 	int						m_iStart = 0;	///< first byte relative to m_pBuf, inclusive
 	int						m_iEnd = 0;		///< last byte relative to m_pBuf, exclusive! thus length = end - start
-	int64_t					m_iValue = 0;
 	int						m_iType = 0;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
 	float					m_fValue = 0.0;
 	AttrValues_p			m_pValues { nullptr };	///< filter values vector (FIXME? replace with numeric handles into parser state?)
+	uint64_t				m_uValue = 0;
 	int						m_iParsedOp = -1;
+	bool					m_bNegative = false;	// this flag means that '-' was explicitly specified before the integer const
 
-	SqlNode_t() = default;
+							SqlNode_t() = default;
 
+	void					SetValueInt ( int64_t iValue );
+	void					SetValueInt ( uint64_t uValue, bool bNegative );
+	int64_t					GetValueInt() const;
+	uint64_t				GetValueUint() const;
+	void					CopyValueInt ( const SqlNode_t & tRhs );
 };
 
 
@@ -157,12 +163,6 @@ enum SqlSet_e
 /// insert value
 struct SqlInsert_t
 {
-	int						m_iType = 0;
-	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
-	int64_t					m_iVal = 0;
-	float					m_fVal = 0.0;
-	AttrValues_p			m_pVals;
-
 	// some internal tokens for bison grammar parser.
 	// originaly we fetched values from parser itself, but it is more convenient to push own values instead.
 	// in order to make it most seamless way, let's follow this manual:
@@ -170,7 +170,8 @@ struct SqlInsert_t
 	// then add the number BOTH into sphinxql.y (to fix this value forever), and into this enum (without TOK_ prefix),
 	// as: for TOK_SYSVAR which is now 268 - change '%token TOK_SYSVAR' to '%token TOK_SYSVAR 268' in bison file,
 	// then add SYSVAR = 268 here.
-	enum Tokens_e {
+	enum Tokens_e
+	{
 		CONST_INT = 260,
 		CONST_FLOAT = 261,
 		CONST_MVA = 262,
@@ -178,6 +179,22 @@ struct SqlInsert_t
 		CONST_STRINGS = 269,
 		TABLE = 378,
 	};
+
+	int						m_iType = 0;
+	float					m_fVal = 0.0;
+	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
+	AttrValues_p			m_pVals;
+
+	void					SetValueInt ( uint64_t uValue, bool bNegative );
+	void					SetValueInt ( int64_t iValue );
+	int64_t					GetValueInt() const;
+	uint64_t				GetValueUint() const;
+	bool					IsNegativeInt() const { return m_bNegative; }
+	void					CopyValueInt ( const SqlNode_t & tRhs );
+
+private:
+	uint64_t				m_uValue = 0;
+	bool					m_bNegative = false;
 };
 
 

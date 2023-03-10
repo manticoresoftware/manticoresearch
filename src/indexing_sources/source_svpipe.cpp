@@ -69,6 +69,9 @@ protected:
 	BYTE **					ReportDocumentError();
 	virtual bool			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError ) = 0;
 	virtual ESphParseResult	SplitColumns ( CSphString & ) = 0;
+
+private:
+	bool	StoreAttribute ( int iAttr, int iOff );
 };
 
 
@@ -319,103 +322,135 @@ BYTE ** CSphSource_BaseSV::ReportDocumentError ()
 }
 
 
+bool CSphSource_BaseSV::StoreAttribute ( int iAttr, int iOff )
+{
+	// if+if for field-string attribute case
+	const RemapXSV_t & tRemap = m_dRemap[iAttr];
+
+	// field column
+	if ( tRemap.m_iField!=-1 )
+	{
+		m_dFields[tRemap.m_iField] = m_dBuf.Begin() + iOff;
+		m_dFieldLengths[tRemap.m_iField] = (int) strlen ( (char *)m_dFields[tRemap.m_iField] );
+	}
+
+	// attribute column
+	if ( tRemap.m_iAttr==-1 )
+		return true;
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tRemap.m_iAttr );
+	const char * sVal = (const char *)m_dBuf.Begin() + iOff;
+
+	CSphString & sCurStrAttr = m_dStrAttrs[tRemap.m_iAttr];
+	SphAttr_t & tCurIntAttr = m_dAttrs[tRemap.m_iAttr];
+
+	switch ( tAttr.m_eAttrType )
+	{
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_JSON:
+		sCurStrAttr = sVal;
+		break;
+
+	case SPH_ATTR_FLOAT:
+		{
+			float fValue = sphToFloat(sVal);
+			tCurIntAttr = sphF2DW(fValue);
+
+			if ( !tAttr.IsColumnar() )
+				m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, fValue );
+		}
+		break;
+
+	case SPH_ATTR_BIGINT:
+		{
+			CSphString sWarn;
+			if ( tRemap.m_iAttr )
+			{
+				tCurIntAttr = sphToInt64 ( sVal, &sWarn );
+				if ( !sWarn.IsEmpty() )
+					sphWarn ( "%s", sWarn.cstr() );
+			}
+			else
+			{
+				tCurIntAttr = (int64_t)StrToDocID ( sVal, sWarn );
+				if ( !sWarn.IsEmpty() )
+				{
+					sphWarn ( "%s", sWarn.cstr() );
+					return false;
+				}
+			}
+
+			if ( !tAttr.IsColumnar() )
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
+		}
+		break;
+
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
+		ParseFieldMVA ( tRemap.m_iAttr, sVal );
+		break;
+
+	case SPH_ATTR_TOKENCOUNT:
+		m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
+		break;
+
+	case SPH_ATTR_BOOL:
+		tCurIntAttr = sphToDword(sVal) ? 1 : 0;
+		if ( !tAttr.IsColumnar() )
+			m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
+		break;
+
+	default:
+		tCurIntAttr = sphToDword(sVal);
+		if ( !tAttr.IsColumnar() )
+			m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
+		break;
+	}
+
+	return true;
+}
+
+
 BYTE **	CSphSource_BaseSV::NextDocument ( bool & bEOF, CSphString & sError )
 {
 	bEOF = false;
 
-	ESphParseResult eRes = SplitColumns ( sError );
-	if ( eRes==PARSING_FAILED )
-		return ReportDocumentError();
-	else if ( eRes==DATA_OVER )
+	bool bSkipDoc = false;
+	do
 	{
-		bEOF = true;
-		return nullptr;
-	}
-
-	assert ( eRes==GOT_DOCUMENT );
-
-	m_dMvas.Resize ( m_tSchema.GetAttrsCount() );
-	for ( auto & i : m_dMvas )
-		i.Resize(0);
-
-	CSphString sWarn;
-
-	int iOff = m_iDocStart;
-	ARRAY_FOREACH ( iCol, m_dRemap )
-	{
-		// if+if for field-string attribute case
-		const RemapXSV_t & tRemap = m_dRemap[iCol];
-
-		// field column
-		if ( tRemap.m_iField!=-1 )
+		ESphParseResult eRes = SplitColumns ( sError );
+		if ( eRes==PARSING_FAILED )
+			return ReportDocumentError();
+		else if ( eRes==DATA_OVER )
 		{
-			m_dFields[tRemap.m_iField] = m_dBuf.Begin() + iOff;
-			m_dFieldLengths[tRemap.m_iField] = (int) strlen ( (char *)m_dFields[tRemap.m_iField] );
+			bEOF = true;
+			return nullptr;
 		}
 
-		// attribute column
-		if ( tRemap.m_iAttr!=-1 )
+		assert ( eRes==GOT_DOCUMENT );
+
+		m_dMvas.Resize ( m_tSchema.GetAttrsCount() );
+		for ( auto & i : m_dMvas )
+			i.Resize(0);
+
+		int iOff = m_iDocStart;
+
+		bSkipDoc = false;
+		ARRAY_FOREACH ( i, m_dRemap )
 		{
-			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tRemap.m_iAttr );
-			const char * sVal = (const char *)m_dBuf.Begin() + iOff;
-
-			CSphString & sCurStrAttr = m_dStrAttrs[tRemap.m_iAttr];
-			SphAttr_t & tCurIntAttr = m_dAttrs[tRemap.m_iAttr];
-
-			switch ( tAttr.m_eAttrType )
+			if ( !StoreAttribute ( i, iOff ) )
 			{
-			case SPH_ATTR_STRING:
-			case SPH_ATTR_JSON:
-				sCurStrAttr = sVal;
-				break;
-
-			case SPH_ATTR_FLOAT:
-				{
-					float fValue = sphToFloat(sVal);
-					tCurIntAttr = sphF2DW(fValue);
-
-					if ( !tAttr.IsColumnar() )
-						m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, fValue );
-				}
-				break;
-
-			case SPH_ATTR_BIGINT:
-				tCurIntAttr = sphToInt64 ( sVal, &sWarn );
-				if ( !sWarn.IsEmpty() )
-					sphWarn ( "%s", sWarn.cstr() );
-
-				if ( !tAttr.IsColumnar() )
-					m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
-
-				break;
-
-			case SPH_ATTR_UINT32SET:
-			case SPH_ATTR_INT64SET:
-				ParseFieldMVA ( tRemap.m_iAttr, sVal );
-				break;
-
-			case SPH_ATTR_TOKENCOUNT:
-				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
-				break;
-
-			case SPH_ATTR_BOOL:
-				tCurIntAttr = sphToDword(sVal) ? 1 : 0;
-				if ( !tAttr.IsColumnar() )
-					m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
-				break;
-
-			default:
-				tCurIntAttr = sphToDword(sVal);
-				if ( !tAttr.IsColumnar() )
-					m_tDocInfo.SetAttr ( tAttr.m_tLocator, tCurIntAttr );
+				bSkipDoc = true;
 				break;
 			}
+
+			iOff += m_dColumnsLen[i] + 1; // length of value plus null-terminator
 		}
 
-		iOff += m_dColumnsLen[iCol] + 1; // length of value plus null-terminator
+		m_iLine++;
 	}
+	while ( bSkipDoc );
 
-	m_iLine++;
 	return m_dFields.Begin();
 }
 

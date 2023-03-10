@@ -101,24 +101,24 @@ text_or_string:
 	;
 
 attribute_type:
-	TOK_INTEGER 	{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
-	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
-	| TOK_BOOL		{ $$.m_iValue = SPH_ATTR_BOOL; }
-	| TOK_MULTI		{ $$.m_iValue = SPH_ATTR_UINT32SET; }
-	| TOK_MULTI64	{ $$.m_iValue = SPH_ATTR_INT64SET; }
-	| TOK_JSON		{ $$.m_iValue = SPH_ATTR_JSON; }
-	| TOK_INT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_UINT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_TIMESTAMP	{ $$.m_iValue = SPH_ATTR_TIMESTAMP; }
+	TOK_INTEGER 	{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
+	| TOK_BIGINT	{ $$.SetValueInt ( SPH_ATTR_BIGINT ); }
+	| TOK_FLOAT		{ $$.SetValueInt ( SPH_ATTR_FLOAT ); }
+	| TOK_BOOL		{ $$.SetValueInt ( SPH_ATTR_BOOL ); }
+	| TOK_MULTI		{ $$.SetValueInt ( SPH_ATTR_UINT32SET ); }
+	| TOK_MULTI64	{ $$.SetValueInt ( SPH_ATTR_INT64SET ); }
+	| TOK_JSON		{ $$.SetValueInt ( SPH_ATTR_JSON ); }
+	| TOK_INT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
+	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
+	| TOK_TIMESTAMP	{ $$.SetValueInt ( SPH_ATTR_TIMESTAMP ); }
 	;
 	
 //////////////////////////////////////////////////////////////////////////
 
 alter_col_type:
 	attribute_type
-	| text_or_string 					{ $$.m_iValue = SPH_ATTR_STRING; }
-	| text_or_string field_flag_list 	{ $$.m_iValue = SPH_ATTR_STRING; $$.m_iType = $2.m_iType; }
+	| text_or_string 					{ $$.SetValueInt ( SPH_ATTR_STRING ); }
+	| text_or_string field_flag_list 	{ $$.SetValueInt ( SPH_ATTR_STRING ); $$.m_iType = $2.m_iType; }
 	;
 
 alter:
@@ -132,7 +132,7 @@ alter:
 		}
 	| TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
-			if ( !pParser->SetupAlterTable ( $3, $6, SPH_ATTR_INTEGER, 0, $9.m_iValue ) )
+			if ( !pParser->SetupAlterTable ( $3, $6, SPH_ATTR_INTEGER, 0, $9.GetValueInt() ) )
 			{
 			 	yyerror ( pParser, pParser->GetLastError() );
 	            YYERROR;
@@ -261,7 +261,7 @@ create_table_item:
 			YYERROR;
 		}
 	}
-	| ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
+	| ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list	{ pParser->AddCreateTableBitCol ( $1, $4.GetValueInt() ); }
 	;
 
 create_table_item_list:
@@ -354,16 +354,16 @@ create_function:
 			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
 			pParser->ToString ( tStmt.m_sUdfName, $3 );
 			tStmt.m_sUdfLib = pParser->ToStringUnescape ( $7 );
-			tStmt.m_eUdfType = (ESphAttr) $5.m_iValue;
+			tStmt.m_eUdfType = (ESphAttr) $5.GetValueInt();
 		}
 	;
 
 udf_type:
-	TOK_INT			{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
-	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
-	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRINGPTR; }
-	| TOK_INTEGER	{ $$.m_iValue = SPH_ATTR_INTEGER; }
+	TOK_INT			{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
+	| TOK_BIGINT	{ $$.SetValueInt ( SPH_ATTR_BIGINT ); }
+	| TOK_FLOAT		{ $$.SetValueInt ( SPH_ATTR_FLOAT ); }
+	| TOK_STRING	{ $$.SetValueInt ( SPH_ATTR_STRINGPTR ); }
+	| TOK_INTEGER	{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	;
 
 drop_function:
@@ -428,7 +428,7 @@ opt_as:
 	;
 
 insert_val:
-	TOK_CONST_INT			{ $$.m_iType = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
+	TOK_CONST_INT			{ $$.m_iType = TOK_CONST_INT; $$.SetValueInt ( $1.GetValueInt() ); }
 	| TOK_CONST_FLOAT		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
 	;

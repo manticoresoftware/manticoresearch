@@ -74,7 +74,7 @@ class DocstoreRT_i : public Docstore_i, public DocstoreBuilder_i
 {
 public:
 	virtual bool	Load ( CSphReader & tReader ) = 0;
-	virtual void	Save ( CSphWriter & tWriter ) = 0;
+	virtual void	Save ( Writer_i & tWriter ) = 0;
 	virtual void	Load ( MemoryReader_c & tReader ) = 0;
 	virtual void	Save ( MemoryWriter_c & tWriter ) = 0;
 

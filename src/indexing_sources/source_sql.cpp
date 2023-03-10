@@ -22,11 +22,11 @@
 #define SPH_UNPACK_BUFFER_SIZE	4096
 #include <ctime>
 
-static char * sphStrMacro ( const char * sTemplate, const char * sMacro, int64_t iValue )
+static char * sphStrMacro ( const char * sTemplate, const char * sMacro, uint64_t uValue )
 {
 	// expand macro
 	char sExp[32];
-	snprintf ( sExp, sizeof(sExp), INT64_FMT, iValue );
+	snprintf ( sExp, sizeof(sExp), UINT64_FMT, uValue );
 
 	// calc lengths
 	auto iExp = (int) strlen ( sExp );
@@ -279,7 +279,7 @@ static bool HookPostIndex ( const char* szCommand, DocID_t tLastIndexed )
 	const char * sMacro = "$maxid";
 	char sValue[32];
 	const char* pValue = sValue;
-	snprintf ( sValue, sizeof(sValue), INT64_FMT, tLastIndexed );
+	snprintf ( sValue, sizeof(sValue), UINT64_FMT, tLastIndexed );
 
 	const char * pCmd = SubstituteParams ( szCommand, &sMacro, &pValue, 1 );
 
@@ -750,142 +750,171 @@ void CSphSource_SQL::Disconnect ()
 }
 
 
+bool CSphSource_SQL::StoreAttribute ( int iAttr )
+{
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
+
+	switch ( tAttr.m_eAttrType )
+	{
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_JSON:
+		// memorize string, fixup NULLs
+		m_dStrAttrs[iAttr] = SqlColumn ( tAttr.m_iIndex );
+		if ( !m_dStrAttrs[iAttr].cstr() )
+			m_dStrAttrs[iAttr] = "";
+
+		break;
+
+	case SPH_ATTR_FLOAT:
+	{
+		float fValue = sphToFloat ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?
+		m_dAttrs[iAttr] = sphF2DW(fValue);
+		if ( !tAttr.IsColumnar() )
+			m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, fValue );
+	}
+	break;
+
+	case SPH_ATTR_BIGINT:
+		if ( tAttr.m_iIndex<0 )
+		{
+			assert ( tAttr.m_sName==sphGetBlobLocatorName() );
+		} else
+		{
+			bool bDocId = !iAttr;
+			const char * szNumber = SqlColumn ( tAttr.m_iIndex );
+
+			CSphString sWarn;
+			if ( bDocId )
+			{
+				uint64_t uDocID = StrToDocID ( szNumber, sWarn );
+				if ( !sWarn.IsEmpty() )
+				{
+					sphWarn ( "%s", sWarn.cstr() );
+					return false;
+				}
+
+				m_dAttrs[iAttr] = (int64_t)uDocID;
+				m_tMaxFetchedID = (int64_t)Max ( (uint64_t)m_tMaxFetchedID, uDocID );
+			}
+			else
+				m_dAttrs[iAttr] = sphToInt64 ( szNumber, &sWarn );
+
+			if ( !sWarn.IsEmpty() )
+				sphWarn ( "%s", sWarn.cstr() );
+
+			if ( !tAttr.IsColumnar() )
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[iAttr] );
+		}
+		break;
+
+	case SPH_ATTR_TOKENCOUNT:
+		// reset, and the value will be filled by IterateHits()
+		m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
+		break;
+
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
+		if ( tAttr.m_eSrc==SPH_ATTRSRC_FIELD )
+			ParseFieldMVA ( iAttr, SqlColumn ( tAttr.m_iIndex ) );
+		break;
+
+	case SPH_ATTR_BOOL:
+		m_dAttrs[iAttr] = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ? 1 : 0;
+		if ( !tAttr.IsColumnar() )
+			m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[iAttr] ); // FIXME? report conversion errors maybe?
+		break;
+
+	default:
+		// just store as uint by default
+		m_dAttrs[iAttr] = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?
+		if ( !tAttr.IsColumnar() )
+			m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[iAttr] ); // FIXME? report conversion errors maybe?
+		break;
+	}
+
+	return true;
+}
+
+
 BYTE ** CSphSource_SQL::NextDocument ( bool & bEOF, CSphString & sError )
 {
 	assert ( m_bSqlConnected );
 
-	// try to get next row
-	bool bGotRow = SqlFetchRow ();
+	bool bSkipDoc = false;
 
-	bEOF = false;
-
-	// when the party's over...
-	while ( !bGotRow )
+	do
 	{
-		// is that an error?
-		if ( SqlIsError() )
-		{
-			sError.SetSprintf ( "sql_fetch_row: %s", SqlError() );
-			return nullptr;
-		}
+		// try to get next row
+		bool bGotRow = SqlFetchRow ();
 
-		// maybe we can do next step yet?
-		if ( !RunQueryStep ( m_tParams.m_sQuery.cstr(), sError ) )
-		{
-			// if there's a message, there's an error
-			// otherwise, we're just over
-			if ( !sError.IsEmpty() )
-				return nullptr;
+		bEOF = false;
 
-		} else
+		// when the party's over...
+		while ( !bGotRow )
 		{
-			// step went fine; try to fetch
-			bGotRow = SqlFetchRow ();
-			continue;
-		}
-
-		SqlDismissResult();
-
-		// ok, we're over
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
-		{
-			if ( !SqlQuery ( m_tParams.m_dQueryPost[i].cstr() ) )
+			// is that an error?
+			if ( SqlIsError() )
 			{
-				sphWarn ( "sql_query_post[%d]: error=%s, query=%s",	i, SqlError(), m_tParams.m_dQueryPost[i].cstr() );
-				break;
+				sError.SetSprintf ( "sql_fetch_row: %s", SqlError() );
+				return nullptr;
+			}
+
+			// maybe we can do next step yet?
+			if ( !RunQueryStep ( m_tParams.m_sQuery.cstr(), sError ) )
+			{
+				// if there's a message, there's an error
+				// otherwise, we're just over
+				if ( !sError.IsEmpty() )
+					return nullptr;
+
+			} else
+			{
+				// step went fine; try to fetch
+				bGotRow = SqlFetchRow ();
+				continue;
 			}
 
 			SqlDismissResult();
+
+			// ok, we're over
+			ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
+			{
+				if ( !SqlQuery ( m_tParams.m_dQueryPost[i].cstr() ) )
+				{
+					sphWarn ( "sql_query_post[%d]: error=%s, query=%s",	i, SqlError(), m_tParams.m_dQueryPost[i].cstr() );
+					break;
+				}
+
+				SqlDismissResult();
+			}
+
+			bEOF = true;
+			return nullptr;
 		}
 
-		bEOF = true;
-		return nullptr;
-	}
+		// cleanup attrs
+		for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
+			m_tDocInfo.m_pDynamic[i] = 0;
 
-	m_tMaxFetchedID = Max ( m_tMaxFetchedID, sphToInt64 ( SqlColumn(0) ) );
-
-	// cleanup attrs
-	for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
-		m_tDocInfo.m_pDynamic[i] = 0;
-
-	// split columns into fields and attrs
-	for ( int i=0; i<m_iPlainFieldsLength; i++ )
-	{
-		// get that field
-		auto tCol = SqlUnpackColumn ( i, m_dUnpack[i] );
-		m_dFields[i] = (BYTE*)const_cast<char*> ( tCol.first );
-		m_dFieldLengths[i] = tCol.second;
-	}
-
-	m_dMvas.Resize ( m_tSchema.GetAttrsCount() );
-	for ( auto & i : m_dMvas )
-		i.Resize(0);
-
-	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i); // shortcut
-
-		switch ( tAttr.m_eAttrType )
+		// split columns into fields and attrs
+		for ( int i=0; i<m_iPlainFieldsLength; i++ )
 		{
-			case SPH_ATTR_STRING:
-			case SPH_ATTR_JSON:
-				// memorize string, fixup NULLs
-				m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
-				if ( !m_dStrAttrs[i].cstr() )
-					m_dStrAttrs[i] = "";
-
-				break;
-
-			case SPH_ATTR_FLOAT:
-				{
-					float fValue = sphToFloat ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?
-					m_dAttrs[i] = sphF2DW(fValue);
-					if ( !tAttr.IsColumnar() )
-						m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, fValue );
-				}
-				break;
-
-			case SPH_ATTR_BIGINT:
-				if ( tAttr.m_iIndex<0 )
-				{
-					assert ( tAttr.m_sName==sphGetBlobLocatorName() );
-				} else
-				{
-					CSphString sWarn;
-					m_dAttrs[i] = sphToInt64 ( SqlColumn ( tAttr.m_iIndex ), &sWarn );
-					if ( !sWarn.IsEmpty() )
-						sphWarn ( "%s", sWarn.cstr() );
-
-					if ( !tAttr.IsColumnar() )
-						m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[i] );
-				}
-				break;
-
-			case SPH_ATTR_TOKENCOUNT:
-				// reset, and the value will be filled by IterateHits()
-				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
-				break;
-
-			case SPH_ATTR_UINT32SET:
-			case SPH_ATTR_INT64SET:
-				if ( tAttr.m_eSrc==SPH_ATTRSRC_FIELD )
-					ParseFieldMVA ( i, SqlColumn ( tAttr.m_iIndex ) );
-				break;
-
-			case SPH_ATTR_BOOL:
-				m_dAttrs[i] = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ? 1 : 0;
-				if ( !tAttr.IsColumnar() )
-					m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[i] ); // FIXME? report conversion errors maybe?
-				break;
-
-			default:
-				// just store as uint by default
-				m_dAttrs[i] = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?
-				if ( !tAttr.IsColumnar() )
-					m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dAttrs[i] ); // FIXME? report conversion errors maybe?
-				break;
+			// get that field
+			auto tCol = SqlUnpackColumn ( i, m_dUnpack[i] );
+			m_dFields[i] = (BYTE*)const_cast<char*> ( tCol.first );
+			m_dFieldLengths[i] = tCol.second;
 		}
+
+		m_dMvas.Resize ( m_tSchema.GetAttrsCount() );
+		for ( auto & i : m_dMvas )
+			i.Resize(0);
+
+		bSkipDoc = false;
+		for ( int i=0; i<m_tSchema.GetAttrsCount() && !bSkipDoc; i++ )
+			if ( !StoreAttribute(i) )
+				bSkipDoc = true;
 	}
+	while ( bSkipDoc );
 
 	// log it
 	DumpDocument();

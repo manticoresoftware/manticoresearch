@@ -19,6 +19,7 @@ source test1
 	sql_query		= select * from test_table1
 	sql_attr_uint  = tag
     sql_attr_bool  = flag
+	sql_attr_string = extra
 }
 
 source test2
@@ -70,8 +71,8 @@ CREATE TABLE `test_table1` (
   `id` int,
   `title` varchar(255),
   `tag` int,
-  `flag` int
-  
+  `flag` int,
+  `extra` varchar(255)
 );
 </db_create>
 
@@ -84,7 +85,14 @@ CREATE TABLE `test_table2` (
 </db_create>
 
 <db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
-<db_insert>insert into test_table1 (id,title, tag, flag) values(1,'abc', 1, 1),(2,'abc', 1, 1),(3,'abc', 2, 0),(4,'abc', 1, 1),(5,'abc', 2, 0)</db_insert>
+<db_insert>
+insert into test_table1 (id,title, tag, flag,extra) values
+(1,'abc', 1, 1,''),
+(2,'abc', 1, 1,''),
+(3,'abc', 2, 0,''),
+(4,'abc', 1, 1,'1'),
+(5,'abc', 2, 0,'1')
+</db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table2</db_drop>
 <db_insert>
@@ -114,6 +122,13 @@ SELECT * FROM test3 WHERE idd &gt; 0 ORDER BY id ASC /*+ SecondaryIndex(idd) */
 select * from test4 where tag in (2006) order by id desc /*+ SecondaryIndex(tag) */;
 select * from test4 where tag in (2007) order by id desc /*+ SecondaryIndex(tag) */;
 select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag) */;
+</sphinxql>
+
+<sphinxql>
+select * from test1 where extra='' order by id desc /*+ NO_SecondaryIndex(extra) */;
+select * from test1 where extra='' order by id desc /*+ SecondaryIndex(extra) */;
+select * from test1 where extra!='' order by id desc /*+ NO_SecondaryIndex(extra) */;
+select * from test1 where extra!='' order by id desc /*+ SecondaryIndex(extra) */;
 </sphinxql>
 
 </queries>

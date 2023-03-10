@@ -14,7 +14,7 @@
 
 #include "sphinxstd.h"
 
-class CSphWriter;
+class Writer_i;
 class JsonEscapedBuilder;
 
 class ExceptionsTrie_c
@@ -55,7 +55,7 @@ public:
 		return -1;
 	}
 
-	void Export ( CSphWriter& w ) const;
+	void Export ( Writer_i & w ) const;
 	void Export ( JsonEscapedBuilder& tOut ) const;
 
 private:

@@ -33,6 +33,8 @@ ESphAttr WidestType ( ESphAttr a, ESphAttr b )
 		return SPH_ATTR_FLOAT;
 	if ( a==SPH_ATTR_BIGINT || b==SPH_ATTR_BIGINT )
 		return SPH_ATTR_BIGINT;
+	if ( a==SPH_ATTR_UINT64 || b==SPH_ATTR_UINT64 )
+		return SPH_ATTR_BIGINT;
 	if ( a==SPH_ATTR_JSON_FIELD || b==SPH_ATTR_JSON_FIELD )
 		return SPH_ATTR_BIGINT;
 	return SPH_ATTR_INTEGER;

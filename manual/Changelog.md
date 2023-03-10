@@ -1,5 +1,25 @@
 # Changelog
 
+# Version X
+
+### Bugfixes
+* [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
+* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
+* [gl #3287] Crash on possibly out of space disk
+
+### Major new features
+* Query optimizer now works for fulltext queries
+
+### Minor changes
+* Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
+* String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
+* Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.
+* When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
+
+### Behaviour changes
+* **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
+* **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
+
 # Version 6.0.4
 
 Released: soon
@@ -18,6 +38,8 @@ Released: soon
 * [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed /pq HTTP endpoint to be an alias of the /json/pq HTTP endpoint
 * [Commit ee87](https://github.com/manticoresoftware/columnar/commit/ee87d11) Fixed crash on search with the secondary index
 * [Commit e7f9](https://github.com/manticoresoftware/manticoresearch/commit/e7f9815) Added buddy version to startup log entry
+* [Commit fdd9](https://github.com/manticoresoftware/manticoresearch/commit/fdd9087) Fixed compat mode to pass errors into buddy
+* [Commit 1912](https://github.com/manticoresoftware/manticoresearch/commit/1912b3c) Added compatibility mode to work with Logstash, Beat and Kibana
 
 # Version 6.0.2
 Released: Feb 10 2023
@@ -27,6 +49,7 @@ Released: Feb 10 2023
 * ❗[Issue #1029](https://github.com/manticoresoftware/manticoresearch/issues/1029) - WARNING: Compiled-in value KNOWN_CREATE_SIZE (16) is less than measured (208). Consider to fix the value!
 * ❗[Issue #1032](https://github.com/manticoresoftware/manticoresearch/issues/1032) - Manticore 6.0.0 plain index crashes
 * ❗[Issue #1033](https://github.com/manticoresoftware/manticoresearch/issues/1033) - multiple distributed lost on daemon restart
+* ❗[Issue #1064](https://github.com/manticoresoftware/manticoresearch/issues/1064) - race condition in tokenizer lowercase tables
 
 # Version 6.0.0
 Released: Feb 7 2023
@@ -109,7 +132,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Issue #924](https://github.com/manticoresoftware/manticoresearch/issues/924) Debian Bookworm support.
 * [Issue #636](https://github.com/manticoresoftware/manticoresearch/issues/636) Packaging: arm64 builds for Linuxes and MacOS.
 * [PR #26](https://github.com/manticoresoftware/docker/pull/26) Multi-architecture (x86_64 / arm64) docker image.
-* [Simplified package building for contributors](../Installation/Compiling_from_sources.md#Building-using-CI-docker).
+* [Simplified package building for contributors](../Installation/Compiling_from_sources.md#Building-using-CI-Docker).
 * It's now possible to install a specific version using APT.
 * [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows installer (previously we provided just an archive).
 * Switched to compiling using CLang 15.

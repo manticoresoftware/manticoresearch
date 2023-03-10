@@ -444,6 +444,7 @@ public:
 	void			AddStr ( const char * szName, const char * szValue );
 	void			AddStr ( const char * szName, const CSphString & sValue );
 	void			AddInt ( const char * szName, int64_t iValue );
+	void			AddUint ( const char * szName, uint64_t uValue );
 	void			AddFlt ( const char * szName, float fValue );
 	void			AddBool ( const char * szName, bool bValue );
 	void			AddNull ( const char * szName );
@@ -468,9 +469,11 @@ public:
 	bool			HasItem ( const char * szName ) const;
 
 	static JsonObj_c CreateInt ( int64_t iInt );
+	static JsonObj_c CreateUint ( uint64_t uInt );
 	static JsonObj_c CreateStr ( const CSphString & sStr );
 
 	bool			IsInt() const;
+	bool			IsUint() const;
 	bool			IsDbl() const;
 	bool			IsNum() const;
 	bool			IsBool() const;

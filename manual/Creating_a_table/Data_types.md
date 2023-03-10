@@ -2,7 +2,7 @@
 
 ## Full-text fields and attributes
 
-Manticore's data types can be split into full-text fields and attributes.
+Manticore's data types can be split into two categories: full-text fields and attributes.
 
 ### Full-text fields
 
@@ -12,19 +12,19 @@ Full-text fields:
 * original document's content can be retrieved
 * original document's content can be used for highlighting
 
-Full-text fields are represented data type `text`. All the other data types are called "attributes".
+Full-text fields are represented by the data type `text`. All other data types are called "attributes".
 
 ### Attributes
 
-Attributes are non-full-text values associated with each document that can be used to perform non-full-text filtering, sorting and grouping during search.
+Attributes are non-full-text values associated with each document that can be used to perform non-full-text filtering, sorting and grouping during a search.
 
-It is often desired to process full-text search results based not only on matching document ID and its rank, but on a number of other per-document values as well. For instance, one might need to sort news search results by date and then relevance, or search through products within specified price range, or limit blog search to posts made by selected users, or group results by month. To do that efficiently, Manticore enables not only full-text fields, but additional attributes to each document. It's then possible to use them to filter, sort, or group full-text matches or search only by attributes.
+It is often desired to process full-text search results based not only on matching document ID and its rank, but also on a number of other per-document values. For example, one might need to sort news search results by date and then relevance, or search through products within a specified price range, or limit a blog search to posts made by selected users, or group results by month. To do this efficiently, Manticore enables not only full-text fields, but also additional attributes to be added to each document. These attributes can be used to filter, sort, or group full-text matches, or to search only by attributes.
 
 The attributes, unlike full-text fields, are not full-text indexed. They are stored in the table, but it is not possible to search them as full-text.
 
 <!-- example attributes or fields -->
 
-A good example for attributes would be a forum posts table. Assume that only title and content fields need to be full-text searchable - but that sometimes it is also required to limit search to a certain author or a sub-forum (ie. search only those rows that have some specific values of author_id or forum_id); or to sort matches by post_date column; or to group matching posts by month of the post_date and calculate per-group match counts.
+A good example for attributes would be a forum posts table. Assume that only the title and content fields need to be full-text searchable - but that sometimes it is also required to limit search to a certain author or a sub-forum (i.e., search only those rows that have some specific values of author_id or forum_id); or to sort matches by post_date column; or to group matching posts by month of the post_date and calculate per-group match counts.
 
 <!-- intro -->
 ##### SQL:
@@ -233,26 +233,26 @@ As can be understood from their names, they store data differently. The traditio
 * stores attributes uncompressed
 * all attributes of the same document are stored in one row close to each other
 * rows are stored one by one
-* accessing attributes is basically done by just multiplying rowid by stride (length of a single vector) and getting the requested attribute from the calculated memory location. It gives very low random access latency
-* attributes have to be in memory to get acceptable performance, otherwise due to the row-wise nature of the storage Manticore may have to read from disk too much unneded data which is in many cases suboptimal.
+* accessing attributes is basically done by just multiplying the row ID by the stride (length of a single vector) and getting the requested attribute from the calculated memory location. It gives very low random access latency.
+* attributes have to be in memory to get acceptable performance, otherwise due to the row-wise nature of the storage Manticore may have to read from disk too much unneeded data which is in many cases suboptimal.
 
 With **the columnar storage**:
-* each attribute is stored independently from all other attributes in its separate "column"
+* each attribute is stored independently of all other attributes in its separate "column"
 * storage is split into blocks of 65536 entries
-* the blocks are stored compressed. This often allows to store just a few distinct values instead of storing all of them like in the row-wise storage. High compression ratio allows to read from disk faster and makes the memory requirement much lower
+* the blocks are stored compressed. This often allows storing just a few distinct values instead of storing all of them like in the row-wise storage. High compression ratio allows reading from disk faster and makes the memory requirement much lower
 * when data is indexed, storage scheme is selected for each block independently. For example, if all values in a block are the same, it gets "const" storage and only one value is stored for the whole block. If there are less than 256 unique values per block, it gets "table" storage and stores indexes to a table of values instead of the values themselves
 * search in a block can be early rejected if it's clear the requested value is not present in the block.
 
 The columnar storage was designed to handle large data volume that does not fit into RAM, so the recommendations are:
 * if you have enough memory for all your attributes you will benefit from the row-wise storage
-* otherwise the columnar storage can still give you decent performance with much lower memory footprint which will allow you to store much more documents in your table
+* otherwise, the columnar storage can still give you decent performance with a much lower memory footprint which will allow you to store much more documents in your table
 
 ### How to switch between the storages
 
-The traditional row-wise storage is default, so if you want everything to be stored in a row-wise fashion you don't need to do anything when you create a table.
+The traditional row-wise storage is the default, so if you want everything to be stored in a row-wise fashion, you don't need to do anything when you create a table.
 
 To enable the columnar storage you need to:
-* specify `engine='columnar'` in [CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) to make all attributes of the table columnar. Then if you want to keep a specific attribute row-wise you need to add `engine='rowwise'` when you declare it. For example:
+* specify `engine='columnar'` in [CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) to make all attributes of the table columnar. Then, if you want to keep a specific attribute row-wise, you need to add `engine='rowwise'` when you declare it. For example:
 ```sql
 create table tbl(title text, type int, price float engine='rowwise') engine='columnar'
 ```
@@ -272,12 +272,11 @@ Below is the list of data types supported by Manticore Search:
 ## Document ID
 
 <!-- example id -->
-
-The document identifier is a mandatory attribute. It must be a **unique, signed 64-bit integer**. While the document ID can be specified explicitly, it is still enabled even if not specified. Document IDs cannot be [UPDATE](../Data_creation_and_modification/Updating_documents/UPDATE.md)'ed.
+The document identifier is a mandatory attribute, and document IDs must be **unique 64-bit unsigned integers**. Document IDs can be explicitly specified, but if not, they are still enabled. Document IDs cannot be updated. Note that when retrieving document IDs, they are treated as signed 64-bit integers, which means they may be negative. Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to cast them to unsigned 64-bit integers if necessary.
 
 <!-- request Explicit ID -->
 
-When you create a table you can specify ID explicitly, but no matter what datatype you use it will be always as said previously - signed 64-bit integer.
+When you create a table, you can specify ID explicitly, but no matter what data type you use, it will be always as said previously - a signed 64-bit integer.
 
 ```sql
 CREATE TABLE tbl(id bigint, content text);
@@ -328,13 +327,13 @@ string|text [stored|attribute] [indexed]
 
 1. `indexed` - full-text indexed (can be used in full-text queries)
 2. `stored` - stored in a docstore (stored on disk, not in RAM, lazy read)
-3. `attribute` - makes it string attribute (can sort/group by it)
+3. `attribute` - makes it a string attribute (can sort/group by it)
 
-Specifying at least one property overrides all the default ones (see below), i.e. if you decide to use a custom combination of properties you need to list all the properties you want.
+Specifying at least one property overrides all the default ones (see below), i.e., if you decide to use a custom combination of properties, you need to list all the properties you want.
 
 **No properties specified:**
 
-`string` and `text` are aliases, but if you don’t specify any properties they by default means different things:
+`string` and `text` are aliases, but if you don’t specify any properties, they by default mean different things:
 
 * just `string` by default means `attribute` (see details [below](../Creating_a_table/Data_types.md#Text)).
 * just `text` by default means `stored` + `indexed` (see details [below](../Creating_a_table/Data_types.md#String)).
@@ -343,11 +342,11 @@ Specifying at least one property overrides all the default ones (see below), i.e
 
 <!-- example working with text -->
 
-Text (just `text` or `text/string indexed`) data type forms the full-text part of the table. Text fields are indexed and can be searched for keywords.
+The text (just `text` or `text/string indexed`) data type forms the full-text part of the table. Text fields are indexed and can be searched for keywords.
 
-Text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations etc. Eventually a full-text table (a special data structure that enables quick searches for a keyword) gets built from that text.
+Text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations, etc. Eventually, a full-text table (a special data structure that enables quick searches for a keyword) gets built from that text.
 
-Full-text fields can only be used in `MATCH()` clause and cannot be used for sorting or aggregation. Words are stored in an inverted index along with references to the fields they belong and positions in the field. This allows to search a word inside each field and to use advanced operators like proximity. By default the original text of the fields is both indexed and stored in document storage. It means that the original text can be returned with the query results and it can be used in [search result highlighting](../Searching/Highlighting.md).
+Full-text fields can only be used in the `MATCH()` clause and cannot be used for sorting or aggregation. Words are stored in an inverted index along with references to the fields they belong to and positions in the field. This allows searching a word inside each field and using advanced operators like proximity. By default, the original text of the fields is both indexed and stored in document storage. It means that the original text can be returned with the query results and used in [search result highlighting](../Searching/Highlighting.md).
 
 <!-- intro -->
 ##### SQL:
@@ -501,7 +500,7 @@ table products
 
 <!-- example for field naming  -->
 
-Fields are named, and you can limit your searches to a single field (e.g. search through "title" only) or a subset of fields (eg. to "title" and "abstract" only). Manticore table format generally supports up to 256 full-text fields.
+Fields are named, and you can limit your searches to a single field (e.g. search through "title" only) or a subset of fields (e.g. "title" and "abstract" only). The Manticore table format generally supports up to 256 full-text fields.
 
 <!-- intro -->
 ##### SQL:
@@ -569,9 +568,9 @@ utilsApi.sql("CREATE TABLE products(title text indexed)");
 
 <!-- example for string attributes  -->
 
-Unlike full-text fields, string attributes (just `string` or `string/text attribute`) are stored as they are received and cannot be used in full-text searches. Instead they are returned in results, they can be used in `WHERE` clause for comparison filtering or `REGEX` and they can be used for sorting and aggregation. In general it's not recommended to store large texts in string attributes, but use string attributes for metadata like names, titles, tags, keys.
+Unlike full-text fields, string attributes (just `string` or `string/text attribute`) are stored as they are received and cannot be used in full-text searches. Instead, they are returned in results, can be used in the `WHERE` clause for comparison filtering or `REGEX`, and can be used for sorting and aggregation. In general, it's not recommended to store large texts in string attributes, but use string attributes for metadata like names, titles, tags, keys.
 
-If want to also index the string attribute, can specify both as `string attribute indexed`. Will allow full-text searching, and works as an attribute.
+If you want to also index the string attribute, you can specify both as `string attribute indexed`. It will allow full-text searching and works as an attribute.
 
 <!-- intro -->
 ##### SQL:
@@ -652,7 +651,7 @@ table products
 
 <!-- example string field -->
 
-You can create a fulltext field that is also stored as a string attribute. This approach creates a fulltext field and a string attribute that have the same name. Note that you can't add a `stored` property to store the data as a a string attribute and in the document storage at the same time.
+You can create a full-text field that is also stored as a string attribute. This approach creates a full-text field and a string attribute that have the same name. Note that you can't add a `stored` property to store the data as a string attribute and in the document storage at the same time.
 
 <!-- intro -->
 ##### SQL:
@@ -810,7 +809,7 @@ table products
 
 <!-- example for bit integers  -->
 
-Integers can be stored in shorter sizes than 32 bit by specifying a bit count. For example if we want to store a numeric value which we know is not going to be bigger than 8, the type can be defined as `bit(3)`. Bitcount integers perform slower than the full size ones, but they require less RAM. They are saved in 32-bit chunks, so in order to save space they should be grouped at the end of attributes definitions (otherwise a bitcount integer between 2 full-size integers will occupy 32 bits as well).
+Integers can be stored in shorter sizes than 32-bit by specifying a bit count. For example, if we want to store a numeric value which we know is not going to be bigger than 8, the type can be defined as `bit(3)`. Bitcount integers perform slower than the full-size ones, but they require less RAM. They are saved in 32-bit chunks, so in order to save space, they should be grouped at the end of attribute definitions (otherwise a bitcount integer between 2 full-size integers will occupy 32 bits as well).
 
 <!-- intro -->
 ##### SQL:
@@ -1215,7 +1214,7 @@ table products
 
 <!-- example for eps comparison -->
 
-Unlike integer types, equal comparison of floats is forbidden due to rounding errors. A near equal can be used instead, by checking the absolute error margin.
+Unlike integer types, comparing two floating-point numbers for equality is not recommended due to potential rounding errors. A more reliable approach is to use a near-equal comparison, by checking the absolute error margin.
 
 <!-- intro -->
 ##### SQL:
@@ -1283,7 +1282,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for float mul -->
 
-Another alternative, which can also be used to perform `IN(attr,val1,val2,val3)` is to compare floats as integers by choosing a multiplier factor and convert the floats to integers in operations. Example illustrates modifying `IN(attr,2.0,2.5,3.5)` to work with integer values.
+Another alternative, which can also be used to perform `IN(attr,val1,val2,val3)` is to compare floats as integers by choosing a multiplier factor and convert the floats to integers in operations. The following example illustrates modifying `IN(attr,2.0,2.5,3.5)` to work with integer values.
 
 <!-- intro -->
 ##### SQL:
@@ -1353,7 +1352,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for creating json -->
 
-This data type allows storing JSON objects for schema-less data. It is not supported by the columnar storage, but since you can combine the both storages in the same table you can have it stored in the traditional storage instead.
+This data type allows storing JSON objects, which is useful for storing schema-less data. However, it is not supported by columnar storage. However, it can be stored in traditional storage, as it's possible to combine both storage types in the same table.
 
 <!-- intro -->
 ##### SQL:
@@ -1501,7 +1500,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for REGEX() json -->
 
-Text properties are treated same as strings so it's not possible to use them in full-text matches expressions, but string functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29) can be used.
+Text properties are treated the same as strings, so it's not possible to use them in full-text match expressions. However, string functions such as [REGEX()](../Functions/String_functions.md#REGEX%28%29) can be used.
 
 <!-- intro -->
 ##### SQL:
@@ -1579,7 +1578,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for DOUBLE() -->
 
-In case of JSON properties, enforcing data type is required to be casted in some situations for proper functionality. For example in case of float values [DOUBLE()](../Functions/Type_casting_functions.md#DOUBLE%28%29) must be used for proper sorting.
+In the case of JSON properties, enforcing data type may be required for proper functionality in certain situations. For example, when working with float values, [DOUBLE()](../Functions/Type_casting_functions.md#DOUBLE%28%29) must be used for proper sorting.
 
 <!-- intro -->
 ##### SQL:
@@ -1648,7 +1647,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example for creating MVA32 -->
 
-Multi-value attributes allow storing variable-length lists of 32-bit unsigned integers. It can be used to store one-to-many numeric values like tags, product categories, properties.
+Multi-value attributes allow storing variable-length lists of 32-bit unsigned integers. This can be useful for storing one-to-many numeric values, such as tags, product categories, and properties.
 
 <!-- intro -->
 ##### SQL:
@@ -1729,7 +1728,8 @@ table products
 
 
 <!-- example for any/all MVA -->
-It supports filtering and aggregation, but not sorting. Filtering can be made of a condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)).
+It supports filtering and aggregation, but not sorting. Filtering can be done using a condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all elements ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)) to pass.
+
 
 <!-- intro -->
 ##### SQL:
@@ -1871,7 +1871,7 @@ searchResponse = searchApi.search(searchRequest);
 <!-- end -->
 
 <!-- example for grouping by MVA -->
-When grouping by multi-value attribute, a document will contribute to as many groups as there are different values associated with that document. For instance, if the collection contains exactly 1 document having a 'product_codes' multi-value attribute with values 5, 7, and 11, grouping on 'product_codes' will produce 3 groups with `COUNT(*)`equal to 1 and `GROUPBY()` key values of 5, 7, and 11 respectively. Also note that grouping by multi-value attributes might lead to duplicate documents in the result set because each document can participate in many groups.
+When grouping by a multi-value attribute, a document will contribute to as many groups as there are different values associated with that document. For instance, if a collection contains exactly one document having a 'product_codes' multi-value attribute with values 5, 7, and 11, grouping on 'product_codes' will produce 3 groups with `COUNT(*)`equal to 1 and `GROUPBY()` key values of 5, 7, and 11, respectively. Also, note that grouping by multi-value attributes may lead to duplicate documents in the result set because each document can participate in many groups.
 
 <!-- intro -->
 ##### SQL:
@@ -1900,7 +1900,7 @@ Query OK, 1 row affected (0.00 sec)
 <!-- end -->
 
 <!-- example for MVA value order -->
-The order of the numbers inserted as values of multi-valued attributes is not preserved. Values are stored internally as a sorted set.
+The order of the numbers inserted as values of multivalued attributes is not preserved. Values are stored internally as a sorted set.
 
 <!-- intro -->
 ##### SQL:
@@ -2121,7 +2121,7 @@ class SearchResponse {
 
 <!-- example for creating MVA64 -->
 
-A data type type that allows storing variable-length lists of 64-bit signed integers. It has the same functionality as multi-value integer.
+A data type that allows storing variable-length lists of 64-bit signed integers. It has the same functionality as multi-value integer.
 
 <!-- intro -->
 ##### SQL:
@@ -2205,7 +2205,7 @@ When you use the columnar storage you can specify the following properties for t
 <!-- example fast_fetch -->
 ### fast_fetch
 
-By default Manticore Columnar storage stores all attributes not only in columnar fashion, but in a special docstore row by row which enables fast execution of queries like `SELECT * FROM ...` especially when you are fetching lots of records at once. But if you are sure you don't need it or want to save disk space you can disable it by specifying `fast_fetch='0'` when you create a table or (if you are defining a table in a config) use `columnar_no_fast_fetch` as shown in the following example.
+By default, Manticore Columnar storage stores all attributes in a columnar fashion, as well as in a special docstore row by row. This enables fast execution of queries like `SELECT * FROM ...`, especially when fetching a large number of records at once. However, if you are sure that you do not need it or wish to save disk space, you can disable it by specifying `fast_fetch='0'` when creating a table or (if you are defining a table in a config) by using `columnar_no_fast_fetch` as shown in the following example.
 
 <!-- request RT mode -->
 ```sql
@@ -2260,3 +2260,4 @@ table tbl {
 ```
 
 <!-- end -->
+<!-- proofread -->

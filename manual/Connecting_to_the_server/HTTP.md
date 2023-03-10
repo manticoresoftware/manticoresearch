@@ -1,14 +1,14 @@
 # HTTP
 
-You can connect to Manticore Search over HTTP/HTTPS.
+You can connect to Manticore Search through HTTP/HTTPS.
 
 ## Configuration
 <!-- example HTTP -->
-By default Manticore listens for HTTP, HTTPS and binary requests on ports 9308 and 9312.
+By default, Manticore listens for HTTP, HTTPS, and binary requests on ports 9308 and 9312.
 
-In section "searchd" of your configuration file the HTTP port can be defined with directive `listen` like this:
+In the "searchd" section of your configuration file, you can define the HTTP port using the `listen` directive as follows:
 
-Both lines are valid and equal by meaning (except for the port number), they both define listeners that will serve all api/http/https protocols. There are no special requirements and any HTTP client can be used to connect to Manticore.
+Both lines are valid and have the same meaning (except for the port number). They both define listeners that will serve all API/HTTP/HTTPS protocols. There are no special requirements, and any HTTP client can be used to connect to Manticore.
 
 <!-- request HTTP -->
 ```ini
@@ -21,9 +21,9 @@ searchd {
 ```
 <!-- end -->
 
-All HTTP endpoints respond with `application/json` content type. Most endpoints use JSON payload for requests, however there are some exceptions that use NDJSON or simple URL encoded payload.
+All HTTP endpoints return `application/json` content type. For the most part, endpoints use JSON payloads for requests. However, there are some exceptions that use NDJSON or simple URL-encoded payloads.
 
-There is no user authentication implemented at the moment, so make sure the HTTP interface is not reachable by anyone outside your network. Since Manticore acts like any other web server, you can use a reverse proxy like Nginx to add HTTP  authentication or caching.
+Currently, there is no user authentication. Therefore, make sure that the HTTP interface is not accessible to anyone outside your network. As Manticore functions like any other web server, you can use a reverse proxy, such as Nginx, to implement HTTP authentication or caching.
 
 <!-- example HTTPS -->
 The HTTP protocol also supports [SSL encryption](../Security/SSL.md):
@@ -38,13 +38,13 @@ searchd {
 ...
 }
 ```
-<!-- end -->
+<!-- end --> 
 
-### VIP connection
+### VIP Connection
 <!-- example VIP -->
-Separate HTTP interface can be used to perform 'VIP' connections. A connection in this case bypasses a thread pool and always forcibly creates a new dedicated thread. That's useful for managing Manticore Search in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
+Separate HTTP interface can be used for 'VIP' connections. In this case, the connection bypasses a thread pool and always creates a new dedicated thread. This is useful for managing Manticore Search during periods of severe overload when the server might stall or not allow regular port connections.
 
-Read more about `listen` in [this section](../Server_settings/Searchd.md#listen).
+For more information on the `listen` directive, see [this section](../Server_settings/Searchd.md#listen).
 
 <!-- request VIP -->
 ```ini
@@ -186,7 +186,7 @@ POST /sql?mode=raw -d "query=desc%20test"
 
 <!-- example SQL_over_HTTP_4 -->
 ### /cli
-While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it eaiser to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is even if you don't escape it manually via curl or let the browser encode it automaticaly. The `+` sign is not decoded to space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
+While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
 
 <!-- request HTTP -->
 
@@ -249,3 +249,4 @@ POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') 
 ### Keep-alive
 
 HTTP keep-alive is also supported, which makes working via the HTTP JSON interface stateful as long as the client supports keep-alive too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql.
+<!-- proofread -->

@@ -1,11 +1,11 @@
 # Template table
 
 <!-- example template -->
- Template table is a pseudo-table since it does not store any data and does not create any files on your disk. At the same time it can have the same [NLP settings](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Natural-language-processing-specific-settings) as a plain or a real-time table. Template tables can be used for a few purposes:
+ A Template Table is a special type of table in Manticore that doesn't store any data and doesn't create any files on your disk. Despite this, it can have the same [NLP settings](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Natural-language-processing-specific-settings) as a plain or real-time table. Template tables can be used for the following purposes:
 
-* as templates to inherit plain/real-time tables in the [Plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29) just to minify Manticore configuration file
-* keywords generation with help of [CALL KEYWORDS](../../Searching/Autocomplete.md#CALL-KEYWORDS)
-* highlighting of an arbitrary string using [CALL SNIPPETS](../../Searching/Highlighting.md#CALL-SNIPPETS)
+* As a template to inherit settings in the  [Plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29), simplifying your Manticore configuration file.
+* Keyword generation with the help of the [CALL KEYWORDS](../../Searching/Autocomplete.md#CALL-KEYWORDS) command.
+* Highlighting an arbitrary string using the [CALL SNIPPETS](../../Searching/Highlighting.md#CALL-SNIPPETS) command.
 
 
 <!-- intro -->
@@ -24,3 +24,4 @@ table template {
 }
 ```
 <!-- end -->
+<!-- proofread -->

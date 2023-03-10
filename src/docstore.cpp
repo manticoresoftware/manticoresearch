@@ -1330,7 +1330,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final {}
 
 	bool				Load ( CSphReader & tReader ) final;
-	void				Save ( CSphWriter & tWriter ) final;
+	void				Save ( Writer_i & tWriter ) final;
 	void				Load ( MemoryReader_c & tReader ) final;
 	void				Save ( MemoryWriter_c & tWriter ) final;
 
@@ -1509,9 +1509,9 @@ bool DocstoreRT_c::Load ( CSphReader & tReader )
 	return !tReader.GetErrorFlag();
 }
 
-void DocstoreRT_c::Save ( CSphWriter & tWriter )
+void DocstoreRT_c::Save ( Writer_i & tWriter )
 {
-	DocstoreSave_T<CSphWriter> ( m_dDocs, m_tFields.GetNumFields(), tWriter );
+	DocstoreSave_T<Writer_i> ( m_dDocs, m_tFields.GetNumFields(), tWriter );
 }
 
 void DocstoreRT_c::Load ( MemoryReader_c & tReader )

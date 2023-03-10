@@ -599,7 +599,7 @@ void CSphFieldFilterSettings::Load ( CSphReader & tReader )
 }
 
 
-void CSphFieldFilterSettings::Save ( CSphWriter & tWriter ) const
+void CSphFieldFilterSettings::Save ( Writer_i & tWriter ) const
 {
 	tWriter.PutDword ( m_dRegexps.GetLength() );
 	for ( const auto & i : m_dRegexps )
@@ -1376,7 +1376,7 @@ bool IndexSettingsContainer_c::CheckPaths()
 
 //////////////////////////////////////////////////////////////////////////
 
-static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
+static void WriteFileInfo ( Writer_i & tWriter, const CSphSavedFile & tInfo )
 {
 	tWriter.PutOffset ( tInfo.m_uSize );
 	tWriter.PutOffset ( tInfo.m_uCTime );
@@ -1384,7 +1384,7 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 	tWriter.PutDword ( tInfo.m_uCRC32 );
 }
 
-void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
+void operator<< ( JsonEscapedBuilder & tOut, const CSphSavedFile & tInfo )
 {
 	auto _ = tOut.Object ();
 	tOut.NamedValNonDefault ( "size", tInfo.m_uSize );
@@ -1395,7 +1395,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphSavedFile & tInfo )
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveTokenizerSettings ( CSphWriter & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c & pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
 
@@ -1454,7 +1454,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFiel
 
 /// gets called from and MUST be in sync with RtIndex_c::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveDictionarySettings ( CSphWriter & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit )
+void SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c & pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	const CSphDictSettings & tSettings = pDict->GetSettings ();
@@ -1882,6 +1882,53 @@ static bool IsDDLToken ( const CSphString & sTok )
 }
 
 
+static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndex * pIndex, int iNumColumnar )
+{
+	StringBuilder_c sRes;
+
+	CSphString sQuotedName;
+	if ( IsDDLToken ( tAttr.m_sName ) )
+		sQuotedName.SetSprintf ( "`%s`", tAttr.m_sName.cstr() );
+	else
+		sQuotedName = tAttr.m_sName;
+
+	sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
+
+	AddStorageSettings ( sRes, tAttr, *pIndex, false, iNumColumnar );
+	AddEngineSettings ( sRes, tAttr );
+
+	return sRes.cstr();
+}
+
+
+static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const CSphIndex * pIndex, const CSphSchema & tSchema, int iNumColumnar )
+{
+	StringBuilder_c sRes;
+
+	CSphString sQuotedName;
+	if ( IsDDLToken ( tField.m_sName ) )
+		sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
+	else
+		sQuotedName = tField.m_sName;
+
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
+	bool bAttr = pAttr && pAttr->m_eAttrType==SPH_ATTR_STRING;
+
+	sRes << sQuotedName << ( bAttr ? " string" : " text" );
+	AddFieldSettings ( sRes, tField );
+
+	if ( bAttr )
+	{
+		sRes << " attribute";
+
+		AddStorageSettings ( sRes, *pAttr, *pIndex, true, iNumColumnar );
+		AddEngineSettings ( sRes, *pAttr );
+	}
+
+	return sRes.cstr();
+}
+
+
 CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
 	assert ( pIndex );
@@ -1894,61 +1941,39 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	StringBuilder_c sRes;
 	sRes << "CREATE TABLE " << sName << " (\n";
 
-	CSphVector<const CSphColumnInfo *> dExclude;
-
-	bool bHasAttrs = false;
+	CSphVector<const CSphColumnInfo *> dExcludeAttrs;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-			continue;
-	
-		if ( bHasAttrs )
-			sRes << ",\n";
-
-		CSphString sQuotedName;
-		if ( IsDDLToken ( tAttr.m_sName ) )
-			sQuotedName.SetSprintf ( "`%s`", tAttr.m_sName.cstr() );
-		else
-			sQuotedName = tAttr.m_sName;
-
-		const CSphColumnInfo * pField = tSchema.GetField ( tAttr.m_sName.cstr() );
+		const auto & tAttr = tSchema.GetAttr(i);
+		const auto * pField = tSchema.GetField ( tAttr.m_sName.cstr() );
 		if ( pField && tAttr.m_eAttrType==SPH_ATTR_STRING )
-		{
-			sRes << sQuotedName << " " << GetAttrTypeName(tAttr) << " attribute";
-
-			AddFieldSettings ( sRes, *pField );
-			dExclude.Add(pField);
-		}
-		else
-			sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
-
-		AddStorageSettings ( sRes, tAttr, *pIndex, !!pField, iNumColumnar );
-		AddEngineSettings ( sRes, tAttr );
-
-		bHasAttrs = true;
+			dExcludeAttrs.Add(&tAttr);
 	}
 
-	dExclude.Uniq();
+	dExcludeAttrs.Uniq();
+
+	const CSphColumnInfo * pId = tSchema.GetAttr("id");
+	assert(pId);
+
+	sRes << FormatCreateTableAttr ( *pId, pIndex, iNumColumnar );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
-		const CSphColumnInfo & tField = tSchema.GetField(i);
+		sRes << ",\n";
+		sRes << FormatCreateTableField ( tSchema.GetField(i), pIndex, tSchema, iNumColumnar );
+	}
 
-		if ( dExclude.BinarySearch(&tField) )
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT || &tAttr==pId )
 			continue;
 
-		if ( i || bHasAttrs )
-			sRes << ",\n";
+		if ( dExcludeAttrs.BinarySearch(&tAttr) )
+			continue;
 
-		CSphString sQuotedName;
-		if ( IsDDLToken ( tField.m_sName ) )
-			sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
-		else
-			sQuotedName = tField.m_sName;
-
-		sRes << sQuotedName << " text";
-		AddFieldSettings ( sRes, tField );
+		sRes << ",\n";
+		sRes << FormatCreateTableAttr ( tAttr, pIndex, iNumColumnar );
 	}
 
 	sRes << "\n)";
@@ -1958,6 +1983,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 	if ( g_fnCreateFilenameBuilder )
 		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
+
 	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get() );
 
 	if ( tBuf.GetLength() )

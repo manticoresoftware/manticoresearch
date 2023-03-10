@@ -45,6 +45,7 @@ enum ESphAttr
 	SPH_ATTR_TOKENCOUNT	= 11,			///< field token count, 32-bit integer
 	SPH_ATTR_JSON		= 12,			///< JSON subset; converted, packed, and stored as string
 	SPH_ATTR_DOUBLE		= 13,			///< floating point number (IEEE 64-bit)
+	SPH_ATTR_UINT64		= 14,			///< unsigned 64-bit integer
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers

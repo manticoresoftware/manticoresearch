@@ -2,8 +2,7 @@
 
 <!-- example local_dist -->
 
-A distributed table in Manticore Search doesn't hold any data. Instead it acts as a 'master node' to proxy the demanded query to other tables and provide merged results from the responses it receives from the 'node' tables. A distributed table can connect to local tables or tables located on other servers. The simplest example of a distributed table looks so:
-
+A distributed table in Manticore Search acts as a "master node" that proxies the demanded query to other tables and provides merged results from the responses it receives. The table doesn't hold any data on its own. It can connect to both local tables and tables located on other servers. Here's an example of a simple distributed table:
 
 <!-- intro -->
 ##### Configuration file:
@@ -67,3 +66,4 @@ utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='i
 ```
 
 <!-- end -->
+<!-- proofread -->

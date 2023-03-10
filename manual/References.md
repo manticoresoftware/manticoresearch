@@ -262,7 +262,8 @@
 * [DOUBLE()](Functions/Type_casting_functions.md#DOUBLE%28%29) - Forcibly promotes given argument to floating point type
 * [INTEGER()](Functions/Type_casting_functions.md#INTEGER%28%29) - Forcibly promotes given argument to 64-bit signed type
 * [TO_STRING()](Functions/Type_casting_functions.md#TO_STRING%28%29) - Forcibly promotes the argument to string type
-* [UINT()](Functions/Type_casting_functions.md#UINT%28%29) - Forcibly reinterprets given argument to 64-bit unsigned type
+* [UINT()](Functions/Type_casting_functions.md#UINT%28%29) - Converts the given argument to 32-bit unsigned integer type
+* [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) - Converts the given argument to 64-bit unsigned integer type
 * [SINT()](Functions/Type_casting_functions.md#SINT%28%29) - Interprets 32-bit unsigned integer as signed 64-bit integer
 
 ##### Arrays and conditions

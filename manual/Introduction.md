@@ -5,8 +5,9 @@ Manticore Search is a multi-storage database specifically designed for search, w
 As an open-source database (available on [GitHub](https://github.com/manticoresoftware/manticoresearch/)), Manticore Search was created in 2017 as a continuation of [Sphinx Search](https://sphinxsearch.com/) engine. Our development team took all the best features of Sphinx and significantly improved its functionality, fixing hundreds of bugs along the way (as detailed in our [Changelog](https://manual.manticoresearch.com/Changelog)). With nearly complete code rewrites, Manticore Search is now a modern, fast, and light-weight database with full features and exceptional full-text search capabilities.
 
 ## Our key features are:
-#### Powerful and fast full-text searching which works fine for small and big datasets
-  * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> and over 20 ranking factors
+#### Powerful and fast full-text searching that works well for small and large datasets
+
+  * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}-->  and over 20 ranking factors
   * Custom ranking
   * [Stemming](Creating_a_table/NLP_and_tokenization/Morphology.md)
   * [Lemmatization](Creating_a_table/NLP_and_tokenization/Morphology.md)
@@ -21,7 +22,7 @@ As an open-source database (available on [GitHub](https://github.com/manticoreso
 Manticore Search utilizes a smart query parallelization to lower response time and fully utilize all CPU cores when needed.
 
 #### Cost-based query optimizer
-A cost-based query optimizer uses statistical data about the indexed data to evaluate the relative costs of different execution plans for a given query. This allows the optimizer to determine the most efficient plan for retrieving the desired results, taking into account factors such as the size of the indexed data, the complexity of the query, and the available resources.
+The cost-based query optimizer uses statistical data about the indexed data to evaluate the relative costs of different execution plans for a given query. This allows the optimizer to determine the most efficient plan for retrieving the desired results, taking into account factors such as the size of the indexed data, the complexity of the query, and the available resources.
 
 #### Storage options
 Manticore offers both [row-wise and column-oriented storage options](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) to accommodate datasets of various sizes. The traditional and default row-wise storage option is available for datasets of all sizes - small, medium, and large, while the columnar storage option is provided through the Manticore Columnar Library for even larger datasets. The key difference between these storage options is that row-wise storage requires all attributes (excluding full-text fields) to be kept in RAM for optimal performance, while columnar storage does not, thus offering lower RAM consumption, but with a potential for slightly slower performance (as demonstrated by the statistics on https://db-benchmarks.com/).

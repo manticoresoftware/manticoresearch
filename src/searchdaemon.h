@@ -169,7 +169,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x122, // 1.33
+	VER_COMMAND_SEARCH		= 0x123, // 1.34
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x101,
@@ -1409,7 +1409,7 @@ void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
 std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
-int64_t GetDocID ( const char * sID );
+uint64_t			GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
@@ -1508,7 +1508,8 @@ enum MysqlColumnType_e
 	MYSQL_COL_FLOAT		= 4,
 	MYSQL_COL_DOUBLE	= 5,
 	MYSQL_COL_LONGLONG	= 8,
-	MYSQL_COL_STRING	= 254
+	MYSQL_COL_STRING	= 254,
+	MYSQL_COL_UINT64	= 508
 };
 
 

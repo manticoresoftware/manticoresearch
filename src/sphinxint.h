@@ -884,7 +884,7 @@ void			sphUnlinkIndex ( const char * sName, bool bForce );
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion );
 void			ReadSchemaJson ( bson::Bson_c tNode, CSphSchema & tSchema );
-void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
+void			SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );

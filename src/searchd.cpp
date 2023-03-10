@@ -1963,6 +1963,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			break;
 
 		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_UINT64:
 			tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
 			break;
 
@@ -3449,6 +3450,9 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 	case SPH_ATTR_DOUBLE:
 		return iVer<0x122 ? SPH_ATTR_FLOAT : SPH_ATTR_DOUBLE;
 
+	case SPH_ATTR_UINT64:
+		return iVer<0x123 ? SPH_ATTR_BIGINT : SPH_ATTR_UINT64;
+
 	default: return tCol.m_eAttrType;
 	} 
 }
@@ -3529,6 +3533,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 		break;
 
 	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_UINT64:
 		tOut.SendUint64 ( tMatch.GetAttr(tLoc) );
 		break;
 
@@ -7624,8 +7629,8 @@ public:
 	{
 		switch ( tVal.m_iType )
 		{
-			case SqlInsert_t::QUOTED_STRING :	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
-			case SqlInsert_t::CONST_INT:			return int(tVal.m_iVal);
+			case SqlInsert_t::QUOTED_STRING:	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::CONST_INT:		return int(tVal.GetValueInt());
 			case SqlInsert_t::CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
 		}
 		return 0;
@@ -7635,14 +7640,25 @@ public:
 	{
 		switch ( tVal.m_iType )
 		{
-			case SqlInsert_t::QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
-			case SqlInsert_t::CONST_INT:			return tVal.m_iVal;
+			case SqlInsert_t::QUOTED_STRING:	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::CONST_INT:		return tVal.GetValueInt();
 			case SqlInsert_t::CONST_FLOAT:		return int64_t(tVal.m_fVal); // FIXME? report conversion error?
 		}
 		return 0;
 	}
 
-	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr )
+	inline static SphAttr_t ToBigUint ( const SqlInsert_t & tVal )
+	{
+		switch ( tVal.m_iType )
+		{
+		case SqlInsert_t::QUOTED_STRING:	return strtoull ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+		case SqlInsert_t::CONST_INT:		return tVal.GetValueUint();
+		case SqlInsert_t::CONST_FLOAT:		return uint64_t(int64_t(tVal.m_fVal)); // FIXME? report conversion error?
+		}
+		return 0;
+	}
+
+	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
 
@@ -7656,14 +7672,25 @@ public:
 			break;
 
 		case SPH_ATTR_BIGINT:
-			tAttr = ToBigInt(tVal);
+			if ( bDocID )
+			{
+				if ( tVal.IsNegativeInt() )
+				{
+					sError = "Negative document ids are not allowed";
+					return false;
+				}
+
+				tAttr = ToBigUint(tVal);
+			}
+			else
+				tAttr = ToBigInt(tVal);
 			break;
 
 		case SPH_ATTR_FLOAT:
 			if ( tVal.m_iType==SqlInsert_t::QUOTED_STRING )
 				tAttr = sphF2DW ( (float)strtod ( tVal.m_sVal.cstr(), NULL ) ); // FIXME? report conversion error?
 			else if ( tVal.m_iType==SqlInsert_t::CONST_INT )
-				tAttr = sphF2DW ( float(tVal.m_iVal) ); // FIXME? report conversion error?
+				tAttr = sphF2DW ( float(tVal.GetValueInt()) ); // FIXME? report conversion error?
 			else if ( tVal.m_iType==SqlInsert_t::CONST_FLOAT )
 				tAttr = sphF2DW ( tVal.m_fVal );
 			break;
@@ -7678,19 +7705,25 @@ public:
 		return true;
 	}
 
-	inline static void SetAttr ( CSphMatch & tMatch, const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, ESphAttr eTargetType )
+	inline static bool SetAttr ( CSphMatch & tMatch, const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, ESphAttr eTargetType, bool bDocID, CSphString & sError )
 	{
 		SphAttr_t tAttr;
-		if ( ConvertPlainAttr ( tVal, eTargetType, tAttr ) )
+		if ( ConvertPlainAttr ( tVal, eTargetType, tAttr, bDocID, sError ) )
+		{
 			tMatch.SetAttr ( tLoc, tAttr );
+			return true;
+		}
+
+		return false;
 	}
 
 	inline static void SetDefaultAttr ( CSphMatch & tMatch, const CSphAttrLocator & tLoc, ESphAttr eTargetType )
 	{
 		SqlInsert_t tVal;
 		tVal.m_iType = SqlInsert_t::CONST_INT;
-		tVal.m_iVal = 0;
-		SetAttr ( tMatch, tLoc, tVal, eTargetType );
+		tVal.SetValueInt(0);
+		CSphString sError;
+		SetAttr ( tMatch, tLoc, tVal, eTargetType, false, sError );
 	}
 };
 
@@ -9375,7 +9408,7 @@ static void BsonToSqlInsert ( const bson::Bson_c& dBson, SqlInsert_t& tAttr )
 	{
 	case JSON_INT32:
 	case JSON_INT64: tAttr.m_iType = SqlInsert_t::CONST_INT;
-		tAttr.m_iVal = dBson.Int ();
+		tAttr.SetValueInt ( dBson.Int() );
 		break;
 	case JSON_DOUBLE: tAttr.m_iType = SqlInsert_t::CONST_FLOAT;
 		tAttr.m_fVal = float ( dBson.Double () );
@@ -9443,6 +9476,7 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE> & dDoc, const SchemaItem
 	if ( dDoc.IsEmpty () )
 		return false;
 
+	CSphString sError;
 	SqlInsert_t tAttr;
 
 	const SchemaItemVariant_t * pId = sIdAlias.IsEmpty () ? nullptr : tLoc.Find ( sphFNV64 ( sIdAlias.cstr() ) );
@@ -9487,7 +9521,7 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE> & dDoc, const SchemaItem
 			} else
 			{
 				BsonToSqlInsert ( dChild, tAttr );
-				CSphMatchVariant::SetAttr ( tDoc, pItem->m_tLoc, tAttr, pItem->m_eType );
+				CSphMatchVariant::SetAttr ( tDoc, pItem->m_tLoc, tAttr, pItem->m_eType, false, sError );
 				if ( pId==pItem )
 					tDoc.SetAttr ( tIdLoc, (DocID_t)dChild.Int() );
 
@@ -10294,13 +10328,13 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 			iExpType = SqlInsert_t::QUOTED_STRING;
 			sphColumnToLowercase ( const_cast<char *>( tOpts.m_sIdAlias.cstr() ) );
 
-		} else if ( sOpt=="docs" )		tOpts.m_bGetDocs = ( v.m_iVal!=0 );
-		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.m_iVal!=0 );
-		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
-		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );
-		else if ( sOpt=="skip_bad_json" )	tOpts.m_bSkipBadJson = ( v.m_iVal!=0 );
+		} else if ( sOpt=="docs" )		tOpts.m_bGetDocs = ( v.GetValueInt()!=0 );
+		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.GetValueInt()!=0 );
+		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.GetValueInt()!=0 );
+		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.GetValueInt()!=0 );
+		else if ( sOpt=="skip_bad_json" )	tOpts.m_bSkipBadJson = ( v.GetValueInt()!=0 );
 		else if ( sOpt=="skip_empty" ) 	bSkipEmpty = true;
-		else if ( sOpt=="shift" ) 		tOpts.m_iShift = v.m_iVal;
+		else if ( sOpt=="shift" ) 		tOpts.m_iShift = v.GetValueInt();
 		else if ( sOpt=="mode" )
 		{
 			auto sMode = v.m_sVal;
@@ -10465,10 +10499,17 @@ static void PopulateMapsFromIndexSchema ( CSphVector<int> & dAttrSchema, CSphVec
 	int iAttrId = dFieldSchema.GetLength()+1;
 	for ( int i = 1; i < dAttrSchema.GetLength(); i++ )
 	{
-		if ( sphIsInternalAttr( tSchema.GetAttr(i) ) )
+		if ( sphIsInternalAttr ( tSchema.GetAttr(i) ) )
 			dAttrSchema[i]=-1;
 		else
-			dAttrSchema[i] = iAttrId++;
+		{
+			// check for string field/attr with the same name
+			int iFieldId = tSchema.GetFieldIndex ( tSchema.GetAttr(i).m_sName.cstr() );
+			if ( iFieldId!=-1 )
+				dAttrSchema[i] = iFieldId+1;
+			else
+				dAttrSchema[i] = iAttrId++;
+		}
 	}
 }
 
@@ -10545,7 +10586,7 @@ class AttributeConverter_c : public InsertDocData_t
 public:
 				AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning );
 
-	bool		SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
+	bool		SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError );
 	void		SetDefaultAttrValue ( int iCol );
 
 	bool		SetFieldValue ( int iField, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
@@ -10708,10 +10749,11 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 
 	SqlInsert_t tDefaultVal;
 	tDefaultVal.m_iType = SqlInsert_t::CONST_INT;
-	tDefaultVal.m_iVal = 0;
+	tDefaultVal.SetValueInt(0);
 
 	SphAttr_t tAttr;
-	if ( CSphMatchVariant::ConvertPlainAttr ( tDefaultVal, tCol.m_eAttrType, tAttr ) )
+	CSphString sError;
+	if ( CSphMatchVariant::ConvertPlainAttr ( tDefaultVal, tCol.m_eAttrType, tAttr, false, sError ) )
 	{
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
@@ -10721,9 +10763,10 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 }
 
 
-bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
+bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError )
 {
 	const CSphColumnInfo & tCol = m_tSchema.GetAttr(iCol);
+	bool bDocId = tCol.m_sName == sphGetDocidName();
 	CSphAttrLocator tLoc = tCol.m_tLocator;
 	tLoc.m_bDynamic = true;
 
@@ -10748,13 +10791,16 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 	}
 
 	SphAttr_t tAttr;
-	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, tAttr ) )
+	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, tAttr, bDocId, sError ) )
 	{
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
 		else
 			m_tDoc.SetAttr ( tLoc, tAttr );
 	}
+	else
+		if ( !sError.IsEmpty() )
+			return false;
 
 	if ( !CheckStrings ( tCol, tVal, iCol, iRow ) )	return false;
 	if ( !CheckJson ( tCol, tVal ) )				return false;
@@ -10914,6 +10960,14 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	if ( pIndex->GetSettings().m_bIndexFieldLens )
 		iSchemaSz -= tSchema.GetFieldsCount();
 
+	// check for 'string indexed attribute'
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && tSchema.GetField ( tAttr.m_sName.cstr() ) )
+			iSchemaSz--;
+	}
+
 	if ( tSchema.GetAttr ( sphGetBlobLocatorName() ) )
 		iSchemaSz--;
 
@@ -10980,7 +11034,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 			if ( iQuerySchemaIdx < 0 )
 				tConverter.SetDefaultAttrValue(i);
 			else
-				bOk = tConverter.SetAttrValue ( i, tStmt.m_dInsertValues[iQuerySchemaIdx + iRow * iExp], iRow, iQuerySchemaIdx );
+				bOk = tConverter.SetAttrValue ( i, tStmt.m_dInsertValues[iQuerySchemaIdx + iRow * iExp], iRow, iQuerySchemaIdx, sError );
 		}
 
 		if ( !bOk )
@@ -11098,21 +11152,21 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
 		else if ( sOpt=="passage_boundary" || sOpt=="snippet_boundary" ) { q.m_ePassageSPZ = GetPassageBoundary(v.m_sVal); iExpType = SqlInsert_t::QUOTED_STRING; }
 
-		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="limit_passages" || sOpt=="limit_snippets" ) { q.m_iLimitPassages = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="start_passage_id" || sOpt=="start_snippet_id" ) { q.m_iPassageId = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="limit_passages" || sOpt=="limit_snippets" ) { q.m_iLimitPassages = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="start_passage_id" || sOpt=="start_snippet_id" ) { q.m_iPassageId = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }
 		else if ( sOpt=="exact_phrase" )
 		{
 			sError.SetSprintf ( "exact_phrase is deprecated" );
 			break;
 		}
-		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.GetValueInt()!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.GetValueInt()!=0 ); iExpType = SqlInsert_t::CONST_INT; }
 		else if ( sOpt=="query_mode" )
 		{
-			bool bQueryMode = ( v.m_iVal!=0 );
+			bool bQueryMode = ( v.GetValueInt()!=0 );
 			iExpType = SqlInsert_t::CONST_INT;
 			if ( !bQueryMode )
 			{
@@ -11120,12 +11174,12 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 				break;
 			}
 		}
-		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="load_files" )			{ q.m_uFilesMode = ( v.m_iVal!=0 )?1:0; iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.m_iVal!=0 )?2:0; iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
-		else if ( sOpt=="force_passages" || sOpt=="force_snippets" ) { q.m_bForcePassages = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.GetValueInt()!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="load_files" )			{ q.m_uFilesMode = ( v.GetValueInt()!=0 )?1:0; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.GetValueInt()!=0 )?2:0; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.GetValueInt()!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.GetValueInt()!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="force_passages" || sOpt=="force_snippets" ) { q.m_bForcePassages = ( v.GetValueInt()!=0 ); iExpType = SqlInsert_t::CONST_INT; }
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
@@ -11309,12 +11363,12 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	}
 
 	GetKeywordsSettings_t tSettings;
-	tSettings.m_bStats = ( iArgs==3 && tStmt.m_dInsertValues[2].m_iVal!=0 );
+	tSettings.m_bStats = ( iArgs==3 && tStmt.m_dInsertValues[2].GetValueInt()!=0 );
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
 		sOpt.ToLower ();
-		bool bEnabled = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+		bool bEnabled = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		bool bOptInt = true;
 
 		if ( sOpt=="stats" )
@@ -11326,7 +11380,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 		else if ( sOpt=="fold_wildcards" )
 			tSettings.m_bFoldWildcards = bEnabled;
 		else if ( sOpt=="expansion_limit" )
-			tSettings.m_iExpansionLimit = int ( tStmt.m_dCallOptValues[i].m_iVal );
+			tSettings.m_iExpansionLimit = int ( tStmt.m_dCallOptValues[i].GetValueInt() );
 		else if ( sOpt=="sort_mode" )
 		{
 			// FIXME!!! add more sorting modes
@@ -11531,28 +11585,28 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 
 		if ( sOpt=="limit" )
 		{
-			tArgs.m_iLimit = int ( tStmt.m_dCallOptValues[i].m_iVal );
+			tArgs.m_iLimit = int ( tStmt.m_dCallOptValues[i].GetValueInt() );
 		} else if ( sOpt=="delta_len" )
 		{
-			tArgs.m_iDeltaLen = int ( tStmt.m_dCallOptValues[i].m_iVal );
+			tArgs.m_iDeltaLen = int ( tStmt.m_dCallOptValues[i].GetValueInt() );
 		} else if ( sOpt=="max_matches" )
 		{
-			tArgs.m_iQueueLen = int ( tStmt.m_dCallOptValues[i].m_iVal );
+			tArgs.m_iQueueLen = int ( tStmt.m_dCallOptValues[i].GetValueInt() );
 		} else if ( sOpt=="reject" )
 		{
-			tArgs.m_iRejectThr = int ( tStmt.m_dCallOptValues[i].m_iVal );
+			tArgs.m_iRejectThr = int ( tStmt.m_dCallOptValues[i].GetValueInt() );
 		} else if ( sOpt=="max_edits" )
 		{
-			tArgs.m_iMaxEdits = int ( tStmt.m_dCallOptValues[i].m_iVal );
+			tArgs.m_iMaxEdits = int ( tStmt.m_dCallOptValues[i].GetValueInt() );
 		} else if ( sOpt=="result_line" )
 		{
-			tArgs.m_bResultOneline = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+			tArgs.m_bResultOneline = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else if ( sOpt=="result_stats" )
 		{
-			tArgs.m_bResultStats = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+			tArgs.m_bResultStats = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else if ( sOpt=="non_char" )
 		{
-			tArgs.m_bNonCharAllowed = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+			tArgs.m_bNonCharAllowed = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -11661,12 +11715,30 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 }
 
 
-static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField )
+static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
+{
+	StringBuilder_c sProps(" ");
+	if ( tAttr.IsColumnar() )
+		sProps << "columnar";
+
+	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
+		sProps << "fast_fetch";
+
+	if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
+		sProps << "no_hash";
+
+	return sProps.cstr();
+}
+
+
+static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema )
 {
 	if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
 		return;
 
-	dOut.Add ( "text" );
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
+	dOut.Add ( pAttr ? "string" : "text" );
+
 	StringBuilder_c sProperties ( " " );
 	DWORD uFlags = tField.m_uFieldFlags;
 	if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
@@ -11674,14 +11746,26 @@ static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField )
 
 	if ( uFlags & CSphColumnInfo::FIELD_STORED )
 		sProperties << "stored";
+
+	if ( pAttr )
+	{
+		sProperties << "attribute";
+		CSphString sProps = DescribeAttributeProperties ( *pAttr );
+		if ( !sProps.IsEmpty() )
+			sProperties << sProps;
+	}
+
 	dOut.Add ( sProperties.cstr () );
 }
 
 
-static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr )
+static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema )
 {
 	if ( sphIsInternalAttr ( tAttr ) )
 		return;
+
+	if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
+		return; // already described it as a field property
 
 	if ( dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
 	{
@@ -11693,17 +11777,7 @@ static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr )
 		} else
 			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
 
-		StringBuilder_c sProps(" ");
-		if ( tAttr.IsColumnar() )
-			sProps << "columnar";
-
-		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
-			sProps << "fast_fetch";
-
-		if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
-			sProps << "no_hash";
-
-		dOut.Add ( sProps.cstr() );
+		dOut.Add ( DescribeAttributeProperties(tAttr) );
 	}
 }
 
@@ -11717,14 +11791,14 @@ void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool b
 	if ( !bIsTemplate )
 	{
 		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		AddAttributeDesc ( dOut, tSchema.GetAttr(0) );
+		AddAttributeDesc ( dOut, tSchema.GetAttr(0), tSchema );
 	}
 
 	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-		AddFieldDesc ( dOut, tSchema.GetField(i) );
+		AddFieldDesc ( dOut, tSchema.GetField(i), tSchema );
 
 	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
-		AddAttributeDesc ( dOut, tSchema.GetAttr(i) );
+		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema );
 }
 
 
@@ -11924,8 +11998,10 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 }
 
 
-static CSphString ConcatWarnings ( const StrVec_t & dWarnings )
+static CSphString ConcatWarnings ( StrVec_t & dWarnings )
 {
+	dWarnings.Uniq();
+
 	StringBuilder_c sRes ( "; " );
 	for ( const auto & i : dWarnings )
 		sRes << i;
@@ -12975,6 +13051,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 			case SPH_ATTR_FLOAT:	eType = MYSQL_COL_FLOAT; break;
 			case SPH_ATTR_DOUBLE:	eType = MYSQL_COL_DOUBLE; break;
 			case SPH_ATTR_BIGINT:	eType = MYSQL_COL_LONGLONG; break;
+			case SPH_ATTR_UINT64:	eType = MYSQL_COL_UINT64; break;
 			default: break;
 			}
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
@@ -13018,6 +13095,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 			case SPH_ATTR_BIGINT:
 				dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
+				break;
+
+			case SPH_ATTR_UINT64:
+				dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
 				break;
 
 			case SPH_ATTR_FLOAT:
@@ -14556,9 +14637,9 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand, const QueryProfile_c 
 }
 
 // fwd
-static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
+static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError );
 
-void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
 		return;
@@ -14567,6 +14648,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
 	CSphString sError;
+	StrVec_t dWarnings;
 	const CSphString & sIndex = tStmt.m_sIndex;
 
 	if ( bReconfigure )
@@ -14575,7 +14657,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		pCmd->m_tReconfigure->m_bChangeSchema = true;
 	}
 
-	if ( bReconfigure && !PrepareReconfigure ( sIndex.cstr(), *pCmd->m_tReconfigure, sError ) )
+	if ( bReconfigure && !PrepareReconfigure ( sIndex.cstr(), *pCmd->m_tReconfigure, &dWarnings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -14603,11 +14685,13 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto* pAccum = tAcc.GetAcc();
 	pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 
+	sWarning = ConcatWarnings ( dWarnings );
+
 	bool bRes = HandleCmdReplicate ( *pAccum, sError );
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
-		tOut.Ok();
+		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
 
@@ -14755,6 +14839,7 @@ void HandleMysqlSelectDual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		}
 		case SPH_ATTR_INTEGER:	tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
 		case SPH_ATTR_BIGINT:	tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
+		case SPH_ATTR_UINT64:	tOut.PutNumAsString ( (uint64_t)pExpr->Int64Eval ( tMatch ) ); break;
 		case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
 		case SPH_ATTR_DOUBLE:	tOut.PutDoubleAsString ( pExpr->Eval ( tMatch ) ); break;
 		default:
@@ -15385,39 +15470,35 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
 	sAttrToRemove.ToLower();
 
-	bool bIsAttr = true;
-	const CSphColumnInfo * pAttr = pIdx->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
-	if ( !pAttr )
+	auto pAttr = pIdx->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() );
+	auto pField = pIdx->GetMatchSchema().GetField ( sAttrToRemove.cstr() );
+	if ( !pAttr && !pField )
 	{
-		pAttr = pIdx->GetMatchSchema ().GetField ( sAttrToRemove.cstr () );
-		if ( !pAttr )
-		{
-			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
-			return;
-		}
-		bIsAttr = false;
+		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
+		return;
 	}
 
-	if ( bIsAttr && ( sAttrToRemove==sphGetDocidName () || sphIsInternalAttr ( *pAttr ) ) )
+	if ( pAttr && ( sAttrToRemove==sphGetDocidName () || sphIsInternalAttr ( *pAttr ) ) )
 	{
 		sError.SetSprintf ( "unable to remove built-in attribute '%s'", sAttrToRemove.cstr() );
 		return;
 	}
 
-	if ( bIsAttr && pIdx->GetMatchSchema().GetAttrsCount()==1 )
+	if ( pAttr && pIdx->GetMatchSchema().GetAttrsCount()==1 )
 	{
 		sError.SetSprintf ( "unable to remove last attribute '%s'", sAttrToRemove.cstr() );
 		return;
 	}
 
-	if ( bIsAttr )
+	if ( pAttr )
 	{
 		AttrAddRemoveCtx_t tCtx;
 		tCtx.m_sName = sAttrToRemove;
 		tCtx.m_eType = pAttr->m_eAttrType;
 		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
-	else
+	
+	if ( pField )
 		pIdx->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
 
@@ -15505,26 +15586,37 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 }
 
 
-static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, CSphString & sWarning, CSphString & sError )
+static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
 {
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 
-	// fixme: report warnings
-	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
-	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
-	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-	tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
+	{
+		CSphString sWarning;
+		tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
+		tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
+		tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
+		tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
 
-	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, tSettings.m_tIndex, sError, !tSettings.m_bChangeSchema, false ) )
+		if ( pWarnings && !sWarning.IsEmpty() )
+			pWarnings->Add(sWarning);
+	}
+
+	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, tSettings.m_tIndex, pWarnings, sError, !tSettings.m_bChangeSchema, false ) )
 	{
 		sError.SetSprintf ( "failed to parse table '%s' schema, error: '%s'", szIndex, sError.cstr() );
 		return false;
 	}
 
-	if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
 	{
-		sError.SetSprintf ( "failed to parse table '%s' settings, error: '%s'", szIndex, sError.cstr() );
-		return false;
+		CSphString sWarning;
+		if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
+		{
+			sError.SetSprintf ( "failed to parse table '%s' settings, error: '%s'", szIndex, sError.cstr() );
+			return false;	
+		}
+
+		if ( pWarnings && !sWarning.IsEmpty() )
+			pWarnings->Add(sWarning);
 	}
 
 	tSettings.m_tSchema.SetupFlags ( tSettings.m_tIndex, false, nullptr );
@@ -15533,7 +15625,7 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 }
 
 
-static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
+static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
 {
 	CSphConfig hCfg;
 	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
@@ -15555,8 +15647,7 @@ static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings &
 		return false;
 	}
 
-	CSphString sWarning;
-	return PrepareReconfigure ( szIndex, hCfg["index"][szIndex], tSettings, sWarning, sError );
+	return PrepareReconfigure ( szIndex, hCfg["index"][szIndex], tSettings, pWarnings, sError );
 }
 
 // ALTER RTINDEX/TABLE <idx> RECONFIGURE
@@ -15582,16 +15673,16 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	CSphString sError;
+	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
 	CSphReconfigureSetup tSetup;
 
-	if ( !PrepareReconfigure ( szIndex, tSettings, sError ) )
+	if ( !PrepareReconfigure ( szIndex, tSettings, &dWarnings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
 
-	StrVec_t dWarnings;
 	WIdx_T<RtIndex_i*> pRT { pServed };
 	if ( !pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError ) && sError.IsEmpty() )
 	{
@@ -15601,6 +15692,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		}
 	}
+
 	sWarning = ConcatWarnings ( dWarnings );
 	if ( sError.IsEmpty() )
 		tOut.Ok ( 0, dWarnings.GetLength() );
@@ -15785,14 +15877,11 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
-	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, sWarning, sError ) )
+	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
-
-	if ( !sWarning.IsEmpty() )
-		dWarnings.Add(sWarning);
 
 	CSphReconfigureSetup tSetup;
 	bool bSame = pRtIndex->IsSameSettings ( tSettings, tSetup, dWarnings, sError );
@@ -16470,7 +16559,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_TRUNCATE_RTINDEX:
-		HandleMysqlTruncate ( tOut, *pStmt );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlTruncate ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_OPTIMIZE_INDEX:
@@ -17489,7 +17579,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
-	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, sError, bPercolate, bPercolate ) )
+	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, bPercolate, bPercolate ) )
 	{
 		sphWarning ( "table '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return false;

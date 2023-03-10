@@ -30,7 +30,7 @@ static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // ve
 
 static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // verbose logging http processing events, ruled by this env variable
 #define LOG_COMPONENT_HTTP ""
-#define HTTPINFO LOGINFO ( HTTP, HTTP )
+#define HTTPINFO LOGMSG ( VERBOSE_DEBUG, HTTP, HTTP )
 
 static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "404 Not Found", "405 Method Not Allowed", "409 Conflict", "413 Request Entity Too Large", "500 Internal Server Error", "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
 

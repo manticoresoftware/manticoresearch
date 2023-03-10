@@ -13,6 +13,7 @@ Released: soon
 * [Issue #1039](https://github.com/manticoresoftware/manticoresearch/issues/1039) Fixed memory leak at daemon on reading output of the Buddy console
 * [Commit f381](https://github.com/manticoresoftware/manticoresearch/commit/f381ad2) Default config is now created by Windows installer; paths are no longer substituted in runtime.
 * [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95) [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks
+* [Commit 20d2](https://github.com/manticoresoftware/manticoresearch/commit/20d246c) Fixed compat mode bulk request to pass into buddy on error
 * [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed /pq HTTP endpoint to be an alias of the /json/pq HTTP endpoint
 * [Commit fdd9](https://github.com/manticoresoftware/manticoresearch/commit/fdd9087) Fixed compat mode to pass errors into buddy
 * [Commit 1912](https://github.com/manticoresoftware/manticoresearch/commit/1912b3c) Added compatibility mode to work with Logstash, Beat and Kibana

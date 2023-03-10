@@ -26,6 +26,8 @@
 #include "searchdbuddy.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http reqests, ruled by this env variable
+static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
+
 static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // verbose logging http processing events, ruled by this env variable
 #define LOG_COMPONENT_HTTP ""
 #define HTTPINFO LOGINFO ( HTTP, HTTP )
@@ -35,6 +37,10 @@ static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial C
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 extern CSphString g_sStatusVersion;
+
+static const Str_t g_sDataDisabled = FROMS("-");
+Str_t Data2Log ( Str_t tMsg ) { return ( g_iLogHttpData ? Str_t ( tMsg.first, Min ( tMsg.second, g_iLogHttpData ) ) : g_sDataDisabled ); }
+Str_t Data2Log ( ByteBlob_t tMsg ) { return ( g_iLogHttpData ? Str_t ( (const char *)tMsg.first, Min ( tMsg.second, g_iLogHttpData ) ) : g_sDataDisabled ); }
 
 int HttpGetStatusCodes ( ESphHttpStatus eStatus )
 {
@@ -287,7 +293,7 @@ private:
 
 	inline int ParserBody ( Str_t sData )
 	{
-		HTTPINFO << "ChunkedSocketStream_c::ParserBody with " << sData.second << " bytes '" << sData << "'";
+		HTTPINFO << "ParserBody chunked str with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";;
 
 		if ( !IsEmpty ( sData ) )
 			m_dBodies.Add ( sData );
@@ -296,7 +302,7 @@ private:
 
 	void ParseBody ( ByteBlob_t sData )
 	{
-		HTTPINFO << "ChunkedSocketStream_c::ParseBody with " << sData.second << " bytes '" << sData << "'";
+		HTTPINFO << "ParseBody chunked blob with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";;
 		m_iLastParsed = (int)http_parser_execute ( m_pParser, &m_tParserSettings, (const char*)sData.first, sData.second );
 		if ( m_iLastParsed != sData.second )
 		{
@@ -449,7 +455,7 @@ void HttpRequestParser_c::Reinit()
 
 bool HttpRequestParser_c::ParseHeader ( ByteBlob_t sData )
 {
-	HTTPINFO << "ParseChunk with " << sData.second << " bytes '" << sData << "'";
+	HTTPINFO << "ParseChunk with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";
 
 	m_iLastParsed = (int) http_parser_execute ( &m_tParser, &m_tParserSettings, (const char *)sData.first, sData.second );
 	if ( m_iLastParsed != sData.second )
@@ -565,7 +571,7 @@ void StoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
 
 void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 {
-	HTTPINFO << "ParseList with " << sData.second << " bytes '" << sData << "'";
+	HTTPINFO << "ParseList with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";
 
 	const char * sCur = sData.first;
 	const char* sLast = sCur;
@@ -617,7 +623,6 @@ inline int HttpRequestParser_c::ParserUrl ( Str_t sData )
 
 inline void HttpRequestParser_c::FinishParserUrl ()
 {
-	HTTPINFO <<"FinishParserUrl '" << m_sUrl << "'";
 	if ( m_sUrl.IsEmpty() )
 		return;
 
@@ -674,8 +679,6 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 
 inline int HttpRequestParser_c::ParserHeaderField ( Str_t sData )
 {
-	HTTPINFO << "ParserHeaderField with '" << sData << "'";
-
 	FinishParserKeyVal();
 	m_sCurField << sData;
 	return 0;
@@ -683,8 +686,6 @@ inline int HttpRequestParser_c::ParserHeaderField ( Str_t sData )
 
 inline int HttpRequestParser_c::ParserHeaderValue ( Str_t sData )
 {
-	HTTPINFO << "ParserHeaderValue with '" << sData << "'";
-
 	m_sCurValue << sData;
 	return 0;
 }
@@ -693,8 +694,6 @@ inline void HttpRequestParser_c::FinishParserKeyVal()
 {
 	if ( m_sCurValue.IsEmpty() )
 		return;
-
-	HTTPINFO << "FinishParserKeyVal with '" << m_sCurField << "':'" << m_sCurValue << "'";
 
 	CSphString sField = (CSphString)m_sCurField;
 	sField.ToLower();
@@ -705,7 +704,7 @@ inline void HttpRequestParser_c::FinishParserKeyVal()
 
 inline int HttpRequestParser_c::ParserBody ( Str_t sData )
 {
-	HTTPINFO << "ParserBody with " << sData.second << " bytes '" << sData << "'";
+	HTTPINFO << "ParserBody parser with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";
 
 	if ( !m_dParsedBodies.IsEmpty() )
 	{
@@ -1906,16 +1905,14 @@ public:
 				if ( IsEmpty ( sResult ) )
 					continue;
 				++m_iJsons;
-				HTTPINFO << "non-last chunk " << m_iJsons << " " << sResult;;
-			}
-			else
+			} else
 			{
 				m_dLastChunk.Append ( szJson, p - szJson );
 				sResult = m_dLastChunk;
 				--sResult.second; // exclude terminating \0
 				m_dLastChunk.Resize ( 0 );
 				++m_iJsons;
-				HTTPINFO << "Last chunk " << m_iJsons << " " << sResult;
+				HTTPINFO << "Last chunk " << m_iJsons << " '" << Data2Log ( sResult ) << "'";;
 			}
 			return sResult;
 		}
@@ -1925,7 +1922,7 @@ public:
 		m_dLastChunk.Resize ( m_dLastChunk.GetLength() - 1 );
 		Str_t sResult = m_dLastChunk;
 		++m_iJsons;
-		HTTPINFO << "Termination chunk " << m_iJsons << " " << sResult;
+		HTTPINFO << "Termination chunk " << m_iJsons << " '" << Data2Log ( sResult ) << "'";
 		return sResult;
 	}
 

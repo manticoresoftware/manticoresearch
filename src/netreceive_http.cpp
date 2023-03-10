@@ -37,7 +37,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	if ( bHeNeedSSL && !bICanSSL )
 	{
 		if ( bINeedSSL )
-			sphWarning ( "Client tries to connect with https to secure port, but we can't serve" );
+			LogNetError ( "Client tries to connect with https to secure port, but we can't serve" );
 
 		// that will drop the connection (we can't say anything as can't encrypt our message)
 		return;
@@ -72,16 +72,14 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	CSphVector<BYTE> dResult;
 	TRACE_CONN ( "conn", "HttpServe" );
 
-	auto HttpReply = [&dResult, &tOut, &tSess] ( ESphHttpStatus eCode, Str_t sMsg )
+	auto HttpReply = [&dResult, &tOut] ( ESphHttpStatus eCode, Str_t sMsg )
 	{
 		if ( IsEmpty ( sMsg ) )
 		{
 			HttpBuildReply ( dResult, eCode, sMsg, false );
 		} else
 		{
-			int iCID = tSess.GetConnID();
-			const char * sClientIP = tSess.szClientName();
-			sphWarning ( "conn %s(%d): %s", sClientIP, iCID, sMsg.first );
+			LogNetError ( sMsg.first );
 			sphHttpErrorReply ( dResult, eCode, sMsg.first );
 		}
 		tOut.SwapData ( dResult );
@@ -160,7 +158,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		pBuf->SyncErrorState();
 		if ( tIn.GetError() )
-			sphWarning ( "%s", tIn.GetErrorMessage().cstr() );
+			LogNetError ( tIn.GetErrorMessage().cstr() );
 		pBuf->ResetError();
 
 	} while ( tSess.GetPersistent() );

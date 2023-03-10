@@ -115,6 +115,7 @@ public:
 
 	int64_t GetTotalSent () const;
 	int64_t GetTotalReceived () const;
+	int GetSocket () const;
 };
 
 /// simple network request buffer
@@ -201,3 +202,4 @@ public:
 };
 
 std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapper_c> pSock );
+void LogNetError ( const char * sMsg );

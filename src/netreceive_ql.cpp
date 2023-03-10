@@ -1011,7 +1011,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( !tIn.ReadFrom ( iPacketLen+4 ))
 			{
 				sError.SetSprintf ( "bailing on failed MySQL header, %s", ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
-				sphWarning ( "conn %s(%d): %s", sClientIP, iCID, sError.cstr() );
+				LogNetError ( sError.cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
 				tOut.Flush ();
 				return;
@@ -1030,7 +1030,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( !tIn.ReadFrom ( iPacketLen ))
 			{
 				sError.SetSprintf ( "failed to receive MySQL request body, expected length %d, %s", iPacketLen, ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
-				sphWarning ( "conn %s(%d): %s)", sClientIP, iCID, sError.cstr() );
+				LogNetError ( sError.cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
 				tOut.Flush ();
 				return;
@@ -1058,7 +1058,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( IsMaxedOut() )
 			{
-				sphWarning ( "%s", g_sMaxedOutMessage.first );
+				LogNetError ( g_sMaxedOutMessage.first );
 				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
 				tOut.Flush ();
 				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
@@ -1089,7 +1089,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		pBuf->SyncErrorState();
 		if ( tIn.GetError() )
-			sphWarning ( "%s", tIn.GetErrorMessage().cstr() );
+			LogNetError ( tIn.GetErrorMessage().cstr() );
 		pBuf->ResetError();
 
 	} while ( tSess.GetPersistent() );

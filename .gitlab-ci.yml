@@ -83,7 +83,7 @@ docs_deploy:
   interruptible: true
   needs: [ ]
   tags:
-    - docker
+    - docker-free
   image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
   variables:
     CACHEB: "../cache"
@@ -97,9 +97,12 @@ docs_deploy:
     sysroot: roots_nov22
   script:
     - ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
-  after_script:
+    - exit_code=$?
+    - if [ $exit_code -ne 0 ]; then echo "Previous command failed"; fi;
+    - echo -e "\e[0Ksection_start:`date +%s`:xml_pack\r\e[0KCopy xml artifacts"
     - cd build && mkdir xml
     - cp -r Testing/2*/*.xml xml
+    - echo -e "\e[0Ksection_end:`date +%s`:xml_pack\r\e[0K"
   cache:
     paths:
       - cache
@@ -187,7 +190,7 @@ release_build:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
     - if: $TEST =~ /release/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
-    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
+    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 0
 
 release_tests:
   extends: [ .tests ]

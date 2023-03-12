@@ -310,10 +310,11 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	std::string sCmd = sArgs;
 	g_pBuddy.reset();
 	if ( g_pIOS )
-	{
 		g_pIOS->stop();
-		g_pIOS.reset(); 
-	}
+
+	g_pPipe.reset();
+	g_pIOS.reset(); 
+
 	g_pIOS.reset ( new boost::asio::io_service );
 	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
 

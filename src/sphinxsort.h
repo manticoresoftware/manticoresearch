@@ -126,6 +126,9 @@ public:
 	// or it should use the values stored in the matches
 	// used by columnar aggregate functions
 	virtual void		SetMerge ( bool bMerge ) = 0;
+
+	/// is it a sorter that uses precalculated data and does not require real matches?
+	virtual bool		IsPrecalc() const { return false; }
 };
 
 
@@ -192,7 +195,7 @@ int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery,
 void			SetAccurateAggregationDefault ( bool bEnabled );
 bool			GetAccurateAggregationDefault();
 
-std::pair<bool,int> ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
+int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError

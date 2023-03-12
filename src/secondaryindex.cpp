@@ -781,12 +781,6 @@ static uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t
 	if ( !tCtx.m_pSI )
 		return uNumIterators;
 
-	// if we suspect that that index may fetch A LOT of iterators,
-	// we ask the SI about it explicitly
-	const int DOC_THRESH = 10000;
-	if ( !IsWideRange(tFilter) || iDocs<DOC_THRESH )
-		return uNumIterators;
-
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
 	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_eCollation, tCtx.m_tSchema, sWarning ) )
@@ -801,12 +795,7 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 	ARRAY_FOREACH ( i, dSIInfo )
 	{
 		auto & tSIInfo = dSIInfo[i];
-		auto & tFilter = tCtx.m_dFilters[i];
-
-		if ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1 )
-			tSIInfo.m_uNumSIIterators = 1;
-		else
-			tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tFilter, tSIInfo.m_iRsetEstimate, tCtx );
+		tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tCtx.m_dFilters[i], tSIInfo.m_iRsetEstimate, tCtx );
 	}
 }
 

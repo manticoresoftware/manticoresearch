@@ -1114,6 +1114,7 @@ public:
 	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const;
 	virtual bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
 	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
+	virtual int64_t				GetCount ( const CSphFilterSettings & tFilter ) const { return -1; }	// returns values if index has some meta on its attributes
 
 public:
 	/// build index by indexing given sources
@@ -1361,6 +1362,7 @@ struct SphQueueSettings_t
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
 	std::function<int64_t (const CSphString &)> m_fnGetCountDistinct;
+	std::function<int64_t (const CSphFilterSettings &)> m_fnGetCount;
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
 

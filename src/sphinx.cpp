@@ -1276,6 +1276,7 @@ public:
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
+	int64_t				GetCount ( const CSphFilterSettings & tFilter ) const override;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -3025,9 +3026,7 @@ bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads
 	const float COST_THRESH = 0.5f;
 
 	float fCost = FLT_MAX;
-	bool bImplicitCutoff;
-	int iCutoff;
-	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, {} );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
 
 	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
 	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost );
@@ -3082,11 +3081,34 @@ int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQue
 
 int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr ) const
 {
-	if ( !m_pSIdx.get() )
+	if ( !m_pSIdx.get() || m_tDeadRowMap.HasDead() )
 		return -1;
 
 	std::string sAttrSTL = sAttr.cstr();
 	return m_pSIdx.get()->GetCountDistinct(sAttrSTL);
+}
+
+
+int64_t CSphIndex_VLN::GetCount ( const CSphFilterSettings & tFilter ) const
+{
+	if ( !m_pSIdx.get() || m_tDeadRowMap.HasDead() )
+		return -1;
+
+	SelectIteratorCtx_t tCtx ( {}, {}, {}, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), SPH_COLLATION_DEFAULT, 0, m_iDocinfo, 1 );
+	if ( !tCtx.IsEnabled_SI(tFilter) )
+		return -1;
+
+	common::Filter_t tColumnarFilter;
+	CSphString sWarning;
+	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, SPH_COLLATION_DEFAULT, m_tSchema, sWarning ) )
+		return -1;
+
+	uint32_t uCount = 0;
+	std::string sError;
+	if ( !m_pSIdx.get()->CalcCount ( uCount, tColumnarFilter, sError ) )
+		return -1;
+
+	return uCount;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8148,9 +8170,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
 
-	bool bImplicitCutoff;
-	int iCutoff;
-	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, dSorters );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+	bool bAllPrecalc = dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
@@ -11149,9 +11170,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		i->SetColumnar ( m_pColumnar.get() );
 	}
 
-	bool bImplicitCutoff;
-	int iCutoff;
-	std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, {} );
+	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
+
+	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
 	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dModifiedFilters, pRanker.get() ) );
 	if ( pIterator )

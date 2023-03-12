@@ -1160,6 +1160,7 @@ public:
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
+	int64_t				GetCount ( const CSphFilterSettings & tFilter ) const override;
 
 	// helpers
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
@@ -7165,9 +7166,7 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
-		bool bImplicitCutoff;
-		int iCutoff;
-		std::tie ( bImplicitCutoff, iCutoff ) = ApplyImplicitCutoff ( tQuery, dSorters );
+		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
 		tMeta.m_bTotalMatchesApprox |= PerformFullscan ( dRamChunks, tMaxSorterSchema.GetDynamicSize(), tArgs.m_iIndexWeight, iStride, iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta.m_sWarning );
 	}
 
@@ -8618,22 +8617,39 @@ int RtIndex_c::ChunkIDByChunkIdx ( int iChunkIdx ) const
 
 int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
 {
-	// fixme! we don't account for distinct values in RAM chunk
-	auto pDiskChunks = m_tRtChunks.DiskChunks();
-	if ( !pDiskChunks || !pDiskChunks->GetLength() )
+	// fixme! add code to calculate distinct values in RAM segments
+	if ( m_tRtChunks.GetRamSegmentsCount() )
 		return -1;
 
-	int64_t iSumCountDistinct = 0;
+	auto pDiskChunks = m_tRtChunks.DiskChunks();
+	if ( !pDiskChunks || pDiskChunks->GetLength()!=1 )
+		return -1;
+
+	return (*pDiskChunks)[0]->Cidx().GetCountDistinct(sAttr);
+}
+
+
+int64_t RtIndex_c::GetCount ( const CSphFilterSettings & tFilter ) const
+{
+	// fixme! add code to calculate count(*) in RAM segments
+	if ( m_tRtChunks.GetRamSegmentsCount() )
+		return -1;
+
+	auto pDiskChunks = m_tRtChunks.DiskChunks();
+	if ( !pDiskChunks || !pDiskChunks->GetLength() )
+		return 0;
+
+	int64_t iSumCount = 0;
 	for ( const auto & i : *pDiskChunks )
 	{
-		int64_t iCountDistinct = i->Cidx().GetCountDistinct(sAttr);
-		if ( iCountDistinct==-1 )
+		int64_t iCount = i->Cidx().GetCount(tFilter);
+		if ( iCount==-1 )
 			return -1;
 
-		iSumCountDistinct += iCountDistinct;
+		iSumCount += iCount;
 	}
 
-	return iSumCountDistinct;
+	return iSumCount;
 }
 
 

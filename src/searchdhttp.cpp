@@ -1898,8 +1898,9 @@ public:
 			if ( m_dLastChunk.IsEmpty () )
 			{
 				sResult =  { szLine, p - szLine - 1 };
-				if ( IsEmpty ( sResult ) )
-					continue;
+// that is commented out, as we better will deal with empty strings on parser level instead.
+//				if ( IsEmpty ( sResult ) )
+//					continue;
 				++m_iLines;
 				HTTPINFO << "non-last chunk " << m_iLines << " " << sResult;;
 			}
@@ -1991,7 +1992,20 @@ public:
 			JsonObj_c tResult = JsonNull;
 
 			if ( IsEmpty ( tQuery ) )
+			{
+				if ( session::IsInTrans() )
+				{
+					assert ( !sTxnIdx.IsEmpty() );
+					// empty query finishes current txn
+					bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
+					AddResult ( "bulk", tResult );
+					if ( !bResult )
+						break;
+					sTxnIdx = "";
+					iLastTxStartLine = iCurLine;
+				}
 				continue;
+			}
 
 			bResult = false;
 			auto& tCrashQuery = GlobalCrashQueryGetRef();

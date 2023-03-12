@@ -83,7 +83,7 @@ docs_deploy:
   interruptible: true
   needs: [ ]
   tags:
-    - docker
+    - docker-free
   image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
   variables:
     CACHEB: "../cache"

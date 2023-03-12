@@ -42,6 +42,7 @@ Released: soon
 * [Commit e7f9](https://github.com/manticoresoftware/manticoresearch/commit/e7f9815) Added buddy version to startup log entry
 * [Commit fdd9](https://github.com/manticoresoftware/manticoresearch/commit/fdd9087) Fixed compat mode to pass errors into buddy
 * [Commit 1912](https://github.com/manticoresoftware/manticoresearch/commit/1912b3c) Added compatibility mode to work with Logstash, Beat and Kibana
+* [Commit 3b53](https://github.com/manticoresoftware/manticoresearch/commit/3b5385a) Fixed daemon crash on buddy restart
 
 # Version 6.0.2
 Released: Feb 10 2023

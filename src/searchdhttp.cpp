@@ -1850,7 +1850,7 @@ class NDJsonStream_c
 	Str_t m_sCurChunk { dEmptyStr };
 	bool m_bDone;
 
-	int m_iJsons = 0;
+	int m_iLines = 0;
 	int m_iReads = 0;
 	int m_iTotallyRead = 0; // not used, but provides data during debug
 
@@ -1862,7 +1862,7 @@ public:
 
 	inline bool Eof() const { return m_bDone;}
 
-	Str_t Read()
+	Str_t ReadLine()
 	{
 		assert ( !m_bDone );
 		while (true)
@@ -1876,16 +1876,16 @@ public:
 				++m_iReads;
 			}
 
-			const char* szJson = m_sCurChunk.first;
-			const char* pEnd = szJson + m_sCurChunk.second;
-			const char* p = szJson;
+			const char* szLine = m_sCurChunk.first;
+			const char* pEnd = szLine + m_sCurChunk.second;
+			const char* p = szLine;
 
 			while ( p < pEnd && *p != '\r' && *p != '\n' )
 				++p;
 
 			if ( p==pEnd )
 			{
-				m_dLastChunk.Append ( szJson, p-szJson );
+				m_dLastChunk.Append ( szLine, p-szLine );
 				m_sCurChunk = dEmptyStr;
 				continue;
 			}
@@ -1897,20 +1897,20 @@ public:
 			Str_t sResult;
 			if ( m_dLastChunk.IsEmpty () )
 			{
-				sResult =  { szJson, p - szJson - 1 };
+				sResult =  { szLine, p - szLine - 1 };
 				if ( IsEmpty ( sResult ) )
 					continue;
-				++m_iJsons;
-				HTTPINFO << "non-last chunk " << m_iJsons << " " << sResult;;
+				++m_iLines;
+				HTTPINFO << "non-last chunk " << m_iLines << " " << sResult;;
 			}
 			else
 			{
-				m_dLastChunk.Append ( szJson, p - szJson );
+				m_dLastChunk.Append ( szLine, p - szLine );
 				sResult = m_dLastChunk;
 				--sResult.second; // exclude terminating \0
 				m_dLastChunk.Resize ( 0 );
-				++m_iJsons;
-				HTTPINFO << "Last chunk " << m_iJsons << " " << sResult;
+				++m_iLines;
+				HTTPINFO << "Last chunk " << m_iLines << " " << sResult;
 			}
 			return sResult;
 		}
@@ -1919,8 +1919,8 @@ public:
 		m_dLastChunk.Add ( '\0' );
 		m_dLastChunk.Resize ( m_dLastChunk.GetLength() - 1 );
 		Str_t sResult = m_dLastChunk;
-		++m_iJsons;
-		HTTPINFO << "Termination chunk " << m_iJsons << " " << sResult;
+		++m_iLines;
+		HTTPINFO << "Termination chunk " << m_iLines << " " << sResult;
 		return sResult;
 	}
 };
@@ -1948,42 +1948,61 @@ public:
 			return false;
 		}
 
+		JsonObj_c tResults ( true );
+		bool bResult = false;
+		int iCurLine = 0;
+		int iLastTxStartLine = 0;
+
+		auto FinishBulk = [&, this] ( ESphHttpStatus eStatus = SPH_HTTP_STATUS_TOTAL ) {
+			JsonObj_c tRoot;
+			tRoot.AddItem ( "items", tResults );
+			tRoot.AddInt ( "current_line", iCurLine );
+			tRoot.AddInt ( "skipped_lines", iCurLine - iLastTxStartLine );
+			tRoot.AddBool ( "errors", !bResult );
+			tRoot.AddStr ( "error", m_sError.IsEmpty() ? "" : m_sError );
+			if ( eStatus == SPH_HTTP_STATUS_TOTAL )
+				eStatus = bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500;
+			BuildReply ( tRoot.AsString(), eStatus );
+			HTTPINFO << "inserted  " << iCurLine;
+			return !bResult;
+		};
+
+		auto AddResult = [&tResults] ( const char* szStmt, JsonObj_c& tResult ) {
+			JsonObj_c tItem;
+			tItem.AddItem ( szStmt, tResult );
+			tResults.AddItem ( tItem );
+		};
+
 		if ( m_tSource.Eof() )
-		{
-			BuildReply ( R"({"items":[],"errors":false})", SPH_HTTP_STATUS_200 );
-			return true;
-		}
+			return FinishBulk();
 
 		// originally we execute txn for single index
-		// if there is combo, we fall-back to query-by-query commits
-		JsonObj_c tRoot;
-		JsonObj_c tItems ( true );
+		// if there is combo, we fall back to query-by-query commits
+
 		CSphString sTxnIdx;
 		CSphString sStmt;
-		bool bResult = false;
-		int iInserted = 0;
+
 		while ( !m_tSource.Eof() )
 		{
-			auto tQuery = m_tSource.Read();
+			auto tQuery = m_tSource.ReadLine();
+			++iCurLine;
+
+			DocID_t tDocId = 0;
+			JsonObj_c tResult = JsonNull;
+
 			if ( IsEmpty ( tQuery ) )
 				continue;
-			++iInserted;
+
+			bResult = false;
 			auto& tCrashQuery = GlobalCrashQueryGetRef();
 			tCrashQuery.m_dQuery = { (const BYTE*) tQuery.first, tQuery.second };
 			const char* szStmt = tQuery.first;
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
-			DocID_t tDocId = 0;
+
 			CSphString sQuery;
 			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
-			{
-				ReportError ( SPH_HTTP_STATUS_400 );
-				HTTPINFO << "inserted  " << iInserted;
-				return false;
-			}
-
-			JsonObj_c tResult = JsonNull;
-			bResult = false;
+				return FinishBulk ( SPH_HTTP_STATUS_400 );
 
 			if ( sTxnIdx.IsEmpty() )
 			{
@@ -1995,12 +2014,12 @@ public:
 				assert ( !sTxnIdx.IsEmpty() );
 				// we should finish current txn, as we got another index
 				bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-				sStmt = "bulk";
-				AddResult ( tItems, sStmt, tResult );
+				AddResult ( "bulk", tResult );
 				if ( !bResult )
 					break;
 				sTxnIdx = tStmt.m_sIndex;
 				ProcessBegin ( sTxnIdx );
+				iLastTxStartLine = iCurLine;
 			}
 
 			switch ( tStmt.m_eStmt )
@@ -2025,17 +2044,19 @@ public:
 				break;
 
 			default:
-				ReportError ( "Unknown statement", SPH_HTTP_STATUS_400 );
-				HTTPINFO << "inserted  " << iInserted;
-				return false;
+				m_sError = "Unknown statement";
+				return FinishBulk ( SPH_HTTP_STATUS_400 );
 			}
 
 			if ( !bResult || !session::IsInTrans() )
-				AddResult ( tItems, sStmt, tResult );
+				AddResult ( sStmt.cstr(), tResult );
 
 			// no further than the first error
 			if ( !bResult )
 				break;
+
+			if ( !session::IsInTrans() )
+				iLastTxStartLine = iCurLine;
 		}
 
 		if ( bResult && session::IsInTrans() )
@@ -2044,27 +2065,16 @@ public:
 			// We're in txn - that is, nothing committed, and we should do it right now
 			JsonObj_c tResult;
 			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), 0, tResult, m_sError );
-			sStmt = "bulk";
-			AddResult ( tItems, sStmt, tResult );
+			AddResult ( "bulk", tResult );
+			if ( bResult )
+				iLastTxStartLine = iCurLine;
 		}
 
 		session::SetInTrans ( false );
-
-		tRoot.AddItem ( "items", tItems );
-		tRoot.AddBool ( "errors", !bResult );
-		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
-		HTTPINFO << "inserted  " << iInserted;
-		return true;
+		return FinishBulk();
 	}
 
-protected:
-	static void AddResult ( JsonObj_c & tRoot, CSphString & sStmt, JsonObj_c & tResult )
-	{
-		JsonObj_c tItem;
-		tItem.AddItem ( sStmt.cstr(), tResult );
-		tRoot.AddItem ( tItem );
-	}
-
+private:
 	const char* IsNDJson() const
 	{
 		if ( !m_tOptions.Exists ( "content-type" ) )

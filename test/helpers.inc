@@ -848,9 +848,18 @@ function RoundFloatValues ( &$values, $roundoff )
 }
 
 
-function IsColumnarProperty ( $property )
+function RemoveColumnarProperty ( $property )
 {
-	return $property=="columnar" || $property=="columnar fast_fetch" || $property=="columnar stored";
+	$props = explode ( " ", $property );
+	$key = array_search ( "columnar", $props );
+	if ( $key !== false )
+	    unset ( $props[$key] );
+
+	$key = array_search ( "fast_fetch", $props );
+	if ( $key !== false )
+	    unset ( $props[$key] );
+
+	return implode ( " ", $props );
 }
 
 
@@ -901,8 +910,8 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 			{
 				foreach ( $row["data"] as &$entry )
 				{
-					if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar && IsColumnarProperty ( $entry["Properties"] ) )
-						$entry["Properties"] = "";
+					if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar )
+						$entry["Properties"] = RemoveColumnarProperty ( $entry["Properties"] );
 				}
 			}
 
@@ -963,8 +972,8 @@ function SqlRsetFixup ( &$set, $columnar )
 		if ( $keys[0]!='Field' || $keys[1]!='Type' || $keys[2]!='Properties' )
 			return;
 
-		if ( $columnar && IsColumnarProperty ( $row['Properties'] ) )
-			$row['Properties'] = '';
+		if ( $columnar )
+			$row['Properties'] = RemoveColumnarProperty ( $row['Properties'] );
 	}
 }
 

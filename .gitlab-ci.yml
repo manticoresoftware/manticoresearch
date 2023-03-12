@@ -187,7 +187,7 @@ release_build:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
     - if: $TEST =~ /release/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
-    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 1
+    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 0
 
 release_tests:
   extends: [ .tests ]

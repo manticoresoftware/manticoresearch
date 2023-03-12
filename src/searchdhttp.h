@@ -97,7 +97,7 @@ public:
 	// return all available data
 	virtual Str_t ReadAll() = 0;
 
-	inline bool Eof() const { return m_bDone; }
+	inline bool Eof() const noexcept { return m_bDone; }
 };
 
 struct HttpProcessResult_t
@@ -107,7 +107,6 @@ struct HttpProcessResult_t
 	CSphString m_sError;
 };
 
-CharStream_c * CreateBlobStream ( const Str_t & sData );
 void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
 

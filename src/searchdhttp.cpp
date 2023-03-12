@@ -25,7 +25,7 @@
 #include "tracer.h"
 #include "searchdbuddy.h"
 
-static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http reqests, ruled by this env variable
+static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // verbose logging http processing events, ruled by this env variable
 #define LOG_COMPONENT_HTTP ""
 #define HTTPINFO LOGINFO ( HTTP, HTTP )
@@ -169,10 +169,6 @@ public:
 	}
 };
 
-CharStream_c * CreateBlobStream ( const Str_t & sData )
-{
-	return new BlobStream_c ( sData );
-}
 
 /// stream with known content length and no special massage over socket
 class RawSocketStream_c final : public CharStream_c
@@ -243,7 +239,7 @@ public:
 	}
 };
 
-/// stream with known content length and no special massage over socket
+/// chunked stream - i.e. total content length is unknown
 class ChunkedSocketStream_c final: public CharStream_c
 {
 	AsyncNetInputBuffer_c& m_tIn;
@@ -1846,7 +1842,7 @@ protected:
 	}
 };
 
-// stream for ndjsons
+// stream for lines - each 'Read()' returns single line (lines split by \r or \n)
 class NDJsonStream_c
 {
 	CharStream_c& m_tIn;

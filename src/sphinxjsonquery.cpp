@@ -996,7 +996,7 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 		{
 			sColName = tItem.Name();
 
-			// replace internal of elastic and does not supported fields with underscore
+			// replace internal of elastic and does not support fields with underscore
 			// any '@name' fields
 			// 'ecs' or 'ecs.version' fields
 			if ( bCompat )

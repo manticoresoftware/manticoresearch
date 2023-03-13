@@ -1849,14 +1849,12 @@ protected:
 // stream for ndjsons
 class NDJsonStream_c
 {
-	CharStream_c& m_tIn;
+	CharStream_c & m_tIn;
 	CSphVector<char> m_dLastChunk;
 	Str_t m_sCurChunk { dEmptyStr };
 	bool m_bDone;
 
 	int m_iJsons = 0;
-	int m_iReads = 0;
-	int m_iTotallyRead = 0; // not used, but provides data during debug
 
 public:
 	explicit NDJsonStream_c ( CharStream_c& tIn )
@@ -1876,15 +1874,13 @@ public:
 				if ( m_tIn.Eof() || m_tIn.GetError() )
 					break;
 				m_sCurChunk = m_tIn.Read();
-				m_iTotallyRead += m_sCurChunk.second;
-				++m_iReads;
 			}
 
 			const char* szJson = m_sCurChunk.first;
 			const char* pEnd = szJson + m_sCurChunk.second;
 			const char* p = szJson;
 
-			while ( p < pEnd && *p != '\r' && *p != '\n' )
+			while ( p<pEnd && *p!='\r' && *p!='\n' )
 				++p;
 
 			if ( p==pEnd )
@@ -1905,6 +1901,7 @@ public:
 				if ( IsEmpty ( sResult ) )
 					continue;
 				++m_iJsons;
+				HTTPINFO << "chunk " << m_iJsons << " '" << Data2Log ( sResult ) << "'";;
 			} else
 			{
 				m_dLastChunk.Append ( szJson, p - szJson );
@@ -1912,7 +1909,7 @@ public:
 				--sResult.second; // exclude terminating \0
 				m_dLastChunk.Resize ( 0 );
 				++m_iJsons;
-				HTTPINFO << "Last chunk " << m_iJsons << " '" << Data2Log ( sResult ) << "'";;
+				HTTPINFO << "chunk last " << m_iJsons << " '" << Data2Log ( sResult ) << "'";;
 			}
 			return sResult;
 		}
@@ -1922,7 +1919,7 @@ public:
 		m_dLastChunk.Resize ( m_dLastChunk.GetLength() - 1 );
 		Str_t sResult = m_dLastChunk;
 		++m_iJsons;
-		HTTPINFO << "Termination chunk " << m_iJsons << " '" << Data2Log ( sResult ) << "'";
+		HTTPINFO << "chunk termination " << m_iJsons << " '" << Data2Log ( sResult ) << "'";
 		return sResult;
 	}
 
@@ -1930,6 +1927,18 @@ public:
 	const CSphString & GetErrorMessage() const { return m_tIn.GetErrorMessage(); }
 };
 
+static Str_t TrimHeadSpace ( Str_t tLine )
+{
+	if ( IsEmpty ( tLine ) )
+		return tLine;
+
+	const char * sCur = tLine.first;
+	const char * sEnd = sCur + tLine.second;
+	while ( sCur<sEnd && sphIsSpace ( *sCur ) )
+		sCur++;
+
+	return Str_t { sCur, sEnd-sCur };
+}
 
 class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpJsonUpdateTraits_c, public HttpJsonTxnTraits_c
 {
@@ -1979,6 +1988,7 @@ public:
 			if ( CheckReportError() )
 				return false;
 
+			tQuery = TrimHeadSpace ( tQuery ); // could be a line with only whitespace chars
 			if ( IsEmpty ( tQuery ) )
 				continue;
 			++iInserted;
@@ -1992,7 +2002,7 @@ public:
 			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
 			{
 				ReportError ( SPH_HTTP_STATUS_400 );
-				HTTPINFO << "inserted  " << iInserted;
+				HTTPINFO << "inserted " << iInserted << ", error: " << m_sError;
 				return false;
 			}
 
@@ -2040,7 +2050,7 @@ public:
 
 			default:
 				ReportError ( "Unknown statement", SPH_HTTP_STATUS_400 );
-				HTTPINFO << "inserted  " << iInserted;
+				HTTPINFO << "inserted  " << iInserted << ", got unknown statement:" << (int)tStmt.m_eStmt;
 				return false;
 			}
 
@@ -2067,7 +2077,7 @@ public:
 		tRoot.AddItem ( "items", tItems );
 		tRoot.AddBool ( "errors", !bResult );
 		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
-		HTTPINFO << "inserted  " << iInserted;
+		HTTPINFO << "inserted  " << iInserted << " result: " << (int)bResult << ", error:" << m_sError;
 		return true;
 	}
 

@@ -7982,20 +7982,21 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 
 	// correct rset estimates (we are estimating filters after FT)
 	float fCostOfFilters = 0.0f;
-	int64_t iDocsAfterFilters = int64_t(fValuesAfterFilters*m_iDocinfo);
-	if ( iDocsAfterFilters>0 )
+	if ( tEstimate.m_iDocs>0 )
 	{
-		float fRatio = float ( iDocsAfterFilters ) / tSelectIteratorCtx.m_iTotalDocs;
+		float fRatio = float ( tEstimate.m_iDocs ) / tSelectIteratorCtx.m_iTotalDocs;
 		for ( auto & i : dSIInfoFilters )
 			i.m_iRsetEstimate *= fRatio;
 
-		tSelectIteratorCtx.m_iTotalDocs = iDocsAfterFilters;
+		tSelectIteratorCtx.m_iTotalDocs = tEstimate.m_iDocs;
 		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfoFilters, tSelectIteratorCtx ) );
 		fCostOfFilters = pCostEstimate->CalcQueryCost();
 	}
 
+	int64_t iDocsAfterFilters = int64_t(fValuesAfterFilters*m_iDocinfo);
 	NodeEstimate_t tIteratorEst = { fBestCost, iDocsAfterFilters, 1 };
 	const int ITERATOR_BLOCK_SIZE = 1024;
+	tEstimate.m_iDocs = Max ( tEstimate.m_iDocs, 1 );
 	float fIteratorWithFT = CalcFTIntersectCost ( tIteratorEst, tEstimate, m_iDocinfo, ITERATOR_BLOCK_SIZE, MAX_BLOCK_DOCS );
 	float fFTWithFilters = tEstimate.m_fCost + fCostOfFilters;
 
@@ -8171,7 +8172,6 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
-	bool bAllPrecalc = dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters hold pointers to those settings

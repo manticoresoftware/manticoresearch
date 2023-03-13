@@ -15,8 +15,8 @@
 * String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
 * Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.
 * When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
-* `/bulk` endpoint report information about N of processed and non-processed (in case of error) strings (documents).
-* `/bulk` endpoint process empty lines as 'commit' command. Look for a tiny example in test 339.
+* [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
+* The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command. 
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.

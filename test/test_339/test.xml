@@ -80,14 +80,14 @@ index test2
 { "insert" : { "index" : "test_rt", "id" :10, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
 </query>
 
-<!-- multibulk -->
-
-<query endpoint="json/bulk" content="application/x-ndjson">
+<!-- multibulk - 3 different operations to same index -->
+<query endpoint="json/bulk" content="application/x-ndjson" example="multibulk">
 { "insert" : { "index" : "test_rt", "id" : 11, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
 { "replace" : { "index" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
 { "delete" : { "index" : "test_rt", "id" : 3 } }
 </query>
 
+<!-- multibulk - interleave 2 indexes. Will make 4 txns - on each change of index -->
 <query endpoint="json/bulk" content="application/x-ndjson">
 { "insert" : { "index" : "test_rt", "id" : 21, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
 { "insert" : { "index" : "test_rt", "id" : 22, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
@@ -101,8 +101,7 @@ index test2
 { "insert" : { "index" : "test2", "id" : 30, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
 </query>
 
-<!-- bulk commit with empty line -->
-
+<!-- bulk commit with empty line - will produce couple transactions - 3 docs, then 2 docs-->
 <query endpoint="json/bulk" content="application/x-ndjson">
 { "insert" : { "index" : "test_rt", "id" : 31, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
 { "insert" : { "index" : "test_rt", "id" : 32, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
@@ -110,6 +109,16 @@ index test2
 
 { "insert" : { "index" : "test_rt", "id" : 36, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
 { "insert" : { "index" : "test_rt", "id" : 37, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+</query>
+
+<!-- bulk commit with an error - will commit 3 docs, then fail on last txn -->
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 41, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "index" : "test_rt", "id" : 42, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "index" : "test_rt", "id" : 43, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+
+{ "insert" : { "index" : "test_rt", "id" : 44, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "index" : "test_rt", "id" : 45s, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
 </query>
 
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} }, "sort": [ "id" ] } }</query>

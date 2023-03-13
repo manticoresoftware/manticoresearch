@@ -11,6 +11,7 @@
 * Query optimizer now works for fulltext queries
 
 ### Minor changes
+* Queries using `count(*)` with a single filter now utilize precalculated data from secondary indexes (if available), resulting in significantly faster query times.
 * Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
 * String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
 * Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.

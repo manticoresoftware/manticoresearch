@@ -3,7 +3,32 @@
 # Version X
 
 ### Bugfixes
+* [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
+* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
+* [gl #3287] Crash on possibly out of space disk
+
+### Major new features
+* Query optimizer now works for fulltext queries
+
+### Minor changes
+* Queries using `count(*)` with a single filter now utilize precalculated data from secondary indexes (if available), resulting in significantly faster query times.
+* Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
+* String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
+* Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.
+* When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
+* [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
+* The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command.
+
+### Behaviour changes
+* **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
+* **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
+
+# Next maintenance release
+
+### Bugfixes
 * [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute
+* [gl #3363] Updated export ranker output to match `packedfactors()`
+
 
 # Version 6.0.4
 Released: March 15 2023

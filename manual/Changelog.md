@@ -6,6 +6,7 @@
 * [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
 * [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
 * [gl #3287] Crash on possibly out of space disk
+* [gl #3363] Updated export ranker output to match `packedfactors()`
 
 ### Major new features
 * Query optimizer now works for fulltext queries

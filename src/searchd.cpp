@@ -19154,13 +19154,9 @@ static StringSetStatic_c g_hSearchdPathVars {
 , "ssl_key"
 };
 
-static void DumpSettingsSection ( const CSphConfig & hConf, const char * sSectionName, RowBuffer_i & tOut )
+static void DumpSettingsSection ( const CSphConfigSection & hNode, const char * sSectionName, RowBuffer_i & tOut )
 {
-	if ( !hConf.Exists ( sSectionName ) || !hConf[sSectionName].Exists ( sSectionName ) )
-		return;
-
 	StringBuilder_c tTmp;
-	const CSphConfigSection & hNode = hConf[sSectionName][sSectionName];
 
 	for ( const auto & tIt : hNode )
 	{
@@ -19190,6 +19186,33 @@ static void DumpSettingsSection ( const CSphConfig & hConf, const char * sSectio
 	}
 }
 
+static void DumpSettingsSection ( const CSphConfig & hConf, const char * sSectionName, RowBuffer_i & tOut )
+{
+	if ( !hConf.Exists ( sSectionName ) || !hConf[sSectionName].Exists ( sSectionName ) )
+		return;
+
+	DumpSettingsSection ( hConf[sSectionName][sSectionName], sSectionName, tOut );
+}
+
+static void DumpCommonSection ( const CSphConfig & hConf, RowBuffer_i & tOut )
+{
+	CSphString sCommonName ( "common" );
+	CSphString sPDirName ( "plugin_dir" );
+	if ( hConf.Exists ( sCommonName ) && hConf[sCommonName].Exists ( sCommonName ) && hConf[sCommonName][sCommonName].Exists ( sPDirName ) )
+	{
+		DumpSettingsSection ( hConf, sCommonName.cstr(), tOut );
+		return;
+	}
+
+	// plugin_dir should be printed always
+	CSphConfigSection hCommon;
+	if ( hConf.Exists ( sCommonName ) && hConf[sCommonName].Exists ( sCommonName ) )
+		hCommon = hConf[sCommonName][sCommonName];
+
+	hCommon.AddEntry ( sPDirName.cstr(), PluginGetDir().cstr() );
+	DumpSettingsSection ( hCommon, sCommonName.cstr(), tOut );
+}
+
 void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 {
 	tOut.HeadBegin( 2 );
@@ -19207,7 +19230,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 	tOut.Commit();
 
 	DumpSettingsSection ( hConf, "searchd", tOut );
-	DumpSettingsSection ( hConf, "common", tOut );
+	DumpCommonSection ( hConf, tOut );
 	DumpSettingsSection ( hConf, "indexer", tOut );
 
 	// done

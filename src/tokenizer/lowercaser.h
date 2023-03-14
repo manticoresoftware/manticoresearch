@@ -58,8 +58,8 @@ public:
 	// modifiers
 	void Reset();
 	void SetRemap ( const CSphLowercaser* pLC );
-	void AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWORD uFlags=0 );
-	void AddChars ( const char* szChars, DWORD uFlags=0 );
+	void AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWORD uAddFlags=0, DWORD uResetFlags=0 );
+	void AddChars ( const char* szChars, DWORD uAddFlags=0, DWORD uResetFlags=0 );
 
 	// check that nothing from dRemaps is referenced somewhere
 	bool CheckRemap ( CSphString& sError, const VecTraits_T<CSphRemapRange>& dRemaps, const char* sSource, bool bCanRemap ) const noexcept;

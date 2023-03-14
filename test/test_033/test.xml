@@ -32,13 +32,44 @@ index test
       <Variant>	</Variant>
     </Dynamic>
 }
+
+index test11
+{
+    type = rt
+    path = <data_path/>/test11
+    rt_field = title
+    rt_attr_uint = idd
+    
+    ignore_chars = U+002A
+    min_infix_len = 2
+}
+
+index test12
+{
+    type = rt
+    path = <data_path/>/test12
+    rt_field = title
+    rt_attr_uint = idd
+    
+    min_infix_len = 2
+}
 </config>
 
 <queries>
-<query mode="extended2">hello -world</query>
-<query mode="extended2">-hello world</query>
-<query mode="extended2">hello world</query>
+<query mode="extended2" index="test">hello -world</query>
+<query mode="extended2" index="test">-hello world</query>
+<query mode="extended2" index="test">hello world</query>
 </queries>
+
+<sphqueries>
+<!-- ignore_chars remove wildcard at the query -->
+<sphinxql >INSERT INTO test11 (id, title) VALUES (1, 'abc*test'), (2, 'abcd*test')</sphinxql>
+<sphinxql >INSERT INTO test12 (id, title) VALUES (1, 'abc*test'), (2, 'abcd*test')</sphinxql>
+<sphinxql >SELECT * FROM test11 WHERE MATCH('*abc*'); SHOW META</sphinxql>
+<sphinxql >SELECT * FROM test12 WHERE MATCH('*abc*'); SHOW META</sphinxql>
+<sphinxql >SELECT * FROM test11 WHERE MATCH('abc'); SHOW META</sphinxql>
+<sphinxql >SELECT * FROM test12 WHERE MATCH('abc'); SHOW META</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`

@@ -179,13 +179,13 @@ BISON_TARGET ( DDLParser "${CMAKE_CURRENT_SOURCE_DIR}/ddl.y" ${BISON_DIR}/bisddl
 BISON_TARGET ( JsonParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.y" ${BISON_DIR}/bissphinxjson.c COMPILE_FLAGS ${BIS_FLAGS} )
 BISON_TARGET ( SQLDebugParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.y" ${BISON_DIR}/bissphinxql_debug.c COMPILE_FLAGS ${BIS_FLAGS} )
 
-set_property ( SOURCE sphinxexpr.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_ExprParser_OUTPUT_SOURCE} )
-set_property ( SOURCE sphinx.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} )
-set_property ( SOURCE sphinxquery.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_QueryParser_OUTPUT_SOURCE} )
-set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} )
-set_property ( SOURCE searchdddl.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} )
-set_property ( SOURCE searchdsql.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} )
-set_property ( SOURCE sphinxql_debug.cpp APPEND PROPERTY OBJECT_DEPENDS ${BISON_SQLDebugParser_OUTPUT_SOURCE} )
+set_source_files_properties ( sphinxexpr.cpp PROPERTIES OBJECT_DEPENDS ${BISON_ExprParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( sphinx.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( sphinxquery.cpp PROPERTIES OBJECT_DEPENDS ${BISON_QueryParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( sphinxjson.cpp PROPERTIES OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( searchdddl.cpp PROPERTIES OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( searchdsql.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( sphinxql_debug.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLDebugParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
 
 # add the extra targets in the case we want on-the-fly lex compiler
 find_package ( FLEX REQUIRED )

@@ -189,8 +189,6 @@ release_build:
   rules:
     - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
     - if: $TEST =~ /release/ && ( $WHAT=='$WHAT' || $WHAT==null )
-  variables:
-    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 0
 
 release_tests:
   extends: [ .tests ]
@@ -260,6 +258,18 @@ win_tests:
   cache: { }
 
 
+# ==================== Just build arm64 ======================
+
+build_arm:
+  extends: [ .build ]
+  variables:
+    arch: aarch64
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+  cache:
+    key: $DISTR$arch
+
 # ==================== Just build FreeBSD 13 ======================
 
 build_bsd:
@@ -275,7 +285,6 @@ build_bsd:
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
   cache:
     key: $DISTR$arch
-  retry: 1
 
 # ==================== Publish (push) pipeline results ======================
 
@@ -333,6 +342,8 @@ deploy_hook:
     - job: win_tests
       artifacts: false
     - job: release_tests
+      artifacts: false
+    - job: build_arm
       artifacts: false
 
 # ==================== Manually redirect to our site ======================

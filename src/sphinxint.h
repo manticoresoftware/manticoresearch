@@ -1363,22 +1363,6 @@ inline int sphUtf8CharBytes ( BYTE uFirst )
 
 /// parser to build lowercaser from textual config
 
-struct StoredToken_t
-{
-	BYTE			m_sToken [3*SPH_MAX_WORD_LEN+4];
-	// tokenized state
-	const char *	m_szTokenStart;
-	const char *	m_szTokenEnd;
-	const char *	m_pBufferPtr;
-	const char *	m_pBufferEnd;
-	int				m_iTokenLen;
-	int				m_iOvershortCount;
-	bool			m_bBoundary;
-	bool			m_bSpecial;
-	bool			m_bBlended;
-	bool			m_bBlendedPart;
-};
-
 struct RemapXSV_t
 {
 	int m_iAttr {-1};

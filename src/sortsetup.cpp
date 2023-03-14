@@ -119,7 +119,7 @@ protected:
 };
 
 
-static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
+inline ESphSortKeyPart Attr2Keypart_ ( ESphAttr eType )
 {
 	switch ( eType )
 	{
@@ -449,7 +449,7 @@ bool SortStateSetup_c::Setup ( CSphString & sError )
 	}
 
 	const CSphColumnInfo & tCol = m_tSchema.GetAttr(m_iAttr);
-	m_tState.m_eKeypart[m_iField] = Attr2Keypart ( m_eAttrType!=SPH_ATTR_NONE ? m_eAttrType : tCol.m_eAttrType );
+	m_tState.m_eKeypart[m_iField] = Attr2Keypart_ ( m_eAttrType!=SPH_ATTR_NONE ? m_eAttrType : tCol.m_eAttrType );
 	m_tState.m_tLocator[m_iField] = tCol.m_tLocator;
 	m_tState.m_dAttrs[m_iField] = m_iAttr;
 

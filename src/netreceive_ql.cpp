@@ -815,7 +815,7 @@ public:
 };
 
 
-static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
+bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
 	auto& tSess = session::Info();
 	assert ( pBuf );
@@ -949,9 +949,8 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	int iCID = tSess.GetConnID();
 	const char * sClientIP = tSess.szClientName();
 
-	// fixme! durty macros to transparently substitute pBuf on the fly (to ssl, compressed, whatever)
-	#define tOut (*(NetGenericOutputBuffer_c*)pBuf.get())
-	#define tIn (*(AsyncNetInputBuffer_c*)pBuf.get())
+	NetGenericOutputBuffer_c* pOut = pBuf.get();
+	AsyncNetInputBuffer_c* pIn = pBuf.get();
 
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
 	/// So, no passive probing possible.
@@ -961,9 +960,9 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	tHandshake.SetCanSsl ( CheckWeCanUseSSL() ); // fixme! SSL capability must be set only if keys are valid!
 	tHandshake.SetCanZlib( bCanZlibCompression );
 	tHandshake.SetCanZstd( bCanZstdCompression );
-	tHandshake.Send ( tOut );
+	tHandshake.Send ( *pOut );
 	tSess.SetTaskState ( TaskState_e::NET_WRITE );
-	if ( !tOut.Flush () )
+	if ( !pOut->Flush () )
 	{
 		int iErrno = sphSockGetErrno ();
 		sphWarning ( "failed to send server version (client=%s(%d), error: %d '%s')",
@@ -986,37 +985,37 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		if ( iCurrentTimeout!=iTimeoutS )
 		{
 			iTimeoutS = iCurrentTimeout;
-			tIn.SetTimeoutUS ( S2US * iTimeoutS );
+			pIn->SetTimeoutUS ( S2US * iTimeoutS );
 		}
 
-		tIn.DiscardProcessed ();
+		pIn->DiscardProcessed ();
 		iPacketLen = 0;
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
-		sphLogDebugv ( "Receiving command... %d bytes in buf", tIn.HasBytes() );
+		sphLogDebugv ( "Receiving command... %d bytes in buf", pIn->HasBytes() );
 
 		// setup per-query profiling
 		auto pProfile = session::StartProfiling ( SPH_QSTATE_TOTAL );
 		if ( pProfile )
-			tOut.SetProfiler ( pProfile );
+			pOut->SetProfiler ( pProfile );
 
 		int iChunkLen = MAX_PACKET_LEN;
 
-		auto iStartPacketPos = tIn.GetBufferPos ();
+		auto iStartPacketPos = pIn->GetBufferPos ();
 		while (iChunkLen==MAX_PACKET_LEN)
 		{
 			// inlined AsyncReadMySQLPacketHeader
-			if ( !tIn.ReadFrom ( iPacketLen+4 ))
+			if ( !pIn->ReadFrom ( iPacketLen+4 ))
 			{
 				sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)",
 						sClientIP, iCID, sphSockError ());
 				return;
 			}
-			tIn.SetBufferPos ( iStartPacketPos + iPacketLen ); // will read at the end of the buffer
-			DWORD uAddon = tIn.GetLSBDword ();
-			tIn.DiscardProcessed ( sizeof ( uAddon )); // move out this header to keep rest of the buff solid
-			tIn.SetBufferPos ( iStartPacketPos ); // rewind back after the read.
+			pIn->SetBufferPos ( iStartPacketPos + iPacketLen ); // will read at the end of the buffer
+			DWORD uAddon = pIn->GetLSBDword ();
+			pIn->DiscardProcessed ( sizeof ( uAddon )); // move out this header to keep rest of the buff solid
+			pIn->SetBufferPos ( iStartPacketPos ); // rewind back after the read.
 			uPacketID = 1+(BYTE) ( uAddon >> 24 );
 			iChunkLen = ( uAddon & MAX_PACKET_LEN );
 
@@ -1024,7 +1023,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			iPacketLen += iChunkLen;
 
 			// receive package body
-			if ( !tIn.ReadFrom ( iPacketLen ))
+			if ( !pIn->ReadFrom ( iPacketLen ))
 			{
 				sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')",
 						sClientIP, iCID, iPacketLen, sphSockError ());
@@ -1038,7 +1037,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		if ( !bAuthed )
 		{
 			tSess.SetTaskState ( TaskState_e::HANDSHAKE );
-			HandshakeResponse41 tResponse ( tIn, iPacketLen );
+			HandshakeResponse41 tResponse ( *pIn, iPacketLen );
 
 			// switch to ssl by demand.
 			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
@@ -1047,15 +1046,17 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( !tSess.GetSsl() && tResponse.WantSSL() ) // want SSL
 			{
 				tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
-				tSess.SetPersistent( !tOut.GetError () );
+				pOut = pBuf.get();
+				pIn = pBuf.get();
+				tSess.SetPersistent( !pOut->GetError () );
 				continue; // next packet will be 'login' again, but received over SSL
 			}
 
 			if ( IsMaxedOut() )
 			{
 				sphWarning ( "%s", g_sMaxedOutMessage.first );
-				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
-				tOut.Flush ();
+				SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
+				pOut->Flush ();
 				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 				break;
 			}
@@ -1063,18 +1064,22 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
 			session::SetDumpUser ( tResponse.GetUsername() );
-			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
-			tSess.SetPersistent ( tOut.Flush () );
+			SendMysqlOkPacket ( *pOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
+			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;
 
 			if ( bCanZstdCompression && tResponse.WantZstd() )
 			{
 				MakeZstdMysqlCompressedLayer ( pBuf, tResponse.WantZstdLev() );
+				pOut = pBuf.get();
+				pIn = pBuf.get();
 				pCompressedFlag->m_bCompressed = true;
 			}
 			else if ( bCanZlibCompression && tResponse.WantZlib() )
 			{
 				MakeZlibMysqlCompressedLayer ( pBuf );
+				pOut = pBuf.get();
+				pIn = pBuf.get();
 				pCompressedFlag->m_bCompressed = true;
 			}
 			continue;

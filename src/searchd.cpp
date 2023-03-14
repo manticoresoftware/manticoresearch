@@ -647,7 +647,11 @@ public:
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// force even long time searches to shut
+	SHUTINFO << "Trigger g_bInterruptNow ...";
 	sphInterruptNow ();
+
+	SHUTINFO << "Shutdown curl query subsystem ...";
+	ShutdownCurl();
 
 #if !_WIN32
 	int fdStopwait = -1;

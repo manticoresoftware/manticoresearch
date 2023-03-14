@@ -14,7 +14,8 @@
 
 CSphString FetchUrl ( const CSphString& sUrl );
 
-std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery );
-std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<const char *> & dHeaders );
+std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<CSphString>& dHeaders );
+
+void ShutdownCurl();
 
 bool IsCurlAvailable();

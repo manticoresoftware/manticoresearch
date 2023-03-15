@@ -2,9 +2,9 @@
 
 <!-- example replace -->
 
-`REPLACE` works similar to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the old document with the same ID as a new document as deleted before inserting a new document.
+`REPLACE` works similarly to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the previous document with the same ID as deleted before inserting a new one.
 
-When using the HTTP JSON protocol, two different request formats are available: a Manticore format and an Elasticsearch-like format. Both formats can be seen in the provided examples.
+For HTTP JSON protocol, two request formats are available: Manticore and Elasticsearch-like. You can find both examples in the provided examples.
 
 <!-- intro -->
 ##### SQL:
@@ -186,11 +186,11 @@ class SuccessResponse {
 ```
 <!-- end -->
 
-`REPLACE` is supported for RT and PQ tables.
+`REPLACE` is available for both RT and PQ tables.
 
-The old document is not removed from the table, it is only marked as deleted. Because of this the table size grows until table chunks are merged and documents marked as deleted in these chunks are not included in the chunk created as a result of merge. You can force chunk merge by using [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+When you run a `REPLACE`, the previous document is not removed, but it's marked as deleted, so the table size grows until chunk merging happens, and the marked documents won't be included. To force a chunk merge, use the [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-The syntax of the `REPLACE` statement is identical to [INSERT syntax](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md):
+The syntax of the `REPLACE` statement is the same as the [INSERT statement syntax](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 
 ```sql
 REPLACE INTO table [(column1, column2, ...)]
@@ -198,11 +198,11 @@ REPLACE INTO table [(column1, column2, ...)]
     [, (...)]
 ```
 
-`REPLACE` using HTTP protocol is performed via the `/replace` endpoint. There's also a synonym endpoint, `/index`.
+To use the HTTP JSON interface with `REPLACE`, use the `/replace` endpoint. There's also a synonym endpoint, `/index`.
 
 <!-- example bulk_replace -->
 
-Multiple documents can be replaced at once. See [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) for more details.
+You can replace multiple documents at once. Check [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) for more information.
 
 <!-- intro -->
 ##### HTTP:
@@ -359,3 +359,5 @@ class BulkResponse {
 }
 ```
 <!-- end -->
+
+<!-- proofread -->

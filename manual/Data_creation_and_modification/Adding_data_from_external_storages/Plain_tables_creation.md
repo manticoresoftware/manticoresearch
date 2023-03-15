@@ -94,7 +94,7 @@ sudo -u manticore indexer mytable --buildstops word_freq.txt 1000 --buildfreqs
 ```
 
 This would produce the `word_freq.txt` as above, however after each word would be the number of times it occurred in the table in question.
-* `--merge <dst-table> <src-table>` is used for physically merging tables together, for example if you have a [main+delta scheme](../../Creating_a_table/Local_tables/Plain_table.md#Main+delta), where the main table rarely changes, but the delta table is rebuilt frequently, and `--merge` would be used to combine the two. The operation moves from right to left - the contents of `src-table` get examined and physically combined with the contents of `dst-table` and the result is left in `dst-table`. In pseudo-code, it might be expressed as: `dst-table += src-table` An example:
+* `--merge <dst-table> <src-table>` is used for physically merging tables together, for example if you have a [main+delta scheme](../../Creating_a_table/Local_tables/Plain_table.md#Main+delta-scenario), where the main table rarely changes, but the delta table is rebuilt frequently, and `--merge` would be used to combine the two. The operation moves from right to left - the contents of `src-table` get examined and physically combined with the contents of `dst-table` and the result is left in `dst-table`. In pseudo-code, it might be expressed as: `dst-table += src-table` An example:
 
 ```shell
 sudo -u manticore indexer --merge main delta --rotate

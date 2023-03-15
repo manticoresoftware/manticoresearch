@@ -251,7 +251,7 @@ max_substring_len = length
 
 Maximum substring (either prefix or infix) length to index. Optional, default is 0 (do not limit indexed substrings). Applies to [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) only.
 
-By default, substring (either prefix or infix) indexing in the [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)⛔ will index **all** possible substrings as separate keywords. That might result in an overly large full-text index. So this directive lets you limit the impact of substring indexing by skipping too-long substrings (which, chances are, will never get searched for anyway).
+By default, substring (either prefix or infix) indexing in the [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) will index **all** possible substrings as separate keywords. That might result in an overly large full-text index. So this directive lets you limit the impact of substring indexing by skipping too-long substrings (which, chances are, will never get searched for anyway).
 
 For example, a test table of 10,000 blog posts takes this much disk space depending on the settings:
 * 6.4 MB baseline (no substrings)

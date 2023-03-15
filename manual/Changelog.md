@@ -28,11 +28,11 @@
 Released: March 15 2023
 
 ### New features
-* Improved the integration with Logstash, Beats etc. including:
+* Improved integration with Logstash, Beats etc. including:
   - Support for Logstash versions >= 7.13.
   - Auto-schema support.
   - Added handling of bulk requests in Elasticsearch-like format.
-* [Buddy commit ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) Log Buddy version on Manticore start
+* [Buddy commit ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) Log Buddy version on Manticore start.
 
 ### Bugfixes
 * [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588), [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) Fixed bad character at the search meta and call keywords for bigram index.

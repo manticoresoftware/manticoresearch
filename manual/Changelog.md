@@ -7,6 +7,7 @@
 * [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
 * [gl #3287] Crash on possibly out of space disk
 * [gl #3363] Updated export ranker output to match `packedfactors()`
+* [Commit 2196](https://github.com/manticoresoftware/manticoresearch/commit/21966fbf) fixed wildcards at query to not be affected by ignore_chars
 
 ### Major new features
 * Query optimizer now works for fulltext queries

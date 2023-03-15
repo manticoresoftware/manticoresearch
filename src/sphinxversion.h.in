@@ -1,5 +1,5 @@
 // this is the main place where version number is defined
-#define VERNUMBERS "6.0.3"
+#define VERNUMBERS "6.0.5"
 // GIT_COMMIT_ID "$Format:%h$"
 // GIT_TIMESTAMP_ID "$Format:%ci$"
 // GIT_EPOCH_ID "$Format:%ct$"

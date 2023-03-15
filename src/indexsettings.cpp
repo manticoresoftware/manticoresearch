@@ -1692,8 +1692,6 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	if ( bTokenizerSpawned )
 		Tokenizer::AddToMultiformFilterTo ( pIndex->ModifyTokenizer(), pIndex->GetDictionary ()->GetMultiWordforms () );
 
-	pIndex->SetupQueryTokenizer();
-
 	if ( !pIndex->GetFieldFilter() )
 	{
 		CSphFieldFilterSettings tFilterSettings;

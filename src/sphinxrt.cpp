@@ -7541,6 +7541,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
 	{
+		assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
 		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 		{
 			tMeta.m_sError = tParsed.m_sParseError;

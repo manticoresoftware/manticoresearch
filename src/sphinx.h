@@ -1146,7 +1146,7 @@ public:
 	virtual void				Unlock () = 0;
 
 	/// called when index is loaded and prepared to work
-	virtual void				PostSetup() {}
+	virtual void				PostSetup();
 
 public:
 	/// return index document, bytes totals (FIXME? remove this in favor of GetStatus() maybe?)

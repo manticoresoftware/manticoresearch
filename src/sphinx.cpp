@@ -1968,6 +1968,11 @@ void CSphIndex::SetupQueryTokenizer()
 	m_pQueryTokenizerJson = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 }
 
+void CSphIndex::PostSetup()
+{
+	SetupQueryTokenizer();
+}
+
 TokenizerRefPtr_c CSphIndex::GetTokenizer() const
 {
 	return m_pTokenizer;
@@ -10741,6 +10746,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	// parse query
 	SwitchProfile ( pProfile, SPH_QSTATE_PARSE );
 
+	assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
 	XQQuery_t tParsed;
 	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 	{

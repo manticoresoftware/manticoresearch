@@ -9,8 +9,8 @@
   * [update](../../Quick_start_guide.md#Update) it's killlist_target
 
 ### ⛔ What you cannot do with a plain table:
-  * Insert additional data into the table once it has been built 
-  * Delete data from the table 
+  * Insert additional data into the table once it has been built
+  * Delete data from the table
   * Create, delete, or alter the table online
   * Use [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID generation (data from external storage must include a unique identifier)
 
@@ -20,7 +20,7 @@ Numeric attributes, including [MVAs](../../Creating_a_table/Data_types.md#Multi-
 #### How to create a plain table
 
 <!-- request Plain table example -->
-To create a plain table, you'll need to define it in a configuration file. It's not supported by the  `CREATE TABLE` command. 
+To create a plain table, you'll need to define it in a configuration file. It's not supported by the  `CREATE TABLE` command.
 
 Here's an example of a plain table configuration and a source for fetching data from a MySQL database:
 
@@ -56,12 +56,12 @@ For small data sets, the simplest option is to have a single plain table that is
 * The data in the table is not as fresh as the data in the source
 * The time it takes to build the table increases as the data set grows
 
-##### Main+delta Scenario 
+##### Main+delta scenario 
 For larger data sets, a plain table can be used instead of a [Real-Time](../../Creating_a_table/Local_tables/Real-time_table.md). The main+delta scenario involves:
 * Creating a smaller table for incremental indexing
 * Combining the two tables using a [distributed table](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
 
-This approach allows for infrequent rebuilding of the larger table and more frequent processing of updates from the source. The smaller table can be rebuilt more often (e.g. every minute or even every few seconds). 
+This approach allows for infrequent rebuilding of the larger table and more frequent processing of updates from the source. The smaller table can be rebuilt more often (e.g. every minute or even every few seconds).
 
 However, as time goes on, the indexing duration for the smaller table will become too long, requiring a rebuild of the larger table and the emptying of the smaller one.
 

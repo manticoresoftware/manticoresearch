@@ -1177,28 +1177,33 @@ hint_list:
 	| hint_list hint_item
 	;
 
+hint_attr_list:
+	ident
+	| hint_attr_list ',' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	;
+
 hint_item:           
-	TOK_HINT_SECONDARY '(' ident ')'
+	TOK_HINT_SECONDARY '(' hint_attr_list ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, true, $3 );
 		}
-	| TOK_HINT_NO_SECONDARY '(' ident ')'
+	| TOK_HINT_NO_SECONDARY '(' hint_attr_list ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, false, $3 );
 		}
-	| TOK_HINT_DOCID '(' ident ')'
+	| TOK_HINT_DOCID '(' hint_attr_list ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, true, $3 );
 		}
-	| TOK_HINT_NO_DOCID '(' ident ')'
+	| TOK_HINT_NO_DOCID '(' hint_attr_list ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, false, $3 );
 		}
-	| TOK_HINT_COLUMNAR '(' ident ')'
+	| TOK_HINT_COLUMNAR '(' hint_attr_list ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, true, $3 );
 		}
-	| TOK_HINT_NO_COLUMNAR '(' ident ')'
+	| TOK_HINT_NO_COLUMNAR '(' hint_attr_list ')'
 		{
 			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, false, $3 );
 		}

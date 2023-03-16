@@ -46,7 +46,7 @@ const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings>
 
 bool	ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock );
 
-CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost );
+CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost, CSphString & sWarning );
 
 namespace SI
 {

@@ -799,9 +799,48 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 	}
 }
 
+
+static bool CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, CSphString & sWarning )
+{
+	for ( auto & i : tCtx.m_dHints )
+		switch ( i.m_eType )
+		{
+		case SecondaryIndexType_e::LOOKUP:
+			if ( i.m_sIndex!=sphGetDocidName() )
+			{
+				sWarning = "hint error: DocidIndex can only be applied to 'id' attribute";
+				return false;
+			}
+			break;
+
+		case SecondaryIndexType_e::ANALYZER:
+		case SecondaryIndexType_e::INDEX:
+			if ( !tCtx.m_tSchema.GetAttr ( i.m_sIndex.cstr() ) )
+			{
+				sWarning.SetSprintf ( "hint error: '%s' attribute not found", i.m_sIndex.cstr() );
+				return false;
+			}
+			break;
+
+		default:
+			break;
+		}
+
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+		for ( auto & tHint : tCtx.m_dHints )
+			if ( tHint.m_sIndex==tCtx.m_dFilters[i].m_sAttrName && tHint.m_bForce )
+				if ( !dSIInfo[i].m_dCapabilities.any_of ( [&tHint]( auto eSupported ){ return tHint.m_eType==eSupported; } ) )
+				{
+					sWarning.SetSprintf ( "hint error: requested hint type not supported for '%s' attribute", tHint.m_sIndex.cstr() );
+					return false;
+				}
+
+	return true;
+}
+
 /////////////////////////////////////////////////////////////////////
 
-CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost )
+CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost, CSphString & sWarning )
 {
 	fBestCost = FLT_MAX;
 
@@ -820,6 +859,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	DisableRowidFilters ( dSIInfo, tCtx );
 	FetchPartialColumnarMinMax ( dSIInfo, tCtx );
 	FetchNumSIIterators ( dSIInfo, tCtx );
+	CheckHints ( dSIInfo, tCtx, sWarning );
 
 	CSphVector<int> dCapabilities ( dSIInfo.GetLength() );
 	CSphVector<int> dBest ( dSIInfo.GetLength() );

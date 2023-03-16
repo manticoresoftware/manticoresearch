@@ -6,11 +6,15 @@
 * [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
 * [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
 * [gl #3287] Crash on possibly out of space disk
+* [gl 548] Fixed DocidIndex cost calculation
+* [gl 3361] Fixed index hints to support multiple attributes
 
 ### Major new features
 * Query optimizer now works for fulltext queries
 
 ### Minor changes
+* Fixed DocidIndex cost calculation
+* Added warnings on invalid index hints
 * Queries using `count(*)` with a single filter now utilize precalculated data from secondary indexes (if available), resulting in significantly faster query times.
 * Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
 * String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.

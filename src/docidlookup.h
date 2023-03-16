@@ -204,7 +204,7 @@ public:
 			return;
 
 		// tDocID is inside current block (check with next min docid)? do nothing
-		if ( tDocID < ( m_pCurCheckpoint+1 )->m_tBaseDocID )
+		if ( (uint64_t)tDocID < uint64_t ( ( m_pCurCheckpoint+1 )->m_tBaseDocID ) )
 			return;
 
 		// perform binary search starting with next checkpoint

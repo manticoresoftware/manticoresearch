@@ -462,12 +462,7 @@ bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::Fill()
 {
 	DocID_t tLookupDocID = 0;
 	RowID_t tLookupRowID = INVALID_ROWID;
-
-	RowID_t * pRowIdStart = BASE::m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + BASE::m_dCollected.GetLength()-1;
-	RowID_t * pRowID = pRowIdStart;
-
-	while ( pRowID<pRowIdMax && m_pReader->Read ( tLookupDocID, tLookupRowID ) )
+	while ( m_pReader->Read ( tLookupDocID, tLookupRowID ) )
 	{
 		m_iProcessed++;
 
@@ -578,7 +573,7 @@ bool RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Fill()
 
 static bool NeedBitmapStorage ( int64_t iRsetSize, DWORD uTotalDocs )
 {
-	return float(iRsetSize)/uTotalDocs > 0.05f;
+	return float(iRsetSize)/uTotalDocs > 0.001f;
 }
 
 

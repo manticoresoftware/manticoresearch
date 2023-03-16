@@ -16936,11 +16936,19 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 	SmallStringHash_T<int> hItems;
 	ARRAY_FOREACH ( i, tRealQuery.m_dItems )
 		hItems.Add ( i, tRealQuery.m_dItems[i].m_sAlias );
-	ARRAY_FOREACH ( i, tSrcQuery.m_dItems )
+	for ( CSphQueryItem & tItem : tRealQuery.m_dRefItems )
 	{
-		const CSphQueryItem & tItem = tSrcQuery.m_dItems[i];
-		if ( !hItems.Exists ( tItem.m_sAlias ) )
+		int * pRealItem = hItems ( tItem.m_sAlias );
+		if ( !pRealItem )
+		{
 			tRealQuery.m_dItems.Add ( tItem );
+		} else
+		{
+			// change original item name to match on minimize result set
+			CSphQueryItem & tRealItem = tRealQuery.m_dItems[*pRealItem];
+			if ( tItem.m_sExpr!=tRealItem.m_sExpr )
+				tItem.m_sExpr = tRealItem.m_sExpr;
+		}
 	}
 
 	// query setup

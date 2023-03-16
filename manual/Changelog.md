@@ -8,6 +8,7 @@
 * [gl #3287] Crash on possibly out of space disk
 * [gl #3363] Updated export ranker output to match `packedfactors()`
 * [Commit 2196](https://github.com/manticoresoftware/manticoresearch/commit/21966fbf) fixed wildcards at query to not be affected by ignore_chars
+* [Commit 1990](https://github.com/manticoresoftware/manticoresearch/commit/1990e350) fixed crash of daemon at federated query with aggregate
 
 ### Major new features
 * Query optimizer now works for fulltext queries

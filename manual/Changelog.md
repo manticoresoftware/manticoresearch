@@ -1,5 +1,10 @@
 # Changelog
 
+# Version X
+
+### Bugfixes
+* [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute
+
 # Version 6.0.4
 Released: March 15 2023
 

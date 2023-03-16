@@ -316,27 +316,3 @@ deploy_hook:
       artifacts: false
     - job: build_arm
       artifacts: false
-
-# ==================== Manually redirect to our site ======================
-
-.pages:
-  stage: routines
-  needs: [ ]
-  rules:
-    - when: manual
-      allow_failure: true
-  tags:
-    - docker
-  variables:
-    GIT_STRATEGY: none
-    REDIR_URL: "https://manual.manticoresearch.com/dev/"
-  script:
-    - mkdir .public
-    - cd .public
-    - echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content = '0; url = $REDIR_URL' /></head></html>" >> index.html
-    - cd -
-    - mv .public public
-  artifacts:
-    paths:
-      - public
-  cache: { }

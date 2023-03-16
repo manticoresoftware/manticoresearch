@@ -18,10 +18,6 @@ variables:
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
-  rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
   variables:
     CACHEB: "../cache"
     arch: x86_64
@@ -68,6 +64,8 @@ variables:
       allow_failure: true
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
       when: manual
+    - if: $CI_COMMIT_BRANCH == "maintenance-release"
+      when: manual
     - if: $CI_COMMIT_BRANCH == "master"
       when: on_success
 
@@ -98,7 +96,6 @@ osx:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /osx/
   variables:
     DISTR: macos
 
@@ -118,7 +115,6 @@ windows:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /windows/
   variables:
     arch: x64
     DISTR: windows
@@ -139,7 +135,6 @@ rhel7:
   extends: [ .build_rhel ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /rhel7/
   variables:
     DISTR: rhel7
 
@@ -161,7 +156,6 @@ rhel8:
   extends: [ .build_rhel ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /rhel8/
   variables:
     DISTR: rhel8
 
@@ -183,7 +177,6 @@ rhel9:
   extends: [ .build_rhel ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /rhel9/
   variables:
     DISTR: rhel9
 
@@ -206,7 +199,6 @@ bionic:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /bionic/
   variables:
     DISTR: bionic
 
@@ -228,7 +220,6 @@ focal:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /focal/
   variables:
     DISTR: focal
 
@@ -250,7 +241,6 @@ buster:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /buster/
   variables:
     DISTR: buster
 
@@ -272,7 +262,6 @@ bullseye:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /bullseye/
   variables:
     DISTR: bullseye
 
@@ -294,7 +283,6 @@ jammy:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /jammy/
   variables:
     DISTR: jammy
 
@@ -316,7 +304,6 @@ bookworm:
   extends: [ .build ]
   rules:
     - !reference [ .build, rules ]
-    - if: $WHAT =~ /bookworm/
   variables:
     DISTR: bookworm
 
@@ -353,9 +340,7 @@ build_docker:
   variables:
     GIT_STRATEGY: none
   rules:
-    - if: $REPO_NAME=='$REPO_NAME'
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null && $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "master"
   tags:
     - dev-host
   script:

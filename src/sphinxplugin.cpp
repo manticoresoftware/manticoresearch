@@ -136,6 +136,10 @@ void sphPluginInit ( const char * sDir )
 	g_bPluginsEnabled = true;
 }
 
+const CSphString &  PluginGetDir()
+{
+	return g_sPluginDir;
+}
 
 bool sphPluginParseSpec ( const CSphString & sParams, StrVec_t & dParams, CSphString & sError )
 {

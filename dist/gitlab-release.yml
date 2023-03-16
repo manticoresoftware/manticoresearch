@@ -18,10 +18,6 @@ variables:
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243
-  rules:
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null
-    - if: $WHAT=="all"
   variables:
     CACHEB: "../cache"
     arch: x86_64
@@ -70,9 +66,11 @@ variables:
       allow_failure: true
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
       when: manual
+    - if: $CI_COMMIT_BRANCH == "maintenance-release"
+      when: manual
     - if: $CI_COMMIT_BRANCH == "master"
       when: on_success
-      
+
 .collect_deb:
   extends: [ .collect_job ]
   script:
@@ -98,9 +96,6 @@ variables:
 
 osx:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /osx/
   variables:
     DISTR: macos
 
@@ -118,9 +113,6 @@ collect_osx:
 
 windows:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /windows/
   variables:
     arch: x64
     DISTR: windows
@@ -139,9 +131,6 @@ collect_windows:
 
 rhel7:
   extends: [ .build_rhel ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /rhel7/
   variables:
     DISTR: rhel7
 
@@ -161,9 +150,6 @@ collect_rhel7:
 
 rhel8:
   extends: [ .build_rhel ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /rhel8/
   variables:
     DISTR: rhel8
 
@@ -183,9 +169,6 @@ collect_rhel8:
 
 rhel9:
   extends: [ .build_rhel ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /rhel9/
   variables:
     DISTR: rhel9
 
@@ -206,9 +189,6 @@ collect_rhel9:
 
 bionic:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /bionic/
   variables:
     DISTR: bionic
 
@@ -228,9 +208,6 @@ collect_bionic:
 
 focal:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /focal/
   variables:
     DISTR: focal
 
@@ -250,9 +227,6 @@ collect_focal:
 
 buster:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /buster/
   variables:
     DISTR: buster
 
@@ -272,9 +246,6 @@ collect_buster:
 
 bullseye:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /bullseye/
   variables:
     DISTR: bullseye
 
@@ -294,9 +265,6 @@ collect_bullseye:
 
 jammy:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /jammy/
   variables:
     DISTR: jammy
 
@@ -316,9 +284,6 @@ collect_jammy:
 
 bookworm:
   extends: [ .build ]
-  rules:
-    - !reference [ .build, rules ]
-    - if: $WHAT =~ /bookworm/
   variables:
     DISTR: bookworm
 
@@ -345,7 +310,6 @@ nsis_release:
   needs:
     - job: collect_windows
 
-
 build_docker:
   stage: deploy
   needs:
@@ -355,9 +319,7 @@ build_docker:
   variables:
     GIT_STRATEGY: none
   rules:
-    - if: $REPO_NAME=='$REPO_NAME'
-    - if: $WHAT=='$WHAT'
-    - if: $WHAT==null && $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "master"
   tags:
     - dev-host
   script:

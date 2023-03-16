@@ -41,7 +41,7 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser* pLC )
 	InvalidateStoredClones();
 }
 
-void CSphLowercaser::AddChars ( const char* szChars, DWORD uFlags )
+void CSphLowercaser::AddChars ( const char* szChars, DWORD uAddFlags, DWORD uResetFlags )
 {
 	assert ( szChars );
 	auto iChars = (int)strlen ( szChars );
@@ -50,7 +50,7 @@ void CSphLowercaser::AddChars ( const char* szChars, DWORD uFlags )
 	for ( int i = 0; i < iChars; ++i )
 		dRemaps.Add ( (CSphRemapRange)szChars[i] );
 
-	AddRemaps ( dRemaps, uFlags );
+	AddRemaps ( dRemaps, uAddFlags, uResetFlags );
 }
 
 bool CSphLowercaser::CheckRemap ( CSphString& sError, const VecTraits_T<CSphRemapRange>& dRemaps, const char* sSource, bool bCanRemap ) const noexcept
@@ -80,7 +80,7 @@ bool CSphLowercaser::CheckRemap ( CSphString& sError, const VecTraits_T<CSphRema
 }
 
 
-void CSphLowercaser::AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWORD uFlags )
+void CSphLowercaser::AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWORD uAddFlags, DWORD uResetFlags )
 {
 	if ( dRemaps.IsEmpty() )
 		return;
@@ -145,8 +145,9 @@ void CSphLowercaser::AddRemaps ( const VecTraits_T<CSphRemapRange>& dRemaps, DWO
 		{
 			assert ( m_pChunk[j >> CHUNK_BITS] );
 			auto& uCodepoint = m_pChunk[j >> CHUNK_BITS][j & CHUNK_MASK];
-			auto uNew = uRemapped | uFlags | ( uCodepoint & MASK_FLAGS );
-			if ( ( uCodepoint & MASK_CODEPOINT ) && ( uFlags & FLAG_CODEPOINT_SPECIAL ) )
+			auto uNew = uRemapped | uAddFlags | ( uCodepoint & MASK_FLAGS );
+			uNew &= ~uResetFlags;
+			if ( ( uCodepoint & MASK_CODEPOINT ) && ( uAddFlags & FLAG_CODEPOINT_SPECIAL ) )
 				uNew |= FLAG_CODEPOINT_DUAL;
 			bChanged |= uCodepoint!=uNew;
 			uCodepoint = uNew;
@@ -207,22 +208,22 @@ UPCLONESTART ( Query )
 UPCLONEEND ( Query )
 
 UPCLONESTART ( QueryWildExactJson )
-	pLC->AddChars ( "*?%=" );
+	pLC->AddChars ( "*?%=", 0, FLAG_CODEPOINT_IGNORE );
 	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryWildExactJson )
 
 UPCLONESTART ( QueryWildExact )
-	pLC->AddChars ( "*?%=" );
+	pLC->AddChars ( "*?%=", 0, FLAG_CODEPOINT_IGNORE );
 	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryWildExact )
 
 UPCLONESTART ( QueryWildJson )
-	pLC->AddChars ( "*?%" );
+	pLC->AddChars ( "*?%", 0, FLAG_CODEPOINT_IGNORE );
 	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryWildJson )
 
 UPCLONESTART ( QueryWild )
-	pLC->AddChars ( "*?%" );
+	pLC->AddChars ( "*?%", 0, FLAG_CODEPOINT_IGNORE );
 	pLC->AddChars ( "\\()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryWild )
 

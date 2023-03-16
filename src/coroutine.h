@@ -44,6 +44,7 @@ size_t AlignStackSize ( size_t iSize );
 using Waiter_t = SharedPtrCustom_t<void>;
 
 // perform handler in plain coro (as continuation), or in dedicated (if called from plain thread)
+void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler = nullptr );
 void CallCoroutine ( Handler fnHandler );
 bool CallCoroutineRes ( Predicate fnHandler );
 

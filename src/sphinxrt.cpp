@@ -7002,18 +7002,8 @@ void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtS
 }
 
 // perform initial query transformations and expansion.
-static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const char * szModifiedQuery, const CSphIndexSettings & tSettings, const QueryParser_i * pQueryParser, const CSphQuery & tQuery, const CSphSchema & tSchema, cRefCountedRefPtrGeneric_t pIndexData, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
+static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKeywordDict, int iExpandKeywords, int iExpansionLimit, const CSphIndexSettings & tSettings, const CSphQuery & tQuery, cRefCountedRefPtrGeneric_t pIndexData, const DictRefPtr_c& pDict, CSphQueryResultMeta & tMeta, QueryProfile_c * pProfiler, CSphScopedPayload * pPayloads, XQQuery_t & tParsed )
 {
-	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	TokenizerRefPtr_c pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, false );
-	TokenizerRefPtr_c pQueryTokenizerJson = sphCloneAndSetupQueryTokenizer ( pTokenizer, bIsStarDict, tSettings.m_bIndexExactWords, true );
-
-	if ( !pQueryParser->ParseQuery ( tParsed, szModifiedQuery, &tQuery, pQueryTokenizer, pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
-	{
-		tMeta.m_sError = tParsed.m_sParseError;
-		return 0;
-	}
-
 	if ( !tParsed.m_sParseWarning.IsEmpty () )
 		tMeta.m_sWarning = tParsed.m_sParseWarning;
 
@@ -7550,7 +7540,17 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	bool bFullscan = pQueryParser->IsFullscan ( tQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
-		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, (const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, (cRefCountedRefPtrGeneric_t) tGuard.m_tSegmentsAndChunks.m_pSegs, m_pTokenizer, pDict, tMeta, pProfiler, &tPayloads, tParsed );
+	{
+		assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
+		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
+		{
+			tMeta.m_sError = tParsed.m_sParseError;
+			iStackNeed = 0;
+		} else
+		{
+			iStackNeed = PrepareFTSearch ( this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, m_tSettings, tQuery,(cRefCountedRefPtrGeneric_t) tGuard.m_tSegmentsAndChunks.m_pSegs, pDict, tMeta, pProfiler, &tPayloads, tParsed );
+		}
+	}
 
 	// empty index, empty result. Must be AFTER PrepareFTSearch, since it prepares list of words
 	if ( tGuard.m_dRamSegs.IsEmpty() )

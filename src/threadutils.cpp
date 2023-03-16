@@ -512,7 +512,6 @@ class Strand_c final : public SchedulerWithBackend_i
 	using StrandWorkerPtr_t = CSphRefcountedPtr<StrandWorker_t>;
 
 	StrandWorkerPtr_t m_pWorker;
-	bool			m_bShutdown = false;
 	const char*		m_szName = nullptr;
 
 	// Per-thread call stack to track the state of each thread in the service.
@@ -535,8 +534,6 @@ class Strand_c final : public SchedulerWithBackend_i
 
 	inline bool Enqueue ( Threads::details::SchedulerOperation_t* pOp )
 	{
-		if ( m_bShutdown )
-			return false;
 		assert ( m_pWorker );
 		return m_pWorker->Enqueue ( pOp );
 	}

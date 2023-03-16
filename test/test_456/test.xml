@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication of update with blobs</name>
+
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
+<skip_indexer/>
+<num_agents>2</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+	server_id = <agent_id/>
+}
+</agent1>
+
+</config>
+
+
+<queries>
+
+<!-- request to node 0 -->
+<sphinxql d="0">
+create table rt1 (id bigint, attrs json, idd integer, content text indexed, s string) rt_mem_limit='12M';
+create cluster test;
+alter cluster test add rt1;
+insert into test:rt1 (id, content, attrs, idd, s) values (1, 'text content first object', '{"phones":{"n":[971526025257],"t":[1]},"mails":[],"version":1}', 11, 'some 1');
+insert into test:rt1 (id, content, attrs, idd, s) values (2, 'text content second document', '{"phones":{"n":[971526025257],"t":[1]},"mails":[],"version":1}', 2, 'other');
+</sphinxql>
+
+<!-- request to node 1 -->
+<sphinxql d="1" cluster_connect="0">
+	join cluster test at '%addr_connect%';
+</sphinxql>
+
+<!-- stream to node 1 -->
+<!-- crashed node 0 due to missed blob replication -->
+<sphinxql d="1">
+UPDATE test:rt1 set attrs='{"phones":{"n":[966549463121],"t":[1]},"mails":[],"version":6}' where id=2;
+UPDATE test:rt1 set s='another 1' where id=1;
+show status like 'cluster_test_last_committed';
+</sphinxql>
+
+<!-- request to node 0 -->
+<sphinxql d="0">
+debug wait test status 5 like 'state' option 'timeout'=30;
+SELECT * FROM test:rt1 order by id asc;
+</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">
+	ALTER CLUSTER test DROP rt1;
+	DROP TABLE rt1;
+</sphinxql>
+
+</queries>
+
+</test>

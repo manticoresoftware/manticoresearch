@@ -221,4 +221,7 @@ bool sphPluginReload ( const char * sName, CSphString & sError );
 /// list all plugins (basically for SHOW PLUGINS)
 void sphPluginList ( CSphVector<PluginInfo_t> & dResult );
 
+/// get directory of plugins
+const CSphString & PluginGetDir();
+
 #endif // _sphinxplugin_

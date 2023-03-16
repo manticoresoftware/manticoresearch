@@ -4189,6 +4189,8 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::UpdateATC ( bool bFl
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 class ExtRanker_Expr_T : public ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true >
 {
+	using BASE = ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true >;
+
 public:
 	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, bool bSkipQCache )
 		: ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true > ( tXQ, tSetup, bSkipQCache )
@@ -4201,7 +4203,7 @@ public:
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) final
 	{
-		ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>,true >::SetQwordsIDF ( hQwords );
+		BASE::SetQwordsIDF ( hQwords );
 		this->m_tState.m_iMaxQpos = this->m_iMaxQpos;
 		this->m_tState.SetQwords ( hQwords );
 	}
@@ -4211,7 +4213,7 @@ public:
 		if_const ( NEED_PACKEDFACTORS )
 			this->m_tState.FlushMatches ();
 
-		return ExtRanker_State_T<RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>,true >::GetMatches ();
+		return BASE::GetMatches();
 	}
 
 	void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos ) final
@@ -4225,16 +4227,24 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 /// ranker state that computes BM25 as weight, but also all known factors for export purposes
-struct RankerState_Export_fn : public RankerState_Expr_fn<>
+template <bool HANDLE_DUPES>
+struct RankerState_Export_fn : public RankerState_Expr_fn<false, HANDLE_DUPES>
 {
+	using BASE = RankerState_Expr_fn<false, HANDLE_DUPES>;
+
 public:
 	CSphOrderedHash < CSphString, RowID_t, IdentityHash_fn, 256 > m_hFactors;
 
 public:
+	RankerState_Export_fn()
+	{
+		BASE::m_bWantAtc = true;
+	}
+
 	int Finalize ( const CSphMatch & tMatch )
 	{
 		// finalize factor computations
-		FinalizeDocFactors ( tMatch );
+		BASE::FinalizeDocFactors ( tMatch );
 
 		// build document level factors
 		// FIXME? should we build query level factors too? max_lcs, query_word_count, etc
@@ -4242,22 +4252,26 @@ public:
 		CSphVector<char> dVal;
 		dVal.Resize ( MAX_STR_LEN );
 		snprintf ( dVal.Begin(), dVal.GetLength(), "bm25=%d, bm25a=%f, field_mask=%d, doc_word_count=%d",
-			m_uDocBM25, m_fDocBM25A, *m_tMatchedFields.Begin(), m_uDocWordCount );
+			BASE::m_uDocBM25, BASE::m_fDocBM25A, *BASE::m_tMatchedFields.Begin(), BASE::m_uDocWordCount );
 
 		char sTmp[MAX_STR_LEN];
 
 		// build field level factors
-		for ( int i=0; i<m_iFields; i++ )
-			if ( m_uHitCount[i] )
+		for ( int i=0; i<BASE::m_iFields; i++ )
 		{
+			if ( !BASE::m_uHitCount[i] )
+				continue;
+
 			snprintf ( sTmp, MAX_STR_LEN, ", field%d="
 				"(lcs=%d, hit_count=%d, word_count=%d, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
-				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%d, max_window_hits=%d)",
+				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%d, max_window_hits=%d, "
+				"min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
 				i,
-				m_uLCS[i], m_uHitCount[i], m_uWordCount[i],
-				m_dTFIDF[i], m_dMinIDF[i], m_dMaxIDF[i], m_dSumIDF[i],
-				m_iMinHitPos[i], m_iMinBestSpanPos[i], m_tExactHit.BitGet ( i ), m_iMaxWindowHits[i] );
+				BASE::m_uLCS[i], BASE::m_uHitCount[i], BASE::m_uWordCount[i],
+				BASE::m_dTFIDF[i], BASE::m_dMinIDF[i], BASE::m_dMaxIDF[i], BASE::m_dSumIDF[i],
+				BASE::m_iMinHitPos[i], BASE::m_iMinBestSpanPos[i], BASE::m_tExactHit.BitGet ( i ), BASE::m_iMaxWindowHits[i],
+				BASE::m_iMinGaps[i], BASE::m_tExactOrder.BitGet(i), BASE::m_dLCCS[i], BASE::m_dWLCCS[i], BASE::m_dAtc[i] );
 
 			auto iValLen = (int) strlen ( dVal.Begin() );
 			auto iTotalLen = iValLen+(int)strlen(sTmp);
@@ -4268,10 +4282,10 @@ public:
 		}
 
 		// build word level factors
-		for ( int i=1; i<=m_iMaxQpos; i++ )
-			if ( !IsTermSkipped ( i ) )
+		for ( int i=1; i<=BASE::m_iMaxQpos; i++ )
+			if ( !BASE::IsTermSkipped(i) )
 		{
-			snprintf ( sTmp, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i, m_dTF[i], m_dIDF[i] );
+			snprintf ( sTmp, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i-1, BASE::m_dTF[i], BASE::m_dIDF[i] );
 			auto iValLen = (int)strlen ( dVal.Begin() );
 			auto iTotalLen = iValLen+(int)strlen(sTmp);
 			if ( dVal.GetLength() < iTotalLen+1 )
@@ -4284,12 +4298,12 @@ public:
 		m_hFactors.Add ( dVal.Begin(), tMatch.m_tRowID );
 
 		// compute sorting expression now
-		int iRes = ( m_eExprType==SPH_ATTR_INTEGER )
-			? m_pExpr->IntEval ( tMatch )
-			: (int)m_pExpr->Eval ( tMatch );
+		int iRes = ( BASE::m_eExprType==SPH_ATTR_INTEGER )
+			? BASE::m_pExpr->IntEval ( tMatch )
+			: (int)BASE::m_pExpr->Eval ( tMatch );
 
 		// cleanup and return!
-		ResetDocFactors();
+		BASE::ResetDocFactors();
 		return iRes;
 	}
 
@@ -4303,21 +4317,29 @@ public:
 
 /// export ranker that emits BM25 as the weight, but computes and export all the factors
 /// useful for research purposes, eg. exporting the data for machine learning
-class ExtRanker_Export_c : public ExtRanker_State_T<RankerState_Export_fn, true>
+template < bool HANDLE_DUPES >
+class ExtRanker_Export_T : public ExtRanker_State_T<RankerState_Export_fn<HANDLE_DUPES>, true>
 {
+	using BASE = ExtRanker_State_T<RankerState_Export_fn<HANDLE_DUPES>, true>;
+
 public:
-	ExtRanker_Export_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, bool bSkipQCache )
-		: ExtRanker_State_T<RankerState_Export_fn,true> ( tXQ, tSetup, bSkipQCache )
+	ExtRanker_Export_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, bool bSkipQCache )
+		: BASE ( tXQ, tSetup, bSkipQCache )
 	{
-		m_tState.m_sExpr = sExpr;
-		m_tState.m_pSchema = &tSchema;
+		BASE::m_tState.m_sExpr = sExpr;
+		BASE::m_tState.m_pSchema = &tSchema;
 	}
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) final
 	{
-		ExtRanker_State_T<RankerState_Export_fn,true>::SetQwordsIDF ( hQwords );
-		m_tState.m_iMaxQpos = m_iMaxQpos;
-		m_tState.SetQwords ( hQwords );
+		BASE::SetQwordsIDF ( hQwords );
+		BASE::m_tState.m_iMaxQpos = BASE::m_iMaxQpos;
+		BASE::m_tState.SetQwords ( hQwords );
+	}
+
+	void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos ) final
+	{
+		BASE::m_tState.SetTermDupes ( hQwords, iMaxQpos, BASE::m_pRoot.get() );
 	}
 };
 
@@ -4353,8 +4375,7 @@ static bool HasQwordDupes ( XQNode_t * pNode )
 }
 
 
-std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResultMeta & tMeta,
-	const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
+std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
@@ -4447,7 +4468,10 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 		case SPH_RANK_EXPORT:
 			// TODO: replace Export ranker to Expression ranker to remove duplicated code
 			tTermSetup.m_bSetQposMask = true;
-			pRanker = std::make_unique < ExtRanker_Export_c> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+			if ( bGotDupes )
+				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+			else
+				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
 			break;
 
 		default:

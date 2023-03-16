@@ -8,9 +8,6 @@ stages:
   stage: deploy
   tags:
     - dev-host
-  rules:
-    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
-      when: on_success
 
 .collect_arc:
   extends: [ .collect_job ]
@@ -25,9 +22,6 @@ build_nsis:
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/build_nsis:1.0.0
-  rules:
-    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
-      when: on_success
   script:
     - mkdir build
     - /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh

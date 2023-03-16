@@ -613,7 +613,8 @@ std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int i
 // ver 0x104 added docstore from RT index
 // ver 0x105 fixed CSphWordHit serialization - instead of direct raw blob copy only fields sent (16 bytes vs 24)
 // ver 0x106 add total indexed bytes to accum
-static const WORD g_iReplicateCommandVer = 0x106;
+// ver 0x107 add blobs vector to replicate update statement
+static const WORD g_iReplicateCommandVer = 0x107;
 
 // log debug info about cluster nodes as current nodes views that
 static void LogGroupView ( const wsrep_view_info_t * pView )
@@ -5901,6 +5902,7 @@ void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut )
 	SaveArray ( tUpd.m_dDocids, tWriter );
 	SaveArray ( tUpd.m_dRowOffset, tWriter );
 	SaveArray ( tUpd.m_dPool, tWriter );
+	SaveArray ( tUpd.m_dBlobs, tWriter );
 }
 
 int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob )
@@ -5922,6 +5924,7 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlo
 	GetArray ( tUpd.m_dDocids, tIn );
 	GetArray ( tUpd.m_dRowOffset, tIn );
 	GetArray ( tUpd.m_dPool, tIn );
+	GetArray ( tUpd.m_dBlobs, tIn );
 
 	return tIn.GetPos();
 }

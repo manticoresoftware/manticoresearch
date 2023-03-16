@@ -8,6 +8,10 @@
 * [gl #3287] Crash on possibly out of space disk
 * [gl 548] Fixed DocidIndex cost calculation
 * [gl 3361] Fixed index hints to support multiple attributes
+* [gl #3363] Updated export ranker output to match `packedfactors()`
+* [Commit 2196](https://github.com/manticoresoftware/manticoresearch/commit/21966fbf) fixed wildcards at query to not be affected by ignore_chars
+* [Commit 1990](https://github.com/manticoresoftware/manticoresearch/commit/1990e350) fixed crash of daemon at federated query with aggregate
+* [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute
 
 ### Major new features
 * Query optimizer now works for fulltext queries
@@ -21,33 +25,36 @@
 * Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.
 * When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
 * [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
-* The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command. 
+* The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command.
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
 * **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
 
 # Version 6.0.4
+Released: March 15 2023
 
-Released: soon
+### New features
+* Improved integration with Logstash, Beats etc. including:
+  - Support for Logstash versions >= 7.13.
+  - Auto-schema support.
+  - Added handling of bulk requests in Elasticsearch-like format.
+* [Buddy commit ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) Log Buddy version on Manticore start.
 
 ### Bugfixes
-* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588), [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) fixed bad character at the search meta and call keywords for bigram index
-* [Issue #1056](https://github.com/manticoresoftware/manticoresearch/issues/1056) Question mark unexpected behavior
-* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) Lowercase HTTP headers are rejected  
-* [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) Fixed bulk writes processing in the JSON interface for documents with id explicitly set to null
-* [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) Fixed term statistics in CALL KEYWORDS for multiple same terms
-* [Issue #1039](https://github.com/manticoresoftware/manticoresearch/issues/1039) Fixed memory leak at daemon on reading output of the Buddy console
+* [Issue #588](https://github.com/manticoresoftware/manticoresearch/issues/588), [Issue #942](https://github.com/manticoresoftware/manticoresearch/issues/942) Fixed bad character at the search meta and call keywords for bigram index.
+* [Issue #1027](https://github.com/manticoresoftware/manticoresearch/issues/1027) Lowercase HTTP headers are rejected.
+* ❗[Issue #1039](https://github.com/manticoresoftware/manticoresearch/issues/1039) Fixed memory leak at daemon on reading output of the Buddy console.
+* [Issue #1056](https://github.com/manticoresoftware/manticoresearch/issues/1056) Fixed unexpected behavior of question mark.
+* [Issue #1064](https://github.com/manticoresoftware/manticoresearch/issues/1064) - Fixed race condition in tokenizer lowercase tables causing a crash.
+* [Commit 59bb](https://github.com/manticoresoftware/manticoresearch/commit/59bb54c) Fixed bulk writes processing in the JSON interface for documents with id explicitly set to null.
+* [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) Fixed term statistics in CALL KEYWORDS for multiple same terms.
 * [Commit f381](https://github.com/manticoresoftware/manticoresearch/commit/f381ad2) Default config is now created by Windows installer; paths are no longer substituted in runtime.
-* [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95) [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks
-* [Commit 20d2](https://github.com/manticoresoftware/manticoresearch/commit/20d246c) Fixed compat mode bulk request to pass into buddy on error
-* [Commit aa0c](https://github.com/manticoresoftware/manticoresearch/commit/aa0cdfb) Fixed daemon to log messages from buddy console into daemon log line by line
-* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed /pq HTTP endpoint to be an alias of the /json/pq HTTP endpoint
-* [Commit ee87](https://github.com/manticoresoftware/columnar/commit/ee87d11) Fixed crash on search with the secondary index
-* [Commit e7f9](https://github.com/manticoresoftware/manticoresearch/commit/e7f9815) Added buddy version to startup log entry
-* [Commit fdd9](https://github.com/manticoresoftware/manticoresearch/commit/fdd9087) Fixed compat mode to pass errors into buddy
-* [Commit 1912](https://github.com/manticoresoftware/manticoresearch/commit/1912b3c) Added compatibility mode to work with Logstash, Beat and Kibana
-* [Commit 3b53](https://github.com/manticoresoftware/manticoresearch/commit/3b5385a) Fixed daemon crash on buddy restart
+* [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95), [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks.
+* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed `/pq` HTTP endpoint to be an alias of the `/json/pq` HTTP endpoint.
+* [Commit 3b53](https://github.com/manticoresoftware/manticoresearch/commit/3b5385a) Fixed daemon crash on Buddy restart.
+* [Buddy commit fba9](https://github.com/manticoresoftware/manticoresearch-buddy/commit/fba9c8c) Display original error on invalid request received.
+* [Buddy commit db95](https://github.com/manticoresoftware/manticoresearch-buddy/commit/db9532c) Allow spaces in backup path and add some magic to regexp to support single quotes also.
 
 # Version 6.0.2
 Released: Feb 10 2023

@@ -4,8 +4,7 @@ workflow:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "master" && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/ && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
-    - if: $TEST
-    - if: $WHAT
+    - if: $CI_COMMIT_BRANCH == "maintenance-release" && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
 
 # to skip ci add [ci skip] or [skip ci] in commit message in any capitalization,
 # or add param when pushing, as: git push -o ci.skip ...
@@ -28,8 +27,9 @@ job_mirror:
   stage: mirroring
   needs: [ ]
   rules:
-    - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
-    - if: $TEST==null && $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - if: $CI_COMMIT_BRANCH == "maintenance-release"
   tags:
     - dev-host
   script:
@@ -51,6 +51,7 @@ job_mirror:
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - if: $CI_COMMIT_BRANCH == "maintenance-release"
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
@@ -163,9 +164,6 @@ docs_deploy:
 
 simple_build:
   extends: [ .build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /simple/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
     CTEST_CONFIGURATION_TYPE: "Debug"
@@ -174,9 +172,6 @@ simple_build:
 simple_tests:
   extends: [ .tests ]
   needs: [ simple_build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /simple/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     CTEST_CONFIGURATION_TYPE: "Debug"
     WITH_COVERAGE: 1
@@ -186,18 +181,10 @@ simple_tests:
 
 release_build:
   extends: [ .build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /release/ && ( $WHAT=='$WHAT' || $WHAT==null )
-  variables:
-    CMAKE_INTERPROCEDURAL_OPTIMIZATION: 0
 
 release_tests:
   extends: [ .tests ]
   needs: [ release_build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /simple/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
     NO_BUILD: 1
@@ -206,9 +193,6 @@ release_tests:
 
 win_build:
   extends: [ .build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /windows/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     DISTR: windows
     arch: x64
@@ -231,9 +215,6 @@ win_build:
 win_tests:
   stage: ubertests
   needs: [ win_build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /windows/ && ( $WHAT=='$WHAT' || $WHAT==null )
   tags:
     - windev19
   variables:
@@ -260,13 +241,22 @@ win_tests:
   cache: { }
 
 
+# ==================== Just build arm64 ======================
+
+build_arm:
+  extends: [ .build ]
+  variables:
+    arch: aarch64
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+  cache:
+    key: $DISTR$arch
+
 # ==================== Just build FreeBSD 13 ======================
 
 build_bsd:
   extends: [ .build ]
-  rules:
-    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && ( $WHAT=='$WHAT' || $WHAT==null )
-    - if: $TEST =~ /freebsd/ && ( $WHAT=='$WHAT' || $WHAT==null )
   variables:
     DISTR: freebsd13
     boost: none
@@ -275,16 +265,12 @@ build_bsd:
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
   cache:
     key: $DISTR$arch
-  retry: 1
 
 # ==================== Publish (push) pipeline results ======================
 
 # build and upload on regular commits
 convert_win_junit:
   stage: publish
-  rules:
-    - if: ( $WHAT=='$WHAT' || $WHAT==null )
-      when: always
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/ubertests_public:3201
@@ -319,12 +305,6 @@ check_docs_examples:
 
 deploy_hook:
   stage: hooks
-  variables:
-    WHAT: $WHAT
-    REPO_NAME: $REPO_NAME
-  rules:
-    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
-      when: on_success
   trigger:
     include: dist/gitlab-release.yml
   needs:
@@ -334,27 +314,5 @@ deploy_hook:
       artifacts: false
     - job: release_tests
       artifacts: false
-
-# ==================== Manually redirect to our site ======================
-
-.pages:
-  stage: routines
-  needs: [ ]
-  rules:
-    - when: manual
-      allow_failure: true
-  tags:
-    - docker
-  variables:
-    GIT_STRATEGY: none
-    REDIR_URL: "https://manual.manticoresearch.com/dev/"
-  script:
-    - mkdir .public
-    - cd .public
-    - echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content = '0; url = $REDIR_URL' /></head></html>" >> index.html
-    - cd -
-    - mv .public public
-  artifacts:
-    paths:
-      - public
-  cache: { }
+    - job: build_arm
+      artifacts: false

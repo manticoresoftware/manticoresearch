@@ -14,13 +14,17 @@
 #include "networking_daemon.h"
 
 #define LOG_LEVEL_MULTIINFO false
-#define LOG_LEVEL_TIMERCB ( LOG_LEVEL_MULTIINFO & false )
+#define LOG_LEVEL_TIMERCB ( LOG_LEVEL_MULTIINFO && false )
 #define LOG_LEVEL_CULRSOCKET false
 #define LOG_LEVEL_CURLEASY false
 #define LOG_LEVEL_CB false
 
 #define CURL_VERBOSE false
+#define CURL_VERBOSE_CB ( CURL_VERBOSE && false )
 #define CURL_PROGRESS false
+
+/// usually DEBUG, but can be WARNING for easier bug investigations
+#define LDEBUG DEBUG
 
 /// logging helpers
 #define LOG_COMPONENT_FUNCLINE __func__ << " @ " << __LINE__ << " "
@@ -32,35 +36,35 @@
 #define MULTI_LOG( LEVEL ) LOGMSG ( LEVEL, MULTIINFO, CURLMULTI )
 #define MULTI_INFO MULTI_LOG ( INFO )
 #define MULTI_WARN MULTI_LOG ( WARNING )
-#define MULTI_DEBUG MULTI_LOG ( DEBUG )
+#define MULTI_DEBUG MULTI_LOG ( LDEBUG )
 
 // used in CurlEasy functions
 #define LOG_COMPONENT_CONN "CurlConn_t::" << LOG_COMPONENT_FUNCLINE << this << "(" << m_pCurlEasy << ") " << "(" << m_sUrl << ") "
 #define CONN_LOG( LEVEL ) LOGMSG ( LEVEL, CURLEASY, CONN )
 #define CONN_INFO CONN_LOG ( INFO )
 #define CONN_WARN CONN_LOG ( WARNING )
-#define CONN_DEBUG CONN_LOG ( DEBUG )
+#define CONN_DEBUG CONN_LOG ( LDEBUG )
 
 // used in socket functions
 #define LOG_COMPONENT_SOCKET "CurlSocket_t::" << LOG_COMPONENT_FUNCLINE << this << " (refs " << GetRefcount() << ", sock " << m_iSock << ") "
 #define SOCKET_LOG( LEVEL ) LOGMSG ( LEVEL, CULRSOCKET, SOCKET )
 #define SOCKET_INFO SOCKET_LOG ( INFO )
 #define SOCKET_WARN SOCKET_LOG ( WARNING )
-#define SOCKET_DEBUG SOCKET_LOG ( DEBUG )
+#define SOCKET_DEBUG SOCKET_LOG ( LDEBUG )
 
 // used in timer cb
 #define LOG_COMPONENT_TIMER LOG_COMPONENT_CURLMULTI << STime() << " "
 #define TIMER_LOG( LEVEL ) LOGMSG ( LEVEL, TIMERCB, TIMER )
 #define TIMER_INFO TIMER_LOG ( INFO )
 #define TIMER_WARNING TIMER_LOG ( WARNING )
-#define TIMER_DEBUG TIMER_LOG ( DEBUG )
+#define TIMER_DEBUG TIMER_LOG ( LDEBUG )
 
 // used in static cbacks, one param must be called 'handle'
 #define LOG_COMPONENT_CURLCB LOG_COMPONENT_FUNCLINE << handle << " "
 #define CURLCB_LOG( LEVEL ) LOGMSG ( LEVEL, CB, CURLCB )
 #define CB_INFO CURLCB_LOG ( INFO )
 #define CB_WARN CURLCB_LOG ( WARN )
-#define CB_DEBUG CURLCB_LOG ( DEBUG )
+#define CB_DEBUG CURLCB_LOG ( LDEBUG )
 
 #if WITH_CURL
 
@@ -177,160 +181,33 @@ inline static const char* CurlPollName ( int iWhat )
 	return iWhat<sizeof(WhatStrs) ? WhatStrs[iWhat] : "UNKNOWN";
 }
 
-inline static const char* CurlInfoType ( int iType )
-{
-	const char* InfotypeStrs[] = { "CURLINFO_TEXT", "CURLINFO_HEADER_IN", "CURLINFO_HEADER_OUT", "CURLINFO_DATA_IN", "CURLINFO_DATA_OUT", "CURLINFO_SSL_DATA_IN", "CURLINFO_SSL_DATA_OUT", "CURLINFO_END" };
-	return iType < sizeof ( InfotypeStrs ) ? InfotypeStrs[iType] : "UNKNOWN";
-}
-
-Threads::SchedRole CurlStrand();
-
-struct CurlSocket_t final : public ISphNetAction
-{
-	CSphRefcountedPtr<CSphNetLoop> m_pNetLoop;
-	int m_iNotifiedCurlEvents = CURL_POLL_NONE;
-	int m_iLastEngaged = CURL_POLL_NONE;
-
-protected:
-	~CurlSocket_t() final
-	{
-		SOCKET_INFO;
-	}
-
-public:
-	explicit CurlSocket_t ( int iSock )
-		: ISphNetAction( iSock )
-	{
-		auto pNetLoop = GetAvailableNetLoop();
-		SafeAddRef ( pNetLoop );
-		m_pNetLoop = pNetLoop;
-		SOCKET_INFO;
-	}
-
-	void Process()
-	{
-		int iCurlEvents = CURL_POLL_NONE;
-		if ( CheckSocketError() || m_uGotEvents == IS_TIMEOUT ) // real socket error
-		{
-			iCurlEvents = CURL_POLL_REMOVE;
-		} else
-		{
-			bool bRead = m_uGotEvents & NetPollEvent_t::IS_READ;
-			bool bWrite = m_uGotEvents & NetPollEvent_t::IS_WRITE;
-			if ( bRead && bWrite )
-				iCurlEvents = CURL_POLL_INOUT;
-			else if ( bRead )
-				iCurlEvents = CURL_POLL_IN;
-			else if ( bWrite )
-				iCurlEvents = CURL_POLL_OUT;
-			else
-				iCurlEvents = CURL_POLL_NONE;
-		}
-
-		NotifyCurl ( iCurlEvents );
-	}
-
-	void NotifyCurl ( int iCurlEvents );
-	void WipeFromMulti() REQUIRES ( CurlStrand() );
-
-	void CurlNotified() REQUIRES ( CurlStrand() )
-	{
-		SOCKET_DEBUG;
-		m_iNotifiedCurlEvents = CURL_POLL_NONE;
-		if ( m_iLastEngaged != CURL_POLL_REMOVE )
-			Engage ( m_iLastEngaged, false );
-	}
-
-	void NetLoopDestroying() final
-	{
-		Release();
-	}
-
-	void Remove() REQUIRES ( CurlStrand() )
-	{
-		SOCKET_INFO;
-		m_iLastEngaged = CURL_POLL_REMOVE;
-		m_uIOChange = NetPollEvent_t::SET_NONE;
-		m_pNetLoop->AddAction ( this );
-		WipeFromMulti();
-		Release();
-	}
-
-	void Engage (int iCurlWhat, bool bExternal=true ) REQUIRES ( CurlStrand() )
-	{
-		SOCKET_DEBUG << ( bExternal ? "external" : "internal" ) << " -> " << CurlPollName ( iCurlWhat );
-		m_iLastEngaged = iCurlWhat;
-		m_uIOChange = NetPollEvent_t::SET_ONESHOT;
-		switch ( iCurlWhat )
-		{
-		case CURL_POLL_IN : m_uIOChange |= NetPollEvent_t::SET_READ; break;
-		case CURL_POLL_INOUT: m_uIOChange |= NetPollEvent_t::SET_RW; break;
-		case CURL_POLL_OUT: m_uIOChange |= NetPollEvent_t::SET_WRITE; break;
-		case CURL_POLL_REMOVE: return Remove();
-		default: break;
-		}
-		m_pNetLoop->AddAction ( this );
-	}
-};
-
+// forward def
+class CurlSocket_c;
 
 // Common curl for all connections
 class CurlMulti_c
 {
-public:
+private:
 	CURLM* m_pCurlMulti;
 	Threads::RoledSchedulerSharedPtr_t m_tStrand;
 	MiniTimer_c m_tTimer;
+	static bool m_bInitialized;
 
-	void WriteSocketCookie ( curl_socket_t tCurlSocket, void* pCookie=nullptr ) const REQUIRES ( CurlStrand() )
-	{
-		auto x = sph_curl_multi_assign ( m_pCurlMulti, tCurlSocket, pCookie );
-		MULTI_INFO << "curl_multi_assign returned " << x;
-	}
+	CurlSocket_c* MakeAsyncSocket ( curl_socket_t tCurlSocket ) const;
 
-	CurlSocket_t* MakeAsyncSocket ( curl_socket_t tCurlSocket ) const
-	{
-		MULTI_INFO << "called with sock " << tCurlSocket;
-		auto pSocket = new CurlSocket_t ( tCurlSocket );
+	int CmSocketCb ( curl_socket_t tCurlSocket, int iWhat, void* pSocketData ) const REQUIRES ( CurlStrand() );
 
-		Threads::ScopedScheduler_c tSerialFiber { CurlStrand() };
-		WriteSocketCookie ( tCurlSocket, reinterpret_cast<void*> ( pSocket ) );
-		return pSocket;
-	}
-
-	int CmSocketCb ( curl_socket_t tCurlSocket, int iWhat, void* pSocketData ) const REQUIRES ( CurlStrand() ) NO_THREAD_SAFETY_ANALYSIS
-	{
-		MULTI_INFO << "called with sock " << tCurlSocket << " for " << CurlPollName(iWhat) << "(" << iWhat << "), data " << pSocketData;
-
-		auto* pAsyncSocket = pSocketData ? ( CurlSocket_t* ) pSocketData : MakeAsyncSocket ( tCurlSocket );
-		switch ( iWhat )
-		{
-		case CURL_POLL_REMOVE:
-		case CURL_POLL_IN:
-		case CURL_POLL_OUT:
-		case CURL_POLL_INOUT:
-			pAsyncSocket->Engage ( iWhat );
-
-		default: break;
-		}
-
-		return 0;
-	}
-
-	void CheckCompleted ( curl_socket_t tCurlSocket, int iWhat) REQUIRES ( CurlStrand() );
-
-	void StrandCheckCompleted ( curl_socket_t tCurlSocket, int iWhat )
+	void StrandSocketAction ( curl_socket_t tCurlSocket, int iWhat ) const
 	{
 		Threads::Coro::Go ( [this, tCurlSocket, iWhat]() REQUIRES ( CurlStrand() ) {
-			CheckCompleted ( tCurlSocket, iWhat );
+			SocketAction ( tCurlSocket, iWhat );
 		}, CurlStrand() );
 	}
 
-	void CheckTimeouts(bool bPrint = true)
+	void CheckTimeouts() const
 	{
-		if ( bPrint )
-			TIMER_DEBUG;
-		StrandCheckCompleted ( CURL_SOCKET_TIMEOUT, 0 );
+		TIMER_DEBUG;
+		StrandSocketAction ( CURL_SOCKET_TIMEOUT, 0 );
 	}
 
 	int CmTimerCb ( long iTimeoutMS ) REQUIRES ( CurlStrand() )
@@ -343,7 +220,7 @@ public:
 		else if ( iTimeoutMS == 0 )
 		{
 			TIMER_DEBUG << "immediate check";
-			StrandCheckCompleted( CURL_SOCKET_TIMEOUT, 0 );
+			StrandSocketAction ( CURL_SOCKET_TIMEOUT, 0 );
 		} else
 		{
 			auto iEngaged = m_tTimer.Engage ( iTimeoutMS == 1 ? 2 : iTimeoutMS ); // add 1MS jitter
@@ -368,7 +245,7 @@ public:
 
 public:
 	CurlMulti_c()
-		: m_tTimer { "SleepMsec", [this]() { CheckTimeouts(); } }
+		: m_tTimer { "CurlMulti", [this] { CheckTimeouts(); } }
 	{
 		sph_curl_global_init ( CURL_GLOBAL_DEFAULT );
 		m_pCurlMulti = sph_curl_multi_init();
@@ -381,27 +258,52 @@ public:
 		sph_curl_multi_setopt ( m_pCurlMulti, CURLMOPT_TIMERFUNCTION, &CmTimerCbJump );
 		sph_curl_multi_setopt ( m_pCurlMulti, CURLMOPT_TIMERDATA, this );
 
-#if LIBCURL_VERSION_NUM>=0x072B00 // CURLPIPE_MULTIPLEX
-		// for CURLOPT_PIPEWAIT to work (m.b. no more need as it is default behaviour)
-		sph_curl_multi_setopt ( m_pCurlMulti, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX );
-#endif
-
-		m_tStrand = MakeAloneScheduler ( GlobalWorkPool(), "serial" );
+		m_tStrand = MakeAloneScheduler ( GlobalWorkPool(), "curl_serial" );
+		m_bInitialized = true;
 		MULTI_INFO;
 	}
 
 	~CurlMulti_c()
 	{
-		sph_curl_multi_cleanup ( m_pCurlMulti );
-		sph_curl_global_cleanup();
-		MULTI_INFO;
+		Deinit();
 	}
+
+	void WriteSocketCookie ( curl_socket_t tCurlSocket, void* pCookie ) const REQUIRES ( CurlStrand() )
+	{
+		auto x = sph_curl_multi_assign ( m_pCurlMulti, tCurlSocket, pCookie );
+		MULTI_INFO << "curl_multi_assign for socket " << tCurlSocket << ", cookie " << pCookie << " returned " << x;
+	}
+
+	void SocketAction ( curl_socket_t tCurlSocket, int iWhat ) const REQUIRES ( CurlStrand() );
 
 	Threads::SchedRole CurlStrand() const RETURN_CAPABILITY ( m_tStrand )
 	{
 		return m_tStrand;
 	}
+
+	CURLM* GetMultiPtr() const
+	{
+		return m_pCurlMulti;
+	}
+
+	inline static bool IsInitialized()
+	{
+		return m_bInitialized;
+	}
+
+	void Deinit()
+	{
+		MULTI_INFO;
+		if ( !m_bInitialized )
+			return;
+		sph_curl_multi_cleanup ( m_pCurlMulti );
+		sph_curl_global_cleanup();
+		m_bInitialized = false;
+		MULTI_INFO;
+	}
 };
+
+bool CurlMulti_c::m_bInitialized = false;
 
 CurlMulti_c& CurlMulti()
 {
@@ -414,77 +316,157 @@ Threads::SchedRole CurlStrand() RETURN_CAPABILITY ( CurlMulti().CurlStrand() )
 	return CurlMulti().CurlStrand();
 }
 
+// wrapper over curl socket.
+// Notice, that curl manages connections itself, we don't open/accept anything here, but just provide async io.
+class CurlSocket_c final: public ISphNetAction
+{
+	const CurlMulti_c* m_pCurlMulti;
+	CSphRefcountedPtr<CSphNetLoop> m_pNetLoop;
+	int m_iNotifiedCurlEvents = CURL_POLL_NONE;
+	int m_iLastEngaged = CURL_POLL_NONE;
+
+protected:
+	~CurlSocket_c() final
+	{
+		SOCKET_INFO;
+	}
+
+public:
+	CurlSocket_c ( int iSock, const CurlMulti_c* pOwner )
+		: ISphNetAction ( iSock )
+		, m_pCurlMulti ( pOwner )
+	{
+		assert ( m_pCurlMulti );
+		auto pNetLoop = GetAvailableNetLoop();
+		SafeAddRef ( pNetLoop );
+		m_pNetLoop = pNetLoop;
+		SOCKET_INFO;
+	}
+
+	void Process() final
+	{
+		int iCurlEvents = CURL_POLL_NONE;
+		if ( CheckSocketError() || m_uGotEvents == IS_TIMEOUT ) // real socket error
+		{
+			iCurlEvents = CURL_POLL_REMOVE;
+		} else
+		{
+			bool bRead = m_uGotEvents & NetPollEvent_t::IS_READ;
+			bool bWrite = m_uGotEvents & NetPollEvent_t::IS_WRITE;
+			if ( bRead && bWrite )
+				iCurlEvents = CURL_POLL_INOUT;
+			else if ( bRead )
+				iCurlEvents = CURL_POLL_IN;
+			else if ( bWrite )
+				iCurlEvents = CURL_POLL_OUT;
+			else
+				iCurlEvents = CURL_POLL_NONE;
+		}
+
+		NotifyCurl ( iCurlEvents );
+	}
+
+	void NetLoopDestroying() final
+	{
+		Release();
+	}
+
+public:
+	void Engage ( int iCurlWhat, bool bExternal = true ) REQUIRES ( m_pCurlMulti->CurlStrand() )
+	{
+		SOCKET_DEBUG << ( bExternal ? "external" : "internal" ) << " -> " << CurlPollName ( iCurlWhat );
+		m_iLastEngaged = iCurlWhat;
+		m_uIOChange = NetPollEvent_t::SET_ONESHOT;
+		switch ( iCurlWhat )
+		{
+		case CURL_POLL_IN: m_uIOChange |= NetPollEvent_t::SET_READ; break;
+		case CURL_POLL_INOUT: m_uIOChange |= NetPollEvent_t::SET_RW; break;
+		case CURL_POLL_OUT: m_uIOChange |= NetPollEvent_t::SET_WRITE; break;
+		case CURL_POLL_REMOVE: return Remove();
+		default: break;
+		}
+		m_pNetLoop->AddAction ( this );
+	}
+
+private:
+	void NotifyCurl ( int iCurlEvents )
+	{
+		if ( m_iNotifiedCurlEvents == iCurlEvents )
+			return;
+
+		SOCKET_DEBUG << "got events " << m_uGotEvents << ", " << CurlPollName ( iCurlEvents );
+		m_iNotifiedCurlEvents = iCurlEvents;
+		AddRef();
+		Threads::Coro::Go ( [this, iCurlEvents]() REQUIRES ( m_pCurlMulti->CurlStrand() ) {
+			CSphRefcountedPtr<ISphNetAction> pWorkKeeper { this };
+			m_pCurlMulti->SocketAction ( m_iSock, iCurlEvents );
+			CurlNotified();
+		},
+			m_pCurlMulti->CurlStrand() );
+	}
+
+	void CurlNotified() REQUIRES ( m_pCurlMulti->CurlStrand() )
+	{
+		SOCKET_DEBUG;
+		m_iNotifiedCurlEvents = CURL_POLL_NONE;
+		if ( m_iLastEngaged != CURL_POLL_REMOVE )
+			Engage ( m_iLastEngaged, false );
+	}
+
+	void Remove() REQUIRES ( m_pCurlMulti->CurlStrand() )
+	{
+		SOCKET_INFO;
+		m_iLastEngaged = CURL_POLL_REMOVE;
+		m_uIOChange = NetPollEvent_t::SET_NONE;
+		m_pNetLoop->AddAction ( this );
+		m_pCurlMulti->WriteSocketCookie ( m_iSock, nullptr );
+		Release();
+	}
+};
+
+#ifdef CURLOPT_XFERINFOFUNCTION
+static int ProgressCb ( void* handle, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow )
+{
+	auto* pConn = (CurlConn_t*)handle;
+	CB_DEBUG << ": " << pConn->m_sUrl
+			 << " d (" << dlnow << "/" << dltotal << ")"
+			 << " u (" << ulnow << "/" << ultotal << ")";
+	return 0;
+}
+#endif
+
+#if CURL_VERBOSE_CB
+inline static const char* CurlInfoType ( int iType )
+{
+	const char* InfotypeStrs[] = { "CURLINFO_TEXT", "CURLINFO_HEADER_IN", "CURLINFO_HEADER_OUT", "CURLINFO_DATA_IN", "CURLINFO_DATA_OUT", "CURLINFO_SSL_DATA_IN", "CURLINFO_SSL_DATA_OUT", "CURLINFO_END" };
+	return iType < sizeof ( InfotypeStrs ) ? InfotypeStrs[iType] : "UNKNOWN";
+}
+
+static int DebugCbJump ( CURL* handle, curl_infotype type, char* data, size_t size, void* pUserData )
+{
+	CB_INFO << "chunk " << CurlInfoType ( type ) << " with " << size << " bytes.";
+	return 0;
+}
+#endif
+
+using CurlConnListHook_t = boost::intrusive::slist_member_hook<>;
+
 struct CurlConn_t
 {
 	CURL*			m_pCurlEasy;
+	CurlMulti_c*	m_pCurlMulti = nullptr;
 	CSphString		m_sUrl;
 	char			m_sError[CURL_ERROR_SIZE];
 	CURLcode		m_uReturnCode = CURLE_OK;
 	CSphVector<BYTE> m_dData;
 	Threads::Coro::Waker_c m_tWaker;
-
-	// fixme! That is ad-hoc and should not work this way
-	// we never wait something from curl, because it has no execution thread itself
-
-	static bool CheckShutdown ( void * handle )
-	{
-		if ( sphInterrupted() )
-		{
-			const char * sUrl = "";
-			auto * pConn = (CurlConn_t *)handle;
-			if ( pConn )
-				sUrl = pConn->m_sUrl.cstr();
-			CB_DEBUG << " exit on shutdown: " << pConn->m_sUrl;
-
-			return true;
-		} else
-		{
-			return false;
-		}
-	}
-
-	static void LogProgress( void * handle, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow )
-	{
-#if CURL_PROGRESS
-		auto * pConn = (CurlConn_t *)handle;
-		if ( pConn )
-		{
-			CB_DEBUG << ": " << pConn->m_sUrl
-					<< " d (" << dlnow << "/" << dltotal << ")"
-					<< " u (" << ulnow << "/" << ultotal << ")";
-		}
-#endif
-	}
-
-	static int ProgressCbv29 ( void * handle, double dltotal, double dlnow, double ultotal, double ulnow )
-	{
-		if ( CheckShutdown ( handle ) )
-			return -1;
-
-		LogProgress ( handle, dltotal, dlnow, ultotal, ulnow );
-		return 0;
-	}
-
-	static int ProgressCb ( void * handle, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow )
-	{
-		if ( CheckShutdown ( handle ) )
-			return -1;
-
-		LogProgress ( handle, dltotal, dlnow, ultotal, ulnow );
-		return 0;
-	}
+	CurlConnListHook_t	m_tHook;
 
 	int WriteCb ( ByteBlob_t dData )
 	{
 		CONN_DEBUG << "received " << dData.second << " bytes";
 		m_dData.Append(dData);
 		return dData.second;
-	}
-
-	int DebugCb ( CURL* handle, curl_infotype type, char* data, size_t size )
-	{
-		CB_INFO << "chunk " << CurlInfoType(type) << " with " << size << " bytes.";
-		return 0;
 	}
 
 	static size_t WriteCbJump ( void* pData, size_t tSize, size_t nItems, void* pUserData )
@@ -494,79 +476,52 @@ struct CurlConn_t
 		return pConn->WriteCb ( { (const BYTE*)pData, tSize * nItems } );
 	}
 
-	static int DebugCbJump ( CURL* handle, curl_infotype type, char* data, size_t size, void* pUserData )
+	template<typename TPARAM>
+	inline void SetCurlOpt ( CURLoption eOpt, TPARAM tParam ) const
 	{
-		auto pConn = (CurlConn_t*)pUserData;
-		return pConn->DebugCb ( handle, type, data, size );
+		sph_curl_easy_setopt ( m_pCurlEasy, eOpt, tParam );
 	}
 
-	static void DoneCb ( CURLMsg* pMsg )
-	{
-		assert ( pMsg->msg == CURLMSG_DONE );
-		auto pEasy = pMsg->easy_handle;
-		CurlConn_t* pConn;
-		sph_curl_easy_getinfo ( pEasy, CURLINFO_PRIVATE, &pConn );
-		pConn->Done ( pMsg->data.result );
-	}
-
-	explicit CurlConn_t ( CSphString sUrl, Threads::Coro::Worker_c* pWorker ) REQUIRES ( CurlStrand() )
+	CurlConn_t ( CSphString sUrl, Threads::Coro::Worker_c* pWorker ) REQUIRES ( CurlStrand() )
 		: m_sUrl { std::move(sUrl) }
 		, m_tWaker { Threads::CreateWaker ( pWorker ) }
 	{
 		m_pCurlEasy = sph_curl_easy_init();
 
 		// basic options from customer
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_URL, m_sUrl.cstr() );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_FOLLOWLOCATION, 1 );
+		SetCurlOpt ( CURLOPT_URL, m_sUrl.cstr() );
+		SetCurlOpt ( CURLOPT_FOLLOWLOCATION, 1 );
 
 		// extra service options
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_NOSIGNAL, 1 );
-#if LIBCURL_VERSION_NUM>=0x072B00 //CURLOPT_PIPEWAIT
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_PIPEWAIT, 1 );
-#endif
+		SetCurlOpt ( CURLOPT_NOSIGNAL, 1 );
 
 		// options we absolutely NEED
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_WRITEFUNCTION, WriteCbJump );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_WRITEDATA, this );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_ERRORBUFFER, m_sError );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_PRIVATE, this ); // to use via CURLINFO_PRIVATE from curl_easy_getinfo
+		SetCurlOpt ( CURLOPT_WRITEFUNCTION, WriteCbJump );
+		SetCurlOpt ( CURLOPT_WRITEDATA, this );
+		SetCurlOpt ( CURLOPT_ERRORBUFFER, m_sError );
+		SetCurlOpt ( CURLOPT_PRIVATE, this ); // to use via CURLINFO_PRIVATE from curl_easy_getinfo
 
 #if CURL_VERBOSE
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_DEBUGFUNCTION, DebugCbJump );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_DEBUGDATA, this );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_VERBOSE, 1 );
+		SetCurlOpt ( CURLOPT_VERBOSE, 1 );
+#if CURL_VERBOSE_CB
+		SetCurlOpt ( CURLOPT_DEBUGFUNCTION, DebugCbJump );
+		SetCurlOpt ( CURLOPT_DEBUGDATA, this );
+#endif
 #endif
 
-#if LIBCURL_VERSION_NUM>=0x072000 //CURLOPT_XFERINFOFUNCTION vs CURLOPT_PROGRESSFUNCTION
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_NOPROGRESS, 0 );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_XFERINFOFUNCTION, ProgressCb );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_XFERINFODATA, this );
-#else
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_NOPROGRESS, 0 );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_PROGRESSFUNCTION, ProgressCbv29 );
-		sph_curl_easy_setopt ( m_pCurlEasy, CURLOPT_PROGRESSDATA, this );
+#if CURL_PROGRESS
+		SetCurlOpt ( CURLOPT_NOPROGRESS, 0 );
+#ifdef CURLOPT_XFERINFOFUNCTION
+		SetCurlOpt ( CURLOPT_XFERINFOFUNCTION, ProgressCb );
+#endif
+#ifdef CURLOPT_XFERINFODATA
+		SetCurlOpt ( CURLOPT_XFERINFODATA, this );
+#endif
 #endif
 	}
 
-	inline void SetCurlOpt ( CURLoption eOpt, intptr_t tParam )
-	{
-		sph_curl_easy_setopt ( m_pCurlEasy, eOpt, tParam );
-	}
-
-	void RunQuery()
-	{
-		CONN_INFO << "Add to multi " << &CurlMulti() << " for " << m_sUrl;
-		auto iRes = sph_curl_multi_add_handle ( CurlMulti().m_pCurlMulti, m_pCurlEasy );
-		CONN_INFO << "Add complete -> " << iRes;
-	}
-
-	void Done ( CURLcode uResult )
-	{
-		m_uReturnCode = uResult;
-		CONN_INFO << "DONE: (" << uResult << ") " << m_sError;
-		sph_curl_multi_remove_handle ( CurlMulti().m_pCurlMulti, m_pCurlEasy );
-		m_tWaker.Wake ( true );
-	}
+	void RunQuery() REQUIRES ( CurlStrand() );
+	void Done ( CURLcode uResult ) REQUIRES ( CurlStrand() );
 
 	~CurlConn_t()
 	{
@@ -575,7 +530,48 @@ struct CurlConn_t
 	}
 };
 
-void CurlMulti_c::CheckCompleted ( curl_socket_t tCurlSocket, int iWhat ) REQUIRES ( CurlStrand() )
+static bool operator== ( const CurlConn_t& tA, const CurlConn_t& tB ) noexcept
+{
+	return tA.m_pCurlEasy == tB.m_pCurlEasy;
+}
+
+using CurlConnList_t = boost::intrusive::slist<CurlConn_t,
+	boost::intrusive::member_hook<CurlConn_t, CurlConnListHook_t, &CurlConn_t::m_tHook>,
+	boost::intrusive::constant_time_size<false>,
+	boost::intrusive::cache_last<false>>;
+
+CurlConnList_t g_tCurlConnections GUARDED_BY ( CurlStrand() );
+
+void CurlConn_t::RunQuery() REQUIRES ( CurlStrand() )
+{
+	m_pCurlMulti = &CurlMulti();
+	CONN_INFO << "Add to multi " << m_pCurlMulti << " for " << m_sUrl;
+	g_tCurlConnections.push_front ( *this );
+	auto iRes = sph_curl_multi_add_handle ( m_pCurlMulti->GetMultiPtr(), m_pCurlEasy );
+	CONN_INFO << "Add complete -> " << iRes;
+}
+
+void CurlConn_t::Done ( CURLcode uResult ) REQUIRES ( CurlStrand() )
+{
+	g_tCurlConnections.remove ( *this ); // this op requires operator==
+	assert ( m_pCurlMulti );
+	m_uReturnCode = uResult;
+	CONN_INFO << "DONE: (" << uResult << ") " << m_sError;
+	sph_curl_multi_remove_handle ( m_pCurlMulti->GetMultiPtr(), m_pCurlEasy );
+	m_pCurlMulti = nullptr;
+	m_tWaker.Wake ( true );
+}
+
+static void CurlConnectionIsDone ( CURLMsg* pMsg ) REQUIRES ( CurlStrand() )
+{
+	assert ( pMsg->msg == CURLMSG_DONE );
+	auto pEasy = pMsg->easy_handle;
+	CurlConn_t* pConn;
+	sph_curl_easy_getinfo ( pEasy, CURLINFO_PRIVATE, &pConn );
+	pConn->Done ( pMsg->data.result );
+}
+
+void CurlMulti_c::SocketAction ( curl_socket_t tCurlSocket, int iWhat ) const REQUIRES ( CurlStrand() ) NO_THREAD_SAFETY_ANALYSIS
 {
 	MULTI_DEBUG << "invoke curl_multi_socket_action with socket " << tCurlSocket << ", " << CurlPollName(iWhat);
 	int iLeft = 0;
@@ -590,30 +586,37 @@ void CurlMulti_c::CheckCompleted ( curl_socket_t tCurlSocket, int iWhat ) REQUIR
 			break;
 
 		if ( pMsg->msg == CURLMSG_DONE )
-			CurlConn_t::DoneCb ( pMsg );
+			CurlConnectionIsDone ( pMsg );
 	}
 }
 
-void CurlSocket_t::NotifyCurl ( int iCurlEvents )
+CurlSocket_c* CurlMulti_c::MakeAsyncSocket ( curl_socket_t tCurlSocket ) const
 {
-	if ( m_iNotifiedCurlEvents == iCurlEvents )
-		return;
+	MULTI_INFO << "called with sock " << tCurlSocket;
+	auto pSocket = new CurlSocket_c ( tCurlSocket, this );
 
-	SOCKET_DEBUG << "got events " << m_uGotEvents << ", " << CurlPollName(iCurlEvents);
-	m_iNotifiedCurlEvents = iCurlEvents;
-	AddRef();
-	Threads::Coro::Go ( [this, iCurlEvents]() REQUIRES ( CurlStrand() ) {
-		CSphRefcountedPtr<ISphNetAction> pWorkKeeper { this };
-
-		CurlMulti().CheckCompleted ( m_iSock, iCurlEvents );
-		CurlNotified();
-
-	}, CurlStrand() );
+	Threads::ScopedScheduler_c tSerialFiber { CurlStrand() };
+	WriteSocketCookie ( tCurlSocket, reinterpret_cast<void*> ( pSocket ) );
+	return pSocket;
 }
 
-void CurlSocket_t::WipeFromMulti() REQUIRES ( CurlStrand() )
+int CurlMulti_c::CmSocketCb ( curl_socket_t tCurlSocket, int iWhat, void* pSocketData ) const NO_THREAD_SAFETY_ANALYSIS
 {
-	CurlMulti().WriteSocketCookie ( m_iSock );
+	MULTI_INFO << "called with sock " << tCurlSocket << " for " << CurlPollName ( iWhat ) << "(" << iWhat << "), data " << pSocketData;
+
+	auto* pAsyncSocket = pSocketData ? (CurlSocket_c*)pSocketData : MakeAsyncSocket ( tCurlSocket );
+	switch ( iWhat )
+	{
+	case CURL_POLL_REMOVE:
+	case CURL_POLL_IN:
+	case CURL_POLL_OUT:
+	case CURL_POLL_INOUT:
+		pAsyncSocket->Engage ( iWhat );
+
+	default: break;
+	}
+
+	return 0;
 }
 
 class CurlHttpHeaders_c
@@ -632,7 +635,7 @@ public:
 		m_pHttpHeadersList = sph_curl_slist_append ( m_pHttpHeadersList, szHeader );
 	}
 
-	inline operator intptr_t() const { return (intptr_t)m_pHttpHeadersList; }
+	inline curl_slist* CurlSlist() const { return m_pHttpHeadersList; }
 };
 
 bool IsCurlAvailable()
@@ -651,26 +654,20 @@ static const char * szNoCurlMsg = CURL_LIB " not found";
 
 using CurlOpt_t = std::pair<CURLoption, intptr_t>;
 
-std::pair<bool, CSphString> InvokeCurl ( CSphString sUrl, const VecTraits_T<CurlOpt_t>& dParams, const VecTraits_T<const char *> & dHeaders )
+std::pair<bool, CSphString> InvokeCurl ( CSphString sUrl, const VecTraits_T<CurlOpt_t>& dParams )
 {
 	if ( !IsCurlAvailable() )
 		return { false, szNoCurlMsg };
 
 	using namespace Threads::Coro;
-	std::unique_ptr<CurlConn_t> pRequest;
-
-	CurlHttpHeaders_c tHeaders;
 	auto pWorker = CurrentWorker();
 
+	std::unique_ptr<CurlConn_t> pRequest;
+
 	YieldWith ( [&]() mutable {
-		Go ( [&]() mutable {
+		Go ( [&]() REQUIRES ( CurlStrand() )  mutable {
 			pRequest = std::make_unique<CurlConn_t> ( std::move ( sUrl ), pWorker );
-			for ( const auto& tParam : dParams )
-				pRequest->SetCurlOpt ( tParam.first, tParam.second );
-			for ( const char* szHeader : dHeaders )
-				tHeaders.Append ( szHeader );
-			if ( tHeaders )
-				pRequest->SetCurlOpt ( CURLOPT_HTTPHEADER, tHeaders );
+			dParams.for_each ( [&pRequest] ( const auto tParam ) { pRequest->SetCurlOpt ( tParam.first, tParam.second ); } );
 			pRequest->RunQuery();
 		},
 			CurlStrand() );
@@ -685,28 +682,45 @@ std::pair<bool, CSphString> InvokeCurl ( CSphString sUrl, const VecTraits_T<Curl
 
 CSphString FetchUrl ( const CSphString& sUrl )
 {
-	auto tResult = InvokeCurl ( sUrl, {}, {} );
-	return tResult.second;
+	CSphVector<CurlOpt_t> dCurlOpts;
+	dCurlOpts.Add ( { (CURLoption)237, 1L } ); // CURLOPT_PIPEWAIT. If not exist, will be just ignored
+	auto [bSuccess, sResult] = InvokeCurl ( sUrl, dCurlOpts );
+	return sResult;
 }
 
-std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery )
-{
-	return FetchHelperUrl ( sUrl, sQuery, {} );
-}
-
-std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<const char *> & dHeaders )
+std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<CSphString>& dHeaders )
 {
 	CSphVector<CurlOpt_t> dOptions;
 	dOptions.Add ( { CURLOPT_POST, 1 } );
 	dOptions.Add ( { CURLOPT_POSTFIELDSIZE, sQuery.second } );
 	dOptions.Add ( { CURLOPT_POSTFIELDS, (intptr_t)sQuery.first } );
-	
-	CSphFixedVector<const char*> dHeadersPost ( dHeaders.GetLength() + 1 );
-	dHeadersPost[dHeaders.GetLength()] = "Content-Type: application/json; charset=UTF-8";
-	ARRAY_FOREACH ( i, dHeaders )
-		dHeadersPost[i] = dHeaders[i];
+	dOptions.Add ( { (CURLoption)237, 1L } ); // CURLOPT_PIPEWAIT. If not exist, will be just ignored
 
-	return InvokeCurl ( std::move ( sUrl ), dOptions, dHeadersPost );
+	CurlHttpHeaders_c tHeaders;
+	dHeaders.for_each ( [&tHeaders] ( const auto& sHeader ) { tHeaders.Append ( sHeader.cstr() ); } );
+	tHeaders.Append ( "Content-Type: application/json; charset=UTF-8" );
+	dOptions.Add ( { CURLOPT_HTTPHEADER, (intptr_t)tHeaders.CurlSlist() } );
+
+	return InvokeCurl ( std::move ( sUrl ), dOptions );
+}
+
+void ShutdownCurl()
+{
+	if ( !CurlMulti_c::IsInitialized() )
+		return;
+
+	Threads::CallPlainCoroutine ( []() REQUIRES ( CurlStrand() ) {
+		if ( !CurlMulti_c::IsInitialized() )
+			return;
+		while ( !g_tCurlConnections.empty() )
+		{
+			auto& tConn = g_tCurlConnections.front();
+			strcpy ( tConn.m_sError, "Interrupted due to shutdown" );
+			tConn.Done ( CURLE_ABORTED_BY_CALLBACK );
+		}
+		CurlMulti().Deinit();
+	},
+		CurlStrand() );
 }
 
 #else // WITH_CURL
@@ -718,12 +732,8 @@ CSphString FetchUrl ( const CSphString& sUrl )
 	return szNoCurlMsg;
 }
 
-std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery )
-{
-	return { false, szNoCurlMsg };
-}
 
-std::pair<bool, CSphString> FetchHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<const char *> & dHeaders )
+std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<CSphString>& dHeaders )
 {
 	return { false, szNoCurlMsg };
 }

@@ -38,7 +38,7 @@ private:
 	static constexpr float COST_INDEX_READ_DENSE_BITMAP	= 1.5f;
 	static constexpr float COST_INDEX_READ_SPARSE		= 30.0f;
 	static constexpr float COST_INDEX_UNION_COEFF		= 4.0f;
-	static constexpr float COST_LOOKUP_READ				= 7.0f;
+	static constexpr float COST_LOOKUP_READ				= 20.0f;
 	static constexpr float COST_INDEX_ITERATOR_INIT		= 150.0f;
 
 	const CSphVector<SecondaryIndexInfo_t> &	m_dSIInfo;
@@ -60,6 +60,7 @@ private:
 	float	CalcFilterCost ( bool bFromIterator, float fDocsAfterIndexes ) const;
 	float	CalcAnalyzerCost() const;
 	float	CalcLookupCost() const;
+	float	CalcPushCost ( float fDocsAfterFilters ) const;
 	float	CalcMTCost ( float fCost ) const;
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
@@ -264,8 +265,16 @@ float CostEstimate_c::CalcLookupCost() const
 		if ( i.m_eType==SecondaryIndexType_e::LOOKUP )
 			iDocsToReadLookup += i.m_iRsetEstimate;
 
-	iDocsToReadLookup = ApplyCutoff(iDocsToReadLookup);
+	// no cutoff here since lookup reader fetches all docs and sorts them
 	return Cost_LookupRead ( iDocsToReadLookup );
+}
+
+
+float CostEstimate_c::CalcPushCost ( float fDocsAfterFilters ) const
+{
+	int64_t iDocsToPush = fDocsAfterFilters*m_tCtx.m_iTotalDocs;
+	iDocsToPush = ApplyCutoff(iDocsToPush);
+	return Cost_Push ( iDocsToPush );
 }
 
 
@@ -365,7 +374,7 @@ float CostEstimate_c::CalcQueryCost()
 		fCost += CalcIndexCost();
 
 	if ( m_tCtx.m_bCalcPushCost )
-		fCost += Cost_Push ( uint64_t(fDocsAfterFilters*m_tCtx.m_iTotalDocs) );
+		fCost += CalcPushCost(fDocsAfterFilters);
 
 	if ( !iNumIndexes && !iNumLookups ) // SI and docid lookups always run in a single thread
 		fCost = CalcMTCost(fCost);

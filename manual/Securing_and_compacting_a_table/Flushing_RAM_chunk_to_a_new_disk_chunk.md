@@ -5,7 +5,7 @@
 <!-- example flush_ramchunk -->
 
 ```sql
-FLUSH RAMCHUNK rtindex
+FLUSH RAMCHUNK rt_table
 ```
 
 `FLUSH RAMCHUNK` forcibly creates a new disk chunk in an RT table.

@@ -5,7 +5,7 @@
 <!-- example flush_rtindex -->
 
 ```sql
-FLUSH TABLE rtindex
+FLUSH TABLE rt_table
 ```
 
 `FLUSH TABLE` forcibly flushes RT table RAM chunk contents to disk.

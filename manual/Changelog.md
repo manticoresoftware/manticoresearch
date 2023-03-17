@@ -11,7 +11,6 @@
 * [gl #3363] Updated export ranker output to match `packedfactors()`
 * [Commit 2196](https://github.com/manticoresoftware/manticoresearch/commit/21966fbf) fixed wildcards at query to not be affected by ignore_chars
 * [Commit 1990](https://github.com/manticoresoftware/manticoresearch/commit/1990e350) fixed crash of daemon at federated query with aggregate
-* [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute
 
 ### Major new features
 * Query optimizer now works for fulltext queries
@@ -30,6 +29,12 @@
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
 * **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
+
+# Next maintenance release
+
+### Bugfixes
+* [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute
+* [gl #3363] Updated export ranker output to match `packedfactors()`
 
 # Version 6.0.4
 Released: March 15 2023
@@ -130,6 +135,10 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Commit bef3](https://github.com/manticoresoftware/lemmatizer-uk/commit/bef3ff0386d3ee87ec57619782100972c1122e47) Ukirainian lemmatizer path has been changed.
 * [Commit 4ae7](https://github.com/manticoresoftware/manticoresearch/commit/4ae789595329a2951e194d1191ddb3121459a560) Secondary indexes statistics has been added to [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META).
 * [Commit 2e7c](https://github.com/manticoresoftware/manticoresearch/commit/2e7c585e) JSON interface can now be easily visualized using Swagger Editor https://manual.manticoresearch.com/dev/Openapi#OpenAPI-specification.
+* **⚠️ BREAKING CHANGE**: Replication protocol has been changed. If you are running a replication cluster, then when upgrading to Manticore 5 you need to:
+  - stop all your nodes first cleanly
+  - and then start the node which was stopped last with `--new-cluster` (run tool `manticore_new_cluster` in Linux).
+  - read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 
 ### Changes related with Manticore Columnar Library
 * Refactoring of Secondary indexes integration with Columnar storage.
@@ -258,10 +267,10 @@ Released: May 18th 2022
 * New [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint for running SQL queries over HTTP even easier.
 * Faster bulk INSERT/REPLACE/DELETE via JSON over HTTP: previously you could provide multiple write commands via HTTP JSON protocol, but they were processed one by one, now they are handled as a single transaction.
 * [#720](https://github.com/manticoresoftware/manticoresearch/issues/720) [Nested filters](../Searching/Filters.md#Nested-bool-query) support in JSON protocol. Previously you couldn't code things like `a=1 and (b=2 or c=3)` in JSON: `must` (AND), `should` (OR) and `must_not` (NOT) worked only on the highest level. Now they can be nested.
-* Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in HTTP protocol. You can now use chunked transfer in your application to transfer large batches with lower resource consumption (since you don't need to calculate `Content-Length`). On the server's side Manticore now always processes incoming HTTP data in streaming fashion without waiting for the whole batch to be transferred as previously, which:
-  - decreases peak RAM consumption, which lowers a chance of OOM
-  - decreases response time (our tests showed 11% decrease for processing a 100MB batch)
-  - lets you overcome [max_packet_size](../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the largest allowed value of `max_packet_size` (128MB), e.g. 1GB at once.
+* Support for [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding) in the HTTP protocol. You can now use chunked transfer in your application to transmit large batches with reduced resource consumption (since calculating `Content-Length` is unnecessary). On the server side, Manticore now always processes incoming HTTP data in a streaming manner, without waiting for the entire batch to be transferred as before, which:
+  - reduces peak RAM usage, lowering the risk of OOM
+  - decreases response time (our tests indicated an 11% reduction for processing a 100MB batch)
+  - allows you to bypass [max_packet_size](../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
 * [#719](https://github.com/manticoresoftware/manticoresearch/issues/719) HTTP interface support of `100 Continue`: now you can transfer large batches from `curl` (including curl libraries used by various programming languages) which by default does `Expect: 100-continue` and waits some time before actually sending the batch. Previously you had to add `Expect: ` header, now it's not needed.
 
   <details>

@@ -580,3 +580,8 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [3.6.0](https://manual.manticoresearch.com/manticore-3-6-0/)
 * [4.0.2](https://manual.manticoresearch.com/manticore-4-0-2/)
 * [4.2.0](https://manual.manticoresearch.com/manticore-4-2-0/)
+* [5.0.0](https://manual.manticoresearch.com/manticore-5-0-0/)
+* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/)
+* [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/)
+* [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/)
+* [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/)

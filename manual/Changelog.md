@@ -4,7 +4,6 @@
 
 ### Bugfixes
 * [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
-* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
 * [gl #3287] Crash on possibly out of space disk
 * [Commit df32](https://github.com/manticoresoftware/manticoresearch/commit/df32f550) fixed wrong remove of field end marker
 
@@ -25,6 +24,7 @@
 * **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
 
 # Next maintenance release
+* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
 
 ### Bugfixes
 * [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute

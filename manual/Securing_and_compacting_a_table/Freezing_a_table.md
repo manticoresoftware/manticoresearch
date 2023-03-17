@@ -2,17 +2,21 @@
 
 <!-- example freeze -->
 
-`FREEZE` prepares a real-time/plain table for a safe [backup](../Securing_and_compacting_a_table/Backup_and_restore.md). In particular it:
-1. Disables table compaction. If the table is being compacted right now `FREEZE` will wait for it to finish.
-2. Flushes current RAM chunk into a disk chunk.
-3. Flushes attributes.
-4. Disables implicit operations that may change the files on disk.
-5. Displays actual list of the files belonging to the table.
+```sql
+FREEZE tbl1[, tbl2, ...]
+```
 
-Built-in tool [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md) uses `FREEZE` to guarantee data consistency. So can you if you want to make your own backup solution or need to freeze tables for whatever else reason. All you need to do is:
-1. `FREEZE` a table.
-2. Grab output of the `FREEZE` command and backup the provided files.
-3. `UNFREEZE` the table once you are done.
+`FREEZE` readies a real-time/plain table for a secure [backup](../Securing_and_compacting_a_table/Backup_and_restore.md). Specifically, it:
+1. Deactivates table compaction. If the table is currently being compacted, `FREEZE` will wait for completion.
+2. Transfers the current RAM chunk to a disk chunk.
+3. Flushes attributes.
+4. Disables implicit operations that could modify the disk files.
+5. Shows the actual file list associated with the table.
+
+The built-in tool [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md) uses `FREEZE` to ensure data consistency. You can do the same if you want to create your own backup solution or need to freeze tables for other reasons. Just follow these steps:
+1. `FREEZE` a table (or a few).
+2. Capture the output of the `FREEZE` command and back up the specified files.
+3. `UNFREEZE` the table(s) once finished.
 
 <!-- request Example -->
 ```sql
@@ -43,27 +47,32 @@ FREEZE t;
 
 <!-- end -->
 
-The column `file` provides paths to the table's files inside [data_dir](../Server_settings/Searchd.md#data_dir) of the running instance. The column `normalized` shows absolute paths of the same files. If you want to back up a table it's safe to just copy the provided files with no other preparations.
+The `file` column indicates the table's file paths within the [data_dir](../Server_settings/Searchd.md#data_dir) of the running instance. The `normalized` column displays the absolute paths for the same files. To back up a table, simply copy the provided files without additional preparation.
 
-When a table is frozen, you can't perform `UPDATE` queries on it; they will fail with the error message `index is locked now, try again later`.
+When a table is frozen, you cannot execute `UPDATE` queries; they will fail with the error message "index is locked now, try again later."
 
-Also, `DELETE` and `REPLACE` queries have some limitations while the table is frozen:
-* If `DELETE` affects a document stored in a current RAM chunk - it is allowed.
-* If `DELETE` affects a document in a disk chunk, but it was already deleted before - it is allowed.
-* If `DELETE` is going to change an actual disk chunk - it will wait until the table is unfrozen.
+Also, `DELETE` and `REPLACE` queries have some restrictions while the table is frozen:
+* If `DELETE` affects a document in the current RAM chunk - it is permitted.
+* If `DELETE` impacts a document in a disk chunk but was previously deleted - it is allowed.
+* If `DELETE` would alter an actual disk chunk - it will wait until the table is unfrozen.
 
-Manual `FLUSH` of a RAM chunk of a frozen table will report 'success', however no actual save will happen.
+Manually `FLUSH`ing a RAM chunk of a frozen table will report 'success', but no real saving will occur.
 
-`DROP`/`TRUNCATE` of a frozen table **is** allowed, since such operation is not implicit. We assume that if you truncate or drop a table - you don't need it backed up anyway, therefore it should not have been frozen in the first place.
+`DROP`/`TRUNCATE` of a frozen table **is** allowed since these operations are not implicit. We assume that if you truncate or drop a table, you don't need it backed up; therefore, it should not have been frozen initially.
 
-`INSERT` into a frozen table is supported, but also limited: new data will be stored in RAM (as usual), until `rt_mem_limit` is reached; then new insertions will wait until the table is unfrozen.
+`INSERT`ing into a frozen table is supported but limited: new data will be stored in RAM (as usual) until `rt_mem_limit` is reached; then, new insertions will wait until the table is unfrozen.
 
-If you shut down the daemon with a frozen table, it will behave as in case of a dirty shutdown (e.g. `kill -9`): new inserted data will **not** be saved in the RAM-chunk on disk, and on restart it will be restored from a binary log (if any), or lost (if binary logging is disabled).
+If you shut down the daemon with a frozen table, it will act as if it experienced a dirty shutdown (e.g., `kill -9`): newly inserted data will **not** be saved in the RAM-chunk on disk, and upon restart, it will be restored from a binary log (if any) or lost (if binary logging is disabled).
 
 # Unfreezing a table
 
 <!-- example unfreeze -->
-`UNFREEZE` re-enables previously blocked operations and restarts the internal compaction service. All the operations that are waiting for a table unfreeze get unfrozen too and finish their operations normally.
+
+```sql
+UNFREEZE tbl1[, tbl2, ...]
+```
+
+`UNFREEZE` reactivates previously blocked operations and resumes the internal compaction service. All operations waiting for a table to unfreeze will also be unfrozen and complete normally.
 
 <!-- request Example -->
 ```sql
@@ -71,3 +80,5 @@ UNFREEZE tbl;
 ```
 
 <!-- end -->
+
+<!-- proofread -->

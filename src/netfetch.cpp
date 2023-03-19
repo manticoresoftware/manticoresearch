@@ -738,6 +738,11 @@ std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, con
 	return { false, szNoCurlMsg };
 }
 
+
+void ShutdownCurl()
+{}
+
+
 bool IsCurlAvailable()
 {
 	return false;

@@ -60,6 +60,7 @@ public:
 
 	bool			Write ( bool bRemoveUnsuccessful = true );
 	bool			Fsync();
+	int64_t			GetPos() const				{ return m_iFilePos; }
 
 	bool			OpenFile ( const CSphString & sFile, CSphString & sError ) { return m_tFile.Open ( sFile, SPH_O_NEW, sError ); }
 	void			CloseFile();

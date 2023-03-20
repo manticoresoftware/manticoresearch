@@ -68,6 +68,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
 	CSphString sError;
+	bool bOk = true;
 	HttpRequestParser_c tParser;
 	CSphVector<BYTE> dResult;
 	TRACE_CONN ( "conn", "HttpServe" );
@@ -150,7 +151,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		}
 
 //		tracer.Instant ( [&tIn](StringBuilder_c& sOut) {sOut<< ",\"args\":{\"step\":"<<tIn.HasBytes()<<"}";} );
-		tParser.ProcessClientHttp ( tIn, dResult );
+		bOk = tParser.ProcessClientHttp ( tIn, dResult );
 
 		tOut.SwapData (dResult);
 		if ( !tOut.Flush () )
@@ -161,5 +162,5 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			LogNetError ( tIn.GetErrorMessage().cstr() );
 		pBuf->ResetError();
 
-	} while ( tSess.GetPersistent() );
+	} while ( tSess.GetPersistent() && bOk );
 }

@@ -1990,7 +1990,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError 
 	tErr.AddStr ( "index", szIndex );
 
 	tObj.AddItem ( "error", tErr );
-	tObj.AddInt ( "status", 500 );
+	tObj.AddInt ( "status", HttpGetStatusCodes ( SPH_HTTP_STATUS_409 ) );
 
 	return tObj;
 }

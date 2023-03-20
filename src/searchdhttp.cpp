@@ -1744,7 +1744,7 @@ public:
 		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
 
 		CSphString sResult = tResult.AsString();
-		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
+		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
 
 		return bResult;
 	}
@@ -1808,7 +1808,7 @@ public:
 
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
-		BuildReply ( tResult.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
+		BuildReply ( tResult.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
 
 		return bResult;
 	}
@@ -2076,9 +2076,9 @@ public:
 
 		tRoot.AddItem ( "items", tItems );
 		tRoot.AddBool ( "errors", !bResult );
-		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
+		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
 		HTTPINFO << "inserted  " << iInserted << " result: " << (int)bResult << ", error:" << m_sError;
-		return true;
+		return bResult;
 	}
 
 protected:
@@ -3035,7 +3035,7 @@ bool HttpHandlerEsBulk_c::Process()
 	tRoot.AddItem ( "items", tItems );
 	tRoot.AddBool ( "errors", !bOk );
 	tRoot.AddInt ( "took", 1 ); // FIXME!!! add delta
-	BuildReply ( tRoot.AsString(), ( bOk ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 ) );
+	BuildReply ( tRoot.AsString(), ( bOk ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 ) );
 
 	if ( !bOk )
 		ReportLogError ( "failed to commit", "", SPH_HTTP_STATUS_400, true );

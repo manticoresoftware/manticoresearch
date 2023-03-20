@@ -47,6 +47,22 @@ index test256
 	path			= <data_path/>/test256
 	columnar_attrs 	= id, guid
 }
+
+source src_mva
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_mva
+	sql_field_string  = guid
+	sql_attr_multi	= uint mva from field
+}
+
+index test_mva
+{
+	source 			= src_mva
+	path			= <data_path/>/test_mva
+	columnar_attrs 	= *
+}
 </config>
 
 <db_create>
@@ -56,7 +72,16 @@ CREATE TABLE `test_table` (
 );
 </db_create>
 
+<db_create>
+CREATE TABLE `test_mva` (
+  `id` int(11),
+  `guid` varchar(255),
+  `mva` varchar(255)
+);
+</db_create>
+
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_mva;</db_drop>
 
 <db_insert>insert into test_table (id,guid) values
 (  1,'constlen001'),
@@ -317,12 +342,23 @@ CREATE TABLE `test_table` (
 (256,'constlen256')
 </db_insert>
 
+<db_insert>
+insert into test_mva (id,guid,mva) values
+(  1,'constlen001',''),
+(  2,'constlen002',''),
+(  3,'constlen003',''),
+(  4,'constlen004','')
+</db_insert>
+
 <sphqueries>
 <sphinxql>select count(*) from test255</sphinxql>
 <sphinxql>select count(*) from test256</sphinxql>
 
 <sphinxql>select id,guid from test255</sphinxql>
 <sphinxql>select id,guid from test256</sphinxql>
+
+<sphinxql>desc test_mva</sphinxql>
+<sphinxql>select *, length(mva) from test_mva</sphinxql>
 
 </sphqueries>
 

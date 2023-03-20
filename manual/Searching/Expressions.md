@@ -1,40 +1,44 @@
 # Expressions in search
 
-Manticore lets you use arbitrary arithmetic expressions both via SQL and HTTP, involving attribute values, internal attributes (document ID and relevance weight), arithmetic operations, a number of built-in functions, and user-defined functions. Here’s the complete reference list for quick access.
+Manticore enables the use of arbitrary arithmetic expressions through both SQL and HTTP, incorporating attribute values, internal attributes (document ID and relevance weight), arithmetic operations, several built-in functions, and user-defined functions. Below is the complete reference list for quick access.
 
 ## Arithmetic operators
 ```sql
 +, -, *, /, %, DIV, MOD
 ```
 
-The standard arithmetic operators. Arithmetic calculations involving those can be performed in three different modes:
+Standard arithmetic operators are available. Arithmetic calculations involving these operators can be executed in three different modes:
 
-1. using single-precision, 32-bit IEEE 754 floating point values (the default), 
-2. using signed 32-bit integers
-3. using 64-bit signed integers
+1. using single-precision, 32-bit IEEE 754 floating point values (default),
+2. using signed 32-bit integers,
+3. using 64-bit signed integers.
 
-The expression parser will automatically switch to integer mode if there are no operations the result in a floating point value. Otherwise, it will use the default floating point mode. For instance, a+b will be computed using 32-bit integers if both arguments are 32-bit integers; or using 64-bit integers if both arguments are integers but one of them is 64-bit; or in floats otherwise. However, `a/b` or `sqrt(a)` will always be computed in floats, because these operations return a result of non-integer type. To avoid the first, you can either use `IDIV(a,b)` or a `DIV b` form. Also, `a*b` will not be automatically promoted to 64-bit when the arguments are 32-bit. To enforce 64-bit results, you can use [BIGINT()](../Functions/Type_casting_functions.md#BIGINT%28%29), but note that if there are non-integer operations, BIGINT() will simply be ignored.
+The expression parser automatically switches to integer mode if no operations result in a floating point value. Otherwise, it uses the default floating point mode. For example, a+b will be computed using 32-bit integers if both arguments are 32-bit integers; or using 64-bit integers if both arguments are integers but one of them is 64-bit; or in floats otherwise. However, `a/b` or `sqrt(a)` will always be computed in floats, as these operations return a non-integer result. To avoid this, you can use `IDIV(a,b)` or a `DIV b` form. Additionally, `a*b` will not automatically promote to 64-bit when arguments are 32-bit. To enforce 64-bit results, use [BIGINT()](../Functions/Type_casting_functions.md#BIGINT%28%29), but note that if non-integer operations are present, BIGINT() will simply be ignored.
 
 ## Comparison operators
 ```sql
 <, > <=, >=, =, <>
 ```
 
-Comparison operators return 1.0 when the condition is true and 0.0 otherwise. For instance, `(a=b)+3` will evaluate to 4 when attribute `a` is equal to attribute `b`, and to 3 when `a` is not. Unlike MySQL, the equality comparisons (ie. `=` and `<>` operators) introduce a small equality threshold (1e-6 by default). If the difference between compared values is within the threshold, they will be considered equal. `BETWEEN` and `IN` operators in case of multi-value attribute return true if at least one value matches the condition(same as [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)). `IN` doesn't support JSON attributes. `IS (NOT) NULL` is supported only for JSON attributes.
+The comparison operators return 1.0 when the condition is true and 0.0 otherwise. For example, `(a=b)+3` evaluates to 4 when attribute `a` is equal to attribute `b`, and to 3 when `a` is not. Unlike MySQL, the equality comparisons (i.e., `=` and `<>` operators) include a small equality threshold (1e-6 by default). If the difference between the compared values is within the threshold, they are considered equal.
+
+For string attributes, only the equality operator is supported, and using other operators will result in a syntax error.
+
+The `BETWEEN` and `IN` operators, in the case of multi-value attributes, return true if at least one value matches the condition (similar to [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)). The `IN` operator does not support JSON attributes. The `IS (NOT) NULL` operator is supported only for JSON attributes.
 
 ## Boolean operators
 ```sql
 AND, OR, NOT
 ```
 
-Boolean operators (AND, OR, NOT) behave as usual. They are left-associative and have the least priority compared to other operators. NOT has more priority than AND and OR but nevertheless less than any other operator. AND and OR have the same priority so brackets use is recommended to avoid confusion in complex expressions.
+Boolean operators (AND, OR, NOT) behave as expected. They are left-associative and have the lowest priority compared to other operators. NOT has higher priority than AND and OR but still less than any other operator. AND and OR share the same priority, so using parentheses is recommended to avoid confusion in complex expressions.
 
 ## Bitwise operators
 ```sql
 &, |
 ```
 
-These operators perform bitwise AND and OR respectively. The operands must be of an integer types.
+These operators perform bitwise AND and OR respectively. The operands must be of integer types.
 
 ## Functions:
 * [ABS()](../Functions/Mathematical_functions.md#ABS%28%29)
@@ -97,7 +101,7 @@ These operators perform bitwise AND and OR respectively. The operands must be of
 
 ## Expressions in HTTP JSON
 
-In HTTP JSON interface expressions are supported via `script_fields` and `expressions`
+In the HTTP JSON interface, expressions are supported via `script_fields` and `expressions`.
 
 ### script_fields
 
@@ -105,28 +109,28 @@ In HTTP JSON interface expressions are supported via `script_fields` and `expres
 ```json
 {
 	"index": "test",
-	"query": { 
-		"match_all": {} 
+	"query": {
+		"match_all": {}
 	}, "script_fields": {
-		"add_all": { 
-			"script": { 
-				"inline": "( gid * 10 ) | crc32(title)" 
-			} 
+		"add_all": {
+			"script": {
+				"inline": "( gid * 10 ) | crc32(title)"
+			}
 		},
-		"title_len": { 
-			"script": { 
-	   			"inline": "crc32(title)" 
-			} 
+		"title_len": {
+			"script": {
+	   			"inline": "crc32(title)"
+			}
 		}
 	}
 }
 ```
 
-In this example two expressions are created: `add_all` and `title_len`. First expression calculates `( gid * 10 ) | crc32(title)` and stores the result in the `add_all` attribute. Second expression calculates `crc32(title)` and stores the result in the `title_len` attribute.
+In this example, two expressions are created: `add_all` and `title_len`. The first expression calculates `( gid * 10 ) | crc32(title)` and stores the result in the `add_all` attribute. The second expression calculates `crc32(title)` and stores the result in the `title_len` attribute.
 
-Only `inline` expressions are supported for now. The value of `inline` property (the expression to compute) has the same syntax as SQL expressions.
+Currently, only `inline` expressions are supported. The value of the `inline` property (the expression to compute) has the same syntax as SQL expressions.
 
-The expression name can be used in filtering or sorting.
+The expression name can be utilized in filtering or sorting.
 
 
 <!-- intro -->
@@ -189,13 +193,13 @@ The expression name can be used in filtering or sorting.
 
 <!-- end -->
 
-The expression values are by default included in the `_source` array of the result set. If the source is selective (see [Source selection](../Searching/Search_results.md#Source-selection)) the expressions name can be added to the `_source` parameter in the request.
+By default, expression values are included in the `_source` array of the result set. If the source is selective (see [Source selection](../Searching/Search_results.md#Source-selection)), the expression name can be added to the `_source` parameter in the request.
 
 ### expressions
 
 <!-- example expressions -->
 
-`expressions` is an alternative to `script_fields` with a simpler syntax. Example request adds two expressions and stores the results into `add_all` and `title_len` attributes.
+`expressions` is an alternative to `script_fields` with a simpler syntax. The example request adds two expressions and stores the results into `add_all` and `title_len` attributes.
 
 <!-- request expressions -->
 ```json
@@ -211,3 +215,5 @@ The expression values are by default included in the `_source` array of the resu
 ```
 
 <!-- end -->
+
+<!-- proofread -->

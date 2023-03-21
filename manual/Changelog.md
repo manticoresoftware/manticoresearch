@@ -6,6 +6,7 @@
 * [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
 * [gl #3287] Crash on possibly out of space disk
 * [Commit df32](https://github.com/manticoresoftware/manticoresearch/commit/df32f550) fixed wrong remove of field end marker
+* [Commit 6fbc](https://github.com/manticoresoftware/manticoresearch/commit/6fbc4189) fixed json range filter to work with int64 values
 
 ### Major new features
 * Query optimizer now works for fulltext queries

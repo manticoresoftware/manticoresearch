@@ -2752,12 +2752,10 @@ public:
 class NetEvent_c
 {
 	struct kevent * m_pEntry = nullptr;
-	const TaskNet_t * m_pSignalerTask = nullptr;
 
 public:
-	NetEvent_c ( struct kevent * pEntry, const TaskNet_t * pSignaler )
+	explicit NetEvent_c ( struct kevent * pEntry )
 		: m_pEntry ( pEntry )
-		, m_pSignalerTask ( pSignaler )
 	{}
 
 	inline TaskNet_t * GetTask () const noexcept
@@ -2769,13 +2767,7 @@ public:
 	inline bool IsSignaler () const noexcept
 	{
 		assert ( m_pEntry );
-		auto pTask = GetTask();
-		if ( pTask==m_pSignalerTask )
-		{
-			auto pSignaler = ( PollableEvent_t* )m_pSignalerTask->m_pPayload;
-			pSignaler->DisposeEvent ();
-		}
-		return pTask==m_pSignalerTask;
+		return m_pEntry->filter == EVFILT_USER;
 	}
 
 	inline int GetEvents () const noexcept
@@ -2853,7 +2845,7 @@ protected:
 	CSphVector<DWORD>	m_dIOThreads;
 	CSphVector<OVERLAPPED_ENTRY>	m_dReady;
 
-	inline void events_create ( int iSizeHint )
+	inline void poller_create ( int iSizeHint )
 	{
 		// fixme! m.b. more workers, or just one enough?
 		m_IOCP = CreateIoCompletionPort ( INVALID_HANDLE_VALUE, NULL, 0, 1 );
@@ -2963,14 +2955,23 @@ protected:
 
 #else
 	int m_iEFD = -1;
-	PollableEvent_t m_dSignaler;
-	TaskNet_t			m_dSignalerTask;
 
-	inline void events_create ( int iSizeHint )
+	inline void poller_create ( int iSizeHint )
 	{
 		epoll_or_kqueue_create_impl ( iSizeHint );
 		m_dReady.Reserve ( iSizeHint );
 
+		register_signaller();
+	}
+
+
+#if POLLING_EPOLL
+	PollableEvent_t m_dSignaler;
+	TaskNet_t m_dSignalerTask;
+	CSphVector<epoll_event> m_dReady;
+
+	inline void register_signaller()
+	{
 		// special event to wake up
 		m_dSignalerTask.m_ifd = m_dSignaler.m_iPollablefd;
 		// m_pPayload here used ONLY as store for pointer for comparing with &m_dSignaller,
@@ -2982,17 +2983,12 @@ protected:
 		events_change_io ( &m_dSignalerTask );
 		sphLogDebugv ( "Internal signal action (for epoll/kqueue) added (%d), %p",
 			m_dSignaler.m_iPollablefd, &m_dSignalerTask );
-
 	}
 
-	inline void fire_event ()
+	inline void fire_event()
 	{
-		m_dSignaler.FireEvent ();
+		m_dSignaler.FireEvent();
 	}
-
-
-#if POLLING_EPOLL
-	CSphVector<epoll_event> m_dReady;
 
 private:
 	inline void epoll_or_kqueue_create_impl ( int iSizeHint )
@@ -3082,6 +3078,20 @@ protected:
 	CSphVector<struct kevent> m_dScheduled; // prepared group of events
 	struct kevent * m_pEntry = nullptr;
 
+	inline void register_signaller() const
+	{
+		struct kevent tSignaller;
+		EV_SET ( &tSignaller, 0, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, 0 );
+		assert ( 0 == kevent ( m_iEFD, &tSignaller, 1, 0, 0, 0 ) );
+	}
+
+	inline void fire_event() const
+	{
+		struct kevent tSignaller;
+		EV_SET ( &tSignaller, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, 0 );
+		assert ( 0 == kevent ( m_iEFD, &tSignaller, 1, 0, 0, 0 ) );
+	}
+
 private:
 	inline void epoll_or_kqueue_create_impl ( int iSizeHint )
 	{
@@ -3167,9 +3177,9 @@ protected:
 	NetEvent_c GetEvent ( int iReady )
 	{
 		if ( iReady>=0 )
-			return NetEvent_c ( &m_dReady[iReady], &m_dSignalerTask );
+			return NetEvent_c ( &m_dReady[iReady] );
 		assert ( false );
-		return NetEvent_c ( nullptr, &m_dSignalerTask );
+		return NetEvent_c ( nullptr );
 	}
 
 #endif
@@ -3517,7 +3527,7 @@ private:
 public:
 	explicit LazyNetEvents_c ( int iSizeHint )
 	{
-		events_create ( iSizeHint );
+		poller_create ( iSizeHint );
 		Threads::CreateQ ( &m_dWorkingThread, [this] {
 			ScopedRole_c thLazy ( LazyThread );
 			EventLoop ();

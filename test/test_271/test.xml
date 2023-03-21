@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>French stemmer and exact words (clonning stemmers on parallel)</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	threads = 4
+}
+</config>
+
+<queries>
+	<sphinxql>create table t(f text) morphology='libstemmer_fr' index_exact_words='1';
+	</sphinxql>
+
+	<!-- repeat several times, as original crash wasn't always reveal immediately -->
+	<repeat count="40">
+		<sphinxql>
+			CALL SNIPPETS(('test text 1','test text 2','test text 3','test text 4'), 't', 'php developer');
+		</sphinxql>
+	</repeat>
+	<sphinxql>drop table t;
+	</sphinxql>
+</queries>
+</test>

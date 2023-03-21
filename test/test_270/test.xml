@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>long token snippet</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source tsv
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data1.tsv
+	tsvpipe_field = body
+}
+
+index long
+{
+	source = tsv
+	path = <data_path/>/long
+}
+</config>
+
+<queries>
+	<sphinxql>
+		<!-- snippet over very long token -->
+		SELECT Id, SNIPPET(body, QUERY()) FROM long WHERE MATCH('recherche');
+		SELECT Id, SNIPPET(body, QUERY()) FROM long WHERE MATCH('maintenant');
+		SELECT Id, SNIPPET(body, QUERY()) FROM long WHERE MATCH('message');
+	</sphinxql>
+</queries>
+
+</test>

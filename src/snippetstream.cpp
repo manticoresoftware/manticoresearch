@@ -241,8 +241,7 @@ CacheStreamer_c::CacheStreamer_c ( int iDocLen )
 
 inline BYTE * CacheStreamer_c::StoreEntry ( int iBytes )
 {
-	m_dTokenStream.Resize ( m_dTokenStream.GetLength() + iBytes );
-	return m_dTokenStream.Begin() + m_dTokenStream.GetLength() - iBytes;
+	return m_dTokenStream.AddN ( iBytes );
 }
 
 
@@ -304,7 +303,6 @@ void CacheStreamer_c::StoreSkipHtml ( int iStart, int iLen )
 void CacheStreamer_c::StoreToken ( const TokenInfo_t & tTok, int iTermIndex )
 {
 	assert ( iTermIndex<USHRT_MAX );
-	assert ( tTok.m_iLen<=255 );
 
 	int iDstart = tTok.m_iStart - m_iLastStart;
 	int iDpos = tTok.m_uPosition - m_iLastPos;
@@ -312,7 +310,7 @@ void CacheStreamer_c::StoreToken ( const TokenInfo_t & tTok, int iTermIndex )
 	m_iLastStart = tTok.m_iStart + tTok.m_iLen;
 	m_iLastPos = tTok.m_uPosition;
 
-	if ( iDstart==0 && iDpos==1 && tTok.m_bWord && !tTok.m_bStopWord && iTermIndex==-1 && !tTok.m_iMultiPosLen )
+	if ( iDstart==0 && iDpos==1 && tTok.m_bWord && !tTok.m_bStopWord && iTermIndex==-1 && !tTok.m_iMultiPosLen && tTok.m_iLen<=4095 )
 	{
 		if ( tTok.m_iLen<16 )
 		{
@@ -323,8 +321,8 @@ void CacheStreamer_c::StoreToken ( const TokenInfo_t & tTok, int iTermIndex )
 		} else
 		{
 			// TOKEN2, 2nd most frequent path
-			m_dTokenStream.Add ( (BYTE)( TYPE_TOKEN2<<4 ) );
-			m_dTokenStream.Add ( (BYTE) tTok.m_iLen );
+			m_dTokenStream.Add ( (BYTE)( TYPE_TOKEN2<<4 ) + ( tTok.m_iLen >> 8 ));
+			m_dTokenStream.Add ( (BYTE)( 0xFF & tTok.m_iLen ) );
 			m_eLastStored = TYPE_TOKEN2;
 			return;
 		}
@@ -332,17 +330,18 @@ void CacheStreamer_c::StoreToken ( const TokenInfo_t & tTok, int iTermIndex )
 
 	// TOKEN, stupid generic uncompressed path (can optimize with deltas, if needed)
 	bool bMultiform = ( tTok.m_iMultiPosLen>0 );
-	BYTE * p = StoreEntry ( bMultiform ? 14 : 13 );
 
+	BYTE* p = StoreEntry ( 5 );
 	BYTE eTok = (BYTE)( bMultiform ? TYPE_MULTIFORM : TYPE_TOKEN );
 	p[0] = BYTE ( eTok<<4 );
 	sphUnalignedWrite ( p+1, tTok.m_iStart );
-	p[5] = BYTE(tTok.m_iLen);
-	sphUnalignedWrite ( p+6, tTok.m_uPosition );
-	p[10] = BYTE ( ( tTok.m_bWord<<1 ) + tTok.m_bStopWord );
-	sphUnalignedWrite ( p+11, (WORD)(iTermIndex+1) );
+	ZipInt ( tTok.m_iLen );
+	p = StoreEntry ( bMultiform ? 8 : 7 );
+	sphUnalignedWrite ( p, tTok.m_uPosition );
+	p[4] = BYTE ( ( tTok.m_bWord<<1 ) + tTok.m_bStopWord );
+	sphUnalignedWrite ( p+5, (WORD)(iTermIndex+1) );
 	if ( bMultiform )
-		p[13] = (BYTE)tTok.m_iMultiPosLen;
+		p[7] = (BYTE)tTok.m_iMultiPosLen;
 	m_eLastStored = eTok;
 }
 
@@ -422,19 +421,21 @@ void CacheStreamer_c::Tokenize ( TokenFunctor_i & tFunctor )
 		{
 			BYTE * p = &m_dTokenStream [ m_iReadPtr ];
 			tTok.m_iStart = sphUnalignedRead ( *(DWORD*)(p+1) );
-			tTok.m_iLen = p[5];
-			tTok.m_uPosition = sphUnalignedRead ( *(DWORD*)(p+6) );
-			tTok.m_bWord = ( p[10] & 2 )!=0;
-			tTok.m_bStopWord = ( p[10] & 1 )!=0;
-			tTok.m_iTermIndex = (int)sphUnalignedRead ( *(WORD*)(p+11) ) - 1;
+			m_iReadPtr += 5;
+			tTok.m_iLen = UnzipInt(); // p[5];
+			p = &m_dTokenStream[m_iReadPtr];
+			tTok.m_uPosition = sphUnalignedRead ( *(DWORD*)(p) );
+			tTok.m_bWord = ( p[4] & 2 )!=0;
+			tTok.m_bStopWord = ( p[4] & 1 )!=0;
+			tTok.m_iTermIndex = (int)sphUnalignedRead ( *(WORD*)(p+5) ) - 1;
 			if ( eTok==TYPE_TOKEN )
 			{
 				tTok.m_iMultiPosLen = 0;
-				m_iReadPtr += 13;
+				m_iReadPtr += 7;
 			} else
 			{
-				tTok.m_iMultiPosLen = (int)( p[13] );
-				m_iReadPtr += 14;
+				tTok.m_iMultiPosLen = (int)( p[7] );
+				m_iReadPtr += 8;
 			}
 
 			m_iLastStart = tTok.m_iStart + tTok.m_iLen;
@@ -466,8 +467,8 @@ void CacheStreamer_c::Tokenize ( TokenFunctor_i & tFunctor )
 		case TYPE_TOKEN2:
 		{
 			tTok.m_iStart = m_iLastStart;
-			tTok.m_iLen = m_dTokenStream [ ++m_iReadPtr ];
-			m_iReadPtr++;
+			tTok.m_iLen = ( ( m_dTokenStream[m_iReadPtr] & 15 ) << 8 ) + m_dTokenStream[m_iReadPtr + 1];
+			m_iReadPtr += 2;
 			m_iLastStart += tTok.m_iLen;
 			tTok.m_uPosition = ++m_iLastPos;
 			tTok.m_bWord = true;

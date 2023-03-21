@@ -466,19 +466,19 @@ public:
 	/// consume received chunk
 	void StepForward ( size_t uStep );
 
-	inline bool HasUnsent () const
+	inline bool HasUnsent () const noexcept
 	{
 		return m_iIOChunks!=0;
 	}
 
 	/// if we have data (despite it is sent or not)
-	inline bool IsEmpty () const
+	inline bool IsEmpty () const noexcept
 	{
 		return m_dIOVec.IsEmpty ();
 	}
 
 	/// buf for sendmsg/WSAsend
-	inline sphIovec * IOPtr () const
+	inline sphIovec * IOPtr () const noexcept
 	{
 		if ( !m_iIOChunks )
 			return nullptr;
@@ -486,7 +486,7 @@ public:
 	}
 
 	/// num of io vecs for sendmsg/WSAsend
-	inline size_t IOSize () const
+	inline size_t IOSize () const noexcept
 	{
 		return m_iIOChunks;
 	}

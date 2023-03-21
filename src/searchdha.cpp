@@ -1977,7 +1977,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 
 	if ( iSent )
 	{
-		sphLogDebugv ( "Mac OS TFO: advancing to %zu with %d, error %d", iSent, iRes, sphSockGetErrno () );
+		sphLogDebugv ( "Mac OS TFO: advancing to %zu with %d, error %d (%s)", iSent, iRes, sphSockGetErrno(), strerror (sphSockGetErrno()) );
 		m_dIOVec.StepForward ( iSent );
 		if ( iRes<0 && m_dIOVec.HasUnsent () )
 			iRes = 0;
@@ -2610,7 +2610,7 @@ class NetEvent_c
 	bool				m_bSignaler = true;
 
 public:
-	NetEvent_c ( LPOVERLAPPED_ENTRY pEntry )
+	explicit NetEvent_c ( LPOVERLAPPED_ENTRY pEntry )
 	{
 		if ( !pEntry )
 			return;
@@ -2637,43 +2637,43 @@ public:
 		}
 	}
 
-	inline TaskNet_t * GetTask () const
+	inline TaskNet_t * GetTask () const noexcept
 	{
 		return m_pTask;
 	}
 
-	inline bool IsSignaler () const
+	inline bool IsSignaler () const noexcept
 	{
 		return m_bSignaler;
 	}
 
-	inline int GetEvents() const
+	inline int GetEvents() const noexcept
 	{
 		// return 0 for internal signal, or 1 for write, 1+sizeof(OVERLAPPED) for read.
 		return (!!m_pTask) + 2 * (!!m_bWrite);
 	}
 
-	inline bool IsError() const
+	inline bool IsError() const noexcept
 	{
 		return false;
 	}
 
-	inline bool IsEof() const
+	inline bool IsEof() const noexcept
 	{
 		return !m_bWrite && !m_uNumberOfBytesTransferred;
 	}
 
-	inline bool IsRead() const
+	inline bool IsRead() const noexcept
 	{
 		return !m_bWrite;
 	}
 
-	inline bool IsWrite() const
+	inline bool IsWrite() const noexcept
 	{
 		return m_bWrite;
 	}
 
-	inline DWORD BytesTransferred () const
+	inline DWORD BytesTransferred () const noexcept
 	{
 		return m_uNumberOfBytesTransferred;
 	}
@@ -2692,13 +2692,13 @@ public:
 		, m_pSignalerTask ( pSignaler )
 	{}
 
-	inline TaskNet_t * GetTask ()
+	inline TaskNet_t * GetTask () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( TaskNet_t * ) m_pEntry->data.ptr;
 	}
 
-	inline bool IsSignaler ()
+	inline bool IsSignaler () const noexcept
 	{
 		assert ( m_pEntry );
 		auto pTask = GetTask ();
@@ -2710,37 +2710,37 @@ public:
 		return pTask==m_pSignalerTask;
 	}
 
-	inline int GetEvents ()
+	inline int GetEvents () const noexcept
 	{
 		assert ( m_pEntry );
 		return m_pEntry->events;
 	}
 
-	inline bool IsError ()
+	inline bool IsError () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->events & EPOLLERR )!=0;
 	}
 
-	inline bool IsEof ()
+	inline bool IsEof () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->events & EPOLLHUP )!=0;
 	}
 
-	inline bool IsRead ()
+	inline bool IsRead () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->events & EPOLLIN )!=0;
 	}
 
-	inline bool IsWrite ()
+	inline bool IsWrite () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->events & EPOLLOUT )!=0;
 	}
 
-	inline DWORD BytesTransferred ()
+	inline DWORD BytesTransferred () const noexcept
 	{
 		assert ( m_pEntry );
 		return 0;
@@ -2760,13 +2760,13 @@ public:
 		, m_pSignalerTask ( pSignaler )
 	{}
 
-	inline TaskNet_t * GetTask ()
+	inline TaskNet_t * GetTask () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( TaskNet_t * ) m_pEntry->udata;
 	}
 
-	inline bool IsSignaler ()
+	inline bool IsSignaler () const noexcept
 	{
 		assert ( m_pEntry );
 		auto pTask = GetTask();
@@ -2778,42 +2778,41 @@ public:
 		return pTask==m_pSignalerTask;
 	}
 
-	inline int GetEvents ()
+	inline int GetEvents () const noexcept
 	{
 		assert ( m_pEntry );
 		return m_pEntry->filter;
 	}
 
-	inline bool IsError ()
+	inline bool IsError () const noexcept
 	{
 		assert ( m_pEntry );
 		if ( ( m_pEntry->flags & EV_ERROR )==0 )
 			return false;
 
-		sphLogDebugL ( "L error for %u, errno=%u, %s", m_pEntry->ident, m_pEntry->data, sphSockError (
-			m_pEntry->data ) );
+		sphLogDebugL ( "L error for %u, errno=%u, %s", m_pEntry->ident, m_pEntry->data, strerror ( m_pEntry->data ) );
 		return true;
 	}
 
-	inline bool IsEof ()
+	inline bool IsEof () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->flags & EV_EOF )!=0;
 	}
 
-	inline bool IsRead ()
+	inline bool IsRead () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->filter==EVFILT_READ )!=0;
 	}
 
-	inline bool IsWrite ()
+	inline bool IsWrite () const noexcept
 	{
 		assert ( m_pEntry );
 		return ( m_pEntry->filter==EVFILT_WRITE )!=0;
 	}
 
-	inline DWORD BytesTransferred ()
+	inline DWORD BytesTransferred () const noexcept
 	{
 		assert ( m_pEntry );
 		return 0;
@@ -3217,7 +3216,7 @@ private:
 	{
 		assert ( pTask );
 		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d), release=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, bReleasePayload );
-		pTask->m_uIOChanged = 0;
+		pTask->m_uIOChanged = TaskNet_t::NO;
 		events_change_io ( pTask );
 		auto pConnection = pTask->m_pPayload;
 		pTask->m_pPayload = nullptr;
@@ -3319,7 +3318,7 @@ private:
 
 	/// abandon and release all tiemouted events.
 	/// \return next active timeout (in uS), or -1 for infinite.
-	bool HasTimeoutActions()
+	bool HasTimeoutActions() REQUIRES ( LazyThread )
 	{
 		bool bHasTimeout = false;
 		while ( !m_dTimeouts.IsEmpty () )

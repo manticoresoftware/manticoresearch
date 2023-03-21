@@ -914,8 +914,8 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 		return nullptr;
 	}
 
-	int iLessVal = -1;
-	int iGreaterVal = -1;
+	int64_t iLessVal = -1;
+	int64_t iGreaterVal = -1;
 	if ( ( bLess && !tLess.IsNum() ) || ( bGreater && !tGreater.IsNum() ) )
 	{
 		JsonObj_c tDateFormat = tColumn.GetStrItem ( "format", m_sError, true );
@@ -945,7 +945,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 	{
 		if ( bLess && tLess.IsInt() )
 			iLessVal = tLess.IntVal();
-		if ( bGreater && tGreater.IntVal() )
+		if ( bGreater && tGreater.IsInt() )
 			iGreaterVal = tGreater.IntVal();
 	}
 

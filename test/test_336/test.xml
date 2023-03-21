@@ -43,6 +43,13 @@ index test_rt
 	rt_attr_string = str_col
 }
 
+index test_bigint
+{
+    type = rt
+    path = <data_path/>/test_bigint
+    rt_field = title
+    rt_attr_bigint = icol
+}
 
 source test_mva
 {
@@ -114,7 +121,9 @@ insert into test_rt values (3, '3rd', 'Bander, despite its paean to freedom, fou
 insert into test_rt values (4, '4th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 14, 1.4, 'str4' );
 insert into test_rt values (5, '5th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 15, 1.5, 'str5' );
 insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulging itself in this way.', 16, 1.6, 'str6' );
-</sphinxql></queries>
+</sphinxql>
+<sphinxql>insert into test_bigint values (2333444556, '1st', 2333444556 ), (2333444554, '2nd', 2333444554 ), (140739821799884, '3d', 140739821799884 )</sphinxql>
+</queries>
 
 <httpqueries>
 <query endpoint="json/search">
@@ -440,6 +449,22 @@ insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulg
     }
   }
 }
+</query>
+
+<query endpoint="json/search">
+{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "gt": 2333444555 } } } ] } } }
+</query>
+
+<query endpoint="json/search">
+{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "lt": 2333444555 } } } ] } } }
+</query>
+
+<query endpoint="json/search">
+{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "gt": 140739821799883 } } } ] } } }
+</query>
+
+<query endpoint="json/search">
+{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "lt": 140739821799885 } } } ] } } }
 </query>
 
 </httpqueries>

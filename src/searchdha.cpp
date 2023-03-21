@@ -3001,7 +3001,7 @@ private:
 	}
 
 	// apply changes in case of epoll
-	int events_apply_task_changes ( TaskNet_t * pTask )
+	int events_apply_task_changes ( TaskNet_t * pTask ) const
 	{
 		auto iEvents = 0; // how many events we add/delete
 
@@ -3075,7 +3075,6 @@ protected:
 
 #elif POLLING_KQUEUE
 	CSphVector<struct kevent> m_dReady;
-	CSphVector<struct kevent> m_dScheduled; // prepared group of events
 	struct kevent * m_pEntry = nullptr;
 
 	inline void register_signaller() const
@@ -3100,50 +3099,48 @@ private:
 			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "kqueue %d created", m_iEFD );
-		m_dScheduled.Reserve ( iSizeHint * 2 );
 		m_dReady.Reserve ( iSizeHint * 2 + m_iCReserve );
 	}
 
-	int events_apply_task_changes ( TaskNet_t * pTask )
+	int events_apply_task_changes ( TaskNet_t * pTask ) const
 	{
-		int iEvents = 0;
 		bool bWrite = pTask->m_uIOChanged==TaskNet_t::RW;
 		bool bRead = pTask->m_uIOChanged!=TaskNet_t::NO;
 		bool bWasWrite = pTask->m_uIOActive==TaskNet_t::RW;;
 		bool bWasRead = ( pTask->m_uIOActive!=TaskNet_t::NO);
-		bool bApply = pTask->m_ifd!=-1;
+
+		struct kevent tEv[2];
+		auto pEv = &tEv[0];
 
 		// boring combination matrix below
 		if ( bRead && !bWasRead )
-		{
-			if ( bApply )
-				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_ADD, 0, 0, pTask );
-			++iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
-		}
+			EV_SET ( pEv++, pTask->m_ifd, EVFILT_READ, EV_ADD, 0, 0, pTask );
 
 		if ( bWrite && !bWasWrite )
-		{
-			if ( bApply )
-				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_ADD, 0, 0, pTask );
-			++iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
-		}
+			EV_SET ( pEv++, pTask->m_ifd, EVFILT_WRITE, EV_ADD, 0, 0, pTask );
 
 		if ( !bRead && bWasRead )
-		{
-			if ( bApply )
-				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_DELETE, 0, 0, pTask );
-			--iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
-		}
+			EV_SET ( pEv++, pTask->m_ifd, EVFILT_READ, EV_DELETE, 0, 0, pTask );
 
 		if ( !bWrite && bWasWrite )
+			EV_SET ( pEv++, pTask->m_ifd, EVFILT_WRITE, EV_DELETE, 0, 0, pTask );
+
+		const int nEvs = pEv - tEv;
+		assert ( nEvs <= 2 );
+		int iEvents = 0;
+		for ( int i = 0; i < nEvs; ++i )
 		{
-			if ( bApply )
-				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_DELETE, 0, 0, pTask );
-			--iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength (), iEvents );
+			iEvents += ( tEv[i].flags == EV_ADD ) ? 1 : -1;
+			sphLogDebugL ( "L kqueue setup, ev=%d, fl=%d, sock=%d (%d enqueued), %d in call", tEv[i].filter, tEv[i].flags, pTask->m_ifd, nEvs, iEvents );
+		}
+
+		bool bApply = pTask->m_ifd != -1;
+		if ( pTask->m_ifd == -1 )
+			sphLogDebugL ( "L kqueue not called since sock is closed" );
+		else {
+			auto iRes = kevent ( m_iEFD, tEv, nEvs, nullptr, 0, nullptr );
+			if ( iRes == -1 )
+				sphLogDebugL ( "L failed to perform kevent for sock %d(%p), errno=%d, %s", pTask->m_ifd, pTask, errno, strerrorm ( errno ) );
 		}
 		return iEvents;
 	}
@@ -3157,7 +3154,7 @@ protected:
 
 	inline int events_wait ( int64_t iTimeoutUS )
 	{
-		m_dReady.Resize ( m_iEvents + m_dScheduled.GetLength () + m_iCReserve );
+		m_dReady.Resize ( m_iEvents + m_iCReserve );
 		timespec ts;
 		timespec * pts = nullptr;
 		if ( iTimeoutUS>=0 )
@@ -3167,10 +3164,7 @@ protected:
 			pts = &ts;
 		}
 		// need positive timeout for communicate threads back and shutdown
-		auto iRes = kevent ( m_iEFD, m_dScheduled.begin (), m_dScheduled.GetLength (), m_dReady.begin (), m_dReady.GetLength (), pts );
-		m_dScheduled.Reset();
-		return iRes;
-
+		return kevent ( m_iEFD, nullptr, 0, m_dReady.begin (), m_dReady.GetLength (), pts );
 	};
 
 	// returns task and also selects current event for all the functions below

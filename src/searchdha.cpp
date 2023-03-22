@@ -1981,6 +1981,8 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 		m_dIOVec.StepForward ( iSent );
 		if ( iRes<0 && m_dIOVec.HasUnsent () )
 			iRes = 0;
+		else if ( !m_dIOVec.HasUnsent() )
+			m_iPoolerTimeoutUS += m_iMyQueryTimeoutMs * 1000;
 	}
 #else
 	int iRes = 0;

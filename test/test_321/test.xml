@@ -318,6 +318,13 @@ call pq('pq_small', 'bc', 0 as docs_json, 1 as query);
 call pq('pq_small', 'def', 0 as docs_json, 1 as query);
 </sphinxql>
 
+<sphinxql>
+<!-- regression exact mdifier breaks matching -->
+INSERT INTO pq_stem (query) VALUES ( '=проверка' );
+CALL PQ ('pq_stem', 'проверки', 1 as docs, 0 as docs_json );
+CALL PQ ('pq_stem', 'проверка', 1 as docs, 0 as docs_json );
+</sphinxql>
+
 </queries>
 
 </test>

@@ -1032,7 +1032,7 @@ SphWordID_t PercolateDictProxy_c::GetWordID ( BYTE * pWord )
 	assert ( !m_bHasMorph || m_pDictMorph );
 
 	// apply stemmers
-	if ( m_bHasMorph )
+	if ( m_bHasMorph && pWord[0]!='=' )
 		m_pDictMorph->GetWordID ( pWord );
 
 	return const_cast<DictMap_t *>(m_pDict)->GetTerm ( pWord );

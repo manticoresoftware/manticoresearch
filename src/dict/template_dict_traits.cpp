@@ -545,13 +545,19 @@ void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRe
 		// tokenize file
 		int iLength = (int)fread ( dBuffer.Begin(), 1, (size_t)st.st_size, fp );
 
-		BYTE* pToken;
-		pTokenizerClone->SetBuffer ( dBuffer.Begin(), iLength );
-		while ( ( pToken = pTokenizerClone->GetToken() ) != nullptr )
-			if ( m_tSettings.m_bStopwordsUnstemmed )
-				dStop.Add ( GetWordIDNonStemmed ( pToken ) );
-			else
-				dStop.Add ( GetWordID ( pToken ) );
+		// tokenize stopwords line by line to prevent exceptions to fold multiple lines
+		sphSplitApply ( (const char *)dBuffer.Begin(), iLength, "\r\n", [&] ( const char * sLine, int iLineLen )
+		{ 
+			BYTE* pToken;
+			pTokenizerClone->SetBuffer ( (const BYTE *)sLine, iLineLen );
+			while ( ( pToken = pTokenizerClone->GetToken() ) != nullptr )
+			{
+				if ( m_tSettings.m_bStopwordsUnstemmed )
+					dStop.Add ( GetWordIDNonStemmed ( pToken ) );
+				else
+					dStop.Add ( GetWordID ( pToken ) );
+			}
+		} );
 
 		// close file
 		fclose ( fp );

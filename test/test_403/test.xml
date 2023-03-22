@@ -74,6 +74,16 @@ create table test1(title text) charset_table='non_cjk' stopwords='<this_test/>/s
 show tables;
 drop table test1;
 
-</sphinxql></queries>
+</sphinxql>
+
+<!-- regression exceptions vs stopwords -->
+<sphinxql>
+create table test4 ( title text, tag integer ) exceptions = '<this_test/>/exc1.txt' stopwords = '<this_test/>/stops1.txt';
+call keywords('a b', 'test4');
+call keywords('a', 'test4');
+drop table test4;
+</sphinxql>
+
+</queries>
 
 </test>

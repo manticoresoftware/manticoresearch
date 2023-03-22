@@ -332,17 +332,17 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ( const char* szReport, co
 
 #ifdef NDEBUG
 			if ( COMPILEDVAL && COMPILEDVAL < iNewSize )
-				sphWarning ( "Compiled-in value %s (%d) is less than measured (%d). Please, tell us about it!", szEnv, COMPILEDVAL, iNewSize );
+				sphLogDebug ( "Compiled-in value %s (%d) is less than measured (%d).", szEnv, COMPILEDVAL, iNewSize );
 #endif
 		}
 		iSize = iNewSize;
 		if ( bMocked )
-			sphInfo ( "%s is %d. Consider to add env MANTICORE_%s=%d to store this value persistent for this binary", szReport, iSize, szEnv, iNewSize );
+			sphLogDebug ( "%s is %d (mocked, as no env MANTICORE_%s=%d found)", szReport, iSize, szEnv, iNewSize );
 		else
-			sphInfo ( "%s %d (from env MANTICORE_%s)", szReport, iSize, szEnv );
+			sphLogDebug ( "%s %d (from env MANTICORE_%s)", szReport, iSize, szEnv );
 	} else
 	{
-		sphInfo ( "%s is %d (compiled-in)", szReport, iSize );
+		sphLogDebug ( "%s is %d (compiled-in)", szReport, iSize );
 	}
 
 	MOCK::PublishValue ( iSize );

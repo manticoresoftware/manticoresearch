@@ -8,12 +8,11 @@
 FLUSH TABLE rt_table
 ```
 
-`FLUSH TABLE` forcibly flushes RT table RAM chunk contents to disk.
+`FLUSH TABLE` forcefully flushes RT table RAM chunk contents to disk.
 
-Backing up an RT table is as simple as copying over its data files, followed by the [binary log](../Logging/Binary_logging.md). However, recovering from that backup means that all the transactions in the log since the last successful RAM chunk write would need to be replayed. Those writes normally happen either on a clean shutdown, or periodically with a (big enough!) interval between writes specified in  [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) directive. So such a backup made at an arbitrary point in time just might end up with way too much binary log data to replay.
+The real-time table [RAM chunk](../Local_tables/Real-time_table.md#Real-time-table-files-structure) is automatically flushed to disk during a clean shutdown, or periodically every [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) seconds.
 
-`FLUSH TABLE` forcibly writes the RAM chunk contents to disk, and also causes the subsequent cleanup of (now redundant) binary log files. Thus,  recovering from a backup made just after `FLUSH TABLE` should be almost instant.
-
+Issuing a `FLUSH TABLE` command not only forces the RAM chunk contents to be written to disk but also triggers the cleanup of binary log files.
 
 <!-- intro -->
 ##### SQL:
@@ -28,3 +27,5 @@ FLUSH TABLE rt;
 Query OK, 0 rows affected (0.05 sec)
 ```
 <!-- end -->
+
+<!-- proofread -->

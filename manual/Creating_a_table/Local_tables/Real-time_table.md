@@ -108,6 +108,7 @@ table products {
 #### Real-time table files structure
 
 The following table outlines the different file extensions and their respective descriptions in a real-time table:
+
 | Extension | Description |
 | - | - |
 | `.lock` | A lock file that ensures that only one process can access the table at a time. |

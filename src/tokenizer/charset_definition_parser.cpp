@@ -23,7 +23,7 @@ class CSphCharsetDefinitionParser
 	bool IsEof();
 	bool CheckEof();
 	int ParseCharsetCode();
-	bool AddRange ( const CSphRemapRange& tRange, CSphVector<CSphRemapRange>& dRanges );
+	bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges );
 
 public:
 	bool Parse ( const char* sConfig, CSphVector<CSphRemapRange>& dRanges );
@@ -119,10 +119,11 @@ int CSphCharsetDefinitionParser::ParseCharsetCode()
 	return iCode;
 }
 
-bool CSphCharsetDefinitionParser::AddRange ( const CSphRemapRange& tRange, CSphVector<CSphRemapRange>& dRanges )
+bool CSphCharsetDefinitionParser::AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges )
 {
 	if ( tRange.m_iRemapStart >= 0x20 )
 	{
+		tRange.m_iOrder = dRanges.GetLength();
 		dRanges.Add ( tRange );
 		return true;
 	}
@@ -351,6 +352,8 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		m_pCurrent++;
 	}
 
+	// need a stable sort with the desc order of the mappings
+	// to keep the last mapping definition and merge into it all next entries (entries defined prior to the last mapping)
 	dRanges.Sort();
 	for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
 	{

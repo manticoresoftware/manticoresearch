@@ -105,6 +105,18 @@ index cht
 	charset_table 	= english, _, 0..9, russian
 }
 
+index dup1
+{
+	type		= template
+	charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00DC->U+00FC
+}
+
+index dup2
+{
+	type		= template
+	charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00DC->U+00FC, U+00DF
+}
+
 </config>
 
 <queries>
@@ -148,6 +160,13 @@ index cht
 	CALL KEYWORDS ('runs runs* =runs', 'rt', 1);
 	CALL KEYWORDS ('runs runs* =runs', 'exact_wf', 1);
 </sphinxql>
+
+<sphinxql>
+<!-- regression duplicated charset mapping sorted wrong on charset_table parsing -->
+CALL KEYWORDS('Öö', 'dup1', 1 as stats, 'hits' as sort_mode);
+CALL KEYWORDS('Öö', 'dup2', 1 as stats, 'hits' as sort_mode);
+</sphinxql>
+
 </queries>
 
 

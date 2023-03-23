@@ -12,6 +12,9 @@
 * [Commit 2196](https://github.com/manticoresoftware/manticoresearch/commit/21966fbf) fixed wildcards at query to not be affected by ignore_chars
 * [Commit 1990](https://github.com/manticoresoftware/manticoresearch/commit/1990e350) fixed crash of daemon at federated query with aggregate
 * [Commit 6fbc](https://github.com/manticoresoftware/manticoresearch/commit/6fbc4189) fixed json range filter to work with int64 values
+* [Commit 3e4d](https://github.com/manticoresoftware/manticoresearch/commit/3e4d145d) fixed percolate query to handle exact term modifier
+* [Commit 7d08](https://github.com/manticoresoftware/manticoresearch/commit/7d08d877) fixed wrong behavior when exceptions fold multiple lines at the stopwords
+* [Commit 4f4b](https://github.com/manticoresoftware/manticoresearch/commit/4f4ba25e) fixed wrong charset mapping for duplicates
 
 ### Major new features
 * Query optimizer now works for fulltext queries

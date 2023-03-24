@@ -308,6 +308,7 @@ deploy_hook:
   rules:
     - if: $CI_MERGE_REQUEST_ID
       when: manual
+    - if: $CI_MERGE_REQUEST_ID == null
   trigger:
     include: dist/gitlab-release.yml
   needs:

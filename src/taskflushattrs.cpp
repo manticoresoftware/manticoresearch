@@ -18,7 +18,7 @@
 //////////////////////////////////////////////////////////////////////////
 struct FlushState_t
 {
-	CSphAutoEvent m_tFlushFinished;
+	Threads::Coro::Event_c m_tFlushFinished;
 	std::atomic<int> m_iDemandEvents {0}; // if worker need to set the event
 	int m_iFlushTag = 0;        ///< last flushed tag
 };

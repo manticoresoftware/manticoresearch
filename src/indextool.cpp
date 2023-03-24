@@ -1109,18 +1109,21 @@ static bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf,
 		if ( hConf[szSection].Exists ( sIndexName ) )
 			sphDie ( "table '%s' already exists", sIndexName.cstr() );
 
-		hConf[szSection].Add ( CSphConfigSection(), sIndexName );
-
-		CSphConfigSection & tSec = hConf[szSection][sIndexName];
-
-		CSphString sPath, sType;
-		if ( !i.FetchStrItem ( sPath, "path", sError ) )
-			return false;
-
+		CSphString sType;
 		if ( !i.FetchStrItem ( sType, "type", sError ) )
 			return false;
 
+		if ( sType == "distributed" || sType == "template" ) // 'template' is not implemented yet, however obvious
+			continue;
+
+		CSphString sPath;
+		if ( !i.FetchStrItem ( sPath, "path", sError ) )
+			return false;
+
 		MakeRelativePath ( sPath );
+
+		hConf[szSection].Add ( CSphConfigSection(), sIndexName );
+		CSphConfigSection& tSec = hConf[szSection][sIndexName];
 		tSec.AddEntry ( "path", sPath.cstr() );
 		tSec.AddEntry ( "type", sType.cstr() );
 		tSec.AddEntry ( "from_json", "1" );

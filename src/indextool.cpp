@@ -994,42 +994,49 @@ static void ShowVersion()
 
 static void ShowHelp ()
 {
+	/// notice: set tab width=8 to correctly see content of the message
 	fprintf ( stdout,
-		"Usage: indextool <COMMAND> [OPTIONS]\n"
-		"\n"
-		"Commands are:\n"
-		"-h, --help\t\t\tdisplay this help message\n"
-		"-v\t\t\t\tdisplay version information\n"
-		"--check <TABLE>\t\t\tperform table consistency check\n"
-                "--check-disk-chunk <CHUNK_ID>\tperform single disk chunk consistency check (to be used together with --check)\n"
-                "--check-id-dups <CHUNK_ID>\tcheck if there are duplicate ids (to be used together with --check)\n"
-                "--rotate\t\t\trotate table after --check in case it's valid\n"
-		"--checkconfig\t\t\tperform config consistency check\n"
-		"--dumpconfig <SPH-FILE>\t\tdump table header in config format by file name\n"
-		"--dumpdocids <TABLE>\t\tdump docids by table name\n"
-		"--dumpdict <SPI-FILE>\t\tdump dictionary by file name\n"
-		"--dumpdict <TABLE>\t\tdump dictionary\n"
-		"--dumpheader <SPH-FILE>|<META-FILE>\n"
-                "\t\t\t\tdump table header, or rt table meta by file name\n"
-		"--dumpheader <TABLE>\t\tdump table header by table name\n"
-		"--dumphitlist <TABLE> <KEYWORD>\n"
-		"--dumphitlist <TABLE> --wordid <ID>\n"
-		"\t\t\t\tdump hits for a given keyword\n"
-		"--fold <TABLE> [FILE]\t\tfold FILE or stdin using TABLE charset_table\n"
-		"--htmlstrip <TABLE>\t\tfilter stdin using table HTML stripper settings\n"
-		"--buildidf <TABLE1.dict> [TABLE2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
-		"\t\t\t\tjoin --stats dictionary dumps into global.idf file\n"
-		"--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n"
-		"\t\t\t\tmerge several .idf files into one file\n"
-		"--apply-killlists\t\tapply table killlists\n"
-		"\n"
-		"Options are:\n"
-		"-c, --config <file>\t\tuse given config file instead of defaults\n"
-		"-q, --quiet\t\t\tbe quiet, skip banner etc (useful with --fold etc)\n"
-		"--strip-path\t\t\tstrip path from filenames referenced by table\n"
-		"\t\t\t\t(eg. stopwords, exceptions, etc)\n"
-		"--stats\t\t\t\tshow total statistics in the dictionary dump\n"
-		"--skip-uniq\t\t\tskip unique (df=1) words in the .idf files\n"
+		R"(Usage: indextool <COMMAND> [OPTIONS]
+
+Commands are:
+-h, --help			display this help message
+-v				display version information
+--check <TABLE>			perform table consistency check
+--check-disk-chunk <CHUNK_ID>	perform single disk chunk consistency check (to be used together with --check)
+--check-id-dups <CHUNK_ID>	check if there are duplicate ids (to be used together with --check)
+--rotate			rotate table after --check in case it's valid
+--checkconfig			perform config consistency check
+--dumpconfig <SPH-FILE>		dump table header in config format by file name
+--dumpdocids <TABLE>		dump docids by table name
+--dumpdict <SPI-FILE>		dump dictionary by file name
+--dumpdict <TABLE>		dump dictionary
+--dumpheader <SPH-FILE>|<META-FILE>
+				dump table header, or rt table meta by file name
+--dumpheader <TABLE>		dump table header by table name
+--dumphitlist <TABLE> <KEYWORD>
+--dumphitlist <TABLE> --wordid <ID>
+				dump hits for a given keyword
+--docextract TBL DOCID		runs usual table check pass of whole dictionary/docs/hits,
+				and collects all the words and hits belonging to requested document.
+				Then all of the words are placed in the order according to their fields
+				and positions, and result is printed, grouping by field.
+
+--fold <TABLE> [FILE]		fold FILE or stdin using TABLE charset_table
+--htmlstrip <TABLE>		filter stdin using table HTML stripper settings
+--buildidf <TABLE1.dict> [TABLE2.dict ...] [--skip-uniq] --out <GLOBAL.idf>
+				join --stats dictionary dumps into global.idf file
+--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>
+				merge several .idf files into one file
+--apply-killlists		apply table killlists
+
+Options are:
+-c, --config <file>		use given config file instead of defaults
+-q, --quiet			be quiet, skip banner etc (useful with --fold etc)
+--strip-path			strip path from filenames referenced by table
+				(eg. stopwords, exceptions, etc)
+--stats				show total statistics in the dictionary dump
+--skip-uniq			skip unique (df=1) words in the .idf files
+)"
 	);
 }
 

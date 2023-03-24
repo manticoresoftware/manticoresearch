@@ -61,7 +61,7 @@ const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pT
 }
 
 
-static void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
+void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
 	bool bColumnar = !!(tCtx.m_uFlags & CSphColumnInfo::ATTR_COLUMNAR);
 	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );

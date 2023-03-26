@@ -4205,7 +4205,6 @@ public:
 		if_const ( HAS_AGGREGATES )
 			dRhs.UpdateAggregates ( m_tData, false, true );
 
-		dRhs.CheckReplaceEntry ( m_tData );
 		if ( !bCopyMeta && DISTINCT )
 			dRhs.UpdateDistinct ( m_tData );
 	}
@@ -4227,20 +4226,6 @@ private:
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
 	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
 	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry, m_bMerge ); }
-
-	// if new entry is more relevant, update from it
-	void CheckReplaceEntry ( const CSphMatch & tEntry )
-	{
-		if ( tEntry.m_tRowID<m_tData.m_tRowID )
-		{
-			if_const ( NOTIFICATIONS )
-			{
-				m_tJustPushed = RowTagged_t ( tEntry );
-				m_dJustPopped.Add ( RowTagged_t ( m_tData ) );
-			}
-			m_tPregroup.CloneKeepingAggrs ( m_tData, tEntry );
-		}
-	}
 
 	// submit actual distinct value in all cases
 	void UpdateDistinct ( const CSphMatch & tEntry, bool bGrouped = true )
@@ -4284,8 +4269,6 @@ private:
 			// update aggregates
 			if_const ( HAS_AGGREGATES )
 				UpdateAggregates ( tEntry, GROUPED, m_bMerge );
-
-			CheckReplaceEntry ( tEntry );
 		}
 
 		if_const ( DISTINCT )

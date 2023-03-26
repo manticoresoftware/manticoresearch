@@ -8229,7 +8229,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		}
 	}
 
-	tMeta.m_bTotalMatchesApprox = bCutoffHit;
+	bool bAllPrecalc = dSorters.GetLength() && dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
+	tMeta.m_bTotalMatchesApprox = bCutoffHit && !bAllPrecalc;
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE );
 

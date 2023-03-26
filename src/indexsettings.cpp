@@ -2355,13 +2355,13 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 
 	if ( hIndex.Exists ( "read_buffer_docs" ) )
 	{
-		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_docs", m_tFileAccess.m_iReadBufferDocList ) );
+		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetSize ( "read_buffer_docs", m_tFileAccess.m_iReadBufferDocList ) );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
 	}
 
 	if ( hIndex.Exists ( "read_buffer_hits" ) )
 	{
-		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", m_tFileAccess.m_iReadBufferHitList ) );
+		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetSize ( "read_buffer_hits", m_tFileAccess.m_iReadBufferHitList ) );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
 	}
 

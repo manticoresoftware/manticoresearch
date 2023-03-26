@@ -311,7 +311,7 @@ bool DdlParser_c::ConvertToAttrEngine ( const SqlNode_t & tEngine, AttrEngine_e 
 	CSphString sEngineLowerCase = sEngine;
 	sEngineLowerCase.ToLower();
 
-	return StrToAttrEngine ( eEngine, sEngineLowerCase, m_sError );
+	return StrToAttrEngine ( eEngine, AttrEngine_e::DEFAULT, sEngineLowerCase, m_sError );
 }
 
 

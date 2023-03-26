@@ -26,11 +26,6 @@ inline int64_t cast2signed ( SphWordID_t tVal )
 	return *(int64_t*)&tVal;
 }
 
-inline SphWordID_t cast2wordid ( int64_t iVal )
-{
-	return *(SphWordID_t*)&iVal;
-}
-
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
@@ -174,6 +169,7 @@ public:
 	StrVec_t m_dStoredOnlyFields;	///< list of "fields" that are stored but not indexed
 
 	AttrEngine_e m_eEngine = AttrEngine_e::DEFAULT;	///< attribute storage engine
+	AttrEngine_e m_eDefaultEngine = AttrEngine_e::ROWWISE; ///< default storage engine set by daemon
 
 	StrVec_t m_dColumnarAttrs;			///< list of attributes to be placed in columnar store
 	StrVec_t m_dColumnarNonStoredAttrs;	///< list of columnar attributes that should be not added to document storage
@@ -363,7 +359,7 @@ struct RtTypedAttr_t
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
 
-bool					StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError );
+bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError );
 
 struct CreateTableAttr_t
 {
@@ -456,5 +452,8 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSetti
 
 void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
+
+void SetDefaultAttrEngine ( AttrEngine_e eEngine );
+AttrEngine_e GetDefaultAttrEngine();
 
 #endif // _indexsettings_

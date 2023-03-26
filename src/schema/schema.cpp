@@ -522,8 +522,9 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 			if ( bAllRowwise || hRowwise.Exists ( tAttr.m_sName ) )
 				tAttr.m_eEngine = AttrEngine_e::ROWWISE;
 		}
-
-		AttrEngine_e eEngine = CombineEngines ( tSettings.m_eEngine, tAttr.m_eEngine );
+		
+		AttrEngine_e eIndexEngine = CombineEngines ( GetDefaultAttrEngine(), tSettings.m_eEngine );
+		AttrEngine_e eEngine = CombineEngines ( eIndexEngine, tAttr.m_eEngine );
 		if ( eEngine != AttrEngine_e::COLUMNAR )
 			continue;
 

@@ -1,0 +1,25 @@
+a:2:{i:0;a:13:{i:0;a:2:{s:8:"sphinxql";s:11:"show tables";s:10:"total_rows";i:0;}i:1;a:2:{s:8:"sphinxql";s:64:"create table test1 ( title text, tag integer ) engine='columnar'";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:63:"create table test2 ( title text, tag integer ) engine='rowwise'";s:14:"total_affected";i:0;}i:3;a:2:{s:8:"sphinxql";s:46:"create table test3 ( title text, tag integer )";s:14:"total_affected";i:0;}i:4;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}}}i:5;a:3:{s:8:"sphinxql";s:10:"desc test2";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:6;a:3:{s:8:"sphinxql";s:10:"desc test3";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:7;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:75:"CREATE TABLE test1 (
+id bigint,
+title text,
+tag integer
+) engine='columnar'";}}}i:8;a:3:{s:8:"sphinxql";s:23:"show create table test2";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test2";s:12:"Create Table";s:74:"CREATE TABLE test2 (
+id bigint,
+title text,
+tag integer
+) engine='rowwise'";}}}i:9;a:3:{s:8:"sphinxql";s:23:"show create table test3";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test3";s:12:"Create Table";s:57:"CREATE TABLE test3 (
+id bigint,
+title text,
+tag integer
+)";}}}i:10;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:11;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}i:12;a:2:{s:8:"sphinxql";s:16:"drop table test3";s:14:"total_affected";i:0;}}i:1;a:13:{i:0;a:2:{s:8:"sphinxql";s:11:"show tables";s:10:"total_rows";i:0;}i:1;a:2:{s:8:"sphinxql";s:64:"create table test1 ( title text, tag integer ) engine='columnar'";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:63:"create table test2 ( title text, tag integer ) engine='rowwise'";s:14:"total_affected";i:0;}i:3;a:2:{s:8:"sphinxql";s:46:"create table test3 ( title text, tag integer )";s:14:"total_affected";i:0;}i:4;a:3:{s:8:"sphinxql";s:10:"desc test1";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}}}i:5;a:3:{s:8:"sphinxql";s:10:"desc test2";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:0:"";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:0:"";}}}i:6;a:3:{s:8:"sphinxql";s:10:"desc test3";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:5:"Field";s:2:"id";s:4:"Type";s:6:"bigint";s:10:"Properties";s:19:"columnar fast_fetch";}i:1;a:3:{s:5:"Field";s:5:"title";s:4:"Type";s:4:"text";s:10:"Properties";s:14:"indexed stored";}i:2;a:3:{s:5:"Field";s:3:"tag";s:4:"Type";s:4:"uint";s:10:"Properties";s:19:"columnar fast_fetch";}}}i:7;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:75:"CREATE TABLE test1 (
+id bigint,
+title text,
+tag integer
+) engine='columnar'";}}}i:8;a:3:{s:8:"sphinxql";s:23:"show create table test2";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test2";s:12:"Create Table";s:74:"CREATE TABLE test2 (
+id bigint,
+title text,
+tag integer
+) engine='rowwise'";}}}i:9;a:3:{s:8:"sphinxql";s:23:"show create table test3";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test3";s:12:"Create Table";s:57:"CREATE TABLE test3 (
+id bigint,
+title text,
+tag integer
+)";}}}i:10;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:11;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}i:12;a:2:{s:8:"sphinxql";s:16:"drop table test3";s:14:"total_affected";i:0;}}}

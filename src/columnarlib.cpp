@@ -15,6 +15,7 @@
 #include "fileutils.h"
 #include "schema/columninfo.h"
 #include "schema/schema.h"
+#include "std/cpuid.h"
 
 using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const common::Schema_t & tSchema, const std::string & sFile, std::string & sError );
@@ -162,6 +163,12 @@ bool InitColumnar ( CSphString & sError )
 	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR );
 	if ( sLibfile.IsEmpty() )
 		return true;
+
+	if ( !IsSSE42Supported() )
+	{
+		sError.SetSprintf ( "MCL requires a CPU that supports SSE 4.2" );
+		return false;
+	}
 
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );
 	if ( !tHandle.Get() )

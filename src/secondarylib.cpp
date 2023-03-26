@@ -16,6 +16,7 @@
 #include "schema/schema.h"
 #include "columnarmisc.h"
 #include "secondarylib.h"
+#include "std/cpuid.h"
 
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
@@ -70,6 +71,12 @@ bool InitSecondary ( CSphString & sError )
 	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY );
 	if ( sLibfile.IsEmpty() )
 		return true;
+
+	if ( !IsSSE42Supported() )
+	{
+		sError.SetSprintf ( "MCL requires a CPU that supports SSE 4.2" );
+		return false;
+	}
 
 	ScopedHandle_c tHandle ( dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL ) );
 	if ( !tHandle.Get() )

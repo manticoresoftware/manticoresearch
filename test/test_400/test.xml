@@ -194,6 +194,11 @@ searchd
 	select count(distinct a) from t1,t2;
 	drop table t1;
 	drop table t2;
+
+	<!-- regression for read_buffer_docs vs size syntax -->
+	create table t(f text) read_buffer_hits='128k';
+	show create table t;
+	drop table t;
 </sphinxql>
 </queries>
 

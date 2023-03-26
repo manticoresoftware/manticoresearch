@@ -19083,6 +19083,13 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
 	SetOptionSI ( hSearchd, bTestMode );
 
+	CSphString sWarning;
+	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
+	if ( StrToAttrEngine ( eEngine, AttrEngine_e::ROWWISE, hSearchd.GetStr("engine"), sWarning ) )
+		SetDefaultAttrEngine(eEngine);
+	else
+		sphWarning ( sWarning.cstr() );
+
 	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );

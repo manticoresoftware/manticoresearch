@@ -279,6 +279,21 @@ docstore_cache_size = 8m
 ```
 <!-- end -->
 
+### engine
+
+<!-- example conf engine -->
+Default attribute storage engine used when creating tables in RT mode. Can be `rowwise` (default) or `columnar`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+engine = columnar
+```
+<!-- end -->    
+
 
 ### expansion_limit
 

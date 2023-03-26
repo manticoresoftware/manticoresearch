@@ -27,6 +27,7 @@
 
 
 static CreateFilenameBuilder_fn g_fnCreateFilenameBuilder = nullptr;
+static AttrEngine_e	g_eAttrEngine = AttrEngine_e::ROWWISE;
 
 void SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder )
 {
@@ -37,6 +38,12 @@ void SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder )
 CreateFilenameBuilder_fn GetIndexFilenameBuilder()
 {
 	return g_fnCreateFilenameBuilder;
+}
+
+
+static inline SphWordID_t cast2wordid ( int64_t iVal )
+{
+	return *(SphWordID_t*)&iVal;
 }
 
 
@@ -720,7 +727,14 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 	{
 		CSphString sEngine = hIndex.GetStr ( "engine" );
 		sEngine.ToLower();
-		if ( !StrToAttrEngine ( m_eEngine, sEngine, sError ) )
+		if ( !StrToAttrEngine ( m_eEngine, AttrEngine_e::DEFAULT, sEngine, sError ) )
+			return false;
+	}
+
+	{
+		CSphString sEngine = hIndex.GetStr ( "engine_default" );
+		sEngine.ToLower();
+		if ( !StrToAttrEngine ( m_eDefaultEngine, AttrEngine_e::ROWWISE, sEngine, sError ) )
 			return false;
 	}
 
@@ -992,6 +1006,15 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 }
 
 
+static void AddEngineSettings ( AttrEngine_e eEngine, SettingsFormatter_c & tOut )
+{
+	if ( eEngine==AttrEngine_e::COLUMNAR )
+		tOut.Add ( "engine", "columnar", true );
+	else if ( eEngine==AttrEngine_e::ROWWISE )
+		tOut.Add ( "engine", "rowwise", true );
+}
+
+
 void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
 	tOut.Add ( "min_prefix_len",		RawMinPrefixLen(),		RawMinPrefixLen()!=0 );
@@ -1021,10 +1044,9 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 		tOut.Add ( "hitless_words",		sHitlessFiles,			true );
 	}
 
-	if ( m_eEngine==AttrEngine_e::COLUMNAR )
-		tOut.Add ( "engine",			"columnar",				true );
-	else if ( m_eEngine==AttrEngine_e::ROWWISE )
-		tOut.Add ( "engine",			"rowwise",				true );
+	AddEngineSettings ( m_eEngine, tOut );
+	if ( m_eEngine==AttrEngine_e::DEFAULT && m_eDefaultEngine!=GetDefaultAttrEngine() )
+		AddEngineSettings ( m_eDefaultEngine, tOut );
 
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
@@ -1059,11 +1081,11 @@ static StrVec_t SplitArg ( const CSphString & sValue, StrVec_t & dFiles )
 }
 
 
-bool StrToAttrEngine ( AttrEngine_e & eEngine, const CSphString & sValue, CSphString & sError )
+bool StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError )
 {
 	if ( sValue.IsEmpty() )
 	{
-		eEngine = AttrEngine_e::DEFAULT;
+		eEngine = eDefault;
 		return true;
 	}
 
@@ -1161,7 +1183,7 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 
 	if ( sName=="engine" )
 	{
-		if ( !StrToAttrEngine ( m_eEngine, sValue, m_sError ) )
+		if ( !StrToAttrEngine ( m_eEngine, AttrEngine_e::DEFAULT, sValue, m_sError ) )
 			return false;
 
 		return Add ( sName, sValue );
@@ -1266,6 +1288,9 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	if ( !Contains("type") )
 		Add ( "type", "rt" );
+
+	if ( !Contains("engine_default") && GetDefaultAttrEngine()==AttrEngine_e::COLUMNAR )	
+		Add ( "engine_default", "columnar" );
 
 	bool bDistributed = Get("type")=="distributed";
 	if ( !bDistributed )
@@ -2539,4 +2564,16 @@ AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngin
 		eEngine = eAttrEngine;
 
 	return eEngine;
+}
+
+
+void SetDefaultAttrEngine ( AttrEngine_e eEngine )
+{
+	g_eAttrEngine = eEngine;
+}
+
+
+AttrEngine_e GetDefaultAttrEngine()
+{
+	return g_eAttrEngine;
 }

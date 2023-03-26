@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>default attribute engine</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+    <dynamic>
+      <variant>engine=rowwise</variant>
+      <variant>engine=columnar</variant>
+    </dynamic>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	show tables;
+	create table test1 ( title text, tag integer ) engine='columnar';
+	create table test2 ( title text, tag integer ) engine='rowwise';
+	create table test3 ( title text, tag integer );
+	desc test1;
+	desc test2;
+	desc test3;
+	show create table test1;
+	show create table test2;
+	show create table test3;
+
+	drop table test1;
+	drop table test2;
+	drop table test3;
+</sphinxql>
+</queries>
+
+</test>

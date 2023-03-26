@@ -919,6 +919,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_compression_int64", 0, nullptr },
 	{ "columnar_subblock",		0, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
+	{ "engine_default",			0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -1046,6 +1047,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
+	{ "engine",					0, nullptr },
 	{ NULL,						0, NULL }
 };
 

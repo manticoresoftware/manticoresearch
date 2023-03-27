@@ -1,55 +1,57 @@
 # Main+delta schema
 
-There's a frequent situation when the total dataset is too big to be rebuilt from scratch often, but the amount of new records is rather small. Example: a forum with a 1,000,000 archived posts, but only 1,000 new posts per day.
+<!-- example maindelta -->
+In many situations, the total dataset is too large to be frequently rebuilt from scratch, while the number of new records remains relatively small. For example, a forum may have 1,000,000 archived posts but only receive 1,000 new posts per day.
 
-In this case, "live" (almost real time) table updates could be implemented using so called "main+delta" scheme.
+In such cases, implementing "live" (nearly real-time) table updates can be achieved using a "main+delta" scheme.
 
-The idea is to set up two sources and two tables, with one "main" table for the data which only changes rarely (if ever), and one "delta" for the new documents. In the example above, 1,000,000 archived posts would go to the main table, and newly inserted 1,000 posts/day would go to the delta table. Delta table could then be rebuilt very frequently, and the documents can be made available to search in a matter of minutes. Specifying which documents should go to what table and rebuilding the main table could also be made fully automatic. One option would be to make a counter table which would track the ID which would split the documents, and update it whenever the main table is rebuilt.
+The concept involves setting up two sources and two tables, with one "main" table for data that rarely changes (if ever), and one "delta" table for new documents. In the example, the 1,000,000 archived posts would be stored in the main table, while the 1,000 new daily posts would be placed in the delta table. The delta table can then be rebuilt frequently, making the documents available for searching within seconds or minutes. Determining which documents belong to which table and rebuilding the main table can be fully automated. One approach is to create a counter table that tracks the ID used to split the documents and update it whenever the main table is rebuilt.
 
-Example: Fully automated live updates
+Using a timestamp column as the split variable is more effective than using the ID since timestamps can track not only new documents but also modified ones.
 
+For datasets that may contain modified or deleted documents, the delta table should provide a list of affected documents, ensuring they are suppressed and excluded from search queries. This is accomplished using a feature called Kill Lists. The document IDs to be killed can be specified in an auxiliary query defined by [sql_query_killlist](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list). The delta table must indicate the target tables for which the kill lists will be applied using the [killlist_target](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) directive. The impact of kill lists is permanent on the target table, meaning that even if a search is performed without the delta table, the suppressed documents will not appear in the search results.
+
+Notice how we're overriding `sql_query_pre` in the delta source. We must explicitly include this override. If we don't, the `REPLACE` query would be executed during the delta source's build as well, effectively rendering it useless.
+
+<!-- request Example -->
 ```ini
 # in MySQL
-CREATE TABLE sph_counter
-(
-    counter_id INTEGER PRIMARY KEY NOT NULL,
-    max_doc_id INTEGER NOT NULL
+CREATE TABLE deltabreaker (
+  index_name VARCHAR(50) NOT NULL,
+  created_at TIMESTAMP NOT NULL  DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (index_name)
 );
 
-# in sphinx.conf
-source main
-{
-    # ...
-    sql_query_pre = SET NAMES utf8
-    sql_query_pre = REPLACE INTO sph_counter SELECT 1, MAX(id) FROM documents
-    sql_query = SELECT id, title, body FROM documents \
-        WHERE id<=( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
+# in manticore.conf
+source main {
+  ...
+  sql_query_pre = REPLACE INTO deltabreaker SET index_name = 'main', created_at = NOW()
+  sql_query =  SELECT id, title, UNIX_TIMESTAMP(updated_at) AS updated FROM documents WHERE deleted=0 AND  updated_at  >=FROM_UNIXTIME($start) AND updated_at  <=FROM_UNIXTIME($end)
+  sql_query_range  = SELECT ( SELECT UNIX_TIMESTAMP(MIN(updated_at)) FROM documents) min, ( SELECT UNIX_TIMESTAMP(created_at)-1 FROM deltabreaker WHERE index_name='main') max
+  sql_query_post_index = REPLACE INTO deltabreaker set index_name = 'delta', created_at = (SELECT created_at FROM deltabreaker t WHERE index_name='main')
+  ...
+  sql_attr_timestamp = updated
 }
 
-source delta : main
-{
-    sql_query_pre = SET NAMES utf8
-    sql_query = SELECT id, title, body FROM documents \
-        WHERE id>( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
+source delta : main {
+  sql_query_pre =
+  sql_query_range = SELECT ( SELECT UNIX_TIMESTAMP(created_at) FROM deltabreaker WHERE index_name='delta') min, UNIX_TIMESTAMP() max
+  sql_query_killlist = SELECT id FROM documents WHERE updated_at >=  (SELECT created_at FROM deltabreaker WHERE index_name='delta')
 }
 
-table main
-{
-    source = main
-    path = /path/to/main
-    # ... all the other settings
+table main {
+  path = /var/lib/manticore/main
+  source = main
 }
 
-**note how all other settings are copied from main, but source and path are overridden (they MUST be)**
-table delta : main
-{
-    source = delta
-    path = /path/to/delta
+table delta {
+  path = /var/lib/manticore/delta
+  source = delta
+  killlist_target = main:kl
 }
 ```
 
-A better split variable is to use a timestamp column instead of the ID as timestamps can track not just new documents, but also modified ones.
+<!-- end -->
 
-For the datasets that can have documents modified or deleted, the delta table should also provide a list with documents that suffered changes in order to be suppressed and not be used in search queries. This is achieved with the feature called Kill lists. The document ids to be killed can be provided in an auxiliary query defined by [sql_query_killlist](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list). The delta must point the tables for which the kill-lists will be applied by directive [killlist_target](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target). The effect of kill-lists is permanent on the target table, meaning even if the search is made without the delta table, the suppressed documents will not appear in searches.
 
-Note how we're overriding `sql_query_pre` in the delta source. We need to explicitly have that override. Otherwise `REPLACE` query would be run when building the delta source too, effectively nullifying it. However, when we issue the directive in the inherited source for the first time, it removes *all* inherited values, so the encoding setup is also lost. So `sql_query_pre` in the delta can not just be empty; and we need to issue the encoding setup query explicitly once again.
+<!-- proofread -->

@@ -11,6 +11,11 @@ include ( FetchContent )
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_MultipleHeaders ON CACHE BOOL "")
 set(JSON_GlobalUDLs OFF CACHE BOOL "")
+
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 set ( NLJSON_URL_GITHUB "http://github.com/nlohmann/json/archive/refs/tags/v3.10.5.zip" )
 message ( STATUS "Use nljson from github ${NLJSON_URL_GITHUB}" )
 FetchContent_Declare ( nljson

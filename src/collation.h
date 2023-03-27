@@ -14,6 +14,7 @@
 #define _collation_
 
 #include "std/fnv64.h"
+#include <locale>
 
 class LibcCSHash_fn
 {
@@ -64,5 +65,8 @@ StrHashCalc_fn	GetStringHashCalcFunc ( ESphCollation eCollation );
 void sphCollationInit();
 volatile ESphCollation& GlobalCollation();
 ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pError );
+void SetLocale ( const CSphString & sLocale, bool bSet );
+const std::locale & GlobalLocale();
+bool IsGlobalLocaleSet();
 
 #endif // _collation_

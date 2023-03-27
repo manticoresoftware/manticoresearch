@@ -26,6 +26,7 @@
 #include "conversion.h"
 #include <time.h>
 #include <math.h>
+#include "uni_algo/case.h"
 
 #if WITH_RE2
 #include <re2/re2.h>
@@ -2466,15 +2467,12 @@ int Expr_SubstringIndex_c::RightSearch ( const char * pDoc, int iDocLen, int iCo
 	return LeftSearch ( pDoc, iDocLen, iCount, true, ppResStr, pResLen );
 }
 
-template<bool UPPER>
-class Expr_Case_c : public ISphStringExpr
+class ExprCaseBase_c : public ISphStringExpr
 {
-private:
-    CSphRefcountedPtr<ISphExpr> m_pArg;
-
 public:
-    explicit Expr_Case_c ( ISphExpr * pArg )
+    explicit ExprCaseBase_c ( ISphExpr * pArg, const char * sClassName )
     	: m_pArg ( pArg )
+		, m_sClassName ( sClassName )
     {
         assert( pArg );
         SafeAddRef( pArg );
@@ -2490,36 +2488,6 @@ public:
     {
         if ( m_pArg )
             m_pArg->Command ( eCmd, pArg );
-    }
-
-    int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
-    {
-        const char * pDoc = nullptr;
-        int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
-        *ppStr = nullptr;
-
-        // create CSphVector and store the value
-        CSphVector<BYTE> dStrBuffer;
-		dStrBuffer.Append ( pDoc, iDocLen );
-
-        BYTE * pStrBeg = dStrBuffer.begin();
-        const BYTE * pStrEnd = ( pStrBeg + iDocLen );
-
-        if ( pDoc && iDocLen>0 )
-        {
-            while( pStrBeg<pStrEnd )
-			{
-                // convert the current character to its uppercase or lowercase version if it exists
-                DoCase ( (char *)pStrBeg );
-                pStrBeg++;
-            }
-        }
-
-        *ppStr = dStrBuffer.LeakData();
-        FreeDataPtr ( *m_pArg, pDoc );
-
-        // return the resultant string
-        return iDocLen;
     }
 
     bool IsDataPtrAttr() const final
@@ -2604,42 +2572,149 @@ public:
 		FreeDataPtr ( *this, pBuf );
 		return iVal;
 	}
-	
-    bool IsConst () const final { return false; }
 
-    uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
-    {
-        EXPR_CLASS_NAME("Expr_Case_c");
-        CALC_CHILD_HASH(m_pArg);
-        return CALC_DEP_HASHES();
-    }
+	bool IsConst () const final { return false; }
 
-    ISphExpr * Clone () const final
-    {
-        return new Expr_Case_c ( *this );
-    }
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME(m_sClassName);
+		CALC_CHILD_HASH(m_pArg);
+		return CALC_DEP_HASHES();
+	}
+
+protected:
+	CSphRefcountedPtr<ISphExpr> m_pArg;
+
+	ExprCaseBase_c ( const ExprCaseBase_c & rhs )
+		: m_pArg ( SafeClone ( rhs.m_pArg ) )
+		, m_sClassName ( rhs.m_sClassName )
+	{}
 
 private:
-    void DoCase ( char * pString ) const;
+	const char * m_sClassName = nullptr;
+};
 
-    Expr_Case_c ( const Expr_Case_c & rhs )
-		: m_pArg ( SafeClone ( rhs.m_pArg ) )
-    {}
+template<bool UPPER>
+class ExprCaseTrival_c : public ExprCaseBase_c
+{
+public:
+    explicit ExprCaseTrival_c ( ISphExpr * pArg )
+		: ExprCaseBase_c ( pArg, "ExprCaseTrival_c" )
+	{
+	}
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		const char * pDoc = nullptr;
+		int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
+		*ppStr = nullptr;
+
+		// create CSphVector and store the value
+		CSphVector<BYTE> dStrBuffer;
+		dStrBuffer.Append ( pDoc, iDocLen );
+
+		BYTE * pStrBeg = dStrBuffer.begin();
+		const BYTE * pStrEnd = ( pStrBeg + iDocLen );
+
+		if ( pDoc && iDocLen>0 )
+		{
+			while( pStrBeg<pStrEnd )
+			{
+				// convert the current character to its uppercase or lowercase version if it exists
+				DoCase ( (char *)pStrBeg );
+				pStrBeg++;
+			}
+		}
+
+		*ppStr = dStrBuffer.LeakData();
+		FreeDataPtr ( *m_pArg, pDoc );
+
+		// return the resultant string
+		return iDocLen;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new ExprCaseTrival_c ( *this );
+	}
+
+private:
+	void DoCase ( char * pString ) const;
+
+	ExprCaseTrival_c ( const ExprCaseTrival_c & rhs )
+		: ExprCaseBase_c ( rhs )
+	{}
 };
 
 // For upper() function
 template<>
-void Expr_Case_c<true> :: DoCase ( char *pString ) const
+void ExprCaseTrival_c<true>::DoCase ( char * pString ) const
 {
 	*pString = toupper ( *pString );
 }
 
 // For lower() function
 template<>
-void Expr_Case_c<false> :: DoCase ( char *pString ) const
+void ExprCaseTrival_c<false>::DoCase ( char * pString ) const
 {
-    *pString = tolower ( *pString );
+	*pString = tolower ( *pString );
 }
+
+void UTF8ToLower( std::vector<char> & dBuf, std::basic_string_view<char> source )
+{
+    return una::detail::t_map<std::vector<char>, std::basic_string_view<char>, una::detail::impl_x_case_map_utf8, una::detail::impl_case_map_loc_utf8> ( dBuf, source, una::detail::impl_case_map_mode_lowercase );
+}
+
+void UTF8ToUpper( std::vector<char> & dBuf, std::basic_string_view<char> source )
+{
+    return una::detail::t_map<std::vector<char>, std::basic_string_view<char>, una::detail::impl_x_case_map_utf8, una::detail::impl_case_map_loc_utf8> ( dBuf, source, una::detail::impl_case_map_mode_uppercase );
+}
+
+template<bool UPPER>
+class ExprCaseComplex_c : public ExprCaseBase_c
+{
+public:
+	explicit ExprCaseComplex_c ( ISphExpr * pArg )
+		: ExprCaseBase_c ( pArg, "ExprCaseComplex_c" )
+	{
+	}
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		*ppStr = nullptr;
+
+		const char * pSrcDoc = nullptr;
+		int iSrcDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pSrcDoc );
+
+		std::vector<char> & dBuf = const_cast<std::vector<char> &> ( m_dBuf );
+		dBuf.resize ( 0 );
+		if ( UPPER )
+			UTF8ToUpper ( dBuf, std::basic_string_view<char> ( pSrcDoc, iSrcDocLen ) );
+		else
+			UTF8ToLower ( dBuf, std::basic_string_view<char> ( pSrcDoc, iSrcDocLen ) );
+
+		int iDstDocLen = dBuf.size();
+		CSphFixedVector<BYTE> dDst ( iDstDocLen );
+		memcpy ( dDst.Begin(), dBuf.data(), iDstDocLen );
+		*ppStr = dDst.LeakData();
+
+		// return the resultant string
+		return iDstDocLen;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new ExprCaseComplex_c ( *this );
+	}
+
+private:
+
+	ExprCaseComplex_c ( const ExprCaseComplex_c & rhs )
+		: ExprCaseBase_c ( rhs )
+	{}
+
+	std::vector<char> m_dBuf;
+};
 
 class Expr_Iterator_c : public Expr_JsonField_c
 {
@@ -6869,9 +6944,19 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 		return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
 
 	case FUNC_UPPER:
-		return new Expr_Case_c<true> ( dArgs[0] );
+	{
+		if ( IsGlobalLocaleSet() && GlobalLocale()==std::locale::classic() )
+			return new ExprCaseTrival_c<true> ( dArgs[0] );
+		else
+			return new ExprCaseComplex_c<true> ( dArgs[0] );
+	}
 	case FUNC_LOWER:
-		return new Expr_Case_c<false> ( dArgs[0] );
+	{
+		if ( IsGlobalLocaleSet() && GlobalLocale()==std::locale::classic() )
+			return new ExprCaseTrival_c<false> ( dArgs[0] );
+		else
+			return new ExprCaseComplex_c<false> ( dArgs[0] );
+	}
 
 	case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
 	case FUNC_CURRENT_USER:

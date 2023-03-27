@@ -204,6 +204,7 @@ set_property ( SOURCE sphinxql_debug.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_S
 
 # our mega-lib
 target_sources ( lmanticore PUBLIC ${LMANTICORE_BISON} ${LMANTICORE_FLEX} ${HEADERS} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
+target_link_libraries ( lmanticore PUBLIC uni-algo::uni-algo )
 
 add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdtask.cpp taskping.cpp taskmalloctrim.cpp taskoptimize.cpp taskglobalidf.cpp tasksavestate.cpp

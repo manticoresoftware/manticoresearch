@@ -301,6 +301,7 @@ dl_package ( PostgreSQL "pgsql" )
 win_install ( PostgreSQL indexer )
 
 include(GetNLJSON)
+include(GetUniAlgo)
 
 # Storing compiler version
 set ( COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}" )

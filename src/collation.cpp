@@ -424,3 +424,28 @@ ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pErr
 	pError->SetSprintf ( "Unknown collation: '%s'", sName.cstr() );
 	return SPH_COLLATION_DEFAULT;
 }
+
+static CSphString g_sLocale;
+static std::locale g_tLocale;
+static bool g_bGlobalLocaleSet = false;
+
+void SetLocale ( const CSphString & sLocale, bool bSet )
+{
+	g_sLocale = sLocale;
+	g_tLocale = std::locale();
+	if ( g_sLocale.IsEmpty() )
+		return;
+
+	g_bGlobalLocaleSet = bSet;
+	g_tLocale = std::locale ( sLocale.cstr() );
+}
+
+const std::locale & GlobalLocale()
+{
+	return g_tLocale;
+}
+
+bool IsGlobalLocaleSet()
+{
+	return g_bGlobalLocaleSet;
+}

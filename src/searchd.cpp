@@ -18972,12 +18972,17 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	{
 		g_iTFO &= ~TFO_LISTEN;
 	}
+
+	bool bLocaleSet = false;
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{
 		auto sLocale = hSearchd.GetStr ( "collation_libc_locale" );
-		if ( !setlocale ( LC_COLLATE, sLocale.cstr() ) )
+		bLocaleSet = setlocale ( LC_COLLATE, sLocale.cstr() );
+		if ( !bLocaleSet )
 			sphWarning ( "setlocale failed (locale='%s')", sLocale.cstr() );
 	}
+	CSphString sLoc = setlocale ( LC_COLLATE, nullptr );
+	SetLocale( sLoc, bLocaleSet );
 
 	if ( hSearchd ( "collation_server" ) )
 	{

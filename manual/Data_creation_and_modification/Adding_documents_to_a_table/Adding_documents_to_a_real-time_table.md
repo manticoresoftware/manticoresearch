@@ -772,10 +772,9 @@ sqlresult = indexApi.insert(newdoc);
 ```
 <!-- end -->
 
-
 <!-- example JSON_insert -->
 ## Inserting JSON
-JSON value can be inserted as as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
+JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
 
 <!-- intro -->
 ### Examples
@@ -788,7 +787,7 @@ INSERT INTO products VALUES (1, 'shoes', '{"size": 41, "color": "red"}');
 <!-- intro -->
 ##### JSON
 <!-- request JSON -->
-JSON value can be inserted as as JSON object
+JSON value can be inserted as a JSON object
 ```json
 POST /insert
 {

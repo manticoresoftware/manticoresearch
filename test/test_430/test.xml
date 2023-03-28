@@ -186,6 +186,7 @@ show meta;
 select brand_id from test_col where price&gt;500 and brand_id&gt;5 /*+ NO_ColumnarScan(price,brand_id) */;
 show meta;
 
+select groupby(), count(*) from META:all group by price,brand_id;
 </sphinxql></queries>
 
 </test>

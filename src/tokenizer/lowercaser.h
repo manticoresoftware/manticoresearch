@@ -85,12 +85,12 @@ public: \
 	}
 
 	LOWERCASE_CLONE ( Query )				// GetQueryLC 				- special "\\" (all the rest also imply that special)
-	LOWERCASE_CLONE ( QueryWildExactJson )	// GetQueryWildExactJsonLC	- "*?%="
-	LOWERCASE_CLONE ( QueryWildExact )		// GetQueryWildExactLC		- "*?%=" and specials "\\=()|-!@~"/^$<"
+	LOWERCASE_CLONE ( QueryWildExactJson )	// GetQueryWildExactJsonLC	- "*?%" and specials "="
+	LOWERCASE_CLONE ( QueryWildExact )		// GetQueryWildExactLC		- "*?%" and specials "\\=()|-!@~"/^$<"
 	LOWERCASE_CLONE ( QueryWildJson )		// GetQueryWildJsonLC		- "*?%"
 	LOWERCASE_CLONE ( QueryWild )			// GetQueryWildLC			- "*?%" and specials "()|-!@~"/^$<"
-	LOWERCASE_CLONE ( QueryExactJson )		// GetQueryExactJsonLC		- "="
-	LOWERCASE_CLONE ( QueryExact )			// GetQueryExactLC			- "=" and specials "=()|-!@~"/^$<"
+	LOWERCASE_CLONE ( QueryExactJson )		// GetQueryExactJsonLC		- specials "="
+	LOWERCASE_CLONE ( QueryExact )			// GetQueryExactLC			- specials "=()|-!@~"/^$<"
 //	LOWERCASE_CLONE ( QueryJson )			// the same as just 'Query'	- special "\\" - that is usual old cloned query
 	LOWERCASE_CLONE ( Query_ )				// GetQuery_LC				- specials "()|-!@~"/^$<"
 

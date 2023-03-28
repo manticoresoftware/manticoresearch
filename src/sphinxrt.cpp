@@ -6645,15 +6645,13 @@ bool RtIndex_c::RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tG
 	return bFound;
 }
 
-void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial )
+void SetupExactTokenizer ( const TokenizerRefPtr_c & pTokenizer )
 {
 	assert ( pTokenizer );
-	pTokenizer->AddPlainChars ( "=" );
-	if ( bAddSpecial )
-		pTokenizer->AddSpecials ( "=" );
+	pTokenizer->AddSpecials ( "=" );
 }
 
-void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer )
+void SetupStarTokenizer ( const TokenizerRefPtr_c & pTokenizer )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChars ( "*" );
@@ -7660,7 +7658,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	RtQword_t tQword;
 
-	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pTokenizer = m_pQueryTokenizer->Clone ( SPH_CLONE );
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -7676,7 +7674,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	if ( m_tSettings.m_bIndexExactWords )
 	{
-		SetupExactTokenizer ( pTokenizer, false );
+		SetupExactTokenizer ( pTokenizer );
 		SetupExactDict ( pDict );
 	}
 

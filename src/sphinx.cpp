@@ -644,7 +644,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	if ( m_tSettings.m_bIndexExactWords )
 	{
-		pTokenizer->AddPlainChars ( "=" );
+		pTokenizer->AddSpecials ( "=" );
 		SetupExactDict ( pDict );
 	}
 
@@ -9781,7 +9781,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 
 	bool bWordDict = pDict->GetSettings ().m_bWordDict;
 
-	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pTokenizer = m_pQueryTokenizer->Clone ( SPH_CLONE );
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -9789,7 +9789,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	if ( IsStarDict ( bWordDict ) )
 		pTokenizer->AddPlainChars ( "*" );
 	if ( m_tSettings.m_bIndexExactWords )
-		pTokenizer->AddPlainChars ( "=" );
+		pTokenizer->AddSpecials ( "=" );
 
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
@@ -9953,7 +9953,8 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 
 	if ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_MORPH_NONE )==KWE_MORPH_NONE )
 	{
-		pNode->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		if ( !pNode->m_dWords[0].m_sWord.Begins( "=" ) )
+			pNode->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
 		return pNode;
 	}
 
@@ -9983,7 +9984,13 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
 		XQNode_t * pExact = CloneKeyword ( pNode );
-		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		if ( pNode->m_dWords[0].m_sWord.Begins( "=" ) )
+		{
+			pExact->m_dWords[0].m_sWord = pNode->m_dWords[0].m_sWord;
+		} else
+		{
+			pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		}
 		pExact->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pExact );
 	}

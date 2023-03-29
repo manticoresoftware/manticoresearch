@@ -181,6 +181,9 @@ install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools 
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
 install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
 
+# stuff going to /usr/local/
+install ( DIRECTORY DESTINATION /usr/local/lib/manticore COMPONENT common )
+
 if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 	install_icudata ( ${FULL_SHARE_DIR}/icu )
 endif ()

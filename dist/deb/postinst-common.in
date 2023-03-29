@@ -15,6 +15,7 @@ DATADIR=@CMAKE_INSTALL_FULL_LOCALSTATEDIR@/lib/manticore
 SYSCONFDIR=@CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch
 chown manticore:manticore $DATADIR -R
 chown manticore:manticore $SYSCONFDIR -R
+chown manticore:manticore /usr/local/lib/manticore
 
 case "$1" in
     configure)

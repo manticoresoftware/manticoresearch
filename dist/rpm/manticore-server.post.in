@@ -13,6 +13,6 @@ if [ $1 == 2 ]; then
 	    fi
 fi
 # print some further pointers
-echo "To start Manticore Search service:"
+echo "To start Manticore Search, run the following command:"
 echo "  > systemctl start manticore"
 echo

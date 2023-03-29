@@ -5,7 +5,7 @@
 
 set -e
 
-echo "To start Manticore Search service:"
+echo "To start Manticore Search, run the following command:"
 if [ -x "/usr/bin/deb-systemd-helper" ]; then
  echo "  > systemctl start manticore"
 else

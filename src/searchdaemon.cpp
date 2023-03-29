@@ -845,12 +845,18 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 /////////////////////////////////////////////////////////////////////////////
 
 InputBuffer_c::InputBuffer_c( const BYTE* pBuf, int iLen )
-	: m_pBuf( pBuf ), m_pCur( pBuf ), m_bError( !pBuf || iLen<0 ), m_iLen( iLen )
-{}
+	: m_pBuf( pBuf ), m_pCur( pBuf ), m_iLen( iLen )
+{
+	if ( !pBuf || iLen<0 )
+		SetError ( "empty input buffer" );
+}
 
 InputBuffer_c::InputBuffer_c ( const VecTraits_T<BYTE> & dBuf )
-	: m_pBuf ( dBuf.begin() ), m_pCur ( dBuf.begin () ), m_bError ( dBuf.IsEmpty() ), m_iLen ( dBuf.GetLength() ) {}
-
+	: m_pBuf ( dBuf.begin() ), m_pCur ( dBuf.begin () ), m_iLen ( dBuf.GetLength() )
+{
+	if ( dBuf.IsEmpty() )
+		SetError ( "empty input buffer" );
+}
 
 CSphString InputBuffer_c::GetString()
 {
@@ -862,12 +868,8 @@ CSphString InputBuffer_c::GetString()
 CSphString InputBuffer_c::GetRawString( int iLen )
 {
 	CSphString sRes;
-
-	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur + iLen>m_pBuf + m_iLen ))
-	{
-		SetError( true );
+	if ( m_bError || !IsDataSizeValid ( iLen ) )
 		return sRes;
-	}
 
 	if ( iLen )
 		sRes.SetBinary( (const char*) m_pCur, iLen );
@@ -880,11 +882,8 @@ CSphString InputBuffer_c::GetRawString( int iLen )
 bool InputBuffer_c::GetString( CSphVector<BYTE>& dBuffer )
 {
 	int iLen = GetInt();
-	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur + iLen>m_pBuf + m_iLen ))
-	{
-		SetError( true );
+	if ( m_bError || !IsDataSizeValid ( iLen ) )
 		return false;
-	}
 
 	if ( !iLen )
 		return true;
@@ -896,13 +895,9 @@ bool InputBuffer_c::GetString( CSphVector<BYTE>& dBuffer )
 bool InputBuffer_c::GetBytes( void* pBuf, int iLen )
 {
 	assert ( pBuf );
-	assert ( iLen>0 && iLen<=g_iMaxPacketSize );
 
-	if ( m_bError || ( m_pCur + iLen>m_pBuf + m_iLen ))
-	{
-		SetError( true );
+	if ( m_bError || !IsDataSizeValid ( iLen ) )
 		return false;
-	}
 
 	memcpy( pBuf, m_pCur, iLen );
 	m_pCur += iLen;
@@ -912,13 +907,9 @@ bool InputBuffer_c::GetBytes( void* pBuf, int iLen )
 bool InputBuffer_c::GetBytesZerocopy( const BYTE** ppData, int iLen )
 {
 	assert ( ppData );
-	assert ( iLen>0 && iLen<=g_iMaxPacketSize );
 
-	if ( m_bError || ( m_pCur + iLen>m_pBuf + m_iLen ))
-	{
-		SetError( true );
+	if ( m_bError || !IsDataSizeValid ( iLen ) )
 		return false;
-	}
 
 	*ppData = m_pCur;
 	m_pCur += iLen;
@@ -931,7 +922,7 @@ bool InputBuffer_c::GetDwords( CSphVector<DWORD>& dBuffer, int& iGot, int iMax )
 	iGot = GetInt();
 	if ( iGot<0 || iGot>iMax )
 	{
-		SetError( true );
+		SetError( "length %d (should be in 0..%d range)", iGot, iMax );
 		return false;
 	}
 
@@ -951,7 +942,7 @@ bool InputBuffer_c::GetQwords( CSphVector<SphAttr_t>& dBuffer, int& iGot, int iM
 	iGot = GetInt();
 	if ( iGot<0 || iGot>iMax )
 	{
-		SetError( true );
+		SetError( "length %d (should be in 0..%d range)", iGot, iMax );
 		return false;
 	}
 
@@ -965,6 +956,56 @@ bool InputBuffer_c::GetQwords( CSphVector<SphAttr_t>& dBuffer, int& iGot, int iM
 	return !m_bError;
 }
 
+void InputBuffer_c::SetError( const char * sTemplate, ... )
+{
+	m_bError = true;
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	m_sError.SetSprintfVa ( sTemplate, ap );
+	va_end ( ap );
+}
+
+bool InputBuffer_c::IsDataSizeValid ( int iSize )
+{
+	if ( !IsLessMaxPacket ( iSize ) )
+	{
+		return false;
+	} else if ( m_pCur + iSize>m_pBuf + m_iLen )
+	{
+		SetError( "read overflows buffer by %d byte, data size %d", (int)( ( m_pCur + iSize ) - ( m_pBuf + m_iLen ) ), iSize );
+		return false;
+	}
+
+	return true;
+}
+
+bool InputBuffer_c::IsLessMaxPacket ( int iSize )
+{
+	if ( iSize<0 )
+	{
+		SetError( "negative data length %d", iSize );
+		return false;
+	} else if ( iSize>g_iMaxPacketSize )
+	{
+		SetError( "length out of bounds %d(%d)", iSize, g_iMaxPacketSize );
+		return false;
+	}
+
+	return true;
+}
+
+void InputBuffer_c::ResetError()
+{
+	m_bError = false;
+	m_sError = "";
+}
+
+void NetGenericOutputBuffer_c::ResetError()
+{
+	m_bError = false;
+	m_sError = "";
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // SERVED INDEX DESCRIPTORS STUFF

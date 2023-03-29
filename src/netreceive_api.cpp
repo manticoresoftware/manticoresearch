@@ -119,6 +119,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 					sphLogDebugv ( "conn %s(%d): bailing idle pconn on client_timeout", sClientIP, iCID );
 				else
 				{
+					pBuf->ResetError();
 					sphLogDebugv ( "conn %s(%d): timeout, not reached, continue", sClientIP, iCID );
 					continue;
 				}
@@ -195,6 +196,12 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		if ( !tOut.Flush () )
 			break;
+
+		pBuf->SyncErrorState();
+		if ( tIn.GetError() )
+			sphWarning ( "%s", tIn.GetErrorMessage().cstr() );
+		pBuf->ResetError();
+
 	} while ( tSess.GetPersistent());
 
 	sphLogDebugv ( "conn %s(%d): exiting", sClientIP, iCID );

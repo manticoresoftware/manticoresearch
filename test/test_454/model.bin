@@ -2,7 +2,7 @@ a:1:{i:0;a:20:{i:0;a:6:{s:13:"http_endpoint";s:10:"test1/_doc";s:11:"http_method
 { "index" : { "_index" : "test1", "_id" : "101" } }";s:4:"rows";s:125:"{"error":{"type":"illegal_argument_exception","reason":"The bulk request must be terminated by a newline [\n]"},"status":400}";s:9:"http_code";i:400;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:54:"
 { "index" : { "_index" : "test1", "_id" : "102" } }
 
-";s:4:"rows";s:183:"{"items":[{"index":{"_index":"test1","_type":"doc","_id":"102","status":400,"error":{"type":"mapper_parsing_exception","reason":"failed to parse, document is empty"}}}],"errors":true}";s:9:"http_code";i:500;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:365:"
+";s:4:"rows";s:183:"{"items":[{"index":{"_index":"test1","_type":"doc","_id":"102","status":400,"error":{"type":"mapper_parsing_exception","reason":"failed to parse, document is empty"}}}],"errors":true}";s:9:"http_code";i:409;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:365:"
 { "index" : { "_index" : "test1", "_id" : "101" } }
 { "int_col" : "101" }
 { "delete" : { "_index" : "test1", "_id" : "11" } }
@@ -25,7 +25,7 @@ a:1:{i:0;a:20:{i:0;a:6:{s:13:"http_endpoint";s:10:"test1/_doc";s:11:"http_method
 { "index" : { "_index" : "test1", "_id" : "1002" } }
 { "int_col" : "101", "id":1010 }
 
-";s:4:"rows";s:179:"{"items":[{"index":{"_index":"test1","_type":"doc","_id":"1002","status":400,"error":{"type":"mapper_parsing_exception","reason":"id has already been specified"}}}],"errors":true}";s:9:"http_code";i:500;s:4:"http";i:1;}i:16;a:6:{s:13:"http_endpoint";s:8:"cli_json";s:11:"http_method";s:4:"POST";s:12:"http_request";s:20:"truncate table test1";s:4:"rows";s:37:"[{"total":0,"error":"","warning":""}]";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:75:"
+";s:4:"rows";s:179:"{"items":[{"index":{"_index":"test1","_type":"doc","_id":"1002","status":400,"error":{"type":"mapper_parsing_exception","reason":"id has already been specified"}}}],"errors":true}";s:9:"http_code";i:409;s:4:"http";i:1;}i:16;a:6:{s:13:"http_endpoint";s:8:"cli_json";s:11:"http_method";s:4:"POST";s:12:"http_request";s:20:"truncate table test1";s:4:"rows";s:37:"[{"total":0,"error":"","warning":""}]";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:75:"
 { "index" : { "_index" : "test1", "_id" : null } }
 { "int_col" : "201" }
 

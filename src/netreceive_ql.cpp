@@ -124,6 +124,8 @@ struct MYSQL_FLAG
 	static constexpr WORD MORE_RESULTS = 8;		// mysql.h: SERVER_MORE_RESULTS_EXISTS
 };
 
+constexpr int MAX_PACKET_LEN = 0x00FFFFFFL; // 16777215 bytes, max low level packet size. Notice, also used as mask.
+
 struct MYSQL_CHARSET
 {
 	static constexpr BYTE utf8_general_ci = 0x21;
@@ -529,8 +531,16 @@ public:
 	// sends collected data, then reset
 	bool Commit() override
 	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( GetLength() ) );
-		m_tOut.SendBytes ( *this );
+		int iLeft = GetLength();
+		const BYTE * pBuf = Begin();
+		while ( iLeft )
+		{
+			int iSize = Min ( iLeft, MAX_PACKET_LEN );
+			m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + iSize );
+			m_tOut.SendBytes ( pBuf, iSize );
+			pBuf += iSize;
+			iLeft -= iSize;
+		}
 		Resize(0);
 		return true;
 	}
@@ -926,9 +936,6 @@ DEFINE_RENDER( QlCompressedInfo_t )
 		dDst.m_sChain << "gzip ";
 	}
 }
-
-
-constexpr int MAX_PACKET_LEN = 0x00FFFFFFL; // 16777215 bytes, max low level packet size. Notice, also used as mask.
 
 // main sphinxql server
 void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )

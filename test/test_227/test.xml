@@ -184,7 +184,9 @@ for ( $i=0; $i<8389004; $i++ )
 	$icontent .= "sc";
 $iquery = "REPLACE INTO rt1 (id, title, content, gid, price, big, categories, createdon, gidkey) VALUES (1, 'Title1', '" . $icontent . "', 0, 0, 0, (), 1553088425, '0Key')";
 $results[] = $ql->Query ( $iquery );
-$results[] = "ERROR: "; // $ql->Query ( "SELECT * FROM rt1" ); // FIXME!!! change back after MySQL large packet fix
+$qres = strval ( $ql->Query ( "SELECT * FROM rt1" ) );
+$results[] = "length " . strlen ( $qres );
+$results[] = substr ( $qres, 0, 128 ) . "...";
 
 // regression for id updates
 $results[] = $client->XUpdateAttributes ( "block1", array("id"), array(1=>array(100)) );

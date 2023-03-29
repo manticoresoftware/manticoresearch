@@ -1855,8 +1855,6 @@ class NDJsonStream_c
 	bool m_bDone;
 
 	int m_iJsons = 0;
-	int m_iReads = 0;
-	int m_iTotallyRead = 0; // not used, but provides data during debug
 
 public:
 	explicit NDJsonStream_c ( CharStream_c& tIn )

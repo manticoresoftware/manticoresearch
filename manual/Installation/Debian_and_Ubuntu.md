@@ -47,7 +47,7 @@ If you prefer "Nightly" (development) versions do:
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
 sudo dpkg -i manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
-sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata
+sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l
 ```
 
 ### Standalone DEB packages

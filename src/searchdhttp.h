@@ -87,8 +87,14 @@ class CharStream_c
 {
 protected:
 	bool m_bDone = false;
+	AsyncNetInputBuffer_c * m_pIn;
+	CSphString m_sError;
 
 public:
+	CharStream_c ( AsyncNetInputBuffer_c * pIn )
+		: m_pIn ( pIn )
+	{}
+
 	virtual ~CharStream_c() = default;
 
 	// return next chunk of data
@@ -98,6 +104,9 @@ public:
 	virtual Str_t ReadAll() = 0;
 
 	inline bool Eof() const noexcept { return m_bDone; }
+
+	bool GetError() const;
+	const CSphString & GetErrorMessage() const;
 };
 
 struct HttpProcessResult_t

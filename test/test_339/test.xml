@@ -146,6 +146,14 @@ index test2
 { "create" : { "index" : "test_rt", "id" : 104, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
 </query>
 
+<!-- bulk with empty line but with whitespace chars -->
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 31, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+   
+{ "insert" : { "index" : "test_rt", "id" : 32, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "index" : "test_rt", "id" : 33, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+</query>
+
 </httpqueries>
 
 </test>

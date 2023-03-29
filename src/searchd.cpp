@@ -19093,7 +19093,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( StrToAttrEngine ( eEngine, AttrEngine_e::ROWWISE, hSearchd.GetStr("engine"), sWarning ) )
 		SetDefaultAttrEngine(eEngine);
 	else
-		sphWarning ( sWarning.cstr() );
+		sphWarning ( "%s", sWarning.cstr() );
 
 	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );

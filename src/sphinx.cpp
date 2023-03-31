@@ -9909,7 +9909,7 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 #define SPH_EXTNODE_STACK_SIZE ( 0x160 )
 #endif
 #elif defined( _WIN32 )
-#define SPH_EXTNODE_STACK_SIZE ( 600 )
+#define SPH_EXTNODE_STACK_SIZE ( 630 )
 #else
 #define SPH_EXTNODE_STACK_SIZE ( 160 )
 #endif
@@ -9928,7 +9928,7 @@ int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 
 	// align as stack of tree + 32K
 	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enouth)
-	iQueryStack = iStackNeed + 32*1024;
+	iQueryStack = Threads::GetMaxCoroStackSize();
 	if ( Threads::GetMaxCoroStackSize()>=iQueryStack )
 		return (int)iQueryStack;
 

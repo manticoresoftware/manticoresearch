@@ -1950,7 +1950,10 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 {
 	m_iElementSize = iElementSize;
 
-	m_dPool.Reset ( nElements*GetIntElementSize() );
+	// large query + index with many fields + max_matches could overflow int size
+	// FIXME!!! is it worth to fail such large qeury on start of the search without special explicitly set flag?
+	int64_t iPoolSize = (int64_t)nElements * GetIntElementSize();
+	m_dPool.Reset ( iPoolSize );
 	m_dHash.Reset ( nElements );
 	m_dFree.Reset ( nElements );
 
@@ -1960,8 +1963,8 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 
 BYTE * FactorPool_c::Alloc ()
 {
-	int iIndex = m_dFree.Get();
-	assert ( iIndex>=0 && iIndex*GetIntElementSize()<m_dPool.GetLength() );
+	int64_t iIndex = m_dFree.Get();
+	assert ( iIndex>=0 && iIndex*GetIntElementSize()<m_dPool.GetLength64() );
 	return m_dPool.Begin() + iIndex * GetIntElementSize();
 }
 

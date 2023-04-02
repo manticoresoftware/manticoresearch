@@ -1535,26 +1535,6 @@ protected:
 	ISphExprRefPtr_c	m_pExpr;
 };
 
-
-static bool NextSet ( CSphFixedVector<int> & dSet, const CSphFixedVector<CSphVector<SphGroupKey_t>> & dAllKeys )
-{
-	for ( int i = 0; i < dSet.GetLength(); i++ )
-	{
-		int iMaxValues = dAllKeys[i].GetLength();
-		if ( !iMaxValues )
-			continue;
-
-		dSet[i]++;
-		if ( dSet[i]>=iMaxValues )
-			dSet[i] = 0;
-		else
-			return true;
-	}
-
-	return false;
-}
-
-
 template <typename MVA, typename ADDER>
 static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
 {
@@ -5512,6 +5492,10 @@ static CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation e
 static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
 {
 	bool bHaveColumnar = dAttrs.any_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
+	bool bAllColumnar = dAttrs.all_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
+
+	if ( bAllColumnar )
+		return CreateGrouperColumnarMulti ( dAttrs, eCollation );
 
 	switch ( eCollation )
 	{

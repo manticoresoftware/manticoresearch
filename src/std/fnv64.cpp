@@ -53,3 +53,30 @@ uint64_t sphFNV64cont ( const void * s, uint64_t uPrev )
 	}
 	return hval;
 }
+
+
+uint64_t sphFNV64 ( uint64_t uVal, uint64_t uPrev )
+{
+	const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
+	const BYTE * p = (const BYTE*)&uVal;
+	uint64_t hval = uPrev;
+
+	hval ^= (uint64_t)*(p+0);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+1);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+2);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+3);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+4);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+5);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+6);
+	hval *= FNV_64_PRIME;
+	hval ^= (uint64_t)*(p+7);
+	hval *= FNV_64_PRIME;
+
+	return hval;
+}

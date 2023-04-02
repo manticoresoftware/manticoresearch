@@ -11,6 +11,49 @@
 #include "columnargrouper.h"
 #include "sphinxsort.h"
 
+
+static inline SphGroupKey_t FetchIntValue ( const std::unique_ptr<columnar::Iterator_i> & pIterator, const CSphMatch & tMatch )
+{
+	pIterator->AdvanceTo ( tMatch.m_tRowID );
+	return pIterator->Get();
+}
+
+template <typename T>
+static inline void FetchMVAValues ( const std::unique_ptr<columnar::Iterator_i> & pIterator, CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch )
+{
+	pIterator->AdvanceTo ( tMatch.m_tRowID );
+
+	const BYTE * pMVA = nullptr;
+	int iLen = pIterator->Get(pMVA);
+	int iNumValues = iLen/sizeof(T);
+	auto pValues = (const T*)pMVA;
+
+	dKeys.Resize(iNumValues);
+	for ( int i = 0; i < iNumValues; i++ )
+		dKeys[i] = (SphGroupKey_t)pValues[i];
+}
+
+
+bool NextSet ( CSphFixedVector<int> & dSet, const CSphFixedVector<CSphVector<int64_t>> & dAllKeys )
+{
+	for ( int i = 0; i < dSet.GetLength(); i++ )
+	{
+		int iMaxValues = dAllKeys[i].GetLength();
+		if ( !iMaxValues )
+			continue;
+
+		dSet[i]++;
+		if ( dSet[i]>=iMaxValues )
+			dSet[i] = 0;
+		else
+			return true;
+	}
+
+	return false;
+}
+
+/////////////////////////////////////////////////////////////////////
+
 class GrouperColumnarInt_c : public CSphGrouper
 {
 public:
@@ -19,11 +62,11 @@ public:
 
 	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
 	ESphAttr		GetResultType () const final { return m_eAttrType; }
-	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final;
+	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final { return FetchIntValue ( m_pIterator, tMatch ); }
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { assert(0); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
-	CSphGrouper *	Clone() const final;
+	CSphGrouper *	Clone() const final	{ return new GrouperColumnarInt_c(*this); }
 
 private:
 	ESphAttr							m_eAttrType = SPH_ATTR_INTEGER;
@@ -44,26 +87,11 @@ GrouperColumnarInt_c::GrouperColumnarInt_c ( const GrouperColumnarInt_c & rhs )
 {}
 
 
-SphGroupKey_t GrouperColumnarInt_c::KeyFromMatch ( const CSphMatch & tMatch ) const
-{
-	if ( m_pIterator && m_pIterator->AdvanceTo ( tMatch.m_tRowID ) == tMatch.m_tRowID )
-		return m_pIterator->Get();
-
-	return SphGroupKey_t(0);
-}
-
-
 void GrouperColumnarInt_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
 	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(), sError );
-}
-
-
-CSphGrouper * GrouperColumnarInt_c::Clone() const
-{
-	return new GrouperColumnarInt_c(*this);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -150,7 +178,7 @@ public:
 	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
 	ESphAttr		GetResultType () const final { return SPH_ATTR_BIGINT; }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final { assert(0); return SphGroupKey_t(); }
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final;
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { FetchMVAValues<T> ( m_pIterator, dKeys, tMatch ); }
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
 	CSphGrouper *	Clone() const final { return new GrouperColumnarMVA_T(*this); }
@@ -162,29 +190,193 @@ private:
 };
 
 template <typename T>
-void GrouperColumnarMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
-{
-	dKeys.Resize(0);
-
-	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
-		return;
-
-	const BYTE * pMVA = nullptr;
-	int iLen = m_pIterator->Get(pMVA);
-	int iNumValues = iLen/sizeof(T);
-	auto pValues = (const T*)pMVA;
-
-	dKeys.Resize(iNumValues);
-	for ( int i = 0; i < iNumValues; i++ )
-		dKeys[i] = (SphGroupKey_t)pValues[i];
-}
-
-template <typename T>
 void GrouperColumnarMVA_T<T>::SetColumnar ( const columnar::Columnar_i * pColumnar )
 {
 	assert(pColumnar);
 	std::string sError; // fixme! report errors
 	m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttrName.cstr(),sError );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+template <class HASH>
+class GrouperColumnarMulti final : public CSphGrouper, public HASH
+{
+public:
+					GrouperColumnarMulti ( const CSphVector<CSphColumnInfo> & dAttrs, ESphCollation eCollation );
+
+	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final;
+	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
+	CSphGrouper *	Clone() const final { return new GrouperColumnarMulti<HASH> ( m_dAttrs, m_eCollation ); }
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final;
+	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
+	void			GetLocator ( CSphAttrLocator & ) const final { assert(0); }
+	ESphAttr		GetResultType() const final { return SPH_ATTR_BIGINT; }
+	bool			IsMultiValue() const final;
+
+private:
+	CSphVector<CSphColumnInfo>		m_dAttrs;
+	ESphCollation					m_eCollation = SPH_COLLATION_DEFAULT;
+	CSphVector<std::unique_ptr<columnar::Iterator_i>> m_dIterators;
+	CSphVector<bool>				m_dHaveStringHashes;
+	const columnar::Columnar_i *	m_pColumnar = nullptr;
+
+	SphGroupKey_t	FetchStringHash ( int iAttr, const CSphMatch & tMatch, SphGroupKey_t tPrevKey ) const;
+	SphGroupKey_t	FetchStringHash ( int iAttr, const CSphMatch & tMatch ) const;
+	void			SpawnIterators();
+};
+
+template <class HASH>
+GrouperColumnarMulti<HASH>::GrouperColumnarMulti ( const CSphVector<CSphColumnInfo> & dAttrs, ESphCollation eCollation )
+	: m_dAttrs ( dAttrs )
+	, m_eCollation ( eCollation )
+{
+	assert ( dAttrs.GetLength()>1 );
+}
+
+template <class HASH>
+SphGroupKey_t GrouperColumnarMulti<HASH>::KeyFromMatch ( const CSphMatch & tMatch ) const
+{
+	auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
+
+	for ( int i=0; i<m_dAttrs.GetLength(); i++ )
+	{
+		auto & pIterator = m_dIterators[i];
+
+		if ( m_dAttrs[i].m_eAttrType==SPH_ATTR_STRING || m_dAttrs[i].m_eAttrType==SPH_ATTR_STRINGPTR )
+			tKey = FetchStringHash ( i, tMatch, tKey );
+		else
+		{
+			SphGroupKey_t tNewKey = FetchIntValue ( pIterator, tMatch );
+			tKey = ( SphGroupKey_t ) sphFNV64 ( tNewKey, tKey );
+		}
+	}
+
+	return tKey;
+}
+
+template <class HASH>
+void GrouperColumnarMulti<HASH>::SetColumnar ( const columnar::Columnar_i * pColumnar )
+{
+	CSphGrouper::SetColumnar ( pColumnar );
+	m_pColumnar = pColumnar;
+	SpawnIterators();
+}
+
+template <class HASH>
+void GrouperColumnarMulti<HASH>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+
+	CSphFixedVector<CSphVector<SphGroupKey_t>> dAllKeys { m_dAttrs.GetLength() };
+	for ( int i=0; i<m_dAttrs.GetLength(); i++ )
+	{
+		auto & dCurKeys = dAllKeys[i];
+		auto & pIterator = m_dIterators[i];
+
+		switch ( m_dAttrs[i].m_eAttrType )
+		{
+		case SPH_ATTR_UINT32SET:
+			FetchMVAValues<DWORD> ( pIterator, dKeys, tMatch );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			FetchMVAValues<int64_t> ( pIterator, dKeys, tMatch );
+			break;
+
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:
+			{
+				SphGroupKey_t tStringKey = FetchStringHash ( i, tMatch );
+				if ( tStringKey!=(SphGroupKey_t)SPH_FNV64_SEED )
+					dCurKeys.Add ( tStringKey );
+			}
+			break;
+
+		default:
+			dCurKeys.Add ( FetchIntValue ( pIterator, tMatch ) );
+			break;
+		}
+	}
+
+	CSphFixedVector<int> dIndexes { m_dAttrs.GetLength() };
+	dIndexes.ZeroVec();
+
+	do
+	{
+		auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
+		ARRAY_FOREACH ( i, dAllKeys )
+			if ( dAllKeys[i].GetLength() )
+				tKey = (SphGroupKey_t)sphFNV64 ( dAllKeys[i][dIndexes[i]], tKey );
+
+		dKeys.Add(tKey);
+	}
+	while ( NextSet ( dIndexes, dAllKeys ) );
+}
+
+template <class HASH>
+bool GrouperColumnarMulti<HASH>::IsMultiValue() const
+{
+	return m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET; } );
+}
+
+template <class HASH>
+SphGroupKey_t GrouperColumnarMulti<HASH>::FetchStringHash ( int iAttr, const CSphMatch & tMatch, SphGroupKey_t tPrevKey ) const
+{
+	auto & pIterator = m_dIterators[iAttr];
+	pIterator->AdvanceTo ( tMatch.m_tRowID );
+	if ( m_dHaveStringHashes[iAttr] )
+		return sphFNV64 ( pIterator->Get(), tPrevKey );
+
+	const BYTE * pStr = nullptr;
+	int iLen = pIterator->Get(pStr);
+	if ( !iLen )
+		return tPrevKey;
+
+	return HASH::Hash ( pStr, iLen, tPrevKey );
+}
+
+template <class HASH>
+SphGroupKey_t GrouperColumnarMulti<HASH>::FetchStringHash ( int iAttr, const CSphMatch & tMatch ) const
+{
+	auto & pIterator = m_dIterators[iAttr];
+	pIterator->AdvanceTo ( tMatch.m_tRowID );
+	if ( m_dHaveStringHashes[iAttr] )
+		return pIterator->Get();
+
+	const BYTE * pStr = nullptr;
+	int iLen = pIterator->Get(pStr);
+	if ( !iLen )
+		return SPH_FNV64_SEED;
+
+	return HASH::Hash ( pStr, iLen, SPH_FNV64_SEED );
+}
+
+template <class HASH>
+void GrouperColumnarMulti<HASH>::SpawnIterators()
+{
+	m_dHaveStringHashes.Resize ( m_dAttrs.GetLength() );
+	m_dHaveStringHashes.Fill(false);
+	m_dIterators.Resize ( m_dAttrs.GetLength() );
+
+	ARRAY_FOREACH ( i, m_dAttrs )
+	{
+		const auto & tAttr = m_dAttrs[i];
+		assert ( tAttr.IsColumnar() || tAttr.IsColumnarExpr() );
+
+		std::string sError; // fixme! report errors
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
+		{
+			columnar::IteratorHints_t tHints;
+			columnar::IteratorCapabilities_t tCapabilities;
+			tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
+
+			m_dIterators[i] = CreateColumnarIterator ( m_pColumnar, tAttr.m_sName.cstr(), sError, tHints, &tCapabilities );
+			m_dHaveStringHashes[i] = tCapabilities.m_bStringHashes;
+		}
+		else
+			m_dIterators[i] = CreateColumnarIterator ( m_pColumnar, tAttr.m_sName.cstr(), sError );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -203,6 +395,18 @@ CSphGrouper * CreateGrouperColumnarString ( const CSphColumnInfo & tAttr, ESphCo
 	case SPH_COLLATION_LIBC_CI:			return new GrouperColumnarString_T<LibcCIHash_fn> ( tAttr, eCollation );
 	case SPH_COLLATION_LIBC_CS:			return new GrouperColumnarString_T<LibcCSHash_fn> ( tAttr, eCollation );
 	default:							return new GrouperColumnarString_T<BinaryHash_fn> ( tAttr, eCollation );
+	}
+}
+
+
+CSphGrouper * CreateGrouperColumnarMulti ( const CSphVector<CSphColumnInfo> & dAttrs, ESphCollation eCollation )
+{
+	switch ( eCollation )
+	{
+	case SPH_COLLATION_UTF8_GENERAL_CI:	return new GrouperColumnarMulti<Utf8CIHash_fn> ( dAttrs, eCollation );
+	case SPH_COLLATION_LIBC_CI:			return new GrouperColumnarMulti<LibcCIHash_fn> ( dAttrs, eCollation );
+	case SPH_COLLATION_LIBC_CS:			return new GrouperColumnarMulti<LibcCSHash_fn> ( dAttrs, eCollation );
+	default:							return new GrouperColumnarMulti<BinaryHash_fn> ( dAttrs, eCollation );
 	}
 }
 

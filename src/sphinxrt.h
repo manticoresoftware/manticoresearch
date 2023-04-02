@@ -427,8 +427,8 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
 	const CSphTightVector<uint64_t> &dFilter, CSphVector<DWORD> &dCheckpoints );
 
-void SetupExactTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bAddSpecial = true );
-void SetupStarTokenizer ( const TokenizerRefPtr_c& pTokenizer );
+void SetupExactTokenizer ( const TokenizerRefPtr_c & pTokenizer );
+void SetupStarTokenizer ( const TokenizerRefPtr_c & pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,

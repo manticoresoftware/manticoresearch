@@ -465,6 +465,9 @@ class NetGenericOutputBuffer_c : public ISphOutputBuffer
 {
 public:
 	bool	GetError () const { return m_bError; }
+	const	CSphString & GetErrorMessage() const { return m_sError; }
+	void	ResetError();
+
 	void	SetProfiler ( QueryProfile_c * pProfiler ) { m_pProfile = pProfiler; }
 
 	bool Flush ()
@@ -484,6 +487,7 @@ public:
 protected:
 	QueryProfile_c *	m_pProfile = nullptr;
 	bool		m_bError = false;
+	CSphString  m_sError;
 };
 
 /// generic request buffer
@@ -515,7 +519,6 @@ public:
 	CSphString		GetString ();
 	CSphString		GetRawString ( int iLen );
 	bool			GetString ( CSphVector<BYTE> & dBuffer );
-	bool			GetError () const { return m_bError; }
 	bool			GetBytes ( void * pBuf, int iLen );
 	const BYTE *	GetBufferPtr () const { return m_pCur; }
 	int				GetBufferPos () const { return int ( m_pCur - m_pBuf ); }
@@ -527,26 +530,33 @@ public:
 
 	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
 
+	bool			GetError() const { return m_bError; }
+	const CSphString & GetErrorMessage() const { return m_sError; }
+	void			ResetError();
+
 protected:
 	const BYTE *	m_pBuf;
 	const BYTE *	m_pCur;
-	bool			m_bError;
 	int				m_iLen;
 
 protected:
-	void			SetError ( bool bError ) { m_bError = bError; }
+	void			SetError ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+	bool			IsDataSizeValid ( int iSize );
+	bool			IsLessMaxPacket ( int iSize );
+
 	template < typename T > T	GetT ()
 	{
-		if ( m_bError || ( m_pCur + sizeof( T )>m_pBuf + m_iLen ))
-		{
-			SetError( true );
+		if ( m_bError || !IsDataSizeValid ( sizeof( T ) ) )
 			return 0;
-		}
 
 		T iRes = sphUnalignedRead( *( T* ) const_cast<BYTE*>(m_pCur) );
 		m_pCur += sizeof( T );
 		return iRes;
 	}
+
+private:
+	CSphString		m_sError;
+	bool			m_bError = false;
 };
 
 /// simple memory request buffer
@@ -1349,6 +1359,7 @@ enum ESphHttpStatus
 	SPH_HTTP_STATUS_404,
 	SPH_HTTP_STATUS_405,
 	SPH_HTTP_STATUS_409,
+	SPH_HTTP_STATUS_413,
 	SPH_HTTP_STATUS_500,
 	SPH_HTTP_STATUS_501,
 	SPH_HTTP_STATUS_503,

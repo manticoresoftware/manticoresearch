@@ -64,7 +64,6 @@ void NetOutputBuffer_c::SendBufferImpl ( const VecTraits_T<BYTE> & dData )
 	if ( sphInterrupted () )
 		sphLogDebug( "SIGTERM in NetOutputBuffer::Flush" );
 
-	StringBuilder_c sError;
 	auto* pBuffer = ( const char* ) dData.Begin();
 
 	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
@@ -80,8 +79,8 @@ void NetOutputBuffer_c::SendBufferImpl ( const VecTraits_T<BYTE> & dData )
 				continue;
 			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
 			{
-				sError.Sprintf( "send() failed: %d: %s", iErrno, sphSockError( iErrno ));
-				sphWarning( "%s", sError.cstr());
+				m_sError.SetSprintf ( "send() failed: %d: %s", iErrno, sphSockError( iErrno ));
+				sphWarning( "%s", m_sError.cstr());
 				m_bError = true;
 				break;
 			}
@@ -101,8 +100,8 @@ void NetOutputBuffer_c::SendBufferImpl ( const VecTraits_T<BYTE> & dData )
 
 		if ( !iRes ) // timeout
 		{
-			sError << "timed out while trying to flush network buffers";
-			sphWarning( "%s", sError.cstr());
+			m_sError = "timed out while trying to flush network buffers";
+			sphWarning( "%s", m_sError.cstr());
 			m_bError = true;
 			break;
 		}
@@ -112,8 +111,8 @@ void NetOutputBuffer_c::SendBufferImpl ( const VecTraits_T<BYTE> & dData )
 			int iErrno = sphSockGetErrno();
 			if ( iErrno==EINTR )
 				break;
-			sError.Sprintf( "sphPoll() failed: %d: %s", iErrno, sphSockError( iErrno ));
-			sphWarning( "%s", sError.cstr());
+			m_sError.SetSprintf ( "sphPoll() failed: %d: %s", iErrno, sphSockError( iErrno ));
+			sphWarning( "%s", m_sError.cstr());
 			m_bError = true;
 			break;
 		}
@@ -274,8 +273,13 @@ bool NetInputBuffer_c::ReadFrom( int iLen, int iTimeout, bool bIntr, bool bAppen
 	int iTail = bAppend ? m_iLen : 0;
 
 	m_bIntr = false;
-	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
+	if ( !IsLessMaxPacket ( iLen ) )
 		return false;
+	if ( m_iSock<0 )
+	{
+		SetError ( "reading from invalid socket %d", m_iSock );
+		return false;
+	}
 
 	int iOff = int ( m_pCur - m_pBuf );
 	Resize( m_iLen );
@@ -286,16 +290,18 @@ bool NetInputBuffer_c::ReadFrom( int iLen, int iTimeout, bool bIntr, bool bAppen
 	int iGot = sphSockRead( m_iSock, pBuf, iLen, iTimeout, bIntr );
 	if ( sphInterrupted () )
 	{
-		sphLogDebug( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
-		m_bError = true;
+		SetError ( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
+		sphLogDebugv ( "%s", GetErrorMessage().cstr() );
 		m_bIntr = true;
 		return false;
 	}
 
-	m_bError = ( iGot!=iLen );
-	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
-	m_iLen = m_bError ? 0 : iTail + iLen;
-	return !m_bError;
+	if ( iGot!=iLen )
+		SetError ( "wrong size read %d(%d)", iGot, iLen );
+
+	m_bIntr = ( GetError() && ( sphSockPeekErrno()==EINTR ) );
+	m_iLen = ( GetError() ? 0 : iTail + iLen );
+	return !GetError();
 }
 
 

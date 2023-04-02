@@ -208,12 +208,12 @@ UPCLONESTART ( Query )
 UPCLONEEND ( Query )
 
 UPCLONESTART ( QueryWildExactJson )
-	pLC->AddChars ( "*?%=", 0, FLAG_CODEPOINT_IGNORE );
-	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+	pLC->AddChars ( "*?%", 0, FLAG_CODEPOINT_IGNORE );
+	pLC->AddChars ( "\\=", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryWildExactJson )
 
 UPCLONESTART ( QueryWildExact )
-	pLC->AddChars ( "*?%=", 0, FLAG_CODEPOINT_IGNORE );
+	pLC->AddChars ( "*?%", 0, FLAG_CODEPOINT_IGNORE );
 	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryWildExact )
 
@@ -228,12 +228,10 @@ UPCLONESTART ( QueryWild )
 UPCLONEEND ( QueryWild )
 
 UPCLONESTART ( QueryExactJson )
-	pLC->AddChars ( "=" );
-	pLC->AddChars ( "\\", FLAG_CODEPOINT_SPECIAL );
+	pLC->AddChars ( "\\=", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryExactJson )
 
 UPCLONESTART ( QueryExact )
-	pLC->AddChars ( "=" );
 	pLC->AddChars ( "\\=()|-!@~\"/^$<", FLAG_CODEPOINT_SPECIAL );
 UPCLONEEND ( QueryExact )
 

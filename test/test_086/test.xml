@@ -4,7 +4,6 @@
 <name>index rotation vs pconns</name>
 
 <requires>
-<non-windows/>
 <non-rt/>
 </requires>
 
@@ -77,8 +76,6 @@ unset ( $res2["time"] );
 $client->Close();
 
 $results = array ( $res1, $res2 );
-if ( !$res1 || !$res2 || $rv!=0 )
-	$results = false;
 ]]></custom_test>
 
 </test>

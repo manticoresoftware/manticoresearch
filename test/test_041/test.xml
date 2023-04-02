@@ -406,6 +406,16 @@ index phrase_shift_star_1
 
     <!-- regression wildcard with utf8 counts as phrase shift -->
     SELECT id, weight() FROM phrase_shift_star_1 WHERE MATCH(' оранжевая "*коробка может быть" ') ORDER BY weight() desc;
+    
+    <!-- regression escaped exact symbol -->
+    SELECT * FROM kw_p WHERE MATCH('busi\\=');
+    show meta;
+    SELECT * FROM rt_p WHERE MATCH('busi\\=');
+    show meta;
+    SELECT * FROM kw_p WHERE MATCH('busi\\=') option expand_keywords=1;
+    show meta;
+    SELECT * FROM rt_p WHERE MATCH('busi\\=') option expand_keywords=1;
+    show meta;    
 </sphinxql>
 </queries>
 

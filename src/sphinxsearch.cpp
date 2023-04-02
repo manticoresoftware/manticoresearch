@@ -1950,7 +1950,10 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 {
 	m_iElementSize = iElementSize;
 
-	m_dPool.Reset ( nElements*GetIntElementSize() );
+	// large query + index with many fields + max_matches could overflow int size
+	// FIXME!!! is it worth to fail such large qeury on start of the search without special explicitly set flag?
+	int64_t iPoolSize = (int64_t)nElements * GetIntElementSize();
+	m_dPool.Reset ( iPoolSize );
 	m_dHash.Reset ( nElements );
 	m_dFree.Reset ( nElements );
 
@@ -1960,8 +1963,8 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 
 BYTE * FactorPool_c::Alloc ()
 {
-	int iIndex = m_dFree.Get();
-	assert ( iIndex>=0 && iIndex*GetIntElementSize()<m_dPool.GetLength() );
+	int64_t iIndex = m_dFree.Get();
+	assert ( iIndex>=0 && iIndex*GetIntElementSize()<m_dPool.GetLength64() );
 	return m_dPool.Begin() + iIndex * GetIntElementSize();
 }
 
@@ -2139,7 +2142,7 @@ struct RankerState_Expr_fn : public ISphExtra
 {
 public:
 	// per-field and per-document stuff
-	BYTE				m_uLCS[SPH_MAX_FIELDS];
+	CSphFixedVector<BYTE> m_uLCS { 0 };
 	BYTE				m_uCurLCS;
 	DWORD				m_uCurPos;
 	DWORD				m_uLcsTailPos;
@@ -2152,24 +2155,24 @@ public:
 	DWORD				m_uDocBM25 = 0;
 	CSphBitvec			m_tMatchedFields;
 	int					m_iCurrentField = 0;
-	DWORD				m_uHitCount[SPH_MAX_FIELDS];
-	DWORD				m_uWordCount[SPH_MAX_FIELDS];
-	CSphVector<float>	m_dIDF;
-	float				m_dTFIDF[SPH_MAX_FIELDS];
-	float				m_dMinIDF[SPH_MAX_FIELDS];
-	float				m_dMaxIDF[SPH_MAX_FIELDS];
-	float				m_dSumIDF[SPH_MAX_FIELDS];
-	int					m_iMinHitPos[SPH_MAX_FIELDS];
-	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
+	CSphFixedVector<DWORD> m_uHitCount { 0 };
+	CSphFixedVector<DWORD> m_uWordCount { 0 };
+	CSphFixedVector<float>	m_dIDF { 0 };
+	CSphFixedVector<float> m_dTFIDF { 0 };
+	CSphFixedVector<float> m_dMinIDF { 0 };
+	CSphFixedVector<float> m_dMaxIDF { 0 };
+	CSphFixedVector<float> m_dSumIDF { 0 };
+	CSphFixedVector<int> m_iMinHitPos { 0 };
+	CSphFixedVector<int> m_iMinBestSpanPos { 0 };
 	CSphBitvec			m_tExactHit;
 	CSphBitvec			m_tExactOrder;
 	CSphBitvec			m_tKeywords;
 	DWORD				m_uDocWordCount = 0;
-	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
-	CSphVector<int>		m_dTF;			///< for bm25a
+	CSphFixedVector<int> m_iMaxWindowHits { 0 };
+	CSphFixedVector<int> m_dTF { 0 };			///< for bm25a
 	float				m_fDocBM25A = 0.0f;	///< for bm25a
-	CSphVector<int>		m_dFieldTF;		///< for bm25f, per-field layout (ie all field0 tfs, then all field1 tfs, etc)
-	int					m_iMinGaps[SPH_MAX_FIELDS];		///< number of gaps in the minimum matching window
+	CSphFixedVector<int> m_dFieldTF { 0 };		///< for bm25f, per-field layout (ie all field0 tfs, then all field1 tfs, etc)
+	CSphFixedVector<int> m_iMinGaps { 0 };		///< number of gaps in the minimum matching window
 
 	const char *		m_sExpr = nullptr;
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
@@ -2182,8 +2185,8 @@ public:
 	float				m_fParamK1 = 1.2f;
 	float				m_fParamB = 0.75f;
 	int					m_iMaxQpos = 65535;		///< among all words, including dupes
-	CSphVector<WORD>	m_dTermDupes;
-	CSphVector<Hitpos_t>	m_dTermsHit;
+	CSphFixedVector<WORD>		m_dTermDupes { 0 };
+	CSphFixedVector<Hitpos_t>	m_dTermsHit { 0 };
 	CSphBitvec			m_tHasMultiQpos;
 	int					m_uLastSpanStart = 0;
 
@@ -2205,7 +2208,7 @@ public:
 	int						m_iHaveMinWindow = 0;		///< whether to compute minimum matching window, and over how many query words
 	int						m_iMinWindowWords = 0;		///< how many unique words have we seen so far
 	CSphVector<LeanHit_t>	m_dMinWindowHits;			///< current minimum matching window candidate hits
-	CSphVector<int>			m_dMinWindowCounts;			///< maps querypos indexes to number of occurrencess in m_dMinWindowHits
+	CSphFixedVector<int>	m_dMinWindowCounts { 0 };			///< maps querypos indexes to number of occurrencess in m_dMinWindowHits
 
 	// exact_order
 	int					m_iLastField = 0;
@@ -2213,9 +2216,9 @@ public:
 	int					m_iExactOrderWords = 0;
 
 	// LCCS and Weighted LCCS
-	BYTE				m_dLCCS[SPH_MAX_FIELDS];
-	float				m_dWLCCS[SPH_MAX_FIELDS];
-	CSphVector<WORD>	m_dNextQueryPos;				///< words positions might have gaps due to stop-words
+	CSphFixedVector<BYTE>	m_dLCCS { 0 };
+	CSphFixedVector<float>	m_dWLCCS { 0 };
+	CSphFixedVector<WORD>	m_dNextQueryPos { 0 };				///< words positions might have gaps due to stop-words
 	WORD				m_iQueryPosLCCS = 0;
 	int					m_iHitPosLCCS = 0;
 	BYTE				m_iLenLCCS = 0;
@@ -2234,10 +2237,10 @@ public:
 	AtcHit_t			m_dAtcHits[XRANK_ATC_BUFFER_LEN];	///< ATC hits ring buffer
 	int					m_iAtcHitStart = 0;					///< hits start at ring buffer
 	int					m_iAtcHitCount = 0;					///< hits amount in buffer
-	CSphVector<float>	m_dAtcTerms;						///< per-word ATC
+	CSphFixedVector<float>	m_dAtcTerms { 0 };						///< per-word ATC
 	CSphBitvec			m_dAtcProcessedTerms;				///< temporary processed mask
 	DWORD				m_uAtcField = 0;					///< currently processed field
-	float				m_dAtc[SPH_MAX_FIELDS];				///< ATC per-field values
+	CSphFixedVector<float> m_dAtc { 0 };					///< ATC per-field values
 	bool				m_bAtcHeadProcessed = false;		///< flag for hits from buffer start to window start
 	bool				m_bHaveAtc = false;					///< calculate ATC?
 	bool				m_bWantAtc = false;
@@ -2258,13 +2261,13 @@ public:
 	/// WARNING, CALLED EVEN BEFORE INIT()!
 	void SetQwords ( const ExtQwordsHash_t & hQwords )
 	{
-		m_dIDF.Resize ( m_iMaxQpos+1 ); // [MaxUniqQpos, MaxQpos] range will be all 0, but anyway
+		m_dIDF.Reset ( m_iMaxQpos+1 ); // [MaxUniqQpos, MaxQpos] range will be all 0, but anyway
 		m_dIDF.Fill ( 0.0f );
 
-		m_dTF.Resize ( m_iMaxQpos+1 );
+		m_dTF.Reset ( m_iMaxQpos+1 );
 		m_dTF.Fill ( 0 );
 
-		m_dMinWindowCounts.Resize ( m_iMaxQpos+1 );
+		m_dMinWindowCounts.Reset ( m_iMaxQpos+1 );
 		m_dMinWindowCounts.Fill ( 0 );
 
 		m_iQueryWordCount = 0;
@@ -2307,7 +2310,7 @@ public:
 
 		// set next term position for current term in query (degenerates to +1 in the simplest case)
 		dQueryPos.Sort();
-		m_dNextQueryPos.Resize ( m_iMaxQpos+1 );
+		m_dNextQueryPos.Reset ( m_iMaxQpos+1 );
 		m_dNextQueryPos.Fill ( (WORD)-1 ); // WORD_MAX filler
 		for ( int i=0; i<dQueryPos.GetLength()-1; i++ )
 		{
@@ -2322,10 +2325,10 @@ public:
 		if ( !pRoot )
 			return;
 
-		m_dTermsHit.Resize ( iMaxQpos + 1 );
+		m_dTermsHit.Reset ( iMaxQpos + 1 );
 		m_dTermsHit.Fill ( EMPTY_HIT );
 		m_tHasMultiQpos.Init ( iMaxQpos+1 );
-		m_dTermDupes.Resize ( iMaxQpos+1 );
+		m_dTermDupes.Reset ( iMaxQpos+1 );
 		m_dTermDupes.Fill ( (WORD)-1 );
 
 		CSphVector<TermPos_t> dTerms;
@@ -3119,30 +3122,30 @@ public:
 		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
 		switch ( iID )
 		{
-			case XRANK_LCS:					return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_uLCS );
+			case XRANK_LCS:					return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_uLCS.Begin() );
 			case XRANK_USER_WEIGHT:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_pWeights );
-			case XRANK_HIT_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uHitCount );
-			case XRANK_WORD_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uWordCount );
-			case XRANK_TF_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dTFIDF );
-			case XRANK_MIN_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dMinIDF );
-			case XRANK_MAX_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dMaxIDF );
-			case XRANK_SUM_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dSumIDF );
-			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
-			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
+			case XRANK_HIT_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uHitCount.Begin() );
+			case XRANK_WORD_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uWordCount.Begin() );
+			case XRANK_TF_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dTFIDF.Begin() );
+			case XRANK_MIN_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dMinIDF.Begin() );
+			case XRANK_MAX_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dMaxIDF.Begin() );
+			case XRANK_SUM_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dSumIDF.Begin() );
+			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos.Begin() );
+			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos.Begin() );
 			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<CSphBitvec> ( pCF, m_pState->m_tExactHit );
 			case XRANK_EXACT_ORDER:			return new Expr_FieldFactor_c<CSphBitvec> ( pCF, m_pState->m_tExactOrder );
 			case XRANK_MAX_WINDOW_HITS:
 				{
 					CSphMatch tDummy;
 					m_pState->m_iWindowSize = pLeft->IntEval ( tDummy ); // must be constant; checked in GetReturnType()
-					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
+					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits.Begin() );
 				}
-			case XRANK_MIN_GAPS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
-			case XRANK_LCCS:				return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_dLCCS );
-			case XRANK_WLCCS:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dWLCCS );
+			case XRANK_MIN_GAPS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps.Begin() );
+			case XRANK_LCCS:				return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_dLCCS.Begin() );
+			case XRANK_WLCCS:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dWLCCS.Begin() );
 			case XRANK_ATC:
 				m_pState->m_bWantAtc = true;
-				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dAtc );
+				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dAtc.Begin() );
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_Rank_c ( m_pState->m_iMaxLCS );
@@ -3378,15 +3381,31 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_iWindowSize = 1;
 	m_iHaveMinWindow = 0;
 	m_dMinWindowHits.Reserve ( Max ( m_iMaxQpos, 32 ) );
-	memset ( m_dLCCS, 0 , sizeof(m_dLCCS) );
-	memset ( m_dWLCCS, 0, sizeof(m_dWLCCS) );
 	m_iQueryPosLCCS = 0;
 	m_iHitPosLCCS = 0;
 	m_iLenLCCS = 0;
 	m_fWeightLCCS = 0.0f;
-	m_dAtcTerms.Resize ( m_iMaxQpos + 1 );
+	m_dAtcTerms.Reset ( m_iMaxQpos + 1 );
 	m_dAtcProcessedTerms.Init ( m_iMaxQpos + 1 );
 	m_bAtcHeadProcessed = false;
+	
+	m_uLCS.Reset ( iFields );
+	m_uHitCount.Reset ( iFields );
+	m_uWordCount.Reset ( iFields );
+	m_dTFIDF.Reset ( iFields );
+	m_dMinIDF.Reset ( iFields );
+	m_dMaxIDF.Reset ( iFields );
+	m_dSumIDF.Reset ( iFields );
+	m_iMinHitPos.Reset ( iFields );
+	m_iMinBestSpanPos.Reset ( iFields );
+	m_iMaxWindowHits.Reset ( iFields );
+	m_iMinGaps.Reset ( iFields );
+	m_dLCCS.Reset ( iFields );
+	m_dLCCS.Fill ( 0 );
+	m_dWLCCS.Reset ( iFields );
+	m_dWLCCS.Fill ( 0 );
+	m_dAtc.Reset ( iFields );
+
 	ResetDocFactors();
 
 	// compute query level constants
@@ -3418,7 +3437,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_fParamB = 0.75f;
 
 	// not in SetQwords, because we only get iFields here
-	m_dFieldTF.Resize ( m_iFields*(m_iMaxQpos+1) );
+	m_dFieldTF.Reset ( m_iFields*(m_iMaxQpos+1) );
 	m_dFieldTF.Fill ( 0 );
 
 	ExprRankerHook_T<NEED_PACKEDFACTORS, HANDLE_DUPES> tHook ( this );
@@ -4066,8 +4085,8 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 
 	// cleanup
 	ResetDocFactors();
-	memset ( m_dLCCS, 0 , sizeof(m_dLCCS) );
-	memset ( m_dWLCCS, 0, sizeof(m_dWLCCS) );
+	m_dLCCS.Fill ( 0 );
+	m_dWLCCS.Fill ( 0 );
 	m_iQueryPosLCCS = 0;
 	m_iHitPosLCCS = 0;
 	m_iLenLCCS = 0;

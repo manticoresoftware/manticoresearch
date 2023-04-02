@@ -15,6 +15,12 @@
 * [Commit 3e4d](https://github.com/manticoresoftware/manticoresearch/commit/3e4d145d) fixed percolate query to handle exact term modifier
 * [Commit 7d08](https://github.com/manticoresoftware/manticoresearch/commit/7d08d877) fixed wrong behavior when exceptions fold multiple lines at the stopwords
 * [Commit 4f4b](https://github.com/manticoresoftware/manticoresearch/commit/4f4ba25e) fixed wrong charset mapping for duplicates
+* [Commit 0bf1](https://github.com/manticoresoftware/manticoresearch/commit/0bf17d9e) fixed string functions upper and lower to work with multibyte string
+* [Commit 0297](https://github.com/manticoresoftware/manticoresearch/commit/02977de) fixed daemon crash on processing search with pseudo-sharding enabled and UDF with JSON argument
+* [Commit 8505](https://github.com/manticoresoftware/manticoresearch/commit/85057e7) fixed exact symbol can be escaped; fixed double exact expansion by expand_keyword option
+* [Commit e9bc](https://github.com/manticoresoftware/manticoresearch/commit/e9bc2f9) fixed HTTP error on processing bulk requests; fixed return error to client from net loop
+* [Commit c86d](https://github.com/manticoresoftware/manticoresearch/commit/c86d78c) fixed SphinxQL packet larger 16Mb to properly return to client
+* [Commit e90f](https://github.com/manticoresoftware/manticoresearch/commit/e90ff11) fixed daemon crash on query with packedfactors and large internal buffer
 
 ### Major new features
 * Query optimizer now works for fulltext queries

@@ -37,7 +37,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	if ( bHeNeedSSL && !bICanSSL )
 	{
 		if ( bINeedSSL )
-			sphWarning ( "Client tries to connect with https to secure port, but we can't serve" );
+			LogNetError ( "Client tries to connect with https to secure port, but we can't serve" );
 
 		// that will drop the connection (we can't say anything as can't encrypt our message)
 		return;
@@ -59,9 +59,6 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_eType = QUERY_JSON;
 
-	int iCID = tSess.GetConnID();
-	const char * sClientIP = tSess.szClientName();
-
 	// needed to check permission to turn maintenance mode on/off
 
 	if ( bHeNeedSSL )
@@ -70,6 +67,8 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf.get();
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
+	CSphString sError;
+	bool bOk = true;
 	HttpRequestParser_c tParser;
 	CSphVector<BYTE> dResult;
 	TRACE_CONN ( "conn", "HttpServe" );
@@ -77,9 +76,13 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	auto HttpReply = [&dResult, &tOut] ( ESphHttpStatus eCode, Str_t sMsg )
 	{
 		if ( IsEmpty ( sMsg ) )
+		{
 			HttpBuildReply ( dResult, eCode, sMsg, false );
-		else
+		} else
+		{
+			LogNetError ( sMsg.first );
 			sphHttpErrorReply ( dResult, eCode, sMsg.first );
+		}
 		tOut.SwapData ( dResult );
 		return tOut.Flush();
 	};
@@ -99,8 +102,11 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( iChunk > 0 )
 				continue;
 
-			if ( !iChunk && tIn.GetError() )
-				sphWarning ( "failed to receive HTTP request (client=%s(%d)) max packet size(%d) exceeded)", sClientIP, iCID, g_iMaxPacketSize );
+			if ( !iChunk || tIn.GetError() )
+			{
+				sError.SetSprintf ( "failed to receive HTTP request, %s", ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
+				HttpReply ( SPH_HTTP_STATUS_400, FromStr ( sError ) );
+			}
 
 			return;
 		}
@@ -108,7 +114,11 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		// malformed header
 		if ( tParser.Error() )
 		{
-			HttpReply ( SPH_HTTP_STATUS_400, FromSz ( tParser.Error() ) );
+			if ( tIn.GetError() )
+				sError.SetSprintf ( "%s, %s", tIn.GetErrorMessage().cstr(), tParser.Error() );
+			else
+				sError = tParser.Error();
+			HttpReply ( SPH_HTTP_STATUS_400, FromStr ( sError ) );
 			break;
 		}
 
@@ -141,11 +151,16 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		}
 
 //		tracer.Instant ( [&tIn](StringBuilder_c& sOut) {sOut<< ",\"args\":{\"step\":"<<tIn.HasBytes()<<"}";} );
-		tParser.ProcessClientHttp ( tIn, dResult );
+		bOk = tParser.ProcessClientHttp ( tIn, dResult );
 
 		tOut.SwapData (dResult);
 		if ( !tOut.Flush () )
 			break;
+
 		pBuf->SyncErrorState();
-	} while ( tSess.GetPersistent() );
+		if ( tIn.GetError() )
+			LogNetError ( tIn.GetErrorMessage().cstr() );
+		pBuf->ResetError();
+
+	} while ( tSess.GetPersistent() && bOk );
 }

@@ -124,6 +124,8 @@ struct MYSQL_FLAG
 	static constexpr WORD MORE_RESULTS = 8;		// mysql.h: SERVER_MORE_RESULTS_EXISTS
 };
 
+constexpr int MAX_PACKET_LEN = 0x00FFFFFFL; // 16777215 bytes, max low level packet size. Notice, also used as mask.
+
 struct MYSQL_CHARSET
 {
 	static constexpr BYTE utf8_general_ci = 0x21;
@@ -529,8 +531,16 @@ public:
 	// sends collected data, then reset
 	bool Commit() override
 	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( GetLength() ) );
-		m_tOut.SendBytes ( *this );
+		int iLeft = GetLength();
+		const BYTE * pBuf = Begin();
+		while ( iLeft )
+		{
+			int iSize = Min ( iLeft, MAX_PACKET_LEN );
+			m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + iSize );
+			m_tOut.SendBytes ( pBuf, iSize );
+			pBuf += iSize;
+			iLeft -= iSize;
+		}
 		Resize(0);
 		return true;
 	}
@@ -815,7 +825,7 @@ public:
 };
 
 
-bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
+static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
 	auto& tSess = session::Info();
 	assert ( pBuf );
@@ -927,9 +937,6 @@ DEFINE_RENDER( QlCompressedInfo_t )
 	}
 }
 
-
-constexpr int MAX_PACKET_LEN = 0x00FFFFFFL; // 16777215 bytes, max low level packet size. Notice, also used as mask.
-
 // main sphinxql server
 void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
@@ -970,6 +977,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		return;
 	}
 
+	CSphString sError;
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 	int iPacketLen;
@@ -1008,8 +1016,10 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			// inlined AsyncReadMySQLPacketHeader
 			if ( !pIn->ReadFrom ( iPacketLen+4 ))
 			{
-				sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)",
-						sClientIP, iCID, sphSockError ());
+				sError.SetSprintf ( "bailing on failed MySQL header, %s", ( pIn->GetError() ? pIn->GetErrorMessage().cstr() : sphSockError() ) );
+				LogNetError ( sError.cstr() );
+				SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				pOut->Flush ();
 				return;
 			}
 			pIn->SetBufferPos ( iStartPacketPos + iPacketLen ); // will read at the end of the buffer
@@ -1025,8 +1035,10 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			// receive package body
 			if ( !pIn->ReadFrom ( iPacketLen ))
 			{
-				sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')",
-						sClientIP, iCID, iPacketLen, sphSockError ());
+				sError.SetSprintf ( "failed to receive MySQL request body, expected length %d, %s", iPacketLen, ( pIn->GetError() ? pIn->GetErrorMessage().cstr() : sphSockError() ) );
+				LogNetError ( sError.cstr() );
+				SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				pOut->Flush ();
 				return;
 			}
 		}
@@ -1054,7 +1066,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( IsMaxedOut() )
 			{
-				sphWarning ( "%s", g_sMaxedOutMessage.first );
+				LogNetError ( g_sMaxedOutMessage.first );
 				SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
 				pOut->Flush ();
 				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
@@ -1086,6 +1098,12 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		}
 
 		tSess.SetPersistent ( LoopClientMySQL ( uPacketID, iPacketLen, pProfile, pBuf.get() ) );
+
+		pBuf->SyncErrorState();
+		if ( pIn->GetError() )
+			LogNetError ( pIn->GetErrorMessage().cstr() );
+		pBuf->ResetError();
+
 	} while ( tSess.GetPersistent() );
 }
 

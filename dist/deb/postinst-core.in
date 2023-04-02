@@ -10,7 +10,7 @@ chown manticore:manticore $LOGDIR -R
 
 echo "Manticore Search (https://manticoresearch.com)"
 echo ""
-echo "Getting Started with Manticore Search:"
+echo "Get started with Manticore Search:"
 echo "  https://manual.manticoresearch.com/Quick_start_guide"
 echo ""
 echo "Learn Manticore with interactive courses:"

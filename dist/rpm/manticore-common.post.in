@@ -3,6 +3,7 @@ groupadd -r %{manticore_group} 2>/dev/null || true
 useradd -M -r -d @CMAKE_INSTALL_FULL_LOCALSTATEDIR@/lib/manticore -s /bin/bash -c "Manticore server" -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 chown -R %{manticore_user}:%{manticore_group} @CMAKE_INSTALL_FULL_LOCALSTATEDIR@/lib/manticore
+chown -R %{manticore_user}:%{manticore_group} /usr/local/lib/manticore
 
 if [ $1 == 2 ]; then
         if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf ]; then

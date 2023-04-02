@@ -688,6 +688,12 @@ int64_t SockWrapper_c::GetTotalReceived () const
 	return m_pImpl->GetTotalReceived ();
 }
 
+int SockWrapper_c::GetSocket () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->m_iSock;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 /// Helpers
 /////////////////////////////////////////////////////////////////////////////
@@ -696,15 +702,18 @@ int64_t SockWrapper_c::GetTotalReceived () const
 // Alone worker will use waiting in poll.
 // Cooperative worker will yield and resume instead of waiting.
 // timeout is ruled by g_iWriteTimeoutS.
-static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen)
+static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen, CSphString & sError )
 {
 	if ( sphInterrupted () )
 		sphLogDebugv ( "SIGTERM in SockWrapper_c::Send" );
 
 	if ( iLen<=0 )
+	{
+		sError = "empty input buffer";
 		return false;
+	}
 
-	sphLogDebugv ( "AsyncSend " INT64_FMT " bytes", iLen );
+	sphLogDebugv ( "AsyncSend " INT64_FMT " bytes, sock=%d", iLen, pSock->GetSocket() );
 
 	auto iTimeoutUntilUs = MonoMicroTimer () + pSock->GetWTimeoutUS();
 	do
@@ -715,20 +724,26 @@ static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen)
 			int iErrno = sphSockGetErrno ();
 			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
 				continue;
-			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK ) {
-				sphWarning ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ));
+			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
+			{
+				sError.SetSprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+				sphWarning ( "%s, sock=%d", sError.cstr(), pSock->GetSocket() );
 				return false;
 			}
-		} else {
+		} else
+		{
 			if ( iLen==iRes )
 				return true; // we're finished
+
 			iLen -= iRes;
 			pBuffer += iRes;
 		}
 
-		sphLogDebugv ("Still need to send " INT64_FMT " bytes...", iLen );
+		sphLogDebugv ("Still need to send " INT64_FMT " bytes, sock=%d", iLen, pSock->GetSocket() );
 	} while (pSock->SockPoll ( iTimeoutUntilUs, true ) );
-	sphWarning ( "timed out while performing SyncSend to flush network buffers" );
+
+	sError = "timed out while performing SyncSend to flush network buffers";
+	sphWarning ( "%s, sock=%d", sError.cstr(), pSock->GetSocket() );
 	return false;
 }
 
@@ -737,7 +752,7 @@ static int AsyncRecvNBChunk ( SockWrapper_c * pSock, BYTE *& pBuf, int & iLeftBy
 {
 	// try to receive next chunk
 	auto iRes = pSock->SockRecv ( (char*) pBuf, iLeftBytes );
-	sphLogDebugv ( "=========== AsyncRecvNBChunk " INT64_FMT " when read %d bytes", iRes, iLeftBytes );
+	sphLogDebugv ( "AsyncRecvNBChunk " INT64_FMT " when read %d bytes, sock=%d", iRes, iLeftBytes, pSock->GetSocket() );
 
 	if ( iRes>0 )
 	{
@@ -761,7 +776,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 
 	// try to receive available chunk
 	int iReceived = AsyncRecvNBChunk ( pSock, pBuf, iSpace );
-	sphLogDebugv ( "AsyncRecvNBChunk %d bytes (%d requested)", iReceived, iLen );
+	sphLogDebugv ( "AsyncRecvNBChunk %d bytes (%d requested), sock=%d", iReceived, iLen, pSock->GetSocket() );
 	if ( iReceived>=iLen ) // all, and m.b. more read in one-shot
 		return iReceived;
 
@@ -793,7 +808,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 			break; // timed out
 
 		// wait until there is data
-		sphLogDebugv ( "Still need to receive %d bytes...", iLen );
+		sphLogDebugv ( "Still need to receive %d bytes, sock=%d", iLen, pSock->GetSocket() );
 		iRes = pSock->SockPoll ( tmNextStopUs, false );
 
 		// if there was EINTR, retry
@@ -806,7 +821,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 			{
 				if ( !( sphInterrupted () && bIntr ))
 					continue;
-				sphLogDebugv( "SyncSockRead: select got SIGTERM, exit -1" );
+				sphLogDebugv( "SyncSockRead: select got SIGTERM, exit -1, sock=%d", pSock->GetSocket() );
 			}
 			return -1;
 		}
@@ -830,19 +845,19 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 				continue;
 			}
 #endif
-			sphLogDebugv ( "return TIMEOUT..." );
+			sphLogDebugv ( "return TIMEOUT, sock=%d", pSock->GetSocket() );
 			sphSockSetErrno( ETIMEDOUT );
 			return -1;
 		}
 
 		// try to receive next chunk
 		iRes = AsyncRecvNBChunk( pSock, pBuf, iSpace );
-		sphLogDebugv ( "SyncSockRead: AsyncRecvNBChunk returned %d", iRes );
+		sphLogDebugv ( "SyncSockRead: AsyncRecvNBChunk returned %d, sock=%d", iRes, pSock->GetSocket() );
 
 		// if there was eof, we're done
 		if ( !iRes )
 		{
-			sphLogDebugv ( "SyncSockRead: connection reset" );
+			sphLogDebugv ( "SyncSockRead: connection reset, sock=%d", pSock->GetSocket() );
 			sphSockSetErrno( ECONNRESET );
 			return -1;
 		}
@@ -857,7 +872,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 			{
 				if ( !( sphInterrupted () && bIntr ))
 					continue;
-				sphLogDebugv( "SyncSockRead: select got SIGTERM, exit -1" );
+				sphLogDebugv( "SyncSockRead: select got SIGTERM, exit -1, sock=%d", pSock->GetSocket() );
 			}
 			return -1;
 		}
@@ -872,6 +887,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 	// if there was a timeout, report it as an error
 	if ( iLen>0 )
 	{
+		sphLogDebugv ( "SyncSockRead: at exit byt still need to receive %d bytes, return TIMEOUT, sock=%d", iLen, pSock->GetSocket() );
 		sphSockSetErrno( ETIMEDOUT );
 		return -1;
 	}
@@ -960,15 +976,19 @@ Proto_e AsyncNetInputBuffer_c::Probe ( bool bLight )
 bool AsyncNetInputBuffer_c::ReadFrom( int iLen, bool bIntr )
 {
 	m_bIntr = false;
-	if ( iLen<=0 || iLen>g_iMaxPacketSize )
+	if ( !IsLessMaxPacket ( iLen ) )
 		return false;
 
 	auto iRest = iLen - HasBytes();
 	if ( iRest<=0 ) // lazy case: prev ReadFrom already achieved requested bytes
 		return true;
 
-	m_bError = AppendData ( iRest, iRest, bIntr )<iRest;
-	return !m_bError;
+	int iGot = AppendData ( iRest, iRest, bIntr );
+	// set error message if AppendData returned less without any error
+	if ( iGot<iRest && !GetError() )
+		SetError ( "invalid size read %d(%d)", iRest, iGot );
+
+	return ( !GetError() );
 }
 
 // ensure iSpace bytes in buffer, then read at least iNeed, up to vector's GetLimit().
@@ -980,18 +1000,21 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, bool bIntr )
 	int iGot = ReadFromBackend ( iNeed, iSpace, bIntr );
 	if ( sphInterrupted () && bIntr )
 	{
-		sphLogDebugv ( "AsyncNetInputBuffer_c::AppendData: got SIGTERM, return -1" );
-		m_bError = true;
+		SetError ( "AsyncNetInputBuffer_c::AppendData: got SIGTERM, return -1" );
+		sphLogDebugv ( "%s", GetErrorMessage().cstr() );
 		m_bIntr = true;
 		return -1;
 	}
 
 	if ( iGot==-1 )
 	{
-		m_bError = true;
 		auto iErr = sphSockPeekErrno ();
 		m_bIntr = iErr==EINTR;
-		sphLogDebugv ( "AsyncNetInputBuffer_c::AppendData: error %d (%s) return -1", iErr, strerrorm ( iErr ) );
+		if ( iErr!=ETIMEDOUT && iErr!=ECONNRESET ) // FIXME!!! connection timeout activated by timer skipped but for not the persist connection should reported up to the handler
+		{
+			SetError ( "AsyncNetInputBuffer_c::AppendData: error %d (%s) return -1", iErr, strerrorm ( iErr ) );
+			sphLogDebugv ( "%s", GetErrorMessage().cstr() );
+		}
 		return -1;
 	}
 
@@ -1075,8 +1098,7 @@ void AsyncNetInputBuffer_c::DiscardProcessed ( int iHowMany )
 
 	m_pCur -= iHowMany;
 	m_iLen = STORE::GetLength();
-	sphLogDebugv ( "DiscardProcessed(%d) iPos=%d->0, iLen=%d->%d",
-			iHowMany, (int)iPos, iOldLen, m_iLen );
+	sphLogDebugv ( "DiscardProcessed(%d) iPos=%d->0, iLen=%d->%d, sock=%d", iHowMany, (int)iPos, iOldLen, m_iLen, ClientTaskInfo_t::Info().GetSocket() );
 }
 
 BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
@@ -1097,7 +1119,17 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 
 void AsyncNetBuffer_c::SyncErrorState()
 {
-	InputBuffer_c::SetError( NetGenericOutputBuffer_c::GetError() );
+	if ( NetGenericOutputBuffer_c::GetError() )
+	{
+		assert ( !NetGenericOutputBuffer_c::GetErrorMessage().IsEmpty() );
+		InputBuffer_c::SetError ( "%s", NetGenericOutputBuffer_c::GetErrorMessage().cstr() );
+	}
+}
+
+void AsyncNetBuffer_c::ResetError()
+{
+	InputBuffer_c::ResetError();
+	NetGenericOutputBuffer_c::ResetError();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1119,12 +1151,11 @@ class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 		assert ( m_pSocket );
 		if ( dData.IsEmpty () )
 			return true; // nothing to send
-		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		if ( SyncSend ( m_pSocket.get(), (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () ) )
-			return true;
 
-		NetGenericOutputBuffer_c::m_bError = true;
-		return false;
+		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
+		bool bSent = SyncSend ( m_pSocket.get(), (const char *) m_dBuf.begin(), m_dBuf.GetLength64(), NetGenericOutputBuffer_c::m_sError );
+		NetGenericOutputBuffer_c::m_bError = !bSent;
+		return bSent;
 	}
 
 public:
@@ -1144,4 +1175,12 @@ public:
 std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapper_c> pSock )
 {
 	return std::make_unique<AsyncBufferedSocket_c> ( std::move ( pSock ) );
+}
+
+void LogNetError ( const char * sMsg )
+{
+	int iCID = session::GetConnID();
+	const char * sClientIP = session::szClientName();
+	int iSock = ClientTaskInfo_t::Info().GetSocket();
+	sphWarning ( "conn %s(%d), sock=%d: %s", sClientIP, iCID, iSock, sMsg );
 }

@@ -5355,7 +5355,6 @@ public:
 		tArgs.arg_values = new char * [ tArgs.arg_count ];
 		tArgs.str_lengths = new int [ tArgs.arg_count ];
 
-		m_dArgs2Free = pCall->m_dArgs2Free;
 		m_dArgvals.Resize ( tArgs.arg_count );
 		ARRAY_FOREACH ( i, m_dArgvals )
 			tArgs.arg_values[i] = (char*) &m_dArgvals[i];
@@ -5396,7 +5395,6 @@ public:
 
 			case SPH_UDF_TYPE_FACTORS:
 				tArgs.arg_values[i] = (char *)const_cast<BYTE*>( m_dArgs[i]->FactorEval(tMatch) );
-				m_pCall->m_dArgs2Free.Add(i);
 				break;
 
 			case SPH_UDF_TYPE_JSON:
@@ -5425,7 +5423,8 @@ public:
 
 	void FreeArgs() const
 	{
-		for ( int iAttr : m_dArgs2Free )
+		assert ( !m_pCall->m_dArgs2Free.GetLength() || ( m_pCall->m_dArgs2Free.GetLength() && m_pCall->m_tArgs.arg_count )  );
+		for ( int iAttr : m_pCall->m_dArgs2Free )
 			SafeDeleteArray ( m_pCall->m_tArgs.arg_values[iAttr] );
 	}
 
@@ -5477,26 +5476,38 @@ public:
 	}
 
 protected:
-	VecRefPtrs_t<ISphExpr*>			m_dArgs;
-	CSphVector<int>					m_dArgs2Free;
 	UdfCall_t *						m_pCall {nullptr};
+	VecRefPtrs_t<ISphExpr*>			m_dArgs;
 	mutable CSphVector<int64_t>		m_dArgvals;
+	const BYTE *					m_pBlobPool {nullptr};
 	mutable char					m_bError  {0};
 	QueryProfile_c *				m_pProfiler {nullptr};
-	const BYTE *					m_pBlobPool {nullptr};
 
 	Expr_Udf_c ( const Expr_Udf_c& rhs )
 		: m_pCall ( new UdfCall_t )
 		, m_pProfiler ( rhs.m_pProfiler )
 	{
+		assert ( !rhs.m_pCall->m_tInit.func_data );
+
+		m_pBlobPool = rhs.m_pBlobPool;
+
 		m_pCall->m_pUdf = rhs.m_pCall->m_pUdf;
 		m_pCall->m_dArgs2Free = rhs.m_pCall->m_dArgs2Free;
 		SPH_UDF_ARGS & tArgs = m_pCall->m_tArgs;
+		const SPH_UDF_ARGS & tSrcArgs = rhs.m_pCall->m_tArgs;
+
+		tArgs.arg_count = tSrcArgs.arg_count;
+
+		m_dArgs.Resize ( tArgs.arg_count );
+		ARRAY_FOREACH ( i, m_dArgs )
+			m_dArgs[i] = SafeClone ( rhs.m_dArgs[i] );
+
+		tArgs.arg_types = new sphinx_udf_argtype [ tArgs.arg_count ];
+		memcpy ( tArgs.arg_types, tSrcArgs.arg_types, sizeof ( sphinx_udf_argtype ) * tArgs.arg_count );
 
 		tArgs.arg_values = new char * [tArgs.arg_count];
 		tArgs.str_lengths = new int[tArgs.arg_count];
 
-		m_dArgs2Free = m_pCall->m_dArgs2Free;
 		m_dArgvals.Resize ( tArgs.arg_count );
 		ARRAY_FOREACH ( i, m_dArgvals )
 			tArgs.arg_values[i] = (char *) &m_dArgvals[i];
@@ -9760,6 +9771,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 					break;
 				case SPH_ATTR_FACTORS:
 					eRes = SPH_UDF_TYPE_FACTORS;
+					pCall->m_dArgs2Free.Add ( i );
 					break;
 				case SPH_ATTR_JSON_FIELD:
 					eRes = SPH_UDF_TYPE_JSON;

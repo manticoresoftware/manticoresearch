@@ -400,10 +400,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 		{
 			auto & tIterator = dIterators[iColumnarAttr];
 			if ( tIterator.first )
-			{
-				Verify ( AdvanceIterator ( tIterator.first, tRowID ) );
-				SetColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder, tIterator.first, dTmp );
-			}
+				SetColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder, tIterator.first, tRowID, dTmp );
 			else
 				SetDefaultColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder );
 		}

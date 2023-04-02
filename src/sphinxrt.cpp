@@ -398,10 +398,7 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 		auto pIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
 		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
-		{
-			Verify ( AdvanceIterator ( pIt, tRowID ) );
-			m_tDocIDtoRowID.Add ( pIt->Get(), tRowID );
-		}
+			m_tDocIDtoRowID.Add ( pIt->Get(tRowID), tRowID );
 	}
 }
 
@@ -2410,8 +2407,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto & tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first, dTmp );
+			SetColumnarAttr ( i, tIt.second, tCtx.m_pColumnarBuilder, tIt.first, tRowID, dTmp );
 		}
 
 		if ( tDstSeg.m_pDocstore )
@@ -3343,18 +3339,20 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			ARRAY_FOREACH ( iIterator, dColumnarIterators )
 			{
 				auto & tIterator = dColumnarIterators[iIterator];
-				Verify ( AdvanceIterator ( tIterator.first, tRowID ) );
-				SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first, dTmp );
+				SphAttr_t tAttr = SetColumnarAttr ( iIterator, tIterator.second, pColumnarBuilder.get(), tIterator.first, tRowID, dTmp );
+				if ( iIterator==iColumnarIdLoc )
+					tDocID = tAttr;
 			}
 
-			tDocID = iColumnarIdLoc>=0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID(pRow);
+			if ( iColumnarIdLoc<0 )
+				tDocID = sphGetDocID(pRow);
 
-			BuildStoreHistograms ( pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForHistogram, tHistograms );
+			BuildStoreHistograms ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForHistogram, tHistograms );
 
 			if ( pSIdxBuilder.get() )
 			{
 				pSIdxBuilder->SetRowID ( tNextRowID );
-				BuilderStoreAttrs ( pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dSiAttrs, pSIdxBuilder.get(), dTmp );
+				BuilderStoreAttrs ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dSiAttrs, pSIdxBuilder.get(), dTmp );
 			}
 
 			dRawLookup[tNextRowID] = { tDocID, tNextRowID };

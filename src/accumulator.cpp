@@ -369,11 +369,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 		if ( !bColumnarId )
 			tElem.m_tDocID = sphGetDocID ( pRow );
 		else
-		{
-			assert ( pColumnarIdIterator );
-			Verify ( AdvanceIterator ( pColumnarIdIterator, i ) );
-			tElem.m_tDocID = pColumnarIdIterator->Get();
-		}
+			tElem.m_tDocID = pColumnarIdIterator->Get(i);
 
 		tElem.m_iDocIndex = i;
 //		tElem.m_iHitIndex = iHitIndex;

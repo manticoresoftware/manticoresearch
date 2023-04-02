@@ -33,7 +33,7 @@ CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::C
 }
 
 
-void SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, std::unique_ptr<columnar::Iterator_i>& pIterator, CSphVector<int64_t> & dTmp )
+SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, std::unique_ptr<columnar::Iterator_i> & pIterator, RowID_t tRowID, CSphVector<int64_t> & dTmp )
 {
 	switch ( eType )
 	{
@@ -41,7 +41,7 @@ void SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder
 	case SPH_ATTR_INT64SET:
 	{
 		const BYTE * pResult = nullptr;
-		int iBytes = pIterator->Get(pResult);
+		int iBytes = pIterator->Get ( tRowID, pResult );
 		int iValues = iBytes / ( eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
 		if ( eType==SPH_ATTR_UINT32SET )
 		{
@@ -60,15 +60,20 @@ void SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder
 	case SPH_ATTR_STRING:
 	{
 		const BYTE * pResult = nullptr;
-		int iBytes = pIterator->Get(pResult);
+		int iBytes = pIterator->Get ( tRowID, pResult);
 		pBuilder->SetAttr ( iAttr, (const uint8_t*)pResult, iBytes );
 	}
 	break;
 
 	default:
-		pBuilder->SetAttr ( iAttr, pIterator->Get() );
-		break;
+		{
+			int64_t iValue = pIterator->Get(tRowID);
+			pBuilder->SetAttr ( iAttr, iValue );
+			return iValue;
+		}
 	}
+
+	return 0;
 }
 
 
@@ -92,18 +97,18 @@ void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * p
 }
 
 
-SphAttr_t PlainOrColumnar_t::Get ( const CSphRowitem * pRow, CSphVector<ScopedTypedIterator_t> & dIterators ) const
+SphAttr_t PlainOrColumnar_t::Get ( RowID_t tRowID, const CSphRowitem * pRow, CSphVector<ScopedTypedIterator_t> & dIterators ) const
 {
 	if ( m_iColumnarId>=0 )
-		return dIterators[m_iColumnarId].first->Get();
+		return dIterators[m_iColumnarId].first->Get(tRowID);
 
 	return sphGetRowAttr ( pRow, m_tLocator );
 }
 
-int PlainOrColumnar_t::Get ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const uint8_t * & pData ) const
+int PlainOrColumnar_t::Get ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const uint8_t * & pData ) const
 {
 	if ( m_iColumnarId>=0 )
-		return dIterators[m_iColumnarId].first->Get ( pData );
+		return dIterators[m_iColumnarId].first->Get ( tRowID, pData );
 
 	int iLen = 0;
 	pData = sphGetBlobAttr ( pRow, m_tLocator, pPool, iLen );

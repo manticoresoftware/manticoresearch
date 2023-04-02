@@ -4649,12 +4649,13 @@ static void BuildStoreHistograms ( const CSphSchema & tSchema, DocID_t tDocId, C
 
 			default:
 				tItem.m_pHist->Insert ( tSource.GetAttr ( tItem.m_iAttr ) );
-			break;
+				break;
 		}
 	}
 }
 
-void BuildStoreHistograms ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms )
+
+void BuildStoreHistograms ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms )
 {
 	for ( int iAttr=0; iAttr<dAttrs.GetLength(); iAttr++ )
 	{
@@ -4666,7 +4667,7 @@ void BuildStoreHistograms ( const CSphRowitem * pRow, const BYTE * pPool, CSphVe
 		case SPH_ATTR_INT64SET:
 		{
 			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( pRow, pPool, dIterators, pSrc );
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
 			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
 			for ( int iVal=0; iVal<iValues; iVal++ )
 				tHistograms.Insert ( iAttr, pSrc[iVal] );
@@ -4676,15 +4677,15 @@ void BuildStoreHistograms ( const CSphRowitem * pRow, const BYTE * pPool, CSphVe
 		case SPH_ATTR_STRING:
 		{
 			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( pRow, pPool, dIterators, pSrc );
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
 			SphAttr_t uHash = sphCRC32 ( pSrc, iBytes );
 			tHistograms.Insert ( iAttr, uHash );
 		}
 		break;
 
 		default:
-			tHistograms.Insert ( iAttr, tSrc.Get ( pRow, dIterators ) );
-		break;
+			tHistograms.Insert ( iAttr, tSrc.Get ( tRowID, pRow, dIterators ) );
+			break;
 		}
 	}
 }

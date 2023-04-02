@@ -27,8 +27,7 @@ protected:
 	const columnar::Columnar_i *		m_pColumnar = nullptr;
 	std::unique_ptr<columnar::Iterator_i>	m_pIterator;
 
-	inline bool	GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const;
-	inline bool	GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const;
+	inline ByteBlob_t GetValue ( RowID_t tRowID ) const;
 };
 
 
@@ -55,27 +54,11 @@ void ColumnarFilter_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
 }
 
 
-bool ColumnarFilter_c::GetValue ( RowID_t tRowID, SphAttr_t & tValue ) const
+ByteBlob_t ColumnarFilter_c::GetValue ( RowID_t tRowID ) const
 {
-	if ( m_pIterator && m_pIterator->AdvanceTo(tRowID) == tRowID )
-	{
-		tValue = m_pIterator->Get();
-		return true;
-	}
-
-	return false;
-}
-
-
-bool ColumnarFilter_c::GetValue ( RowID_t tRowID, ByteBlob_t & tData ) const
-{
-	if ( m_pIterator && m_pIterator->AdvanceTo(tRowID) == tRowID )
-	{
-		tData.second = m_pIterator->Get ( tData.first );
-		return true;
-	}
-
-	return false;
+	ByteBlob_t tData;
+	tData.second = m_pIterator->Get ( tRowID, tData.first );
+	return tData;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -87,7 +70,7 @@ class Filter_SingleValueColumnar_c : public ColumnarFilter_c
 
 public:
 	void	SetValues ( const VecTraits_T<SphAttr_t>& tValues ) final;
-	bool	Eval ( const CSphMatch & tMatch ) const override;
+	bool	Eval ( const CSphMatch & tMatch ) const override			{ return m_pIterator->Get ( tMatch.m_tRowID )==m_tRefValue; }
 	bool	Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
 
 protected:
@@ -99,16 +82,6 @@ void Filter_SingleValueColumnar_c::SetValues ( const VecTraits_T<SphAttr_t>& tVa
 {
 	assert ( tValues.GetLength()==1 );
 	m_tRefValue = tValues[0];
-}
-
-
-bool Filter_SingleValueColumnar_c::Eval ( const CSphMatch & tMatch ) const
-{
-	SphAttr_t tValue;
-	if ( !GetValue ( tMatch.m_tRowID, tValue ) )
-		return false;
-
-	return tValue==m_tRefValue;
 }
 
 
@@ -151,11 +124,7 @@ bool Filter_ValuesColumnar_c::Eval ( const CSphMatch & tMatch ) const
 	if ( m_bDegenerate )
 		return true;
 	
-	SphAttr_t tValue;
-	if ( !GetValue ( tMatch.m_tRowID, tValue ) )
-		return false;
-
-	return (*this.*m_fnEval)(tValue);
+	return (*this.*m_fnEval)( m_pIterator->Get ( tMatch.m_tRowID ) );
 }
 
 
@@ -272,7 +241,7 @@ protected:
 	StrHashCalc_fn			m_fnHashCalc = nullptr;
 	bool					m_bEquals = true;
 
-	uint64_t	GetStringHash() const;
+	uint64_t	GetStringHash ( RowID_t tRowID ) const;
 };
 
 
@@ -304,10 +273,7 @@ void Filter_StringColumnar_T<MULTI>::SetRefString ( const CSphString * pRef, int
 template <bool MULTI>
 bool Filter_StringColumnar_T<MULTI>::Eval ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
-		return false;
-
-	uint64_t uHash = GetStringHash();
+	uint64_t uHash = GetStringHash ( tMatch.m_tRowID );
 	if_const ( !MULTI )
 		return ( m_dHashes[0]==uHash ) ^ (!m_bEquals);
 
@@ -356,13 +322,13 @@ void Filter_StringColumnar_T<MULTI>::SetColumnar ( const columnar::Columnar_i * 
 }
 
 template <bool MULTI>
-uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash() const
+uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash ( RowID_t tRowID ) const
 {
 	if ( m_bHasHashes )
-		return m_pIterator->Get();
+		return m_pIterator->Get(tRowID);
 
 	const BYTE * pStr = nullptr;
-	int iLen = m_pIterator->Get(pStr);
+	int iLen = m_pIterator->Get ( tRowID, pStr );
 	if ( !iLen )
 		return 0;
 
@@ -391,10 +357,7 @@ private:
 template <typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
 bool Filter_RangeColumnar_T<T, HAS_EQUAL_MIN, HAS_EQUAL_MAX, OPEN_LEFT, OPEN_RIGHT>::Eval ( const CSphMatch & tMatch ) const
 {
-	SphAttr_t tValue;
-	if ( !GetValue ( tMatch.m_tRowID, tValue ) )
-		return false;
-
+	SphAttr_t tValue = m_pIterator->Get ( tMatch.m_tRowID );
 	return EvalRange<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( ConvertType<T>(tValue), m_tMinValue, m_tMaxValue );
 }
 
@@ -460,10 +423,7 @@ class Filter_SingleValueColumnar_MVA_T : public Filter_SingleValueColumnar_c
 public:
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		ByteBlob_t tData;
-		if ( !GetValue ( tMatch.m_tRowID, tData ) )
-			return false;
-
+		ByteBlob_t tData = GetValue ( tMatch.m_tRowID );
 		VecTraits_T<const T> tCheck ( (const T*)tData.first, tData.second/sizeof(T) );
 		return FUNC::Eval ( tCheck, m_tRefValue );
 	}
@@ -488,10 +448,7 @@ private:
 template < typename T, typename FUNC >
 bool Filter_ValuesColumnar_MVA_T<T,FUNC>::Eval ( const CSphMatch & tMatch ) const
 {
-	ByteBlob_t tData;
-	if ( !GetValue ( tMatch.m_tRowID, tData ) )
-		return false;
-
+	ByteBlob_t tData = GetValue ( tMatch.m_tRowID );
 	VecTraits_T<const T> tCheck ( (const T*)tData.first, tData.second/sizeof(T) );
 	return FUNC::Eval ( tCheck, m_dValues );
 }
@@ -538,10 +495,7 @@ private:
 template <typename T, typename FUNC, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT>
 bool Filter_RangeColumnar_MVA_T<T, FUNC, HAS_EQUAL_MIN, HAS_EQUAL_MAX, OPEN_LEFT, OPEN_RIGHT>::Eval ( const CSphMatch & tMatch ) const
 {
-	ByteBlob_t tData;
-	if ( !GetValue ( tMatch.m_tRowID, tData ) )
-		return false;
-
+	ByteBlob_t tData = GetValue ( tMatch.m_tRowID );
 	VecTraits_T<const T> tCheck ( (const T*)tData.first, tData.second/sizeof(T) );
 	return FUNC::template EvalRange<T,HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( tCheck, m_tMinValue, m_tMaxValue );
 }

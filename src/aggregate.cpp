@@ -116,13 +116,10 @@ protected:
 		if ( bMerge )
 			return BASE::GetValue(tSrc);
 
-		if ( !m_pIterator || m_pIterator->AdvanceTo ( tSrc.m_tRowID ) != tSrc.m_tRowID )
-			return (T)0;
-
 		if ( m_eType==common::AttrType_e::FLOAT )
-			return (T)sphDW2F ( (DWORD)m_pIterator->Get() );
+			return (T)sphDW2F ( (DWORD)m_pIterator->Get ( tSrc.m_tRowID ) );
 
-		return (T)m_pIterator->Get();
+		return (T)m_pIterator->Get ( tSrc.m_tRowID );
 	}
 };
 

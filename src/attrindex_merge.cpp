@@ -137,14 +137,16 @@ bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
 
+		DocID_t tDocID = 0;
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
-			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
+			auto & tIt = dColumnarIterators[i];
+			SphAttr_t tAttr = SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, tRowID, dTmp );
+			if ( !i )
+				tDocID = tAttr;
 		}
 
-		BuildStoreHistograms ( nullptr, nullptr, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
+		BuildStoreHistograms ( tRowID, nullptr, nullptr, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
 
 		if ( m_pDocstoreBuilder )
 			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
@@ -152,10 +154,10 @@ bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex
 		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+			BuilderStoreAttrs ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 		}
 
-		m_dDocidLookup[m_tResultRowID] = { dColumnarIterators[0].first->Get(), m_tResultRowID };
+		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
 	return true;
@@ -202,16 +204,20 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 		} else if ( iStrideBytes )
 			m_tWriterSPA.PutBytes ( pRow, iStrideBytes );
 
+		DocID_t tDocID = 0;
+
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
-			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-			SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, dTmp );
+			auto & tIt = dColumnarIterators[i];
+			SphAttr_t tAttr = SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, tRowID, dTmp );
+			if ( i==iColumnarIdLoc )
+				tDocID = tAttr;
 		}
 
-		DocID_t tDocID = iColumnarIdLoc >= 0 ? dColumnarIterators[iColumnarIdLoc].first->Get() : sphGetDocID ( pRow );
+		if ( iColumnarIdLoc < 0 )
+			tDocID = sphGetDocID(pRow);
 
-		BuildStoreHistograms ( pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
+		BuildStoreHistograms ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
 
 		if ( m_pDocstoreBuilder )
 			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
@@ -219,7 +225,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+			BuilderStoreAttrs ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 		}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
@@ -374,14 +380,8 @@ bool SiBuilder_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const V
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		ARRAY_FOREACH ( i, dColumnarIterators )
-		{
-			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-		}
-
 		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuilderStoreAttrs ( nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		BuilderStoreAttrs ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 	}
 	return true;
 }
@@ -407,14 +407,8 @@ bool SiBuilder_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTrait
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		ARRAY_FOREACH ( i, dColumnarIterators )
-		{
-			auto& tIt = dColumnarIterators[i];
-			Verify ( AdvanceIterator ( tIt.first, tRowID ) );
-		}
-
 		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuilderStoreAttrs ( pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		BuilderStoreAttrs ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 	}
 	return true;
 }

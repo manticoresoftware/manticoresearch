@@ -12,19 +12,11 @@
 #include "sphinxsort.h"
 
 
-static inline SphGroupKey_t FetchIntValue ( const std::unique_ptr<columnar::Iterator_i> & pIterator, const CSphMatch & tMatch )
-{
-	pIterator->AdvanceTo ( tMatch.m_tRowID );
-	return pIterator->Get();
-}
-
 template <typename T>
 static inline void FetchMVAValues ( const std::unique_ptr<columnar::Iterator_i> & pIterator, CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch )
 {
-	pIterator->AdvanceTo ( tMatch.m_tRowID );
-
 	const BYTE * pMVA = nullptr;
-	int iLen = pIterator->Get(pMVA);
+	int iLen = pIterator->Get ( tMatch.m_tRowID, pMVA );
 	int iNumValues = iLen/sizeof(T);
 	auto pValues = (const T*)pMVA;
 
@@ -62,11 +54,11 @@ public:
 
 	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
 	ESphAttr		GetResultType () const final { return m_eAttrType; }
-	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final { return FetchIntValue ( m_pIterator, tMatch ); }
+	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final { return m_pIterator->Get ( tMatch.m_tRowID ); }
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { assert(0); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
-	CSphGrouper *	Clone() const final	{ return new GrouperColumnarInt_c(*this); }
+	CSphGrouper *	Clone() const final { return new GrouperColumnarInt_c(*this); }
 
 private:
 	ESphAttr							m_eAttrType = SPH_ATTR_INTEGER;
@@ -133,14 +125,11 @@ GrouperColumnarString_T<HASH>::GrouperColumnarString_T ( const GrouperColumnarSt
 template <typename HASH>
 SphGroupKey_t GrouperColumnarString_T<HASH>::KeyFromMatch ( const CSphMatch & tMatch ) const
 {
-	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
-		return 0;
-
 	if ( m_bHasHashes )
-		return m_pIterator->Get();
+		return m_pIterator->Get ( tMatch.m_tRowID );
 
 	const BYTE * pStr = nullptr;
-	int iLen = m_pIterator->Get(pStr);
+	int iLen = m_pIterator->Get ( tMatch.m_tRowID, pStr );
 	if ( !iLen )
 		return 0;
 
@@ -246,10 +235,7 @@ SphGroupKey_t GrouperColumnarMulti<HASH>::KeyFromMatch ( const CSphMatch & tMatc
 		if ( m_dAttrs[i].m_eAttrType==SPH_ATTR_STRING || m_dAttrs[i].m_eAttrType==SPH_ATTR_STRINGPTR )
 			tKey = FetchStringHash ( i, tMatch, tKey );
 		else
-		{
-			SphGroupKey_t tNewKey = FetchIntValue ( pIterator, tMatch );
-			tKey = ( SphGroupKey_t ) sphFNV64 ( tNewKey, tKey );
-		}
+			tKey = ( SphGroupKey_t ) sphFNV64 ( pIterator->Get ( tMatch.m_tRowID ), tKey );
 	}
 
 	return tKey;
@@ -294,7 +280,7 @@ void GrouperColumnarMulti<HASH>::MultipleKeysFromMatch ( const CSphMatch & tMatc
 			break;
 
 		default:
-			dCurKeys.Add ( FetchIntValue ( pIterator, tMatch ) );
+			dCurKeys.Add ( pIterator->Get ( tMatch.m_tRowID ) );
 			break;
 		}
 	}
@@ -324,12 +310,11 @@ template <class HASH>
 SphGroupKey_t GrouperColumnarMulti<HASH>::FetchStringHash ( int iAttr, const CSphMatch & tMatch, SphGroupKey_t tPrevKey ) const
 {
 	auto & pIterator = m_dIterators[iAttr];
-	pIterator->AdvanceTo ( tMatch.m_tRowID );
 	if ( m_dHaveStringHashes[iAttr] )
-		return sphFNV64 ( pIterator->Get(), tPrevKey );
+		return sphFNV64 ( pIterator->Get ( tMatch.m_tRowID ), tPrevKey );
 
 	const BYTE * pStr = nullptr;
-	int iLen = pIterator->Get(pStr);
+	int iLen = pIterator->Get ( tMatch.m_tRowID, pStr );
 	if ( !iLen )
 		return tPrevKey;
 
@@ -340,12 +325,11 @@ template <class HASH>
 SphGroupKey_t GrouperColumnarMulti<HASH>::FetchStringHash ( int iAttr, const CSphMatch & tMatch ) const
 {
 	auto & pIterator = m_dIterators[iAttr];
-	pIterator->AdvanceTo ( tMatch.m_tRowID );
 	if ( m_dHaveStringHashes[iAttr] )
-		return pIterator->Get();
+		return pIterator->Get ( tMatch.m_tRowID );
 
 	const BYTE * pStr = nullptr;
-	int iLen = pIterator->Get(pStr);
+	int iLen = pIterator->Get ( tMatch.m_tRowID, pStr );
 	if ( !iLen )
 		return SPH_FNV64_SEED;
 
@@ -450,11 +434,7 @@ public:
 void DistinctFetcherColumnarInt_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
 {
 	dKeys.Resize(0);
-
-	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
-		return;
-
-	dKeys.Add ( m_pIterator->Get() );
+	dKeys.Add ( m_pIterator->Get ( tMatch.m_tRowID ) );
 }
 
 
@@ -482,13 +462,8 @@ public:
 template <typename T>
 void DistinctFetcherColumnarMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
 {
-	dKeys.Resize(0);
-
-	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
-		return;
-
 	const BYTE * pMVA = nullptr;
-	int iLen = m_pIterator->Get(pMVA);
+	int iLen = m_pIterator->Get ( tMatch.m_tRowID, pMVA );
 	int iNumValues = iLen/sizeof(T);
 	auto pValues = (const T*)pMVA;
 
@@ -527,17 +502,14 @@ void DistinctFetcherColumnarString_T<HASH>::GetKeys ( const CSphMatch & tMatch, 
 {
 	dKeys.Resize(0);
 
-	if ( !m_pIterator || m_pIterator->AdvanceTo ( tMatch.m_tRowID ) != tMatch.m_tRowID )
-		return;
-
 	if ( m_bHasHashes )
 	{
-		dKeys.Add ( m_pIterator->Get() );
+		dKeys.Add ( m_pIterator->Get ( tMatch.m_tRowID ) );
 		return;
 	}
 
 	const BYTE * pStr = nullptr;
-	int iLen = m_pIterator->Get(pStr);
+	int iLen = m_pIterator->Get ( tMatch.m_tRowID, pStr );
 	if ( !iLen )
 	{
 		dKeys.Add(0);

@@ -80,19 +80,14 @@ protected:
 class ColumnarIterator_RT_c : public columnar::Iterator_i
 {
 public:
-	uint32_t	AdvanceTo ( uint32_t tRowID ) override { m_tRowID = tRowID; return tRowID; }
-
-	int64_t		Get() override						{ assert ( 0 && "Unsupported function" ); return 0; }
+	int64_t		Get ( uint32_t tRowID ) override		{ assert ( 0 && "Unsupported function" ); return 0; }
 	void		Fetch ( const util::Span_T<uint32_t> & dRowIDs, util::Span_T<int64_t> & dValues ) override { assert ( 0 && "Unsupported function" ); }
 
-	int			Get ( const uint8_t * & pData ) override { assert ( 0 && "Unsupported function" ); return 0; }
-	uint8_t *	GetPacked() override				{ assert ( 0 && "Unsupported function" ); return 0; }
-	int			GetLength() override				{ assert ( 0 && "Unsupported function" ); return 0; }
+	int			Get ( uint32_t tRowID, const uint8_t * & pData ) override { assert ( 0 && "Unsupported function" ); return 0; }
+	uint8_t *	GetPacked ( uint32_t tRowID ) override	{ assert ( 0 && "Unsupported function" ); return 0; }
+	int			GetLength ( uint32_t tRowID ) override	{ assert ( 0 && "Unsupported function" ); return 0; }
 
 	void		AddDesc ( std::vector<common::IteratorDesc_t> & dDesc ) const override {}
-
-protected:
-	RowID_t		m_tRowID = INVALID_ROWID;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -103,7 +98,7 @@ class ColumnarIterator_Int_T : public ColumnarIterator_RT_c
 public:
 			ColumnarIterator_Int_T ( const CSphVector<T> & dValues ) : m_dValues ( dValues ) {}
 
-	int64_t	Get() override { return m_dValues[m_tRowID]; }
+	int64_t	Get ( uint32_t tRowID ) override { return m_dValues[tRowID]; }
 	void	Fetch ( const util::Span_T<uint32_t> & dRowIDs, util::Span_T<int64_t> & dValues ) override;
 
 private:
@@ -203,9 +198,9 @@ class ColumnarIterator_String_c : public ColumnarIterator_RT_c
 public:
 				ColumnarIterator_String_c ( const CSphVector<BYTE> & dData, const CSphVector<int64_t> & dLengths ) : m_dData ( dData ), m_dLengths ( dLengths )  {}
 
-	int			Get ( const uint8_t * & pData ) override;
-	uint8_t *	GetPacked() override;
-	int			GetLength() override;
+	int			Get ( uint32_t tRowID, const uint8_t * & pData ) override;
+	uint8_t *	GetPacked ( uint32_t tRowID ) override;
+	int			GetLength ( uint32_t tRowID ) override	{ return (int)::GetLength ( m_dLengths, tRowID ); }
 
 private:
 	const CSphVector<BYTE> &	m_dData;
@@ -213,27 +208,21 @@ private:
 };
 
 
-int ColumnarIterator_String_c::Get ( const uint8_t * & pData )
+int ColumnarIterator_String_c::Get ( uint32_t tRowID, const uint8_t * & pData )
 {
 	int64_t iLength, iOffset;
-	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, m_tRowID );
+	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
 	pData = iLength>0 ? (const uint8_t*)&m_dData[iOffset] : nullptr;
 	return (int)iLength;
 }
 
 
-uint8_t * ColumnarIterator_String_c::GetPacked()
+uint8_t * ColumnarIterator_String_c::GetPacked ( uint32_t tRowID )
 {
 	int64_t iLength, iOffset;
-	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, m_tRowID );
+	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
 	auto pStr = iLength>0 ? (const uint8_t*)&m_dData[iOffset] : nullptr;
 	return sphPackPtrAttr ( { pStr, iLength } );
-}
-
-
-int ColumnarIterator_String_c::GetLength()
-{
-	return (int)::GetLength ( m_dLengths, m_tRowID );
 }
 
 
@@ -316,9 +305,9 @@ class ColumnarIterator_MVA_T : public ColumnarIterator_RT_c
 public:
 				ColumnarIterator_MVA_T ( const CSphVector<T> & dData, const CSphVector<int> & dLengths ) : m_dData ( dData ), m_dLengths ( dLengths )  {}
 
-	int			Get ( const uint8_t * & pData ) override;
-	uint8_t *	GetPacked() override;
-	int			GetLength() override;
+	int			Get ( uint32_t tRowID, const uint8_t * & pData ) override;
+	uint8_t *	GetPacked ( uint32_t tRowID ) override;
+	int			GetLength ( uint32_t tRowID ) override { return ::GetLength ( m_dLengths, tRowID )*sizeof(T); }
 
 private:
 	const CSphVector<T> &	m_dData;
@@ -326,10 +315,10 @@ private:
 };
 
 template <typename T>
-int ColumnarIterator_MVA_T<T>::Get ( const uint8_t * & pData )
+int ColumnarIterator_MVA_T<T>::Get ( uint32_t tRowID, const uint8_t * & pData )
 {
 	int iLength, iOffset;
-	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, m_tRowID );
+	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
 
 	iLength *= sizeof(T);
 	pData = iLength > 0 ? (const uint8_t*)&m_dData[iOffset] : nullptr;
@@ -338,23 +327,15 @@ int ColumnarIterator_MVA_T<T>::Get ( const uint8_t * & pData )
 }
 
 template <typename T>
-uint8_t * ColumnarIterator_MVA_T<T>::GetPacked()
+uint8_t * ColumnarIterator_MVA_T<T>::GetPacked ( uint32_t tRowID )
 {
 	int iLength, iOffset;
-	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, m_tRowID );
+	std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
 
 	iLength *= sizeof(T);
 	auto pMVA = iLength > 0 ? (const uint8_t*)&m_dData[iOffset] : nullptr;
 	return sphPackPtrAttr ( { pMVA, iLength } );
 }
-
-
-template <typename T>
-int ColumnarIterator_MVA_T<T>::GetLength()
-{
-	return ::GetLength ( m_dLengths, m_tRowID )*sizeof(T);
-}
-
 
 template <typename T>
 class ColumnarAttr_MVA_T : public ColumnarAttrRT_c

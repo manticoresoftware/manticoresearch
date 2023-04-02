@@ -1277,7 +1277,7 @@ std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSph
 }
 
 
-void BuilderStoreAttrs ( const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
+void BuilderStoreAttrs ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
 {
 	for ( int i = 0; i < dAttrs.GetLength(); i++ )
 	{
@@ -1289,7 +1289,7 @@ void BuilderStoreAttrs ( const CSphRowitem * pRow, const BYTE * pPool, CSphVecto
 		case SPH_ATTR_INT64SET:
 		{
 			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( pRow, pPool, dIterators, pSrc );
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
 			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
 			if ( tSrc.m_eType==SPH_ATTR_UINT32SET )
 			{
@@ -1308,13 +1308,13 @@ void BuilderStoreAttrs ( const CSphRowitem * pRow, const BYTE * pPool, CSphVecto
 		case SPH_ATTR_STRING:
 		{
 			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( pRow, pPool, dIterators, pSrc );
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
 			pBuilder->SetAttr ( i, (const uint8_t*)pSrc, iBytes );
 		}
 		break;
 
 		default:
-			pBuilder->SetAttr ( i, tSrc.Get ( pRow, dIterators ) );
+			pBuilder->SetAttr ( i, tSrc.Get ( tRowID, pRow, dIterators ) );
 			break;
 		}
 	}

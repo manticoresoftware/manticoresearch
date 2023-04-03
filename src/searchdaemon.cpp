@@ -659,7 +659,7 @@ int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
 }
 
 
-DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFatal )
+DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pFatal )
 {
 	struct addrinfo tHints, * pResult = nullptr;
 	memset( &tHints, 0, sizeof( tHints ));
@@ -682,22 +682,29 @@ DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP, CSphString * pFat
 	}
 
 	assert ( pResult );
-	auto* pSockaddr_ipv4 = ( struct sockaddr_in* ) pResult->ai_addr;
+	auto * pSockaddr_ipv4 = ( struct sockaddr_in* ) pResult->ai_addr;
 	DWORD uAddr = pSockaddr_ipv4->sin_addr.s_addr;
 
 	if ( pResult->ai_next )
 	{
+		DWORD uLocalhost = htonl ( INADDR_LOOPBACK );
+		char sAddrBuf[SPH_ADDRESS_SIZE+1];
 		StringBuilder_c sBuf( "; ip=", "ip=" );
-		for ( ; pResult->ai_next; pResult = pResult->ai_next )
+
+		while ( pResult )
 		{
-			char sAddrBuf[SPH_ADDRESS_SIZE];
-			auto* pAddr = ( struct sockaddr_in* ) pResult->ai_addr;
+			auto * pAddr = ( struct sockaddr_in *)pResult->ai_addr;
 			DWORD uNextAddr = pAddr->sin_addr.s_addr;
 			sphFormatIP( sAddrBuf, sizeof( sAddrBuf ), uNextAddr );
-			sBuf << sAddrBuf;
+			sBuf += sAddrBuf; // can not use << as builder appends string buffer with tail '\0' and next chunks are invisible
+			pResult = pResult->ai_next;
+
+			if ( uAddr==uLocalhost && uNextAddr!=uLocalhost )
+				uAddr = uNextAddr;
 		}
 
-		sphWarning( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr());
+		sphFormatIP( sAddrBuf, sizeof( sAddrBuf ), uAddr );
+		sphWarning( "multiple addresses (%s) found for '%s', using first one (%s)", sBuf.cstr(), sHost, sAddrBuf );
 	}
 
 	return uAddr;

@@ -9931,7 +9931,7 @@ int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 
 	// align as stack of tree + 32K
 	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enouth)
-	iQueryStack = Threads::GetMaxCoroStackSize();
+	iQueryStack = iStackNeed + 32*1024;
 	if ( Threads::GetMaxCoroStackSize()>=iQueryStack )
 		return (int)iQueryStack;
 

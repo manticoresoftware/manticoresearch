@@ -445,7 +445,7 @@ static const char * GetModeName ( CompatMode_e eMode )
 
 void LoadCompatHttp ( const char * sData )
 {
-	nljson tRaw = nljson::parse ( sData );
+	nljson tRaw = nljson::parse ( sData, nullptr, false );
 	int iLoadedItems = 0;
 
 	if ( tRaw.contains ( g_tConfigTables ) )

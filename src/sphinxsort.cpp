@@ -5662,6 +5662,10 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 		{
 			tExprCol.m_eAttrType = SPH_ATTR_INTEGER;
 			tExprCol.m_tLocator.m_iBitCount = 32;
+		} else if ( tExprCol.m_eAttrType==SPH_ATTR_INTEGER )
+		{
+			tExprCol.m_eAttrType = SPH_ATTR_BIGINT;
+			tExprCol.m_tLocator.m_iBitCount = 64;
 		}
 		break;
 
@@ -5792,9 +5796,6 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 			else
 				return Err ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
 		}
-
-		if ( !bColumnar )
-			m_pSorterSchema->RemoveStaticAttr ( iSorterAttr );
 	}
 
 	// a new and shiny expression, lets parse
@@ -5838,8 +5839,8 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
 
-	// remove original column (replaced by columnar storage expression)
-	if ( bColumnar && iSorterAttr>=0 )
+	// remove original column
+	if ( iSorterAttr>=0 )
 		m_pSorterSchema->RemoveStaticAttr(iSorterAttr);
 
 	if ( !SetupAggregateExpr ( tExprCol, tItem.m_sExpr, uQueryPackedFactorFlags ) )

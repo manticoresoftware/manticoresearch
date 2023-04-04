@@ -43,6 +43,23 @@ index rt
 	rt_field	= body
 	path			= <data_path/>/rt
 }
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, idd2, str1 FROM test_table1
+	sql_attr_uint	= idd1
+	sql_attr_bigint	= idd2
+	sql_attr_string	= str1
+}
+
+index plain1
+{
+	source			= src1
+	path			= <data_path/>/plain1
+}
 </config>
 
 <db_create>
@@ -71,6 +88,18 @@ INSERT INTO `test_table` VALUES
 ( 8, 1,		'a a',		'eats' ),
 ( 9, 3, 	'c cc',		'the' )
 </db_insert>
+
+<db_create>
+CREATE TABLE `test_table1`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` BIGINT NOT NULL default '0',
+    `idd2` BIGINT NOT NULL default '0',
+	`str1` varchar(1024) NOT NULL default ''
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table1`</db_drop>
+<db_insert> INSERT INTO `test_table1` VALUES ( 1, 2019309824, 44500000000, 'a aa' ), ( 2, 2119973120, 45500000000, 'a aa' ), ( 3, 2147432704, 46500000000, 'a aa' )</db_insert>
 
 <queries>
 <query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc"/>
@@ -103,6 +132,18 @@ INSERT INTO rt (id, idd1, str1, body) VALUES
 ;
 select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc;
 select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from rt    where match('the | eats | bird') group by idd1 within group order by str1 asc;
+
+<!-- regression aggregate alias shadows index attribute -->
+select id, sum(idd1) as idd1 from plain where match('the | eats | bird') order by id asc;
+select id, idd1+1 as idd1 from plain where match('the | eats | bird') order by id asc;
+
+select sum(idd1) as s2, s2+0 as s3 from plain where match('the | eats | bird') group by idd1 within group order by id asc;
+select sum(idd1) as idd1, idd1+0 as s3 from plain where match('the | eats | bird') group by idd1 within group order by id asc;
+select sum(idd1) as idd1, idd1+0 as s3 from plain where match('the | eats | bird') order by id asc;
+
+select sum(idd1) as idd1, idd1+0 as s3 from plain1 order by id asc;
+select sum(idd1) as i1, sum(idd2) as i2, i1+i2 as s3 from plain1 order by id asc;
+
 </sphinxql></queries>
 
 </test>

@@ -15,6 +15,10 @@ variables:
   stage: build
   interruptible: true
   needs: [ ]
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: manual
+    - if: $CI_MERGE_REQUEST_ID == null
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3243

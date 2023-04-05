@@ -202,4 +202,4 @@ public:
 };
 
 std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapper_c> pSock );
-void LogNetError ( const char * sMsg );
+void LogNetError ( const char * sMsg, bool bDebug=false );

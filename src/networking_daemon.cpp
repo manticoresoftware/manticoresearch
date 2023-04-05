@@ -1177,10 +1177,13 @@ std::unique_ptr<AsyncNetBuffer_c> MakeAsyncNetBuffer ( std::unique_ptr<SockWrapp
 	return std::make_unique<AsyncBufferedSocket_c> ( std::move ( pSock ) );
 }
 
-void LogNetError ( const char * sMsg )
+void LogNetError ( const char * sMsg, bool bDebug )
 {
 	int iCID = session::GetConnID();
 	const char * sClientIP = session::szClientName();
 	int iSock = ClientTaskInfo_t::Info().GetSocket();
-	sphWarning ( "conn %s(%d), sock=%d: %s", sClientIP, iCID, iSock, sMsg );
+	if ( bDebug )
+		sphLogDebugv ( "conn %s(%d), sock=%d: %s", sClientIP, iCID, iSock, sMsg );
+	else
+		sphWarning ( "conn %s(%d), sock=%d: %s", sClientIP, iCID, iSock, sMsg );
 }

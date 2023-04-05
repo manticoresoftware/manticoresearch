@@ -155,3 +155,15 @@ mysql> select timediff(1615787586, 1613787583);
 +----------------------------------+
 1 row in set (0.00 sec)
 ```
+
+### DATE_FORMAT()
+Returns the string with format argument is the same as strftime function and timestamp argument.
+```sql
+mysql> select date_format(now(), 'year %Y and time %T');
++-------------------------------------------+
+| date_format(now(), 'year %Y and time %T') |
++-------------------------------------------+
+| year 2023 and time 11:54:52               |
++-------------------------------------------+
+1 row in set (0.00 sec)
+```

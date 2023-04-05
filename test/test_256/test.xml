@@ -82,6 +82,18 @@ index rt2
 	index_exact_words = 1
 }
 
+index rt3
+{
+	type = rt
+	path			= <data_path/>/rt3
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z, russian
+	min_infix_len = 2
+}
+
 </config>
 
 <db_create>
@@ -153,6 +165,13 @@ CREATE TABLE test_table
 	INSERT INTO rt1 (id, idd, body) VALUES ( 23, 11, '#test #tests passes well' );
 	CALL SUGGEST ( '#trest', 'rt1');
 	CALL SUGGEST ( '#trest', 'rt1', 1 as non_char );
+    
+    <!-- regression suggest on short words there trigrams do not work -->
+    insert into rt3 (body) VALUES ('range'), ('range'), ('revenge'), ('ranger'), ('orange'), ('binge'), ('rave'), ('grave'), ('raven'), ('brave'), ('raver'), ('france'), ('randy'), ('ranch');
+    CALL SUGGEST('ravge','rt3')
+    
+    <!-- new qsuggest feature to show full sentence -->
+    CALL QSUGGEST ( 'tests passed well in funce', 'rt3', 1 as sentence, 1 as limit);
 	
 </sphinxql></queries>
 

@@ -13160,23 +13160,23 @@ static int BuildUtf8Offsets ( const char * sWord, int iLen, int * pOff, int DEBU
 	return int ( pOff - pStartOff - 1 );
 }
 
-void sphBuildNGrams ( const char * sWord, int iLen, char cDelimiter, CSphVector<char> & dNGrams )
+static void sphBuildNGrams ( const char * sWord, int iLen, int iGramLen, CSphVector<char> & dNGrams )
 {
 	int dOff[SPH_MAX_WORD_LEN+1];
 	int iCodepoints = BuildUtf8Offsets ( sWord, iLen, dOff, sizeof ( dOff ) );
-	if ( iCodepoints<3 )
+	if ( iCodepoints<iGramLen )
 		return;
 
 	dNGrams.Reserve ( iLen*3 );
-	for ( int iChar=0; iChar<=iCodepoints-3; iChar++ )
+	for ( int iChar=0; iChar<=iCodepoints-iGramLen; iChar++ )
 	{
 		int iStart = dOff[iChar];
-		int iEnd = dOff[iChar+3];
-		int iGramLen = iEnd - iStart;
+		int iEnd = dOff[iChar+iGramLen];
+		int iSize = iEnd - iStart;
 
-		char * sDst = dNGrams.AddN ( iGramLen + 1 );
-		memcpy ( sDst, sWord+iStart, iGramLen );
-		sDst[iGramLen] = cDelimiter;
+		char * sDst = dNGrams.AddN ( iSize + 1 );
+		memcpy ( sDst, sWord+iStart, iSize );
+		sDst[iSize] = '\0';
 	}
 	// n-grams split by delimiter
 	// however it's still null terminated
@@ -13248,22 +13248,41 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 }
 
 
-bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord )
+bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord, bool bSetSentence )
 {
 	assert ( pTok->IsQueryTok() );
 	TokenizerRefPtr_c pTokenizer = pTok->Clone ( SPH_CLONE );
 	pTokenizer->SetBuffer ( (BYTE *)const_cast<char*>(sWord), (int) strlen ( sWord ) );
 
+	int iWord = 0;
+	const char * pPrevToken = nullptr;
+	const char * pLastToken = nullptr;
+
 	for ( const BYTE* pToken = pTokenizer->GetToken(); pToken; pToken = pTokenizer->GetToken() )
 	{
-		m_sWord = (const char *)pToken;
-		if ( !bUseLastWord )
+		if ( bUseLastWord || iWord==0 )
+			m_sWord = (const char *)pToken;
+
+		if ( bSetSentence )
+		{
+			pPrevToken = pLastToken;
+			pLastToken = pTokenizer->GetTokenEnd();
+		}
+
+		iWord++;
+
+		if ( !bUseLastWord && !bSetSentence )
 			break;
 
 		if ( pTokenizer->TokenIsBlended() )
 			pTokenizer->SkipBlended();
 	}
 
+	if ( bSetSentence && pPrevToken )
+	{
+		int iSentenceLen = pPrevToken - sWord;
+		m_sSentence.SetBinary ( sWord, iSentenceLen );
+	}
 
 	m_iLen = m_sWord.Length();
 	m_iCodepoints = DecodeUtf8 ( (const BYTE *)m_sWord.cstr(), m_dCodepoints );
@@ -13271,7 +13290,13 @@ bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c& pTo
 
 	bool bValidWord = ( m_iCodepoints>=3 );
 	if ( bValidWord )
-		sphBuildNGrams ( m_sWord.cstr(), m_iLen, '\0', m_dTrigrams );
+	{
+		// lets generate bigrams for short words as trigrams for 5char word could all contain the same wrong symbol
+		if ( m_iCodepoints<6 )
+			m_iNGramLen = 2;
+
+		sphBuildNGrams ( m_sWord.cstr(), m_iLen, m_iNGramLen, m_dTrigrams );
+	}
 
 	return bValidWord;
 }
@@ -13430,6 +13455,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	const bool bHasExactDict = tRes.m_bHasExactDict;
 	const int iMaxEdits = tArgs.m_iMaxEdits;
 	const bool bNonCharAllowed = tArgs.m_bNonCharAllowed;
+	const int iNGramLen = tRes.m_iNGramLen;
 	tRes.m_dMatched.Reserve ( iQLen * 2 );
 	CmpSuggestOrder_fn fnCmp;
 
@@ -13499,10 +13525,10 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 			// single byte reference word	!=	utf8 dictionary word
 
 			bool bGotMatch = false;
-			for ( int iChar=0; iChar<=iDictCodepoints-3 && !bGotMatch; iChar++ )
+			for ( int iChar=0; iChar<=iDictCodepoints-iNGramLen && !bGotMatch; iChar++ )
 			{
 				int iStart = dCharOffset[iChar];
-				int iEnd = dCharOffset[iChar+3];
+				int iEnd = dCharOffset[iChar+iNGramLen];
 				bGotMatch = ( dHashTrigrams.Find ( sphCRC32 ( sDictWord + iStart, iEnd - iStart ) )!=NULL );
 			}
 

@@ -1054,8 +1054,6 @@ struct ISphSubstringPayload
 };
 
 
-void sphBuildNGrams ( const char * sWord, int iLen, char cDelimiter, CSphVector<char> & dNgrams );
-
 // levenstein distance for words
 int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 );
 
@@ -1079,19 +1077,17 @@ struct SuggestWord_t
 
 struct SuggestArgs_t
 {
-	int				m_iLimit;			// limit into result set
-	int				m_iMaxEdits;		// levenstein distance threshold
-	int				m_iDeltaLen;		// filter out words from dictionary these shorter \ longer then reference word
-	int				m_iQueueLen;
-	int				m_iRejectThr;
-	bool			m_bQueryMode;
+	int				m_iLimit			{ 5 };		// limit into result set
+	int				m_iMaxEdits			{ 4 };		// levenstein distance threshold
+	int				m_iDeltaLen			{ 3 };		// filter out words from dictionary these shorter \ longer then reference word
+	int				m_iQueueLen			{ 25 };
+	int				m_iRejectThr		{ 4 };
+	bool			m_bQueryMode		{ false };
 
-	bool			m_bResultOneline;
-	bool			m_bResultStats;
-	bool			m_bNonCharAllowed;
-
-	SuggestArgs_t () : m_iLimit ( 5 ), m_iMaxEdits ( 4 ), m_iDeltaLen ( 3 ), m_iQueueLen ( 25 ), m_iRejectThr ( 4 ), m_bQueryMode ( false ), m_bResultOneline ( false ), m_bResultStats ( true ), m_bNonCharAllowed ( false )
-	{}
+	bool			m_bResultOneline	{ false };
+	bool			m_bResultStats		{ true };
+	bool			m_bNonCharAllowed	{ false };
+	bool			m_bSentence			{ false };
 };
 
 struct SuggestResult_t
@@ -1102,6 +1098,7 @@ struct SuggestResult_t
 
 	// state
 	CSphVector<char>			m_dTrigrams;
+	int							m_iNGramLen = 3;
 	// payload
 	void *						m_pWordReader = nullptr;
 	cRefCountedRefPtrGeneric_t	m_pSegments;
@@ -1113,6 +1110,7 @@ struct SuggestResult_t
 	int				m_iCodepoints = 0;
 	bool			m_bUtf8 = false;
 	bool			m_bHasExactDict = false;
+	CSphString		m_sSentence;
 
 	SuggestResult_t ()
 	{
@@ -1126,7 +1124,7 @@ struct SuggestResult_t
 		assert ( !m_pSegments );
 	}
 
-	bool SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord );
+	bool SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord, bool bSetSentence );
 
 	void Flattern ( int iLimit );
 };

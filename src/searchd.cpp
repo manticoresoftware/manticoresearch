@@ -11612,6 +11612,9 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else if ( sOpt=="non_char" )
 		{
 			tArgs.m_bNonCharAllowed = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
+		} else if ( sOpt=="sentence" )
+		{
+			tArgs.m_bSentence = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -11627,8 +11630,6 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 			return;
 		}
 	}
-
-
 
 	{ // scope for ServedINdexPtr_c
 		auto pServed = GetServed ( tStmt.m_dInsertValues[1].m_sVal );
@@ -11646,7 +11647,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 			return;
 		}
 
-		if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode ) )
+		if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence ) )
 		{
 			pIdx->GetSuggest ( tArgs, tRes );
 		}
@@ -11702,11 +11703,20 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		}
 		tOut.HeadEnd ();
 
+		StringBuilder_c sBuf;
 		auto * szResult = (const char *)( tRes.m_dBuf.Begin() );
 		ARRAY_FOREACH ( i, tRes.m_dMatched )
 		{
 			const SuggestWord_t & tWord = tRes.m_dMatched[i];
-			tOut.PutString ( szResult + tWord.m_iNameOff );
+			if ( tArgs.m_bSentence && !tRes.m_sSentence.IsEmpty() )
+			{
+				sBuf.Clear();
+				sBuf.Appendf ( "%s %s", tRes.m_sSentence.cstr(), ( szResult + tWord.m_iNameOff ) );
+				tOut.PutString ( sBuf );
+			} else
+			{
+				tOut.PutString ( szResult + tWord.m_iNameOff );
+			}
 			if ( tArgs.m_bResultStats )
 			{
 				tOut.PutNumAsString ( tWord.m_iDistance );

@@ -3116,6 +3116,87 @@ private:
 	{}
 };
 
+class ExprDateFormat_c : public ISphStringExpr
+{
+public:
+	ExprDateFormat_c ( ISphExpr * pArg, ISphExpr * pFmt )
+    	: m_pArg ( pArg )
+    {
+        assert( pArg );
+        SafeAddRef( pArg );
+
+		CSphMatch tTmp;
+		const BYTE * sVal = nullptr;
+		int iLen = pFmt->StringEval ( tTmp, &sVal );
+		m_sFmt = CSphString ( (const char*)sVal, iLen );
+		FreeDataPtr ( pFmt, sVal );
+    }
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		*ppStr = nullptr;
+		int64_t iSrcTm = m_pArg->Int64Eval ( tMatch );
+
+		// convert timestamp to tm
+		time_t ts = (time_t)iSrcTm;
+		struct tm s = {0};
+		localtime_r ( &ts, &s );
+
+		// print date with format into temporaty buffer
+		int iLen = strftime ( m_dBuf.Begin(), m_dBuf.GetLength()-1, m_sFmt.cstr(), &s );
+
+		// copy to string and leak the string data
+		CSphString sRes;
+		sRes.SetBinary ( m_dBuf.Begin(), iLen );
+		*ppStr = (const BYTE *)sRes.Leak();
+
+		return iLen;
+	}
+
+    void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
+    {
+        if ( m_pArg )
+            m_pArg->FixupLocator ( pOldSchema, pNewSchema );
+    }
+
+    void Command ( ESphExprCommand eCmd, void * pArg ) override
+    {
+        if ( m_pArg )
+            m_pArg->Command ( eCmd, pArg );
+    }
+
+    bool IsDataPtrAttr() const final
+    {
+        return true;
+    }
+
+	bool IsConst () const final { return false; }
+
+	ISphExpr * Clone () const final
+	{
+		return new ExprDateFormat_c ( *this );
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("ExprDateFormat_c");
+		CALC_CHILD_HASH(m_pArg);
+		return CALC_DEP_HASHES();
+	}
+
+
+private:
+	ExprDateFormat_c ( const ExprDateFormat_c & rhs )
+		: m_pArg ( SafeClone ( rhs.m_pArg ) )
+		, m_sFmt ( rhs.m_sFmt )
+	{}
+
+	CSphRefcountedPtr<ISphExpr> m_pArg;
+	CSphString m_sFmt;
+	CSphFixedVector<char> m_dBuf { MAX_KEYWORD_BYTES };
+};
+
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3583,6 +3664,7 @@ enum Tokh_e : BYTE
 
 	FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
+	FUNC_DATE_FORMAT,
 
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
 	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
@@ -3711,6 +3793,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 
 	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
+	{ "date_format",	FUNC_DATE_FORMAT	 },
 
 	// other reserved (operators, columns, etc.)
 	{ "count",			TOKH_COUNT			},
@@ -3762,47 +3845,49 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
 	{
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108,  16, 108,
-		38,   5,   0, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 14,   5,   5,	0,  21,
-		38,  39,  50,  21, 108, 108,  14,  23,	2,  30,
-		12,  10,   9,   1,   0,  30,  50,  35, 34,  31,
-		7, 108, 108, 108, 108,  22, 108,  14,   5,   5,
-		0,  21,  38,  39,  50,  21, 108, 108,  14,  23,
-		2,  30,  12,  10,   9,   1,   0,  30,  50,  35,
-		34,  31,   7, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108, 108, 108, 108, 108,
-		108, 108, 108, 108, 108, 108
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121,  28, 121,
+       43,  36,  12, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121,   4,  37,  14,   3,  37,
+	   29,  44,  54,  29, 121, 121,  16,  36,   4,  26,
+	   16,  11,   9,   5,   8,  27,  57,  35,  33,  34,
+	   18, 121, 121, 121, 121,   3, 121,   4,  37,  14,
+        3,  37,  29,  44,  54,  29, 121, 121,  16,  36,
+        4,  26,  16,  11,   9,   5,   8,  27,  57,  35,
+       33,  34,  18, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
+      121, 121, 121, 121, 121, 121
 	};
 
 	const static short dIndexes[] =
     {
-		-1, -1, -1, -1, -1, 79, -1, 12, 4, 76,
-		5, 32, 22, 40, 10, 66, 38, 77, 6, 1,
-		59, 39, -1, 42, 83, 31, 81, 28, -1, 71,
-		23, 43, 36, 49, 84, 58, 51, 46, 52, 63,
-		73, 78, 54, 30, 2, 60, 29, 35, 9, 33,
-		11, 44, 21, 13, 64, 68, 69, 47, 17, 82,
-		56, 27, 74, 70, 55, 15, 62, 53, 50, 57,
-		41, 65, 48, 14, 8, 0, 34, 72, 37, 61,
-		16, -1, 3, -1, -1, 25, 45, 67, 19, -1,
-		-1, -1, -1, 20, 24, 7, 26, -1, -1, -1,
-		-1, -1, -1, 80, 18, -1, -1, 75,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, 78, -1, -1, 4, 1, -1, -1,
+		66, 12, 6, 80, 77, -1, 10, 5, 22, 42,
+		73, 38, 40, 49, 59, 31, 84, 79, 71, 60,
+		85, 36, 39, 51, 58, 82, 28, 23, 43, 52,
+		83, 17, -1, 46, 74, 44, 65, 69, -1, 32,
+		27, 30, 63, 2, 41, 70, 33, 54, 62, 3,
+		56, 64, 9, 47, 15, 61, 13, 0, 75, 35,
+		48, 57, 37, 21, 19, 34, 55, 53, 72, 25,
+		68, 67, 29, 8, 20, 11, -1, 50, -1, 16,
+		-1, 18, -1, -1, 14, 24, -1, 7, -1, -1,
+		-1, 76, -1, -1, 45, -1, -1, -1, -1, 26,
+		81,
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -3833,6 +3918,21 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 static int TokHashCheck()
 {
+	// //in asso table values 65..90 (A..Z) copy from 97..122 (a..z), and change strcmp to strcasecmp
+	// //values 66..91 (A..Z) copy from 98..123 (a..z)
+	//int iFrom = 65;
+	//int iTo = 90;
+	//int iBase = 97;
+	//for ( int i=0; i<=iTo-iFrom; i++ )
+	//	g_dAsso[iFrom+i] = g_dAsso[iBase+i];
+
+	//for ( int i=0; i<sizeof(g_dAsso); i++ )
+	//{
+	//	if ( (i%10)==0 )
+	//		printf ( "\n");
+	//	printf ( "%d, ", g_dAsso[i] );
+	//}
+
 	for ( const auto & kv : g_dKeyValTokens )
 	{
 		CSphString sKey ( kv.m_sName );
@@ -3952,6 +4052,7 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 
 	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
+	{ /*"date_format", */		2,	TOK_FUNC,		/*FUNC_DATE_FORMAT,		*/	SPH_ATTR_STRINGPTR },
 };
 
 
@@ -3968,7 +4069,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
 		, "uint", "uint64", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
-		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein" };
+		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein", "date_format" };
 
 	return dNames[iFunc];
 }
@@ -6978,6 +7079,8 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_CONNECTION_ID: return new Expr_GetIntConst_c ( ConnID() );
 	case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
 
+	case FUNC_DATE_FORMAT: return new ExprDateFormat_c ( dArgs[0], dArgs[1] );
+
 	default: // just make gcc happy
 		assert ( 0 && "unhandled function id" );
 	}
@@ -9223,7 +9326,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
 	}
-	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER  || eFunc ==FUNC_LOWER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN ) )
+	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER  || eFunc ==FUNC_LOWER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN || eFunc==FUNC_DATE_FORMAT ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -9434,6 +9537,24 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 #endif
 		}
 		break;
+	case FUNC_DATE_FORMAT:
+		if ( dRetTypes.GetLength()!=2 )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, but 2 args expected", sFuncName, dRetTypes.GetLength() );
+			return -1;
+		}
+		if ( m_dNodes[0].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[0].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[0].m_eRetType!=SPH_ATTR_BIGINT )
+		{
+			m_sParserError.SetSprintf ( "%s() argument 1 must be integer, bigint or timestamp", sFuncName );
+			return -1;
+		}
+		if ( dRetTypes[1]!=SPH_ATTR_STRING )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 2 must be string", sFuncName );
+			return -1;
+		}
+		break;
+
 	default:;
 	}
 

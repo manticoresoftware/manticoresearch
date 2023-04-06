@@ -52,6 +52,7 @@ That's the only difference between them. Several options are supported for custo
 | reject | Rejected words are matches that are not better than those already in the match queue. They are put in a rejected queue that gets reset in case one actually can go in the match queue. This parameter defines the size of the rejected queue (as reject*max(max_matched,limit)). If the rejected queue is filled, the engine stops looking for potential matches | 4 |
 | result_line | alternate mode to display the data by returning all suggests, distances and docs each per one row | 0 |
 | non_char | do not skip dictionary words with non alphabet symbols | 0 (skip such words) |
+| sentence | Returns original sentence along with last work replaced by matched | 0 (do not return full sentence) |
 
 To show how it works let's create a table and add few documents into it.
 
@@ -134,6 +135,30 @@ CALL QSUGGEST('bagg with tasel', 'products');
 ```
 <!-- end -->
 <!-- example result_line -->
+
+with the `1 as sentence` in the options returns original sentence with suggested last word.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```sql
+CALL QSUGGEST('bagg with tasel', 'products', 1 as sentence);
+```
+<!-- response Example -->
+
+```sql
++-------------------+----------+------+
+| suggest           | distance | docs |
++-------------------+----------+------+
+| bagg with tassel  | 1        | 1    |
++-------------------+----------+------+
+```
+<!-- end -->
+<!-- example result_line -->
+
+
 ##### Different display mode
 Using `1 as result_line` in the options turns on alternate mode to display the data by returning all suggests, distances and docs each per one row.
 

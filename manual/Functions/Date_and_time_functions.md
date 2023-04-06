@@ -13,7 +13,7 @@ mysql> select NOW();
 ```
 
 ### CURTIME()
-Returns the current time in local timezone in  in `hh:ii:ss` format.
+Returns the current time in the local timezone in `hh:ii:ss` format.
 ```sql
 mysql> select CURTIME();
 +-----------+
@@ -26,6 +26,7 @@ mysql> select CURTIME();
 
 ### UTC_TIME()
 Returns the current time in UTC timezone in `hh:ii:ss` format.
+
 ```sql
 mysql> select UTC_TIME();
 +------------+
@@ -38,6 +39,7 @@ mysql> select UTC_TIME();
 
 ### UTC_TIMESTAMP()
 Returns the current time in UTC timezone in `YYYY-MM-DD hh:ii:ss` format.
+
 ```sql
 mysql> select UTC_TIMESTAMP();
 +---------------------+
@@ -72,7 +74,7 @@ mysql> select minute(now());
 1 row in set (0.00 sec)
 ```
 
-### HOUR() 
+### HOUR()
 Returns the integer hour (in 0..23 range) from a timestamp argument, according to the current timezone.
 ```sql
 mysql> select hour(now());
@@ -85,7 +87,7 @@ mysql> select hour(now());
 ```
 
 ### DAY()
-Returns the integer day of month (in 1..31 range) from a timestamp argument, according to the current timezone.
+Returns the integer day of the month (in 1..31 range) from a timestamp argument, according to the current timezone.
 ```sql
 mysql> select day(now());
 +------------+
@@ -133,7 +135,7 @@ mysql> select yearmonth(now());
 ```
 
 ### YEARMONTHDAY()
-Returns the integer year, month, and date code (in 19691231..20380119 range) from a timestamp argument, according to the current timezone.   
+Returns the integer year, month, and date code (ranging from 19691231 to 20380119) based on the current timezone.   
 ```sql
 mysql> select yearmonthday(now());
 +---------------------+
@@ -145,7 +147,7 @@ mysql> select yearmonthday(now());
 ```
 
 ### TIMEDIFF()
-Returns difference between the timstamps in format `hh:ii:ss`. Example:
+Calculates the difference between two timestamps in the format `hh:ii:ss`.
 ```sql
 mysql> select timediff(1615787586, 1613787583);
 +----------------------------------+
@@ -157,13 +159,28 @@ mysql> select timediff(1615787586, 1613787583);
 ```
 
 ### DATE_FORMAT()
-Returns the string with format argument is the same as strftime function and timestamp argument.
+Returns a formatted string based on the provided date and format arguments. The format argument uses the same specifiers as the [strftime](https://man7.org/linux/man-pages/man3/strftime.3.html) function. For convenience, here are some common format specifiers:
+
+- `%Y` - Four-digit year
+- `%m` - Two-digit month (01-12)
+- `%d` - Two-digit day of the month (01-31)
+- `%H` - Two-digit hour (00-23)
+- `%M` - Two-digit minute (00-59)
+- `%S` - Two-digit second (00-59)
+- `%T` - Time in 24-hour format (`%H:%M:%S`)
+
+Example usage:
+
 ```sql
-mysql> select date_format(now(), 'year %Y and time %T');
-+-------------------------------------------+
-| date_format(now(), 'year %Y and time %T') |
-+-------------------------------------------+
-| year 2023 and time 11:54:52               |
-+-------------------------------------------+
+mysql> SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
++------------------------------------------+
+| DATE_FORMAT(NOW(), 'year %Y and time %T') |
++------------------------------------------+
+| year 2023 and time 11:54:52              |
++------------------------------------------+
 1 row in set (0.00 sec)
 ```
+
+This example formats the current date and time, displaying the four-digit year and the time in 24-hour format.
+
+<!-- proofread -->

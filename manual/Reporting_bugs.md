@@ -135,8 +135,17 @@ To fix your bug, developers often need to reproduce it locally. To do this, they
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`. Here's how you can do it using the Minio client:
 1. Install the client https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc
-2. Add our s3 host: `mc config host add manticore http://s3.manticoresearch.com:9000 manticore manticore`
-3. Copy your files: `mc cp -r issue-1234/ manticore/write-only/issue-1234` . Make sure the folder name is unique and best if it corresponds to the issue on GitHub where you described the bug.
+For example on 64-bit Linux:
+
+```
+curl https://dl.min.io/client/mc/release/linux-amd64/mc \
+  --create-dirs \
+  -o $HOME/minio-binaries/mc
+chmod +x $HOME/minio-binaries/mc
+export PATH=$PATH:$HOME/minio-binaries/
+```
+2. Add our s3 host (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc config host add manticore http://s3.manticoresearch.com:9000 manticore manticore`
+3. Copy your files (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc cp -r issue-1234/ manticore/write-only/issue-1234` . Make sure the folder name is unique and best if it corresponds to the issue on GitHub where you described the bug.
 
 ### DEBUG
 

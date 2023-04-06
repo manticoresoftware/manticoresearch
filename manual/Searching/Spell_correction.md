@@ -136,18 +136,14 @@ CALL QSUGGEST('bagg with tasel', 'products');
 <!-- end -->
 <!-- example result_line -->
 
+<!-- example sql1 -->
 with the `1 as sentence` in the options returns original sentence with suggested last word.
 
-<!-- intro -->
-##### Example:
-
-<!-- request Example -->
-
+<!-- request SQL -->
 ```sql
 CALL QSUGGEST('bagg with tasel', 'products', 1 as sentence);
 ```
-<!-- response Example -->
-
+<!-- response SQL -->
 ```sql
 +-------------------+----------+------+
 | suggest           | distance | docs |
@@ -156,8 +152,6 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as sentence);
 +-------------------+----------+------+
 ```
 <!-- end -->
-<!-- example result_line -->
-
 
 ##### Different display mode
 Using `1 as result_line` in the options turns on alternate mode to display the data by returning all suggests, distances and docs each per one row.

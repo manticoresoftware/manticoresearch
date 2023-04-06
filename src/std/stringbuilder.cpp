@@ -106,7 +106,7 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 
 	while (true)
 	{
-		int iLeft = m_iSize - m_iUsed;
+		int64_t iLeft = m_iSize - m_iUsed;
 		if ( sComma.second && sComma.second < iLeft ) // prepend delimiter first...
 		{
 			if ( sComma.second )
@@ -246,7 +246,7 @@ void StringBuilder_c::MoveTo ( CSphString &sTarget )
 void StringBuilder_c::Grow ( int iLen )
 {
 	assert ( m_iSize<m_iUsed + iLen + GROW_STEP );
-	m_iSize = (int)sph::DefaultRelimit::Relimit ( m_iSize, m_iUsed + iLen + GROW_STEP );
+	m_iSize = sph::DefaultRelimit::Relimit ( m_iSize, m_iUsed + iLen + GROW_STEP );
 	auto * pNew = new char[m_iSize];
 	if ( m_szBuffer )
 		memcpy ( pNew, m_szBuffer, m_iUsed + 1 );

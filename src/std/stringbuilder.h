@@ -52,8 +52,8 @@ public:
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
 	explicit operator	CSphString() const { return { cstr() }; }
-	explicit operator	Str_t() const { return m_szBuffer ? Str_t { m_szBuffer, m_iUsed } : dEmptyStr; }
-	explicit operator	ByteBlob_t() const { return m_szBuffer ? ByteBlob_t { (const BYTE*) m_szBuffer, m_iUsed } : S2B(dEmptyStr); }
+	explicit operator	Str_t() const { return m_szBuffer ? Str_t { m_szBuffer, (int)m_iUsed } : dEmptyStr; }
+	explicit operator	ByteBlob_t() const { return m_szBuffer ? ByteBlob_t { (const BYTE*) m_szBuffer, (int)m_iUsed } : S2B(dEmptyStr); }
 
 	// move out (de-own) value
 	BYTE *				Leak();
@@ -61,7 +61,7 @@ public:
 
 	// get state
 	bool				IsEmpty () const { return !m_szBuffer || m_szBuffer[0]=='\0'; }
-	inline int			GetLength () const { return m_iUsed; }
+	inline int64_t		GetLength () const { return m_iUsed; }
 
 	// different kind of fullfillments
 	StringBuilder_c &	AppendChunk ( const Str_t& sChunk, char cQuote = '\0' );
@@ -108,7 +108,7 @@ public:
 
 	// support for sph::Sprintf - emulate POD 'char*'
 	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }
-	inline void					operator += (int i) { GrowEnough ( i ); m_iUsed += i; }
+	inline void					operator += ( int64_t i ) { GrowEnough ( i ); m_iUsed += i; }
 
 	// append 1 char despite any blocks.
 	inline void			RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
@@ -162,8 +162,8 @@ protected:
 	static constexpr BYTE GROW_STEP = 64; // how much to grow if no space left
 
 	char *			m_szBuffer = nullptr;
-	int				m_iSize = 0;
-	int				m_iUsed = 0;
+	int64_t			m_iSize = 0;
+	int64_t			m_iUsed = 0;
 	CSphVector<LazyComma_c> m_dDelimiters;
 
 	void			Grow ( int iLen ); // unconditionally shrink enough to place at least iLen more bytes

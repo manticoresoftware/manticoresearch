@@ -63,7 +63,7 @@ void EscapedStringBuilder_T<Q>::AppendEscapedSkippingComma ( const char* sText )
 
 		if ( pCur > ( pEnd - 8 ) ) // need 1 ending quote, terminator, and m.b. long escaping
 		{
-			m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
 			GrowEnough ( 32 );
 			pEnd = (BYTE*)m_szBuffer + m_iSize;
 			pCur = (BYTE*)m_szBuffer + m_iUsed;
@@ -71,7 +71,7 @@ void EscapedStringBuilder_T<Q>::AppendEscapedSkippingComma ( const char* sText )
 	}
 	*pCur++ = Q::cQuote;
 	*pCur = '\0';
-	m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
 }
 
 // dedicated EscBld::eEscape with comma
@@ -101,7 +101,7 @@ void EscapedStringBuilder_T<Q>::AppendEscapedWithComma ( const char* sText )
 
 		if ( pCur > ( pEnd - 8 ) ) // need 1 ending quote, terminator, and m.b. long escaping
 		{
-			m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
 			GrowEnough ( 32 );
 			pEnd = (BYTE*)m_szBuffer + m_iSize;
 			pCur = (BYTE*)m_szBuffer + m_iUsed;
@@ -109,7 +109,7 @@ void EscapedStringBuilder_T<Q>::AppendEscapedWithComma ( const char* sText )
 	}
 	*pCur++ = Q::cQuote;
 	*pCur = '\0';
-	m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
 }
 
 // dedicated EscBld::eEscape with comma with external len
@@ -139,7 +139,7 @@ void EscapedStringBuilder_T<Q>::AppendEscapedWithComma ( const char* sText, int 
 
 		if ( pCur > ( pEnd - 8 ) ) // need 1 ending quote, terminator, and m.b. long escaping
 		{
-			m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
 			GrowEnough ( 32 );
 			pEnd = (BYTE*)m_szBuffer + m_iSize;
 			pCur = (BYTE*)m_szBuffer + m_iUsed;
@@ -147,7 +147,7 @@ void EscapedStringBuilder_T<Q>::AppendEscapedWithComma ( const char* sText, int 
 	}
 	*pCur++ = Q::cQuote;
 	*pCur = '\0';
-	m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
 }
 
 // dedicated EscBld::eFixupSpace
@@ -176,14 +176,14 @@ void EscapedStringBuilder_T<Q>::FixupSpacesAndAppend ( const char* sText )
 
 		if ( pCur > ( pEnd - 7 ) ) // need terminator
 		{
-			m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
 			GrowEnough ( 32 );
 			pEnd = (BYTE*)m_szBuffer + m_iSize;
 			pCur = (BYTE*)m_szBuffer + m_iUsed;
 		}
 	}
 	*pCur = '\0';
-	m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
 }
 
 // dedicated EscBld::eAll (=EscBld::eFixupSpace | EscBld::eEscape )
@@ -213,7 +213,7 @@ void EscapedStringBuilder_T<Q>::FixupSpacedAndAppendEscaped ( const char* sText 
 
 		if ( pCur > ( pEnd - 8 ) ) // need 1 ending quote, terminator, and m.b. long escaping
 		{
-			m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
 			GrowEnough ( 32 );
 			pEnd = (BYTE*)m_szBuffer + m_iSize;
 			pCur = (BYTE*)m_szBuffer + m_iUsed;
@@ -221,7 +221,7 @@ void EscapedStringBuilder_T<Q>::FixupSpacedAndAppendEscaped ( const char* sText 
 	}
 	*pCur++ = Q::cQuote;
 	*pCur = '\0';
-	m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
 }
 
 // dedicated EscBld::eAll (=EscBld::eFixupSpace | EscBld::eEscape ) with external len
@@ -252,7 +252,7 @@ void EscapedStringBuilder_T<Q>::FixupSpacedAndAppendEscaped ( const char* sText,
 		Q::EscapeCharWithSpaces ( pCur, *pSrc );
 		if ( pCur > ( pEnd - 8 ) ) // need 1 ending quote, terminator, and m.b. long escaping
 		{
-			m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
 			GrowEnough ( 32 );
 			pEnd = (BYTE*)m_szBuffer + m_iSize;
 			pCur = (BYTE*)m_szBuffer + m_iUsed;
@@ -260,7 +260,7 @@ void EscapedStringBuilder_T<Q>::FixupSpacedAndAppendEscaped ( const char* sText,
 	}
 	*pCur++ = Q::cQuote;
 	*pCur = '\0';
-	m_iUsed = int ( pCur - (BYTE*)m_szBuffer );
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
 }
 
 // generic implementation. Used this way in tests. For best performance consider to use specialized versions

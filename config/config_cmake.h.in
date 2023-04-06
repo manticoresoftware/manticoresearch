@@ -195,4 +195,4 @@
 #define SYSCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/manticoresearch"
 
 /* hardcoded default plugin dir */
-#define HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore"
+// #define HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore"

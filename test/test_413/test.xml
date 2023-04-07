@@ -36,6 +36,14 @@ index rt1
     rt_attr_uint = gid
 }
 
+index rt2
+{
+    type = rt
+    path = <data_path/>/rt2
+    rt_field = title
+    rt_attr_uint = gid
+}
+
 index pq1
 {
 	type			= percolate
@@ -88,5 +96,16 @@ select id from META:all where match ('hello ( -war -hallo )') order by id asc;
 select id from META:all where match ('( -war -hallo ) hello') order by id asc;
 select id from META:all where match ('hello -war -hallo') order by id asc;
 select id from META:all where match ('-war -hallo hello') order by id asc;
+
+<!-- single not vs segments with killed rows produces duplicates documents at the result set -->
+REPLACE INTO rt2 (id, title) VALUES ( 1, 'hello world' ),( 2, 'hello hallo world' );
+REPLACE INTO rt2 (id, title) VALUES ( 1, 'hello world' ),( 3, 'hello hallo world' );
+select id from rt2 where match ('-hi') order by id asc;
+
+<!-- single not vs disk chunk with killed rows -->
+flush ramchunk rt2;
+REPLACE INTO rt2 (id, title) VALUES ( 1, 'hello world' ),( 4, 'hello hallo world' );
+select id from rt2 where match ('-hi') order by id asc;
+
 </sphinxql></queries>
 </test>

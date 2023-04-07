@@ -8467,15 +8467,23 @@ const CSphMatch & QwordScan_c::GetNextDoc()
 		return m_tDoc;
 	}
 
-	if ( m_tDoc.m_tRowID==INVALID_ROWID )
-		m_tDoc.m_tRowID = 0;
-	else
-		m_tDoc.m_tRowID++;
-
-	if ( m_tDoc.m_tRowID>=m_iRowsCount )
+	// at the RT index some rows could be killed at any segment
+	while ( true )
 	{
-		m_bDone = true;
-		m_tDoc.m_tRowID = INVALID_ROWID;
+		if ( m_tDoc.m_tRowID==INVALID_ROWID )
+			m_tDoc.m_tRowID = 0;
+		else
+			m_tDoc.m_tRowID++;
+
+		if ( m_tDoc.m_tRowID>=m_iRowsCount )
+		{
+			m_bDone = true;
+			m_tDoc.m_tRowID = INVALID_ROWID;
+			break;
+		}
+
+		if ( IsAliveRow ( m_tDoc.m_tRowID ) )
+			break;
 	}
 
 	return m_tDoc;

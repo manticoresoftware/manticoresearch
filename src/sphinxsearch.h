@@ -172,6 +172,8 @@ protected:
 	RowID_t m_iRowsCount = INVALID_ROWID;
 	bool m_bDone = false;
 	CSphMatch m_tDoc;
+
+	virtual bool IsAliveRow (  RowID_t ) const { return true; }
 };
 
 

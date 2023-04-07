@@ -5968,7 +5968,7 @@ private:
 	DWORD						m_uHitEmbeded;
 };
 
-struct RtScanQword_t final : public QwordScan_c
+class RtScanQword_t final : public QwordScan_c
 {
 public:
 	explicit RtScanQword_t ( int iRowsTotal )
@@ -5989,9 +5989,17 @@ public:
 		m_iDocs = m_iRowsCount;
 		m_bDone = ( m_iRowsCount==0 );
 		m_dQwordFields.SetAll();
+		m_pKilled = &pSegment->m_tDeadRowMap;
 
 		return ( pSegment->m_tAliveRows.load(std::memory_order_relaxed)>0 );
 	}
+
+	bool IsAliveRow ( RowID_t tRowID ) const override
+	{
+		return !m_pKilled->IsSet ( tRowID );
+	}
+private:
+	const DeadRowMap_Ram_c * m_pKilled { nullptr };
 };
 
 

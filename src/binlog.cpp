@@ -62,7 +62,7 @@ public:
 	bool			Fsync();
 	int64_t			GetPos() const				{ return m_iFilePos; }
 
-	bool			OpenFile ( const CSphString & sFile, CSphString & sError ) { return m_tFile.Open ( sFile, SPH_O_NEW, sError ); }
+	bool			OpenFile ( const CSphString & sFile, CSphString & sError );
 	void			CloseFile();
 	const CSphString & GetError() const			{ return m_sError; }
 
@@ -323,12 +323,21 @@ bool BinlogWriter_c::Fsync()
 }
 
 
+bool BinlogWriter_c::OpenFile ( const CSphString & sFile, CSphString & sError )
+{
+	m_iFilePos = 0;
+	return m_tFile.Open ( sFile, SPH_O_NEW, sError )>=0;
+}
+
+
 void BinlogWriter_c::CloseFile()
 {
 	if ( HasUnwrittenData() )
 		Write();
 
 	m_tFile.Close();
+
+	m_iLastFsyncPos = m_iFilePos = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////

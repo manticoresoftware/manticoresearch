@@ -51,6 +51,7 @@ struct SelectIteratorCtx_t
 	int64_t									m_iTotalDocs = 0;
 	int										m_iThreads = 1;
 	bool									m_bCalcPushCost = true;
+	bool									m_bFromIterator = false;
 
 			SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> &	dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs, int iThreads );
 

@@ -8002,6 +8002,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 			i.m_iRsetEstimate *= fRatio;
 
 		tSelectIteratorCtx.m_iTotalDocs = tEstimate.m_iDocs;
+		tSelectIteratorCtx.m_bFromIterator = true;
 		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfoFilters, tSelectIteratorCtx ) );
 		fCostOfFilters = pCostEstimate->CalcQueryCost();
 	}
@@ -8190,7 +8191,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dModifiedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	std::unique_ptr<RowidIterator_i> pIterator;
-	if ( !bAllPrecalc )
+	if ( bAllPrecalc )
+		tCtx.m_pFilter.reset();
+	else
 		pIterator = std::unique_ptr<RowidIterator_i> ( SpawnIterators ( tQuery, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dModifiedFilters, nullptr ) );
 	
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );

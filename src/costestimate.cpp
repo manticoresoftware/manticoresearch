@@ -362,7 +362,7 @@ float CostEstimate_c::CalcQueryCost()
 	}
 
 	if ( iNumFilters )
-		fCost += CalcFilterCost ( iToIntersect>0, fDocsAfterIndexes );
+		fCost += CalcFilterCost ( m_tCtx.m_bFromIterator || iToIntersect>0, fDocsAfterIndexes );
 
 	if ( iNumLookups )
 		fCost += CalcLookupCost();

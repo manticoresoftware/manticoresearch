@@ -14,13 +14,16 @@ For example,
 ```bash
 docker run -it --rm \
 -v $(pwd):/manticore \
+-v /sysroots/on/host:/sysroots \
 -e DISTR=bullseye \
 -e arch=x86_64 \
--e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
+-e SYSROOT_URL=file:///sysroots/ \
 -e boost=boost_nov22 \
 -e sysroot=roots_nov22 \
-93ba969c68b2 bash
+external_toolchain:clang13_cmake3263 bash
 ```
+
+Here all sysroots are placed into `/sysroots/on/host` folder, and then used by `file:///` url scheme. That is quite comfortable for local build/debug, as doesn't disturb network for every build.
 Also, you will most likely need to mount a folder with sources if you are not going to fetch them another way, like with git. Just add `-v /manticore/on/host:/manticore`, or something similar, to have the `/manticore/` folder with sources mounted inside the docker.
 
 ### Building package, same as release

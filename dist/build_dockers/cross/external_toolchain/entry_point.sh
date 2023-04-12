@@ -15,22 +15,16 @@ export boost
 
 if [[ $boost != "none" ]]; then
   mkdir -p /sysroot/cache/common/boost && cd /sysroot/cache/common/boost
-  echo "Fetching boost headers..."
-  wget $SYSROOT_URL/$boost/boost_include.tar.xz -q
-  echo "Unpacking boost headers..."
-  tar -xf boost_include.tar.xz
+  echo "Fetching and unpacking boost headers..."
+  curl -s -L $SYSROOT_URL/$boost/boost_include.tar.xz | tar -xJ
   cd /sysroot/root
-  echo "Fetching boost..."
-  wget $SYSROOT_URL/$boost/boost_${DISTR}_${arch}.tar.xz -q
-  echo "Unpacking boost..."
-  tar -xf boost_${DISTR}_${arch}.tar.xz
+  echo "Fetching and unpacking boost libraries..."
+  curl -s -L $SYSROOT_URL/$boost/boost_${DISTR}_${arch}.tar.xz | tar -xJ
 fi
 
 cd /sysroot/root
-echo "Fetching sysroot..."
-wget $SYSROOT_URL/$sysroot/sysroot_${DISTR}_${arch}.tar.xz -q
-echo "Unpacking sysroot..."
-tar -xf sysroot_${DISTR}_${arch}.tar.xz
+echo "Fetching and unpacking sysroot..."
+curl -s -L $SYSROOT_URL/$sysroot/sysroot_${DISTR}_${arch}.tar.xz | tar -xJ
 echo "Preparing boost and sysroot done"
 echo 'PS1="\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\u@\h:\w \[\033[1;31m\][llvm-${llvm} ${DISTR} ${arch}]\[\033[0m\]\$ "' >> ~/.bashrc
 exec "$@"

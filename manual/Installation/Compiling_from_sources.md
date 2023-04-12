@@ -25,7 +25,7 @@ For example, to create the same RedHat 7 package as the official one, but withou
 docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
 -e arch=x86_64 \
 -e DISTR=rhel7 \
--e boost=boost_nov22 \
+-e boost=boost_rhel_feb17 \
 -e sysroot=roots_nov22 \
 -v /manticore/sources:/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
 manticoresearch/external_toolchain:clang15_cmake3243 bash

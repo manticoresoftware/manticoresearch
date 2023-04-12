@@ -3,7 +3,7 @@
 Compiling Manticore Search from sources enables custom build configurations, such as disabling certain features or adding new patches for testing. For example, you may want to compile from sources and disable the embedded ICU in order to use a different version installed on your system that can be upgraded independently of Manticore. This is also useful if you are interested in contributing to the Manticore Search project.
 
 ## Building using CI Docker
-To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md). This is the easiest way to create binaries for any supported operating system and architecture. Once you have built the image, you need to specify three or more environment variables when running the container:
+To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
 
 * `DISTR`: the target platform
 * `arch`: the architecture
@@ -28,7 +28,7 @@ docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/s
 -e boost=boost_nov22 \
 -e sysroot=roots_nov22 \
 -v /manticore/sources:/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-<docker image> bash
+manticoresearch/external_toolchain:clang15_cmake3243 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
@@ -43,7 +43,7 @@ The same process can be used to build binaries/packages not only for popular Lin
 
 ## Building manually
 
-Compiling Manticore without using the building Docker is not recommended, but if you need to do it, here's what you may need to know:
+Compiling Manticore without using the building Docker is **not recommended**, but if you need to do it, here's what you may need to know:
 
 ### Required tools
 

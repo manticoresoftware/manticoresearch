@@ -1090,7 +1090,7 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 }
 
 
-static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
+static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFiles )
 {
 	assert(pIndex);
 
@@ -1129,17 +1129,27 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
 			::unlink ( sTmp.cstr() );
 		}
 	}
+
+	// also remove external files from disk chunks (could be another list of files not same as RT index itself)
+	if ( pExtFiles )
+	{
+		for ( const auto & sName : *pExtFiles )
+		{
+			if  ( sphIsReadable ( sName ) )
+				::unlink ( sName.cstr() );
+		}
+	}
 }
 
 
-static void DeleteRtIndex ( CSphIndex* pIdx )
+static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
 {
 	assert ( IsConfigless() );
 	if ( !pIdx->IsRT() && !pIdx->IsPQ() )
 		return;
 	auto pRt = static_cast<RtIndex_i*> ( pIdx );
 	pRt->IndexDeleted();
-	DeleteExtraIndexFiles ( pRt );
+	DeleteExtraIndexFiles ( pRt, pExtFiles );
 }
 
 static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
@@ -1150,7 +1160,7 @@ static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
 		return;
 
 	WIdx_c pIdx { pServed };
-	DeleteRtIndex ( pIdx );
+	DeleteRtIndex ( pIdx, nullptr );
 	g_pLocalIndexes->Delete ( sIndex );
 }
 
@@ -1202,7 +1212,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 			assert ( pDesc );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
-				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ) );
+				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr );
 				return false;
 			}
 		}
@@ -1326,10 +1336,15 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 	}
 
+	// need to collect all external files prior to truncate as disk chunks could have different options for externals
+	StrVec_t dIndexFiles;
+	StrVec_t dExtFiles;
+	pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
+
 	if ( !pRt->Truncate(sError) )
 		return false;
 
-	DeleteRtIndex ( pRt );
+	DeleteRtIndex ( pRt, &dExtFiles );
 	RemoveConfigIndex ( sIndex );
 
 	return true;

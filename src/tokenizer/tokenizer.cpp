@@ -160,6 +160,9 @@ uint64_t ISphTokenizer::GetSettingsFNV() const
 	uHash = sphFNV64 ( &m_tSettings.m_iMinWordLen, sizeof ( m_tSettings.m_iMinWordLen ), uHash );
 	uHash = sphFNV64 ( &m_tSettings.m_iNgramLen, sizeof ( m_tSettings.m_iNgramLen ), uHash );
 
+	if ( !m_tSynFileInfo.m_sFilename.IsEmpty() )
+		uHash = sphFNV64 ( m_tSynFileInfo.m_sFilename.cstr(), m_tSynFileInfo.m_sFilename.Length(), uHash );
+
 	return uHash;
 }
 

@@ -29,4 +29,10 @@ StringSet::StringSet ( std::initializer_list<const char *> dVals )
 		Add ( sVal );
 }
 
+StringSet::StringSet ( const VecTraits_T<CSphString> & dVals )
+{
+	for ( const CSphString & sVal : dVals )
+		Add ( sVal );
+}
+
 }

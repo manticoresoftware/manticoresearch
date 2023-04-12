@@ -49,6 +49,7 @@ public:
 	}
 
 	StringSet ( std::initializer_list<const char *> dVals );
+	StringSet ( const VecTraits_T<CSphString> & dVals );
 	StringSet() = default;
 
 	using BASE::Delete;

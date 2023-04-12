@@ -49,7 +49,38 @@ drop table test1;
 drop table test2;
 
 ALTER TABLE test1 RECONFIGURE;
+</sphinxql>
 
-</sphinxql></queries>
+<sphinxql>
+<!-- regression alter empty option does not clean externals -->
+create table test3 ( title text, tag integer ) exceptions='<this_test/>/exc.txt' wordforms = '<this_test/>/wordforms1.txt' stopwords = '<this_test/>/stop.txt';
+insert into test3 values (1, 'word form', 11);
+call keywords('a b c1 c d', 'test3');
+alter table test3 exceptions = '';
+insert into test3 values (2, 'word form', 11);
+alter table test3 wordforms = '';
+insert into test3 values (3, 'word form', 11);
+alter table test3 stopwords = '';
+insert into test3 values (4, 'word form', 11);
+call keywords('a b c1 c d', 'test3');
+drop table test3;
+</sphinxql>
+
+<sphinxql>
+<!-- regression save disk chunk on alter fails due to remove of externals -->
+create table test4 ( title text, tag integer ) exceptions='<this_test/>/exc.txt' wordforms = '<this_test/>/wordforms1.txt' stopwords = '<this_test/>/stop.txt';
+insert into test4 values (1, 'a b c1 c d', 11);
+alter table test4 exceptions = '' wordforms = '' stopwords = '';
+insert into test4 values (2, 'a b c1 c d', 11);
+select * from test4 where match ('a b c1 c d') order by id asc;
+drop table test4;
+
+<!-- regression failed to create RT index after previous RT index has disk chunk with different externals -->
+create table test4 ( title text, tag integer );
+drop table test4;
+</sphinxql>
+
+
+</queries>
 
 </test>

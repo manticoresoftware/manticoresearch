@@ -15773,50 +15773,23 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 }
 
-
-static bool SubstituteExternalIndexFiles ( const StrVec_t & dOldExternalFiles, const StrVec_t & dNewExternalFiles, CSphString & sIndexPath, StrVec_t & dBackupFiles, CSphString & sError )
+// remove all old files these are not in the list of current index files
+static void RemoveOutdatedFiles ( RtIndex_i * pRtIndex, StrVec_t & dOldFiles )
 {
-	StrVec_t dOnlyNew;
-	for ( const auto & i : dNewExternalFiles )
+	StrVec_t dNewFiles;
+	pRtIndex->GetIndexFiles ( dNewFiles, dNewFiles );
+
+	dOldFiles.Uniq();
+	sph::StringSet hNewFiles ( dNewFiles );
+
+	for ( const CSphString & tOldName : dOldFiles )
 	{
-		bool bDupe = false;
-		for ( const auto & j : dOldExternalFiles )
-			bDupe |= i==j;
+		if ( hNewFiles[tOldName] )
+			continue;
 
-		if ( !bDupe )
-			dOnlyNew.Add(i);
+		if ( sphIsReadable ( tOldName ) )
+			::unlink ( tOldName.cstr() );
 	}
-
-	StrVec_t dOnlyOld;
-	for ( const auto & i : dOldExternalFiles )
-	{
-		bool bDupe = false;
-		for ( const auto & j : dNewExternalFiles )
-			bDupe |= i==j;
-
-		if ( !bDupe )
-			dOnlyOld.Add(i);
-	}
-
-	for ( const auto & i : dOnlyOld )
-		dBackupFiles.Add().SetSprintf ( "%s.tmp", i.cstr() );
-
-	if ( !RenameWithRollback ( dOnlyOld, dBackupFiles, sError ) )
-		return false;
-
-	if ( !dOnlyNew.GetLength() )
-		return true;
-
-	StrVec_t dCopied;
-	if ( !CopyExternalIndexFiles ( dOnlyNew, sIndexPath, dCopied, sError ) )
-	{
-		// try to rename files back
-		CSphString sTmp;
-		RenameFiles ( dBackupFiles, dOnlyOld, sTmp );
-		return false;
-	}
-
-	return true;
 }
 
 // STMT_ALTER_INDEX_SETTINGS: ALTER TABLE index [ident = 'string']*
@@ -15864,16 +15837,14 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	IndexSettingsContainer_c tContainer;
 	tContainer.Populate ( dCreateTableStmts[0].m_tCreateTable );
 
-	StrVec_t dOldExternalFiles = tContainer.GetFiles();
-
 	// force override for old options
 	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
 		tContainer.RemoveKeys ( i.m_sName );
 
 	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
 	{
-		if ( !i.m_sValue.IsEmpty() )
-			tContainer.AddOption ( i.m_sName, i.m_sValue );
+		// should be able to remove settings with the empty option
+		tContainer.AddOption ( i.m_sName, i.m_sValue );
 	}
 
 	if ( !tContainer.CheckPaths() )
@@ -15882,13 +15853,9 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
-	StrVec_t dBackupFiles;
-	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
-	if ( !SubstituteExternalIndexFiles ( dOldExternalFiles, tContainer.GetFiles(), sIndexPath, dBackupFiles, sError ) )
-	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
+	// keep list of index files prior to alter
+	StrVec_t dOldFiles;
+	pRtIndex->GetIndexFiles ( dOldFiles, dOldFiles );
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
@@ -15915,8 +15882,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	if ( sError.IsEmpty() )
 	{
 		// all ok, delete old files
-		for ( const auto & i : dBackupFiles )
-			::unlink ( i.cstr() );
+		RemoveOutdatedFiles ( pRtIndex, dOldFiles );
 
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	}

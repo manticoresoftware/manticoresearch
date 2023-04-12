@@ -1149,7 +1149,10 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 			m_sError = "'exceptions' options only supports a single file";
 			return false;
 		} else if ( dValues.IsEmpty() )
-			return true;
+		{
+			// needs an empty value
+			dValues.Add ();
+		}
 
 		return Add ( sName, dValues[0] );
 	}

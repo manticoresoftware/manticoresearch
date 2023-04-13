@@ -154,6 +154,29 @@ index test2
 { "insert" : { "index" : "test_rt", "id" : 33, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
 </query>
 
+
+<!-- bulk with duplicate in the 3d chunk -->
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 203, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "test" } } }
+</query>
+
+<repeat count="1000" vars="i" init="1" inc="1">
+    <var name="ctx"><ctx/> bulk doc three<i/></var>
+</repeat>
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 200, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 201, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 202, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 203, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 204, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 205, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 206, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 207, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 208, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 209, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "index" : "test_rt", "id" : 210, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+</query>
+
 </httpqueries>
 
 </test>

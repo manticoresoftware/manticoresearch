@@ -1976,7 +1976,7 @@ public:
 				eStatus = bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500;
 			BuildReply ( tRoot.AsString(), eStatus );
 			HTTPINFO << "inserted  " << iCurLine;
-			return !bResult;
+			return bResult;
 		};
 
 		auto AddResult = [&tResults] ( const char* szStmt, JsonObj_c& tResult ) {

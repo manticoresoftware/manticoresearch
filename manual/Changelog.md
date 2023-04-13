@@ -21,6 +21,13 @@
 * [Commit e9bc](https://github.com/manticoresoftware/manticoresearch/commit/e9bc2f9) fixed HTTP error on processing bulk requests; fixed return error to client from net loop
 * [Commit c86d](https://github.com/manticoresoftware/manticoresearch/commit/c86d78c) fixed SphinxQL packet larger 16Mb to properly return to client
 * [Commit e90f](https://github.com/manticoresoftware/manticoresearch/commit/e90ff11) fixed daemon crash on query with packedfactors and large internal buffer
+* [Commit 6e1b](https://github.com/manticoresoftware/manticoresearch/commit/6e1b849) fixed daemon crash on invalid manticore.json config
+* [Commit 9916](https://github.com/manticoresoftware/manticoresearch/commit/9916043) fixed replication to not bind to localhost for host name with multiple IP
+* [Commit 18a0](https://github.com/manticoresoftware/manticoresearch/commit/18a04c1) fixed select list expression with alias could hides index attribute; fixed sum to count in int64 for integer
+* [Commit 2a00](https://github.com/manticoresoftware/manticoresearch/commit/2a005ea) added date_format select list expression that exposes strftime function
+* [Commit ec19](https://github.com/manticoresoftware/manticoresearch/commit/ec19c5b) fixed suggest for short words; added sentence option to show whole qsuggest sentence
+* [Commit 1d3f](https://github.com/manticoresoftware/manticoresearch/commit/1d3f0da) fixed duplicate documents at the result set for the query with not_terms_only_allowed option to RT index with killed documents
+* [Commit 122b](https://github.com/manticoresoftware/manticoresearch/commit/122bbf2) fixed error of alter with empty string for external files; fixed RT index external files left after alter of external files
 
 ### Major new features
 * Query optimizer now works for fulltext queries

@@ -2284,7 +2284,7 @@ class SphinxConfig
 		    $s = preg_replace (
                 [
                     '/error when sending data: WSA error 10057/', // windows
-                    '/connect timed out/', // also windows
+                    '/connect and query timed out/', // also windows
                     '/receiving failure .*$/' // linux (errno 111) and mac (errno 64)
                 ],
                 [

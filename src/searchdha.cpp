@@ -1710,7 +1710,7 @@ void AgentConn_t::TimeoutCallback ()
 			break;
 		case TIMEOUT_HARD:
 			if ( StateIs ( Agent_e::CONNECTING ) )
-				Fatal ( eTimeoutsConnect, "connect timed out" );
+				Fatal ( eTimeoutsConnect, "connect and query timed out" );
 			else
 				Fatal ( eTimeoutsQuery, "query timed out" );
 			StartRemoteLoopTry ();

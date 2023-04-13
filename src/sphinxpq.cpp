@@ -2815,11 +2815,22 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		return;
 
 	// write new meta
-	CSphString sMeta = GetFilename("meta");
-	CSphString sMetaNew = GetFilename ( "meta.new" );
+	CSphString sNameMeta = GetFilename("meta");
+	CSphString sNameMetaNew = GetFilename ( "meta.new" );
 
+	const int iBuffSize = 262144;
 	CSphString sError;
+	CSphWriter tMetaWriter;
+	tMetaWriter.SetBufferSize ( iBuffSize );
+	if ( !tMetaWriter.OpenFile ( sNameMetaNew, sError ) )
+	{
+		sphWarning ( "failed to serialize meta: %s", sError.cstr() );
+		return;
+	}
+
 	JsonEscapedBuilder sNewMeta;
+	sNewMeta.GrowEnough ( Min ( iBuffSize*2/3, dStored.GetLength() * 64 ) );
+	sNewMeta.Rewind();
 	sNewMeta.ObjectWBlock();
 
 	// human-readable sugar
@@ -2845,31 +2856,34 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		sNewMeta.Named ( "pqs" );
 		auto _ = sNewMeta.ArrayW();
 		for ( const StoredQuery_t * pQuery : dStored )
+		{
 			sNewMeta << *pQuery;
+
+			// flush data on buffer grow
+			if ( sNewMeta.GetLength()>iBuffSize/2 )
+			{
+				tMetaWriter.PutString ( (Str_t)sNewMeta );
+				sNewMeta.Rewind();
+			}
+		}
 	}
-
-	Binlog::NotifyIndexFlush ( GetName(), m_iTID, bShutdown );
-
-	m_iSavedTID = m_iTID;
-	m_tmSaved = sphMicroTimer();
 
 	sNewMeta.FinishBlocks();
-	CSphWriter wrMetaJson;
-	if ( wrMetaJson.OpenFile ( sMetaNew, sError ) )
-	{
-		wrMetaJson.PutString ( (Str_t)sNewMeta );
-		wrMetaJson.CloseFile();
-		assert ( bson::ValidateJson ( sNewMeta.cstr(), &sError ) );
-	} else {
-		sphWarning ( "failed to serialize meta: %s", sError.cstr() );
-		return;
-	}
+	tMetaWriter.PutString ( (Str_t)sNewMeta );
+	tMetaWriter.CloseFile();
+	sNewMeta.Clear();
+	// could be better to add check mode for PQ into indextool
 
 	// rename
-	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
-		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
+	if ( sph::rename ( sNameMetaNew.cstr(), sNameMeta.cstr() ) )
+		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sNameMetaNew.cstr(), sNameMeta.cstr(), errno, strerrorm( errno ) );
 
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
+
+	// notify binlog after file saved
+	Binlog::NotifyIndexFlush ( GetName(), m_iTID, bShutdown );
+	m_iSavedTID = m_iTID;
+	m_tmSaved = sphMicroTimer();
 }
 
 

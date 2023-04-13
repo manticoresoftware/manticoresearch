@@ -3113,7 +3113,7 @@ int64_t CSphIndex_VLN::GetCount ( const CSphFilterSettings & tFilter ) const
 
 	uint32_t uCount = 0;
 	std::string sError;
-	if ( !m_pSIdx.get()->CalcCount ( uCount, tColumnarFilter, sError ) )
+	if ( !m_pSIdx.get()->CalcCount ( uCount, tColumnarFilter, m_iDocinfo, sError ) )
 		return -1;
 
 	return uCount;

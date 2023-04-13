@@ -129,6 +129,10 @@ select * from test1 where extra='' order by id desc /*+ NO_SecondaryIndex(extra)
 select * from test1 where extra='' order by id desc /*+ SecondaryIndex(extra) */;
 select * from test1 where extra!='' order by id desc /*+ NO_SecondaryIndex(extra) */;
 select * from test1 where extra!='' order by id desc /*+ SecondaryIndex(extra) */;
+
+select count(*) from test1 where tag=1;
+select count(*) from test1 where tag!=1;
+select count(*) from test1;
 </sphinxql>
 
 </queries>

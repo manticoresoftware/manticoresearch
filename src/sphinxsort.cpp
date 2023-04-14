@@ -4823,7 +4823,7 @@ static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphColumnInfo> & 
 static CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation );
 
 
-static bool HasImplicitGrouping ( const CSphQuery & tQuery )
+bool HasImplicitGrouping ( const CSphQuery & tQuery )
 {
 	auto fnIsImplicit = [] ( const CSphQueryItem & t )
 	{
@@ -6578,7 +6578,7 @@ bool QueueCreator_c::AddGroupbyStuff ()
 		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
 	};
 
-	bool bHasImplicitGrouping = HasImplicitGrouping(m_tQuery);  m_tQuery.m_sGroupBy.IsEmpty() ? m_tQuery.m_dItems.any_of(fnIsImplicit) : false;
+	bool bHasImplicitGrouping = HasImplicitGrouping(m_tQuery);
 
 	// count(*) and distinct wo group by at main query should keep implicit flag
 	if ( bHasImplicitGrouping && m_bHeadWOGroup )

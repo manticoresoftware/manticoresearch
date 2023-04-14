@@ -2720,6 +2720,9 @@ static ESphAggrFunc GetAggrFunc ( const JsonObj_c & tBucket, bool bCheckAggType 
 
 static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<JsonAggr_t> & dParentItems, CSphString & sError )
 {
+	CSphString sWarning;
+	JsonQuery_c tTmpQuery;
+
 	for ( const auto & tJsonItem : tAggs )
 	{
 		if ( !tJsonItem.IsObj() )
@@ -2761,6 +2764,24 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 		tBucket.FetchIntItem ( iShardSize, "shard_size", sError, true );
 		tItem.m_iSize = Max ( tItem.m_iSize, iShardSize ); // FIXME!!! use (size * 1.5 + 10) for shard size
 		tItem.m_eAggrFunc = GetAggrFunc ( tBucket, !bRoot );
+
+		JsonObj_c tSort = tJsonItem.GetItem("sort");
+		if ( tSort && !( tSort.IsArray() || tSort.IsObj() ) )
+		{
+			sError = "\"sort\" property value should be an array or an object";
+			return false;
+		}
+		if ( tSort )
+		{
+			bool bGotWeight = false;
+			tTmpQuery.m_sSortBy = "";
+			tTmpQuery.m_eSort = SPH_SORT_RELEVANCE;
+			// FIXME!!! reports warnings for geodist sort
+			if ( !ParseSort ( tSort, tTmpQuery, bGotWeight, sError, sWarning ) )
+				return false;
+
+			tItem.m_sSort = tTmpQuery.m_sSortBy;
+		}
 
 		if ( tItem.m_eAggrFunc==SPH_AGGR_NONE && !bRoot )
 		{

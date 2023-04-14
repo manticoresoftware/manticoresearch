@@ -28,6 +28,7 @@ struct JsonAggr_t
 	int			m_iSize = 0;
 	ESphAggrFunc m_eAggrFunc { SPH_AGGR_NONE };
 	CSphVector<JsonAggr_t> m_dNested;
+	CSphString	m_sSort;
 
 	CSphString GetAliasName () const;
 	CSphString GetExpr () const;

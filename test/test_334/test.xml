@@ -449,5 +449,8 @@ select * from dist_gr2 facet gid facet tag;;
 <sphinxql>select * from test_gr1 limit 5,1 facet tag limit 2 facet gid;</sphinxql>
 <query endpoint="json/search">{ "index": "test_gr1", "offset":5, "limit":1, "aggs":{ "gr_small": { "terms": { "field": "tag", "size": 2 } }, "gr_tag": { "terms": { "field": "gid" } }} }</query>
 
+<!-- facets with sort per aggregate -->
+<query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_desc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"desc"}}, {"tag":{"order":"desc"}}] }, "gr_asc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"asc"}}]}} }</query>
+
 </queries>
 </test>

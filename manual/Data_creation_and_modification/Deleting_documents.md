@@ -1,20 +1,20 @@
 # Deleting documents
 
-Deleting is only supported for:
-* [real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables,
-* [percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables
-* distributed tables that contain only RT tables as agents
+Deleting documents is only supported for the following table types:
+* [Real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables,
+* [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables,
+* Distributed tables that only contain RT tables a local or remote agents.
 
-You can delete existing rows (documents) from an existing table based on ID or conditions.
+You can delete existing documents from a table based on either their ID or certain conditions.
 
 <!-- example delete 1 -->
-Deleting documents is supported via SQL and HTTP interfaces.
+Deletion of documents can be accomplished via both SQL and HTTP interfaces.
 
-SQL response for successful operation will show the number of rows deleted.
+For SQL, the response for a successful operation will indicate the number of rows deleted.
 
-`json/delete` is an HTTP endpoint for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
+For HTTP, the `json/delete` endpoint is used. The server will respond with a JSON object indicating whether the operation was successful and the number of rows deleted.
 
-To delete all documents from a table it's recommended to use instead the [table truncation](../Emptying_a_table.md) as it's a much faster operation.
+It is recommended to use [table truncation](../Emptying_a_table.md) instead of deletion to delete all documents from a table, as it is a much faster operation.
 
 <!-- intro -->
 ##### SQL:
@@ -176,9 +176,9 @@ query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","dummy");
 }});
-deleteRequest.index("products").setQuery(query); 
+deleteRequest.index("products").setQuery(query);
 indexApi.delete(deleteRequest);
-      
+
 ```
 
 <!-- response Java -->
@@ -297,9 +297,9 @@ res = await indexApi.delete({"index" : "products", "id" : 1});
 <!-- request Java -->
 ``` java
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("products").setId(1L); 
+deleteRequest.index("products").setId(1L);
 indexApi.delete(deleteRequest);
-      
+
 ```
 
 <!-- response Java -->
@@ -347,7 +347,7 @@ Query OK, 4 rows affected (0.00 sec)
 <!-- end -->
 
 <!-- example delete 5 -->
-Here is an example of deleting documents in cluster `nodes4`'s table `test`:
+Here is an example of deleting documents in cluster `cluster`'s table `test`:
 
 
 <!-- intro -->
@@ -356,14 +356,14 @@ Here is an example of deleting documents in cluster `nodes4`'s table `test`:
 <!-- request SQL -->
 
 ```sql
-delete from nodes4:test where id=100;
+delete from cluster:test where id=100;
 ```
 
 <!-- request JSON -->
 ``` json
 POST /delete -d '
     {
-      "cluster":"nodes4",
+      "cluster":"cluster",
       "index":"test",
       "id": 100
     }'
@@ -374,7 +374,7 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->setCluster('nodes4');
+$index->setCluster('cluster');
 $index->deleteDocument(100);
 ```
 
@@ -394,7 +394,7 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 100})
+indexApi.delete({"cluster":"cluster","index" : "products", "id" : 100})
 ```
 
 <!-- response Python -->
@@ -407,7 +407,7 @@ indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 100})
 
 <!-- request javascript -->
 ``` javascript
-indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 100})
+indexApi.delete({"cluster":"cluster","index" : "products", "id" : 100})
 ```
 
 <!-- response javascript -->
@@ -422,9 +422,9 @@ indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 100})
 <!-- request Java -->
 ``` java
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.cluster("nodes4").index("products").setId(100L); 
+deleteRequest.cluster("cluster").index("products").setId(100L);
 indexApi.delete(deleteRequest);
-      
+
 ```
 
 <!-- response Java -->
@@ -436,3 +436,4 @@ class DeleteResponse {
 }
 ```
 <!-- end -->
+<!-- proofread -->

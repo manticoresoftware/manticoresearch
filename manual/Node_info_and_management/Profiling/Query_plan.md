@@ -2,13 +2,13 @@
 
 <!-- example SHOW PLAN -->
 
-`SHOW PLAN` is an SQL statement that displays the execution plan of the previous `SELECT` statement. The plan gets generated and stored during the actual execution, so profiling must be enabled in the current session **before** running that statement. That can be done with a `SET profiling=1` statement.
+`SHOW PLAN` is an SQL statement that displays the execution plan of the previous `SELECT` statement. The plan is generated and stored during the actual execution, so profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
 
-To view query execution plan in JSON queries, add `"profile":true` to the query. The result appears as a `profile` property in the result set.
+To view the query execution plan in JSON queries, add `"profile": true` to the query. The result appears as a `profile` property in the result set.
 
-Note, there are 2 things returned in the SQL mode:
-* `transformed_tree` which shows the full-text query decomposition
-* `enabled_indexes` which shows information about effective secondary indexes
+Note that there are two things returned in the SQL mode:
+* `transformed_tree`, which shows the full-text query decomposition
+* `enabled_indexes`, which shows information about effective secondary indexes
 
 <!-- intro -->
 ##### SQL:
@@ -99,7 +99,7 @@ POST /search
 
 <!-- example SHOW PLAN EXPANSION -->
 
-In some cases the evaluated query tree can be rather different from the original one because of expansions and other transformations.
+In some cases, the evaluated query tree can be quite different from the original one due to expansions and other transformations.
 
 <!-- intro -->
 ##### SQL:
@@ -305,9 +305,9 @@ See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profili
 
 ## JSON result set notes
 
-`query` property contains the transformed fulltext query tree. Each node contains:
+`query` property contains the transformed full-text query tree. Each node contains:
 
-* `type`: node type. Can be `AND`, `OR`, `PHRASE`, `KEYWORD` etc.
+* `type`: node type. Can be `AND`, `OR`, `PHRASE`, `KEYWORD`, etc.
 * `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
 * `children`: child nodes, if any
 * `max_field_pos`: maximum position within a field
@@ -320,7 +320,7 @@ See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profili
 * `boost`: keyword IDF will be multiplied by this. Keyword nodes only.
 
 ## Dot format for SHOW PLAN
-`SHOW PLAN format=dot` allows to return the full-text query execution tree in hierarchical format suitable for visualization by existing tools, for example https://dreampuf.github.io/GraphvizOnline :
+`SHOW PLAN format=dot` allows returning the full-text query execution tree in a hierarchical format suitable for visualization by existing tools, such as https://dreampuf.github.io/GraphvizOnline:
 
 ```sql
 MySQL [(none)]> show plan option format=dot\G
@@ -342,3 +342,4 @@ Variable: transformed_tree
 ```
 
 ![SHOW PLAN graphviz example](graphviz.png)
+<!-- proofread -->

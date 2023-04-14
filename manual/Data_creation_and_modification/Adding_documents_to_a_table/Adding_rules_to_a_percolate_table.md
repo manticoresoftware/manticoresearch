@@ -1,18 +1,18 @@
 # Adding rules to a percolate table
 
 <!-- example -->
-In a [percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) are stored documents that are percolate query rules and have to follow the exact schema of 4 fields:
+In a [percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) documents that are percolate query rules are stored and must follow the exact schema of four fields:
 
 | field | type | description |
 | - | - | - |
-| id | bigint | PQ rule identifier (if omitted, will be assigned automatically) |
-| query | string | full-text query (can be empty) compatible with the [percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) |
-| filters | string | additional filters by non-full-text fields (can be empty) compatible with the [percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) |
-| tags   | string | string with one or many comma-separated tags, which may be used to selectively show/delete saved queries |
+| id | bigint | PQ rule identifier (if omitted, it will be assigned automatically) |
+| query | string | Full-text query (can be empty) compatible with the [percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) |
+| filters | string | Additional filters by non-full-text fields (can be empty) compatible with the [percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) |
+| tags   | string | A string with one or many comma-separated tags, which may be used to selectively show/delete saved queries |
 
 Any other field names are not supported and will trigger an error.
 
-**Warning:** inserting/replacing JSON-formatted PQ rules via SQL will not work, i.e. the JSON-specific operators (`match` etc) will be considered just parts of the rule's text that should match with documents. If you prefer JSON syntax use the HTTP endpoint instead of `INSERT`/`REPLACE`.
+**Warning:** Inserting/replacing JSON-formatted PQ rules via SQL will not work. In other words, the JSON-specific operators (`match` etc) will be considered just parts of the rule's text that should match with documents. If you prefer JSON syntax, use the HTTP endpoint instead of `INSERT`/`REPLACE`.
 
 <!-- intro -->
 ##### SQL
@@ -36,8 +36,8 @@ SELECT * FROM pq;
 <!-- intro -->
 ##### JSON
 <!-- request JSON -->
-There are two way you can add a percolate query into a percolate table:
-* query in JSON /search compatible format, described at [json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
+There are two ways you can add a percolate query into a percolate table:
+* Query in JSON /search compatible format, described at [json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
 PUT /pq/pq_table/doc/1
 {
@@ -55,7 +55,7 @@ PUT /pq/pq_table/doc/1
 }
 ```
 
-* query in SQL format, described at [search query syntax](../../Searching/Filters.md#Queries-in-SQL-format)
+* Query in SQL format, described at [search query syntax](../../Searching/Filters.md#Queries-in-SQL-format)
 ```json
 PUT /pq/pq_table/doc/2
 {
@@ -124,7 +124,7 @@ indexApi.insert(newdoc);
 <!-- example noid -->
 ## Auto ID provisioning
 
-In case you don't specify the ID it's assigned automatically. Read more about auto-ID [here](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
+If you don't specify an ID, it will be assigned automatically. You can read more about auto-ID [here](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
 
 <!-- intro -->
 ##### SQL:
@@ -270,11 +270,11 @@ indexApi.insert(newdoc);
 
 <!-- example noschema -->
 ## No schema in SQL
-In case of omitted schema in SQL `INSERT` command the following parameters are expected:
-1. id. You can use `0` as the ID to trigger auto id generation
-2. query - full-text query
-3. tags - pq rule tags string
-4. filters - additional filters by attributes
+In case of omitted schema in SQL `INSERT` command, the following parameters are expected:
+1. ID. You can use `0` as the ID to trigger auto-ID generation.
+2. Query - Full-text query.
+3. Tags - PQ rule tags string.
+4. Filters - Additional filters by attributes.
 
 <!-- request SQL -->
 
@@ -298,7 +298,7 @@ SELECT * FROM pq;
 <!-- example replace -->
 ## Replacing rules in a PQ table
 
-To replace an existing PQ rule with a new one in SQL just use a regular [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) command. There's a special syntax `?refresh=1` to replace a PQ rule **defined in JSON mode** via HTTP JSON interface.
+To replace an existing PQ rule with a new one in SQL, just use a regular [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) command. There's a special syntax `?refresh=1` to replace a PQ rule **defined in JSON mode** via the HTTP JSON interface.
 
 
 <!-- intro -->
@@ -386,3 +386,4 @@ GET /pq/pq/doc/2810823411335430149
 ```
 
 <!-- end -->
+<!-- proofread -->

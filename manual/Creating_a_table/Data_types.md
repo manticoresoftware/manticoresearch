@@ -500,7 +500,7 @@ table products
 
 <!-- example for field naming  -->
 
-Fields are named, and you can limit your searches to a single field (e.g. search through "title" only) or a subset of fields (e.g. "title" and "abstract" only). The Manticore table format generally supports up to 256 full-text fields.
+Fields are named, and you can limit your searches to a single field (e.g. search through "title" only) or a subset of fields (e.g. "title" and "abstract" only). You can have up to 256 full-text fields.
 
 <!-- intro -->
 ##### SQL:

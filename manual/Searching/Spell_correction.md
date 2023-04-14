@@ -1,32 +1,32 @@
 # Spell correction
 
-Spell correction also known as:
+Spell correction, also known as:
 
 * Auto correction
 * Text correction
-* Fixing a spelling error
+* Fixing spelling errors
 * Typo tolerance
 * "Did you mean?"
 
-and so on is a software functionality that suggests you alternatives to or makes automatic corrections of the text you have typed in. The concept of correcting typed text dates back to the 1960s, when a computer scientist named Warren Teitelman who also invented the "undo" command came up with a philosophy of computing called D.W.I.M., or "Do What I Mean." Rather than programming computers to accept only perfectly formatted instructions, Teitelman said we should program them to recognize obvious mistakes.
+and so on, is a software functionality that suggests alternatives to or makes automatic corrections of the text you have typed in. The concept of correcting typed text dates back to the 1960s when computer scientist Warren Teitelman, who also invented the "undo" command, introduced a philosophy of computing called D.W.I.M., or "Do What I Mean." Instead of programming computers to accept only perfectly formatted instructions, Teitelman argued that they should be programmed to recognize obvious mistakes.
 
-The first well known product which provided spell correction functionality was Microsoft Word 6.0 released in 1993.
+The first well-known product to provide spell correction functionality was Microsoft Word 6.0, released in 1993.
 
 ### How it works
-There are few ways how spell correction can be done, but the important thing is that there is no purely programmatic way which will convert your mistyped "ipone" into "iphone" (at least with decent quality). Mostly there has to be a data set the system is based on. The data set can be:
 
-* A dictionary of properly spelled words. In its turn it can be:
-  * Based on your real data. The idea here is that mostly in the dictionary made up from your data the spelling is correct and then for each typed word the system just tries to find a word which is most similar to that (we'll speak about how exactly it can be done with Manticore shortly)
-  * Or can be based on an external dictionary which has nothing to do with your data. The problem which may arise here is that your data and the external dictionary can be too different: some words may be missing in the dictionary, some words may be missing in your data.
-* Not just dictionary-based, but context-aware, e.g. "white ber" would be corrected to "white bear" while "dark ber" - to "dark beer". The context may be not just a neighbour word in your query, but your location, date of time, current sentence's grammar (to let's say change "there" to "their" or not), your search history and virtually any other things that can affect your intent.
-* Another classical approach is to use previous search queries as the data set for spell correction. It's even more utilized in [autocomplete](../Searching/Autocomplete.md) functionality, but makes sense for autocorrect too. The idea here is that mostly users are right with spelling, therefore we can use words from their search history as a source of truth even if we don't have the words in our documents nor we use an external dictionary. Context-awareness is also possible here.
+There are a few ways spell correction can be done, but it's important to note that there is no purely programmatic way to convert your mistyped "ipone" into "iphone" with decent quality. Mostly, there has to be a dataset the system is based on. The dataset can be:
 
+* A dictionary of properly spelled words, which in turn can be:
+  * Based on your real data. The idea here is that, for the most part, the spelling in the dictionary made up of your data is correct, and the system tries to find a word that is most similar to the typed word (we'll discuss how this can be done with Manticore shortly).
+  * Or it can be based on an external dictionary unrelated to your data. The issue that may arise here is that your data and the external dictionary can be too different: some words may be missing in the dictionary, while others may be missing in your data.
+* Not just dictionary-based, but also context-aware, e.g., "white ber" would be corrected to "white bear," while "dark ber" would be corrected to "dark beer." The context might not just be a neighboring word in your query, but also your location, time of day, the current sentence's grammar (to change "there" to "their" or not), your search history, and virtually any other factors that can affect your intent.
+* Another classic approach is to use previous search queries as the dataset for spell correction. This is even more utilized in [autocomplete](../Searching/Autocomplete.md) functionality but makes sense for autocorrect too. The idea is that users are mostly right with spelling, so we can use words from their search history as a source of truth, even if we don't have the words in our documents or use an external dictionary. Context-awareness is also possible here.
 
-Manticore provides commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used for the purpose of automatic spell correction.
+Manticore provides the commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used for automatic spell correction purposes.
 
 ### CALL QSUGGEST, CALL SUGGEST
 
-They are both available via SQL only and the general syntax is:
+Both commands are available via SQL only, and the general syntax is:
 ```sql
 CALL QSUGGEST(word, table [,options])
 CALL SUGGEST(word, table [,options])
@@ -34,27 +34,27 @@ CALL SUGGEST(word, table [,options])
 options: N as option_name[, M as another_option, ...]
 ```
 
-These commands provide for a given word all suggestions from the dictionary. They work only on tables with [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
+These commands provide all suggestions from the dictionary for a given word. They work only on tables with [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords, and the document statistics of the suggested keyword.
 
-If the first parameter is not a single word, but multiple, then:
-* `CALL QSUGGEST` will return suggestions only for the **last** word, ignoring the rest
-* `CALL SUGGEST` will return suggestions only for the **first** word
+If the first parameter contains multiple words, then:
+* `CALL QSUGGEST` will return suggestions only for the **last** word, ignoring the rest.
+* `CALL SUGGEST` will return suggestions only for the **first** word.
 
 That's the only difference between them. Several options are supported for customization:
 
 | Option | Description | Default |
 | - | - | - |
 | limit | Returns N top matches | 5 |
-| max_edits | Keeps only dictionary words which Levenshtein distance is less than or equal to N | 4 |
+| max_edits | Keeps only dictionary words with a Levenshtein distance less than or equal to N | 4 |
 | result_stats | Provides Levenshtein distance and document count of the found words | 1 (enabled) |
-| delta_len | Keeps only dictionary words whose length difference is less than N | 3 |
+| delta_len | Keeps only dictionary words with a length difference less than N | 3 |
 | max_matches | Number of matches to keep | 25 |
 | reject | Rejected words are matches that are not better than those already in the match queue. They are put in a rejected queue that gets reset in case one actually can go in the match queue. This parameter defines the size of the rejected queue (as reject*max(max_matched,limit)). If the rejected queue is filled, the engine stops looking for potential matches | 4 |
 | result_line | alternate mode to display the data by returning all suggests, distances and docs each per one row | 0 |
 | non_char | do not skip dictionary words with non alphabet symbols | 0 (skip such words) |
-| sentence | Returns original sentence along with last work replaced by matched | 0 (do not return full sentence) |
+| sentence | Returns the original sentence along with the last word replaced by the matched one. | 0 (do not return the full sentence) |
 
-To show how it works let's create a table and add few documents into it.
+To show how it works, let's create a table and add a few documents to it.
 
 ```sql
 create table products(title text) min_infix_len='2';
@@ -62,12 +62,12 @@ insert into products values (0,'Crossbody Bag with Tassel'), (0,'microfiber shee
 ```
 <!-- example single -->
 ##### Single word example
-As you can see we have a mistype in "crossb**U**dy" which gets corrected to the "crossbody". In addition to that by default `CALL SUGGEST/QSUGGEST` return:
+As you can see, the mistyped word "crossb**U**dy" gets corrected to "crossbody". By default, `CALL SUGGEST/QSUGGEST` return:
 
 * `distance` - the Levenshtein distance which means how many edits they had to make to convert the given word to the suggestion
-* `docs` - and the number of docs that have this word
+* `docs` - number of documents containing the suggested word
 
-To disable these stats display you can use option `0 as result_stats`.
+To disable the display of these statistics, you can use the option `0 as result_stats`.
 
 
 <!-- intro -->
@@ -134,27 +134,27 @@ CALL QSUGGEST('bagg with tasel', 'products');
 +---------+----------+------+
 ```
 <!-- end -->
-<!-- example result_line -->
 
-<!-- example sql1 -->
-with the `1 as sentence` in the options returns original sentence with suggested last word.
+<!-- example last2 -->
 
-<!-- request SQL -->
+Adding `1 as sentence` makes `CALL QSUGGEST` return the entire sentence with the last word corrected.
+
+<!-- request Example -->
 ```sql
-CALL QSUGGEST('bagg with tasel', 'products', 1 as sentence);
+CALL QSUGGEST('bag with tasel', 'products', 1 as sentence);
 ```
-<!-- response SQL -->
+<!-- response Example -->
 ```sql
 +-------------------+----------+------+
 | suggest           | distance | docs |
 +-------------------+----------+------+
-| bagg with tassel  | 1        | 1    |
+| bag with tassel   | 1        | 1    |
 +-------------------+----------+------+
 ```
 <!-- end -->
 
 ##### Different display mode
-Using `1 as result_line` in the options turns on alternate mode to display the data by returning all suggests, distances and docs each per one row.
+The `1 as result_line` option changes the way the suggestions are displayed in the output. Instead of showing each suggestion in a separate row, it displays all suggestions, distances, and docs in a single row. Here's an example to demonstrate this:
 
 <!-- intro -->
 ##### Example:
@@ -179,6 +179,7 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 
 ### Interactive course
 
-[This interactive course](https://play.manticoresearch.com/didyoumean/) demonstrates online how it works on a web page and provides different examples.
+[This interactive course](https://play.manticoresearch.com/didyoumean/) demonstrates online how the spell correction feature works on a web page and experiment with different examples.
 
 ![Typical flow with Manticore and a database](didyoumean.png){.scale-0.5}
+<!-- proofread -->

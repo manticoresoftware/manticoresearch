@@ -2,24 +2,23 @@
 
 ## WHERE
 
-`WHERE` is an SQL clause which works for both fulltext matching and additional filtering. The following operators are available:
+`WHERE` is an SQL clause that works for both full-text matching and additional filtering. The following operators are available:
 
-* [Comparison operators](../Searching/Expressions.md#Comparison-operators) `<, > <=, >=, =, <>, BETWEEN, IN, IS NULL`
+* [Comparison operators](../Searching/Expressions.md#Comparison-operators) `<, >, <=, >=, =, <>, BETWEEN, IN, IS NULL`
 * [Boolean operators](../Searching/Full_text_matching/Operators.md#Boolean-operators) `AND, OR, NOT`
 
-`MATCH('query')` is supported and maps to [fulltext query](../Searching/Full_text_matching/Operators.md).
+`MATCH('query')` is supported and maps to a [full-text query](../Searching/Full_text_matching/Operators.md).
 
-`{col_name | expr_alias} [NOT] IN @uservar` condition syntax is supported. Refer to [SET](../Server_settings/Setting_variables_online.md#SET) syntax for a description of global user variables.
+The `{col_name | expr_alias} [NOT] IN @uservar` condition syntax is supported. Refer to the [SET](../Server_settings/Setting_variables_online.md#SET) syntax for a description of global user variables.
 
 ## HTTP JSON
 
-If you prefer HTTP JSON interface you can also do filtering. It looks more complex that in SQL, but can be recommended for the cases when you need to prepare a query in a programmatic manner, for example as a result of a form in your application filled out by the user.
+If you prefer the HTTP JSON interface, you can also apply filtering. It might seem more complex than SQL, but it is recommended for cases when you need to prepare a query programmatically, such as when a user fills out a form in your application.
 
 <!-- example json1 -->
 Here's an example of several filters in a `bool` query.
 
-This is a fulltext query that matches all the documents containing `product` in any field. These documents must have a price greater or equal than 500 (`gte`) and less or equal than 1000 (`lte`). All of these documents must not have a revision less than 15 (`lt`).
-
+This full-text query matches all documents containing `product` in any field. These documents must have a price greater than or equal to 500 (`gte`) and less than or equal to 1000 (`lte`). All of these documents must not have a revision less than 15 (`lt`).
 
 <!-- request JSON -->
 ```json
@@ -45,7 +44,7 @@ POST /search
 ### bool query
 
 <!-- example bool -->
-`bool` query matches documents matching boolean combinations of other queries and/or filters. Queries and filters must be specified in `must`, `should` or `must_not` sections and can be [nested](../Searching/Filters.md#Nested-bool-query).
+The `bool` query matches documents based on boolean combinations of other queries and/or filters. Queries and filters must be specified in `must`, `should`, or `must_not` sections and can be [nested](../Searching/Filters.md#Nested-bool-query).
 
 <!-- request JSON -->
 ```json
@@ -66,7 +65,7 @@ POST /search
 
 <!-- example must_not -->
 ### must
-Queries and filters specified in the `must` section must match the documents. If several fulltext queries or filters are specified, all of them. This is the equivalent of `AND` queries in SQL. Note, if you want to match against an array ([multi-value attribute](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times and if only all the queried values are found in the array the result will be positive, e.g.:
+Queries and filters specified in the `must` section are required to match the documents. If multiple fulltext queries or filters are specified, all of them must match. This is the equivalent of `AND` queries in SQL. Note that if you want to match against an array ([multi-value attribute](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)), you can specify the attribute multiple times. The result will be positive only if all the queried values are found in the array, e.g.:
 
 ```json
 "must": [
@@ -466,3 +465,4 @@ POST /search
 ```
 
 <!-- end -->
+<!-- proofread -->

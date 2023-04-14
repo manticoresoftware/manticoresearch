@@ -5,12 +5,13 @@
 SHOW QUERIES
 ```
 
-`SHOW QUERIES` returns information about all the queries running now. It outputs a table with the following structure:
+`SHOW QUERIES` returns information about all currently running queries. The output is a table with the following structure:
 
-- `id`: query id which can be used in [KILL](../Node_info_and_management/KILL.md) to terminate the query
-- `query`: query statement or a part of it
-- `protocol`: [connection protocol](../Server_settings/Searchd.md#listen), the possible values are `sphinx` , `mysql` , `http` , `ssl` , `compressed` and `replication` or combination (e.g. `http,ssl` or `compressed,mysql` )
-- `host`: `ip:port` of the client
+- `id`: Query ID that can be used in [KILL](../Node_info_and_management/KILL.md) to terminate the query
+- `query`: Query statement or a portion of it
+- `protocol`: [Connection protocol](../Server_settings/Searchd.md#listen), with possible values being `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)
+- `host`: Client's `ip:port`
+
 
 <!-- request SQL -->
 ```sql
@@ -30,4 +31,6 @@ mysql> SHOW QUERIES;
 
 <!-- end -->
 
-See also [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) if you want to know what's going on from the threads angle of view.
+Refer to [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) if you'd like to gain insight from the perspective of the threads themselves.
+
+<!-- proofread -->

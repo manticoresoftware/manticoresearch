@@ -1,21 +1,21 @@
 # Creating a local table
 
-There are 2 different approaches to deal with tables in Manticore:
+In Manticore Search, there are two ways to manage tables:
 ## Online schema management (RT mode)
-Real-time mode requires no table definition in the configuration file, but presence of [data_dir](../Server_settings/Searchd.md#data_dir) directive in `searchd` section is mandatory. Index files are stored inside the `data_dir`.
+Real-time mode requires no table definition in the configuration file. However, the [data_dir](../Server_settings/Searchd.md#data_dir) directive in the `searchd` section is mandatory. Index files are stored inside the `data_dir`.
 
-Replication is available only in this mode.
+Replication is only available in this mode.
 
-In this mode you can use SQL commands like `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and change table schema and drop it. This mode is especially useful for **real-time** and **percolate tables**.
+You can use SQL commands such as `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and modify table schema, and to drop it. This mode is particularly useful for **real-time** and **percolate tables**.
 
-Table names are case insensitive in the RT mode.
+Table names are case-insensitive in RT mode.
 
 ## Defining table schema in config (Plain mode)
-In this mode you can specify table schema in config which will be read on Manticore start and if the table doesn't exist yet it will be created. This mode is especially useful for **plain tables** that are built upon indexing data from an external storage.
+In this mode, you can specify the table schema in the configuration file. Manticore reads this schema on startup and creates the table if it doesn't exist yet. This mode is particularly useful for **plain tables** that use data from an external storage.
 
-Dropping tables is only possible by removing them from the configuration file or by removing the path setting and sending a HUP signal to the server or restarting it.
+To drop a table, remove it from the configuration file or remove the path setting and send a HUP signal to the server or restart it.
 
-Table names are case sensitive in this mode.
+Table names are case-sensitive in this mode.
 
 All table types are supported in this mode.
 
@@ -23,10 +23,12 @@ All table types are supported in this mode.
 ## Table types and modes
 
 
-| Index type  | RT mode        | Plain mode  |
+| Table type  | RT mode        | Plain mode  |
 |-------------|----------------|-------------|
 | Real-time   | supported      | supported   |
 | Plain       | not supported  | supported   |
 | Percolate   | supported      | supported   |
 | Distributed | supported      | supported   |
 | Template    | not supported  | supported   |
+
+<!-- proofread -->

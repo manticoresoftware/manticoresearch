@@ -1,6 +1,6 @@
 # Importing table
 
-If you decide to migrate from [Plain mode](../../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29) to [RT mode](../../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) and in some other cases, real-time and percolate tables built in the Plain mode can be imported to Manticore running in the RT mode using the `IMPORT TABLE` statement. The general syntax is as follows:
+If you decide to migrate from [Plain mode](../../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29) to [RT mode](../../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) or in some other cases, real-time and percolate tables built in Plain mode can be imported to Manticore running in RT mode using the `IMPORT TABLE` statement. The general syntax is as follows:
 
 <!-- example import -->
 
@@ -35,10 +35,10 @@ Executing this command makes all the table files of the specified table copied t
 ## indexer --print-rt
 
 <!-- example print_rt -->
-If the above method for migrating plain table to RT table is not possible you may use `indexer --print-rt` to dump data from plain table directly without the need to convert it to RT type table and then import dump into RT table right from command line.
+If the above method for migrating a plain table to an RT table is not possible, you may use `indexer --print-rt` to dump data from a plain table directly without the need to convert it to an RT type table and then import the dump into an RT table right from the command line.
 
-This method has few limitations though:
-* Only sql-based sources are supported
+This method has a few limitations though:
+* Only SQL-based sources are supported
 * MVAs are not supported
 
 <!-- request -->
@@ -52,3 +52,4 @@ mysql -P 9306 -h0 < /tmp/dump_regular.sql
 rm /tmp/dump_regular.sql
 ```
 <!-- end -->
+<!-- proofread -->

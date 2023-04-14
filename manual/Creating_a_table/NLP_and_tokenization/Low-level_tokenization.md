@@ -1,26 +1,26 @@
 # Low-level tokenization  
 
-When indexing some text Manticore splits it into words, and does case folding so that e.g. "Abc", "ABC" and "abc" would be treated as the same word.
+When text is indexed in Manticore, it is split into words and case folding is done so that words like "Abc", "ABC", and "abc" are treated as the same word.
 
-To do that properly Manticore needs to know:
-* what encoding is the source text in (and it should always be UTF-8)
-* what characters are letters and what are not
-* what letters should be folded to other letters
+To perform these operations correctly, Manticore must know:
+* the encoding of the source text (which should always be UTF-8)
+* which characters are considered letters and which are not
+* which letters should be folded to other letters
 
-This can be configured on a per-table basis using [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies the array that maps letter characters to their case folded versions (or any other characters if you like). The characters that are not in the array are considered to be non-letters and will be treated as word separators when indexing or searching through this table.
+You can configure these settings on a per-table basis using the  [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies an array that maps letter characters to their case-folded versions (or any other characters that you prefer). Characters that are not present in the array are considered to be non-letters and will be treated as word separators during indexing or searching in this table.
 
-The default character set is `non_cjk` and includes [most languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
+The default character set is `non_cjk`, which includes [most languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
 
-You can also specify text pattern replacement rules. For example, given the rules:
+You can also define text pattern replacement rules. For example, with the following rules:
 
 ```ini
 regexp_filter = \**(\d+)\" => \1 inch
 regexp_filter = (BLUE|RED) => COLOR
 ```
 
-text `RED TUBE 5" LONG` would be indexed as `COLOR TUBE 5 INCH LONG`, and `PLANK 2" x 4"` - as `PLANK 2 INCH x 4 INCH`. The rules are applied in the given order. Text in queries is also replaced; search for `BLUE TUBE` would actually become a search for `COLOR TUBE`.
+The text `RED TUBE 5" LONG` would be indexed as `COLOR TUBE 5 INCH LONG`, and `PLANK 2" x 4"` would be indexed as `PLANK 2 INCH x 4 INCH`. These rules are applied in the specified order. The rules also apply to queries, so a search for `BLUE TUBE` would actually search for `COLOR TUBE`.
 
-Read more about [regexp_filter here](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
+You can learn more about [regexp_filter here](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
 
 ## Index configuration options
 
@@ -42,24 +42,23 @@ charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC,
 ```
 
 <!-- example charset_table -->
-Accepted characters array, with case folding rules. Optional, default values are all characters of most non-CJK languages (`non_cjk`).
+`charset_table` specifies an array that maps letter characters to their case folded versions (or any other characters if you like). The default character set is `non_cjk` which includes most non-CJK languages.
 
-`charset_table` is a main workhorse of Manticore tokenization process, the process of extracting keywords from document text or query text. It controls what characters are accepted as valid and what are not, and how the accepted characters should be transformed (e.g. should the case be removed or not).
+`charset_table` is a workhorse of Manticore's tokenization process, which extracts keywords from document text or query text. It controls what characters are accepted as valid and how they should be transformed (e.g. whether case should be removed or not).
 
-You can think of `charset_table` as of a big table or array that has a mapping for each and every of 100K+ characters in Unicode. By default, every character maps to 0, which means that it does not occur within keywords and should be treated as a separator. Once mentioned in the table, character is mapped to some other character (most frequently, either to itself or to a lowercase letter), and is treated as a valid keyword part.
+By default, every character maps to 0, which means that it is not considered a valid keyword and is treated as a separator. Once a character is mentioned in the table, it is mapped to another character (most frequently, either to itself or to a lowercase letter) and is treated as a valid keyword part.
 
-The expected value format is a comma-separated list of mappings. Two simplest mappings simply declare a character as valid, and map a single character to another single character, respectively. But specifying the whole table in such form would result in bloated and barely manageable specifications. So there are several syntax shortcuts that let you map ranges of characters at once. The complete list is as follows:
+charset_table uses a comma-separated list of mappings to declare characters as valid or to map them to other characters. Syntax shortcuts are available for mapping ranges of characters at once:
 
-* `A->a` - Single char mapping, declares source char 'A' as allowed to occur within keywords and maps it to destination char 'a' (but does *not* declare 'a' as allowed).
-* `A..Z->a..z` - Range mapping, declares all chars in source range as allowed and maps them to the destination range. Does *not* declare destination range as allowed. Also checks range's lengths (the lengths must be equal).
-* `a` - Stray char mapping, declares a character as allowed and maps it to itself. Equivalent to a->a single char mapping.
-* `a..z` - Stray range mapping, declares all characters in range as allowed and maps them to themselves. Equivalent to `a..z->a..z` range mapping.
-* `A..Z/2` - Checkerboard range map. Maps every pair of chars to the second char. More formally, declares odd characters in range as allowed and maps them to the even ones; also declares even characters as allowed and maps them to themselves. For instance, `A..Z/2` is equivalent to `A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z`. This mapping shortcut is helpful for a number of Unicode blocks where uppercase and lowercase letters go in such interleaved order instead of contiguous chunks.
+* Single char mapping: `A->a`. Declares the source character 'A' as allowed within keywords and maps it to the destination character 'a' (but does not declare 'a' as allowed).
+* Range mapping: `A..Z->a..z`. Declares all characters in the source range as allowed and maps them to the destination range. Does not declare the destination range as allowed. Checks the lengths of both ranges.
+* Stray char mapping: `a`. Declares a character as allowed and maps it to itself. Equivalent to `a->a` single char mapping.
+* Stray range mapping: `a..z`.  Declares all characters in the range as allowed and maps them to themselves. Equivalent to `a..z->a..z` range mapping.
+* Checkerboard range mapping: `A..Z/2`. Maps every pair of characters to the second character. For instance, `A..Z/2` is equivalent to `A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z`. This mapping shortcut is helpful for Unicode blocks where uppercase and lowercase letters go in an interleaved order.
 
-Control characters with codes from 0 to 32 are always treated as separators. Characters with codes 33 to 127, i.e. 7-bit ASCII characters, can be used in the mappings as is. To avoid configuration file encoding issues, 8-bit ASCII characters and Unicode characters must be specified in `U+xxx` form, where `xxx` is hexadecimal codepoint number. This form can also be used for 7-bit ASCII characters to encode special ones: e.g. use `U+2E` to encode dot, `U+2C` to encode comma. The minimal accepted unicode character code is `U+0021`.
+For characters with codes from 0 to 32, and those in the range of 127 to 8-bit ASCII and Unicode characters, Manticore always treats them as separators. To avoid configuration file encoding issues, 8-bit ASCII characters and Unicode characters must be specified in `U+XXX` form, where `XXX` is a hexadecimal code point number. The minimal accepted Unicode character code is `U+0021`.
 
-
-You can redefine character mapping by specifying it again with another mapping. For example built-in array `non_cjk` includes characters `Ä` and `ä` and maps them both to ascii character `a` which may not work in some cases (e.g. for the German language). In this case you can redefine the characters so:
+If the default mappings are insufficient for your needs, you can redefine the character mappings by specifying them again with another mapping. For example, if the built-in `non_cjk` array includes characters `Ä` and `ä` and maps them both to the ASCII character `a`, you can redefine those characters by adding the Unicode code points for them, like this:
 
 ```
 charset_table = non_cjk,U+00E4,U+00C4
@@ -208,9 +207,9 @@ table products {
 ```
 <!-- end -->
 
-So if you want your search to support different languages you will need to define sets of valid characters and folding rules for all of them what can be quite a laborious task. We have performed this task for you by preparing default charset tables, non_cjk and cjk, that comprise non-cjk and cjk-languages respectively. These charsets should be sufficient to use in most cases.
+If you want to support different languages in your search, it can be a laborious task to define sets of valid characters and folding rules for all of them. We have simplified this for you by providing default charset tables, `non_cjk` and `cjk`, that cover non-CJK and CJK (Chinese, Japanese, Korean) languages respectively. In most cases, these charsets should be sufficient for your needs.
 
-The languages that are currently **not** supported are:
+Please note that the following languages are currently **not** supported:
 * Assamese
 * Bishnupriya
 * Buhid
@@ -231,11 +230,11 @@ The languages that are currently **not** supported are:
 * Sindhi
 * Sylheti
 
-All other languages listed in the following list are supported by default: [Unicode languages
-list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/).
+All other languages listed in the [Unicode languages
+list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/) are supported by default.
 
 <!-- example charset_table 3 -->
-To be able to work with both cjk and non-cjk languages you should set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/CJK.md) for Chinese):
+To work with both cjk and non-cjk languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/CJK.md) for Chinese):
 
 <!-- request SQL -->
 
@@ -305,10 +304,10 @@ table products {
 ```
 <!-- end -->
 
-In case you don't need support for cjk-languages you can just omit [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-options. For more information on those see the appropriate documentation sections.
+If you do not require support for cjk-languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+options. For more information on these options, refer to the corresponding documentation sections.
 
-If you're looking for mapping one character to multiple or vice-versa [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.
+To map one character to multiple characters or vice versa, you can use [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.
 
 ### blend_chars
 
@@ -320,17 +319,17 @@ blend_chars = +, &->+
 <!-- example blend_chars -->
 Blended characters list. Optional, default is empty.
 
-Blended characters are indexed both as separators and valid characters. For instance, assume that `&` is configured as blended and `AT&T` occurs in an indexed document. Three different keywords will get indexed, namely `at&t`, treating blended characters as valid, plus `at` and `t`, treating them as separators.
+Blended characters are indexed as both separators and valid characters. For example, when `&` is defined as a blended character and `AT&T` appears in an indexed document, three different keywords will be indexed, `at&t`, `at` and `t`.
 
-Blended characters should be used carefully:
-* since as soon as a character is defined as blended it is not a separator any more which can affect search. For example if you put a comma to the `blend_chars` and then search for `dog,cat` it will treat that as a single token `dog,cat` and if during indexation you **didn't** index `dog,cat` as `dog,cat`, but left only `dog cat` then it won't be matched.
-* therefore you need to make sure that this behaviour is desired and control it with help of the other setting [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+Care should be taken when using blended characters as defining a character as blended means that it is no longer a separator.
+* Therefore, if you put a comma to the `blend_chars` and search for `dog,cat`, it will treat that as a single token `dog,cat`. If `dog,cat` was **not** indexed as `dog,cat`, but left as `dog cat` only, then it will not match.
+* Hence, this behavior should be controlled with the [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting.
 
-Positions for tokens obtained by replacing blended characters with whitespace are assigned as usual, so regular keywords will be indexed just as if there was no `blend_chars` specified at all. An additional token that mixes blended and non-blended characters will be put at the starting position. For instance, if `AT&T company` occurs in the very beginning of the text field, `at` will be given position 1, `t` position 2, `company` position 3, and `AT&T` will also be given position 1 ("blending" with the opening regular keyword). Thus, querying for either `AT&T` or just `AT` will match that document, and querying for `"AT T"` as a phrase will also match it. Last but not least, phrase query for `"AT&T company"` will *also* match it, despite the position.
+Positions for tokens obtained by replacing blended characters with whitespace are assigned as usual, and regular keywords will be indexed as if there were no `blend_chars` specified at all. An additional token that mixes blended and non-blended characters will be put at the starting position. For instance, if `AT&T company` occurs in the very beginning of the text field, `at` will be given position 1, `t` position 2, `company` position 3, and `AT&T` will also be given position 1, blending with the opening regular keyword. As a result, queries for `AT&T` or just `AT` will match that document. A phrase query for `"AT T"` will also match, as well as a phrase query for `"AT&T company"`.
 
-Blended characters can overlap with special characters used in query syntax (think of `T-Mobile` or `@twitter`). Where possible, query parser will automatically handle blended character as blended. For instance, `"hello @twitter"` within quotes (a phrase operator) would handle @-sign as blended, because @-syntax for field operator is not allowed within phrases. Otherwise, the character would be handled as an operator. So you might want to escape the keywords.
+Blended characters can overlap with special characters used in query syntax, such as `T-Mobile` or `@twitter`. Where possible, the query parser will handle the blended character as blended. For instance, if `hello @twitter` is within quotes (a phrase operator), the query parser will handle the `@` symbol as blended. However, if the `@` symbol was not within quotes, the character would be handled as an operator. Therefore, it is recommended to escape keywords.
 
-Blended characters can be remapped, so that multiple different blended characters could be normalized into just one base form. This is useful when indexing multiple alternative Unicode codepoints with equivalent glyphs.
+Blended characters can be remapped so that multiple different blended characters can be normalized into one base form. This is useful when indexing multiple alternative Unicode codepoints with equivalent glyphs.
 
 <!-- request SQL -->
 
@@ -406,30 +405,32 @@ option = trim_none | trim_head | trim_tail | trim_both | trim_all | skip_pure
 ```
 
 <!-- example blend_mode -->
-Blended tokens indexing mode. Optional, default is `trim_none`.
+The blended tokens indexing mode is enabled by the blend_mode directive.
 
-By default, tokens that mix blended and non-blended characters get indexed in there entirety. For instance, when both at-sign and an exclamation are in `blend_chars`, `@dude!` will get result in two tokens indexed: `@dude!` (with all the blended characters) and `dude` (without any). Therefore `@dude` query will *not* match it.
+By default, tokens that mix blended and non-blended characters get indexed entirely. For example, when both an at-sign and an exclamation are in `blend_chars`, the string `@dude!` will be indexed as two tokens: `@dude!` (with all the blended characters) and `dude` (without any). As a result, a query of `@dude` will **not** match it.
 
-`blend_mode` directive adds flexibility to this indexing behavior. It takes a comma-separated list of options.
+`blend_mode` adds flexibility to this indexing behavior. It takes a comma-separated list of options, each of which specifies a token indexing variant.
 
-Options specify token indexing variants. If multiple options are specified, multiple variants of the same token will be indexed. Regular keywords (resulting from that token by replacing blended with a separator) are always indexed.
+If multiple options are specified, multiple variants of the same token will be indexed. Regular keywords (resulting from that token by replacing blended characters with a separator) are always indexed.
+
+The options are:
 
 * `trim_none` - Index the entire token
 * `trim_head` - Trim heading blended characters, and index the resulting token
 * `trim_tail` - Trim trailing blended characters, and index the resulting token
-* `trim_both` - Trim both heading and trailing blended characters, and index the resulting token
-* `trim_all` - Trim heading, trailing and middle blended characters, and index the resulting token
-* `skip_pure` - Do not index the token if it's purely blended, that is, consists of blended characters only
+* `trim_both`- Trim both heading and trailing blended characters, and index the resulting token
+* `trim_all` - Trim heading, trailing, and middle blended characters, and index the resulting token
+* `skip_pure` - Do not index the token if it is purely blended, that is, consists of blended characters only
 
-Returning to the `@dude!` example above, setting `blend_mode = trim_head, trim_tail` will result in two tokens being indexed, `@dude` and `dude!`. In this particular example, `trim_both` would have no effect, because trimming both blended characters results in `dude` which is already indexed as a regular keyword. Indexing `@U.S.A.` with `trim_both` (and assuming that dot is blended two) would result in `U.S.A` being indexed. Last but not least, `skip_pure` enables you to fully ignore sequences of blended characters only. For example, `one @@@ two` would be indexed exactly as `one two`, and match that as a phrase. That is not the case by default because a fully blended token gets indexed and offsets the second keyword position.
+Using `blend_mode` with the example `@dude!` string above, the setting `blend_mode = trim_head, trim_tail` would result in two indexed tokens: `@dude` and `dude!`. Using `trim_both` would have no effect because trimming both blended characters results in `dude`, which is already indexed as a regular keyword. Indexing `@U.S.A.` with `trim_both` (and assuming that dot is blended two) would result in `U.S.A` being indexed. Lastly, `skip_pure` enables you to ignore sequences of blended characters only. For example, `one @@@ two` would be indexed as `one two`, and match that as a phrase. This is not the case by default because a fully blended token gets indexed and offsets the second keyword position.
 
 Default behavior is to index the entire token, equivalent to `blend_mode = trim_none`.
 
-Make sure you undestand that either of the blend modes limits your search, even the default one `trim_none` as with it and assuming `.` is a blended char:
-* `.dog.` will become `.dog. dog` during indexation
+Be aware that using blend modes limits your search, even with the default mode `trim_none` if you assume `.` is a blended character:
+* `.dog.` will become `dog. dog` during indexing
 * and you won't be able to find it by `dog.`.
 
-The more modes you use, the higher the chance your keyword will match something.
+Using more modes increases the chance your keyword will match something.
 
 <!-- request SQL -->
 
@@ -504,9 +505,10 @@ min_word_len = length
 ```
 
 <!-- example min_word_len -->
-Minimum indexed word length. Optional, default is 1 (index everything).
 
-Only those words that are not shorter than this minimum will be indexed. For instance, if min_word_len is 4, then 'the' won't be indexed, but 'they' will be.
+min_word_len is an optional index configuration option in Manticore that specifies the minimum indexed word length. The default value is 1, which means that everything is indexed.
+
+Only those words that are not shorter than this minimum will be indexed. For example, if min_word_len is 4, then 'the' won't be indexed, but 'they' will be.
 
 <!-- request SQL -->
 
@@ -582,13 +584,13 @@ ngram_len = 1
 <!-- example ngram_len -->
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram indexing). Known values are 0 and 1.
 
-N-grams provide basic CJK (Chinese, Japanese, Korean) support for unsegmented texts. The issue with CJK searching is that there could be no clear separators between the words. In some cases you might not want to use dictionary-based segmentation as [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/CJK.md). In those cases n-gram segmentation might work well too.
+N-grams provide basic CJK (Chinese, Japanese, Korean) support for unsegmented texts. The issue with CJK searching is that there may be no clear separators between the words. In some cases, you may not want to use dictionary-based segmentation [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/CJK.md). In those cases, n-gram segmentation might work well too.
 
-When this feature is enabled, streams of CJK (or any other defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) characters are indexed as N-grams. For example, if incoming text is "ABCDEF" (where A to F represent some CJK characters) and ngram_len is 1, in will be indexed as if it was "A B C D E F". Only ngram_len=1 is supported at the moment. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; other ones will not be affected.
+When this feature is enabled, streams of CJK (or any other characters defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) are indexed as N-grams. For example, if the incoming text is "ABCDEF" (where A to F represent some CJK characters) and ngram_len is 1, it will be indexed as if it were "A B C D E F". Only ngram_len=1 is currently supported. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; others will not be affected.
 
-Note that if search query is segmented, i.e. there are separators between individual words, then wrapping the words in quotes and using extended mode will result in proper matches being found even if the text was **not** segmented. For instance, assume that the original query is `BC DEF`. After wrapping in quotes on the application side, it should look like `"BC" "DEF"` (*with* quotes). This query will be passed to Manticore and internally split into 1-grams too, resulting in `"B C" "D E F"` query, still with quotes that are the phrase matching operator. And it will match the text even though there were no separators in the text.
+Note that if the search query is segmented, i.e. there are separators between individual words, then wrapping the words in quotes and using extended mode will result in proper matches being found even if the text was **not** segmented. For instance, assume that the original query is `BC DEF`. After wrapping in quotes on the application side, it should look like `"BC" "DEF"` (*with* quotes). This query will be passed to Manticore and internally split into 1-grams too, resulting in `"B C" "D E F"` query, still with quotes that are the phrase matching operator. And it will match the text even though there were no separators in the text.
 
-Even if the search query is not segmented, Manticore should still produce good results, thanks to phrase based ranking: it will pull closer phrase matches (which in case of N-gram CJK words can mean closer multi-character word matches) to the top.
+Even if the search query is not segmented, Manticore should still produce good results, thanks to phrase-based ranking: it will pull closer phrase matches (which in the case of N-gram CJK words can mean closer multi-character word matches) to the top.
 
 <!-- request SQL -->
 
@@ -1427,7 +1429,7 @@ index_token_filter = my_lib.so:custom_blend:chars=@#&
 <!-- example index_token_filter -->
 Index-time token filter for full-text indexing. Optional, default is empty.
 
-Index-time token filter gets created by indexer on indexing source data into a plain table or by RT table on processing `INSERT` or `REPLACE` statements and lets you implement a custom tokenizer that makes tokens according to custom rules. The plugins are defined as `library name:plugin name:optional string of settings`.
+The index_token_filter directive specifies an optional index-time token filter for full-text indexing. This directive is used to create a custom tokenizer that makes tokens according to custom rules. The filter is created by the indexer on indexing source data into a plain table or by an RT table on processing `INSERT` or `REPLACE` statements. The plugins are defined using the format `library name:plugin name:optional string of settings`. For example, `my_lib.so:custom_blend:chars=@#&`.
 
 <!-- request SQL -->
 
@@ -1737,13 +1739,13 @@ regexp_filter = (blue|red) => color
 ```
 
 <!-- example regexp_filter -->
-Regular expressions (regexps) to filter the fields and queries with. Optional, multi-value, default is an empty list of regexps.
+Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regexps.
 
-In certain applications (like product search) there can be many different ways to call a model, or a product, or a property, and so on. For instance, 'iphone 3gs' and 'iphone 3 gs' (or even 'iphone3 gs') are very likely to mean the same product. Or, for a more tricky example, '13-inch', '13 inch', '13"', and '13in' in a laptop screen size descriptions do mean the same.
+In certain applications such as product search, there can be many ways to refer to a product, model, or property. For example, `iPhone 3gs` and `iPhone 3 gs` (or even `iPhone3 gs`) are very likely to refer to the same product. Another example could be different ways to express a laptop screen size, such as `13-inch`, `13 inch`, `13"`, or `13in`.
 
-Regexps provide you with a mechanism to specify a number of rules specific to your application to handle such cases. In the first 'iphone 3gs' example, you could possibly get away with a wordforms files tailored to handle a handful of iPhone models. However even in a comparatively simple second '13-inch' example there is just way too many individual forms and you are better off specifying rules that would normalize both '13-inch' and '13in' to something identical.
+Regexps provide a mechanism to specify rules tailored to handle such cases. In the first example, you could possibly use a wordforms file to handle a handful of iPhone models, but in the second example, it's better to specify rules that would normalize "13-inch" and "13in" to something identical.
 
-Regular expressions listed in `regexp_filter` are applied in the order they are listed. That happens at the earliest stage possible, before any other processing, even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
+Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing, even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
 
 <!-- request SQL -->
 
@@ -1814,3 +1816,4 @@ table products {
 }
 ```
 <!-- end -->
+<!-- proofread -->

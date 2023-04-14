@@ -12,25 +12,25 @@ SHOW TABLE index_name STATUS
 
 Displayed statistics include:
 
-* `index_type`: for now that is one of `disk`, `rt`, `percolate`, `template`, and `distributed`.
+* `index_type`: currently one of `disk`, `rt`, `percolate`, `template`, and `distributed`.
 * `indexed_documents` and `indexed_bytes`: number of indexed documents and their text size in bytes, respectively.
-* `field_tokens_XXX`: sums of per-field lengths (in tokens) over the entire table (that is used internally in `BM25A` and `BM25F` functions for ranking purposes). Only available for tables built with `index_field_lengths=1`.
-* `ram_bytes`: total size (in bytes) of RAM-resident table portion.
+* `field_tokens_XXX`: total per-field lengths (in tokens) across the entire table (used internally for `BM25A` and `BM25F` ranking functions). Only available for tables built with `index_field_lengths=1`.
+* `ram_bytes`: total size (in bytes) of the RAM-resident table portion.
 * `disk_bytes`: total size (in bytes) of all table files.
 * `disk_mapped`: total size of file mappings.
 * `disk_mapped_cached`: total size of file mappings actually cached in RAM.
-* `disk_mapped_doclists` and `disk_mapped_cached_doclists`: part of the total and cached mappings belonging to document lists.
-* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of the total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown separately since they're usually huge (say, about 90% size of the whole table).
-* `killed_documents` and `killed_rate`: the first one indicates the number of deleted documents and the rate of deleted/indexed. Technically deletion of a document just means that the document gets suppressed in search output, but physically it still persists in a table and will be purged only after merging/optimizing the table.
-* `ram_chunk`: size of RAM chunk of real-time or percolate table.
-* `ram_chunk_segments_count`: RAM chunk internally consists of segments, usually there are no more than 32 of them. This line shows the current count.
-* `disk_chunks`: number of disk chunks of the real-time table.
+* `disk_mapped_doclists` and `disk_mapped_cached_doclists`: portion of total and cached mappings belonging to document lists.
+* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: portion of total and cached mappings belonging to hit lists. Doclists and hitlists values are shown separately since they're typically large (e.g., about 90% of the whole table's size).
+* `killed_documents` and `killed_rate`: the first indicates the number of deleted documents and the rate of deleted/indexed. Technically, deleting a document means suppressing it in search output, but it still physically exists in the table and will only be purged after merging/optimizing the table.
+* `ram_chunk`: size of the RAM chunk of real-time or percolate table.
+* `ram_chunk_segments_count`: RAM chunk is internally composed of segments, typically no more than 32. This line shows the current count.
+* `disk_chunks`: number of disk chunks in the real-time table.
 * `mem_limit`: actual value of `rt_mem_limit` for the table.
-* `mem_limit_rate`: the rate after which the ram chunk will be flushed as a disk chunk, e.g. if `rt_mem_limit` is 128M and the rate is 50%, a new disk chunk will be saved as soon as the ram chunk exceeds 64M.
-* `ram_bytes_retired`: represents size of garbage in RAM chunks (for example, deleted or replaced documents not yet finally wiped away).
-* `tid` and `tid_saved`: represent the state of saving the table (real-time or percolate only). `tid` gets increased with each change (transaction). `tid_saved` shows max `tid` of the state saved in a RAM chunk in `<table>.ram` file. When the numbers are different, some changes exist only in RAM and also backed by binlog (if enabled). Performing `FLUSH TABLE` or scheduling periodical flushing causes these changes to be saved. After flushing the binlog gets cleared, and the `tid_saved` represents the actual new state.
-* `query_time_*`: query execution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
-* `found_rows_*`: statistics of rows found by queries; provided for last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
+* `mem_limit_rate`: the rate at which the RAM chunk will be flushed as a disk chunk, e.g., if `rt_mem_limit` is 128M and the rate is 50%, a new disk chunk will be saved when the RAM chunk exceeds 64M.
+* `ram_bytes_retired`: represents the size of garbage in RAM chunks (e.g., deleted or replaced documents not yet permanently removed).
+* `tid` and `tid_saved`: represent the state of saving the table (real-time or percolate only). `tid` increases with each change (transaction). `tid_saved` shows the max `tid` of the state saved in a RAM chunk in `<table>.ram` file. When the numbers differ, some changes exist only in RAM and are also backed by binlog (if enabled). Performing `FLUSH TABLE` or scheduling periodic flushing saves these changes. After flushing, the binlog is cleared, and `tid_saved` represents the new actual state.
+* `query_time_*`: query execution time statistics for the last 1 minute, 5 minutes, 15 minutes, and total since server start; data is encapsulated as a JSON object, including the number of queries and min, max, avg, 95, and 99 percentile values.
+* `found_rows_*`: statistics of rows found by queries; provided for the last 1 minute, 5 minutes, 15 minutes, and total since server start; data is encapsulated as a JSON object, including the number of queries and min, max, avg, 95, and 99 percentile values.
 
 <!-- intro -->
 ##### SQL:
@@ -221,3 +221,4 @@ utilsApi.sql("SHOW TABLE statistic STATUS");
   warning= }
 ```
 <!-- end -->
+<!-- proofread -->

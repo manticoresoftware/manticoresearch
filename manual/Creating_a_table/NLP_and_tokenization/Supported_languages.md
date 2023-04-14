@@ -1,14 +1,14 @@
 # Supported languages
 
-Manticore supports many languages. Basic support for most is enabled by default via `charset_table = non_cjk` (which is a default value).
+Manticore supports a wide range of languages, with basic support enabled for most languages via `charset_table = non_cjk` (which is the default value).
 
-For many languages we provide [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) file (you can also use your own one) which you can use to improve search relevance.
+For many languages, Manticore provides a [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) file that can be used to improve search relevance.
 
-For few languages advanced morphology is available that allows to improve search relevance significantly by better segmentation and normalization using dictionary based lemmatization or stemming algorithms.
+Additionally, advanced morphology is available for a few languages that can significantly improve search relevance by using dictionary-based lemmatization or stemming algorithms for better segmentation and normalization.
 
-The below table includes a complete list of supported languages. You can use it to find out how to enable:
+The table below lists all supported languages and indicates how to enable:
 * basic support (column "Supported")
-* stopwords (column "Stopwords")
+* stopwords (column "Stopwords file name")
 * advanced morphology (column "Advanced morphology")
 
 | Language | Supported | Stopwords file name | Advanced morphology | Notes |
@@ -85,3 +85,4 @@ The below table includes a complete list of supported languages. You can use it 
 | Ukrainian | charset_table=non_cjk,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | Requires [installation](../../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) of UK lemmatizer |
 | Yoruba | charset_table=non_cjk | yo | - | |
 | Zulu | charset_table=non_cjk | zu | - |  |
+<!-- proofread -->

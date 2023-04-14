@@ -2,15 +2,15 @@
 
 <!-- example general -->
 
-Manticore Search returns by default the top 20 matched documents in the result set.
+Manticore Search returns the top 20 matched documents in the result set by default.
 
 #### SQL
-For SQL the navigation over the result set can be done with `LIMIT` clause.
+In SQL, you can navigate through the result set using the `LIMIT` clause.
 
-`LIMIT` can accept one number as the size of the returned set using a zero offset or a pair of offset and size.
+`LIMIT` can accept either one number as the size of the returned set with a zero offset, or a pair of offset and size values.
 
 #### HTTP JSON
-If HTTP JSON is used, the nodes `offset` and `limit` can control the offset of the result set and the size of the returned set. Alternatively the pair `size` and `from` can be used instead.
+When using HTTP JSON, the nodes `offset` and `limit` control the offset of the result set and the size of the returned set. Alternatively, you can use the pair `size` and `from` instead.
 
 <!-- intro -->
 
@@ -46,13 +46,13 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 <!-- example maxMatches -->
 ### Result set window
 
-By default, Manticore Search uses a result set window of 1000 best ranked documents that can be returned back in the result set. If the result set is paginated beyond this value, the query will end in error.
+By default, Manticore Search uses a result set window of 1000 best-ranked documents that can be returned in the result set. If the result set is paginated beyond this value, the query will end in error.
 
 This limitation can be adjusted with the query option [max_matches](../Searching/Options.md#max_matches).
 
-Increasing the `max_matches` to very high values should be made only if it's required for the navigation to reach such points. High `max_matches` value requires more memory used and can increase the query response time. One way to work with deep result sets is to set `max_matches` as a sum of offset and limit.
+Increasing the `max_matches` to very high values should only be done if it's necessary for the navigation to reach such points. A high `max_matches` value requires more memory and can increase the query response time. One way to work with deep result sets is to set `max_matches` as the sum of the offset and limit.
 
-Lowering `max_matches` under 1000 has a benefit in reducing the memory used by the query. It can also reduce the query time, but in most cases it might not be a noticeable gain.
+Lowering `max_matches` below 1000 has the benefit of reducing the memory used by the query. It can also reduce the query time, but in most cases, it might not be a noticeable gain.
 
 <!-- intro -->
 
@@ -79,3 +79,4 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 ```
 
 <!-- end -->
+<!-- proofread -->

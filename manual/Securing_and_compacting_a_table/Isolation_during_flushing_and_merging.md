@@ -1,9 +1,10 @@
 # Isolation during flushing and merging
 
-When flushing and compacting a real-time table Manticore provides isolation, so that a changed state doesn't affect the queries that were running when this or that operation started.
+Manticore provides isolation during the flushing and merging process of a real-time table to prevent any changes from affecting running queries.
 
-For instance, while compacting a table we have a pair of disk chunks that are being merged and also a new chunk produced by merging those two. Then, at one moment we create a new version of the table, where instead of the original pair of chunks the new one is placed. That is done seamlessly, so that if there's a long-running query using the original chunks, it will continue seeing the old version of the table while a new query will see the new version with the resulting merged chunk.
+For example, during table compaction, a pair of disk chunks are merged and a new chunk is produced. At one point, a new version of the table is created with the new chunk replacing the original pair. This is done seamlessly so that a long-running query using the original chunks will continue to see the old version of the table, while a new query will see the new version with the resulting merged chunk.
 
-Same is true for flushing a RAM chunk: we merge all suitable RAM segments into a new disk chunk, and finally put a new disk chunk into the set of disk chunks and abandon the participated RAM chunk segments. During this operation, Manticore also provides isolation for those queries that started before the operation began.
+The same applies to flushing a RAM chunk, where suitable RAM segments are merged into a new disk chunk and the participated RAM chunk segments are abandoned. During this operation, Manticore provides isolation for queries that started before the operation began.
 
-Moreover, these operations are also transparent for replaces and updates. If you update an attribute in a document which belongs to a disk chunk which is being merged with another one, the update will be applied both to that chunk and to the resulting chunk after the merge. If you delete a document during a merge - it will be deleted in the original chunk and also the resulting merged chunk will either have the document marked deleted, or it will have no such document at all (if the deletion happened on early stage of the merging).
+Furthermore, these operations are transparent for replaces and updates. If you update an attribute in a document that belongs to a disk chunk being merged with another one, the update will be applied to both that chunk and the resulting merged chunk. If you delete a document during a merge, it will be deleted in the original chunk and also in the resulting merged chunk, which will either have the document marked as deleted or have no such document at all if the deletion happened early in the merging process.
+<!-- proofread -->

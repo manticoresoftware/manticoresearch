@@ -44,3 +44,4 @@ mysql> show session variables like 'autocommit';
 +---------------+-------+
 1 row in set (0.00 sec)
 ```
+<!-- proofread -->

@@ -1,8 +1,8 @@
 # Escaping characters in query string
 
- As some characters are used as operators in the query string, they should be escaped to avoid query errors or  unwanted matching conditions.
+Since certain characters function as operators in the query string, they must be escaped to prevent query errors or unintended matching conditions.
 
- The following characters should be escaped using backslash (`\`):
+The following characters should be escaped using a backslash (`\`):
 
 ```
 !    "    $    '    (    )    -    /    <    @    \    ^    |    ~
@@ -10,20 +10,20 @@
 
 ## In MySQL command line client
 
-Single quote (') can be escaped using one backslash:
+To escape a single quote ('), use one backslash:
 ```sql
 SELECT * FROM your_index WHERE MATCH('l\'italiano');
 ```
 
 
-The rest of the characters in the above list are operators or query constructs. In order to treat them as simple characters, the engine has to see them with a preceding escape character.
-The backslash must also be escaped itself, resulting in 2 backslahes:
+For the other characters in the list mentioned earlier, which are operators or query constructs, they must be treated as simple characters by the engine, with a preceding escape character.
+The backslash must also be escaped, resulting in two backslashes:
 
 ```sql
 SELECT * FROM your_index WHERE MATCH('r\\&b | \\(official video\\)');
 ```
 
-If we want to use backslash as character, we need to escape both the backslash as character and backslash as the escape operator, resulting in 4 backslashes used:
+To use a backslash as a character, you must escape both the backslash as a character and the backslash as the escape operator, which requires four backslashes:
 
 ```sql
 SELECT * FROM your_index WHERE MATCH('\\\\ABC');
@@ -31,11 +31,11 @@ SELECT * FROM your_index WHERE MATCH('\\\\ABC');
 
 ## Using MySQL drivers
 
-MySQL drivers offer escaping functions (e.g., `mysqli_real_escape_string` in PHP or `conn.escape_string` in Python), but they only escape certain characters.
-You will still need to add escaping for the characters from the above list that are not escaped by the respective functions.
-Since these functions will escape backslash for you, you only need to add one backslash.
+MySQL drivers provide escaping functions (e.g., `mysqli_real_escape_string` in PHP or `conn.escape_string` in Python), but they only escape specific characters.
+You will still need to add escaping for the characters from the previously mentioned list that are not escaped by their respective functions.
+Because these functions will escape the backslash for you, you only need to add one backslash.
 
-This also applies for the drivers that support (client-side) prepared statements. For example for PHP PDO prepared statements, you need to add a backslash for `$` character:
+This also applies to drivers that support (client-side) prepared statements. For example, with PHP PDO prepared statements, you need to add a backslash for the `$` character:
 
 ```php
 $statement = $ln_sph->prepare( "SELECT * FROM index WHERE MATCH(:match)");
@@ -44,36 +44,36 @@ $statement->bindParam(':match',$match,PDO::PARAM_STR);
 $results = $statement->execute();
 ```
 
-It will make the final query `SELECT * FROM index WHERE MATCH('\\$manticore');`
+This results in the final query `SELECT * FROM index WHERE MATCH('\\$manticore');`
 
 ## In HTTP JSON API
 
-The same rules for SQL protocol apply with the exception that for JSON the double quote must be escaped with a single backslash, while the rest of the characters must be double escaped.
+The same rules for the SQL protocol apply, with the exception that for JSON, the double quote must be escaped with a single backslash, while the rest of the characters require double escaping.
 
+When using JSON libraries or functions that convert data structures to JSON strings, the double quote and single backslash are automatically escaped by these functions and do not need to be explicitly escaped.
 
-If using JSON libraries/functions that convert data structures to JSON strings the double quote and single backslash are escaped automatically by these functions and must not be explicitly escaped.
 
 
 ## In clients
 
-The [new official clients](https://github.com/manticoresoftware/) (which use HTTP as protocol) are using under the hood common JSON libraries/functions available on the respective programming language. Same rules of escaping as above are applied.
+The [new official clients](https://github.com/manticoresoftware/) (which use the HTTP protocol) utilize common JSON libraries/functions available in their respective programming languages under the hood. The same rules for escaping mentioned earlier apply.
 
 
 ## Escaping asterisk
 
-Asterisk (`*`) is a special character that can have two functionalities:
-* as wildcarding prefix/suffix expander
-* and as any term modifier inside a phrase search.
+The asterisk (`*`) is a unique character that serves two purposes:
+* as a wildcard prefix/suffix expander
+* as an any-term modifier within a phrase search.
 
-Unlike other special characters that are operators, the asterisk cannot be escaped when it's in a position to offer one of it's functionalities.
+Unlike other special characters that function as operators, the asterisk cannot be escaped when it's in a position to provide one of its functionalities.
 
-In non-wildcard queries, the asterisk doesn't require escaping, regardless if it's in the `charset_table` or not.
+In non-wildcard queries, the asterisk does not require escaping, whether it's in the `charset_table` or not.
 
-In wildcard queries, asterisk in the middle of a word doesn't require escaping. As a wildcard operator (either at start or end of the word), the asterisk will always be interpreted as the wildcard operator even if escaping is applied.
+In wildcard queries, an asterisk in the middle of a word does not require escaping. As a wildcard operator (either at the beginning or end of the word), the asterisk will always be interpreted as the wildcard operator, even if escaping is applied.
 
 ## Escaping json node names in SQL
 
-To escape special characters in json nodes use a backtick. For example:
+To escape special characters in JSON nodes, use a backtick. For example:
 
 ```sql
 MySQL [(none)]> select * from t where json.`a=b`=234;
@@ -90,3 +90,4 @@ MySQL [(none)]> select * from t where json.`a:b`=123;
 | 8215557549554925577 | {"a:b":123} |      |
 +---------------------+-------------+------+
 ```
+<!-- proofread -->

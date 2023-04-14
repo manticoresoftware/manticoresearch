@@ -1,47 +1,48 @@
-# Percolate query
+# Percolate Query
 
-Percolate queries are also known as Persistent queries, Prospective search,  document routing, search in reverse and inverse search.
+Percolate queries are also known as Persistent queries, Prospective search, document routing, search in reverse, and inverse search.
 
-The normal way of doing searches is to store documents and perform search queries against them. However there are cases when we want to apply a query to an incoming new document to signal the matching. There are some scenarios where this is wanted. For example a monitoring system doesn't just collect data, but it's also desired to notify user on different events. That can be reaching some threshold for a metric or a certain value that appears in the monitored data. Another similar case is news aggregation. You can notify the user about any fresh news, but the user might want to be notified only about certain categories or topics. Going further, they might be only interested about certain "keywords".
+The traditional way of conducting searches involves storing documents and performing search queries against them. However, there are cases where we want to apply a query to a newly incoming document to signal a match. Some scenarios where this is desired include monitoring systems that collect data and notify users about specific events, such as reaching a certain threshold for a metric or a particular value appearing in the monitored data. Another example is news aggregation, where users may want to be notified only about certain categories or topics, or even specific "keywords."
 
-This is where a traditional search is not a good fit, since would assume performed the desired search over the entire collection, which gets multiplied by the number of users and we end up with lots of queries running over the entire collection, which can put a lot of extra load. The idea explained in this section is to store instead the queries and test them against an incoming new document or a batch of documents.
+In these situations, traditional search is not the best fit, as it assumes the desired search is performed over the entire collection. This process gets multiplied by the number of users, resulting in many queries running over the entire collection, which can cause significant additional load. The alternative approach described in this section involves storing the queries instead and testing them against an incoming new document or a batch of documents.
 
-Google Alerts, AlertHN, Bloomberg Terminal and other systems that let their users to subscribe to something use a similar technology.
+Google Alerts, AlertHN, Bloomberg Terminal, and other systems that allow users to subscribe to specific content utilize similar technology.
 
-> * See [percolate](../Creating_a_table/Local_tables/Percolate_table.md) about how to create a PQ table.
-> * See [Adding rules to a percolate table](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
+> * See [percolate](../Creating_a_table/Local_tables/Percolate_table.md) for information on creating a PQ table.
+> * See [Adding rules to a percolate table](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) to learn how to add percolate rules (also known as PQ rules). Here's a quick example:
+
 
 ### Performing a percolate query with CALL PQ
 
-The key thing you need to remember about percolate queries is that you already have your search queries in the table. What you need to provide is documents **to check if any of them match any of the stored rules**.
+The key thing to remember about percolate queries is that your search queries are already in the table. What you need to provide are documents **to check if any of them match any of the stored rules**.
 
-You can perform a percolate query via SQL or JSON interfaces as well as using programming language clients. The SQL way gives more flexibility while via the HTTP it's simpler and gives all you mostly need. The below table can help you understand the differences.
+You can perform a percolate query via SQL or JSON interfaces, as well as using programming language clients. The SQL approach offers more flexibility, while the HTTP method is simpler and provides most of what you need. The table below can help you understand the differences.
 
-| Desired behaviour | SQL | HTTP | PHP |
-| - | - | - | - |
-| Provide a single document| `CALL PQ('tbl', '{doc1}')` | `query.percolate.document{doc1}`  | `$client->pq()->search([$percolate])`   |
-| Provide a single document (alternative) | `CALL PQ('tbl', 'doc1', 0 as docs_json)`  | -  |   |
-| Provide multiple documents  | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | `query.percolate.documents[{doc1}, {doc2}]` | `$client->pq()->search([$percolate])`  |
-| Provide multiple documents (alternative)  | `CALL PQ('tbl', ('{doc1}', '{doc2}'))` | -  | - |
-| Provide multiple documents (alternative)  | `CALL PQ('tbl', '[{doc1}, {doc2}]')` | -  | - |
-| Return matching document ids | 0/1 as docs (disabled by default)  | Enabled by default  | Enabled by default |
-| Use document's own id to show in the result | 'id field' as docs_id (disabled by default)  | Not available  | Not available  |
-| Consider input documents are JSON | 1 as docs_json (1 by default)  | Enabled by default  | Enabled by default |
-| Consider input documents are plain text | 0 as docs_json (1 by default)  | Not available  | Not available |
-| [Sparsed distribution mode](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query)   | default  | default  | default  |
-| [Sharded distribution mode](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query)   | sharded as mode  | Not available  |  Not available  |
-| Return all info about matching query | 1 as query (0 by default) |  Enabled by default | Enabled by default |
-| Skip invalid JSON | 1 as skip_bad_json (0 by default)  | Not available | Not available  |
-| Extended info in [SHOW META](../Node_info_and_management/SHOW_META.md) | 1 as verbose (0 by default)  | Not available  | Not available |
-| Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)) | 1 as shift (0 by default)  | Not available  | Not available |
+| Desired Behavior              | SQL                                     | HTTP                                 | PHP                                 |
+| ----------------------------- | --------------------------------------- | ------------------------------------ | ----------------------------------- |
+| Provide a single document     | `CALL PQ('tbl', '{doc1}')`              | `query.percolate.document{doc1}`     | `$client->pq()->search([$percolate])` |
+| Provide a single document (alternative) | `CALL PQ('tbl', 'doc1', 0 as docs_json)` | - | |
+| Provide multiple documents    | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | `query.percolate.documents[{doc1}, {doc2}]` | `$client->pq()->search([$percolate])` |
+| Provide multiple documents (alternative) | `CALL PQ('tbl', ('{doc1}', '{doc2}'))` | - | - |
+| Provide multiple documents (alternative) | `CALL PQ('tbl', '[{doc1}, {doc2}]')` | - | - |
+| Return matching document ids  | 0/1 as docs (disabled by default)       | Enabled by default                   | Enabled by default                |
+| Use document's own id to show in the result | 'id field' as docs_id (disabled by default) | Not available | Not available |
+| Consider input documents are JSON | 1 as docs_json (1 by default) | Enabled by default | Enabled by default |
+| Consider input documents are plain text | 0 as docs_json (1 by default) | Not available | Not available |
+| [Sparsed distribution mode](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | default | default | default |
+| [Sharded distribution mode](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | sharded as mode | Not available | Not available |
+| Return all info about matching query | 1 as query (0 by default) | Enabled by default | Enabled by default |
+| Skip invalid JSON | 1 as skip_bad_json (0 by default) | Not available | Not available |
+| Extended info in [SHOW META](../Node_info_and_management/SHOW_META.md) | 1 as verbose (0 by default) | Not available | Not available |
+| Define the number which will be added to document ids if no docs_id fields provided (mostly relevant in [distributed PQ modes](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)) | 1 as shift (0 by default) | Not available | Not available |
 
 <!-- example create percolate -->
-To demonstrate how it works here are few examples. Let's create a PQ table with 2 fields:
+To demonstrate how this works, here are a few examples. Let's create a PQ table with two fields:
 
 * title (text)
 * color (string)
 
-and 3 rules in it:
+and three rules in it:
 
 * Just full-text. Query: `@title bag`
 * Full-text and filtering. Query: `@title shoes`. Filters: `color='red'`
@@ -293,9 +294,9 @@ class SuccessResponse {
 <!-- example single -->
 ##### Just tell me what PQ rules match my single document
 
-The first document doesn't match any rules. It could match the first 2, but they require additional filters.
+The first document doesn't match any rules. It could match the first two, but they require additional filters.
 
-The second document matches one rule. Note that CALL PQ by default expects a document to be a JSON, but if you do `0 as docs_json` you can pass a plain string instead.
+The second document matches one rule. Note that CALL PQ by default expects a document to be a JSON, but if you use `0 as docs_json`, you can pass a plain string instead.
 
 <!-- intro -->
 SQL:
@@ -733,14 +734,14 @@ class SearchResponse {
 <!-- end -->
 
 <!-- example multiple -->
+
 ##### How about multiple documents?
 
-Note that via `CALL PQ` you can provide multiple documents different ways:
+Note that with `CALL PQ`, you can provide multiple documents in different ways:
 
-* as an array of plain document in round brackets `('doc1', 'doc2')`. This requires `0 as docs_json`
-* as a array of JSONs in round brackets `('{doc1}' '{doc2}')`
+* as an array of plain documents in round brackets `('doc1', 'doc2')`. This requires `0 as docs_json`
+* as an array of JSONs in round brackets `('{doc1}', '{doc2}')`
 * or as a standard JSON array `'[{doc1}, {doc2}]'`
-
 
 <!-- intro -->
 SQL:
@@ -1050,7 +1051,7 @@ class SearchResponse {
 <!-- example docs_1 -->
 ##### I want to know what docs match what rules
 
-Option `1 as docs` allows to see what documents of the provided match what rules.
+Using the option `1 as docs` allows you to see which documents of the provided ones match which rules.
 <!-- intro -->
 SQL:
 <!-- request SQL -->
@@ -1058,6 +1059,7 @@ SQL:
 ```sql
 CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query, 1 as docs);
 ```
+
 <!-- response SQL -->
 
 ```sql
@@ -1338,10 +1340,10 @@ class SearchResponse {
 <!-- end -->
 
 <!-- example docs_id -->
-##### Static ids
-By default matching document ids correspond to their relative numbers in the list you provide. But in some cases each document already has its own id. For this case there's an option `'id field name' as docs_id` for `CALL PQ`.
+#### Static ids
+By default, matching document ids correspond to their relative numbers in the list you provide. However, in some cases, each document already has its own id. For this case, there's an option `'id field name' as docs_id` for `CALL PQ`.
 
-Note that if the id cannot be found by the provided field name the PQ rule will not be shown in the results.
+Note that if the id cannot be found by the provided field name, the PQ rule will not be shown in the results.
 
 This option is only available for `CALL PQ` via SQL.
 
@@ -1368,7 +1370,7 @@ CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"
 <!-- example invalid_json -->
 ##### I may have invalid JSONs, please skip them
 
-If you provide documents as separate JSONs there is an option for `CALL PQ` to skip invalid JSONs. In the example note that in the 2nd and 3rd queries the 2nd JSON is invalid. Without `1 as skip_bad_json` the 2nd query fails, adding it in the 3rd query allows to avoid that. This option is not available via JSON over HTTP as the whole JSON query should be always valid when sent via the HTTP protocol.
+When using CALL PQ with separate JSONs, you can use the option 1 as skip_bad_json to skip any invalid JSONs in the input. In the example below, the 2nd query fails due to an invalid JSON, but the 3rd query avoids the error by using 1 as skip_bad_json. Keep in mind that this option is not available when sending JSON queries over HTTP, as the whole JSON query must be valid in that case.
 
 <!-- intro -->
 SQL:
@@ -1403,14 +1405,14 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 <!-- end -->
 
 ##### I want higher performance of a percolate query
-Percolate queries were made with high throughput and big data volume in mind, so there are few things how you can optimize your performance in case you are looking for lower latency and higher throughput.
+Percolate queries are designed with high throughput and large data volumes in mind. To optimize performance for lower latency and higher throughput, consider the following.
 
-There are two modes of distribution of a percolate table and how a percolate query can work against it:
+There are two modes of distribution for a percolate table and how a percolate query can work against it:
 
-* **Sparsed. Default.** When it is good: too many documents, PQ tables are mirrored. The batch of documents you pass will be split into parts according to the number of agents, so each of the nodes will receive and process only a part of the documents from your request. It will be beneficial when your set of documents is quite big, but the set of queries stored in the pq table is quite small. Assuming that all the hosts are mirrors Manticore will split your set of documents and distribute the chunks among the mirrors. Once the agents are done with the queries it will collect and merge all the results and return final query set as if it comes from one solid table. You can use [replication](../References.md#Replication) to help the process.
-* **Sharded**. When it is good: too many PQ rules, the rules are split among PQ tables. The whole documents set will be broad-casted to all tables of the distributed PQ table without any initial documents split. It is beneficial when you push relatively small set of documents, but the number of stored queries is huge. So in this case it is more appropriate to store just part of PQ rules on each node and then merge the results returned from the nodes that process one and the same set of documents against different sets of PQ rules. This mode has to be explicitly set since first of all it implies multiplication of network payload and secondly it expects tables with different PQ which [replication](../References.md#Replication) cannot do out of the box.
+* **Sparse (default).** Ideal for: many documents, mirrored PQ tables. When your document set is large but the set of queries stored in the PQ table is small, the sparse mode is beneficial. In this mode, the batch of documents you pass will be divided among the number of agents, so each node processes only a portion of the documents from your request. Manticore splits your document set and distributes chunks among the mirrors. Once the agents have finished processing the queries, Manticore collects and merges the results, returning a final query set as if it came from a single table. Use [replication](../References.md#Replication) to assist the process.
+* **Sharded.** Ideal for: many PQ rules, rules split among PQ tables. In this mode, the entire document set is broadcast to all tables of the distributed PQ table without initially splitting the documents. This is beneficial when pushing a relatively small set of documents, but the number of stored queries is large. In this case, it's more appropriate to store only a portion of PQ rules on each node and then merge the results returned from the nodes that process the same set of documents against different sets of PQ rules. This mode must be explicitly set, as it implies an increase in network payload and expects tables with different PQs, which [replication](../References.md#Replication) cannot do out-of-the-box.
 
-Let's assume you have table `pq_d2` which is defined as:
+Assume you have table `pq_d2` defined as:
 
 ``` ini
 table pq_d2
@@ -1643,7 +1645,7 @@ class SearchResponse {
 
 <!-- example call_pq_example -->
 
-And you fire `CALL PQ` to the distributed table with a couple of docs.
+And you execute `CALL PQ` on the distributed table with a couple of documents.
 
 
 <!-- intro -->
@@ -1893,7 +1895,7 @@ class SearchResponse {
 ```
 <!-- end -->
 
-That was an example of the default **sparsed** mode. To demonstrate the **sharded** mode let's create a distributed PQ table consisting of 2 local PQ tables and add 2 documents to "products1" and 1 document to "products2":
+In the previous example, we used the default **sparse** mode. To demonstrate the **sharded** mode, let's create a distributed PQ table consisting of 2 local PQ tables and add 2 documents to "products1" and 1 document to "products2":
 ```sql
 create table products1(title text, color string) type='pq';
 create table products2(title text, color string) type='pq';
@@ -1905,7 +1907,7 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 ```
 
 <!-- example sharded -->
-Now if you add `'sharded' as mode` to `CALL PQ` it will send the documents to all the agents tables (in this case just local tables, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
+Now, if you add `'sharded' as mode` to `CALL PQ`, it will send the documents to all the agent's tables (in this case, just local tables, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
 
 <!-- intro -->
 SQL:
@@ -1927,11 +1929,11 @@ CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue
 
 <!-- end -->
 
-Note that the syntax of agent mirrors in the configuration (when several hosts are assigned to one `agent` line, separated with `|` ) has nothing to do with the `CALL PQ` query mode, so each `agent` always represents **one** node despite of the number of HA mirrors specified for this agent.
+Note that the syntax of agent mirrors in the configuration (when several hosts are assigned to one `agent` line, separated with `|`) has nothing to do with the `CALL PQ` query mode. Each `agent` always represents **one** node, regardless of the number of HA mirrors specified for that agent.
 
 <!-- example verbose -->
-##### How do I understand more about the performance?
-In some case you might want to get more details about performance a percolate query. For that purposes there is option `1 as verbose` which is available only via SQL and allows to save more performance metrics. You can see them via `SHOW META` query which you can run after `CALL PQ`. See [SHOW META](../Node_info_and_management/SHOW_META.md) for more info.
+##### How can I learn more about performance?
+In some cases, you might want to get more details about the performance of a percolate query. For that purpose, there is the option `1 as verbose`, which is only available via SQL and allows you to save more performance metrics. You can see them using the `SHOW META` query, which you can run after `CALL PQ`. See [SHOW META](../Node_info_and_management/SHOW_META.md) for more info.
 
 <!-- intro -->
 1 as verbose:
@@ -1993,3 +1995,4 @@ CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 +-----------------------+-----------+
 ```
 <!-- end -->
+<!-- proofread -->

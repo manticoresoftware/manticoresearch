@@ -1,15 +1,15 @@
 # Database connection
 
-The source definition must contain the settings of the connection, this includes the host,port, user credentials or specific settings of a driver.
+The source definition must contain the settings of the connection, this includes the host, port, user credentials, or specific settings of a driver.
 
 ## sql_host
 
-The database server host to connect to. Note that MySQL client library chooses whether to connect over TCP/IP or over UNIX socket based on the host name. Specifically "localhost" will force it to use UNIX socket (this is the default and generally recommended mode) and "127.0.0.1" will force TCP/IP usage.
+The database server host to connect to. Note that the MySQL client library chooses whether to connect over TCP/IP or over UNIX socket based on the host name. Specifically, "localhost" will force it to use UNIX socket (this is the default and generally recommended mode) and "127.0.0.1" will force TCP/IP usage.
 
 ## sql_port
 
-The server IP port to connect to.
-For `mysql` default is 3306 and for `pgsql` is 5432.
+The server IP port to connect to. 
+For `mysql` the default is 3306 and for `pgsql`, it is 5432.
 
 ## sql_db
 
@@ -21,11 +21,11 @@ The username used for connecting.
 
 ## sql_pass
 
-The user password to use when connecting. If the password includes `#` (which can be used to add comments in the configuration file) you can escape it with `\`.
+The user password to use when connecting. If the password includes `#` (which can be used to add comments in the configuration file), you can escape it with `\`.
 
 ## sql_sock
 
-UNIX socket name to connect to for local database servers. Note that it depends on `sql_host` setting whether this value will actually be used.
+UNIX socket name to connect to for local database servers. Note that it depends on the `sql_host` setting whether this value will actually be used.
 
 ```ini
 sql_sock = /var/lib/mysql/mysql.sock
@@ -37,7 +37,7 @@ sql_sock = /var/lib/mysql/mysql.sock
 
 #### mysql_connect_flags
 
-MySQL client connection flags. Optional, default value is 0 (do not set any flags).
+MySQL client connection flags. Optional, the default value is 0 (do not set any flags).
 
 This option must contain an integer value with the sum of the flags. The value will be passed to mysql_real_connect() verbatim. The flags are enumerated in mysql_com.h include file. Flags that are especially interesting in regard to indexing, with their respective values, are as follows:
 
@@ -63,18 +63,18 @@ mysql_connect_flags = 32 # enable compression
 unpack_mysqlcompress_maxsize = 1M
 ```
 
-Columns to unpack using MySQL `UNCOMPRESS()` algorithm. Multi-value, optional, default value is empty list of columns.
+Columns to unpack using MySQL `UNCOMPRESS()` algorithm. Multi-value, optional, default value is an empty list of columns.
 
-Columns specified using this directive will be unpacked by indexer using modified zlib algorithm used by MySQL `COMPRESS()` and `UNCOMPRESS()` functions. When indexing on a different box than the database, this lets you offload the database, and save on network traffic. The feature is only available if zlib and zlib-devel were both available during build time.
+Columns specified using this directive will be unpacked by the indexer using the modified zlib algorithm used by MySQL `COMPRESS()` and `UNCOMPRESS()` functions. When indexing on a different box than the database, this lets you offload the database and save on network traffic. This feature is only available if zlib and zlib-devel were both available during build time.
 
 ```ini
 unpack_mysqlcompress = body_compressed
 unpack_mysqlcompress = description_compressed
 ```
 
-By default a buffer of 16M is used for uncompressing the data. This can be changed by setting `unpack_mysqlcompress_maxsize`.
+By default, a buffer of 16M is used for uncompressing the data. This can be changed by setting `unpack_mysqlcompress_maxsize`.
 
-When using unpack_mysqlcompress, due to implementation intricacies it is not possible to deduce the required buffer size from the compressed data. So the buffer must be preallocated in advance, and unpacked data can not go over the buffer size.
+When using unpack_mysqlcompress, due to implementation intricacies, it is not possible to deduce the required buffer size from the compressed data. So, the buffer must be preallocated in advance, and the unpacked data can not go over the buffer size.
 
 ### unpack_zlib
 
@@ -83,13 +83,13 @@ unpack_zlib = col1
 unpack_zlib = col2
 ```
 
-Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value, optional, default value is empty list of columns. Applies to source type `mysql` and `pgsql` only.
+Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value, optional, default value is an empty list of columns. Applies to source types `mysql` and `pgsql` only.
 
-Columns specified using this directive will be unpacked by `indexer` using standard zlib algorithm (called deflate and also implemented by `gunzip`). When indexing on a different box than the database, this lets you offload the database, and save on network traffic. The feature is only available if zlib and zlib-devel were both available during build time.
+Columns specified using this directive will be unpacked by the `indexer` using the standard zlib algorithm (called deflate and also implemented by `gunzip`). When indexing on a different box than the database, this lets you offload the database and save on network traffic. This feature is only available if zlib and zlib-devel were both available during build time.
 
 ### MSSQL
 
-MS SQL Windows authentication flag. Whether to use currently logged in Windows account credentials for authentication when connecting to MS SQL Server.
+MS SQL Windows authentication flag. Whether to use currently logged-in Windows account credentials for authentication when connecting to MS SQL Server.
 
 ```ini
 mssql_winauth = 1
@@ -97,10 +97,11 @@ mssql_winauth = 1
 
 ### ODBC
 
-Sources using ODBC requires the presence of a DSN (Data Source Name) string which can be set with `odbc_dsn`.
+Sources using ODBC require the presence of a DSN (Data Source Name) string which can be set with `odbc_dsn`.
 
 ```ini
 odbc_dsn = Driver={Oracle ODBC Driver};Dbq=myDBName;Uid=myUsername;Pwd=myPassword
 ```
 
-Please note that the format depends on specific ODBC driver used.
+Please note that the format depends on the specific ODBC driver used.
+<!-- proofread -->

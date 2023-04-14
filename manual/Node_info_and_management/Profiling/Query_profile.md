@@ -2,11 +2,11 @@
 
 <!-- example SHOW PROFILE -->
 
-`SHOW PROFILE` is an SQL statement that shows a detailed execution profile of the previous SQL statement executed in the current SQL session. Also, profiling must be enabled in the current session **before** running the statement to be instrumented. That can be done with a `SET profiling=1` statement. By default, profiling is disabled to avoid potential performance implications, and therefore the profile will be empty.
+`SHOW PROFILE` is an SQL statement that displays a detailed execution profile of the previous SQL statement executed in the current SQL session. Profiling must be enabled in the current session **before** running the statement to be instrumented, which can be done with a `SET profiling=1` statement. By default, profiling is disabled to avoid potential performance implications, and as a result, the profile will be empty.
 
-* `Status` column briefly describes where exactly (in which state) was the time spent.
+* `Status` column briefly describes the specific state where the time was spent.
 * `Duration` column shows the wall clock time, in seconds.
-* `Switches` column displays the number of times query engine changed to the given state.   Those are just logical engine state switches and **not** any OS level context switches nor function calls (even though some of the sections can actually map to function calls) and they do **not** have any direct effect on the performance. In a sense, number of switches is just a number of times when the respective instrumentation point was hit.
+* `Switches` column displays the number of times the query engine changed to the given state. These are merely logical engine state switches and **not** any OS level context switches or function calls (although some sections might actually map to function calls), and they do **not** have any direct effect on performance. In a sense, the number of switches is just the number of times the respective instrumentation point was hit.
 * `Percent` column shows the percentage of time spent in this state.
 
 <!-- intro -->
@@ -65,16 +65,16 @@ Query OK, 0 rows affected (0.00 sec)
 
 States in the profile are returned in a prerecorded order that roughly maps (but is **not** identical) to the actual query order.
 
-A list of states may (and will) vary over time, as we refine the states. Here's a brief description of the currently profiled states.
+The list of states may (and will) change over time as we refine the states. Here's a brief description of the currently profiled states.
 
-* `unknown`: generic catch-all state. Accounts for both not-yet-instrumented code, or just small miscellaneous tasks that do not really belong in any other state, but are too small to deserve their own state.
-* `net_read`: reading the query from the network (that is, the application).
+* `unknown`: generic catch-all state. Accounts for not-yet-instrumented code or small miscellaneous tasks that don't really belong in any other state but are too small to warrant their own state.
+* `net_read`: reading the query from the network (i.e., the application).
 * `io`: generic file IO time.
 * `dist_connect`: connecting to remote agents in the distributed table case.
 * `sql_parse`: parsing the SQL syntax.
 * `dict_setup`: dictionary and tokenizer setup.
 * `parse`: parsing the full-text query syntax.
-* `transforms`: full-text query transformations (wildcard and other expansions, simplification, etc).
+* `transforms`: full-text query transformations (wildcard and other expansions, simplification, etc.).
 * `init`: initializing the query evaluation.
 * `open`: opening the table files.
 * `read_docs`: IO time spent reading document lists.
@@ -84,8 +84,8 @@ A list of states may (and will) vary over time, as we refine the states. Here's 
 * `filter`: filtering the full-text matches.
 * `rank`: computing the relevance rank.
 * `sort`: sorting the matches.
-* `finalize`: finalizing the per-table search result set (last stage expressions, etc).
-* `dist_wait`: waiting for the remote results from the agents in the distributed table case.
+* `finalize`: finalizing the per-table search result set (last stage expressions, etc.).
+* `dist_wait`: waiting for remote results from agents in the distributed table case.
 * `aggregate`: aggregating multiple result sets.
 * `net_write`: writing the result set to the network.
 
@@ -104,7 +104,7 @@ You can view the final transformed query tree with all normalized keywords by ad
 }
 ```
 
-This feature is somewhat similar to [SHOW PLAN](../../Node_info_and_management/Profiling/Query_plan.md) statement in SQL. The result appears as a profile property in the result set. For example:
+This feature is somewhat similar to the [SHOW PLAN](../../Node_info_and_management/Profiling/Query_plan.md) statement in SQL. The result appears as a profile property in the result set. For example:
 
 ```json
 "profile":
@@ -161,7 +161,7 @@ This feature is somewhat similar to [SHOW PLAN](../../Node_info_and_management/P
 
 `query` property contains the transformed full-text query tree. Each node contains:
 
-* `type`: node type. Can be AND, OR, PHRASE, KEYWORD etc
+* `type`: node type. Can be AND, OR, PHRASE, KEYWORD, etc.
 * `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
 * `children`: child nodes, if any
 * `max_field_pos`: maximum position within a field
@@ -172,3 +172,5 @@ This feature is somewhat similar to [SHOW PLAN](../../Node_info_and_management/P
 * `field_start`: keyword must occur at the very start of the field. Keyword nodes only
 * `field_end`: keyword must occur at the very end of the field. Keyword nodes only
 * `boost`: keyword IDF will be multiplied by this. Keyword nodes only
+
+<!-- proofread -->

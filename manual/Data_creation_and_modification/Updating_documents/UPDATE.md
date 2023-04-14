@@ -2,14 +2,14 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+UPDATE changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
+Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 
-**Note that document id cannot be updated.**
+Note that the document ID cannot be updated.
 
-**Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.**
+Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.
 
 <!-- intro -->
 ##### SQL:
@@ -123,7 +123,7 @@ class UpdateResponse {
 
 <!-- example update multiple attributes -->
 
-Multiple attributes can be updated in a single statement.
+Multiple attributes can be updated in a single statement. Example:
 
 <!-- intro -->
 ##### SQL:
@@ -597,7 +597,7 @@ class UpdateResponse {
 
 <!-- example cluster update -->
 
-When using replication, the table name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP you should set a `cluster` property. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more info.
+When using replication, the table name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP, you should set a `cluster` property. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more information.
 
 ```json
 {
@@ -825,10 +825,10 @@ class UpdateResponse {
 OPTION <optionname>=<value> [ , ... ]
 ```
 
-The options are the same as for [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for `UPDATE` statement you can use these options:
+The options are the same as for the [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for the `UPDATE` statement, you can use these options:
 
-*   'ignore_nonexistent_columns' - If set to **1** points that the update will silently ignore any warnings about trying to update a column which is not exists in current table schema. Default value is  **0**.
-*   'strict' - this option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will end in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0 if multiple properties are updated and some are not allowed, the `UPDATE` will not end in error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` are not permitted, the command will end in an error even with strict=0.
+*   'ignore_nonexistent_columns' - If set to **1**, it indicates that the update will silently ignore any warnings about trying to update a column which does not exist in the current table schema. The default value is **0**.
+*   'strict' - This option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will result in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0, if multiple properties are updated and some are not allowed, the `UPDATE` will not result in an error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` re permitted, the command will result in an error even with strict=0.
 
 ### Query optimizer hints
 
@@ -874,7 +874,7 @@ POST /update
 
 <!-- example JSON Example_2 -->
 
-The id of the document that needs to be updated can be set directly using the `id` property (as in the example above) or you can do an update by query and apply the update to all the documents that match the query:
+The ID of the document that needs to be updated can be set directly using the `id` property, as shown in the previous example, or you can update documents by query and apply the update to all the documents that match the query:
 
 <!-- intro -->
 ##### JSON:
@@ -916,7 +916,7 @@ The query syntax is the same as in the [/search endpoint](../../Searching/Full_t
 FLUSH ATTRIBUTES
 ```
 
-Flushes all in-memory attribute updates in all the active disk tables to disk. Returns a tag that identifies the result on-disk state (basically, a number of actual disk attribute saves performed since the server startup).
+The FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active tables to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -937,7 +937,8 @@ See also [attr_flush_period](../../Data_creation_and_modification/Updating_docum
 
 <!-- example bulk update -->
 
-Several update operations can be performed in a single call using the `/bulk` endpoint. This endpoint only works with data that has `Content-Type` set to `application/x-ndjson`. The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline `\n` and maybe a `\r`.
+You can perform multiple update operations in a single call using the `/bulk` endpoint. This endpoint only works with data that has `Content-Type` set to `application/x-ndjson`. The data should be formatted as newline-delimited JSON (NDJSON). Essentially, this means that each line should contain exactly one JSON statement and end with a newline `\n` and, possibly, a `\r`.
+
 
 <!-- intro -->
 ##### JSON:
@@ -980,7 +981,7 @@ POST /bulk
 
 <!-- end -->
 
-`/bulk` endpoint supports inserts, replaces and deletes. Each statement starts with an action type (in this case, `update`). Here's a list of the supported actions:
+The `/bulk` endpoint supports inserts, replaces, and deletes. Each statement begins with an action type (in this case, `update`). Here's a list of the supported actions:
 
 * `insert`: Inserts a document. The syntax is the same as in the [/insert endpoint](../../Quick_start_guide.md#Add-documents).
 * `create`: a synonym for `insert`
@@ -1140,7 +1141,7 @@ class BulkResponse {
 
 
 
-Note that the bulk operation stops at the first query that results in an error.
+Keep in mind that the bulk operation stops at the first query that results in an error.
 
 ## Settings related with updates
 
@@ -1151,11 +1152,11 @@ attr_update_reserve=size
 ```
 
 <!-- example attr_update_reserve -->
-`attr_update_reserve` is a per-table setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
+`attr_update_reserve` is a per-table setting that determines the space reserved for blob attribute updates. This setting is optional, with a default value of 128k.
 
-When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the `.spb` file. But if the updated string is longer, updates are written to the end of the `.spb` file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
+When blob attributes (MVAs, strings, JSON) are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the `.spb` file. However, if the updated string is longer, updates are written to the end of the `.spb` file. This file is memory-mapped, which means resizing it may be a rather slow process, depending on the OS implementation of memory-mapped files.
 
-To avoid frequent resizes, you can specify the extra space to be reserved at the end of the `.spb` file by using this option.
+To avoid frequent resizes, you can specify the extra space to be reserved at the end of the `.spb` file using this option.
 
 
 <!-- intro -->
@@ -1236,3 +1237,5 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 
 When updating attributes the changes are first written to in-memory copy of attributes. This setting allows to set the interval between flushing the updates to disk. It defaults to 0, which disables the periodic flushing, but flushing will still occur at normal shut-down.
+
+<!-- proofread -->

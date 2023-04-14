@@ -1,12 +1,12 @@
 # Full text operators
 
-The query string can contain certain operators that allow telling the conditions of how the words from the query string should be matched.
+The query string can include specific operators that define the conditions for how the words from the query string should be matched.
 
 ### Boolean operators
 
 #### AND operator
 
-There always is implicit `AND` operator, so "hello world" means that both "hello" and "world" must be present in matching document.
+An implicit `AND` operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
 
 ```sql
 hello  world
@@ -14,8 +14,7 @@ hello  world
 
 #### OR operator
 
-`OR` operator precedence is higher than AND, so `looking for cat | dog | mouse` means `looking for ( cat | dog | mouse )`
- and not `(looking for cat) | dog | mouse`.
+The `OR` operator has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
 
 ```sql
 hello | world
@@ -27,7 +26,7 @@ hello | world
 hello MAYBE world
 ```
 
-`MAYBE` operator works much like operator `|` but doesn't return documents which match only right subtree expression.
+The `MAYBE` operator functions similarly to the `|` operator, but it does not return documents that match only the right subtree expression.
 
 ### Negation operator
 
@@ -38,7 +37,7 @@ hello !world
 
 The negation operator enforces a rule for a word to not exist.
 
-Queries having **only** negations are **not** supported by default in Manticore Search. There's the server option [not_terms_only_allowed](../../Server_settings/Searchd.md#not_terms_only_allowed) to enable it.
+Queries containing **only** negations are **not** supported by default. To enable, use the server option [not_terms_only_allowed](../../Server_settings/Searchd.md#not_terms_only_allowed).
 
 ### Field search operator
 
@@ -46,15 +45,15 @@ Queries having **only** negations are **not** supported by default in Manticore 
 @title hello @body world
 ```
 
-Field limit operator limits subsequent searching to a given field. Normally, query will fail with an error message if given field name does not exist in the searched table. However, that can be suppressed by specifying `@@relaxed` option at the very beginning of the query:
+The field limit operator restricts subsequent searches to a specified field. By default, the query will fail with an error message if the given field name does not exist in the searched table. However, this behavior can be suppressed by specifying the `@@relaxed` option at the beginning of the query:
 
 ```sql
 @@relaxed @nosuchfield my query
 ```
 
-This can be helpful when searching through heterogeneous tables with different schemas.
+This can be useful when searching through heterogeneous tables with different schemas.
 
-Field position limit additionally restricts the searching to first N position within given field (or fields). For example, `@body [50] hello` will not match the documents where the keyword `hello` occurs at position 51 and below in the body.
+Field position limits additionally constrain the search to the first N positions within a given field (or fields). For example, `@body [50] hello` will not match documents where the keyword `hello` appears at position 51 or later in the body.
 
 ```sql
 @body[50] hello
@@ -66,14 +65,13 @@ Multiple-field search operator:
 @(title,body) hello world
 ```
 
-Ignore field search operator (will ignore any matches of 'hello world' from field 'title'):
+Ignore field search operator (ignores any matches of 'hello world' from the 'title' field):
 
 ```sql
 @!title hello world
 ```
 
-Ignore multiple-field search operator (if we have fields title,
-    subject and body then `@!(title)` is equivalent to `@(subject,body)`):
+Ignore multiple-field search operator (if there are fields 'title', 'subject', and 'body', then `@!(title)` is equivalent to `@(subject,body)`):
 
 ```sql
 @!(title,body) hello world
@@ -91,9 +89,9 @@ All-field search operator:
 "hello world"
 ```
 
-The phrase operator requires the words to be next to each other.
+The phrase operator mandates that the words be adjacent to each other.
 
-The phrase search operator may include a `match any term` modifier. Terms within the phrase operator are position significant. When the 'match any term' modifier is implemented, the position of the subsequent terms from that phrase query will be shifted. Therefore, 'match any' has no impact on search performance.
+The phrase search operator can incorporate a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
 
 ```sql
 "exact * phrase * * for terms"
@@ -105,7 +103,7 @@ The phrase search operator may include a `match any term` modifier. Terms within
 "hello world"~10
 ```
 
-Proximity distance is specified in words, adjusted for word count, and applies to all words within quotes. For instance, `"cat dog mouse"~5` query means that there must be less than 8-word span which contains all 3 words, ie. `CAT aaa bbb ccc DOG eee fff MOUSE` document will not match this query, because this span is exactly 8 words long.
+Proximity distance is measured in words, accounting for word count, and applies to all words within quotes. For example, the query `"cat dog mouse"~5` indicates that there must be a span of fewer than 8 words containing all 3 words. Therefore, a document with `CAT aaa bbb ccc DOG eee fff MOUSE` will not match this query, as the span is exactly 8 words long.
 
 ###  Quorum matching operator
 
@@ -113,7 +111,7 @@ Proximity distance is specified in words, adjusted for word count, and applies t
 "the world is a wonderful place"/3
 ```
 
-Quorum matching operator introduces a kind of fuzzy matching. It will only match those documents that pass a given threshold of given words. The example above (`"the world is a wonderful place"/3`) will match all documents that have at least 3 of the 6 specified words. Operator is limited to 255 keywords. Instead of an absolute number, you can also specify a number between 0.0 and 1.0 (standing for 0% and 100%), and Manticore will match only documents with at least the specified percentage of given words. The same example above could also have been written `"the world is a wonderful place"/0.5` and it would match documents with at least 50% of the 6 words.
+The quorum matching operator introduces a type of fuzzy matching. It will match only those documents that meet a given threshold of specified words. In the example above (`"the world is a wonderful place"/3`), it will match all documents containing at least 3 of the 6 specified words. The operator is limited to 255 keywords. Instead of an absolute number, you can also provide a value between 0.0 and 1.0 (representing 0% and 100%), and Manticore will match only documents containing at least the specified percentage of given words. The same example above could also be expressed as `"the world is a wonderful place"/0.5`, and it would match documents with at least 50% of the 6 words.
 
 ### Strict order operator
 
@@ -121,7 +119,7 @@ Quorum matching operator introduces a kind of fuzzy matching. It will only match
 aaa << bbb << ccc
 ```
 
-Strict order operator (aka operator "before") will match the document only if its argument keywords occur in the document exactly in the query order. For instance, `black << cat` query (without quotes) will match the document "black and white cat" but not the "that cat was black" document. Order operator has the lowest priority. It can be applied both to just keywords and more complex expressions, ie. this is a valid query:
+The strict order operator (also known as the "before" operator) matches a document only if its argument keywords appear in the document precisely in the order specified in the query. For example, the query `black << cat` will match the document "black and white cat" but not the document "that cat was black". The order operator has the lowest priority. It can be applied to both individual keywords and more complex expressions. For instance, this is a valid query:
 
 ```sql
 (bag of words) << "exact phrase" << red|green|blue
@@ -134,11 +132,11 @@ raining =cats and =dogs
 ="exact phrase"
 ```
 
-Exact form keyword modifier will match the document only if the keyword occurred in exactly the specified form. The default behaviour is to match the document if the stemmed/lemmatized keyword matches. For instance, "runs" query will match both the document that contains "runs" and the document that contains "running", because both forms stem to just "run" while `=runs` query will only match the first document. Exact form operator requires [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
+The exact form keyword modifier matches a document only if the keyword appears in the exact form specified. By default, a document is considered a match if the stemmed/lemmatized keyword matches. For instance, the query "runs" will match both a document containing "runs" and one containing "running", because both forms stem to just "run". However, the `=runs` query will only match the first document. The exact form operator requires the [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
 
-Another use case is to avoid [expanding](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) a keyword to its `*keyword*` form. I.e. with `index_exact_words=1` + `expand_keywords=1/star` `bcd` will find a document containing `abcde`, but `=bcd` will not.
+Another use case is to prevent [expanding](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) a keyword to its `*keyword*` form. For example, with `index_exact_words=1` + `expand_keywords=1/star`, `bcd` will find a document containing `abcde`, but `=bcd` will not.
 
-This is a modifier that affects the keyword and thus can be used within operators such as phrase, proximity, and quorum operators. It is possible to apply an exact form modifier to the phrase operator. In this case it internally adds the exact form modifier to all terms in the phrase.
+As a modifier affecting the keyword, it can be used within operators such as phrase, proximity, and quorum operators. Applying an exact form modifier to the phrase operator is possible, and in this case, it internally adds the exact form modifier to all terms in the phrase.
 
 ### Wildcard operators
 
@@ -146,16 +144,16 @@ This is a modifier that affects the keyword and thus can be used within operator
 nation* *nation* *national
 ```
 
-Requires [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) for prefix (expansion in trail) and/or sufix (expansion in head). If only prefixing is wanted, [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) can be used instead.
+Requires [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) for prefix (expansion in trail) and/or suffix (expansion in head). If only prefixing is desired, [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) can be used instead.
 
-The search will try to find all the expansions of the wildcarded tokens and each expansion is recorded as a matched hit. The number of expansions for a token can be controlled with [expansion_limit](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) table setting. Wildcarded tokens can have a big impact on the query search time, especially when tokens have short length. In such cases is desired to use the expansion limit.
+The search will attempt to find all expansions of the wildcarded tokens, and each expansion is recorded as a matched hit. The number of expansions for a token can be controlled with the [expansion_limit](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) table setting. Wildcarded tokens can have a significant impact on query search time, especially when tokens have short lengths. In such cases, it is desirable to use the expansion limit.
 
-The wildcard operator can be automatically applied if [expand_keywords](../../Searching/Options.md#expand_keywords) table setting is used.
+The wildcard operator can be automatically applied if the [expand_keywords](../../Searching/Options.md#expand_keywords) table setting is used.
 
 In addition, the following inline wildcard operators are supported:
 
-* `?` can match any(one) character: `t?st` will match `test`, but not `teast`
-* `%` can match zero or one character : `tes%` will match `tes` or `test`, but not `testing`
+* `?` can match any single character: `t?st` will match `test`, but not `teast`
+* `%` can match zero or one character: `tes%` will match `tes` or `test`, but not `testing`
 
 The inline operators require `dict=keywords` and infixing enabled.
 
@@ -166,7 +164,7 @@ The inline operators require `dict=keywords` and infixing enabled.
 ^hello world$
 ```
 
-Field-start and field-end keyword modifiers will make the keyword match only if it occurred at the very start or the very end of a fulltext field, respectively. For instance, the query `"^hello world$"` (with quotes and thus combining phrase operator and start/end modifiers) will only match documents that contain at least one field that has exactly these two keywords.
+Field-start and field-end keyword modifiers ensure that a keyword only matches if it appears at the very beginning or the very end of a full-text field, respectively. For example, the query `"^hello world$"` (enclosed in quotes to combine the phrase operator with the start/end modifiers) will exclusively match documents containing at least one field with these two specific keywords.
 
 ### IDF boost modifier
 
@@ -174,7 +172,7 @@ Field-start and field-end keyword modifiers will make the keyword match only if 
 boosted^1.234 boostedfieldend$^1.234
 ```
 
-The boost modifier increases the word IDF score by the specified factor in ranking scores that use IDF in their formula. It does not affect the matching in any way.  
+The boost modifier raises the word IDF score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
 
 ### NEAR operator
 
@@ -182,18 +180,18 @@ The boost modifier increases the word IDF score by the specified factor in ranki
 hello NEAR/3 world NEAR/4 "my test"
 ```
 
-Operator `NEAR` is a generalized version of the proximity operator. The syntax is `NEAR/N`, it is case-sensitive, and no spaces are allowed between the `NEAR` keywords, the slash sign, and the distance value.
+The `NEAR` operator is a more generalized version of the proximity operator. Its syntax is `NEAR/N`, which is case-sensitive and does not allow spaces between the `NEAR` keywords, slash sign, and distance value.
 
-The original proximity operator only works on sets of keywords. `NEAR` is more generic and can accept arbitrary subexpressions as its two arguments, matching the document when both subexpressions are found within N words of each other, no matter in which order. `NEAR` is left associative and has the same (lowest) precedence as [BEFORE](../../Searching/Full_text_matching/Operators.md#Strict-order-operator).
+While the original proximity operator works only on sets of keywords, `NEAR` is more versatile and can accept arbitrary subexpressions as its two arguments. It matches a document when both subexpressions are found within N words of each other, regardless of their order. `NEAR` is left-associative and shares the same (lowest) precedence as [BEFORE](../../Searching/Full_text_matching/Operators.md#Strict-order-operator).
 
-You should also note how `one NEAR/7 two NEAR/7 three` is not really equivalent to `"one two three"~7`. The difference here is that the proximity operator allows for up to 6 non-matching words between all the 3 matching words, but the version with `NEAR` is less restrictive: it would allow for up to 6 words between `one` and `two` and then for up to 6 more between that two-word matching and `three`.
+It is important to note that `one NEAR/7 two NEAR/7 three` is not exactly equivalent to `"one two three"~7`. The key difference is that the proximity operator allows up to 6 non-matching words between all three matching words, while the version with `NEAR` is less restrictive: it permits up to 6 words between `one` and `two`, and then up to 6 more between that two-word match and `three`.
 
 ### NOTNEAR operator
 
 ```sql
 Church NOTNEAR/3 street
 ```
-Operator `NOTNEAR` is a negative assertion. It matches the document when left argument exists and either there is no right argument in document or right argument is distance away from left matched argument's end. The distance is specified in words. The syntax is `NOTNEAR/N`, it is case-sensitive, and no spaces are allowed between the `NOTNEAR` keyword, the slash sign, and the distance value. Both arguments of this operator might be terms or any operators or group of operators.
+The `NOTNEAR` operator serves as a negative assertion. It matches a document when the left argument is present and either the right argument is absent from the document or the right argument is a specified distance away from the end of the left matched argument. The distance is denoted in words. The syntax is `NOTNEAR/N`, which is case-sensitive and does not permit spaces between the `NOTNEAR` keyword, slash sign, and distance value. Both arguments of this operator can be terms or any operators or group of operators.
 
 ### SENTENCE and PARAGRAPH operators
 
@@ -205,9 +203,9 @@ all SENTENCE words SENTENCE "in one sentence"
 ```sql
 "Bill Gates" PARAGRAPH "Steve Jobs"
 ```
-`SENTENCE` and `PARAGRAPH` operators matches the document when both its arguments are within the same sentence or the same paragraph of text, respectively. The arguments can be either keywords, or phrases, or the instances of the same operator.
+The `SENTENCE` and `PARAGRAPH` operators match a document when both of their arguments are within the same sentence or the same paragraph of text, respectively. These arguments can be keywords, phrases, or instances of the same operator.
 
-The order of the arguments within the sentence or paragraph does not matter. These operators only work on tables built with [index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) (sentence and paragraph indexing feature) enabled, and revert to a mere AND otherwise. Refer to the [index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) directive documentation for the notes on what's considered a sentence and a paragraph.
+The order of the arguments within the sentence or paragraph is irrelevant. These operators function only with tables built with [index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) (sentence and paragraph indexing feature) enabled and revert to a simple AND operation otherwise. For information on what constitutes a sentence and a paragraph, refer to the [index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) directive documentation.
 
 
 ### ZONE limit operator
@@ -218,7 +216,7 @@ ZONE:(h3,h4)
 only in these titles
 ```
 
-`ZONE limit` operator is quite similar to field limit operator, but restricts matching to a given in-field zone or a list of zones. Note that the subsequent subexpressions are not required to match in a single contiguous span of a given zone, and may match in multiple spans. For instance, `(ZONE:th hello world)` query will match this example document:
+The `ZONE limit` operator closely resembles the field limit operator but limits matching to a specified in-field zone or a list of zones. It is important to note that subsequent subexpressions do not need to match within a single continuous span of a given zone and may match across multiple spans. For example, the query `(ZONE:th hello world)` will match the following sample document:
 
 ```html
 <th>Table 1. Local awareness of Hello Kitty brand.</th>
@@ -226,7 +224,7 @@ only in these titles
 <th>Table 2. World-wide brand awareness.</th>
 ```
 
-`ZONE` operator affects the query until the next field or `ZONE` limit operator, or the closing parenthesis. It only works on the tables built with zones support (see [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)) and will be ignored otherwise.
+The `ZONE` operator influences the query until the next field or `ZONE` limit operator, or until the closing parenthesis. It functions exclusively with tables built with zone support (refer to [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)) and will be disregarded otherwise.
 
 ### ZONESPAN limit operator
 
@@ -236,4 +234,6 @@ ZONESPAN:(h2)
 only in a (single) title
 ```
 
-`ZONESPAN` limit operator is similar to the `ZONE` operator, but requires the match to occur in a single contiguous span. In the example above, `ZONESPAN:th hello world` would not match the document, since "hello" and "world" do not occur within the same span.
+The `ZONESPAN` limit operator resembles the `ZONE` operator but mandates that the match occurs within a single continuous span. In the example provided earlier, `ZONESPAN:th hello world` would not match the document, as "hello" and "world" do not appear within the same span.
+
+<!-- proofread -->

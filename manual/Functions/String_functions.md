@@ -67,4 +67,3 @@ Note, `SNIPPET()` doesn't support limiting by fields. Use [HIGHLIGHT()](../Searc
 SELECT SUBSTRING_INDEX('www.w3schools.com', '.', 2) FROM test;
 SELECT SUBSTRING_INDEX(j.coord, ' ', 1) FROM test;
 ```
-

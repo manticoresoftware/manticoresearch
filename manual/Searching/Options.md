@@ -1,6 +1,6 @@
 # Search options
 
-SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and HTTP [/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint support a number of options that can be used to fine-tune search behaviour.
+The SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and the HTTP [/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint support a number of options that can be used to fine-tune search behavior.
 
 ## OPTION
 
@@ -106,7 +106,7 @@ Supported options are:
 ### accurate_aggregation
 Integer. Enables or disables guaranteed aggregate accuracy when running groupby queries in multiple threads. Default is 0.
 
-When running a groupby query, it can be run in parallel on plain index on several pseudo shards (if `pseudo_sharding` is on). A similar approach works on RT indexes. Each shard/chunk executes the query, but the number of groups is limited by `max_matches`. If the result sets from different shards/chunks have different groups, the group counts and aggregates may be inaccurate. Note that Manticore tries to increase `max_matches` up to [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) based on the number of unique values of the groupby attribute (retrieved from secondary indexes). If it succeeds, there will be no loss in accuracy.
+When running a groupby query, it can be run in parallel on a plain index with several pseudo shards (if `pseudo_sharding` is on). A similar approach works on RT indexes. Each shard/chunk executes the query, but the number of groups is limited by `max_matches`. If the result sets from different shards/chunks have different groups, the group counts and aggregates may be inaccurate. Note that Manticore tries to increase `max_matches` up to [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) based on the number of unique values of the groupby attribute (retrieved from secondary indexes). If it succeeds, there will be no loss in accuracy.
 
 However, if the number of unique values of the groupby attribute is high, further increasing `max_matches` may not be a good strategy because it can lead to a loss in performance and higher memory usage. Setting `accurate_aggregation` to 1 forces groupby searches to run in a single thread, which fixes the accuracy issue. Note that running in a single thread is only enforced when `max_matches` cannot be set high enough; otherwise, searches with `accurate_aggregation=1` will still run in multiple threads.
 
@@ -128,7 +128,7 @@ Integer. Max found matches threshold. The value is selected automatically if not
 * `N > 0`: instructs Manticore to stop looking for results as soon as it finds `N` documents.
 * not set: Manticore will decide automatically what the value should be.
 
-In case Manticore cannot calculate the exact matching documents count you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise you'll get `total_relation: eq`.
+In case Manticore cannot calculate the exact matching documents count, you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise, you'll get `total_relation: eq`.
 
 ### expand_keywords
 `0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
@@ -156,58 +156,56 @@ The historically default IDF (Inverse Document Frequency) in Manticore is equiva
 
 First, `idf=normalized` causes keyword penalization. For instance, if you search for `the | something` and `the` occurs in more than 50% of the documents, then documents with both keywords `the` and `something` will get less weight than documents with just one keyword `something`. Using `OPTION idf=plain` avoids this. Plain IDF varies in `[0, log(N)]` range, and keywords are never penalized; while the normalized IDF varies in `[-log(N), log(N)]` range, and too frequent keywords are penalized.
 
-Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we additionally divided IDF by query keyword count, so that the entire `sum(tf*idf)` over all keywords would still fit into [0,1] range. However, that means that queries `word1` and `word1 | nonmatchingword2` would assign different weights to the exactly same result set, because the IDFs for both `word1` and `nonmatchingword2` would be divided by 2. `OPTION idf='tfidf_unnormalized'` fixes that. Note that BM25, BM25A, BM25F() ranking factors will be scale accordingly once you disable this normalization.
+Second, `idf=tfidf_normalized` leads to IDF drift across queries. Historically, IDF was also divided by the query keyword count, ensuring the entire `sum(tf*idf)` across all keywords remained within the [0,1] range. However, this meant that queries like `word1` and `word1 | nonmatchingword2` would assign different weights to the exact same result set, as the IDFs for both `word1` and `nonmatchingword2` would be divided by 2. Using `OPTION idf='tfidf_unnormalized'` resolves this issue. Keep in mind that BM25, BM25A, BM25F() ranking factors will be adjusted accordingly when you disable this normalization.
 
-IDF flags can be mixed; `plain` and `normalized` are mutually exclusive; `tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.
+IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfidf_unnormalized` and `tfidf_normalized` are also mutually exclusive; and unspecified flags in such mutually exclusive groups default to their original settings. This means `OPTION idf=plain` is the same as specifying `OPTION idf='plain,tfidf_normalized'` in its entirety.
 
 ### index_weights
 Named integer list. Per-table user weights for ranking.
 
 ### local_df
-`0` or `1`,automatically sum DFs over all the local parts of a distributed table, so that the IDF is consistent (and precise) over a locally sharded table.
+`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table.
 
 ### low_priority
-`0` or `1` (`0` by default). `low_priority=1` runs the query with low priority in terms of Linux CPU scheduling. Consider also option `threads=1` instead, or use that together with `low_priority=1`, as it might be better in some use cases.
+`0` or `1` (`0` by default). Setting `low_priority=1` executes the query with a lower priority in terms of Linux CPU scheduling. You may also consider using the `threads=1` option instead, or combine it with `low_priority=1`, as it could be more effective in certain scenarios.
 
 ### max_matches
 Integer. Per-query max matches value.
 
-Maximum amount of matches that the server keeps in RAM for each table and can return to the client. Default is 1000.
+The maximum number of matches that the server retains in RAM for each table and can return to the client. The default is 1000.
 
-Introduced in order to control and limit RAM usage, `max_matches` setting defines how much matches will be kept in RAM while searching each table. Every match found will still be processed; but only best N of them will be kept in memory and return to the client in the end. Assume that the table contains 2,000,000 matches for the query. You rarely (if ever) need to retrieve all of them. Rather, you need to scan all of them, but only choose “best” at most, say, 500 by some criteria (ie. sorted by relevance, or price, or anything else), and display those 500 matches to the end user in pages of 20 to 100 matches. And tracking only the best 500 matches is much more RAM and CPU efficient than keeping all 2,000,000 matches, sorting them, and then discarding everything but the first 20 needed to display the search results page. `max_matches` controls N in that "best N" amount.
+Introduced to control and limit RAM usage, the `max_matches` setting determines how many matches will be kept in RAM while searching each table. Every match found is still processed, but only the best N of them will be retained in memory and returned to the client in the end. For example, suppose a table contains 2,000,000 matches for a query. It's rare that you would need to retrieve all of them. Instead, you need to scan all of them but only choose the "best" 500, for instance, based on some criteria (e.g., sorted by relevance, price, or other factors) and display those 500 matches to the end user in pages of 20 to 100 matches. Tracking only the best 500 matches is much more RAM and CPU efficient than keeping all 2,000,000 matches, sorting them, and then discarding everything but the first 20 needed for the search results page. `max_matches` controls the N in that "best N" amount.
 
-This parameter noticeably affects per-query RAM and CPU usage. Values of 1,000 to 10,000 are generally fine, but higher limits must be used with care. Recklessly raising max_matches to 1,000,000 means that `searchd` will have to allocate and initialize 1-million-entry matches buffer for every query. That will obviously increase per-query RAM usage, and in some cases can also noticeably impact performance.
+This parameter significantly impacts per-query RAM and CPU usage. Values of 1,000 to 10,000 are generally acceptable, but higher limits should be used with caution. Carelessly increasing max_matches to 1,000,000 means that `searchd` will have to allocate and initialize a 1-million-entry matches buffer for every query. This will inevitably increase per-query RAM usage and, in some cases, can noticeably affect performance.
 
-See also [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), which can affect the behavior of the `max_matches` option.
+Refer to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) for additional information on how it can influence the behavior of the `max_matches` option.
 
 ### max_matches_increase_threshold
 
 Integer. Sets the threshold that `max_matches` can be increased to. Default is 16384.
 
-Manticore may increase `max_matches` to improve groupby and/or aggregation accuracy when `pseudo_sharding` is enabled and if it detects that the number of unique values
-of groupby attribute is less than this threshold. Loss of accuracy may occur when pseudo sharding executes the query in several threads or RT table performs
-parallel searches in disk chunks.
+Manticore may increase `max_matches` to enhance groupby and/or aggregation accuracy when `pseudo_sharding` is enabled, and if it detects that the number of unique values of the groupby attribute is less than this threshold. Loss of accuracy may occur when pseudo-sharding executes the query in multiple threads or when an RT table conducts parallel searches in disk chunks.
 
-If the number of unique values of groupby attribute is less than the threshold, `max_matches` will be set to this number. Otherwise, default `max_matches` will be used.
+If the number of unique values of the groupby attribute is less than the threshold, `max_matches` will be set to this number. Otherwise, the default `max_matches` will be used.
 
-If `max_matches` was set explicitly in query options, this threshold has no effect.
+If `max_matches` was explicitly set in query options, this threshold has no effect.
 
-Note that if this threshold is set too high, the result will be increased memory consumption and general performance degradation.
+Keep in mind that if this threshold is set too high, it will result in increased memory consumption and general performance degradation.
 
-You can also force guaranteed groupby/aggregate accuracy mode using [accurate_aggregation](../Searching/Options.md#accurate_aggregation) option.
+You can also enforce a guaranteed groupby/aggregate accuracy mode using the [accurate_aggregation](../Searching/Options.md#accurate_aggregation) option.
 
 ### max_query_time
-Sets maximum search query time, in milliseconds. Must be a non-negative integer. Default value is 0 which means "do not limit". Local search queries will be stopped once that much time has elapsed. Note that if you're performing a search which queries several local tables, this limit applies to each table separately. Note it may increase the query's response time a little bit, the overhead is caused by constant tracking if it's time to stop the query.
+Sets the maximum search query time in milliseconds. Must be a non-negative integer. The default value is 0, which means "do not limit." Local search queries will be stopped once the specified time has elapsed. Note that if you're performing a search that queries multiple local tables, this limit applies to each table separately. Be aware that this may slightly increase the query's response time due to the overhead caused by constantly tracking whether it's time to stop the query.
 
 ### max_predicted_time
-Integer. Max predicted search time, see [predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs).
+Integer. Maximum predicted search time; see [predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs).
 
 ### morphology
-`none` allows to replace all query terms with their exact forms if table was built with [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. Useful to prevent stemming or lemmatizing query terms.
+`none` allows replacing all query terms with their exact forms if the table was built with [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. This is useful for preventing stemming or lemmatizing query terms.
 
 ### not_terms_only_allowed
 <!-- example not_terms_only_allowed -->
-`0` or `1`, allows standalone [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) for the query. Default is 0. See also corresponding [global setting](../Server_settings/Searchd.md#not_terms_only_allowed).
+`0` or `1` allows standalone [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) for the query. The default is 0. See also the corresponding [global setting](../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- request SQL -->
 ```sql
@@ -223,7 +221,7 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 <!-- end -->
 
 ### ranker
-Any of:
+Choose from the following options:
 * `proximity_bm25`
 * `bm25`
 * `none`
@@ -233,30 +231,30 @@ Any of:
 * `fieldmask`
 * `sph04`
 * `expr`
-* or `export`
+* `export`
 
-Refer to [Search results ranking](../Searching/Sorting_and_ranking.md) for more details on each ranker.
+For more details on each ranker, refer to [Search results ranking](../Searching/Sorting_and_ranking.md).
 
 ### rand_seed
-Lets you specify a specific integer seed value for an `ORDER BY RAND()` query, for example: `... OPTION rand_seed=1234`. By default, a new and different seed value is autogenerated for every query
+Allows you to specify a specific integer seed value for an `ORDER BY RAND()` query, for example: `... OPTION rand_seed=1234`. By default, a new and different seed value is autogenerated for every query.
 
 ### retry_count
 Integer. Distributed retries count.
 
 ### retry_delay
-Integer. Distributed retry delay, msec.
+Integer. Distributed retry delay, in milliseconds.
 
 ### sort_method
 * `pq` - priority queue, set by default
-* `kbuffer` - gives faster sorting for already pre-sorted data, e.g. table data sorted by id
-The result set is in both cases the same; picking one option or the other may just improve (or worsen!) performance.
+* `kbuffer` - provides faster sorting for already pre-sorted data, e.g., table data sorted by id
+The result set is the same in both cases; choosing one option or the other may simply improve (or worsen) performance.
 
 ### threads
-Limits max number of threads to use for current query processing. Default - no limit (the query can occupy all [threads](../Server_settings/Searchd.md#threads) as defined globally).
-For batch of queries the option must be attached to the very first query in the batch, and it is then applied when working queue is created and then is effective for the whole batch. This option has same meaning as option [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query), but applied only to the current query or batch of queries.
+Limits the max number of threads used for current query processing. Default - no limit (the query can occupy all [threads](../Server_settings/Searchd.md#threads) as defined globally).
+For a batch of queries, the option must be attached to the very first query in the batch, and it is then applied when the working queue is created and is effective for the entire batch. This option has the same meaning as the option [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query), but is applied only to the current query or batch of queries.
 
 ### token_filter
-Quoted, colon-separated of `library name:plugin name:optional string of settings`. Query-time token filter gets created on search each time full-text invoked by every table involved and let you implement a custom tokenizer that makes tokens according to custom rules.
+Quoted, colon-separated string of `library name:plugin name:optional string of settings`. A query-time token filter is created for each search when full-text is invoked by every table involved, allowing you to implement a custom tokenizer that generates tokens according to custom rules.
 ```sql
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
@@ -272,7 +270,7 @@ In rare cases, Manticore's built-in query analyzer may be incorrect in understan
 * `/*+ ColumnarScan(<attr_name1>[, <attr_nameN>]) */`  to force the use of a columnar scan (if the attribute is columnar), `/*+ NO_ColumnarScan(id) */` to tell the optimizer to ignore it
 * `/*+ OptimizeFulltextFilters */` to force intersection of full-text tree results with filter results (as opposed to standard match-then-filter scheme), `/*+ NO_OptimizeFulltextFilters */`  to use standard full-text matching. Note that other hints can be used to control what entities are used to calculate filter results.
 
-For more information on how the query optimizer works, see the [Cost based optimizer](../Searching/Cost_based_optimizer.md).
+For more information on how the query optimizer works, refer to the [Cost based optimizer](../Searching/Cost_based_optimizer.md) page.
 
 <!-- request SQL -->
 
@@ -281,3 +279,5 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```
 
 <!-- end -->
+
+<!-- proofread -->

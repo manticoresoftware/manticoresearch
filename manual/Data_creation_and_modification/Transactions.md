@@ -85,7 +85,7 @@ Empty set (0.00 sec)
 
 In this case, changes are NOT automatically committed. As a result, the insertions are not visible, even in the same session, since they have not been committed. Also, despite the absence of a `BEGIN` statement, a transaction is implicitly started.
 
-So, let's finally commit it:
+To make the changes visible, you need to commit the transaction:
 
 ```sql
 commit;
@@ -108,7 +108,7 @@ select * from indexrt where id=3;
 1 row in set (0.00 sec)
 ```
 
-Now it is finished and visible.
+After the commit statement, the insertions are visible in the table.
 
 ### Manual transaction
 

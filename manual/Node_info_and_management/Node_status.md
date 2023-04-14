@@ -3,17 +3,17 @@
 ## STATUS
 
 <!-- example status -->
-The easiest way to see high-level information about your Manticore node is by running `status` in mysql client. It will show you information about different things:
-* current version
-* whether SSL is in effect or not
-* current TCP port/unix socket
-* uptime
-* number of [threads](../Server_settings/Searchd.md#threads)
-* number of [jobs in queue](../Server_settings/Searchd.md#jobs_queue_size)
-* number of connections (`clients`)
-* number of tasks being processed now
-* number of queries made since start
-* number or jobs in queue and number of tasks normalized by number of threads
+The easiest way to view high-level information about your Manticore node is by running `status` in the MySQL client. It will display information about various aspects, such as:
+* Current version
+* Whether SSL is in effect or not
+* Current TCP port/Unix socket
+* Uptime
+* Number of [threads](../Server_settings/Searchd.md#threads)
+* Number of [jobs in queue](../Server_settings/Searchd.md#jobs_queue_size)
+* Number of connections (`clients`)
+* Number of tasks being processed currently
+* Number of queries executed since the start
+* Number of jobs in queue and number of tasks, normalized by the number of threads
 
 <!-- request SQL -->
 ```sql
@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` is an SQL statement that displays a number of useful performance counters. IO and CPU counters will only be available if searchd was started with `--iostats` and `--cpustats` switches respectively (or they were enabled via `SET GLOBAL iostats/cpustats=1`).
+`SHOW STATUS` is an SQL statement that presents various helpful performance counters. IO and CPU counters will only be available if `searchd` was started with the `--iostats` and `--cpustats` switches, respectively (or if they were enabled via `SET GLOBAL iostats/cpustats=1`).
 
 <!-- intro -->
 ##### SQL:
@@ -132,7 +132,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-An optional `LIKE` clause is supported. It lets you pick just the variables that match a pattern. The pattern syntax is that of regular SQL wildcards, that is, `%` means any number of any characters, and `_` means a single character.
+An optional `LIKE` clause is supported, allowing you to select only the variables that match a specific pattern. The pattern syntax follows standard SQL wildcards, where `%` represents any number of any characters, and `_` represents a single character.
 
 <!-- intro -->
 ##### SQL:
@@ -165,9 +165,9 @@ SHOW STATUS LIKE 'qcache%';
 
 `SHOW SETTINGS` is an SQL statement that displays the current settings from your configuration file. The setting names are represented in the following format: `'config_section_name'.'setting_name'`
 
-The result also contains two additionary values: 
-- `configuration_file` - the path to the configuration file
-- `worker_pid` -  the process id of the running searchd instance
+The result also includes two additional values:
+- `configuration_file` - The path to the configuration file
+- `worker_pid` - The process ID of the running `searchd` instance
 
 <!-- intro -->
 ##### SQL:
@@ -208,7 +208,7 @@ SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` displays the statistic of [remote agents](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) or of a distributed table. It includes the values like the age of the last request, last answer, the number of different kind of errors and successes, etc. Statistic is shown for every agent for last 1, 5 and 15 intervals, each of them of [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) seconds.
+`SHOW AGENT STATUS` displays the statistics of [remote agents](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) or a distributed table. It includes values such as the age of the last request, last answer, the number of various types of errors and successes, and so on. Statistics are displayed for every agent for the last 1, 5, and 15 intervals, each consisting of [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) seconds.
 
 <!-- intro -->
 ##### SQL:
@@ -551,7 +551,7 @@ utilsApi.sql("SHOW AGENT STATUS");
 
 <!-- example SHOW AGENT LIKE -->
 
-An optional `LIKE` clause is supported, syntax is the same as in `SHOW STATUS`.
+An optional `LIKE` clause is supported, with the syntax being the same as in `SHOW STATUS`.
 
 <!-- intro -->
 ##### SQL:
@@ -665,7 +665,7 @@ utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 
 <!-- example show specific agent -->
 
-You can specify a particular agent by its address. In this case only that agent's data will be displayed. Also, `agent_` prefix will be used instead of `ag_N_`:
+You can specify a particular agent by its address. In this case, only that agent's data will be displayed. Additionally, the `agent_` prefix will be used instead of `ag_N_`:
 
 <!-- intro -->
 ##### SQL:
@@ -816,7 +816,7 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 <!-- end -->
 <!-- example show agent table status -->
 
-Finally, you can check the status of the agents in a specific distributed table. It can be done with a `SHOW AGENT index_name STATUS` statement. That statement shows the table HA status (i.e. whether or not it uses agent mirrors at all), and then the mirror information (specifically: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect).
+Finally, you can check the status of the agents in a specific distributed table using the `SHOW AGENT index_name STATUS` statement. This statement displays the table's HA status (i.e., whether or not it uses agent mirrors at all) and provides information on the mirrors, including: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect.
 
 <!-- intro -->
 ##### SQL:
@@ -986,7 +986,7 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 SHOW CHARACTER SET
 ```
 
-This is currently a placeholder query that does nothing and reports that a UTF-8 character set is available. It was added in order to keep compatibility with frameworks and connectors that automatically execute this statement.
+This is currently a placeholder query that does nothing and reports the availability of a UTF-8 character set. It was added to maintain compatibility with frameworks and connectors that automatically execute this statement.
 
 ```sql
 mysql> SHOW CHARACTER SET;
@@ -997,3 +997,4 @@ mysql> SHOW CHARACTER SET;
 +---------+---------------+-------------------+--------+
 1 row in set (0.00 sec)
 ```
+<!-- proofread -->

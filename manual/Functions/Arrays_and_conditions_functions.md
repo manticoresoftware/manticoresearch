@@ -304,32 +304,32 @@ select * from tbl where tags not any('feature', 'priority_low')
 
 ### IF()
 
-`IF()` behavior is slightly different than its MySQL counterpart. It takes 3 arguments, checks whether the 1st argument is equal to 0.0, returns the 2nd argument if it is not zero or the 3rd one when it is. Note that unlike comparison operators, `IF()` does **not** use a threshold! Therefore, it's safe to use comparison results as its 1st argument, but arithmetic operators might produce unexpected results. For instance, the following two calls will produce *different* results even though they are logically equivalent:
+The behavior of `IF()` is slightly different from its MySQL counterpart. It takes 3 arguments, checks whether the 1st argument is equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd one when it is. Note that unlike comparison operators, `IF()` does **not** use a threshold! Therefore, it's safe to use comparison results as its 1st argument, but arithmetic operators might produce unexpected results. For instance, the following two calls will produce *different* results even though they are logically equivalent:
 
 ```sql
 IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
 IF ( sqrt(3)*sqrt(3)-3, a, b )
 ```
 
-In the first case, the comparison operator <> will return 0.0 (false) because of a threshold, and `IF()` will always return `**` as a result. In the second one, the same `sqrt(3)*sqrt(3)-3` expression will be compared with zero *without* threshold by the `IF()` function itself. But its value will be slightly different from zero because of limited floating point calculations precision. Because of that, the comparison with 0.0 done by `IF()` will not pass, and the second variant will return 'a' as a result.
+In the first case, the comparison operator <> will return 0.0 (false) due to a threshold, and `IF()` will always return `**` as a result. In the second case, the same `sqrt(3)*sqrt(3)-3` expression will be compared with zero *without* a threshold by the `IF()` function itself. However, its value will be slightly different from zero due to limited floating-point calculation precision. Because of this, the comparison with 0.0 done by `IF()` will not pass, and the second variant will return 'a' as a result.
 
 
 ### IN()
-`IN(expr,val1,val2,...)` takes 2 or more arguments, and returns 1 if 1st argument (expr) is equal to any of the other arguments (val1..valN), or 0 otherwise. Currently, all the checked values (but not the expression itself!) are required to be constant. The constants are pre-sorted and then binary search is used, so `IN()` even against a big arbitrary list of constants will be very quick. First argument can also be an MVA attribute. In that case, `IN()` will return 1 if any of the MVA values is equal to any of the other arguments. IN() also supports `IN(expr,@uservar)` syntax to check whether the value belongs to the list in the given global user variable. First argument can be JSON attribute.
+`IN(expr,val1,val2,...)` takes 2 or more arguments and returns 1 if the 1st argument (expr) is equal to any of the other arguments (val1..valN), or 0 otherwise. Currently, all the checked values (but not the expression itself) are required to be constant. The constants are pre-sorted, and binary search is used, so `IN()` even against a large arbitrary list of constants will be very quick. The first argument can also be an MVA attribute. In that case, `IN()` will return 1 if any of the MVA values are equal to any of the other arguments. `IN()` also supports `IN(expr,@uservar)` syntax to check whether the value belongs to the list in the given global user variable. The first argument can be a JSON attribute.
 
 ### INDEXOF()
-`INDEXOF(cond FOR var IN json.array)` function iterates through all elements in array and returns index of first element for which 'cond' is true and -1 if 'cond' is false for every element in array.
+`INDEXOF(cond FOR var IN json.array)` function iterates through all elements in the array and returns the index of the first element for which 'cond' is true, and -1 if 'cond' is false for every element in the array.
 
 ### INTERVAL()
-`INTERVAL(expr,point1,point2,point3,...)`, takes 2 or more arguments, and returns the index of the argument that is less than the first argument: it returns 0 if `expr<point1`, 1 if `point1<=expr<point2`, and so on. It is required that `point1<point2<...<pointN` for this    function to work correctly.
+`INTERVAL(expr,point1,point2,point3,...)` takes 2 or more arguments and returns the index of the argument that is less than the first argument: it returns 0 if `expr<point1`, 1 if `point1<=expr<point2`, and so on. It is required that `point1<point2<...<pointN` for this function to work correctly.
 
 
 ### LENGTH()
-`LENGTH(attr_mva)` function returns amount of elements in MVA set. It works with both 32-bit and 64-bit MVA attributes. LENGTH(attr_json) returns length of a field in JSON. Return value depends on type of a field. For example LENGTH(json_attr.some_int) always returns 1 and LENGTH(json_attr.some_array) returns number of elements in array. LENGTH(string_expr) function returns the length of the string resulted from an expression.
-[TO_STRING()](../Functions/Type_casting_functions.md#TO_STRING%28%29) must enclose the expression, regardless if the expression returns a   non-string or it's simply a string attribute.
+`LENGTH(attr_mva)` function returns the number of elements in an MVA set. It works with both 32-bit and 64-bit MVA attributes. `LENGTH(attr_json)` returns the length of a field in JSON. The return value depends on the type of field. For example, `LENGTH(json_attr.some_int)` always returns 1, and `LENGTH(json_attr.some_array)` returns the number of elements in the array. `LENGTH(string_expr)` function returns the length of the string resulting from an expression.
+[TO_STRING()](../Functions/Type_casting_functions.md#TO_STRING%28%29) must enclose the expression, regardless of whether the expression returns a non-string or it's simply a string attribute.
 
 ### REMAP()
-`REMAP(condition, expression, (cond1, cond2, ...), (expr1, expr2, ...))` function allows you to make some exceptions of an expression values depending on condition values. Condition expression should always result integer, expression can result in integer or float.
+`REMAP(condition, expression, (cond1, cond2, ...), (expr1, expr2, ...))` function allows you to make some exceptions to expression values depending on condition values. The condition expression should always result in an integer, while the expression can result in an integer or float.
 
 Example:
 
@@ -339,7 +339,7 @@ FROM products
 ORDER BY s ASC;
 ```
 
-This will put documents with sizes 5 and 6 first, lower will go sizes 7 an 8. In case there's an original value not listed in the array (e.g. size 10) it will be defaulted to 15 and in this case will be put to the end.
+This will put documents with sizes 5 and 6 first, followed by sizes 7 and 8. In case there's an original value not listed in the array (e.g. size 10), it will default to 15, and in this case, will be placed at the end.
 
 More examples:
 
@@ -347,3 +347,4 @@ More examples:
 SELECT REMAP(userid, karmapoints, (1, 67), (999, 0)) FROM users;
 SELECT REMAP(id%10, salary, (0), (0.0)) FROM employes;
 ```
+<!-- proofread -->

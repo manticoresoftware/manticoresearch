@@ -1,14 +1,14 @@
 # MATCH
 
-The `MATCH` clause allows to perform  full-text searches in text fields. The query string at input is [tokenized](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md) using same settings applied to the text during indexing. In addition to tokenization of input text, the query string supports a number of [full-text operators](../../Searching/Full_text_matching/Operators.md) that allow enforcing different rules on how keywords should provide a valid match.
+The `MATCH` clause allows for full-text searches in text fields. The input query string is [tokenized](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md) using the same settings applied to the text during indexing. In addition to the tokenization of input text, the query string supports a number of [full-text operators](../../Searching/Full_text_matching/Operators.md) that enforce various rules on how keywords should provide a valid match.
 
-The full-text match clauses can be combined with attribute [filters](../../Searching/Filters.md) as an AND boolean. **OR relation between full-text matches and attribute filters are not supported**.
+Full-text match clauses can be combined with attribute [filters](../../Searching/Filters.md) as an AND boolean. **OR relations between full-text matches and attribute filters are not supported**.
 
-The match query is always executed first in the filtering process, followed by the [attribute filters](../../Searching/Filters.md). The attribute filters are applied on the result set of the match query. A query without a match clause is called a fullscan.
+The match query is always executed first in the filtering process, followed by the [attribute filters](../../Searching/Filters.md). The attribute filters are applied to the result set of the match query. A query without a match clause is called a fullscan.
 
 There must be at most one `MATCH()` in the `SELECT` clause.
 
-Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.md) matching  is performed over all indexed text fields of a document, unless the expression requires to be match within a field (like phrase search) or limited by field operators.
+Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.md), matching is performed across all indexed text fields of a document, unless the expression requires a match within a field (like phrase search) or is limited by field operators.
 
 ## SQL
 <!-- example Example_1 -->
@@ -52,7 +52,7 @@ Full-text matching is available in the `/search` endpoint and in HTTP-based clie
 
 ### match
 
-"match" is a simple query that matches the specified keywords in the specified fields
+"match" is a simple query that matches the specified keywords in the specified fields.
 
 ```json
 "query":
@@ -79,7 +79,7 @@ You can search all fields except one using "!field":
   "!field1": "keyword"
 }
 ```
-By default keywords are combined using the OR operator. However, you can change that behaviour using the "operator" clause:
+By default, keywords are combined using the OR operator. However, you can change that behavior using the "operator" clause:
 
 ```json
 "query":
@@ -109,7 +109,7 @@ By default keywords are combined using the OR operator. However, you can change 
 ```
 
 ### query_string
-"query_string" accepts an input string as a full-text query in `MATCH()` syntax
+"query_string" accepts an input string as a full-text query in `MATCH()` syntax.
 
 ```json
 "query":
@@ -121,7 +121,7 @@ By default keywords are combined using the OR operator. However, you can change 
 
 ### Combining full-text filtering with other filters
 
-All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not) and [should](../../Searching/Filters.md#should) operators of an [HTTP `bool` query](../../Searching/Filters.md#bool-query).
+All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of an [HTTP `bool` query](../../Searching/Filters.md#bool-query).
 
 <!-- intro -->
 Examples:
@@ -345,3 +345,4 @@ class SearchResponse {
 }
 ```
 <!-- end -->
+<!-- proofread -->

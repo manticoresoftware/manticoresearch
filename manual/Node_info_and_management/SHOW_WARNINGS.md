@@ -26,3 +26,4 @@ Message: quorum threshold too high (words=2, thresh=3); replacing quorum operato
          with AND operator
 1 row in set (0.00 sec)
 ```
+<!-- proofread -->

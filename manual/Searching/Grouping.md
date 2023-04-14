@@ -1,15 +1,15 @@
 # Grouping search results
 
 <!-- example general -->
-It's often useful to group search results to get per-group match counts or  other aggregations. For instance, to draw a nice graph of how much matching blog posts were there per month or to group web search results by site or forum posts by author etc.
+Grouping search results is often helpful for obtaining per-group match counts or other aggregations. For example, it's useful for creating a graph illustrating the number of matching blog posts per month or grouping web search results by site or forum posts by author, etc.
 
-Manticore supports grouping of search results by one or multiple columns and computed expressions. The results can:
+Manticore supports the grouping of search results by single or multiple columns and computed expressions. The results can:
 
-* be sorted inside a group
-* have more than one row returned per group
-* have groups filtered
-* have groups sorted
-* be aggregated with help of the [aggregation functions](../Searching/Grouping.md#Aggregation-functions)
+* Be sorted within a group
+* Return more than one row per group
+* Have groups filtered
+* Have groups sorted
+* Be aggregated using the [aggregation functions](../Searching/Grouping.md#Aggregation-functions)
 
 <!-- intro -->
 The general syntax is:
@@ -29,7 +29,7 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 <!-- request JSON -->
-JSON query format supports currently a simple grouping that can retrieve the aggregate values and their count(*).
+JSON query format currently supports a basic grouping that can retrieve aggregate values and their count(*).
 
 ```json
 {
@@ -46,19 +46,19 @@ JSON query format supports currently a simple grouping that can retrieve the agg
 }
 ```
 
-The normal query output returns the result set without grouping and can be hidden with `limit` (or `size`).
-The aggregation requires to set a `size` for the size of the result set group.  
+The standard query output returns the result set without grouping, which can be hidden using `limit` (or `size`).
+The aggregation requires setting a `size` for the group's result set size.
 
 <!-- end -->
 
 <!-- example group1 -->
 ### Just Grouping
-Grouping is very simple - just add "GROUP BY smth" to the end of your `SELECT` query. The something can be:
+Grouping is quite simple - just add "GROUP BY smth" to the end of your `SELECT` query. The something can be:
 
-* any non-full-text field from the table: integer, float, string, MVA (multi-value attribute)
-* or if you used an alias in the `SELECT` list - you can GROUP BY it too
+* Any non-full-text field from the table: integer, float, string, MVA (multi-value attribute)
+* Or, if you used an alias in the `SELECT` list, you can GROUP BY it too
 
-You can omit any [aggregation functions](../Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will work too:
+You can omit any [aggregation functions](../Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will still work:
 
 <!-- intro -->
 ##### Example:
@@ -81,10 +81,10 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- end -->
 <!-- example group2 -->
-But in most cases you want to get something aggregated for each group, for example:
+In most cases, however, you'll want to obtain some aggregated data for each group, such as:
 
-* `COUNT(*)` to just get number of elements in each groups
-* or `AVG(field)` to get an average value of the field in the group
+* `COUNT(*)` to simply get the number of elements in each group
+* or `AVG(field)` to calculate the average value of the field within the group
 
 
 <!-- intro -->
@@ -331,7 +331,7 @@ class SearchResponse {
 
 <!-- example sort1 -->
 ##### Sorting groups
-By default the groups are not sorted and the next thing you normally want to do is to order them by something. For example the field you are grouping by:
+By default, groups are not sorted, and the next thing you typically want to do is order them by something, like the field you're grouping by:
 
 <!-- intro -->
 ##### Example:
@@ -354,10 +354,10 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 ```
 <!-- end -->
 <!-- example sort2 -->
-Or vice-versa - by the aggregation:
+Alternatively, you can sort by the aggregation:
 
-* by `count(*)` to see those groups that have most elements first
-* by `avg(rental_rate)` to see most rated movies first. Note that in the example it's done via an alias: `avg(rental_rate)` is first mapped to `avg` in the `SELECT` list and then we just do `ORDER BY avg`
+* by `count(*)` to display groups with the most elements first
+* by `avg(rental_rate)` to show the highest-rated movies first. Note that in the example, it's done via an alias: `avg(rental_rate)` is first mapped to `avg` in the `SELECT` list, and then we simply do `ORDER BY avg`
 
 
 <!-- intro -->
@@ -400,7 +400,7 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 
 <!-- example group3 -->
 ##### GROUP BY multiple fields at once
-In some cases you might want to group not by a single, but by multiple fields at once, for example movie's category and year:
+In some cases, you might want to group not just by a single field, but by multiple fields at once, such as a movie's category and year:
 
 <!-- intro -->
 ##### Example:
@@ -440,7 +440,7 @@ SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, rele
 
 <!-- example group4 -->
 ##### Give me N rows
-Sometimes it's useful to see not a single element per group, but multiple. This can be easily done with help of `GROUP N BY`. For example here you can see that we get 2 movies for each year rather than one which would simple `GROUP BY release_year` returned.
+Sometimes it's useful to see not just a single element per group, but multiple. This can be easily achieved with the help of `GROUP N BY`. For example, in the following case, we get two movies for each year rather than just one, which a simple `GROUP BY release_year` would have returned.
 
 <!-- intro -->
 ##### Example:
@@ -466,12 +466,12 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 
 <!-- example group5 -->
 ##### Sorting inside a group
-Another essential analytics demand is to sort elements within a group. For that there's `WITHIN GROUP ORDER BY ... {ASC|DESC}` clause. For example let's get the most rated film for each year. Note it works in parallel with just `ORDER BY`:
+Another crucial analytics requirement is to sort elements within a group. To achieve this, use the `WITHIN GROUP ORDER BY ... {ASC|DESC}` clause. For example, let's get the highest-rated film for each year. Note that it works in parallel with just `ORDER BY`:
 
 * `WITHIN GROUP ORDER BY` sorts results **inside a group**
 * while just `GROUP BY` **sorts the groups themselves**
 
-The work absolutely independently.
+These two work entirely independently.
 
 
 <!-- intro -->
@@ -497,7 +497,7 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 
 <!-- example group6 -->
 ##### Filter groups
-`HAVING expression` is a useful clause to filter groups. If `WHERE` is applied before grouping `HAVING` works with the groups. For example let's leave only those years when an average rental rate of the films of that year was higher than 3. We get only 4 years:
+`HAVING expression` is a helpful clause for filtering groups. While `WHERE` is applied before grouping, `HAVING` works with the groups. For example, let's keep only those years when the average rental rate of the films for that year was higher than 3. We get only four years:
 
 <!-- intro -->
 ##### Example:
@@ -521,11 +521,11 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 
 <!-- example group7 -->
 ##### GROUPBY()
-There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases especially when you [GROUP BY an MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](../Searching/Grouping.md#Grouping-by-a-JSON-node).
+There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases, especially when you [GROUP BY an MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](../Searching/Grouping.md#Grouping-by-a-JSON-node).
 
-It can be also used in `HAVING` to for example leave only years 2000 and 2002.
+It can also be used in `HAVING`, for example, to keep only years 2000 and 2002.
 
-Note that `GROUPBY()`is not recommended for use when you GROUP BY multiple fields at once. It will still work, but since the group key in this case is compound of field values it may look not the way you expect.
+Note that `GROUPBY()`is not recommended for use when you GROUP BY multiple fields at once. It will still work, but since the group key in this case is a compound of field values, it may not appear the way you expect.
 
 <!-- intro -->
 ##### Example:
@@ -546,7 +546,7 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 <!-- end -->
 <!-- example mva -->
 ##### Grouping by MVA (multi-value attributes)
-Manticore supports grouping by [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
+Manticore supports grouping by [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). To demonstrate how it works, let's create a table "shoes" with MVA "sizes" and insert a few documents into it:
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
@@ -562,7 +562,7 @@ SELECT * FROM shoes;
 | 1657851069130080267 | 42,43    | reebook |
 +---------------------+----------+---------+
 ```
-If we now GROUP BY "sizes" it will process all our multi-value attributes and will return aggregation for each, in this case just count:
+If we now GROUP BY "sizes", it will process all our multi-value attributes and return an aggregation for each, in this case just the count:
 
 <!-- intro -->
 ##### Example:
@@ -741,7 +741,7 @@ class SearchResponse {
 
 <!-- example json -->
 ##### Grouping by a JSON node
-If you have a field of type [JSON](../Creating_a_table/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
+If you have a field of type [JSON](../Creating_a_table/Data_types.md#JSON), you can GROUP BY any node from it. To demonstrate this, let's create a table "products" with a few documents, each having a color in the "meta" JSON field:
 ```sql
 create table products(title text, meta json);
 insert into products values(0,'nike','{"color":"red"}'),(0,'adidas','{"color":"red"}'),(0,'puma','{"color":"green"}');
@@ -757,7 +757,7 @@ SELECT * FROM products;
 | 1657851069130080270 | {"color":"green"} | puma   |
 +---------------------+-------------------+--------+
 ```
-To group the products by color we can just `GROUP BY meta.color` and to show the corresponding group key in the `SELECT` list we can use `GROUPBY()`:
+To group the products by color, we can simply use `GROUP BY meta.color`, and to display the corresponding group key in the `SELECT` list, we can use `GROUPBY()`:
 
 <!-- intro -->
 ##### Example:
@@ -914,10 +914,10 @@ class SearchResponse {
 <!-- end -->
 
 ## Aggregation functions
-Besides `COUNT(*)` which returns number of elements in each group you can use different other aggregation functions:
+Besides `COUNT(*)`, which returns the number of elements in each group, you can use various other aggregation functions:
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
-While `COUNT(*)` returns number of all elements in the group `COUNT( DISTINCT field)` returns number of different values of the field in the group which may be absolutely different from the total count: you can have 100 elements in the group, but all with the same value of some field. `COUNT(DISTINCT field)` helps to figure that out. To demonstrate it let's create table "students" with student's name, age and major:
+While `COUNT(*)` returns the number of all elements in the group, `COUNT(DISTINCT field)` returns the number of unique values of the field in the group, which may be completely different from the total count. For instance, you can have 100 elements in the group, but all with the same value for a certain field. `COUNT(DISTINCT field)` helps to determine that. To demonstrate this, let's create a table "students" with the student's name, age, and major:
 ```sql
 CREATE TABLE students(name text, age int, major string);
 INSERT INTO students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
@@ -938,11 +938,11 @@ MySQL [(none)]> SELECT * from students;
 +---------------------+------+----------+---------+
 ```
 
-In the example you can see that if we GROUP BY major and show both `COUNT(*)` and `COUNT(DISTINCT age)` it gets clear that there are 2 students that chose major "cs" and 2 unique ages, but for the major "arts" there are also 2 students, but only one unique age.
+In the example, you can see that if we GROUP BY major and display both `COUNT(*)` and `COUNT(DISTINCT age)`, it becomes clear that there are two students who chose the major "cs" with two unique ages, but for the major "arts", there are also two students, yet only one unique age.
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
-**`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may be different tokenization settings).
+**`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may have different tokenization settings).
 
 <!-- intro -->
 ##### Example:
@@ -966,9 +966,9 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-Often you want to understand better the contents of each group. You can use [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) for that, but it would return additional rows you might not want in the output. `GROUP_CONCAT()` enriches your grouping by concatenating values of some field in the group. Let's take the previous example and improve it by getting all the ages in each group.
+Often, you want to better understand the contents of each group. You can use [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) for that, but it would return additional rows you might not want in the output. `GROUP_CONCAT()` enriches your grouping by concatenating values of a specific field in the group. Let's take the previous example and improve it by displaying all the ages in each group.
 
-`GROUP_CONCAT(field)` returns the list comma-separated.
+`GROUP_CONCAT(field)` returns the list as comma-separated values.
 
 <!-- intro -->
 ##### Example:
@@ -990,7 +990,7 @@ SELECT major, count(*), count(distinct age), group_concat(age) FROM students GRO
 <!-- end -->
 <!-- example sum -->
 ##### SUM(), MIN(), MAX(), AVG()
-And of course you can get sum, average, minimal and maximum values in the group.
+Of course, you can also obtain the sum, average, minimum, and maximum values within a group.
 
 <!-- intro -->
 ##### Example:
@@ -1018,7 +1018,7 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 
 Grouping is done in fixed memory, which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If `max_matches` allows for storage of all found groups, the results will be 100% accurate. However, if the value of `max_matches` is lower, the results will be less accurate.
 
-When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT index with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the results sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
+When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT index with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
 
 Manticore will try to increase `max_matches` up to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) if it detects that groupby may return inaccurate results. Detection is based on the number of unique values of the groupby attribute, which is retrieved from secondary indexes (if present).
 
@@ -1065,3 +1065,4 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 +------+----------+
 ```
 <!-- end -->
+<!-- proofread -->

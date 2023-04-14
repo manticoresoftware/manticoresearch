@@ -2,9 +2,9 @@
 
 <!-- example highlighting -->
 
-Highlighting allows you to get highlighted text fragments (called snippets) from documents that contain matching keywords.
+Highlighting enables you to obtain highlighted text fragments (referred to as snippets) from documents containing matching keywords.
 
-SQL's `HIGHLIGHT()` function, `"highlight"` property in json queries via HTTP and `highlight()` function in the PHP client all use built-in document storage for retrieving original field contents (enabled by default).
+The SQL `HIGHLIGHT()` function, the `"highlight"` property in JSON queries via HTTP, and the `highlight()` function in the PHP client all utilize the built-in document storage to retrieve the original field contents (enabled by default).
 
 <!-- intro -->
 ##### SQL:
@@ -173,54 +173,68 @@ class SearchResponse {
 ```
 <!-- end -->
 
-When using SQL to highlight search results, you get different snippets from different fields concatenated as a single string. It is a limitation of mysql protocol. You can fine-tune concatenation separators with `field_separator` and `snippet_separator` options, see below.
+When using SQL for highlighting search results, you will receive snippets from various fields combined into a single string due to the limitations of the MySQL protocol. You can adjust the concatenation separators with the `field_separator` and `snippet_separator` options, as detailed below.
 
-When running json queries via HTTP or using the PHP client, there are no such limitations and the result set contains an array of fields which contains arrays of snippets (without the separators).
+When executing JSON queries through HTTP or using the PHP client, there are no such constraints, and the result set includes an array of fields containing arrays of snippets (without separators).
 
-Note that snippet generation options such as `limit`, `limit_words`, `limit_snippets` are applied to each field separately (by default). You can change this behavior using the `limits_per_field` option, but it may lead to undesirable results. I.e. one of the fields has matching keywords, but no snippets from this field are included in the result set because they didn't rank as high as the snippets from the other fields in the highlighting engine.
+Keep in mind that snippet generation options like `limit`, `limit_words`, and `limit_snippets` apply to each field individually by default. You can alter this behavior using the `limits_per_field` option, but it could lead to unwanted results. For example, one field may have matching keywords, but no snippets from that field are included in the result set because they didn't rank as high as snippets from other fields in the highlighting engine.
 
-Highlighting algorithm currently favors better snippets (with closer phrase matches), and then snippets with keywords not yet included in the result. Generally, it will try to highlight the best match with the query, and it will also try to highlight all the query keywords, as made possible by the limits. If there are no matches in the current field, the beginning of the document trimmed down according to the limits will be return by default. You can also return an empty string instead by setting `allow_empty` option to 1.
+The highlighting algorithm currently prioritizes better snippets (with closer phrase matches) and then snippets with keywords not yet included in the result. Generally, it aims to highlight the best match for the query and to highlight all query keywords, as allowed by the limits. If no matches are found in the current field, the beginning of the document will be trimmed according to the limits and returned by default. To return an empty string instead, set the `allow_empty` option to 1.
 
-Highlighting is performed on a so-called `post limit` stage, meaning that snippet generation is postponed not just until the entire final result set is ready, but even after the LIMIT clause is applied. For example, with a LIMIT 20,10 clause, `HIGHLIGHT()` function will be called at most 10 times.
+Highlighting is performed during the so-called `post limit` stage, which means that snippet generation is deferred not only until the entire final result set is prepared but also after the LIMIT clause is applied. For instance, with a LIMIT 20,10 clause, the `HIGHLIGHT()` function will be called a maximum of 10 times.
 
 ## Highlighting options
 
 <!-- example highlighting options -->
 
-There are several additional optional highlighting options that can be used to fine-tune snippet generation. Most of them are common to SQL, HTTP and PHP client.
+There are several optional highlighting options that can be used to fine-tune snippet generation, which are common to SQL, HTTP, and PHP clients.
 
 #### before_match
-A string to insert before a keyword match. A `%SNIPPET_ID%` macro can be used in this string. The first match of the macro is replaced with an incrementing snippet number within a current snippet. Numbering starts at 1 by default but can be overridden with `start_snippet_id` option. %SNIPPET_ID% restarts at the start of every new document. Default is `<b>`.
+A string to insert before a keyword match. The `%SNIPPET_ID%` macro can be used in this string. The first occurrence of the macro is replaced with an incrementing snippet number within the current snippet. Numbering starts at 1 by default but can be overridden with the `start_snippet_id` option. %SNIPPET_ID% restarts at the beginning of each new document. The default is `<b>`.
+
 #### after_match
-A string to insert after a keyword match. Default is `</b>`.
+A string to insert after a keyword match. The default is `</b>`.
+
 #### limit
-Maximum snippet size, in symbols (codepoints). Default is 256. Per-field by default, see `limits_per_field`.
+The maximum snippet size, in symbols (codepoints). The default is 256. This is applied per-field by default, see `limits_per_field`.
+
 #### limit_words
-Limits the maximum number of words that can be included in the result. Note the limit applies to any words, and not just the matched keywords to highlight. For example, if we are highlighting `Mary` and a snippet `Mary had a little lamb` is selected, then it contributes 5 words to this limit, not just 1. Default is 0 (no limit). Per-field by default, see `limits_per_field`.
+Limits the maximum number of words that can be included in the result. Note that this limit applies to all words, not just the matched keywords to highlight. For example, if highlighting `Mary` and a snippet `Mary had a little lamb` is selected, it contributes 5 words to this limit, not just 1. The default is 0 (no limit). This is applied per-field by default, see `limits_per_field`.
+
 #### limit_snippets
-Limits the maximum number of snippets that can be included in the result. Default is 0 (no limit). Per-field by default, see `limits_per_field`.
+Limits the maximum number of snippets that can be included in the result. The default is 0 (no limit). This is applied per-field by default, see `limits_per_field`.
+
 #### limits_per_field
-Selects whether `limit`, `limit_words` and `limit_snippets` work as individual limits in every field of the document being highlighted or as global limits for the whole document. Setting this option to 0 means that all combined highlighting results for one document must be within the specified limits.  The downside is that you may get several snippets highlighted in one field and none in another if the highlighting engine decides that they are more relevant. Default is 1 (use per-field limits).
+Determines whether `limit`, `limit_words`, and `limit_snippets` operate as individual limits in each field of the document being highlighted or as global limits for the entire document. Setting this option to 0 means that all combined highlighting results for one document must be within the specified limits. The downside is that you may have several snippets highlighted in one field and none in another if the highlighting engine decides they are more relevant. The default is 1 (use per-field limits).
 #### around
-How much words to pick around each matching keywords block. Default is 5.
+The number of words to select around each matching keyword block. The default is 5.
+
 #### use_boundaries
-Whether to additionally break snippets by phrase boundary characters, as configured in table settings with [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) directive. Default is 0 (don't use boundaries).
+Determines whether to additionally break snippets by phrase boundary characters, as configured in table settings with the [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) directive. The default is 0 (don't use boundaries).
+
 #### weight_order
-Whether to sort the extracted snippets in order of relevance (decreasing weight), or in order of appearance in the document (increasing position). Default is 0 (don't use weight order).
+Specifies whether to sort the extracted snippets in order of relevance (decreasing weight) or in order of appearance in the document (increasing position). The default is 0 (don't use weight order).
+
 #### force_all_words
-Ignores length limit until the result includes all the keywords. Default is 0 (don't force all keywords).
+Ignores the length limit until the result includes all keywords. The default is 0 (don't force all keywords).
+
 #### start_snippet_id
-Specifies the starting value of `%SNIPPET_ID%` macro (that gets detected and expanded in `before_match`, `after_match` strings). Default is 1.
+Sets the starting value of the `%SNIPPET_ID%` macro (which is detected and expanded in `before_match`, `after_match` strings). The default is 1.
+
 #### html_strip_mode
-HTML stripping mode setting. Defaults to `index`, which means that table settings will be used. The other values are `none` and `strip`, that forcibly skip or apply stripping irregardless of table settings; and `retain`, that retains HTML markup and protects it from highlighting. The `retain` mode can only be used when highlighting full documents and thus requires that no snippet size limits are set. String, allowed values are `none`, `strip`, `index`, and `retain`.
+Defines the HTML stripping mode setting. Defaults to `index`, meaning that table settings will be used. Other values include `none` and `strip`, which forcibly skip or apply stripping regardless of table settings; and `retain`, which retains HTML markup and protects it from highlighting. The `retain` mode can only be used when highlighting full documents and therefore requires that no snippet size limits are set. The allowed string values are `none`, `strip`, `index`, and `retain`.
+
 #### allow_empty
-Allows empty string to be returned as highlighting result when no snippets could be generated in the current field (no keywords match, or no snippets fit the limit). By default, the beginning of original text would be returned instead of an empty string. Default is 0 (don't allow empty result).
+Permits an empty string to be returned as the highlighting result when no snippets could be generated in the current field (no keyword match or no snippets fit the limit). By default, the beginning of the original text would be returned instead of an empty string. The default is 0 (don't allow an empty result).
+
 #### snippet_boundary
-Ensures that snippets do not cross a sentence, paragraph, or zone boundary (when used with a table that has the respective indexing settings enabled). String, allowed values are `sentence`, `paragraph`, and `zone`.
+Ensures that snippets do not cross a sentence, paragraph, or zone boundary (when used with a table that has the respective indexing settings enabled). The allowed values are `sentence`, `paragraph`, and `zone`.
+
 #### emit_zones
-Emits an HTML tag with an enclosing zone name before each snippet. Default is 0 (don't emit zone names).
+Emits an HTML tag with the enclosing zone name before each snippet. The default is 0 (don't emit zone names).
+
 #### force_snippets
-Whether to force snippet generation even if limits allow to highlight whole text. Default is 0 (don't force snippet generation).
+Determines whether to force snippet generation even if limits allow highlighting the entire text. The default is 0 (don't force snippet generation).
 
 <!-- intro -->
 ##### SQL:
@@ -455,7 +469,7 @@ class SearchResponse {
 
 ## Highlighting via SQL
 
-`HIGHLIGHT()` function can be used to highlight search results. Here's the syntax:
+The `HIGHLIGHT()` function can be used to highlight search results. Here's the syntax:
 
 ```sql
 HIGHLIGHT([options], [field_list], [query] )
@@ -487,7 +501,7 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 
 <!-- example highlight() field syntax -->
 
-`HIGHLIGHT()` fetches all available full-text fields from document storage and highlights them against the given query. It supports field syntax in queries. Field text is separated by `field_separator`, which can be changed in the options.
+`HIGHLIGHT()` retrieves all available full-text fields from document storage and highlights them against the provided query. Field syntax in queries is supported. Field text is separated by `field_separator`, which can be modified in the options.
 
 <!-- intro -->
 ##### SQL:
@@ -536,7 +550,7 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 
 <!-- example highlight() field list -->
 
-Optional second argument is a string containing a field or a comma-separated list of fields. If this argument is present, only the specified fields will be fetched from document storage and highlighted. An empty string as a second argument means "fetch all available fields".
+The optional second argument is a string containing a single field or a comma-separated list of fields. If this argument is present, only the specified fields will be fetched from document storage and highlighted. An empty string as the second argument signifies "fetch all available fields."
 
 <!-- intro -->
 ##### SQL:
@@ -562,7 +576,7 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 
 <!-- example highlight() string attr -->
 
-Another way to use the second argument is to specify string attribute or field name without quotes. This way the supplied string will be highlighted against the provided query, however, field syntax will be ignored.
+Alternatively, you can use the second argument to specify a string attribute or field name without quotes. In this case, the supplied string will be highlighted against the provided query, but field syntax will be ignored.
 
 <!-- intro -->
 ##### SQL:
@@ -588,7 +602,7 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 
 <!-- example highlight() query -->
 
-Optional third argument is the query. It is used to highlight search results against a query different than the one used for searching.
+The optional third argument is the query. This is used to highlight search results against a query different from the one used for searching.
 
 <!-- intro -->
 ##### SQL:
@@ -614,7 +628,7 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 
 <!-- example HIGHLIGHT TO_STRING -->
 
-While `HIGHLIGHT()` is designed to work with stored full-text fields and string attributes, it can also be used to highlight arbitrary text. Note that if the query has any field search operators (`@title hello @body world`), the field part of them is ignored in this case.
+Although `HIGHLIGHT()` is designed to work with stored full-text fields and string attributes, it can also be used to highlight arbitrary text. Keep in mind that if the query contains any field search operators (e.g., `@title hello @body world`), the field part of them is ignored in this case.
 
 <!-- intro -->
 ##### SQL:
@@ -637,22 +651,22 @@ SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books
 
 <!-- end -->
 
-Several options make sense only when generating a single string as a result (not an array of snippets). This only applies to SQL's `HIGHLIGHT()` function:
+Several options are relevant only when generating a single string as a result (not an array of snippets). This applies exclusively to the SQL `HIGHLIGHT()` function:
 
 #### snippet_separator
-A string to insert between snippets. Default is ` ... `.
+A string to insert between snippets. The default is ` ... `.
 #### field_separator
-A string to insert between fields. Default is `|`.
+A string to insert between fields. The default is `|`.
 
 
-Another way to highlight text is to use the [CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS) statement. It mostly duplicates `HIGHLIGHT()` functionality, but it can't use built-in document storage. It can, however, load source text from files.
+Another way to highlight text is to use the [CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS) statement. This mostly duplicates the `HIGHLIGHT()` functionality but cannot use built-in document storage. However, it can load source text from files.
 
 
 ## Highlighting via HTTP
 
 <!-- example highlight in JSON -->
 
-To highlight full-text search results in JSON queries via HTTP, field contents has to be stored in document storage (enabled by default). In the example full-text fields `content` and `title` are fetched from document storage and highlighted against the query specified in `query` clause.
+To highlight full-text search results in JSON queries via HTTP, field contents must be stored in document storage (enabled by default). In the example, full-text fields `content` and `title` are fetched from document storage and highlighted against the query specified in the `query` clause.
 
 Highlighted snippets are returned in the `highlight` property of the `hits` array.
 
@@ -808,7 +822,7 @@ class SearchResponse {
 
 <!-- example highlight JSON all field  -->
 
-To highlight all possible fields, pass an empty object as `highlight` propery.
+To highlight all possible fields, pass an empty object as the `highlight` property.
 
 <!-- intro -->
 ##### JSON:
@@ -964,16 +978,16 @@ class SearchResponse {
 In addition to common highlighting options, several synonyms are available for JSON queries via HTTP:
 
 #### fields
-`fields` object contains attribute names with options. It can also be an array of field names (without any options).
+The `fields` object contains attribute names with options. It can also be an array of field names (without any options).
 
-Note, by default the highlighting works the way it tries to highlight the results following the full-text query. I.e. in a general case when you don't specify fields to highlight the highlight is based on your full-text query, but if you specify the fields to highlight it highlights only if the full-text query matches the selected fields.
+Note that by default, highlighting attempts to highlight the results following the full-text query. In a general case, when you don't specify fields to highlight, the highlight is based on your full-text query. However, if you specify fields to highlight, it highlights only if the full-text query matches the selected fields.
 
 #### encoder
-`encoder` can be set to `default` or `html`. When set to `html`, retains html markup when highlighting. Works similar to `html_strip_mode=retain` option.
+The `encoder` can be set to `default` or `html`. When set to `html`, it retains HTML markup when highlighting. This works similarly to the `html_strip_mode=retain` option.
 
-<!-- example highlight_query  -->
+<!-- example highlight_query -->
 #### highlight_query
-`highlight_query` makes it possible to highlight against a query other than our search query. Syntax is the same as in the main `query`.
+The `highlight_query` option allows you to highlight against a query other than your search query. The syntax is the same as in the main `query`.
 
 <!-- intro -->
 ##### JSON:
@@ -1079,7 +1093,7 @@ searchResponse = searchApi.search(searchRequest);
 <!-- example pre_tags  -->
 
 #### pre_tags and post_tags
-`pre_tags` and `post_tags` set opening and closing tags for highlighted text snippets. They work similar to `before_match` and    `after_match` options. Optional, defaults are `<b>` and `</b>`.
+`pre_tags` and `post_tags` set the opening and closing tags for highlighted text snippets. They function similarly to the `before_match` and `after_match` options. These are optional, with default values of `<b>` and `</b>`.
 
 <!-- intro -->
 ##### JSON:
@@ -1196,7 +1210,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example no_match_size  -->
 #### no_match_size
-`no_match_size` works similar to the `allow_empty` option. If set to 0, acts as `allow_empty=1`, i.e. allows empty string to be returned as 	highlighting result when a snippet could not be generated. Otherwise, the beginning of the field will be returned. Optional, default is 1.
+`no_match_size` functions similarly to the `allow_empty` option. If set to 0, it acts as `allow_empty=1`, allowing an empty string to be returned as a highlighting result when a snippet could not be generated. Otherwise, the beginning of the field will be returned. This is optional, with a default value of 1.
 
 <!-- intro -->
 ##### JSON:
@@ -1310,7 +1324,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example order  -->
 #### order
-`order` sets the sorting order of extracted snippets. If set to `"score"`, sorts the extracted snippets in order of relevance. Optional. 	Works similar to `weight_order` option.
+`order` sets the sorting order of extracted snippets. If set to `"score"`, it sorts the extracted snippets in order of relevance. This is optional and works similarly to the `weight_order` option.
 
 <!-- intro -->
 ##### JSON:
@@ -1422,7 +1436,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example fragment_size -->
 #### fragment_size
-`fragment_size` sets maximum snippet size in symbols. Can be global or per-field. Per-field options override global options. Optional, default is 256. 	Works similar to `limit` option.
+`fragment_size` sets the maximum snippet size in symbols. It can be global or per-field. Per-field options override global options. This is optional, with a default value of 256. It works similarly to the `limit` option.
 
 <!-- intro -->
 ##### JSON:
@@ -1529,7 +1543,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example number_of_fragments -->
 #### number_of_fragments
-`number_of_fragments`: Limits the maximum number of snippets in the result. Just as `fragment_size`, can be global or per-field. Optional, default is 0 (no limit). 	Works similar to `limit_snippets` option.
+`number_of_fragments` limits the maximum number of snippets in the result. Like `fragment_size`, it can be global or per-field. This is optional, with a default value of 0 (no limit). It works similarly to the `limit_snippets` option.
 
 <!-- intro -->
 ##### JSON:
@@ -1642,7 +1656,7 @@ searchResponse = searchApi.search(searchRequest);
 <!-- example highlight json per-field limits -->
 
 #### limit, limit_words, limit_snippets
-Options such as `limit`, `limit_words`, and `limit_snippets` can be set as global or per-field options. Global options are used as per-field limits unless per-field options override them. In the example the `title` field is highlighted with default limit settings while the `content` field uses a different limit.
+Options like `limit`, `limit_words`, and `limit_snippets` can be set as global or per-field options. Global options are used as per-field limits unless per-field options override them. In the example, the `title` field is highlighted with default limit settings, while the `content` field uses a different limit.
 
 <!-- intro -->
 ##### JSON:
@@ -1756,7 +1770,7 @@ searchResponse = searchApi.search(searchRequest);
 <!-- example highlight json global limits -->
 
 #### limits_per_field
-Global limits can also be forced by specifying `limits_per_field=0`. Setting this option means that all combined highlighting results must be within the specified limits. The downside is that you may get several snippets highlighted in one field and none in another if the highlighting engine decides that they are more relevant.
+Global limits can also be enforced by specifying `limits_per_field=0`. Setting this option means that all combined highlighting results must be within the specified limits. The downside is that you may get several snippets highlighted in one field and none in another if the highlighting engine decides that they are more relevant.
 
 <!-- intro -->
 ##### JSON:
@@ -1870,7 +1884,7 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- example CALL SNIPPETS -->
 
-`CALL SNIPPETS` statement builds a snippet from provided data and query using specified table settings. It can't access built-in document storage, that's why it's recommended to use [HIGHLIGHT() function](../Searching/Highlighting.md) instead.
+The `CALL SNIPPETS` statement builds a snippet from provided data and query using specified table settings. It can't access built-in document storage, which is why it's recommended to use the [HIGHLIGHT() function](../Searching/Highlighting.md) instead.
 
 The syntax is:
 
@@ -1879,13 +1893,13 @@ CALL SNIPPETS(data, table, query[, opt_value AS opt_name[, ...]])
 ```
 
 #### data
-`data` is the source data to extract a snippet from. It can be a single string, or the list of the strings enclosed in curly brackets.
+`data` serves as the source from which a snippet is extracted. It can either be a single string or a list of strings enclosed in curly brackets.
 #### table
-`table` is the name of the table from which to take the text processing settings.
+`table` refers to the name of the table that provides the text processing settings for snippet generation.
 #### query
-`query` is the full-text query to build snippets for.
+`query` is the full-text query used to build the snippets.
 #### opt_value and opt_name
-`opt_value` and `opt_name` are [snippet generation options](../Searching/Highlighting.md)
+`opt_value` and `opt_name` represent the [snippet generation options](../Searching/Highlighting.md).
 
 <!-- intro -->
 ##### SQL:
@@ -1913,12 +1927,12 @@ Most options are the same as in the [HIGHLIGHT() function](../Searching/Highligh
 The following options can be used to highlight text stored in separate files:
 
 #### load_files
-Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents invoke snippets generation in a distributed table, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
+This option, when enabled, treats the first argument as file names instead of data to extract snippets from. The specified files on the server side will be loaded for data. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents, invoke snippets generation in a distributed table containing only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) option is used to generate the final file name. For example, when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
 
 #### load_files_scattered
-Works only with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents and the main server will merge all non-erroneous results. E.g. if one agent of the distributed table has `file1.txt`, another agent has `file2.txt` and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
+This option only works with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents, and the main server will merge all non-erroneous results. For example, if one agent of the distributed table has `file1.txt`, another agent has `file2.txt`, and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
 
-If `load_files` options is also enabled, request will return an error if any of the files is not available anywhere. Otherwise (if `load_files` is not enabled) it will just return empty strings for all absent files. Searchd does not pass this flag to agents, so agents do not generate a critical error if the file does not exist. If you want to be sure that all source files are loaded, set both `load_files_scattered` and `load_files` to 1. If the absence of some source files on some agent is not critical, set only `load_files_scattered` to 1.
+If the `load_files` option is also enabled, the request will return an error if any of the files is not available anywhere. Otherwise (if `load_files` is not enabled), it will return empty strings for all absent files. Searchd does not pass this flag to agents, so agents do not generate a critical error if the file does not exist. If you want to be sure that all source files are loaded, set both `load_files_scattered` and `load_files` to 1. If the absence of some source files on some agent is not critical, set only `load_files_scattered` to 1.
 
 <!-- intro -->
 ##### SQL:
@@ -1940,3 +1954,4 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 ```
 
 <!-- end -->
+<!-- proofread -->

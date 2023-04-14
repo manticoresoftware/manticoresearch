@@ -3,7 +3,7 @@
 ## SQL
 
 <!-- example sql1 -->
-When you run a query via SQL over mysql protocol as a result you get the requested columns back or empty result set in case nothing is found.  
+When you run a query via SQL over the MySQL protocol, you receive the requested columns as a result or an empty result set if nothing is found.
 
 <!-- request SQL -->
 ```sql
@@ -24,7 +24,7 @@ SELECT * FROM tbl;
 <!-- end -->
 
 <!-- example sql2 -->
-In addition to that you can use [SHOW META](../Node_info_and_management/SHOW_META.md) call to see additional meta-information about the latest query. 
+Additionally, you can use the [SHOW META](../Node_info_and_management/SHOW_META.md) call to see extra meta-information about the latest query.
 
 <!-- request SQL -->
 ```sql
@@ -55,7 +55,7 @@ SELECT id,story_author,comment_author FROM hn_small WHERE story_author='joe' LIM
 <!-- end -->
 
 <!-- example sql3 -->
-In some cases, e.g. when you do [faceted search](../Searching/Faceted_search.md) you can get multiple result sets as a response to your SQL query. 
+In some cases, such as when performing a [faceted search](../Searching/Faceted_search.md), you may receive multiple result sets as a response to your SQL query.
 
 <!-- request SQL -->
 ```sql
@@ -81,7 +81,7 @@ SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 <!-- end -->
 
 <!-- example sql4 -->
-In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](../Node_info_and_management/SHOW_WARNINGS.md).
+In case of a warning, the result set will include a warning flag, and you can see the warning using [SHOW WARNINGS](../Node_info_and_management/SHOW_WARNINGS.md).
 <!-- request SQL -->
 ```sql
 SELECT * from tbl where match('"joe"/3'); show warnings;
@@ -106,7 +106,7 @@ SELECT * from tbl where match('"joe"/3'); show warnings;
 <!-- end -->
 
 <!-- example sql5 -->
-If your query fails you will get an error:
+If your query fails, you will receive an error:
 
 <!-- request SQL -->
 ```sql
@@ -123,7 +123,7 @@ ERROR 1064 (42000): index idx: query error: no field 'surname' found in schema
 
 ## HTTP
 
-Via HTTP JSON iterface query result is sent as a JSON document. Example:
+Via the HTTP JSON interface, the query result is sent as a JSON document. Example:
 
 ```json
 {
@@ -150,22 +150,22 @@ Via HTTP JSON iterface query result is sent as a JSON document. Example:
 ```
 
 * `took`: time in milliseconds it took to execute the search
-* `timed_out`: if the query timed out or not
-* `hits`: search results. has the following properties:
-* `total`: total number of matching documents
-* `hits`: an array containing matches
+* `timed_out`: whether the query timed out or not
+* `hits`: search results, with the following properties:
+  - `total`: total number of matching documents
+  - `hits`: an array containing matches
 
-Query result can also include query profile information, see [Query profile](../Node_info_and_management/Profiling/Query_profile.md).
+The query result can also include query profile information. See [Query profile](../Node_info_and_management/Profiling/Query_profile.md).
 
 Each match in the `hits` array has the following properties:
 
 * `_id`: match id
-* `_score`: match weight, calculated by ranker
+* `_score`: match weight, calculated by the ranker
 * `_source`: an array containing the attributes of this match
 
 ### Source selection
 
-By default all attributes are returned in the `_source` array. You can use the `_source` property in the request payload to select the fields you want to be included in the result set. Example:
+By default, all attributes are returned in the `_source` array. You can use the `_source` property in the request payload to select the fields you want to include in the result set. Example:
 
 ```json
 {
@@ -175,7 +175,7 @@ By default all attributes are returned in the `_source` array. You can use the `
 }
 ```
 
-You can specify the attributes which you want to include in the query result as a string (`"_source": "attr*"`) or as an array of strings (`"_source": [ "attr1", "attri*" ]"`). Each entry can be an attribute name or a wildcard (`*`, `%` and `?` symbols are supported).
+You can specify the attributes you want to include in the query result as a string (`"_source": "attr*"`) or as an array of strings (`"_source": [ "attr1", "attri*" ]"`). Each entry can be an attribute name or a wildcard (`*`, `%` and `?` symbols are supported).
 
 You can also explicitly specify which attributes you want to include and which to exclude from the result set using the `includes` and `excludes` properties:
 
@@ -187,9 +187,9 @@ You can also explicitly specify which attributes you want to include and which t
 }
 ```
 
-An empty list of includes is interpreted as “include all attributes” while an empty list of excludes does not match anything. If an attribute matches both the includes and excludes, then the excludes win.
+An empty list of includes is interpreted as "include all attributes," while an empty list of excludes does not match anything. If an attribute matches both the includes and excludes, then the excludes win.
 
-
+<!-- proofread -->
 
 
 

@@ -6,23 +6,23 @@ SHOW THREADS [ OPTION columns=width[,format=sphinxql][,format=all] ]
 
 <!-- example SHOW THREADS -->
 
-`SHOW THREADS` is an SQL statement that lists all threads information about what they are doing at the moment.
+`SHOW THREADS` is an SQL statement that displays information about all threads and their current activities.
 
-It returns a table with following columns:
+The resulting table contains the following columns:
 
-* `Tid`: id assigned to the thread by the kernel
-* `Name`: thread name, you can also see this name in `top`, `htop`, `ps` and other unix tools to monitor thread's statistics
-* `Proto`: connection protocol, possible values are `sphinx`, `mysql`, `http`, `ssl`, `compressed` and `replication` or combination (e.g. `http,ssl` or `compressed,mysql`)
-* `State`: thread state, possible values are `handshake`, `net_read`, `net_write`, `query`, `net_idle`
-* `Host`: `ip:port` of the client
-* `ConnID`: connection id (starting from 0)
-* `Time`: current job's duration (in seconds, with microsecond precision) or uptime of the thread in case of `format=all` when the thread is idling
-* `Work time`: uptime of the thread
-* `Work time CPU`: effective CPU time (requires [`--cpustats`](../Starting_the_server/Manually.md#searchd-command-line-options))
-* `Jobs done`: how many jobs this thread has completed
-* `Last job took`: last job's duration
-* `In idle`: whether the thread is idling now or when it was last idling
-* `Info`: information about the query, can have multiple queries in case the query is against a distributed table or a real-time table
+* `Tid`: ID assigned to the thread by the kernel
+* `Name`: Thread name, also visible in `top`, `htop`, `ps`, and other Unix tools for monitoring thread statistics
+* `Proto`: Connection protocol; possible values include `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)
+* `State`: Thread state; possible values are `handshake`, `net_read`, `net_write`, `query`, `net_idle`
+* `Host`: Client's `ip:port`
+* `ConnID`: Connection ID (starting from 0)
+* `Time`: Current job's duration (in seconds, with microsecond precision) or thread uptime when using `format=all` and the thread is idling
+* `Work time`: Thread uptime
+* `Work time CPU`: Effective CPU time (requires [`--cpustats`](../Starting_the_server/Manually.md#searchd-command-line-options))
+* `Jobs done`: Number of jobs completed by this thread
+* `Last job took`: Duration of the last job
+* `In idle`: Whether the thread is currently idling or when it last idled
+* `Info`: Information about the query, which may include multiple queries if the query targets a distributed table or a real-time table
 
 <!-- intro -->
 ##### SQL:
@@ -551,16 +551,16 @@ utilsApi.sql("SHOW THREADS");
 
 <!-- example SHOW THREADS WIDTH -->
 
-`Info` column shows:
+The `Info` column displays:
 
-* raw text of queries run through Manticore SQL interface
-* full text syntax, comments and data size for queries run via internal Manticore binary protocol (e.g. from a remote Manticore instance)
+* Raw text of queries executed via the Manticore SQL interface
+* Full text syntax, comments, and data size for queries run through the internal Manticore binary protocol (e.g., from a remote Manticore instance)
 
-Maximum width of the `Info` column can be limited by specifying the `columns=N` option (notice the second row in the example table).
+You can limit the maximum width of the `Info` column by specifying the `columns=N` option (note the second row in the example table).
 
-By default, queries are shown in their original format. When the `format=sphinxql` option is specified, the queries will be shown in SQL format regardless of protocol through which they were executed.
+By default, queries are displayed in their original format. However, when the `format=sphinxql` option is used, queries will be shown in SQL format, regardless of the protocol used for execution.
 
-`format=all` displays all threads, otherwise idling and system threads are hidden (e.g. those busy with [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE))
+Using `format=all` will show all threads, while idling and system threads are hidden without this option (e.g., those busy with [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)).
 
 <!-- intro -->
 ##### SQL:
@@ -1086,3 +1086,4 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
 }
 ```
 <!-- end -->
+<!-- proofread -->

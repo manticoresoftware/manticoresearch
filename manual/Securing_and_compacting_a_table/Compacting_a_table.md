@@ -1,8 +1,8 @@
-# Compacting a table
+# Compacting a Table
 
-Over time, RT tables can become fragmented into many disk chunks and/or tainted with deleted, but unpurged data, impacting search performance. When that happens, they can be optimized. Basically, the optimization pass merges together disk chunks pairs, purging off documents suppressed previously by DELETEs.
+Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines pairs of disk chunks, removing documents that were previously deleted using DELETE statements.
 
-Starting Manticore 4 it happens [automaticaly by default](../Server_settings/Searchd.md#auto_optimize), but you can also use the below commands to force table compaction.
+Beginning with Manticore 4, this process occurs [automatically by default](../Server_settings/Searchd.md#auto_optimize). However, you can also use the following commands to manually initiate table compaction.
 
 ## OPTIMIZE TABLE
 
@@ -11,7 +11,7 @@ Starting Manticore 4 it happens [automaticaly by default](../Server_settings/Sea
 OPTIMIZE TABLE index_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` statement enqueues an RT table for optimization in a background thread.
+`OPTIMIZE` statement adds an RT table to the optimization queue, which will be processed in a background thread.
 
 <!-- intro -->
 ##### SQL:
@@ -27,11 +27,11 @@ OPTIMIZE TABLE rt;
 
 <!-- example optimize_cutoff -->
 
-OPTIMIZE merges the RT table's disk chunks down to the number which equals to `# of CPU cores * 2` by default.  The number of optimized disk chunks can be controlled with option `cutoff`.
+By default, OPTIMIZE merges the RT table's disk chunks down to a number equal to `# of CPU cores * 2`. You can control the number of optimized disk chunks using the `cutoff` option.
 
-There's also:
-* server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the above threshold
-* per-table setting [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff)
+Additional options include:
+* Server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the default threshold
+* Per-table setting [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff)
 
 <!-- intro -->
 ##### SQL:
@@ -47,7 +47,7 @@ OPTIMIZE TABLE rt OPTION cutoff=4;
 
 <!-- example optimize_sync -->
 
-If `OPTION sync=1` is used (0 by default), the command will wait until the optimization process is done (in case the connection interrupts the optimization will continue to run on the server).
+When using `OPTION sync=1` (0 by default), the command will wait for the optimization process to complete before returning. If the connection is interrupted, the optimization will continue running on the server.
 
 <!-- intro -->
 ##### SQL:
@@ -61,19 +61,19 @@ OPTIMIZE TABLE rt OPTION sync=1;
 
 ### Throttling the IO impact
 
-Optimize can be a lengthy and IO intensive process, so to limit the impact, all the actual merge work is executed serially in a special background thread, and the `OPTIMIZE` statement simply adds a job to its queue. Currently, there is no way to check the table or queue status (that might be added in the future to the `SHOW TABLE STATUS` and `SHOW STATUS` statements respectively). The optimization thread can be IO-throttled, you can control the maximum number of IOs per second and the maximum IO size with [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives respectively.
+Optimization can be a lengthy and I/O-intensive process. To minimize the impact, all actual merge work is executed serially in a special background thread, and the `OPTIMIZE` statement simply adds a job to its queue. Currently, there is no way to check the table or queue status (though this may be added in the future to the `SHOW TABLE STATUS` and `SHOW STATUS` statements, respectively). The optimization thread can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
 
-The RT table being optimized stays online and available for both searching and updates at (almost) all times during the optimization. It gets locked for a very short time when a pair of disk chunks is merged successfully, to rename the old and the new files, and update the table header.
+During optimization, the RT table being optimized remains online and available for both searching and updates nearly all the time. It is locked for a very brief period when a pair of disk chunks is successfully merged, allowing for the renaming of old and new files and updating the table header.
 
 ### Optimizing clustered tables
 
-As long as you don't have [auto_optimize](../Server_settings/Searchd.md#auto_optimize) disabled tables are optimized automatically
+As long as [auto_optimize](../Server_settings/Searchd.md#auto_optimize) is not disabled, tables are optimized automatically.
 
-In case you are experiencing unexpected SSTs or want tables across all nodes of the cluster be binary identical you need to:
+If you are experiencing unexpected SSTs or want tables across all nodes of the cluster to be binary identical, you need to:
 1. Disable [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
-2. Optimize tables manually:
+2. Manually optimize tables:
 <!-- example cluster_manual_drop -->
-On one of the nodes drop the table from the cluster:
+On one of the nodes, drop the table from the cluster:
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster DROP myindex;
@@ -93,13 +93,17 @@ Add back the table to the cluster:
 ALTER CLUSTER mycluster ADD myindex;
 ```
 <!-- end -->
-When the table is added back, the new files created by the optimize process will be replicated to the other nodes in the cluster.
-Any changes made locally to the table on other nodes will be lost.
+When the table is added back, the new files created by the optimization process will be replicated to the other nodes in the cluster.
+Any local changes made to the table on other nodes will be lost.
 
-Table data modifications (inserts, replaces, deletes, updates) should:
-1. either be **postponed**
-2. or directed to the node where the optimize process is running.
+Table data modifications (inserts, replaces, deletes, updates) should either:
 
-Note, while the table is out of the cluster, insert/replace/delete/update commands should refer to it without cluster name prefix (for SQL statements or cluster property fin case of a HTTP JSON request), otherwise they will fail.
-As soon as the table is added back to the cluster, writes can be resumed. At this point write operations on the table must include the cluster name prefix again, or they will fail.
+1. Be postponed, or
+2. Be directed to the node where the optimization process is running.
+
+Note that while the table is out of the cluster, insert/replace/delete/update commands should refer to it without the cluster name prefix (for SQL statements or the cluster property in case of an HTTP JSON request), otherwise they will fail.
+Once the table is added back to the cluster, you must resume write operations on the table and include the cluster name prefix again, or they will fail.
+
 Search operations are available as usual during the process on any of the nodes.
+
+<!-- proofread -->

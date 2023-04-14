@@ -196,6 +196,7 @@ void			SetAccurateAggregationDefault ( bool bEnabled );
 bool			GetAccurateAggregationDefault();
 
 int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
+bool			HasImplicitGrouping ( const CSphQuery & tQuery );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError

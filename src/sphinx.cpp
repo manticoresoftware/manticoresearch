@@ -2063,7 +2063,35 @@ static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
 }
 
 
-bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const
+static bool DetectPrecalcSorters ( const CSphQuery & tQuery, bool bHasSI )
+{
+	if ( !bHasSI )
+		return false;
+
+	if ( tQuery.m_dItems.any_of ( []( auto & tItem ){ return tItem.m_eAggrFunc!=SPH_AGGR_NONE; } ) )
+		return false;
+
+	if ( !HasImplicitGrouping(tQuery) )
+		return false;
+
+	if ( !tQuery.m_sQuery.IsEmpty() )
+		return false;
+
+	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
+
+	// check for count distinct precalc
+	if ( bDistinct && tQuery.m_dFilters.IsEmpty() )
+		return true;
+
+	// check for count(*) precalc
+	if ( !bDistinct && tQuery.m_dFilters.GetLength()==1 )
+		return true;
+
+	return false;
+}
+
+
+bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, bool bHasSI, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const
 {
 	ARRAY_FOREACH ( i, dQueries )
 	{
@@ -2071,6 +2099,9 @@ bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQu
 
 		// check for potential non-clonable sorters (we don't have actual sorters at this stage)
 		if ( DetectNonClonableSorters(tQuery) )
+			return true;
+
+		if ( DetectPrecalcSorters ( tQuery, bHasSI ) )
 			return true;
 
 		// at this point we are trying to decide how many threads this index gets
@@ -2116,7 +2147,7 @@ bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQu
 
 int64_t CSphIndex::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
-	if ( MustRunInSingleThread ( dQueries, dMaxCountDistinct, bForceSingleThread ) )
+	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
 		return -1;
 
 	int64_t iTotalDocs = GetStats().m_iTotalDocuments;
@@ -3054,7 +3085,7 @@ bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads
 
 int64_t CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
-	if ( MustRunInSingleThread ( dQueries, dMaxCountDistinct, bForceSingleThread ) )
+	if ( MustRunInSingleThread ( dQueries, !!m_pSIdx, dMaxCountDistinct, bForceSingleThread ) )
 		return -1;
 
 	bool bAllFast = true;

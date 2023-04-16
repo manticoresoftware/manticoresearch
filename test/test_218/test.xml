@@ -107,6 +107,31 @@ index test3 : base
 	rt_attr_string	= title
 	rt_attr_uint	= tag
 }
+
+index t11
+{
+	type			= rt
+	path			= <data_path/>/t11
+	rt_field		= title
+	rt_attr_string	= title
+    
+    ngram_len = 1
+    ngram_chars = cjk
+    wordforms = <this_test/>/wordforms.txt
+}
+
+index t12
+{
+	type			= rt
+	path			= <data_path/>/t12
+	rt_field		= title
+	rt_attr_string	= title
+    
+    charset_table = cjk
+    morphology = icu_chinese
+    wordforms = <this_test/>/wordforms.txt
+}
+
 </config>
 
 <db_create>
@@ -224,6 +249,17 @@ insert into test3 (id, title, tag) values(2,'买新的Apple电脑tested', 2 );
 select id, SNIPPET(title, '电脑') from test3 where match ( '电脑' );
 
 call snippets('他们在那家餐厅提供美味的比萨饼。', 'test', '美味的');
+
+<!-- regression wrong qpos in phrase with utf8 punctuation with wordasword -->
+insert into t11 values(1,'好，世'),(2,'好 世'),(3,'好， 世');
+insert into t12 values(1,'好，世'),(2,'好 世'),(3,'好， 世');
+
+select * from t11 where match('"好，世"') order by id asc;
+select * from t11 where match('"好 世"') order by id asc;
+select * from t11 where match('"好， 世"') order by id asc;
+select * from t12 where match('"好，世"') order by id asc;
+select * from t12 where match('"好 世"') order by id asc;
+select * from t12 where match('"好， 世"') order by id asc;
 
 </sphinxql></queries>
 

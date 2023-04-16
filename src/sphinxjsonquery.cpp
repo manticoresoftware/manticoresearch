@@ -93,7 +93,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 		bool bMultiDest = false;
 		int iDestCount = 0;
 		// do nothing inside phrase
-		if ( !m_pTokenizer->m_bPhrase )
+		if ( !m_pTokenizer->IsPhraseMode() )
 			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
 
 		// check for stopword, and create that node

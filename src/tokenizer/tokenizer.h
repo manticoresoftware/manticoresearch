@@ -194,6 +194,10 @@ public:
 	/// get (readonly) lowercaser
 	const CSphLowercaser &			GetLowercaser() const { assert ( m_pLC ); return *m_pLC; }
 
+	/// set the phrase mode for precessing tokens
+	virtual void					SetPhraseMode ( bool bPhrase ) { m_bPhrase = bPhrase; }
+	virtual bool					IsPhraseMode () const  { return m_bPhrase; }
+
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
 	virtual bool					AddSpecialsSPZ ( const char * sSpecials, const char * sDirective, CSphString & sError );
@@ -238,8 +242,6 @@ protected:
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings
 	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
-
-public:
 	bool							m_bPhrase = false;
 };
 

@@ -42,6 +42,9 @@ public:
 	bool					EnableZoneIndexing ( CSphString & sError ) override						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
 	int						SkipBlended () override													{ return m_pTokenizer->SkipBlended(); }
 	bool					IsQueryTok() const noexcept override									{ return m_pTokenizer->IsQueryTok(); }
+	void					SetPhraseMode ( bool bPhrase ) override { m_pTokenizer->SetPhraseMode ( bPhrase ); }
+	bool					IsPhraseMode () const override { return m_pTokenizer->IsPhraseMode(); }
+
 
 
 	int						GetCodepointLength ( int iCode ) const final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }

@@ -1306,11 +1306,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		bool bMultiDest = false;
 		int iDestCount = 0;
 		// do nothing inside phrase
-		if ( !m_pTokenizer->m_bPhrase )
+		if ( !m_pTokenizer->IsPhraseMode() )
 			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
 
 		// handle NEAR (must be case-sensitive, and immediately followed by slash and int)
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && 
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && 
 			( GetNearToken ( "NEAR/", 5, TOK_NEAR, p, m_pTokenizer, m_iPendingType, m_tPendingToken )
 				|| GetNearToken ( "NOTNEAR/", 8, TOK_NOTNEAR, p, m_pTokenizer, m_iPendingType, m_tPendingToken ) ) )
 		{
@@ -1319,7 +1319,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle SENTENCE
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_SENTENCE;
@@ -1328,7 +1328,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle PARAGRAPH
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_PARAGRAPH;
@@ -1337,7 +1337,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle MAYBE
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_MAYBE;
@@ -1346,7 +1346,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle ZONE
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strncmp ( p, "ZONE:", 5 )
 			&& ( sphIsAlpha(p[5]) || p[5]=='(' ) )
 		{
 			// ParseZone() will update tokenizer buffer ptr as needed
@@ -1362,7 +1362,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle ZONESPAN
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONESPAN:", 9 )
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strncmp ( p, "ZONESPAN:", 9 )
 			&& ( sphIsAlpha(p[9]) || p[9]=='(' ) )
 		{
 			// ParseZone() will update tokenizer buffer ptr as needed
@@ -1378,7 +1378,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// count [ * ] at phrase node for qpos shift
-		if ( m_pTokenizer->m_bPhrase && pLastTokenEnd )
+		if ( m_pTokenizer->IsPhraseMode() && pLastTokenEnd )
 		{
 			if ( sToken[0]=='*' && sToken[1]=='\0' ) // phrase star should be separate token
 			{
@@ -1485,7 +1485,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 						m_dPhraseStar.Resize ( 0 );
 				}
 				m_iPendingType = sToken[0];
-				m_pTokenizer->m_bPhrase = m_bQuoted;
+				m_pTokenizer->SetPhraseMode ( m_bQuoted );
 
 				if ( sToken[0]=='(' )
 				{

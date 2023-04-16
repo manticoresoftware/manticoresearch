@@ -80,23 +80,15 @@ bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64
 {
 	// this needs to be in sync with iterator construction code
 	const int BITMAP_ITERATOR_THRESH = 8;
-
-	bool bFitsIteratorThresh = false;
 	if ( tFilter.m_eType==SPH_FILTER_RANGE )
 	{
 		if ( tFilter.m_bOpenRight || tFilter.m_bOpenLeft )
-			bFitsIteratorThresh = true;
+			return true;
 		else
-			bFitsIteratorThresh = ( tFilter.m_iMaxValue-tFilter.m_iMinValue+1 ) >= BITMAP_ITERATOR_THRESH;
+			return ( tFilter.m_iMaxValue-tFilter.m_iMinValue+1 ) >= BITMAP_ITERATOR_THRESH;
 	}
-	else if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
-		bFitsIteratorThresh = true;
 
-	if ( m_tCtx.m_iCutoff>=0 )
-		iRsetSize = Min ( iRsetSize, m_tCtx.m_iCutoff );
-
-	const int QUEUE_RSET_THRESH = 4096;
-	return bFitsIteratorThresh && iRsetSize>QUEUE_RSET_THRESH;
+	return tFilter.m_eType==SPH_FILTER_FLOATRANGE;
 }
 
 

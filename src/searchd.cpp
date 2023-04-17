@@ -20263,7 +20263,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	ScheduleFlushAttrs();
 	SetupCompatHttp();
 
-	gStats().m_uStarted = (DWORD)time(NULL);
+	gStats().Init();
 
 	{
 		CSphString sSQLStateDefault;

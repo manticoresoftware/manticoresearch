@@ -131,12 +131,11 @@ docs_deploy:
   needs: [ ]
   tags:
     - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:3201
+  image: manticoresearch/ubertests_ctest:3263
   variables:
     DIAGNOSTIC: 1 # let's set it by default forever
     CACHEB: "../cache"
   script:
-    - bash /root/aot.sh
     - ctest -V -S misc/ctest/gltest.cmake --no-compress-output
   after_script:
     - cd build
@@ -274,7 +273,7 @@ convert_win_junit:
   stage: publish
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:3201
+  image: manticoresearch/ubertests_ctest:3263
   needs:
     - win_tests
   variables:

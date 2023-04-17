@@ -5554,8 +5554,9 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_pHook = pHook;
 	tQS.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
 	tQS.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
-	tQS.m_fnGetCountDistinct = [pIndex]( const CSphString & sAttr ){ return pIndex->GetCountDistinct(sAttr); };
-	tQS.m_fnGetCount = [pIndex]( const CSphFilterSettings & tFilter ){ return pIndex->GetCount(tFilter); };
+	tQS.m_fnGetCountDistinct	= [pIndex]( const CSphString & sAttr ){ return pIndex->GetCountDistinct(sAttr); };
+	tQS.m_fnGetCountFilter		= [pIndex]( const CSphFilterSettings & tFilter ){ return pIndex->GetCountFilter(tFilter); };
+	tQS.m_fnGetCount			= [pIndex](){ return pIndex->GetCount(); };
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
 	return tQS;

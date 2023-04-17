@@ -1157,7 +1157,8 @@ public:
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
-	int64_t				GetCount ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCount() const override;
 
 	// helpers
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
@@ -8633,7 +8634,7 @@ int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
 }
 
 
-int64_t RtIndex_c::GetCount ( const CSphFilterSettings & tFilter ) const
+int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter ) const
 {
 	// fixme! add code to calculate count(*) in RAM segments
 	if ( m_tRtChunks.GetRamSegmentsCount() )
@@ -8646,7 +8647,7 @@ int64_t RtIndex_c::GetCount ( const CSphFilterSettings & tFilter ) const
 	int64_t iSumCount = 0;
 	for ( const auto & i : *pDiskChunks )
 	{
-		int64_t iCount = i->Cidx().GetCount(tFilter);
+		int64_t iCount = i->Cidx().GetCountFilter(tFilter);
 		if ( iCount==-1 )
 			return -1;
 
@@ -8654,6 +8655,29 @@ int64_t RtIndex_c::GetCount ( const CSphFilterSettings & tFilter ) const
 	}
 
 	return iSumCount;
+}
+
+
+int64_t RtIndex_c::GetCount() const
+{
+	int64_t iCount = 0;
+	auto pSegs = m_tRtChunks.RamSegs();
+	if ( pSegs )
+		for ( auto & pSeg : *pSegs )
+			iCount += const_cast<RtSegment_t*> ( pSeg.Ptr() )->m_tAliveRows;
+
+	auto pDiskChunks = m_tRtChunks.DiskChunks();
+	if ( pDiskChunks )
+		for ( const auto & i : *pDiskChunks )
+		{
+			int64_t iChunkCount = i->Cidx().GetCount();
+			if ( iChunkCount==-1 )
+				return -1;
+
+			iCount += iChunkCount;
+		}
+
+	return iCount;
 }
 
 

@@ -1276,7 +1276,8 @@ public:
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
-	int64_t				GetCount ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCount() const override;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -2065,9 +2066,6 @@ static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
 
 static bool DetectPrecalcSorters ( const CSphQuery & tQuery, bool bHasSI )
 {
-	if ( !bHasSI )
-		return false;
-
 	if ( tQuery.m_dItems.any_of ( []( auto & tItem ){ return tItem.m_eAggrFunc!=SPH_AGGR_NONE; } ) )
 		return false;
 
@@ -2078,13 +2076,19 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, bool bHasSI )
 		return false;
 
 	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
+	if ( bHasSI )
+	{
+		// check for count distinct precalc
+		if ( bDistinct && tQuery.m_dFilters.IsEmpty() )
+			return true;
 
-	// check for count distinct precalc
-	if ( bDistinct && tQuery.m_dFilters.IsEmpty() )
-		return true;
+		// check for count(*) precalc w/one filter
+		if ( !bDistinct && tQuery.m_dFilters.GetLength()==1 )
+			return true;
+	}
 
-	// check for count(*) precalc
-	if ( !bDistinct && tQuery.m_dFilters.GetLength()==1 )
+	// check for count(*) w/o filters
+	if ( !bDistinct && tQuery.m_dFilters.IsEmpty() )
 		return true;
 
 	return false;
@@ -3128,7 +3132,7 @@ int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr ) const
 }
 
 
-int64_t CSphIndex_VLN::GetCount ( const CSphFilterSettings & tFilter ) const
+int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter ) const
 {
 	if ( !m_pSIdx.get() || m_tDeadRowMap.HasDead() )
 		return -1;
@@ -3148,6 +3152,12 @@ int64_t CSphIndex_VLN::GetCount ( const CSphFilterSettings & tFilter ) const
 		return -1;
 
 	return uCount;
+}
+
+
+int64_t CSphIndex_VLN::GetCount() const
+{
+	return m_iDocinfo - m_tDeadRowMap.GetNumDeads();
 }
 
 /////////////////////////////////////////////////////////////////////////////

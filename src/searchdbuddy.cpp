@@ -649,9 +649,9 @@ bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & t
 }
 
 #ifdef _WIN32
-static CSphString g_sDefaultBuddyName ( "manticore-buddy.phar" );
+static CSphString g_sDefaultBuddyName ( "buddy\\src\\index.php" );
 #else
-static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
+static CSphString g_sDefaultBuddyName ( "buddy/bin/buddy" );
 #endif
 static CSphString g_sDefaultBuddyExecName ( "manticore-executor.exe" );
 

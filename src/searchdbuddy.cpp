@@ -48,13 +48,13 @@ static BuddyState_e g_eBuddy { BuddyState_e::NONE };
 static int g_iRestartCount = 0;
 static int64_t g_tmStarting = 0;
 static int g_iTask = 0;
+static const int g_iBuddyLoopSleep = 15;
 
 static const int g_iRestartMax = 3;
-static const int g_iStartMaxTimeout = 3; // max start timeout 3 sec
+static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static void BuddyNextTick();
 static CSphString BuddyGetPath ( const CSphString & sPath, bool bHasBuddyPath );
 
 #if _WIN32
@@ -190,7 +190,7 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	if ( !iSize )
 		return;
 
-	Str_t sLineRef ( g_dPipeBuf.data(), iSize );
+	Str_t sLineRef ( g_dPipeBuf.data(), (int)iSize );
 
 	// regular work log all lines from the buddy output
 	if ( g_eBuddy!=BuddyState_e::STARTING )
@@ -275,33 +275,38 @@ static void BuddyTryRestart()
 	}
 }
 
-void BuddyNextTick()
+static void BuddyWorkLoop()
 {
 	auto pDesc = PublishSystemInfo ( "buddy check" );
 
-	while ( !g_pIOS->stopped() )
+	while ( !sphInterrupted() )
 	{
-		if ( !g_pIOS->poll_one() )
+		while ( !g_pIOS->stopped() )
+		{
+			if ( !g_pIOS->poll_one() )
+				break;
+		}
+		g_pIOS->restart();
+
+		if ( g_eBuddy==BuddyState_e::STARTING && sphMicroTimer()>( g_tmStarting + g_iStartMaxTimeout * 1000 * 1000  ) )
+		{
+			sphWarning ( "[BUDDY] failed to start after %d sec", g_iStartMaxTimeout );
+			BuddyStop();
 			break;
-	}
-	g_pIOS->restart();
+		}
 
-	if ( g_eBuddy==BuddyState_e::STARTING && sphMicroTimer()>( g_tmStarting + g_iStartMaxTimeout * 1000 * 1000  ) )
-	{
-		sphWarning ( "[BUDDY] failed to start after %d sec", g_iStartMaxTimeout );
-		BuddyStop();
-		return;
-	}
+		if ( g_eBuddy==BuddyState_e::WORK )
+			g_eBuddy = BuddyCheckLive();
 
-	if ( g_eBuddy==BuddyState_e::WORK )
-		g_eBuddy = BuddyCheckLive();
+		BuddyTryRestart();
 
-	BuddyTryRestart();
-
-	if ( g_eBuddy==BuddyState_e::STARTING || g_eBuddy==BuddyState_e::WORK )
-	{
-		int64_t tmCur = sphMicroTimer();
-		TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, []() { BuddyNextTick(); } );
+		if ( g_eBuddy==BuddyState_e::STARTING || g_eBuddy==BuddyState_e::WORK )
+		{
+			Threads::Coro::SleepMsec ( g_iBuddyLoopSleep );
+		} else
+		{
+			break;
+		}
 	}
 }
 
@@ -414,8 +419,7 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 	g_eBuddy = eBuddy;
 	g_iTask = TaskManager::RegisterGlobal ( "buddy service" );
 	assert ( g_iTask>=0 && "failed to create buddy service task" );
-	int64_t tmCur = sphMicroTimer();
-	TaskManager::ScheduleJob ( g_iTask, tmCur + 15000, []() { BuddyNextTick(); } );
+	TaskManager::StartJob ( g_iTask, BuddyWorkLoop );
 }
 
 void BuddyStop ()

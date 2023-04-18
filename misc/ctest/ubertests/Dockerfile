@@ -93,8 +93,10 @@ WORKDIR /work
 ENTRYPOINT ["bash", "/entry_point.sh"]
 CMD []
 
-# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263 .
-# docker push registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
 # docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263 .
+
+# deprecated:
+# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263 .
+# docker push registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263

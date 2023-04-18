@@ -22,6 +22,8 @@ if (NOT installed)
 	# we have to use the external _LOCALSTATEDIR, otherwise the value may be incorrect (https://manticoresearch.slack.com/archives/C5EEXJG31/p1675084036163049)
 	set ( LOCALDATADIR "${_LOCALSTATEDIR}/manticore/data" )
 	set ( installed ON )
+	
+	install(DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/lib/manticore)
 endif ()
 
 if (only_set_paths)

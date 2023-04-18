@@ -1094,6 +1094,10 @@ limit_clause:
 		{
 			pParser->SetLimit ( 0, $2.GetValueInt() );
 		}
+	| TOK_LIMIT '-' TOK_CONST_INT
+      	{
+      		pParser->SetLimit ( 0, -$3.GetValueInt() );
+      	}
 	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
 		{
 			pParser->SetLimit ( $2.GetValueInt(), $4.GetValueInt() );

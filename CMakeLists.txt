@@ -54,6 +54,20 @@ if (CXX_COMPILER_ID STREQUAL GNU AND CXX_COMPILER_VERSION VERSION_LESS 4.7.2)
 	message ( FATAL_ERROR "Gcc version error. Minspec is 4.7.2" )
 endif ()
 
+# On Macos plugin_dir should be set to /opt/homebrew/usr/local/lib/manticore (or with another homebrew prefix)
+if(DEFINED HOMEBREW_PREFIX)
+	set(HARDCODED_PLUGIN_DIR "${HOMEBREW_PREFIX}/usr/local/lib/manticore")
+# on Windows, plugin_dir should be relative usr/local/lib/manticore by default
+elseif (WIN32)
+	set(HARDCODED_PLUGIN_DIR "usr/local/lib/manticore")
+# on Linux - absolute /usr/local/lib/manticore
+else ()
+       set(HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore")
+endif()
+
+# Pass the value of HARDCODED_PLUGIN_DIR to the C++ code
+add_definitions(-DHARDCODED_PLUGIN_DIR="${HARDCODED_PLUGIN_DIR}")
+
 # Collect string information which will be included into binaries
 include ( banner )
 bannervar ( DISTR_BUILD )

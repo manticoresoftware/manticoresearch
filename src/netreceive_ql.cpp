@@ -1041,6 +1041,12 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			sphLogDebugv ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
 			iPacketLen += iChunkLen;
 
+			if ( !bAuthed && ( uAddon == SPHINX_CLIENT_VERSION || uAddon == 0x01000000UL ) )
+			{
+				sphLogDebug ( "conn %d from %s: seems, that non-mysql proto (sphinx?) packet received (%x). M.b. you've confused remote port in distributed table definition?", iCID, sClientIP, uAddon );
+				return;
+			}
+
 			// receive package body
 			if ( !pIn->ReadFrom ( iPacketLen ))
 			{

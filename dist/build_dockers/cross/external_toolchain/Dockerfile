@@ -56,15 +56,18 @@ ADD entry_point.sh /sysroot/root/
 ENTRYPOINT ["bash", "/sysroot/root/entry_point.sh"]
 CMD []
 
-## on amd:
+# docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
+# docker buildx use manticore_build
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/external_toolchain:clang15_cmake3263 .
+
+# deprecated:
+# on amd:
 # docker build -t external_toolchain:clang15_cmake3263 -t registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263amd .
 # docker push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263amd
-
-# on arm
+# on arm:
 # docker build -t external_toolchain:clang15_cmake3263 -t registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263arm .
 # docker push registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263arm
-
-# on any (amd or arm)
+# on any (amd or arm):
 # docker rmi registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263
 # docker manifest rm registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263
 # docker manifest create registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263 --amend registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263amd --amend registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263arm

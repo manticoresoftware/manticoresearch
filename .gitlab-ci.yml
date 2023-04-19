@@ -47,7 +47,7 @@ job_mirror:
   tags:
     - docker
     - privileged
-  image: registry.gitlab.com/manticoresearch/doc/autodeploy:latest
+  image: manticoresearch/docs_autodeploy:latest
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
@@ -85,7 +85,7 @@ docs_deploy:
   needs: [ ]
   tags:
     - docker-free
-  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:clang15_cmake3263
+  image: manticoresearch/external_toolchain:clang15_cmake3263
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever

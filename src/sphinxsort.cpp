@@ -532,18 +532,9 @@ void MatchSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnB
 	}
 	else
 	{
-		// keep id as the first attribute
-		for ( const CSphString & sName : m_dTransformed )
-			if ( sName==sphGetDocidName() )
-			{
-				tBuilder.AddAttr(sName);
-				break;
-			}
-
-		// add the rest
-		for ( const CSphString & sName : m_dTransformed )
-			if ( sName!=sphGetDocidName() )
-				tBuilder.AddAttr(sName);
+		// keep id as the first attribute, then the rest.
+		m_dTransformed.any_of ( [&tBuilder] ( const auto& sName ) { auto bID = ( sName==sphGetDocidName() ); if ( bID ) tBuilder.AddAttr(sName); return bID; } );
+		m_dTransformed.for_each ( [&tBuilder] ( const auto& sName ) { if ( sName!=sphGetDocidName() ) tBuilder.AddAttr(sName); } );
 	}
 
 	for ( int i = 0; i <pNewSchema->GetAttrsCount(); ++i )

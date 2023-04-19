@@ -7761,10 +7761,10 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 			tMatch.m_pStatic = fnToStatic(i);
 
 			// early filter only (no late filters in full-scan because of no @weight)
-			if_const ( HAS_FILTER_CALC )
+			if constexpr ( HAS_FILTER_CALC )
 				tCtx.CalcFilter(tMatch);
 
-			if_const ( HAS_FILTER )
+			if constexpr ( HAS_FILTER )
 			{
 				if ( !tCtx.m_pFilter->Eval(tMatch) )
 				{
@@ -7775,23 +7775,23 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				}
 			}
 
-			if_const ( HAS_RANDOMIZE )
+			if constexpr ( HAS_RANDOMIZE )
 				tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
-			if_const ( HAS_SORT_CALC )
+			if constexpr ( HAS_SORT_CALC )
 				tCtx.CalcSort(tMatch);
 
 			bool bNewMatch = false;
-			dSorters.Apply ( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
+			dSorters.for_each( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
 
 			// stringptr expressions should be duplicated (or taken over) at this point
-			if_const ( HAS_FILTER_CALC )
+			if constexpr ( HAS_FILTER_CALC )
 				tCtx.FreeDataFilter ( tMatch );
 
-			if_const ( HAS_SORT_CALC )
+			if constexpr ( HAS_SORT_CALC )
 				tCtx.FreeDataSort ( tMatch );
 
-			if_const ( HAS_CUTOFF )
+			if constexpr ( HAS_CUTOFF )
 			{
 				if ( bNewMatch && --iCutoff==0 )
 					return true;
@@ -7799,7 +7799,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 		}
 
 		// handle timer
-		if_const ( HAS_MAX_TIMER )
+		if constexpr ( HAS_MAX_TIMER )
 		{
 			if ( sph::TimeExceeded ( tmMaxTimer ) )
 			{

@@ -12865,7 +12865,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 {
 	// lets check all query for errors
-	CSphString sError;
+	StringBuilder_c sError { "; " };
 	CSphVector<int64_t> dAgentTimes; // dummy for error reporting
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 	{
@@ -12873,18 +12873,14 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 		if ( !tHandler.m_dAggrResults[i].m_sError.IsEmpty() )
 		{
 			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dAggrResults[i], dAgentTimes );
-			if ( sError.IsEmpty() )
-			{
-				if ( tHandler.m_dQueries.GetLength()==1 )
-					sError = tHandler.m_dAggrResults[0].m_sError;
-				else
-					sError.SetSprintf ( "query %d error: %s", i, tHandler.m_dAggrResults[i].m_sError.cstr() );
-			} else
-				sError.SetSprintf ( "%s; query %d error: %s", sError.cstr(), i, tHandler.m_dAggrResults[i].m_sError.cstr() );
+			if ( tHandler.m_dQueries.GetLength()==1 )
+				sError << tHandler.m_dAggrResults[0].m_sError;
+			else
+				sError.Sprintf( "query %d error: %s", i, tHandler.m_dAggrResults[i].m_sError.cstr() );
 		}
 	}
 
-	if ( sError.Length() )
+	if ( !sError.IsEmpty() )
 	{
 		// stmt is intentionally NULL, as we did all the reporting just above
 		dRows.Error ( NULL, sError.cstr() );
@@ -18527,7 +18523,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 		if ( eReincarnate!=EFork::Disabled )
 		{
 			sphInfo ( "watchdog: main process %d forked ok", iChild );
-			sprintf ( g_sPid, "%d", iChild);
+			snprintf ( g_sPid, sizeof(g_sPid), "%d", iChild);
 		}
 
 		SetSignalHandlers();

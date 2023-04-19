@@ -111,6 +111,10 @@ C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
 * `--safetrace` forces `searchd` to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
 * `--nodetach` switch (Linux only) tells `searchd` not to detach into the background. This will also cause log entries to be printed out to the console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a Docker container to capture its output.
 
+## Plugin dir
+
+Manticore utilizes the [plugin_dir](../Server_settings/Common.md#plugin_dir) for storing and using Manticore Buddy plugins. By default, this value is accessible to the "manticore" user in a standard installation. However, if you start the searchd daemon manually with a different user, the daemon might not have access to the `plugin_dir`. To address this problem, ensure you specify a `plugin_dir` in the common section that the user running the searchd daemon can write to.
+
 ## Signals
 
 `searchd` supports a number of signals:

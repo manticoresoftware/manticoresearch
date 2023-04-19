@@ -9257,7 +9257,7 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq ); // definition is below
+void HandleCommandSphinxql ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq ); // definition is below
 void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 void StatCountCommand ( SearchdCommand_e eCmd );
 void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
@@ -9280,7 +9280,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 }
 
 
-void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut )
+void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut )
 {
 	auto & tSess = session::Info();
 	tSess.SetTaskState ( TaskState_e::QUERY );
@@ -16803,7 +16803,7 @@ void session::SaveLastProfile ()
 }
 
 /// sphinxql command over API
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq ) REQUIRES (HandlerThread)
+void HandleCommandSphinxql ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq ) REQUIRES (HandlerThread)
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SPHINXQL, tOut ) )
 		return;

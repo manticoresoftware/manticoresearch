@@ -599,7 +599,7 @@ bool ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, C
 	return true;
 }
 
-bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, ISphOutputBuffer & tOut )
+bool ProcessSqlQueryBuddy ( Str_t sQuery, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
 {
 	BYTE uRefPacketID = uPacketID;
 	int iRefPos = tOut.GetSentCount();

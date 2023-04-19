@@ -1411,7 +1411,7 @@ bool				IsLogManagementEnabled ();
 std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
 uint64_t			GetDocID ( const char * szID );
 
-void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut );
+void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
@@ -1438,7 +1438,7 @@ namespace session
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut );
+void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );
 
 std::unique_ptr<ISphTableFunc>		CreateRemoveRepeats();
 

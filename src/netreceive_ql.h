@@ -17,4 +17,4 @@
 void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf );
 
 
-RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, ISphOutputBuffer * pOut );
+RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, GenericOutputBuffer_c * pOut );

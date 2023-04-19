@@ -325,7 +325,7 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoComm
 class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 {
 	BYTE & m_uPacketID;
-	ISphOutputBuffer & m_tOut;
+	GenericOutputBuffer_c & m_tOut;
 	ClientSession_c* m_pSession = nullptr;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
@@ -421,7 +421,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 
 public:
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut )
+	SqlRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
 		: m_uPacketID ( *pPacketID )
 		, m_tOut ( *pOut )
 		, m_pSession ( session::GetClientSession() )
@@ -540,6 +540,8 @@ public:
 			m_tOut.SendBytes ( pBuf, iSize );
 			pBuf += iSize;
 			iLeft -= iSize;
+			if ( m_tOut.GetSentCount() > MAX_PACKET_LEN )
+				m_tOut.Flush();
 		}
 		Resize(0);
 		return true;
@@ -912,7 +914,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 } // static namespace
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut )
+void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut )
 {
 	BYTE uDummy = 0;
 
@@ -1122,7 +1124,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	} while ( tSess.GetPersistent() );
 }
 
-RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, ISphOutputBuffer * pOut )
+RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
 {
 	return new SqlRowBuffer_c ( pPacketID, pOut );
 }

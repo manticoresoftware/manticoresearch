@@ -830,7 +830,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 	auto& tSess = session::Info();
 	assert ( pBuf );
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
-	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
+	auto& tOut = *(GenericOutputBuffer_c *) pBuf;
 
 	auto uHasBytesIn = tIn.HasBytes ();
 	// get command, handle special packets
@@ -956,7 +956,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	int iCID = tSess.GetConnID();
 	const char * sClientIP = tSess.szClientName();
 
-	NetGenericOutputBuffer_c* pOut = pBuf.get();
+	GenericOutputBuffer_c* pOut = pBuf.get();
 	AsyncNetInputBuffer_c* pIn = pBuf.get();
 
 	/// mysql is pro-active, we NEED to send handshake before client send us something.

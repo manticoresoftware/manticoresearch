@@ -260,7 +260,7 @@ bool CheckWeCanUseSSL ( CSphString * pError )
 class BioAsyncNetAdapter_c
 {
 	std::unique_ptr<AsyncNetBuffer_c> m_pBackend;
-	NetGenericOutputBuffer_c& m_tOut;
+	GenericOutputBuffer_c& m_tOut;
 	AsyncNetInputBuffer_c& m_tIn;
 
 public:

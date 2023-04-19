@@ -1119,17 +1119,17 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 
 void AsyncNetBuffer_c::SyncErrorState()
 {
-	if ( NetGenericOutputBuffer_c::GetError() )
+	if ( GenericOutputBuffer_c::GetError() )
 	{
-		assert ( !NetGenericOutputBuffer_c::GetErrorMessage().IsEmpty() );
-		InputBuffer_c::SetError ( "%s", NetGenericOutputBuffer_c::GetErrorMessage().cstr() );
+		assert ( !GenericOutputBuffer_c::GetErrorMessage().IsEmpty() );
+		InputBuffer_c::SetError ( "%s", GenericOutputBuffer_c::GetErrorMessage().cstr() );
 	}
 }
 
 void AsyncNetBuffer_c::ResetError()
 {
 	InputBuffer_c::ResetError();
-	NetGenericOutputBuffer_c::ResetError();
+	GenericOutputBuffer_c::ResetError();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1153,8 +1153,8 @@ class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 			return true; // nothing to send
 
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		bool bSent = SyncSend ( m_pSocket.get(), (const char *) m_dBuf.begin(), m_dBuf.GetLength64(), NetGenericOutputBuffer_c::m_sError );
-		NetGenericOutputBuffer_c::m_bError = !bSent;
+		bool bSent = SyncSend ( m_pSocket.get(), (const char *) m_dBuf.begin(), m_dBuf.GetLength64(), GenericOutputBuffer_c::m_sError );
+		GenericOutputBuffer_c::m_bError = !bSent;
 		return bSent;
 	}
 

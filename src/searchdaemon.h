@@ -461,7 +461,7 @@ public:
 #endif
 };
 
-class NetGenericOutputBuffer_c : public ISphOutputBuffer
+class GenericOutputBuffer_c : public ISphOutputBuffer
 {
 public:
 	bool	GetError () const { return m_bError; }

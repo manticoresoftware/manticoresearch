@@ -21,7 +21,7 @@ class MysqlCompressedSocket_c : public AsyncNetBuffer_c
 protected:
 	std::unique_ptr<AsyncNetBuffer_c> m_pFrontend;
 	AsyncNetInputBuffer_c& m_tIn;
-	NetGenericOutputBuffer_c& m_tOut;
+	GenericOutputBuffer_c& m_tOut;
 	BYTE m_uPackedID = 0;
 
 	DWORD ReadLSBSmallDword ( InputBuffer_c& tIn );

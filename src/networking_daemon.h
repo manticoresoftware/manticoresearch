@@ -194,7 +194,7 @@ public:
 };
 
 
-class AsyncNetBuffer_c : public AsyncNetInputBuffer_c, public NetGenericOutputBuffer_c
+class AsyncNetBuffer_c : public AsyncNetInputBuffer_c, public GenericOutputBuffer_c
 {
 public:
 	void SyncErrorState();

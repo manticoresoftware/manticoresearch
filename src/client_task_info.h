@@ -25,6 +25,7 @@ enum Profile_e {
 };
 
 class ClientSession_c;
+class RowBuffer_i;
 using ClientTaskHook_t = boost::intrusive::slist_member_hook<>;
 
 // client connection (session). Includes both state and settings.
@@ -52,6 +53,8 @@ public:
 	ESphCollation m_eCollation { GlobalCollation () };
 	Profile_e			m_eProfile { Profile_e::NONE };
 	bool m_bPersistent = false;
+	RowBuffer_i * 		m_pSqlRowBuffer = nullptr;
+	void*				m_pSessionOpaque = nullptr;
 	static std::atomic<int> m_iClients;
 	static std::atomic<int> m_iVips;
 

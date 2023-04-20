@@ -7092,6 +7092,9 @@ static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
+		auto& tPair = *(std::pair<const DocstoreReader_i*, Docstore_i*>*)session::Info().m_pSessionOpaque;
+		tPair.second = tSeg.m_pDocstore.get();
+
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
 			tMatch.m_tRowID = tRowID;
@@ -7570,6 +7573,10 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	if ( !iStackNeed )
 		return false;
+
+	auto& tSess = session::Info();
+	auto tDocstores = std::make_pair ( (const DocstoreReader_i*)this, (Docstore_i*)nullptr );
+	tSess.m_pSessionOpaque = (void*)&tDocstores;
 
 	bool bResult;
 	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )

@@ -5548,7 +5548,8 @@ void SearchHandler_c::OnRunFinished()
 
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
-	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile );
+	auto& tSess = session::Info();
+	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile, tSess.m_pSqlRowBuffer, &tSess.m_pSessionOpaque );
 	tQS.m_bComputeItems = true;
 	tQS.m_pCollection = m_pCollectedDocs;
 	tQS.m_pHook = pHook;

@@ -25,6 +25,7 @@
 #include "docstore.h"
 #include "schema/rset.h"
 #include "aggregate.h"
+#include "netreceive_ql.h"
 
 #include <time.h>
 #include <math.h>
@@ -1231,6 +1232,150 @@ void CollectQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 	const CSphColumnInfo * pDocId = pSchema->GetAttr ( sphGetDocidName() );
 	assert(pDocId);
 	m_bDocIdDynamic = pDocId->m_tLocator.m_bDynamic;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
+/// stream out matches
+class DirectSqlQueue_c final : public MatchSorter_c, ISphNoncopyable
+{
+	using BASE = MatchSorter_c;
+
+public:
+	explicit DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque );
+
+	bool				IsGroupby () const final { return false; }
+	int					GetLength () final { return 0; } // that ensures, flatten() will never called;
+	bool				Push ( const CSphMatch& tEntry ) final { return PushMatch(const_cast<CSphMatch&>(tEntry)); }
+	void				Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
+	{
+		for ( const auto & i : dMatches )
+			if ( i.m_tRowID!=INVALID_ROWID )
+				PushMatch(const_cast<CSphMatch&>(i));
+	}
+
+	bool				PushGrouped ( const CSphMatch &, bool ) final { assert(0); return false; }
+	int					Flatten ( CSphMatch * ) final { return 0; }
+	void				Finalize ( MatchProcessor_i &, bool, bool ) final;
+	bool				CanBeCloned() const final { return false; }
+	ISphMatchSorter *	Clone () const final { return nullptr; }
+	void				MoveTo ( ISphMatchSorter *, bool ) final {}
+	void				SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final;
+	bool				IsCutoffDisabled() const final { return true; }
+	void				SetMerge ( bool bMerge ) final {}
+
+	void SetBlobPool ( const BYTE* pBlobPool ) final
+	{
+		m_pBlobPool = pBlobPool;
+		MakeCtx();
+	}
+
+	void SetColumnar ( columnar::Columnar_i* pColumnar ) final
+	{
+		m_pColumnar = pColumnar;
+		MakeCtx();
+	}
+
+private:
+	bool 						m_bSchemaSent = false;
+	int64_t						m_iDocs = 0;
+	RowBuffer_i*				m_pOutput;
+	const BYTE*					m_pBlobPool = nullptr;
+	columnar::Columnar_i*		m_pColumnar = nullptr;
+	CSphVector<ISphExpr*>		m_dDocstores;
+	CSphVector<ISphExpr*>		m_dFinals;
+	void * 						m_pOpaque;
+	void * 						m_pCurDocstore = nullptr;
+	void * 						m_pCurDocstoreReader = nullptr;
+	CSphQuery					m_dFake;
+	CSphQueryContext			m_dCtx;
+
+	inline bool			PushMatch ( CSphMatch & tEntry );
+	void				SendSchema();
+	void				MakeCtx();
+};
+
+
+DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque )
+	: m_pOutput ( pOutput )
+	, m_pOpaque ( pOpaque )
+	, m_dCtx (m_dFake)
+{}
+
+void DirectSqlQueue_c::SendSchema()
+{
+	for ( int i = 0; i < m_pSchema->GetAttrsCount(); ++i )
+	{
+		auto& tCol = const_cast< CSphColumnInfo &>(m_pSchema->GetAttr ( i ));
+		if ( !tCol.m_pExpr )
+			continue;
+		switch ( tCol.m_eStage )
+		{
+		case SPH_EVAL_FINAL : m_dFinals.Add ( tCol.m_pExpr ); break;
+		case SPH_EVAL_POSTLIMIT: m_dDocstores.Add ( tCol.m_pExpr ); break;
+		default:
+			sphWarning ("Unknown stage in SendSchema(): %d", tCol.m_eStage);
+		}
+	}
+
+	SendSqlSchema ( *m_pSchema, m_pOutput );
+	m_bSchemaSent = true;
+}
+
+void DirectSqlQueue_c::MakeCtx()
+{
+	CSphQueryResultMeta tFakeMeta;
+	CSphVector<const ISphSchema*> tFakeSchemas;
+	m_dCtx.SetupCalc ( tFakeMeta, *m_pSchema, *m_pSchema, m_pBlobPool, m_pColumnar, tFakeSchemas );
+}
+
+
+bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
+{
+	if (!m_bSchemaSent)
+		SendSchema();
+	++m_iDocs;
+	auto* pDocstores = *(std::pair<void*,void*>**)m_pOpaque;
+	auto pDocstoreReader = pDocstores->first;
+	if ( pDocstoreReader!=std::exchange (m_pCurDocstore, pDocstoreReader) && pDocstoreReader )
+	{
+		DocstoreSession_c::InfoDocID_t tSessionInfo;
+		tSessionInfo.m_pDocstore = (const DocstoreReader_i *)pDocstoreReader;
+		tSessionInfo.m_iSessionId = -1;
+
+		// value is copied; no leak of pointer to local here.
+		m_dDocstores.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); } );
+	}
+
+	auto pDocstore = pDocstores->second;
+	if ( pDocstore != std::exchange ( m_pCurDocstoreReader, pDocstore ) && pDocstore )
+	{
+		DocstoreSession_c::InfoRowID_t tSessionInfo;
+		tSessionInfo.m_pDocstore = (Docstore_i*)pDocstore;
+		tSessionInfo.m_iSessionId = -1;
+
+		// value is copied; no leak of pointer to local here.
+		m_dFinals.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo ); } );
+	}
+
+	m_dCtx.CalcFinal(tEntry);
+
+	SendSqlMatch ( *m_pSchema, m_pOutput, tEntry, m_pBlobPool );
+	return true;
+}
+
+/// final update pass
+void DirectSqlQueue_c::Finalize ( MatchProcessor_i&, bool bCallProcessInResultSetOrder, bool bFinalizeMatches )
+{
+	if ( bFinalizeMatches )
+		m_pOutput->Eof();
+}
+
+
+void DirectSqlQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
+{
+	BASE::SetSchema ( pSchema, bRemapCmp );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -6721,6 +6866,9 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 		Precalculated_t tPrecalc = FetchPrecalculatedValues();
 		return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates(), tPrecalc );
 	}
+
+	if ( m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer )
+		return new DirectSqlQueue_c ( m_tSettings.m_pSqlRowBuffer, m_tSettings.m_pOpaque );
 
 	if ( m_tSettings.m_pCollection )
 		return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );

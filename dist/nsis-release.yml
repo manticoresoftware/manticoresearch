@@ -8,6 +8,17 @@ stages:
   stage: deploy
   tags:
     - dev-host
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+      when: manual
+    - if: $CI_COMMIT_BRANCH == "maintenance-release"
+      when: manual
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: on_success
+
 
 .collect_arc:
   extends: [ .collect_job ]
@@ -19,6 +30,7 @@ stages:
 
 build_nsis:
   stage: build
+  rules:
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/build_nsis:1.0.0

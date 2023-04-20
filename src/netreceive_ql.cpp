@@ -322,11 +322,12 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoComm
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
 
-class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
+class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 {
 	BYTE & m_uPacketID;
 	GenericOutputBuffer_c & m_tOut;
 	ClientSession_c* m_pSession = nullptr;
+	size_t m_iTotalSent = 0;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
 #endif
@@ -362,6 +363,11 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 		auto iLen = (int) strlen ( sStr );
 		SendSqlInt ( iLen );
 		m_tOut.SendBytes ( sStr, iLen );
+	}
+
+	bool SomethingWasSent() final {
+		auto iPrevSent = std::exchange ( m_iTotalSent, m_tOut.GetTotalSent() + m_tOut.GetSentCount() + GetLength() );
+		return iPrevSent != m_iTotalSent;
 	}
 
 	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags=0 )

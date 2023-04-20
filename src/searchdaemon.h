@@ -1567,6 +1567,8 @@ public:
 
 	virtual void Add ( BYTE uVal ) = 0;
 
+	virtual bool SomethingWasSent() { return false; }
+
 	// common implementations
 	void PutArray ( const StringBuilder_c & dData, bool bSendEmpty=true )
 	{

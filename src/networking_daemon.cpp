@@ -463,9 +463,9 @@ public:
 SockWrapper_c::Impl_c::Impl_c ( int iSocket, CSphNetLoop * pNetLoop )
 	: ISphNetAction ( iSocket )
 	, m_pNetLoop ( pNetLoop )
-	, m_iWriteTimeoutUS ( g_iWriteTimeoutS * S2US )
-	, m_iReadTimeoutUS ( g_iReadTimeoutS * S2US )
 {
+	SetWTimeoutUS ( g_iWriteTimeoutS * S2US );
+	SetTimeoutUS ( g_iReadTimeoutS * S2US );
 	SafeAddRef ( pNetLoop );
 }
 

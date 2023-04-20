@@ -980,21 +980,4 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 
 <!-- end -->
 
-## SHOW CHARACTER SET
-
-```sql
-SHOW CHARACTER SET
-```
-
-This is currently a placeholder query that does nothing and reports the availability of a UTF-8 character set. It was added to maintain compatibility with frameworks and connectors that automatically execute this statement.
-
-```sql
-mysql> SHOW CHARACTER SET;
-+---------+---------------+-------------------+--------+
-| Charset | Description   | Default collation | Maxlen |
-+---------+---------------+-------------------+--------+
-| utf8    | UTF-8 Unicode | utf8_general_ci   | 3      |
-+---------+---------------+-------------------+--------+
-1 row in set (0.00 sec)
-```
 <!-- proofread -->

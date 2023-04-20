@@ -43,9 +43,6 @@ Known per-session server variables:
 
 * `AUTOCOMMIT = {0 | 1}` determines if data modification statements should be implicitly wrapped by `BEGIN` and `COMMIT`.
 * `COLLATION_CONNECTION = collation_name` selects the collation for `ORDER BY` or `GROUP BY` on string values in subsequent queries. Refer to [Collations](../Searching/Collations.md) for a list of known collation names.
-* `CHARACTER_SET_RESULTS = charset_name` these variables do nothing and are placeholders to support frameworks, clients, and connectors that automatically enforce a charset when connecting to a Manticore server.
-* `SQL_AUTO_IS_NULL = value` does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
-* `SQL_MODE = <value>` does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
 * `WAIT_TIMEOUT = <value>` sets connection timeout, either per session or global. Global can only be set on a VIP connection.
 * `PROFILING = {0 | 1}` enables query profiling in the current session. Defaults to 0. See also [show profile](../Node_info_and_management/Profiling/Query_profile.md).
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` redefines [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) in the runtime. Per-session variable influences only the queries run in the same session (connection), i.e. up to disconnect. Value 0 means 'no limit'. If both per-session and the global variables are set, the per-session one has a higher priority.

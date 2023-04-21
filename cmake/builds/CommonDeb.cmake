@@ -31,7 +31,7 @@ set ( CPACK_GENERATOR DEB )
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}-${BUDDY_VERDATE}-${BUDDY_VERHASH}" )
-set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}-${BACKUP_VERDATE}-${BACKUP_VERHASH}" ) 
+set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}-${BACKUP_VERDATE}-${BACKUP_VERHASH}" )
 
 set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_DEBIAN_FILE_NAME DEB-DEFAULT )
@@ -129,7 +129,6 @@ configure_file ( "dist/deb/conffiles-server.in" "${dirserver}/conffiles" @ONLY )
 configure_file ( "dist/deb/manticore.default.in" "${dirserver}/manticore" @ONLY )
 configure_file ( "dist/deb/manticore.init.in" "${dirserver}/manticore.init" @ONLY )
 configure_file ( "dist/deb/manticore.service.in" "${dirserver}/manticore.service" @ONLY )
-configure_file ( "dist/deb/manticore.generator.in" "${dirserver}/manticore-generator" @ONLY )
 
 configure_file ( "dist/deb/README.Debian.in" "${MANTICORE_BINARY_DIR}/README.Debian" @ONLY )
 configure_file ( "dist/deb/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
@@ -165,8 +164,6 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COM
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
 install ( FILES "${dirserver}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server )
-install ( FILES "${dirserver}/manticore-generator" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system-generators
-		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server )
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin

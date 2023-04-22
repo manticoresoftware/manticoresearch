@@ -128,15 +128,15 @@ where
 * QUERY is an SQL query that must fetch values for further processing
 * RANGE-QUERY is an optional SQL query that fetches a range of values to process
 
-*Joined fields* let you avoid JOIN and/or GROUP_CONCAT statements in the main document fetch query (sql_query). This can be useful when the SQL-side JOIN is slow, or needs to be offloaded on the Manticore side, or simply to emulate MySQL-specific `GROUP_CONCAT` functionality in case your database server does not support it.
+**Joined fields** let you avoid JOIN and/or GROUP_CONCAT statements in the main document fetch query (sql_query). This can be useful when the SQL-side JOIN is slow, or needs to be offloaded on the Manticore side, or simply to emulate MySQL-specific `GROUP_CONCAT` functionality in case your database server does not support it.
 
 The query must return exactly 2 columns: document ID, and text to append to a joined field. Document IDs can be duplicate, but they must be in ascending order. All the text rows fetched for a given ID will be concatenated together, and the concatenation result will be indexed as the entire contents of a joined field. Rows will be concatenated in the order returned from the query, and separating whitespace will be inserted between them. For instance, if the joined field query returns the following rows:
 ```ini
-    ( 1, 'red' )
-    ( 1, 'right' )
-    ( 1, 'hand' )
-    ( 2, 'mysql' )
-    ( 2, 'manticore' )
+( 1, 'red' )
+( 1, 'right' )
+( 1, 'hand' )
+( 2, 'mysql' )
+( 2, 'manticore' )
 ```
 
 then the indexing results would be equivalent to adding a new text field with a value of 'red right hand' to document 1 and 'mysql sphinx' to document 2, including the keyword positions inside the field in the order they come from the query. If the rows need to be in a specific order, that needs to be explicitly defined in the query.
@@ -147,23 +147,90 @@ When a single query is not efficient enough or does not work because of the data
 
 When using `ranged-main-query` query, omit the `ranged-query`, and it will automatically use the same query from `sql_query_range` (a useful option in complex inheritance setups to save having to manually duplicate the same query many times).
 
-**Payloads** et you create a special field in which, instead of keyword positions, so-called user payloads are stored. Payloads are custom integer values attached to every keyword. They can then be used at search time to affect the ranking.
+<!-- example payload -->
+**Payloads** let you create a special field in which, instead of keyword positions, so-called user payloads are stored. Payloads are custom integer values attached to every keyword. They can then be used at search time to affect the ranking.
 
-The payload query must return exactly 3 columns: document ID; keyword; and integer payload value. Document IDs can be duplicate, but they must be in ascending order. Payloads **must** be unsigned integers within the 24-bit range, i.e., from 0 to 16777215. For reference, payloads are currently internally stored as in-field keyword positions, but that is not guaranteed and might change in the future.
+The payload query must return exactly 3 columns:
+- document ID
+- keyword
+- and integer payload value.
 
-Currently, the only method to account for payloads is to use  `SPH_RANK_PROXIMITY_BM25` ranker. On tables with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
+Document IDs can be duplicate, but they must be in ascending order. Payloads **must** be unsigned integers within the 24-bit range, i.e., from 0 to 16777215.
 
-Here's an example:
+The only ranker that accounts for payloads is `proximity_bm25` (the default [ranker](../../Searching/Sorting_and_ranking.md#Available-built-in-rankers)). On tables with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
 
+Pleas note that the payload field is ignored for full-text queries containing complex operators. It only works for simple bag-of-words queries.
+
+<!-- intro -->
+Configuration example:
+<!-- request Configuration file -->
 ```ini
-sql_joined_field = \
-        tagstext from query; \
-        SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+source min {
+    type = mysql
+    sql_host = localhost
+    sql_user = test
+    sql_pass =
+    sql_db = test
+    sql_query = select 1, 'Nike bag' f \
+    UNION select 2, 'Adidas bag' f \
+    UNION select 3, 'Reebok bag' f \
+    UNION select 4, 'Nike belt' f
 
-sql_joined_field = tag from ranged-query; \
-        SELECT id, tag FROM tags WHERE id>=$start AND id<=$end ORDER BY id ASC; \
-        SELECT MIN(id), MAX(id) FROM tags
+    sql_joined_field = tag from payload-query; select 1 id, 'nike' tag, 10 weight \
+    UNION select 4 id, 'nike' tag, 10 weight;
+}
+
+index idx {
+    path = idx
+    source = min
+}
 ```
+
+<!-- request Just SELECT -->
+```sql
+mysql> select * from idx;
++------+------------+------+
+| id   | f          | tag  |
++------+------------+------+
+|    1 | Nike bag   | nike |
+|    2 | Adidas bag |      |
+|    3 | Reebok bag |      |
+|    4 | Nike belt  | nike |
++------+------------+------+
+4 rows in set (0.00 sec)
+```
+
+<!-- request Full-text search -->
+
+Note that when you search for `nike | adidas`, the results containing "nike" receive a higher weight due to the "nike" tag and its weight originating from the payload query.
+```sql
+mysql> select *, weight() from idx where match('nike|adidas');
++------+------------+------+----------+
+| id   | f          | tag  | weight() |
++------+------------+------+----------+
+|    1 | Nike bag   | nike |    11539 |
+|    4 | Nike belt  | nike |    11539 |
+|    2 | Adidas bag |      |     1597 |
++------+------------+------+----------+
+3 rows in set (0.01 sec)
+```
+
+<!-- request Complex full-text search -->
+
+Note that the special payload field is ignored for full-text queries containing complex operators. It only works for simple bag-of-words queries.
+
+```sql
+mysql> select *, weight() from idx where match('"nike bag"|"adidas bag"');
++------+------------+------+----------+
+| id   | f          | tag  | weight() |
++------+------------+------+----------+
+|    2 | Adidas bag |      |     2565 |
+|    1 | Nike bag   | nike |     2507 |
++------+------------+------+----------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
 
 ### sql_column_buffers
 

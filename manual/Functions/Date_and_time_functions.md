@@ -169,6 +169,8 @@ Returns a formatted string based on the provided date and format arguments. The 
 - `%S` - Two-digit second (00-59)
 - `%T` - Time in 24-hour format (`%H:%M:%S`)
 
+Note that this is not a complete list of the specifiers. Please consult the documentation for `strftime()` for your operating system to get the full list.
+
 Example usage:
 
 ```sql

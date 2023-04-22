@@ -1,8 +1,8 @@
-# UDF 
+# UDF
 
 UDFs reside in the external dynamic libraries (.so files on UNIX and .dll on Windows systems). Library files need to reside in a trusted folder specified by [plugin_dir](../../Server_settings/Common.md#plugin_dir) directive, for obvious security reasons: securing a single folder is easy; letting anyone install arbitrary code into `searchd` is a risk. You can load and unload them dynamically into searchd with [CREATE FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) and [DROP FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) SQL statements respectively. Also, you can seamlessly reload UDFs (and other plugins) with [RELOAD PLUGINS](../../Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) statement. Manticore keeps track of the currently loaded functions, that is, every time you create or drop an UDF, `searchd` writes its state to the [sphinxql_state](../../Server_settings/Searchd.md#sphinxql_state) file as a plain good old SQL script.
 
-UDFs are local. In order to use them on a cluster, you have to put the same library on all its nodes and run CREATEs on all the nodes too. This might change in the future versions.
+UDFs are local. In order to use them on a cluster, you have to put the same library on all its nodes and run CREATEs on all the nodes too.
 
 Once you successfully load an UDF, you can use it in your SELECT or other statements just as well as any of the builtin functions:
 
@@ -39,11 +39,11 @@ sphinx_int64_t testfunc ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error
 ```
 
 UDF function names in SQL are case insensitive. However, the respective C function names are not, they need to be all *lower-case*, or the UDF will not load. More importantly, it is vital that
- 
+
  1. the calling convention is C (aka \_\_cdecl),
  2. arguments list matches the plugin system expectations exactly, and
  3. the return type matches the one you specify in `CREATE FUNCTION`.
- 
+
 Unfortunately, there is no (easy) way for us to check for those mistakes when loading the function, and they could crash the server and/or result in unexpected results. Last but not least, all the C functions you implement need to be thread-safe.
 
 The first argument, a pointer to `SPH_UDF_INIT` structure, is essentially a pointer to our function state. It is optional. In the example just above the function is stateless, it simply returns 123 every time it gets called. So we do not have to define an initialization function, and we can simply ignore that argument.
@@ -87,7 +87,7 @@ The most notable type is the `SPH_UDF_TYPE_FACTORS` argument type. You get that 
 
 This family consists of 3 functions.
 
-* `sphinx_factors_init()` initializes the unpacked `SPH_UDF_FACTORS` structure 
+* `sphinx_factors_init()` initializes the unpacked `SPH_UDF_FACTORS` structure
 * `sphinx_factors_unpack()` unpacks a binary blob into `SPH_UDF_FACTORS` structure
 * `sphinx_factors_deinit()` cleans up an deallocates the `SPH_UDF_FACTORS`.
 

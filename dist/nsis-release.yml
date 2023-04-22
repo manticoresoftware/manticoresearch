@@ -33,7 +33,7 @@ build_nsis:
   rules:
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/build_nsis:1.0.0
+  image: manticoresearch/build_nsis:1.0.0
   script:
     - mkdir build
     - /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh

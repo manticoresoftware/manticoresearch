@@ -74,7 +74,7 @@ select * from products;
 <!-- request JSON -->
 
 ```json
-PUT /pq/products/doc/
+PUT /json/pq/products/doc/
 {
   "query": {
     "match": {
@@ -84,7 +84,7 @@ PUT /pq/products/doc/
   "filters": ""
 }
 
-PUT /pq/products/doc/
+PUT /json/pq/products/doc/
 {
   "query": {
     "match": {
@@ -94,7 +94,7 @@ PUT /pq/products/doc/
   "filters": "color='red'"
 }
 
-PUT /pq/products/doc/
+PUT /json/pq/products/doc/
 {
   "query": {
     "match": {
@@ -327,7 +327,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /json/pq/products/_search
 {
   "query": {
     "percolate": {
@@ -540,7 +540,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /json/pq/products/_search
 {
   "query": {
     "percolate": {
@@ -781,7 +781,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /json/pq/products/_search
 {
   "query": {
     "percolate": {
@@ -1073,7 +1073,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /json/pq/products/_search
 {
   "query": {
     "percolate": {
@@ -1449,7 +1449,7 @@ SELECT * FROM pq;
 <!-- request JSON -->
 
 ```json
-POST /pq/pq/_search
+POST /json/pq/pq/_search
 ```
 
 <!-- response JSON -->
@@ -1669,7 +1669,7 @@ CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test do
 <!-- request JSON -->
 
 ```json
-POST /pq/pq/_search -d '
+POST /json/pq/pq/_search -d '
 "query":
 {
         "percolate":

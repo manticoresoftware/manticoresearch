@@ -39,7 +39,7 @@ SELECT * FROM pq;
 There are two way you can add a percolate query into a percolate table:
 * query in JSON /search compatible format, described at [json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
-PUT /pq/pq_table/doc/1
+PUT /json/pq/pq_table/doc/1
 {
   "query": {
     "match": {
@@ -57,7 +57,7 @@ PUT /pq/pq_table/doc/1
 
 * query in SQL format, described at [search query syntax](../../Searching/Filters.md#Queries-in-SQL-format)
 ```json
-PUT /pq/pq_table/doc/2
+PUT /json/pq/pq_table/doc/2
 {
   "query": {
     "ql": "@title shoes"
@@ -149,7 +149,7 @@ SELECT * FROM pq;
 <!-- request JSON -->
 
 ```json
-PUT /pq/pq_table/doc
+PUT /json/pq/pq_table/doc
 {
 "query": {
   "match": {
@@ -164,7 +164,7 @@ PUT /pq/pq_table/doc
 "tags": ["Loius Vuitton"]
 }
 
-PUT /pq/pq_table/doc
+PUT /json/pq/pq_table/doc
 {
 "query": {
   "ql": "@title shoes"
@@ -328,7 +328,7 @@ mysql> select * from pq;
 
 <!-- request JSON -->
 ```json
-GET /pq/pq/doc/2810823411335430149
+GET /json/pq/pq/doc/2810823411335430149
 {
   "took": 0,
   "timed_out": false,
@@ -352,7 +352,7 @@ GET /pq/pq/doc/2810823411335430149
   }
 }
 
-PUT /pq/pq/doc/2810823411335430149?refresh=1 -d '{
+PUT /json/pq/pq/doc/2810823411335430149?refresh=1 -d '{
   "query": {
     "match": {
       "title": "boots"
@@ -360,7 +360,7 @@ PUT /pq/pq/doc/2810823411335430149?refresh=1 -d '{
   }
 }'
 
-GET /pq/pq/doc/2810823411335430149
+GET /json/pq/pq/doc/2810823411335430149
 {
   "took": 0,
   "timed_out": false,

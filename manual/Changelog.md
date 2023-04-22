@@ -20,7 +20,6 @@ Released: March 15 2023
 * [Commit 7b6b](https://github.com/manticoresoftware/manticoresearch/commit/7b6b25f) Fixed term statistics in CALL KEYWORDS for multiple same terms.
 * [Commit f381](https://github.com/manticoresoftware/manticoresearch/commit/f381ad2) Default config is now created by Windows installer; paths are no longer substituted in runtime.
 * [Commit 6940](https://github.com/manticoresoftware/manticoresearch/commit/6940e95), [Commit cc5a](https://github.com/manticoresoftware/manticoresearch/commit/cc5a480) Fixed replication issues for cluster with nodes in multiple networks.
-* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) Fixed `/pq` HTTP endpoint to be an alias of the `/json/pq` HTTP endpoint.
 * [Commit 3b53](https://github.com/manticoresoftware/manticoresearch/commit/3b5385a) Fixed daemon crash on Buddy restart.
 * [Buddy commit fba9](https://github.com/manticoresoftware/manticoresearch-buddy/commit/fba9c8c) Display original error on invalid request received.
 * [Buddy commit db95](https://github.com/manticoresoftware/manticoresearch-buddy/commit/db9532c) Allow spaces in backup path and add some magic to regexp to support single quotes also.

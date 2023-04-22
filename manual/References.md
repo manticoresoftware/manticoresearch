@@ -89,14 +89,14 @@
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Allows running an SQL statement over HTTP
 * [/cli](Connecting_to_the_server/HTTP.md#/cli) - HTTP command line interface
 * [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
-* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
+* [/json/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Inserts a PQ rule into a percolate table
 * [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
 * [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces a document in a real-time table
-* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
+* [/json/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - Deletes a document in a table
 * [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call. More about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs search
-* [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
+* [/json/pq/tbl_name/search](Searching/Percolate_query.md) - Performs reverse search in a percolate table
 
 ### Common things
 * [data types](Creating_a_table/Data_types.md)

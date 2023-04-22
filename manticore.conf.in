@@ -6,5 +6,4 @@ searchd {
     query_log = @LOGDIR@/query.log
     pid_file = @RUNDIR@/searchd.pid
     data_dir = @CONFDIR@
-    query_log_format = sphinxql
 }

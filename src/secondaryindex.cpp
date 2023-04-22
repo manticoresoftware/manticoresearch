@@ -610,7 +610,7 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 	if ( !tCtx.IsEnabled_SI(tFilter) )
 		return false;
 
-	if ( !CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::INDEX, bForce ) )
+	if ( !CheckIndexHint ( tFilter, tCtx.m_tQuery.m_dIndexHints, SecondaryIndexType_e::INDEX, bForce ) )
 		return false;
 
 	if ( !IsSecondaryLibLoaded() || GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
@@ -625,7 +625,7 @@ static bool HaveAnalyzer ( const CSphFilterSettings & tFilter, const SelectItera
 	if ( !tCtx.IsEnabled_Analyzer(tFilter) )
 		return false;
 
-	return CheckIndexHint ( tFilter, tCtx.m_dHints, SecondaryIndexType_e::ANALYZER, bForce );
+	return CheckIndexHint ( tFilter, tCtx.m_tQuery.m_dIndexHints, SecondaryIndexType_e::ANALYZER, bForce );
 }
 
 
@@ -640,10 +640,10 @@ static bool HaveLookup ( const CSphFilterSettings & tFilter, const CSphVector<In
 
 static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
-	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
 		bool bForce = false;
-		if ( !HaveLookup( tCtx.m_dFilters[i], tCtx.m_dHints, bForce ) )
+		if ( !HaveLookup( tCtx.m_tQuery.m_dFilters[i], tCtx.m_tQuery.m_dIndexHints, bForce ) )
 			continue;
 
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::LOOKUP );
@@ -658,9 +658,9 @@ static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const 
 	if ( !tCtx.m_pHistograms )
 		return;
 
-	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
-		const CSphFilterSettings & tFilter = tCtx.m_dFilters[i];
+		const CSphFilterSettings & tFilter = tCtx.m_tQuery.m_dFilters[i];
 		const Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tFilter.m_sAttrName );
 		if ( !pHistogram )
 			continue;
@@ -684,10 +684,10 @@ static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const 
 
 static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
-	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
 		bool bForce = false;
-		if ( !HaveAnalyzer ( tCtx.m_dFilters[i], tCtx, bForce ) )
+		if ( !HaveAnalyzer ( tCtx.m_tQuery.m_dFilters[i], tCtx, bForce ) )
 			continue;
 
 		if ( bForce )
@@ -715,7 +715,7 @@ static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
 static void DisableRowidFilters ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
 	ARRAY_FOREACH ( i, dSIInfo )
-		if ( tCtx.m_dFilters[i].m_sAttrName=="@rowid" )
+		if ( tCtx.m_tQuery.m_dFilters[i].m_sAttrName=="@rowid" )
 			dSIInfo[i].m_dCapabilities.Resize(0);
 }
 
@@ -725,7 +725,7 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 	ARRAY_FOREACH ( i, dSIInfo )
 	{
 		auto & tSIInfo = dSIInfo[i];
-		auto & tFilter = tCtx.m_dFilters[i];
+		auto & tFilter = tCtx.m_tQuery.m_dFilters[i];
 
 		bool bHaveAnalyzers = tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::ANALYZER; } );
 		bool bHaveSI		= tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::INDEX; } );
@@ -740,7 +740,7 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 			tCFCtx.m_pFilters	= &dFilter;
 			tCFCtx.m_pSchema	= &tCtx.m_tSchema;
 			tCFCtx.m_pColumnar	= tCtx.m_pColumnar;
-			tCFCtx.m_eCollation	= tCtx.m_eCollation;
+			tCFCtx.m_eCollation	= tCtx.m_tQuery.m_eCollation;
 			tCFCtx.m_bScan		= true;
 			tCFCtx.m_pHistograms= tCtx.m_pHistograms;
 			tCFCtx.m_iTotalDocs	= tCtx.m_iTotalDocs;
@@ -750,7 +750,7 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 				continue;
 
 			common::Filter_t tColumnarFilter;
-			if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_eCollation, tCtx.m_tSchema, sWarning ) )
+			if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tSchema, sWarning ) )
 				continue;
 
 			tSIInfo.m_iPartialColumnarMinMax = tCtx.m_pColumnar->EstimateMinMax ( tColumnarFilter, *tCFCtx.m_pFilter );
@@ -783,7 +783,7 @@ static uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t
 
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
-	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_eCollation, tCtx.m_tSchema, sWarning ) )
+	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tSchema, sWarning ) )
 		return 0;
 
 	return tCtx.m_pSI->GetNumIterators(tColumnarFilter);
@@ -795,14 +795,14 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 	ARRAY_FOREACH ( i, dSIInfo )
 	{
 		auto & tSIInfo = dSIInfo[i];
-		tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tCtx.m_dFilters[i], tSIInfo.m_iRsetEstimate, tCtx );
+		tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tCtx.m_tQuery.m_dFilters[i], tSIInfo.m_iRsetEstimate, tCtx );
 	}
 }
 
 
 static bool CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, CSphString & sWarning )
 {
-	for ( auto & i : tCtx.m_dHints )
+	for ( auto & i : tCtx.m_tQuery.m_dIndexHints )
 		switch ( i.m_eType )
 		{
 		case SecondaryIndexType_e::LOOKUP:
@@ -826,9 +826,9 @@ static bool CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const
 			break;
 		}
 
-	ARRAY_FOREACH ( i, tCtx.m_dFilters )
-		for ( auto & tHint : tCtx.m_dHints )
-			if ( tHint.m_sIndex==tCtx.m_dFilters[i].m_sAttrName && tHint.m_bForce )
+	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+		for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
+			if ( tHint.m_sIndex==tCtx.m_tQuery.m_dFilters[i].m_sAttrName && tHint.m_bForce )
 				if ( !dSIInfo[i].m_dCapabilities.any_of ( [&tHint]( auto eSupported ){ return tHint.m_eType==eSupported; } ) )
 				{
 					sWarning.SetSprintf ( "hint error: requested hint type not supported for '%s' attribute", tHint.m_sIndex.cstr() );
@@ -844,12 +844,12 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 {
 	fBestCost = FLT_MAX;
 
-	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_dFilters.GetLength() );
+	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_tQuery.m_dFilters.GetLength() );
 	ARRAY_FOREACH ( i, dSIInfo )
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::FILTER );
 
 	// no iterators with OR queries
-	if ( !tCtx.m_dFilterTree.IsEmpty() || !tCtx.m_pHistograms )
+	if ( !tCtx.m_tQuery.m_dFilterTree.IsEmpty() || !tCtx.m_pHistograms )
 		return dSIInfo;
 
 	MarkAvailableLookup ( dSIInfo, tCtx );

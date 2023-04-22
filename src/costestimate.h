@@ -39,21 +39,18 @@ namespace SI
 
 struct SelectIteratorCtx_t
 {
-	const CSphVector<CSphFilterSettings> &	m_dFilters;
-	const CSphVector<FilterTreeItem_t> &	m_dFilterTree;
-	const CSphVector<IndexHint_t> &			m_dHints;
+	const CSphQuery &						m_tQuery;
 	const ISphSchema &						m_tSchema;
 	const HistogramContainer_c *			m_pHistograms = nullptr;
 	columnar::Columnar_i *					m_pColumnar = nullptr;
 	SI::Index_i *							m_pSI = nullptr;
-	ESphCollation							m_eCollation = SPH_COLLATION_DEFAULT;
 	int										m_iCutoff = -1;
 	int64_t									m_iTotalDocs = 0;
 	int										m_iThreads = 1;
 	bool									m_bCalcPushCost = true;
 	bool									m_bFromIterator = false;
 
-			SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> &	dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs, int iThreads );
+			SelectIteratorCtx_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
 
 	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
 	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;

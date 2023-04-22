@@ -12,6 +12,7 @@
 #include "costestimate.h"
 
 #include "sphinxint.h"
+#include "sphinxsort.h"
 #include "columnarfilter.h"
 #include "secondarylib.h"
 #include <math.h>
@@ -31,6 +32,7 @@ private:
 	static constexpr float SCALE = 1.0f/1000000.0f;
 
 	static constexpr float COST_PUSH					= 6.0f;
+	static constexpr float COST_PUSH_IG					= 3.0f;
 	static constexpr float COST_FILTER					= 8.5f;
 	static constexpr float COST_COLUMNAR_FILTER			= 4.0f;
 	static constexpr float COST_INTERSECT				= 5.0f;
@@ -48,6 +50,7 @@ private:
 	static float	Cost_BlockFilter ( int64_t iDocs, float fComplexity )	{ return Cost_Filter ( iDocs/DOCINFO_INDEX_FREQ, fComplexity ); }
 	static float	Cost_ColumnarFilter ( int64_t iDocs, float fComplexity ){ return COST_COLUMNAR_FILTER*fComplexity*iDocs*SCALE; }
 	static float	Cost_Push ( int64_t iDocs )								{ return COST_PUSH*iDocs*SCALE; }
+	static float	Cost_PushImplicitGroupby ( int64_t iDocs )				{ return COST_PUSH_IG*iDocs*SCALE; }
 	static float	Cost_Intersect ( int64_t iDocs )						{ return COST_INTERSECT*iDocs*SCALE; }
 	static float	Cost_IndexReadSingle ( int64_t iDocs )					{ return COST_INDEX_READ_SINGLE*iDocs*SCALE; }
 	static float	Cost_IndexReadDenseBitmap ( int64_t iDocs )				{ return COST_INDEX_READ_DENSE_BITMAP*iDocs*SCALE; }
@@ -131,7 +134,7 @@ float CostEstimate_c::CalcIndexCost() const
 		uint32_t uNumIterators = tSIInfo.m_uNumSIIterators;
 		if ( uNumIterators )
 		{
-			const auto & tFilter = m_tCtx.m_dFilters[i];
+			const auto & tFilter = m_tCtx.m_tQuery.m_dFilters[i];
 
 			if ( uNumIterators>1 && !NeedBitmapUnion ( tFilter, iDocs ) )
 				fCost += Cost_IndexUnionQueue(iDocs);
@@ -182,7 +185,7 @@ float CostEstimate_c::CalcFilterCost ( bool bFromIterator, float fDocsAfterIndex
 	ARRAY_FOREACH ( i, m_dSIInfo )
 	{
 		const auto & tSIInfo = m_dSIInfo[i];
-		const auto & tFilter = m_tCtx.m_dFilters[i];
+		const auto & tFilter = m_tCtx.m_tQuery.m_dFilters[i];
 
 		if ( tSIInfo.m_eType!=SecondaryIndexType_e::FILTER )
 			continue;
@@ -215,7 +218,7 @@ float CostEstimate_c::CalcAnalyzerCost() const
 	ARRAY_FOREACH ( i, m_dSIInfo )
 	{
 		const auto & tSIInfo = m_dSIInfo[i];
-		const auto & tFilter = m_tCtx.m_dFilters[i];
+		const auto & tFilter = m_tCtx.m_tQuery.m_dFilters[i];
 
 		if ( tSIInfo.m_eType!=SecondaryIndexType_e::ANALYZER )
 			continue;
@@ -266,6 +269,9 @@ float CostEstimate_c::CalcPushCost ( float fDocsAfterFilters ) const
 {
 	int64_t iDocsToPush = fDocsAfterFilters*m_tCtx.m_iTotalDocs;
 	iDocsToPush = ApplyCutoff(iDocsToPush);
+	if ( HasImplicitGrouping ( m_tCtx.m_tQuery ) )
+		return Cost_PushImplicitGroupby ( iDocsToPush );
+
 	return Cost_Push ( iDocsToPush );
 }
 
@@ -376,15 +382,12 @@ float CostEstimate_c::CalcQueryCost()
 
 /////////////////////////////////////////////////////////////////////
 
-SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const ISphSchema &	tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, ESphCollation eCollation, int iCutoff, int64_t iTotalDocs, int iThreads )
-	: m_dFilters ( dFilters )
-	, m_dFilterTree ( dFilterTree )
-	, m_dHints ( dHints )
+SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads )
+	: m_tQuery ( tQuery )
 	, m_tSchema ( tSchema )
 	, m_pHistograms ( pHistograms )
 	, m_pColumnar ( pColumnar )
 	, m_pSI ( pSI )
-	, m_eCollation ( eCollation )
 	, m_iCutoff ( iCutoff )
 	, m_iTotalDocs ( iTotalDocs )
 	, m_iThreads ( iThreads )
@@ -412,7 +415,7 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 		return false;
 
 	// FIXME!!! warn in case force index used but index was skipped
-	if ( pCol->m_eAttrType==SPH_ATTR_STRING && m_eCollation!=SPH_COLLATION_DEFAULT )
+	if ( pCol->m_eAttrType==SPH_ATTR_STRING && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
 		return false;
 
 	return m_pSI->IsEnabled( tFilter.m_sAttrName.cstr() );

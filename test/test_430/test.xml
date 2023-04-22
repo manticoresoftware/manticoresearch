@@ -32,6 +32,7 @@ source test
 	sql_field_string  = property
 	sql_attr_multi    = uint categories from field
 	sql_attr_json     = j
+	sql_attr_float    = coeff
 }
 
 index test
@@ -82,33 +83,34 @@ CREATE TABLE `test_table` (
   `brand_name` varchar(255),
   `property` varchar(255),
   `categories` varchar(255),
-  `j` varchar(255)
+  `j` varchar(255),
+  `coeff` float
 );
 </db_create>
 
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 
-<db_insert>insert into test_table (id,price,brand_id,title,brand_name,property,categories,j) values
-(1001,529,9,'Product Five Two','Brand Nine','Four','(13,14)','{x:[13,14],a:["a13","a14"]}'),
-(1002,173,10,'Product Five Seven','Brand Ten','Four','(10)','{x:[10],a:["a10"]}'),
-(1003,121,1,'Product Seven Nine','Brand One','Five','(13,14,15)','{x:[13,14,15],a:["a13","a14","a15"]}'),
-(1004,474,7,'Product Ten Three','Brand Seven','Nine','(10,11,12)','{x:[10,11,12],a:["a10","a11","a12"]}'),
-(1005,20,7,'Product Ten Four','Brand Seven','Seven','(13)','{x:[13],a:["a13"]}'),
-(1006,100,3,'Product One Three','Brand Three','Seven','(10)','{x:[10],a:["a10"]}'),
-(1007,724,9,'Product Four Eight','Brand Nine','Five','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}'),
-(1008,13,3,'Product Seven One','Brand Three','Eight','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}'),
-(1009,54,2,'Product Ten Seven','Brand Two','Eight','(11)','{x:[11],a:["a11"]}'),
-(1010,986,6,'Product Six Ten','Brand Six','Eight','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}'),
-(1011,100,10,'Product One Ten','Brand Ten','Four','(11)','{x:[11],a:["a11"]}'),
-(1012,69,10,'Product Five Seven','Brand Ten','Two','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}'),
-(1013,365,4,'Product Two Nine','Brand Four','Ten','(10,11,12)','{x:[10,11,12],a:["a10","a11","a12"]}'),
-(1014,455,1,'Product Two Eight','Brand One','Nine','(13,14,15)','{x:[13,14,15],a:["a13","a14","a15"]}'),
-(1015,718,4,'Product Nine Two','Brand Four','Eight','(10)','{x:[10],a:["a10"]}'),
-(1016,758,9,'Product Eight Ten','Brand Nine','Seven','(13)','{x:[13],a:["a13"]}'),
-(1017,493,4,'Product Nine Six','Brand Four','Five','(11,12)','{x:[11,12],a:["a11","a12"]}'),
-(1018,413,3,'Product Eight Five','Brand Three','Four','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}'),
-(1019,78,4,'Product Six Five','Brand Four','Two','(12)','{x:[12],a:["a12"]}'),
-(1020,169,4,'','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}')
+<db_insert>insert into test_table (id,price,brand_id,title,brand_name,property,categories,j,coeff) values
+(1001,529,9,'Product Five Two','Brand Nine','Four','(13,14)','{x:[13,14],a:["a13","a14"]}',1.0),
+(1002,173,10,'Product Five Seven','Brand Ten','Four','(10)','{x:[10],a:["a10"]}',2.0),
+(1003,121,1,'Product Seven Nine','Brand One','Five','(13,14,15)','{x:[13,14,15],a:["a13","a14","a15"]}',1.0),
+(1004,474,7,'Product Ten Three','Brand Seven','Nine','(10,11,12)','{x:[10,11,12],a:["a10","a11","a12"]}',0.0),
+(1005,20,7,'Product Ten Four','Brand Seven','Seven','(13)','{x:[13],a:["a13"]}',1.0),
+(1006,100,3,'Product One Three','Brand Three','Seven','(10)','{x:[10],a:["a10"]}',2.0),
+(1007,724,9,'Product Four Eight','Brand Nine','Five','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}',0.0),
+(1008,13,3,'Product Seven One','Brand Three','Eight','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}',1.0),
+(1009,54,2,'Product Ten Seven','Brand Two','Eight','(11)','{x:[11],a:["a11"]}',0.0),
+(1010,986,6,'Product Six Ten','Brand Six','Eight','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}',3.0),
+(1011,100,10,'Product One Ten','Brand Ten','Four','(11)','{x:[11],a:["a11"]}',2.5),
+(1012,69,10,'Product Five Seven','Brand Ten','Two','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}',2.5),
+(1013,365,4,'Product Two Nine','Brand Four','Ten','(10,11,12)','{x:[10,11,12],a:["a10","a11","a12"]}',1.0),
+(1014,455,1,'Product Two Eight','Brand One','Nine','(13,14,15)','{x:[13,14,15],a:["a13","a14","a15"]}',4.0),
+(1015,718,4,'Product Nine Two','Brand Four','Eight','(10)','{x:[10],a:["a10"]}',2.0),
+(1016,758,9,'Product Eight Ten','Brand Nine','Seven','(13)','{x:[13],a:["a13"]}',3.0),
+(1017,493,4,'Product Nine Six','Brand Four','Five','(11,12)','{x:[11,12],a:["a11","a12"]}',0.0),
+(1018,413,3,'Product Eight Five','Brand Three','Four','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}',2.0),
+(1019,78,4,'Product Six Five','Brand Four','Two','(12)','{x:[12],a:["a12"]}',1.0),
+(1020,169,4,'','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}',5.0)
 </db_insert>
 
 <metaindex name='META:all'>
@@ -187,6 +189,8 @@ select brand_id from test_col where price&gt;500 and brand_id&gt;5 /*+ NO_Column
 show meta;
 
 select groupby(), count(*) from META:all group by price,brand_id;
+
+select groupby(), count(*) from META:all group by coeff;
 </sphinxql></queries>
 
 </test>

@@ -3071,7 +3071,7 @@ bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads
 	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
 
 	CSphString sWarning;
-	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
+	SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
 	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost, sWarning );
 
 	// disable pseudo sharding if any of the queries use secondary indexes/docid lookups
@@ -3137,7 +3137,8 @@ int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter ) con
 	if ( !m_pSIdx.get() || m_tDeadRowMap.HasDead() )
 		return -1;
 
-	SelectIteratorCtx_t tCtx ( {}, {}, {}, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), SPH_COLLATION_DEFAULT, 0, m_iDocinfo, 1 );
+	CSphQuery tQuery;
+	SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), 0, m_iDocinfo, 1 );
 	if ( !tCtx.IsEnabled_SI(tFilter) )
 		return -1;
 
@@ -5227,10 +5228,11 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 
 static bool BuildSetupHistograms ( const ISphSchema & tSchema, std::unique_ptr<HistogramContainer_c> & pContainer, CSphVector<HistogramSource_t> & dHistograms )
 {
+	const int MAX_HISTOGRAM_SIZE = 8192;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType ).release();
+		Histogram_i * pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType, MAX_HISTOGRAM_SIZE ).release();
 		if ( pHistogram )
 			dHistograms.Add ( { pHistogram, i, tAttr.m_eAttrType } );
 	}
@@ -8012,7 +8014,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 	// 4. estimate the cost of intersecting FT and iterator results
 	NodeEstimate_t tEstimate = pRanker->Estimate ( m_iDocinfo );
 
-	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
+	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
 	tSelectIteratorCtx.IgnorePushCost();
 	float fBestCost = FLT_MAX;
 	dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, sWarning );
@@ -8073,7 +8075,7 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 		// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetric()
 		// For now we use approach b) as it is simpler
 		float fBestCost = FLT_MAX;
-		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), tQuery.m_eCollation, iCutoff, m_iDocinfo, iThreads );
+		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, tMeta.m_sWarning );
 	}
 	else

@@ -578,7 +578,7 @@ static float GetEstimatedCost ( CSphQuery & tQuery, CSphIndex * pIndex, Secondar
 	}
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
-	SelectIteratorCtx_t tCtx ( tQuery.m_dFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->GetColumnar(), pIndex->Debug_GetSI(), tQuery.m_eCollation, iCutoff, tStats.m_iTotalDocuments, 1 );
+	SelectIteratorCtx_t tCtx ( tQuery, pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->GetColumnar(), pIndex->Debug_GetSI(), iCutoff, tStats.m_iTotalDocuments, 1 );
 	std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dSIInfo, tCtx ) );
 	return pEstimate->CalcQueryCost();
 }

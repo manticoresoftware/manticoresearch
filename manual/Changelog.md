@@ -42,6 +42,7 @@
 * When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
 * [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
 * The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command.
+* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) `/pq` HTTP endpoint is now an alias of the `/json/pq` HTTP endpoint.
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.

@@ -307,9 +307,7 @@ collect_bookworm:
 
 nsis_release:
   stage: deploy
-  rules:
-    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
-      when: on_success
+  rules: 
   trigger:
     include: dist/nsis-release.yml
   needs:
@@ -324,7 +322,15 @@ build_docker:
   variables:
     GIT_STRATEGY: none
   rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+      when: manual
+    - if: $CI_COMMIT_BRANCH == "maintenance-release"
+      when: manual
     - if: $CI_COMMIT_BRANCH == "master"
+      when: on_success
   tags:
     - dev-host
   script:

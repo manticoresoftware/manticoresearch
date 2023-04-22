@@ -20,6 +20,7 @@ source test1
 	sql_attr_uint  = tag
     sql_attr_bool  = flag
 	sql_attr_string = extra
+	sql_attr_float = coeff
 }
 
 source test2
@@ -72,7 +73,8 @@ CREATE TABLE `test_table1` (
   `title` varchar(255),
   `tag` int,
   `flag` int,
-  `extra` varchar(255)
+  `extra` varchar(255),
+  `coeff` float
 );
 </db_create>
 
@@ -86,12 +88,12 @@ CREATE TABLE `test_table2` (
 
 <db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
 <db_insert>
-insert into test_table1 (id,title, tag, flag,extra) values
-(1,'abc', 1, 1,''),
-(2,'abc', 1, 1,''),
-(3,'abc', 2, 0,''),
-(4,'abc', 1, 1,'1'),
-(5,'abc', 2, 0,'1')
+insert into test_table1 (id,title, tag, flag,extra,coeff) values
+(1,'abc', 1, 1,'', 0.0 ),
+(2,'abc', 1, 1,'', -1.0 ),
+(3,'abc', 2, 0,'', -10.0 ),
+(4,'abc', 1, 1,'1', 10.0 ),
+(5,'abc', 2, 0,'1', -100.0 )
 </db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table2</db_drop>
@@ -133,6 +135,12 @@ select * from test1 where extra!='' order by id desc /*+ SecondaryIndex(extra) *
 select count(*) from test1 where tag=1;
 select count(*) from test1 where tag!=1;
 select count(*) from test1;
+
+select id, coeff from test1 where coeff&lt;0.0 /*+ SecondaryIndex(coeff) */;
+select id, coeff from test1 where coeff&lt;-2.0 /*+ SecondaryIndex(coeff) */;
+select id, coeff from test1 where coeff&lt;-5.0 /*+ SecondaryIndex(coeff) */;
+select id, coeff from test1 where coeff&lt;-10.0 /*+ SecondaryIndex(coeff) */;
+
 </sphinxql>
 
 </queries>

@@ -887,9 +887,12 @@ bool sphJsonParse ( CSphVector<BYTE> &dData, char * sData, bool bAutoconv, bool 
 DWORD sphJsonKeyMask ( const char * sKey, int iLen )
 {
 	DWORD uCrc = sphCRC32 ( sKey, iLen );
-	return
-		( 1UL<<( uCrc & 31 ) ) +
-		( 1UL<<( ( uCrc>>8 ) & 31 ) );
+
+	DWORD uBloom1 = ( 1UL<<( uCrc & 31 ) );
+	DWORD uBloom2 = ( 1UL<<( ( uCrc>>8 ) & 31 ) );
+
+	// DWORD overflow protection as 0 at bloom mask means not the ROOT node
+	return ( ( uBloom1 + uBloom2 ) ? ( uBloom1 + uBloom2 ) : ( uBloom1 | uBloom2 ) );
 }
 
 static inline DWORD KeyMask ( const char * s )

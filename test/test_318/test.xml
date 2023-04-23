@@ -41,6 +41,22 @@ index test
 	path			= <data_path/>/test
 }
 
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+	sql_attr_json	= j1
+    sql_attr_json	= j2
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+}
 </config>
 
 <db_create>
@@ -63,11 +79,34 @@ INSERT INTO `test_table` VALUES
 (6,1,'test 6','[]')
 </db_insert>
 
+<db_create>
+CREATE TABLE `test_table1` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `j1` varchar(255) NOT NULL,
+  `j2` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table1`;</db_drop>
+<db_insert>
+INSERT INTO `test_table1` VALUES
+(2,1,'test 2','{"1234":0}', '{ "1416" : 0 }'),
+(3,1,'test 3','{ "1" : 1 }', '{ "1416" : { "1" : 12 } }'),
+(4,1,'test 4','{"12":1}',  '{ "141" : 1 }')
+</db_insert>
+
 <queries><sphinxql>
 select * from test where json_data.price is null;
 select * from test where json_data.price is not null;
 select * from test where json_data.price &lt; 25;
 select * from test where json_data is not null;
 select id i, json_data as j from test where j is not null;
+
+<!-- regression crash on access of json atribute with empty bloom -->
+select * from test1;
+select * from test1 where j2.1416 is not null;
+select *, j2.1416, j2.1416.1 from test1;
 </sphinxql></queries>
 </test>

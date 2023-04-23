@@ -2285,11 +2285,7 @@ public:
 		// memorize old dynamic first
 		memcpy ( m_dRowBuf.Begin(), tDst.m_pDynamic, m_dRowBuf.GetLengthBytes() );
 
-		if ( m_dOtherPtrRows.GetLength() )
-		{
-			m_pSchema->FreeDataSpecial ( tDst, m_dOtherPtrRows );
-			m_pSchema->CloneMatchSpecial ( tDst, tSrc, m_dOtherPtrRows );
-		}
+		m_pSchema->CloneMatchSpecial ( tDst, tSrc, m_dOtherPtrRows );
 
 		/*
 			FreeDataSpecial ( tDst, m_dOtherPtrRows );

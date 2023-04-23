@@ -2285,8 +2285,11 @@ public:
 		// memorize old dynamic first
 		memcpy ( m_dRowBuf.Begin(), tDst.m_pDynamic, m_dRowBuf.GetLengthBytes() );
 
-		m_pSchema->FreeDataSpecial ( tDst, m_dOtherPtrRows );
-		m_pSchema->CloneMatchSpecial ( tDst, tSrc, m_dOtherPtrRows );
+		if ( m_dOtherPtrRows.GetLength() )
+		{
+			m_pSchema->FreeDataSpecial ( tDst, m_dOtherPtrRows );
+			m_pSchema->CloneMatchSpecial ( tDst, tSrc, m_dOtherPtrRows );
+		}
 
 		/*
 			FreeDataSpecial ( tDst, m_dOtherPtrRows );
@@ -2718,6 +2721,7 @@ protected:
 	{
 		if_const ( NOTIFICATIONS && bNotify )
 			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
+
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
 
 		// on final pass we totally wipe match.

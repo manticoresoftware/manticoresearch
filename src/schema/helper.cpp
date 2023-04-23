@@ -100,11 +100,17 @@ void CSphSchemaHelper::ResetSchemaHelper()
 
 void CSphSchemaHelper::CloneMatch ( CSphMatch& tDst, const CSphMatch& rhs ) const
 {
-	CloneMatchSpecial ( tDst, rhs, m_dDataPtrAttrs );
+	if ( m_dDataPtrAttrs.GetLength() )
+		CloneMatchSpecial ( tDst, rhs, m_dDataPtrAttrs );
+	else
+		tDst.Combine ( rhs, GetDynamicSize() );
 }
 
 void CSphSchemaHelper::FreeDataPtrs ( CSphMatch& tMatch ) const
 {
+	if ( !m_dDataPtrAttrs.GetLength() )
+		return;
+
 	FreeDataSpecial ( tMatch, m_dDataPtrAttrs );
 }
 

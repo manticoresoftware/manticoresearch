@@ -329,6 +329,24 @@ index dist_facet1
 	agent_query_timeout		= 3000
 }
 
+index dist21
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist22
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+    agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+
 </config>
 
 
@@ -546,6 +564,13 @@ SELECT mva1 FROM dist_facet1 ORDER BY id desc FACET mva1;;
 
 <!-- crash at count distinct with empty result set -->
 select id, count(distinct tag) d from idx1, idx2 where match ( 'missed' ) group by gr;
+
+<!-- error at count to distinct with empty result set -->
+select count(*) c from dist21;
+select count(*) c from dist22;
+select count(*) c from dist21 where id = 10;
+select count(*) c from dist22 where id = 10;
+select count(*) c from dist22 where id = 3;
 
 </sphinxql></queries>
 

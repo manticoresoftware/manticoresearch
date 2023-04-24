@@ -22,7 +22,7 @@ set ( CPACK_GENERATOR RPM )
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}_${BUDDY_VERDATE}.${BUDDY_VERHASH}" )
-set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" ) 
+set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" )
 
 set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_RPM_FILE_NAME RPM-DEFAULT )
@@ -135,7 +135,7 @@ configure_file ( ${SCR}/manticore-common.post.in "${dircommon}/manticore.post" @
 configure_file ( ${SCR}/manticore-core.post.in "${dircore}/manticore.post" @ONLY )
 configure_file ( ${SCR}/manticore-server.post.in "${dirserver}/manticore.post" @ONLY )
 configure_file ( ${SCR}/manticore.tmpfiles.in "${MANTICORE_BINARY_DIR}/manticore.tmpfiles" @ONLY )
-configure_file ( ${SCR}/manticore.generator.in "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
+configure_file ( ${SCR}/manticore.service.in "${dirserver}/manticore.service" @ONLY )
 
 # installation
 
@@ -155,8 +155,9 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COM
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
 ## note! file below is NOT manticore config, that is config of tmpfiles!
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_INSTALL_LIB}/tmpfiles.d COMPONENT server RENAME searchd.conf )
-install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator DESTINATION ${CMAKE_INSTALL_LIB}/systemd/system-generators COMPONENT server )
 
+# stuff that should go to /lib -> actually to /usr/lib
+install ( FILES "${dirserver}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server )
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin

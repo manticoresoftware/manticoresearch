@@ -16,6 +16,7 @@
 #include "searchdaemon.h"
 #include "searchdddl.h"
 #include "sphinxql_debug.h"
+#include "sphinxql_second.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -259,7 +260,6 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
-	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
 	bool			AddFloatFilterGreater ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
@@ -1121,16 +1121,11 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 	dVec.Last().second = (int) tValue.GetValueInt();
 }
 
-void SqlParser_c::SetStatement ( const YYSTYPE& tName, SqlSet_e eSet )
-{
-	m_pStmt->m_eStmt = STMT_SET;
-	m_pStmt->m_eSet = eSet;
-	ToString ( m_pStmt->m_sSetName, tName );
-}
-
 void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName )
 {
-	SetStatement ( tName, SET_LOCAL );
+	m_pStmt->m_eStmt = STMT_SET;
+	m_pStmt->m_eSet = SET_LOCAL;
+	ToString ( m_pStmt->m_sSetName, tName );
 }
 
 void SqlParser_c::SwapSubkeys ()
@@ -1552,33 +1547,27 @@ static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sEr
 
 static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError, bool bKeepError )
 {
-	// parse ddl
+	using ParserFN = ParseResult_e ( * ) ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
+	ParserFN dParsers[] = { ParseDdlEx, ParseSecond, ParseDebugCmd };
+
 	CSphString sNewError;
-	auto eRes = ParseDdlEx ( sQuery, dStmt, sNewError );
-	if ( eRes != ParseResult_e::PARSE_OK )
-		sphLogDebug ( "%s", sNewError.cstr() );
-	if ( eRes==ParseResult_e::PARSE_ERROR && !bKeepError )
+	ParseResult_e eRes;
+	for ( ParserFN pParser : dParsers )
 	{
-		sError = sNewError;
-		bKeepError = true;
+		if ( !dStmt.IsEmpty() )
+			dStmt.Pop();
+		eRes = pParser ( sQuery, dStmt, sNewError );
+		if ( eRes != ParseResult_e::PARSE_OK )
+			sphLogDebug ( "%s", sNewError.cstr() );
+		if ( eRes == ParseResult_e::PARSE_ERROR && !bKeepError )
+		{
+			sError = sNewError;
+			bKeepError = true;
+		}
+		if ( eRes == ParseResult_e::PARSE_OK )
+			return eRes;
 	}
-	if ( eRes != ParseResult_e::PARSE_SYNTAX_ERROR )
-		return eRes;
 
-	// parse debug statements
-	eRes = ParseDebugCmd ( sQuery, dStmt, sNewError );
-	if ( eRes != ParseResult_e::PARSE_OK )
-		sphLogDebug ( "%s", sNewError.cstr() );
-	if ( eRes == ParseResult_e::PARSE_ERROR && !bKeepError )
-	{
-		sError = sNewError;
-		bKeepError = true;
-	}
-	if ( eRes != ParseResult_e::PARSE_SYNTAX_ERROR )
-		return eRes;
-
-	// m.b. add other parsers, like:
-	// eRes = ParseThird ( dStmt, sQuery, sError );
 	return eRes;
 }
 

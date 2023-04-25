@@ -1900,11 +1900,7 @@ static bool IsDDLToken ( const CSphString & sTok )
 
 	CSphString sToken = sTok;
 	sToken.ToUpper();
-	for ( const auto & i : dTokens )
-		if ( i==sToken )
-			return true;
-
-	return false;
+	return any_of ( dTokens, [&sToken] ( const auto& i ) { return i == sToken; } );
 }
 
 

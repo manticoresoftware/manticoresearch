@@ -1,0 +1,31 @@
+[Unit]
+Description=Manticore Search Engine
+After=network.target remote-fs.target nss-lookup.target
+After=syslog.target
+
+[Service]
+Type=forking
+User=manticore
+Group=manticore
+# Run ExecStartPre with root-permissions
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/manticore
+ExecStartPre=/bin/chown manticore.manticore @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
+# Run ExecStart with User=manticore / Group=manticore
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf
+ExecStop=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf --stopwait
+KillMode=process
+KillSignal=SIGTERM
+SendSIGKILL=no
+LimitNOFILE=65536
+LimitCORE=infinity
+LimitMEMLOCK=infinity
+Restart=on-failure
+TimeoutStartSec=infinity
+PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/searchd.pid
+
+[Install]
+WantedBy=multi-user.target
+Alias=manticore.service
+Alias=searchd.service
+

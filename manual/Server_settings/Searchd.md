@@ -452,7 +452,7 @@ If you don't specify any `listen` in the configuration at all, Manticore will wa
 
 By default, Linux won't allow you to let Manticore listen on a port below 1024 (e.g. `listen = 127.0.0.1:80:http` or `listen = 127.0.0.1:443:https`) unless you run searchd under root. If you still want to be able to start Manticore, so it listens on ports < 1024 under a non-root user, consider doing one of the following (either of these should work):
 * Run the command `setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/searchd`
-* Add `AmbientCapabilities=CAP_NET_BIND_SERVICE` to Manticore's systemd unit (`/lib/systemd/system-generators/manticore-search-generator`) and reload the daemon (`systemctl daemon-reload`).
+* Add `AmbientCapabilities=CAP_NET_BIND_SERVICE` to Manticore's systemd unit and reload the daemon (`systemctl daemon-reload`).
 
 #### Technical details about Sphinx API protocol and TFO
 <details>

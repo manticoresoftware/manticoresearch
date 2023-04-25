@@ -42,20 +42,6 @@ To make Manticore start at boot, run:
 sudo systemctl enable manticore
 ```
 
-In some newer operating systems, it may fail with an error "Failed to enable unit: Unit... is transient or generated." In this case, you can remove the generator and try again. It's unlikely you need the generator ever again after Manticore is installed.
-
-In Debian-based operating systems run:
-```bash
-sudo rm /lib/systemd/system-generators/manticore-generator
-sudo systemctl daemon-reload
-```
-
-In CentOS and RHEL run:
-```bash
-sudo rm /usr/lib/systemd/system-generators/manticore-search-generator
-sudo systemctl daemon-reload
-```
-
 If you still need the generator again, just install the Manticore packages again and it will recover the generator file.
 
 `searchd` process logs startup information in `systemd` journal. If `systemd` logging is enabled you can view the logged information with the following command:

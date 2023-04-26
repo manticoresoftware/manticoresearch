@@ -990,6 +990,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	BYTE uPacketID = 1;
 	int iPacketLen;
 	int iTimeoutS = -1;
+	int iWTimeoutS = -1;
 	do
 	{
 		tSess.SetKilled ( false );
@@ -1002,6 +1003,16 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		{
 			iTimeoutS = iCurrentTimeout;
 			pIn->SetTimeoutUS ( S2US * iTimeoutS );
+		}
+
+		iCurrentTimeout = tSess.GetWTimeoutS(); // by default -1, means 'default'
+		if ( iCurrentTimeout < 0 )
+			iCurrentTimeout = g_iClientQlTimeoutS;
+
+		if ( iCurrentTimeout != iWTimeoutS )
+		{
+			iWTimeoutS = iCurrentTimeout;
+			pOut->SetWTimeoutUS( S2US * iWTimeoutS );
 		}
 
 		pIn->DiscardProcessed ();

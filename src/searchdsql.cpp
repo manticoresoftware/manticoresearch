@@ -17,6 +17,7 @@
 #include "searchdddl.h"
 #include "sphinxql_debug.h"
 #include "sphinxql_second.h"
+#include "sphinxql_extra.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -220,6 +221,21 @@ void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 bool SqlParserTraits_c::IsWrongSyntaxError() const noexcept
 {
 	return m_bWrongParserSyntaxError;
+}
+
+void SqlParserTraits_c::DefaultOk ( std::initializer_list<const char*> sList )
+{
+	for ( const char* sElem : sList )
+		m_pStmt->m_dInsertSchema.Add ( sElem );
+	m_pStmt->m_eStmt = STMT_DUMMY;
+}
+
+void SqlParserTraits_c::SetIndex ( const SqlNode_t& tNode ) const
+{
+	ToString ( m_pStmt->m_sIndex, tNode );
+	// unquote index name
+	if ( ( tNode.m_iEnd - tNode.m_iStart ) > 2 && m_pStmt->m_sIndex.cstr()[0] == '\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1] == '\'' )
+		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1548,7 +1564,7 @@ static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sEr
 static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError, bool bKeepError )
 {
 	using ParserFN = ParseResult_e ( * ) ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
-	ParserFN dParsers[] = { ParseDdlEx, ParseSecond, ParseDebugCmd };
+	ParserFN dParsers[] = { ParseDdlEx, ParseSecond, ParseDebugCmd, ParseExtra };
 
 	CSphString sNewError;
 	ParseResult_e eRes;
@@ -1565,7 +1581,7 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 			bKeepError = true;
 		}
 		if ( eRes == ParseResult_e::PARSE_OK )
-			return eRes;
+			break;
 	}
 
 	return eRes;
@@ -1593,6 +1609,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		sError = "internal error: yy_scan_buffer() failed";
 		return false;
 	}
+
+	// uncomment to see everything came to parser.
+//	sphWarning ( "Query: %s", sQuery.first );
 
 	int iRes = yyparse ( &tParser );
 

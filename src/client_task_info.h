@@ -50,6 +50,9 @@ public:
 	int m_iDistThreads = 0;
 	int m_iDesiredStack = -1;
 	int m_iTimeoutS = -1;
+	int m_iWTimeoutS = -1;
+	bool m_bSqlQuoteShowCreate = false;
+
 	ESphCollation m_eCollation { GlobalCollation () };
 	Profile_e			m_eProfile { Profile_e::NONE };
 	bool m_bPersistent = false;
@@ -109,6 +112,12 @@ public:
 
 	void SetTimeoutS ( int iTimeoutS ) { m_iTimeoutS = iTimeoutS; }
 	int GetTimeoutS() const { return m_iTimeoutS;}
+
+	void SetWTimeoutS ( int iTimeoutS ) { m_iWTimeoutS = iTimeoutS; }
+	int GetWTimeoutS() const { return m_iWTimeoutS; }
+
+	void SetSqlQuoteShowCreate ( bool bSqlQuoreShowCreate ) { m_bSqlQuoteShowCreate = bSqlQuoreShowCreate; }
+	int GetSqlQuoteShowCreate() const { return m_bSqlQuoteShowCreate; }
 
 	void SetCollation ( ESphCollation eCollation ) { m_eCollation = eCollation; }
 	ESphCollation GetCollation() const { return m_eCollation; }
@@ -183,6 +192,9 @@ namespace session {
 
 	inline void SetTimeoutS ( int iTimeoutS ) {  ClientTaskInfo_t::Info().SetTimeoutS ( iTimeoutS ); }
 	inline int GetTimeoutS() { return ClientTaskInfo_t::Info().GetTimeoutS(); }
+
+	inline void SetWTimeoutS ( int iTimeoutS ) {  ClientTaskInfo_t::Info().SetWTimeoutS ( iTimeoutS ); }
+	inline int GetWTimeoutS() { return ClientTaskInfo_t::Info().GetWTimeoutS(); }
 
 	inline void SetCollation ( ESphCollation eCollation ) {  ClientTaskInfo_t::Info().SetCollation ( eCollation ); }
 	inline ESphCollation GetCollation() { return ClientTaskInfo_t::Info().GetCollation(); }

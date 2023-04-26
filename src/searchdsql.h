@@ -156,7 +156,8 @@ enum SqlSet_e
 	SET_GLOBAL_UVAR,
 	SET_GLOBAL_SVAR,
 	SET_INDEX_UVAR,
-	SET_CLUSTER_UVAR
+	SET_CLUSTER_UVAR,
+	SET_EXTRA
 };
 
 
@@ -332,6 +333,9 @@ public:
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 	void			ProcessParsingError ( const char* szMessage );
 	bool 			IsWrongSyntaxError() const noexcept;
+
+	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
+	void			SetIndex ( const SqlNode_t& tNode ) const;
 
 protected:
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );

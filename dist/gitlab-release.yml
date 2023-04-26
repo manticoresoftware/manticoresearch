@@ -29,7 +29,7 @@ variables:
     sysroot: roots_nov22
   script:
     - mkdir build && cd build
-    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG ..
     - cmake --build . --target package
   cache:
     key: release_$DISTR$arch
@@ -96,21 +96,22 @@ variables:
     - chmod +x upload_repo_arc
     - /bin/bash ./upload_repo_arc
 
-# ==================== Mac OS X ======================
+# ==================== MacOS ======================
 
-osx:
+macos:
   extends: [ .build ]
   variables:
     DISTR: macos
 
-osxm1:
-  extends: [ osx ]
+macos_arm:
+  extends: [ macos ]
   variables:
     arch: arm64
+    HOMEBREW_PREFIX: /opt/homebrew
 
-collect_osx:
+collect_macos:
   extends: [ .collect_arc ]
-  needs: [ osx, osxm1 ]
+  needs: [ macos, macos_arm ]
 
 
 # ==================== Windows ======================
@@ -307,7 +308,7 @@ collect_bookworm:
 
 nsis_release:
   stage: deploy
-  rules: 
+  rules:
   trigger:
     include: dist/nsis-release.yml
   needs:

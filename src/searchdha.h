@@ -757,7 +757,7 @@ struct SearchdStats_t
 	std::atomic<int64_t>	m_iPredictedTime;	///< total agent predicted query time
 	std::atomic<int64_t>	m_iAgentPredictedTime;	///< total agent predicted query time
 
-	SearchdStats_t ();
+	void Init();
 };
 
 SearchdStats_t&	gStats();

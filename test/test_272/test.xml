@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>SphinxQL: additional stuff over rt index</Name>
+	<requires>
+		<force-rt/>
+	</requires>
+	<skip_indexer/>
+<Config>
+searchd
+{
+<Searchd_Settings/>
+	binlog_path		=
+}
+
+index indexrt
+{
+	type			= rt
+	path 			= <data_path/>/test
+	rt_attr_uint	= gid
+	rt_field		= text
+	stored_fields = text
+}
+
+</Config>
+
+<queries>
+<sphinxql>
+	<!-- preparing -->
+	insert into indexrt values (1,'text one',2),(2,'text two',3),(3,'text three',4),(4,'text four',4);
+	flush ramchunk indexrt;
+	insert into indexrt values (5,'text five',2),(6,'text six',3);
+	flush ramchunk indexrt;
+	insert into indexrt values (7,'text seven',3),(8,'text eight',3);
+
+<!-- stuff from mysqldump in usual mode -->
+/*!40100 SET @@SQL_MODE='' */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!80000 SET SESSION information_schema_stats_expiry=0 */;
+SET SESSION NET_READ_TIMEOUT= 86400, SESSION NET_WRITE_TIMEOUT= 86400;
+SHOW VARIABLES LIKE 'gtid\_mode';
+SELECT LOGFILE_GROUP_NAME, FILE_NAME, TOTAL_EXTENTS, INITIAL_SIZE, ENGINE, EXTRA FROM INFORMATION_SCHEMA.FILES WHERE ENGINE = 'ndbcluster' AND FILE_TYPE = 'UNDO LOG' AND FILE_NAME IS NOT NULL AND LOGFILE_GROUP_NAME IS NOT NULL AND LOGFILE_GROUP_NAME IN (SELECT DISTINCT LOGFILE_GROUP_NAME FROM INFORMATION_SCHEMA.FILES WHERE ENGINE = 'ndbcluster' AND FILE_TYPE = 'DATAFILE' AND TABLESPACE_NAME IN (SELECT DISTINCT TABLESPACE_NAME FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA='manticore' AND TABLE_NAME IN ('indexrt'))) GROUP BY LOGFILE_GROUP_NAME, FILE_NAME, ENGINE, TOTAL_EXTENTS, INITIAL_SIZE ORDER BY LOGFILE_GROUP_NAME;
+SHOW VARIABLES LIKE 'ndbinfo\_version';
+SHOW TABLES LIKE 'indexrt';
+LOCK TABLES `indexrt` READ /*!32311 LOCAL */;
+show table status like 'indexrt';
+SET SQL_QUOTE_SHOW_CREATE=1;
+SET SESSION character_set_results = 'binary';
+show create table `indexrt`;
+SET SESSION character_set_results = 'utf8mb4';
+show fields from `indexrt`;
+show fields from `indexrt`;
+SELECT /*!40001 SQL_NO_CACHE */ * FROM `indexrt`;
+SET SESSION character_set_results = 'binary';
+use `manticore`;
+select @@collation_database;
+SHOW TRIGGERS LIKE 'indexrt';
+SET SESSION character_set_results = 'utf8mb4';
+SET SESSION character_set_results = 'binary';
+SELECT COLUMN_NAME,                       JSON_EXTRACT(HISTOGRAM, '$."number-of-buckets-specified"')                FROM information_schema.COLUMN_STATISTICS                WHERE SCHEMA_NAME = 'manticore' AND TABLE_NAME = 'indexrt';
+
+<!-- stuff from mysqldump with single-transaction key -->
+/*!40100 SET @@SQL_MODE='' */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!80000 SET SESSION information_schema_stats_expiry=0 */;
+SET SESSION NET_READ_TIMEOUT= 86400, SESSION NET_WRITE_TIMEOUT= 86400;
+FLUSH TABLES;
+FLUSH TABLES WITH READ LOCK;
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+START TRANSACTION /*!40100 WITH CONSISTENT SNAPSHOT */;
+SHOW VARIABLES LIKE 'gtid\_mode';
+UNLOCK TABLES;
+SELECT LOGFILE_GROUP_NAME, FILE_NAME, TOTAL_EXTENTS, INITIAL_SIZE, ENGINE, EXTRA FROM INFORMATION_SCHEMA.FILES WHERE ENGINE = 'ndbcluster' AND FILE_TYPE = 'UNDO LOG' AND FILE_NAME IS NOT NULL AND LOGFILE_GROUP_NAME IS NOT NULL AND LOGFILE_GROUP_NAME IN (SELECT DISTINCT LOGFILE_GROUP_NAME FROM INFORMATION_SCHEMA.FILES WHERE ENGINE = 'ndbcluster' AND FILE_TYPE = 'DATAFILE' AND TABLESPACE_NAME IN (SELECT DISTINCT TABLESPACE_NAME FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA='manticore' AND TABLE_NAME IN ('indexrt'))) GROUP BY LOGFILE_GROUP_NAME, FILE_NAME, ENGINE, TOTAL_EXTENTS, INITIAL_SIZE ORDER BY LOGFILE_GROUP_NAME;
+SHOW VARIABLES LIKE 'ndbinfo\_version';
+SHOW TABLES LIKE 'indexrt';
+SAVEPOINT sp;
+show table status like 'indexrt';
+SET SQL_QUOTE_SHOW_CREATE=1;
+SET SESSION character_set_results = 'binary';
+show create table `indexrt`;
+SET SESSION character_set_results = 'utf8mb4';
+show fields from `indexrt`;
+show fields from `indexrt`;
+SELECT /*!40001 SQL_NO_CACHE */ * FROM `indexrt`;
+SET SESSION character_set_results = 'binary';
+use `manticore`;
+select @@collation_database;
+SHOW TRIGGERS LIKE 'indexrt';
+SET SESSION character_set_results = 'utf8mb4';
+SET SESSION character_set_results = 'binary';
+SELECT COLUMN_NAME,                       JSON_EXTRACT(HISTOGRAM, '$."number-of-buckets-specified"')                FROM information_schema.COLUMN_STATISTICS                WHERE SCHEMA_NAME = 'manticore' AND TABLE_NAME = 'indexrt';
+
+
+</sphinxql>
+</queries>
+
+</Test>

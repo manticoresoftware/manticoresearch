@@ -1242,7 +1242,7 @@ protected:
 			return nullptr;
 		}
 
-		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), m_dStmt, m_sError, SPH_COLLATION_DEFAULT ) )
+		if ( !sphParseSqlQuery ( FromStr ( *pRawQl ), m_dStmt, m_sError, SPH_COLLATION_DEFAULT ) )
 		{
 			ReportError ( SPH_HTTP_STATUS_400 );
 			return nullptr;

@@ -101,7 +101,7 @@ static bool SphinxqlStateLine ( CSphVector<char>& dLine, CSphString* sError )
 	dLine.Add ( '\0' );
 
 	CSphVector <SqlStmt_t> dStmt;
-	bool bParsedOK = sphParseSqlQuery ( dLine.Begin (), dLine.GetLength (), dStmt, *sError, SPH_COLLATION_DEFAULT );
+	bool bParsedOK = sphParseSqlQuery ( dLine, dStmt, *sError, SPH_COLLATION_DEFAULT );
 	if ( !bParsedOK )
 		return false;
 

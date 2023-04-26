@@ -20,6 +20,7 @@
 #include "attribute.h"
 #include "indexfiles.h"
 #include "tokenizer/tokenizer.h"
+#include "client_task_info.h"
 
 #if !_WIN32
 	#include <glob.h>
@@ -1900,20 +1901,17 @@ static bool IsDDLToken ( const CSphString & sTok )
 
 	CSphString sToken = sTok;
 	sToken.ToUpper();
-	for ( const auto & i : dTokens )
-		if ( i==sToken )
-			return true;
-
-	return false;
+	return any_of ( dTokens, [&sToken] ( const auto& i ) { return i == sToken; } );
 }
 
 
-static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndex * pIndex, int iNumColumnar )
+static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndex * pIndex, int iNumColumnar, bool bQuote )
 {
 	StringBuilder_c sRes;
 
 	CSphString sQuotedName;
-	if ( IsDDLToken ( tAttr.m_sName ) )
+	bQuote |= IsDDLToken ( tAttr.m_sName );
+	if ( bQuote )
 		sQuotedName.SetSprintf ( "`%s`", tAttr.m_sName.cstr() );
 	else
 		sQuotedName = tAttr.m_sName;
@@ -1927,12 +1925,13 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 }
 
 
-static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const CSphIndex * pIndex, const CSphSchema & tSchema, int iNumColumnar )
+static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const CSphIndex * pIndex, const CSphSchema & tSchema, int iNumColumnar, bool bQuote )
 {
 	StringBuilder_c sRes;
 
 	CSphString sQuotedName;
-	if ( IsDDLToken ( tField.m_sName ) )
+	bQuote |= IsDDLToken ( tField.m_sName );
+	if ( bQuote )
 		sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
 	else
 		sQuotedName = tField.m_sName;
@@ -1959,13 +1958,16 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 {
 	assert ( pIndex );
 
+	auto& tSess = session::Info();
+	bool bQuote = tSess.GetSqlQuoteShowCreate();
+
 	int iNumColumnar = 0;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 		if ( tSchema.GetAttr(i).IsColumnar() )
 			iNumColumnar++;
 
 	StringBuilder_c sRes;
-	sRes << "CREATE TABLE " << sName << " (\n";
+	sRes << "CREATE TABLE " << ( bQuote ? SphSprintf ( "`%s`", sName.cstr() ) : sName) << " (\n";
 
 	CSphVector<const CSphColumnInfo *> dExcludeAttrs;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -1981,12 +1983,12 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
 
-	sRes << FormatCreateTableAttr ( *pId, pIndex, iNumColumnar );
+	sRes << FormatCreateTableAttr ( *pId, pIndex, iNumColumnar, bQuote );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		sRes << ",\n";
-		sRes << FormatCreateTableField ( tSchema.GetField(i), pIndex, tSchema, iNumColumnar );
+		sRes << FormatCreateTableField ( tSchema.GetField(i), pIndex, tSchema, iNumColumnar, bQuote );
 	}
 
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -1999,7 +2001,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			continue;
 
 		sRes << ",\n";
-		sRes << FormatCreateTableAttr ( tAttr, pIndex, iNumColumnar );
+		sRes << FormatCreateTableAttr ( tAttr, pIndex, iNumColumnar, bQuote );
 	}
 
 	sRes << "\n)";

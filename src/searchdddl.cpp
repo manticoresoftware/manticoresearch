@@ -12,6 +12,59 @@
 
 #include "searchdddl.h"
 
+class DdlParser_c : public SqlParserTraits_c
+{
+public:
+	// this exists because we have separate field/attribute entities in the schema, but not in DDL
+	enum
+	{
+		FLAG_NONE		= 0,
+		FLAG_STORED		= 1<<0,
+		FLAG_INDEXED	= 1<<1,
+		FLAG_ATTRIBUTE	= 1<<2
+	};
+
+	struct ItemOptions_t
+	{
+		AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
+		bool			m_bStringHash = true;
+		bool			m_bFastFetch = true;
+
+		bool			m_bHashOptionSet = false;
+
+		void			Reset();
+		DWORD			ToFlags() const;
+	};
+
+	DdlParser_c ( CSphVector<SqlStmt_t>& dStmt, const char* szQuery, CSphString* pError );
+
+	const char * GetLastError() const { return m_sError.scstr(); }
+
+	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
+	bool	AddCreateTableId ( const SqlNode_t & tName );
+	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
+
+	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
+	bool	AddItemOptionHash ( const SqlNode_t & tOption );
+	bool	AddItemOptionFastFetch ( const SqlNode_t & tOption );
+
+	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
+	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType );
+	bool	SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1 );
+
+	void	JoinClusterAt ( const SqlNode_t & tAt );
+
+	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
+
+private:
+	CSphString		m_sError;
+	ItemOptions_t	m_tItemOptions;
+
+	void	AddField ( const CSphString & sName, DWORD uFlags );
+	bool	ConvertToAttrEngine ( const SqlNode_t & tEngine, AttrEngine_e & eEngine );
+	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError );
+};
+
 #define YYSTYPE SqlNode_t
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
@@ -23,26 +76,13 @@
 
 #include "flexddl.c"
 
-void yyerror ( DdlParser_c * pParser, const char * sMessage )
+static void yyerror ( DdlParser_c * pParser, const char * sMessage )
 {
 	// flex put a zero at last token boundary; make it undo that
 	yy3lex_unhold ( pParser->m_pScanner );
 
-	// create our error message
-	pParser->m_pParseError->SetSprintf ( "%s %s near '%s'", pParser->m_sErrorHeader.cstr(), sMessage,
-		pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
-
-	// fixup TOK_xxx thingies
-	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
-	char * d = s;
-	while ( *s )
-	{
-		if ( strncmp ( s, "TOK_", 4 )==0 )
-			s += 4;
-		else
-			*d++ = *s++;
-	}
-	*d = '\0';
+	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
+	pParser->ProcessParsingError ( sMessage );
 }
 
 
@@ -353,26 +393,33 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 
 //////////////////////////////////////////////////////////////////////////
 
-bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+bool ParseDdl ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError )
 {
-	if ( !sQuery || !iLen )
+	if ( !IsFilled ( sQuery ) )
 	{
 		sError = "query was empty";
 		return false;
 	}
 
-	DdlParser_c tParser { dStmt, sQuery, &sError };
-
-	char * sEnd = const_cast<char *>( sQuery ) + iLen;
+	auto* sEnd = const_cast<char*> ( end ( sQuery ) );
 	sEnd[0] = 0; // prepare for yy_scan_buffer
 	sEnd[1] = 0; // this is ok because string allocates a small gap
 
+	return ParseResult_e::PARSE_OK == ParseDdlEx ( sQuery, dStmt, sError );
+}
+
+ParseResult_e ParseDdlEx ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	assert ( IsFilled ( sQuery ) );
+
+	DdlParser_c tParser { dStmt, sQuery.first, &sError };
+
 	yy3lex_init ( &tParser.m_pScanner );
-	YY_BUFFER_STATE tLexerBuffer = yy3_scan_buffer ( const_cast<char *>( sQuery ), iLen+2, tParser.m_pScanner );
+	YY_BUFFER_STATE tLexerBuffer = yy3_scan_buffer ( const_cast<char *>( sQuery.first ), sQuery.second+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
 		sError = "internal error: yy3_scan_buffer() failed";
-		return false;
+		return ParseResult_e::PARSE_ERROR;
 	}
 
 	int iRes = yyparse ( &tParser );
@@ -381,6 +428,8 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 	yy3lex_destroy ( tParser.m_pScanner );
 
 	dStmt.Pop(); // last query is always dummy
+	if ( tParser.IsWrongSyntaxError() )
+		return ParseResult_e::PARSE_SYNTAX_ERROR;
 
-	return !iRes && !dStmt.IsEmpty();
+	return ( iRes || dStmt.IsEmpty() ) ? ParseResult_e::PARSE_ERROR : ParseResult_e::PARSE_OK;
 }

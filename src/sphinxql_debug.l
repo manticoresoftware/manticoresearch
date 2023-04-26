@@ -1,10 +1,21 @@
 %{
+
+#if _WIN32
+#define YY_NO_UNISTD_H 1
+#endif
+
 #include "bissphinxql_debug.h"
 
 #define YY_NO_INPUT
 
+#ifdef __GNUC__
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wsign-compare"
+	#pragma GCC diagnostic ignored "-Wpragmas"
+	#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
+#endif
+
 #if _WIN32
-#define YY_NO_UNISTD_H 1
 #pragma warning(push,1)
 #endif
 
@@ -106,7 +117,21 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 
 %%
 
+static void yy4lex_unhold ( yyscan_t yyscanner )
+{
+	struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+	if ( YY_CURRENT_BUFFER )
+	{
+		*yyg->yy_c_buf_p = yyg->yy_hold_char;
+		YY_CURRENT_BUFFER_LVALUE->yy_buf_pos = yyg->yy_c_buf_p;
+		YY_CURRENT_BUFFER_LVALUE->yy_n_chars = yyg->yy_n_chars;
+	}
+}
 
 #if _WIN32
 #pragma warning(pop)
+#endif
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
 #endif

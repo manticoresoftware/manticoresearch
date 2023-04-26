@@ -15,6 +15,9 @@
 #include "sphinxplugin.h"
 #include "searchdaemon.h"
 #include "searchdddl.h"
+#include "sphinxql_debug.h"
+#include "sphinxql_second.h"
+#include "sphinxql_extra.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -126,6 +129,8 @@ SqlStmt_t::SqlStmt_t()
 	m_tQuery.m_iRetryDelay = -1;
 }
 
+SqlStmt_t::~SqlStmt_t() = default;
+
 
 bool SqlStmt_t::AddSchemaItem ( const char * psName )
 {
@@ -166,7 +171,7 @@ void SqlParserTraits_c::PushQuery()
 	assert ( m_dStmt.GetLength() || ( !m_pQuery && !m_pStmt ) );
 
 	// add new
-	m_dStmt.Add ( SqlStmt_t() );
+	m_dStmt.Add ();
 	m_pStmt = &m_dStmt.Last();
 }
 
@@ -192,6 +197,47 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 	return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
 }
 
+void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
+{
+	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
+	if ( ( m_pBuf == m_pLastTokenStart ) && ( strncmp ( szMessage, "syntax error", 12 ) == 0 ) )
+		m_bWrongParserSyntaxError = true;
+
+	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );
+
+	// fixup TOK_xxx thingies
+	char* s = const_cast<char*> ( m_pParseError->cstr() );
+	char* d = s;
+	while ( *s )
+	{
+		if ( strncmp ( s, "TOK_", 4 ) == 0 )
+			s += 4;
+		else
+			*d++ = *s++;
+	}
+	*d = '\0';
+}
+
+bool SqlParserTraits_c::IsWrongSyntaxError() const noexcept
+{
+	return m_bWrongParserSyntaxError;
+}
+
+void SqlParserTraits_c::DefaultOk ( std::initializer_list<const char*> sList )
+{
+	for ( const char* sElem : sList )
+		m_pStmt->m_dInsertSchema.Add ( sElem );
+	m_pStmt->m_eStmt = STMT_DUMMY;
+}
+
+void SqlParserTraits_c::SetIndex ( const SqlNode_t& tNode ) const
+{
+	ToString ( m_pStmt->m_sIndex, tNode );
+	// unquote index name
+	if ( ( tNode.m_iEnd - tNode.m_iStart ) > 2 && m_pStmt->m_sIndex.cstr()[0] == '\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1] == '\'' )
+		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -204,7 +250,6 @@ public:
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>	m_dFiltersPerStmt;
 	bool			m_bGotFilterOr = false;
-	bool 			m_bGotDDLClause = false;
 
 public:
 					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation, const char* szQuery, CSphString* pError );
@@ -231,7 +276,7 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
-	void			SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
+	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
 	bool			AddFloatFilterGreater ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
 	bool			AddFloatFilterLesser ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
@@ -281,6 +326,8 @@ public:
 	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
 	void			SetIndex ( const SqlNode_t & tNode ) const;
 
+	void			AddComment ( const SqlNode_t* tNode );
+
 private:
 	bool						m_bGotQuery = false;
 	BYTE						m_uSyntaxFlags = 0;
@@ -293,11 +340,9 @@ private:
 	SqlStmt_e		GetSecondaryStmt () const;
 };
 
-
-
 #define YYSTYPE SqlNode_t
 
-									// unused parameter, simply to avoid type clash between all my yylex() functions
+// unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
 
 #if _WIN32
@@ -306,26 +351,12 @@ private:
 
 #include "flexsphinxql.c"
 
-void yyerror ( SqlParser_c * pParser, const char * sMessage )
+static void yyerror ( SqlParserTraits_c * pParser, const char * sMessage )
 {
 	// flex put a zero at last token boundary; make it undo that
 	yylex_unhold ( pParser->m_pScanner );
 
-	// create our error message
-	pParser->m_pParseError->SetSprintf ( "%s %s near '%s'", pParser->m_sErrorHeader.cstr(), sMessage,
-		pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
-
-	// fixup TOK_xxx thingies
-	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
-	char * d = s;
-	while ( *s )
-	{
-		if ( strncmp ( s, "TOK_", 4 )==0 )
-			s += 4;
-		else
-			*d++ = *s++;
-	}
-	*d = '\0';
+	pParser->ProcessParsingError(sMessage);
 }
 
 
@@ -1108,10 +1139,10 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 	dVec.Last().second = (int) tValue.GetValueInt();
 }
 
-void SqlParser_c::SetStatement ( const YYSTYPE & tName, SqlSet_e eSet )
+void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName )
 {
 	m_pStmt->m_eStmt = STMT_SET;
-	m_pStmt->m_eSet = eSet;
+	m_pStmt->m_eSet = SET_LOCAL;
 	ToString ( m_pStmt->m_sSetName, tName );
 }
 
@@ -1127,6 +1158,24 @@ void SqlParser_c::SetIndex ( const SqlNode_t & tNode ) const
 	// unquote index name
 	if ( ( tNode.m_iEnd - tNode.m_iStart )>2 && m_pStmt->m_sIndex.cstr()[0]=='\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1]=='\'' )
 		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length()-2 );
+}
+
+void SqlParser_c::AddComment ( const SqlNode_t* tNode )
+{
+	CSphString sComment;
+	ToString ( sComment, *tNode );
+	StrVec_t sParts;
+	sphSplit ( sParts, sComment.cstr(), " " );
+	for ( auto& sPart : sParts )
+	{
+		sPart.Trim();
+		sPart.ToUpper();
+		if ( sPart == "SQL_NO_CACHE" )
+		{
+			sphLogDebug ( "Found SQL_NO_CACHE, set limit=-1" );
+			SetLimit ( 0, -1 );
+		}
+	}
 }
 
 
@@ -1532,28 +1581,57 @@ static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sEr
 	return true;
 }
 
-
-bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
+static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError, bool bKeepError )
 {
-	if ( !sQuery || !iLen )
+	using ParserFN = ParseResult_e ( * ) ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
+	ParserFN dParsers[] = { ParseDdlEx, ParseSecond, ParseDebugCmd, ParseExtra };
+
+	CSphString sNewError;
+	ParseResult_e eRes;
+	for ( ParserFN pParser : dParsers )
+	{
+		if ( !dStmt.IsEmpty() )
+			dStmt.Pop();
+		eRes = pParser ( sQuery, dStmt, sNewError );
+		if ( eRes != ParseResult_e::PARSE_OK )
+			sphLogDebug ( "%s", sNewError.cstr() );
+		if ( eRes == ParseResult_e::PARSE_ERROR && !bKeepError )
+		{
+			sError = sNewError;
+			bKeepError = true;
+		}
+		if ( eRes == ParseResult_e::PARSE_OK )
+			break;
+	}
+
+	return eRes;
+}
+
+
+bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
+{
+	if ( !IsFilled ( sQuery ) )
 	{
 		sError = "query was empty";
 		return false;
 	}
 
-	SqlParser_c tParser ( dStmt, eCollation, sQuery, &sError );
+	SqlParser_c tParser ( dStmt, eCollation, sQuery.first, &sError );
 
-	char * sEnd = const_cast<char *>( sQuery ) + iLen;
+	char* sEnd = const_cast<char*> ( end ( sQuery ) );
 	sEnd[0] = 0; // prepare for yy_scan_buffer
 	sEnd[1] = 0; // this is ok because string allocates a small gap
 
 	yylex_init ( &tParser.m_pScanner );
-	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( const_cast<char *>( sQuery ), iLen+2, tParser.m_pScanner );
+	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( const_cast<char *>( sQuery.first ), sQuery.second+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
 		sError = "internal error: yy_scan_buffer() failed";
 		return false;
 	}
+
+	// uncomment to see everything came to parser.
+//	sphWarning ( "Query: %s", sQuery.first );
 
 	int iRes = yyparse ( &tParser );
 
@@ -1562,8 +1640,15 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 
 	dStmt.Pop(); // last query is always dummy
 
-	if ( tParser.m_bGotDDLClause )
-		return ParseDdl ( sQuery, iLen, dStmt, sError );
+	// cascade parsing
+	if ( iRes || dStmt.IsEmpty() )
+	{
+		sphLogDebug ( "%s", sError.cstr() );
+		auto eNext = ParseNext ( sQuery, dStmt, sError, !tParser.IsWrongSyntaxError() );
+		if ( eNext == ParseResult_e::PARSE_OK )
+			sError = "";
+		return eNext == ParseResult_e::PARSE_OK;
+	}
 
 	int iFilterStart = 0;
 	int iFilterCount = 0;
@@ -1579,7 +1664,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		{
 			if ( tQuery.m_iSQLSelectStart-1>=0 && tParser.m_pBuf[tQuery.m_iSQLSelectStart-1]=='`' )
 				tQuery.m_iSQLSelectStart--;
-			if ( tQuery.m_iSQLSelectEnd<iLen && tParser.m_pBuf[tQuery.m_iSQLSelectEnd]=='`' )
+			if ( tQuery.m_iSQLSelectEnd<sQuery.second && tParser.m_pBuf[tQuery.m_iSQLSelectEnd]=='`' )
 				tQuery.m_iSQLSelectEnd++;
 
 			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,

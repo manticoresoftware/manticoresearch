@@ -239,13 +239,12 @@ namespace Coro
 
 // if iStack<0, just immediately invoke the handler (that is bypass)
 template<typename HANDLER>
-void Continue ( int iStack, HANDLER handler )
+void Continue ( int iStack, HANDLER&& handler )
 {
-	if ( iStack<0 ) {
-		handler ();
-		return;
-	}
-	Continue ( handler, iStack );
+	if ( iStack<0 )
+		return handler ();
+
+	Continue ( std::forward<HANDLER> ( handler ), iStack );
 }
 
 // if iStack<0, just immediately invoke the handler (that is bypass). Returns boolean result from handler

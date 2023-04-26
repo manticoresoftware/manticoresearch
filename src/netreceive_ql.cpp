@@ -322,11 +322,12 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoComm
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
 
-class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
+class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 {
 	BYTE & m_uPacketID;
-	ISphOutputBuffer & m_tOut;
+	GenericOutputBuffer_c & m_tOut;
 	ClientSession_c* m_pSession = nullptr;
+	size_t m_iTotalSent = 0;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
 #endif
@@ -362,6 +363,11 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 		auto iLen = (int) strlen ( sStr );
 		SendSqlInt ( iLen );
 		m_tOut.SendBytes ( sStr, iLen );
+	}
+
+	bool SomethingWasSent() final {
+		auto iPrevSent = std::exchange ( m_iTotalSent, m_tOut.GetTotalSent() + m_tOut.GetSentCount() + GetLength() );
+		return iPrevSent != m_iTotalSent;
 	}
 
 	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags=0 )
@@ -421,7 +427,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 
 public:
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut )
+	SqlRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
 		: m_uPacketID ( *pPacketID )
 		, m_tOut ( *pOut )
 		, m_pSession ( session::GetClientSession() )
@@ -540,6 +546,8 @@ public:
 			m_tOut.SendBytes ( pBuf, iSize );
 			pBuf += iSize;
 			iLeft -= iSize;
+			if ( m_tOut.GetSentCount() > MAX_PACKET_LEN )
+				m_tOut.Flush();
 		}
 		Resize(0);
 		return true;
@@ -830,7 +838,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 	auto& tSess = session::Info();
 	assert ( pBuf );
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
-	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
+	auto& tOut = *(GenericOutputBuffer_c *) pBuf;
 
 	auto uHasBytesIn = tIn.HasBytes ();
 	// get command, handle special packets
@@ -912,7 +920,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 } // static namespace
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut )
+void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut )
 {
 	BYTE uDummy = 0;
 
@@ -956,7 +964,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	int iCID = tSess.GetConnID();
 	const char * sClientIP = tSess.szClientName();
 
-	NetGenericOutputBuffer_c* pOut = pBuf.get();
+	GenericOutputBuffer_c* pOut = pBuf.get();
 	AsyncNetInputBuffer_c* pIn = pBuf.get();
 
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
@@ -982,6 +990,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	BYTE uPacketID = 1;
 	int iPacketLen;
 	int iTimeoutS = -1;
+	int iWTimeoutS = -1;
 	do
 	{
 		tSess.SetKilled ( false );
@@ -994,6 +1003,16 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		{
 			iTimeoutS = iCurrentTimeout;
 			pIn->SetTimeoutUS ( S2US * iTimeoutS );
+		}
+
+		iCurrentTimeout = tSess.GetWTimeoutS(); // by default -1, means 'default'
+		if ( iCurrentTimeout < 0 )
+			iCurrentTimeout = g_iClientQlTimeoutS;
+
+		if ( iCurrentTimeout != iWTimeoutS )
+		{
+			iWTimeoutS = iCurrentTimeout;
+			pOut->SetWTimeoutUS( S2US * iWTimeoutS );
 		}
 
 		pIn->DiscardProcessed ();
@@ -1040,6 +1059,12 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			sphLogDebugv ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
 			iPacketLen += iChunkLen;
+
+			if ( !bAuthed && ( uAddon == SPHINX_CLIENT_VERSION || uAddon == 0x01000000UL ) )
+			{
+				sphLogDebug ( "conn %d from %s: seems, that non-mysql proto (sphinx?) packet received (%x). M.b. you've confused remote port in distributed table definition?", iCID, sClientIP, uAddon );
+				return;
+			}
 
 			// receive package body
 			if ( !pIn->ReadFrom ( iPacketLen ))
@@ -1116,7 +1141,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	} while ( tSess.GetPersistent() );
 }
 
-RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, ISphOutputBuffer * pOut )
+RowBuffer_i * CreateSqlRowBuffer ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
 {
 	return new SqlRowBuffer_c ( pPacketID, pOut );
 }

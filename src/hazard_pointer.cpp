@@ -15,7 +15,7 @@ static const DWORD MIN_POINTERS = 100;
 static const int MULTIPLIER = 2;
 
 // if one hazard object owns another, etc. - how deep they can be nested.
-// on finish we will stop unwinding under this N of steps and report error.
+// on finish, we will stop unwinding under this N of steps and report error.
 static const int NESTED_LEVELS = 16;
 
 using namespace hazard;
@@ -44,7 +44,7 @@ static ThreadRole thHazardThread;
 using fnHazardProcessor=std::function<void ( Pointer_t )>;
 
 // to be write-used in single thread, so no need to sync anything
-// that is lowest level which actually stores current pointers.
+// that is the lowest level which actually stores current pointers.
 struct Storage_t : public VecListedPointers_t
 {
 	ListedPointer_t* m_pHead GUARDED_BY ( thHazardThread );
@@ -123,7 +123,7 @@ struct VecOfRetired_t : public VecRetiredPointers_t, public ISphNoncopyable
 	}
 };
 
-// when thread hazard destructes, it may still have some alive retired
+// when thread hazard destructs, it may still have some alive retired
 // we will leak them into this sink, and sometimes refine with another threads.
 class RetiredSink_c
 {
@@ -191,10 +191,10 @@ void PrunePointer ( RetiredPointer_t* pPtr )
  	Gc performed in four steps:
  		1. We walk over all currently running threads and collect their hazard pointers
  		2. Sort and uniq the collection
- 		3. Walk over current list of retired: if pointer is not reffered by any hazard - it is finaly pruned
- 		4. Keep list of alive (reffered) pointers back to list of retired.
+ 		3. Walk over current list of retired: if pointer is not referred by any hazard - it is finally pruned
+ 		4. Keep list of alive (referred) pointers back to list of retired.
 
- 		Since size of the list is by design greater then N of threads * N of hazards per thread, it WILL prune
+ 		Since size of the list is by design greater than N of threads * N of hazards per thread, it WILL prune
  		some pointers definitely.
  */
 CSphVector<Pointer_t> CollectActiveHazardPointers()
@@ -262,7 +262,7 @@ bool TryPruneOnePointer ( RetiredPointer_t* pSrc )
 }
 } // unnamed namespace
 
-// when thread hazard destructes, it may still have some alive retired
+// when thread hazard destructs, it may still have some alive retired
 // we will leak them into this sink, and sometimes refine with another threads.
 void RetiredSink_c::PruneSink ()
 {
@@ -277,7 +277,7 @@ void RetiredSink_c::MaybePruneSink ()
 }
 
 // adopt retired chunk from finishing thread
-// called from thread d-tr, to sink pointers finaly alived.
+// called from thread d-tr, to sink pointers finally lived.
 // called from Shutdown, to sink last pointers in the process.
 void RetiredSink_c::AdoptRetired ( VecOfRetired_t& dRetired )
 {
@@ -311,7 +311,7 @@ ThreadState_c::~ThreadState_c ()
 		m_dGlobalSink.AdoptRetired ( m_tRetired );
 }
 
-// GC enterpoint - called when no more place for retired
+// GC entrypoint - called when no more place for retired
 void ThreadState_c::Scan () REQUIRES ( thRetiringThread )
 {
 	// Before start, check if num of threads grown and so, we just need more space for retired
@@ -324,7 +324,7 @@ void ThreadState_c::Scan () REQUIRES ( thRetiringThread )
 // main GC worker
 void ThreadState_c::PruneRetired () REQUIRES ( thRetiringThread )
 {
-	// actually task is quite simple: we call ::PruneRetiredImpl, it keeps all alive pointers, prune all deads and return
+	// actually task is quite simple: we call ::PruneRetiredImpl, it keeps all alive pointers, prune all dead and return
 	// the new size of our vec, containing only alive.
 	// The problem is that deleting non-alive may include more to retire (if deleting object also has something to retire).
 	// Since we're in call PruneRetired because we're full, we can't right now retire any more pointers.

@@ -1352,6 +1352,7 @@ struct CSphAttrUpdateEx
 	int						m_iAffected = 0;		///< num of updated rows.
 };
 
+class RowBuffer_i;
 struct SphQueueSettings_t
 {
 	const ISphSchema &			m_tSchema;
@@ -1367,10 +1368,15 @@ struct SphQueueSettings_t
 	std::function<int64_t ()>							m_fnGetCount;
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
+	StrVec_t 					m_dCreateSchema;
+	RowBuffer_i*				m_pSqlRowBuffer;
+	void*						m_pOpaque;
 
-	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr )
+	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr, RowBuffer_i* pSqlRowBuffer = nullptr, void* pOpaque=nullptr )
 		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
+		, m_pSqlRowBuffer ( pSqlRowBuffer )
+		, m_pOpaque ( pOpaque )
 	{}
 };
 

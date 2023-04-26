@@ -917,9 +917,9 @@ const char * Agent_e_Name ( Agent_e eState )
 	return "UNKNOWN_STATE";
 }
 
-SearchdStats_t::SearchdStats_t()
+void SearchdStats_t::Init()
 {
-	m_uStarted = 0;
+	m_uStarted = (DWORD)time ( nullptr );
 	m_iConnections = 0;
 	m_iMaxedOut = 0;
 	m_iAgentConnect = 0;
@@ -945,9 +945,12 @@ SearchdStats_t::SearchdStats_t()
 		i = 0;
 }
 
+namespace {
+SearchdStats_t tSt;
+}
+
 SearchdStats_t & gStats ()
 {
-	static SearchdStats_t tSt;
 	return tSt;
 }
 

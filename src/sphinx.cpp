@@ -7763,10 +7763,10 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 			tMatch.m_pStatic = fnToStatic(i);
 
 			// early filter only (no late filters in full-scan because of no @weight)
-			if_const ( HAS_FILTER_CALC )
+			if constexpr ( HAS_FILTER_CALC )
 				tCtx.CalcFilter(tMatch);
 
-			if_const ( HAS_FILTER )
+			if constexpr ( HAS_FILTER )
 			{
 				if ( !tCtx.m_pFilter->Eval(tMatch) )
 				{
@@ -7777,23 +7777,23 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				}
 			}
 
-			if_const ( HAS_RANDOMIZE )
+			if constexpr ( HAS_RANDOMIZE )
 				tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
-			if_const ( HAS_SORT_CALC )
+			if constexpr ( HAS_SORT_CALC )
 				tCtx.CalcSort(tMatch);
 
 			bool bNewMatch = false;
-			dSorters.Apply ( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
+			dSorters.for_each( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
 
 			// stringptr expressions should be duplicated (or taken over) at this point
-			if_const ( HAS_FILTER_CALC )
+			if constexpr ( HAS_FILTER_CALC )
 				tCtx.FreeDataFilter ( tMatch );
 
-			if_const ( HAS_SORT_CALC )
+			if constexpr ( HAS_SORT_CALC )
 				tCtx.FreeDataSort ( tMatch );
 
-			if_const ( HAS_CUTOFF )
+			if constexpr ( HAS_CUTOFF )
 			{
 				if ( bNewMatch && --iCutoff==0 )
 					return true;
@@ -7801,7 +7801,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 		}
 
 		// handle timer
-		if_const ( HAS_MAX_TIMER )
+		if constexpr ( HAS_MAX_TIMER )
 		{
 			if ( sph::TimeExceeded ( tmMaxTimer ) )
 			{
@@ -8225,6 +8225,10 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// using -1 might be also interpreted as 0xFFFFFFFF in such context!
 	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
+
+	auto& tSess = session::Info();
+	auto tDocstores = std::make_pair ( (const DocstoreReader_i*)this, m_pDocstore.get() );
+	tSess.m_pSessionOpaque = (void*)&tDocstores;
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
 
@@ -9587,7 +9591,7 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 }
 
 
-bool CSphQueryContext::SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const CSphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar, const CSphVector<const ISphSchema *> & dInSchemas )
+bool CSphQueryContext::SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const ISphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar, const CSphVector<const ISphSchema *> & dInSchemas )
 {
 	m_dCalcFilter.Resize(0);
 	m_dCalcSort.Resize(0);

@@ -31,7 +31,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	const char * sClientIP = tSess.szClientName();
 
 	// needed to check permission to turn maintenance mode on/off
-	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf.get();
+	auto& tOut = *(GenericOutputBuffer_c *) pBuf.get();
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
 	// send handshake

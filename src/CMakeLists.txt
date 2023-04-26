@@ -136,8 +136,8 @@ target_link_libraries ( lmanticore PUBLIC lmanticore_coro )
 
 set ( LMANTICORE_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
 set ( LMANTICORE_FLEX sphinxjson.l sphinxexpr.l )
-set ( SEARCHD_BISON sphinxql.y sphinxql_debug.y ddl.y )
-set ( SEARCHD_FLEX sphinxql.l sphinxql_debug.l ddl.l )
+set ( SEARCHD_BISON sphinxql.y sphinxql_debug.y ddl.y sphinxql_second.y sphinxql_extra.y)
+set ( SEARCHD_FLEX sphinxql.l sphinxql_debug.l ddl.l sphinxql_second.l sphinxql_extra.l)
 
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
@@ -146,7 +146,7 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		sphinxsort.h sphinxstem.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxquery.h sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h event.h threadutils.h threadutils_impl.h
-		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h dynamic_idx.h
+		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h dynamic_idx.h sphinxql_second.h sphinxql_extra.h
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
 		chunksearchctx.h indexfilebase.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
@@ -158,7 +158,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		netreceive_api.h netreceive_http.h netreceive_ql.h networking_daemon.h query_status.h
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
-		netpoll.h pollable_event.h netfetch.h searchdbuddy.h)
+		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h)
 
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
@@ -178,6 +178,8 @@ BISON_TARGET ( SQLParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.y" ${BISON_DIR}/b
 BISON_TARGET ( DDLParser "${CMAKE_CURRENT_SOURCE_DIR}/ddl.y" ${BISON_DIR}/bisddl.c COMPILE_FLAGS ${BIS_FLAGS} )
 BISON_TARGET ( JsonParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.y" ${BISON_DIR}/bissphinxjson.c COMPILE_FLAGS ${BIS_FLAGS} )
 BISON_TARGET ( SQLDebugParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.y" ${BISON_DIR}/bissphinxql_debug.c COMPILE_FLAGS ${BIS_FLAGS} )
+BISON_TARGET ( SQLSecondParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_second.y" ${BISON_DIR}/bissphinxql_second.c COMPILE_FLAGS ${BIS_FLAGS} )
+BISON_TARGET ( SQLExtraParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_extra.y" ${BISON_DIR}/bissphinxql_extra.c COMPILE_FLAGS ${BIS_FLAGS} )
 
 set_source_files_properties ( sphinxexpr.cpp PROPERTIES OBJECT_DEPENDS ${BISON_ExprParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
 set_source_files_properties ( sphinx.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
@@ -186,6 +188,8 @@ set_source_files_properties ( sphinxjson.cpp PROPERTIES OBJECT_DEPENDS ${BISON_J
 set_source_files_properties ( searchdddl.cpp PROPERTIES OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
 set_source_files_properties ( searchdsql.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
 set_source_files_properties ( sphinxql_debug.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLDebugParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( sphinxql_second.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLSecondParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+set_source_files_properties ( sphinxql_extra.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLExtraParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
 
 # add the extra targets in the case we want on-the-fly lex compiler
 find_package ( FLEX REQUIRED )
@@ -195,12 +199,16 @@ FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/fle
 FLEX_TARGET ( Exprlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.l" ${FLEX_DIR}/flexsphinxexpr.c )
 FLEX_TARGET ( DDLlex "${CMAKE_CURRENT_SOURCE_DIR}/ddl.l" ${FLEX_DIR}/flexddl.c )
 FLEX_TARGET ( SQLDebuglex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.l" ${FLEX_DIR}/flexsphinxqldebug.c )
+FLEX_TARGET ( SQLSecondlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_second.l" ${FLEX_DIR}/flexsphinxqlsecond.c )
+FLEX_TARGET ( SQLExtralex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_extra.l" ${FLEX_DIR}/flexsphinxqlextra.c )
 
 set_property ( SOURCE searchdsql.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS} )
 set_property ( SOURCE searchdddl.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_DDLlex_OUTPUTS} )
 set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
 set_property ( SOURCE sphinxexpr.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_Exprlex_OUTPUTS} )
 set_property ( SOURCE sphinxql_debug.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLDebuglex_OUTPUTS} )
+set_property ( SOURCE sphinxql_second.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLSecondlex_OUTPUTS} )
+set_property ( SOURCE sphinxql_extra.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLExtralex_OUTPUTS} )
 
 # our mega-lib
 target_sources ( lmanticore PUBLIC ${LMANTICORE_BISON} ${LMANTICORE_FLEX} ${HEADERS} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
@@ -213,8 +221,8 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
-		sphinxql_debug.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
-		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp)
+		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
+		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp)
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )

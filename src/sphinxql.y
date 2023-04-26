@@ -35,8 +35,6 @@
 %token	TOK_ANY
 %token	TOK_AS
 %token	TOK_ASC
-%token	TOK_ATTACH
-%token	TOK_ATTRIBUTES
 %token	TOK_AVG
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
@@ -50,12 +48,9 @@
 %token	TOK_COLLATION
 %token	TOK_COLUMN
 %token	TOK_COMMIT
-%token	TOK_COMMITTED
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
-%token	TOK_DDLCLAUSE
-%token	TOK_DEBUGCLAUSE
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -66,7 +61,6 @@
 %token	TOK_FACET
 %token	TOK_FALSE
 %token	TOK_FLOAT
-%token	TOK_FLUSH
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
@@ -97,9 +91,7 @@
 %token	TOK_INTEGER
 %token	TOK_INTO
 %token	TOK_IS
-%token	TOK_ISOLATION
 %token	TOK_KILL
-%token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
@@ -122,20 +114,14 @@
 %token	TOK_PROFILE
 %token	TOK_QUERY
 %token	TOK_RAND
-%token	TOK_RAMCHUNK
-%token	TOK_READ
 %token	TOK_REBUILD
 %token	TOK_REGEX
-%token	TOK_RECONFIGURE
 %token	TOK_RELOAD
-%token	TOK_REPEATABLE
 %token	TOK_REPLACE
 %token	TOK_REMAP
 %token	TOK_ROLLBACK
-%token	TOK_RTINDEX
 %token	TOK_SECONDARY
 %token	TOK_SELECT
-%token	TOK_SERIALIZABLE
 %token	TOK_SET
 %token	TOK_SETTINGS
 %token	TOK_SESSION
@@ -152,17 +138,13 @@
 %token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
-%token	TOK_TRUNCATE
-%token	TOK_UNCOMMITTED
 %token	TOK_UNFREEZE
 %token	TOK_UPDATE
-%token	TOK_USE
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WHERE
-%token	TOK_WITH
 %token	TOK_WITHIN
 
 %token	TOK_LTE "<="
@@ -212,36 +194,30 @@ request:
 	| multi_stmt_list ';'
 	;
 
+multi_stmt_list:
+	multi_stmt							{ pParser->PushQuery(); }
+	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
+	| multi_stmt_list facet_stmt		{ pParser->PushQuery(); }
+	;
+
 statement:
 	insert_into
 	| delete_from
-	| set_global_stmt
 	| transact_op
 	| call_proc
 	| describe
 	| update
-	| attach_index
-	| flush_rtindex
-	| flush_ramchunk
-	| flush_index
-	| set_transaction
 	| select_sysvar
 	| select_dual
-	| truncate
 	| optimize_index
-	| reload_plugins
-	| reload_index
-	| reload_indexes
-	| flush_hostnames
-	| flush_logs
 	| sysfilters
-	| TOK_DEBUGCLAUSE	{ pParser->m_pStmt->m_eStmt = STMT_DEBUG; }
-	| delete_cluster
 	| explain_query
-	| TOK_DDLCLAUSE	{ pParser->m_bGotDDLClause = true; }
-	| freeze_indexes
-	| unfreeze_indexes
-	| kill_connid
+	;
+
+multi_stmt:
+	select
+	| show_stmt
+	| set_stmt
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -262,25 +238,24 @@ statement:
 /// Line below starts the list, that is MANDATORY, don't remove/change it!
 /// *** ALL_IDENT_LIST ***
 
-
 reserved_no_option:
-	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
+	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
-	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
+	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
-	| TOK_FLOAT | TOK_FLUSH | TOK_FOR | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
+	| TOK_FLOAT | TOK_FOR | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
-	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_LEVEL
+	| TOK_INT | TOK_INTEGER | TOK_INTO
 	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
 	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
-	| TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ | TOK_REBUILD
-	| TOK_RECONFIGURE | TOK_REMAP | TOK_REPEATABLE | TOK_REPLACE
-	| TOK_ROLLBACK | TOK_RTINDEX | TOK_SECONDARY | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET
+	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
+	| TOK_REMAP | TOK_REPLACE
+	| TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
-	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO | TOK_TRUNCATE
-	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
-	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL | TOK_QUERY
+	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
+	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
+	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	;
 
 reserved_set_tail:
@@ -346,7 +321,7 @@ only_one_index:
 		}
 	;
 
-chunk_key:
+chunk:
 	TOK_DOT_NUMBER
 		{
 			pParser->AddDotIntSubkey ($1);
@@ -359,9 +334,9 @@ chunk_key:
 		}
 	;
 
-chunk_keys:
-	chunk_key
-	| chunk_keys chunk_key
+chunks:
+	chunk
+	| chunks chunk
 	;
 
 string_key:
@@ -376,31 +351,31 @@ string_keys:
 	| string_keys string_key
 	;
 
-multi_strings_and_maybe_chunk_key:
+chunk_subkeys:
 	string_keys
-	| chunk_key string_keys
+	| chunk string_keys
 	;
 
-multi_chunks_and_maybe_string_key:
-	chunk_keys
-	| string_key chunk_keys
+subkey_chunks:
+	chunks
+	| string_key chunks
 	;
 
 fromkeys:
 	// empty
-	| multi_strings_and_maybe_chunk_key
-	| multi_chunks_and_maybe_string_key
+	| chunk_subkeys
+	| subkey_chunks
 	;
 
 
 one_index_opt_subindex:				// used in describe (meta m.b. num or name)
 	only_one_index
-	| only_one_index multi_strings_and_maybe_chunk_key
+	| only_one_index chunk_subkeys
 	;
 
 one_index_opt_chunk:				// used in show settings, show status, update, delete
 	only_one_index
-	| only_one_index chunk_keys
+	| only_one_index chunks
 	| list_of_indexes
     	{
     		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
@@ -433,17 +408,6 @@ list_of_indexes:
 		{
 			TRACK_BOUNDS ( $$, $1, $3 );
 		}
-	;
-
-one_or_more_indexes:
-	one_index
-		{
-                	pParser->ToString (pParser->m_pStmt->m_sIndex, $1);
-		}
-	| list_of_indexes
-		{
-            		pParser->ToString (pParser->m_pStmt->m_sIndex, $1);
-            	}
 	;
 
 // enhanced sysvars
@@ -484,24 +448,14 @@ sysvar:					// full name in token, like var '@@session.last_insert_id', no subke
 
 sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.last_insert_id'
 	TOK_SYSVAR
-	| TOK_SYSVAR multi_strings_and_maybe_chunk_key
-	| TOK_SYSVAR chunk_key
+	| TOK_SYSVAR chunk_subkeys
+	| TOK_SYSVAR chunk
 	;
 
 // statements
 //////////////////////////////////////////////////////////////////////////
 
-multi_stmt_list:
-	multi_stmt							{ pParser->PushQuery(); }
-	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
-	| multi_stmt_list facet_stmt		{ pParser->PushQuery(); }
-	;
 
-multi_stmt:
-	select
-	| show_stmt
-	| set_stmt
-	;
 
 select:
 	select1
@@ -1094,6 +1048,10 @@ limit_clause:
 		{
 			pParser->SetLimit ( 0, $2.GetValueInt() );
 		}
+	| TOK_LIMIT '-' TOK_CONST_INT
+      	{
+      		pParser->SetLimit ( 0, -$3.GetValueInt() );
+      	}
 	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
 		{
 			pParser->SetLimit ( $2.GetValueInt(), $4.GetValueInt() );
@@ -1376,7 +1334,7 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_DATABASES;
 		}
-	| opt_scope TOK_VARIABLES opt_show_variables_where_or_like
+	| global_or_session TOK_VARIABLES opt_show_variables_where_or_like
 		{
       		pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
 		}
@@ -1391,75 +1349,31 @@ index_or_table:
 	| TOK_TABLE
 	;
 
-indexes_or_tables:
-	TOK_INDEXES
-	| TOK_TABLES
-	;
-
 //////////////////////////////////////////////////////////////////////////
 
 set_stmt:
 	TOK_SET ident_set '=' bool_or_integer_value
 		{
-			pParser->SetStatement ( $2, SET_LOCAL );
+			pParser->SetLocalStatement ( $2 );
 			pParser->m_pStmt->m_iSetValue = $4.GetValueInt();
 		}
 	| TOK_SET ident_set '=' set_string_value
 		{
-			pParser->SetStatement ( $2, SET_LOCAL );
+			pParser->SetLocalStatement ( $2 );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
 		}
 	| TOK_SET ident_set '=' TOK_NULL
 		{
-			pParser->SetStatement ( $2, SET_LOCAL );
-//			pParser->m_pStmt->m_bSetNull = true;
+			pParser->SetLocalStatement ( $2 );
 		}
-	| TOK_SET TOK_NAMES set_value opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
-	| TOK_SET sysvar '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
-	| TOK_SET TOK_CHARACTER TOK_SET set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_NAMES ident_or_string_or_num_or_nulls opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET sysvar '=' ident_or_string_or_num_or_nulls	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_CHARACTER TOK_SET ident_or_string_or_num_or_nulls { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
 opt_collate:
 	// empty
-	| TOK_COLLATE set_value
-	;
-
-set_global_stmt:
-	TOK_SET TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
-		{
-			pParser->SetStatement ( $3, SET_GLOBAL_UVAR );
-			pParser->m_pStmt->m_dSetValues = *$6.m_pValues;
-		}
-	| TOK_SET TOK_GLOBAL ident_set '=' set_string_value
-		{
-			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
-			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $5 ).Unquote();
-		}
-	| TOK_SET TOK_GLOBAL ident_set '=' const_int
-		{
-			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
-			pParser->m_pStmt->m_iSetValue = $5.GetValueInt();
-		}
-	| TOK_SET index_or_table identidx TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
-		{
-			pParser->SetStatement ( $5, SET_INDEX_UVAR );
-			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
-		}
-	| TOK_SET TOK_CLUSTER ident TOK_GLOBAL TOK_QUOTED_STRING '=' set_string_value
-		{
-			pParser->SetStatement ( $5, SET_CLUSTER_UVAR );
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
-			pParser->ToString ( pParser->m_pStmt->m_sSetName, $5 ).Unquote();
-			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $7 ).Unquote();
-		}
-	| TOK_SET TOK_CLUSTER ident TOK_GLOBAL TOK_QUOTED_STRING '=' const_int
-		{
-			pParser->SetStatement ( $5, SET_CLUSTER_UVAR );
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
-			pParser->ToString ( pParser->m_pStmt->m_sSetName, $5 ).Unquote();
-			pParser->m_pStmt->m_sSetValue.SetSprintf ( INT64_FMT, $7.GetValueInt() );
-		}
+	| TOK_COLLATE ident_or_string_or_num_or_nulls
 	;
 
 set_string_value:
@@ -1473,12 +1387,12 @@ bool_or_integer_value:
 	| const_int			{ $$.SetValueInt ( $1.GetValueInt() ); }
 	;
 
-set_value:
-	simple_set_value
-	| set_value '-' simple_set_value
+ident_or_string_or_num_or_nulls:
+	ident_or_string_or_num_or_null
+	| ident_or_string_or_num_or_nulls '-' ident_or_string_or_num_or_null
 	;
 
-simple_set_value:
+ident_or_string_or_num_or_null:
 	ident
 	| TOK_NULL
 	| TOK_QUOTED_STRING
@@ -1540,11 +1454,11 @@ insert_vals_list:
 	;
 
 insert_val:
-	const_int			{ $$.m_iType = TOK_CONST_INT; $$.CopyValueInt ( $1 ); }
+	const_int				{ $$.m_iType = TOK_CONST_INT; $$.CopyValueInt ( $1 ); }
 	| const_float			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
-	| '(' const_list ')'		{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
-	| '(' ')'			{ $$.m_iType = TOK_CONST_MVA; }
+	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
+	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1749,14 +1663,7 @@ show_variables_where_entry:
 	ident '=' TOK_QUOTED_STRING // for example, Variable_name = 'character_set'
 	;
 
-set_transaction:
-	TOK_SET opt_scope TOK_TRANSACTION TOK_ISOLATION TOK_LEVEL isolation_level
-		{
-			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
-		}
-	;
-
-opt_scope:
+global_or_session:
 	// empty
 	| TOK_GLOBAL
 		{
@@ -1766,77 +1673,6 @@ opt_scope:
 		{
     		pParser->m_pStmt->m_iIntParam = 1;
     	}
-	;
-
-isolation_level:
-	TOK_READ TOK_UNCOMMITTED
-	| TOK_READ TOK_COMMITTED
-	| TOK_REPEATABLE TOK_READ
-	| TOK_SERIALIZABLE
-	;
-
-////////////////////////////////////////////////////////////
-
-attach_index:
-	TOK_ATTACH index_or_table identidx TOK_TO rtindex identidx opt_with_truncate
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ATTACH_INDEX;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sStringParam, $6 );
-		}
-	;
-
-opt_with_truncate:
-	// empty
-	| TOK_WITH TOK_TRUNCATE
-		{
-			pParser->m_pStmt->m_iIntParam = 1;
-		}
-	;
-
-//////////////////////////////////////////////////////////////////////////
-
-flush_rtindex:
-	TOK_FLUSH rtindex identidx
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	;
-
-flush_ramchunk:
-	TOK_FLUSH TOK_RAMCHUNK identidx
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_FLUSH_RAMCHUNK;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	;
-
-flush_index:
-	TOK_FLUSH TOK_ATTRIBUTES
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_FLUSH_INDEX;
-		}
-	;
-
-flush_hostnames:
-	TOK_FLUSH TOK_HOSTNAMES
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_FLUSH_HOSTNAMES;
-		}
-	;
-
-flush_logs:
-	TOK_FLUSH TOK_LOGS
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_FLUSH_LOGS;
-		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1872,29 +1708,6 @@ select_dual:
 
 //////////////////////////////////////////////////////////////////////////
 
-truncate:
-	TOK_TRUNCATE rtindex only_one_index opt_with_reconfigure
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
-		}
-	;
-
-rtindex:
-	TOK_RTINDEX
-	| TOK_TABLE
-	;
-
-opt_with_reconfigure:
-	// empty
-	| TOK_WITH TOK_RECONFIGURE
-		{
-			pParser->m_pStmt->m_iIntParam = 1;
-		}
-	;
-
-//////////////////////////////////////////////////////////////////////////
-
 optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
 		index_or_table identidx opt_option_clause
@@ -1903,16 +1716,7 @@ optimize_index:
 			}
 	;
 
-//////////////////////////////////////////////////////////////////////////
 
-reload_plugins:
-	TOK_RELOAD TOK_PLUGINS TOK_FROM TOK_SONAME TOK_QUOTED_STRING
-		{
-			SqlStmt_t & s = *pParser->m_pStmt;
-			s.m_eStmt = STMT_RELOAD_PLUGINS;
-			s.m_sUdfLib = pParser->ToStringUnescape ( $5 );
-		}
-	;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1999,30 +1803,6 @@ facet_stmt:
 		}
 	;
 
-opt_reload_index_from:
-	// empty
-	| TOK_FROM TOK_QUOTED_STRING
-		{
-			pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ( $2 );
-		}
-	;
-
-reload_index:
-	TOK_RELOAD index_or_table identidx opt_reload_index_from
-		{
-			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);
-		}
-	;
-
-reload_indexes:
-	TOK_RELOAD indexes_or_tables
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_RELOAD_INDEXES;
-		}
-	;
-
 sysfilters:
 	TOK_SYSFILTERS filter_expr
 		{
@@ -2031,14 +1811,7 @@ sysfilters:
 		}
 	;
 
-delete_cluster:
-	TOK_DELETE TOK_CLUSTER ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_DELETE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	;
+
 
 explain_query:
 	TOK_EXPLAIN   { pParser->m_pStmt->m_eStmt = STMT_EXPLAIN; }
@@ -2050,34 +1823,6 @@ explain_query:
 				pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $5 );
 			}
 	;
-
-freeze_indexes:
-	TOK_FREEZE one_or_more_indexes
-		{
-			pParser->m_pStmt->m_eStmt = STMT_FREEZE;
-		}
-	;
-
-unfreeze_indexes:
-	TOK_UNFREEZE one_or_more_indexes
-		{
-			pParser->m_pStmt->m_eStmt = STMT_UNFREEZE;
-		}
-	;
-
-opt_word_query:
-	// empty
-	| TOK_QUERY
-	;
-
-kill_connid:
-	TOK_KILL opt_word_query TOK_CONST_INT
-		{
-			pParser->m_pStmt->m_eStmt = STMT_KILL;
-			pParser->m_pStmt->m_iIntParam = $3.GetValueInt();
-		}
-    ;
-
 
 %%
 

@@ -1,4 +1,9 @@
 %{
+
+#if _WIN32
+#define YY_NO_UNISTD_H 1
+#endif
+
 #include "bissphinxql.h"
 
 #ifdef __GNUC__
@@ -21,13 +26,13 @@
 		pParser->m_pLastTokenStart = yytext; \
 	}
 
-#define BACKTICK_START \
+#define BLOCK_START \
 	{ \
 		pParser->m_pLastTokenStart = yytext; \
 	    lvalp->m_iStart = yytext + yyleng - pParser->m_pBuf; \
 	}
 
-#define BACKTICK_END \
+#define BLOCK_END \
 	{ \
 		lvalp->m_iEnd = yytext + yyleng - pParser->m_pBuf; \
 	}
@@ -57,18 +62,18 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 
 %%
 
-"/*"         		{ BEGIN(ccomment); }
-<ccomment>"*/"		{ BEGIN(INITIAL); }
+"/*"         		{ BLOCK_START; BEGIN(ccomment); }
+<ccomment>"*/"		{ BLOCK_END; BEGIN(INITIAL); lvalp->m_iEnd-=2; pParser->AddComment(lvalp); }
 <ccomment>[^*\n]+
 <ccomment>"*"[^/]
 <ccomment>"\n"
 
 
-\.{SPACE}*`	           	{ BACKTICK_START; BEGIN (BACKTICK); }
+\.{SPACE}*`	           	{ BLOCK_START; BEGIN (BACKTICK); }
 <BACKTICK>[^\n\\`]+		/* eat everything except \n, \, ` */
 <BACKTICK>\\[^\n]		/* eat one symbol after \ (aka escaping) except \n  */
 <BACKTICK>`				{
-							BACKTICK_END;
+							BLOCK_END;
 							BEGIN(INITIAL);
 							return TOK_BACKTICKED_SUBKEY;
 						}
@@ -86,8 +91,6 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "ANY"				{ YYSTOREBOUNDS; return TOK_ANY; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }
 "ASC"				{ YYSTOREBOUNDS; return TOK_ASC; }
-"ATTACH"			{ YYSTOREBOUNDS; return TOK_ATTACH; }
-"ATTRIBUTES"		{ YYSTOREBOUNDS; return TOK_ATTRIBUTES; }
 "AVG"				{ YYSTOREBOUNDS; return TOK_AVG; }
 "BEGIN"				{ YYSTOREBOUNDS; return TOK_BEGIN; }
 "BETWEEN"			{ YYSTOREBOUNDS; return TOK_BETWEEN; }
@@ -102,7 +105,6 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "COLUMN"			{ YYSTOREBOUNDS; return TOK_COLUMN; }
 "COLUMNARSCAN"		{ YYSTOREBOUNDS; return TOK_HINT_COLUMNAR; }
 "COMMIT"			{ YYSTOREBOUNDS; return TOK_COMMIT; }
-"COMMITTED"			{ YYSTOREBOUNDS; return TOK_COMMITTED; }
 "COUNT"				{ YYSTOREBOUNDS; return TOK_COUNT; }
 "CREATE"			{ YYSTOREBOUNDS; return TOK_CREATE; }
 "DATABASES"			{ YYSTOREBOUNDS; return TOK_DATABASES; }
@@ -117,7 +119,6 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "FACET"				{ YYSTOREBOUNDS; return TOK_FACET; }
 "FALSE"				{ YYSTOREBOUNDS; return TOK_FALSE; }
 "FLOAT"				{ YYSTOREBOUNDS; return TOK_FLOAT; }
-"FLUSH"				{ YYSTOREBOUNDS; return TOK_FLUSH; }
 "FOR"				{ YYSTOREBOUNDS; return TOK_FOR; }
 "FORCE"				{ YYSTOREBOUNDS; return TOK_FORCE; }
 "FROM"				{ YYSTOREBOUNDS; return TOK_FROM; }
@@ -137,9 +138,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "INT"				{ YYSTOREBOUNDS; return TOK_INT; }
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
 "IS"				{ YYSTOREBOUNDS; return TOK_IS; }
-"ISOLATION"			{ YYSTOREBOUNDS; return TOK_ISOLATION; }
 "KILL"	    		{ YYSTOREBOUNDS; return TOK_KILL; }
-"LEVEL"				{ YYSTOREBOUNDS; return TOK_LEVEL; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
 "LOGS"				{ YYSTOREBOUNDS; return TOK_LOGS; }
 "FREEZE"			{ YYSTOREBOUNDS; return TOK_FREEZE; }
@@ -168,20 +167,14 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "PLUGINS"			{ YYSTOREBOUNDS; return TOK_PLUGINS; }
 "PROFILE"			{ YYSTOREBOUNDS; return TOK_PROFILE; }
 "QUERY"	    		{ YYSTOREBOUNDS; return TOK_QUERY; }
-"RAMCHUNK"			{ YYSTOREBOUNDS; return TOK_RAMCHUNK; }
 "RAND"				{ YYSTOREBOUNDS; return TOK_RAND; }
-"READ"				{ YYSTOREBOUNDS; return TOK_READ; }
 "REGEX"				{ YYSTOREBOUNDS; return TOK_REGEX; }
-"RECONFIGURE"		{ YYSTOREBOUNDS; return TOK_RECONFIGURE; }
 "RELOAD"			{ YYSTOREBOUNDS; return TOK_RELOAD; }
-"REPEATABLE"		{ YYSTOREBOUNDS; return TOK_REPEATABLE; }
 "REPLACE"			{ YYSTOREBOUNDS; return TOK_REPLACE; }
 "REMAP"				{ YYSTOREBOUNDS; return TOK_REMAP; }
 "ROLLBACK"			{ YYSTOREBOUNDS; return TOK_ROLLBACK; }
-"RTINDEX"			{ YYSTOREBOUNDS; return TOK_RTINDEX; }
 "SECONDARYINDEX"	{ YYSTOREBOUNDS; return TOK_HINT_SECONDARY; }
 "SELECT"			{ YYSTOREBOUNDS; return TOK_SELECT; }
-"SERIALIZABLE"		{ YYSTOREBOUNDS; return TOK_SERIALIZABLE; }
 "SET"				{ YYSTOREBOUNDS; return TOK_SET; }
 "SETTINGS"			{ YYSTOREBOUNDS; return TOK_SETTINGS; }
 "SESSION"			{ YYSTOREBOUNDS; return TOK_SESSION; }
@@ -198,20 +191,14 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "TO"				{ YYSTOREBOUNDS; return TOK_TO; }
 "TRANSACTION"		{ YYSTOREBOUNDS; return TOK_TRANSACTION; }
 "TRUE"				{ YYSTOREBOUNDS; return TOK_TRUE; }
-"TRUNCATE"			{ YYSTOREBOUNDS; return TOK_TRUNCATE; }
-"UNCOMMITTED"		{ YYSTOREBOUNDS; return TOK_UNCOMMITTED; }
 "UNFREEZE"    		{ YYSTOREBOUNDS; return TOK_UNFREEZE; }
 "UPDATE"			{ YYSTOREBOUNDS; return TOK_UPDATE; }
-"USE"				{ YYSTOREBOUNDS; return TOK_USE; }
 "VALUES"			{ YYSTOREBOUNDS; return TOK_VALUES; }
 "VARIABLES"			{ YYSTOREBOUNDS; return TOK_VARIABLES; }
 "WARNINGS"			{ YYSTOREBOUNDS; return TOK_WARNINGS; }
 "WEIGHT"			{ YYSTOREBOUNDS; return TOK_WEIGHT; }
 "WHERE"				{ YYSTOREBOUNDS; return TOK_WHERE; }
-"WITH"				{ YYSTOREBOUNDS; return TOK_WITH; }
 "WITHIN"			{ YYSTOREBOUNDS; return TOK_WITHIN; }
-^"DEBUG"(?s:\ .*)?	{ return TOK_DEBUGCLAUSE; } // that is not reserved
-^(ALTER|CREATE|DROP|JOIN|IMPORT)(?s:\ .*)?            { return TOK_DDLCLAUSE; } // DDL is not supported in multi-statements anyway, so we only check the whole line
 
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }

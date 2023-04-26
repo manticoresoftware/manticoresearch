@@ -1008,7 +1008,7 @@ void InputBuffer_c::ResetError()
 	m_sError = "";
 }
 
-void NetGenericOutputBuffer_c::ResetError()
+void GenericOutputBuffer_c::ResetError()
 {
 	m_bError = false;
 	m_sError = "";

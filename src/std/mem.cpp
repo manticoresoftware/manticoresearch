@@ -634,9 +634,6 @@ void sphMemStatDump ( int iFD )
 
 void* operator new ( std::size_t iSize )
 {
-	if (iSize)
-		++iSize;
-
 	void* pResult = std::malloc ( iSize );
 	if ( !pResult )
 		sphDieRestart ( "out of memory (unable to allocate " UINT64_FMT " bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too

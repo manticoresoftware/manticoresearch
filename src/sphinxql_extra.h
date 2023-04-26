@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -10,13 +10,8 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#ifndef _searchdddl_
-#define _searchdddl_
+#pragma once
 
 #include "searchdsql.h"
 
-bool ParseDdl ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
-
-ParseResult_e ParseDdlEx ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError );
-
-#endif // _searchdddl_
+ParseResult_e ParseExtra ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError );

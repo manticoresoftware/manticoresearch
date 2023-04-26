@@ -110,22 +110,22 @@ public:
 		m_pPtr.store ( rhs.m_pPtr.exchange ( m_pPtr.load(memory_order_acquire), memory_order_acq_rel ), memory_order_release );
 	}
 
-	PTR operator-> () const
+	PTR operator-> () const noexcept
 	{
 		return m_pPtr.load ( std::memory_order_relaxed );
 	}
 
-	explicit operator bool () const
+	explicit operator bool () const noexcept
 	{
 		return m_pPtr.load ( std::memory_order_relaxed )!=nullptr;
 	}
 
-	explicit operator PTR () const
+	explicit operator PTR () const noexcept
 	{
 		return m_pPtr.load ( std::memory_order_relaxed );
 	}
 
-	explicit operator ATOMIC_PTR& ()
+	explicit operator ATOMIC_PTR& () noexcept
 	{
 		return m_pPtr;
 	}

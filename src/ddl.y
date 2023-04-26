@@ -19,7 +19,6 @@
 %token	TOK_CONST_FLOAT
 %token	TOK_CONST_INT
 %token	TOK_QUOTED_STRING
-%token	TOK_BAD_NUMERIC
 
 %token	TOK_ADD
 %token	TOK_ALTER

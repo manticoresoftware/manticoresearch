@@ -25,7 +25,7 @@
 #endif
 
 
-class NetOutputBuffer_c final : public NetGenericOutputBuffer_c
+class NetOutputBuffer_c final : public GenericOutputBuffer_c
 {
 public:
 	explicit	NetOutputBuffer_c ( int iSock );

@@ -1,4 +1,9 @@
 %{
+
+#if _WIN32
+#define YY_NO_UNISTD_H 1
+#endif
+
 #include "bisddl.h"
 
 #ifdef __GNUC__
@@ -100,9 +105,8 @@ ALPHA				[a-zA-Z_]+
 {DIGIT}+			{ YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
 
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
-`{ID}`				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
-`{DIGIT}+{ID}`		{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; } // allow `123xyz` column names
-[a-zA-Z_0-9]+		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
+`{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
+`{DIGIT}+{ID}`		{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
 
 {SPACE}+			{ ; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }
@@ -112,7 +116,7 @@ ALPHA				[a-zA-Z_]+
 // warning, lexer generator dependent!
 // flex inserts trailing zero as needed into the buffer when lexing
 // but we need that rolled back when doing error reporting from yyerror
-void yy3lex_unhold ( yyscan_t yyscanner )
+static void yy3lex_unhold ( yyscan_t yyscanner )
 {
 	struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 	if ( YY_CURRENT_BUFFER )

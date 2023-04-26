@@ -138,13 +138,11 @@ public:
 		REFCOUNT::Inc ( TASKINFO::Task() );
 	}
 
-	operator TASKINFO*() const { return m_pInfo.operator TASKINFO*(); };
-	TASKINFO* operator->() const { return m_pInfo.operator->(); }
+	explicit operator TASKINFO*() const noexcept { return m_pInfo.operator TASKINFO*(); };
+	TASKINFO* operator->() const noexcept { return m_pInfo.operator->(); }
 
-	ScopedInfo_T ( ScopedInfo_T && rhs ) noexcept
-	{
-		m_pInfo.Swap ( rhs.m_pInfo );
-	}
+	ScopedInfo_T ( ScopedInfo_T&& rhs ) = delete;
+	ScopedInfo_T& operator= ( ScopedInfo_T&& rhs) = delete;
 
 	~ScopedInfo_T ()
 	{

@@ -168,17 +168,18 @@ class ScopedClientInfo_c: public ScopedInfo_T<ClientTaskInfo_t>
 public:
 	bool m_bVip;
 	static TaskSlist_c m_tTasks;
+	ClientSession_c tSession;
 
 public:
-	explicit ScopedClientInfo_c ( ClientTaskInfo_t* pInfo, ClientSession_c* pSession )
+	explicit ScopedClientInfo_c ( ClientTaskInfo_t* pInfo )
 		: ScopedInfo_T<ClientTaskInfo_t> ( pInfo )
 		, m_bVip ( pInfo->GetVip() )
 	{
 		ClientTaskInfo_t::m_iClients.fetch_add ( 1, std::memory_order_relaxed );
 		if ( m_bVip )
 			ClientTaskInfo_t::m_iVips.fetch_add ( 1, std::memory_order_relaxed );
-		pInfo->SetClientSession ( pSession );
-		m_tTasks.Enqueue ( (ClientTaskInfo_t*)m_pInfo );
+		pInfo->SetClientSession ( &tSession );
+		m_tTasks.Enqueue ( pInfo );
 	}
 
 	~ScopedClientInfo_c()
@@ -191,9 +192,9 @@ public:
 
 	void Dequeue()
 	{
+		m_tTasks.Remove ( (ClientTaskInfo_t*)m_pInfo );
 		m_pInfo->SetClientSession ( nullptr );
 		m_pInfo->SetTaskState ( TaskState_e::RETIRED );
-		m_tTasks.Remove ( (ClientTaskInfo_t*)m_pInfo );
 	}
 };
 
@@ -306,10 +307,9 @@ void NetActionAccept_c::Impl_c::ProcessAccept ()
 			case Proto_e::HTTP :
 			case Proto_e::MYSQL41:
 			{
-				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto ] () mutable
+				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto]() mutable
 					{
-						ClientSession_c tSession;						// session variables and state (shorter lifetime than ClientInfo's)
-						ScopedClientInfo_c pInfo { _pInfo, &tSession }; // make visible task info
+						ScopedClientInfo_c pInfo { _pInfo }; // make visible task info
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );
 					}, fnMakeScheduler () );
 				break;

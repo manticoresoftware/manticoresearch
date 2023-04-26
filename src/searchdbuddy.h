@@ -21,4 +21,4 @@ void BuddyStop ();
 bool HasBuddy();
 
 bool ProcessHttpQueryBuddy ( CharStream_c & tSource, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
-bool ProcessSqlQueryBuddy ( Str_t tQuery, BYTE & uPacketID, ISphOutputBuffer & tOut );
+bool ProcessSqlQueryBuddy ( Str_t tQuery, BYTE & uPacketID, GenericOutputBuffer_c & tOut );

@@ -90,6 +90,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 "UNLOCK"			{ STORE_BOUNDS; return TOK_UNLOCK; }
 "USE"				{ STORE_BOUNDS; return TOK_USE; }
 "WITH"				{ STORE_BOUNDS; return TOK_WITH; }
+"WRITE"				{ STORE_BOUNDS; return TOK_WRITE; }
 
 
 {FLOAT_CONSTANT}	{  lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }

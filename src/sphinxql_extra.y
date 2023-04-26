@@ -33,6 +33,7 @@
 %token	TOK_UNLOCK
 %token	TOK_USE
 %token	TOK_WITH
+%token	TOK_WRITE
 
 %{
 
@@ -158,15 +159,15 @@ unlock_tables:
 //////////////////////////////////////////////////////////////////////////
 
 lock_tables:
-	TOK_LOCK TOK_TABLES ident opt_read
+	TOK_LOCK TOK_TABLES ident read_or_write
 		{
 			pParser->DefaultOk();
 		}
 	;
 
-opt_read:
-	// empty
-	| TOK_READ
+read_or_write:
+	TOK_READ
+	| TOK_WRITE
 	;
 
 //////////////////////////////////////////////////////////////////////////

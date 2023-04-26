@@ -326,6 +326,8 @@ public:
 	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
 	void			SetIndex ( const SqlNode_t & tNode ) const;
 
+	void			AddComment ( const SqlNode_t* tNode );
+
 private:
 	bool						m_bGotQuery = false;
 	BYTE						m_uSyntaxFlags = 0;
@@ -1156,6 +1158,24 @@ void SqlParser_c::SetIndex ( const SqlNode_t & tNode ) const
 	// unquote index name
 	if ( ( tNode.m_iEnd - tNode.m_iStart )>2 && m_pStmt->m_sIndex.cstr()[0]=='\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1]=='\'' )
 		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length()-2 );
+}
+
+void SqlParser_c::AddComment ( const SqlNode_t* tNode )
+{
+	CSphString sComment;
+	ToString ( sComment, *tNode );
+	StrVec_t sParts;
+	sphSplit ( sParts, sComment.cstr(), " " );
+	for ( auto& sPart : sParts )
+	{
+		sPart.Trim();
+		sPart.ToUpper();
+		if ( sPart == "SQL_NO_CACHE" )
+		{
+			sphLogDebug ( "Found SQL_NO_CACHE, set limit=-1" );
+			SetLimit ( 0, -1 );
+		}
+	}
 }
 
 

@@ -26,13 +26,13 @@
 		pParser->m_pLastTokenStart = yytext; \
 	}
 
-#define BACKTICK_START \
+#define BLOCK_START \
 	{ \
 		pParser->m_pLastTokenStart = yytext; \
 	    lvalp->m_iStart = yytext + yyleng - pParser->m_pBuf; \
 	}
 
-#define BACKTICK_END \
+#define BLOCK_END \
 	{ \
 		lvalp->m_iEnd = yytext + yyleng - pParser->m_pBuf; \
 	}
@@ -62,18 +62,18 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 
 %%
 
-"/*"         		{ BEGIN(ccomment); }
-<ccomment>"*/"		{ BEGIN(INITIAL); }
+"/*"         		{ BLOCK_START; BEGIN(ccomment); }
+<ccomment>"*/"		{ BLOCK_END; BEGIN(INITIAL); lvalp->m_iEnd-=2; pParser->AddComment(lvalp); }
 <ccomment>[^*\n]+
 <ccomment>"*"[^/]
 <ccomment>"\n"
 
 
-\.{SPACE}*`	           	{ BACKTICK_START; BEGIN (BACKTICK); }
+\.{SPACE}*`	           	{ BLOCK_START; BEGIN (BACKTICK); }
 <BACKTICK>[^\n\\`]+		/* eat everything except \n, \, ` */
 <BACKTICK>\\[^\n]		/* eat one symbol after \ (aka escaping) except \n  */
 <BACKTICK>`				{
-							BACKTICK_END;
+							BLOCK_END;
 							BEGIN(INITIAL);
 							return TOK_BACKTICKED_SUBKEY;
 						}

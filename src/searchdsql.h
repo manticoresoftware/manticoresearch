@@ -336,6 +336,7 @@ public:
 
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
+	void 			AddComment ( const SqlNode_t* tNode ) const;
 
 protected:
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );

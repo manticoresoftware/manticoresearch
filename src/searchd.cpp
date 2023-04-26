@@ -15390,10 +15390,11 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 	dStatus.MatchTupletf ( "killed_documents", "%l", tStatus.m_iDead );
 	dStatus.MatchTupletFn ( "killed_rate", [&tStatus, iDocs] {
 		StringBuilder_c sPercent;
-		if ( iDocs )
-			sPercent.Sprintf ( "%0.2F%%", tStatus.m_iDead * 10000 / iDocs );
+		auto iTotalDocs = iDocs + tStatus.m_iDead;
+		if ( iTotalDocs )
+			sPercent.Sprintf ( "%0.2F%%", tStatus.m_iDead * 10000 / iTotalDocs );
 		else
-			sPercent << "100%";
+			sPercent << "0.00%";
 		return CSphString ( sPercent.cstr () );
 	} );
 	if ( bMutable )

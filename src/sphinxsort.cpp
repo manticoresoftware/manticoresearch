@@ -1237,15 +1237,16 @@ void CollectQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 
 //////////////////////////////////////////////////////////////////////////
 
-void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows )
+void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
 	int iCount = 0;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 		if ( !sphIsInternalAttr ( tSchema.GetAttr ( i ) ) )
 			++iCount;
 
+	assert ( iCount == dOrder.GetLength() );
 	pRows->HeadBegin ( iCount );
-	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	for ( int i : dOrder )
 	{
 		const CSphColumnInfo& tCol = tSchema.GetAttr ( i );
 		if ( sphIsInternalAttr ( tCol ) )
@@ -1268,10 +1269,10 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows )
 	pRows->HeadEnd ( false, 0 );
 }
 
-void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool )
+void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder )
 {
 	auto& dRows = *pRows;
-	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	for ( int i : dOrder )
 	{
 		const CSphColumnInfo& dAttr = tSchema.GetAttr ( i );
 		if ( sphIsInternalAttr ( dAttr ) )
@@ -1389,7 +1390,7 @@ class DirectSqlQueue_c final : public MatchSorter_c, ISphNoncopyable
 	using BASE = MatchSorter_c;
 
 public:
-	explicit DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque );
+	explicit DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec_t dColumns );
 
 	bool				IsGroupby () const final { return false; }
 	int					GetLength () final { return 0; } // that ensures, flatten() will never called;
@@ -1436,6 +1437,8 @@ private:
 	void * 						m_pCurDocstoreReader = nullptr;
 	CSphQuery					m_dFake;
 	CSphQueryContext			m_dCtx;
+	StrVec_t					m_dColumns;
+	CSphVector<int>			m_dOrder;
 
 	inline bool			PushMatch ( CSphMatch & tEntry );
 	void				SendSchema();
@@ -1443,14 +1446,22 @@ private:
 };
 
 
-DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque )
+DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec_t dColumns )
 	: m_pOutput ( pOutput )
 	, m_pOpaque ( pOpaque )
 	, m_dCtx (m_dFake)
+	, m_dColumns ( std::move ( dColumns ) )
 {}
 
 void DirectSqlQueue_c::SendSchema()
 {
+	for ( const auto& sColumn : m_dColumns )
+	{
+		auto iIdx = m_pSchema->GetAttrIndex ( sColumn.cstr() );
+		if ( iIdx >= 0 )
+			m_dOrder.Add ( iIdx );
+	}
+
 	for ( int i = 0; i < m_pSchema->GetAttrsCount(); ++i )
 	{
 		auto& tCol = const_cast< CSphColumnInfo &>(m_pSchema->GetAttr ( i ));
@@ -1465,7 +1476,7 @@ void DirectSqlQueue_c::SendSchema()
 		}
 	}
 
-	SendSqlSchema ( *m_pSchema, m_pOutput );
+	SendSqlSchema ( *m_pSchema, m_pOutput, m_dOrder );
 	m_bSchemaSent = true;
 }
 
@@ -1507,7 +1518,7 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 
 	m_dCtx.CalcFinal(tEntry);
 
-	SendSqlMatch ( *m_pSchema, m_pOutput, tEntry, m_pBlobPool );
+	SendSqlMatch ( *m_pSchema, m_pOutput, tEntry, m_pBlobPool, m_dOrder );
 	return true;
 }
 
@@ -7014,7 +7025,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	}
 
 	if ( m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer )
-		return new DirectSqlQueue_c ( m_tSettings.m_pSqlRowBuffer, m_tSettings.m_pOpaque );
+		return new DirectSqlQueue_c ( m_tSettings.m_pSqlRowBuffer, m_tSettings.m_pOpaque, std::move (m_tSettings.m_dCreateSchema) );
 
 	if ( m_tSettings.m_pCollection )
 		return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );

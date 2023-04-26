@@ -1368,6 +1368,7 @@ struct SphQueueSettings_t
 	std::function<int64_t ()>							m_fnGetCount;
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
+	StrVec_t 					m_dCreateSchema;
 	RowBuffer_i*				m_pSqlRowBuffer;
 	void*						m_pOpaque;
 

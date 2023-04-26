@@ -5546,6 +5546,37 @@ void SearchHandler_c::OnRunFinished()
 		tResult.m_iMatches = tResult.GetLength();
 }
 
+// return sequence of columns as 'show create table', or 'describe' reveal
+static StrVec_t GetDefaultSchema ( const CSphIndex* pIndex )
+{
+	StrVec_t dRes;
+	auto& tSchema = pIndex->GetMatchSchema();
+	if ( tSchema.GetAttrsCount()==0 )
+		return dRes;
+	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
+	const auto& tId = tSchema.GetAttr ( 0 );
+	dRes.Add ( tId.m_sName );
+
+	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
+	{
+		const auto& tField = tSchema.GetField ( i );
+		dRes.Add ( tField.m_sName );
+	}
+
+	for ( int i = 1; i < tSchema.GetAttrsCount(); ++i ) // from 1, as 0 is docID and already emerged
+	{
+		const auto& tAttr = tSchema.GetAttr ( i );
+		if ( sphIsInternalAttr ( tAttr ) )
+			continue;
+
+		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
+			continue; // already described it as a field property
+
+		dRes.Add ( tAttr.m_sName );
+	}
+	return dRes;
+}
+
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
 	auto& tSess = session::Info();
@@ -5560,6 +5591,7 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_fnGetCount			= [pIndex](){ return pIndex->GetCount(); };
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
+	tQS.m_dCreateSchema = GetDefaultSchema ( pIndex );
 	return tQS;
 }
 

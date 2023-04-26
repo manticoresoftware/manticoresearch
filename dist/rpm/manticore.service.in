@@ -9,7 +9,7 @@ User=manticore
 Group=manticore
 # Run ExecStartPre with root-permissions
 PermissionsStartOnly=true
-ExecStartPre=/bin/mkdir -p /var/run/manticore
+ExecStartPre=/bin/mkdir -p @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
 ExecStartPre=/bin/chown manticore.manticore @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
 # Run ExecStart with User=manticore / Group=manticore
 ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf

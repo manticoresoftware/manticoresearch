@@ -1,4 +1,4 @@
-# ---------- homebrew ----------
+# ---------- macos ----------
 
 message ( STATUS "Installing via Homebrew" )
 
@@ -11,24 +11,29 @@ if (NOT installed)
 	set ( CMAKE_INSTALL_PREFIX "$ENV{HOMEBREW_PREFIX}" )
 	include ( GNUInstallDirs )
 	set ( CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX_ORIGINAL}" )
-
 	set ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 
+	set ( CMAKE_INSTALL_FULL_SYSCONFDIR "$ENV{HOMEBREW_PREFIX}/etc" )
+	set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR "$ENV{HOMEBREW_PREFIX}/var" )
+	set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "$ENV{HOMEBREW_PREFIX}/var/run" )
 
-	# these guys came from homebrew formula
-	set ( CMAKE_INSTALL_FULL_SYSCONFDIR ${_SYSCONFDIR} )
-	set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR ${_LOCALSTATEDIR} )
-	set ( CMAKE_INSTALL_FULL_RUNSTATEDIR ${_RUNSTATEDIR} )
-	# we have to use the external _LOCALSTATEDIR, otherwise the value may be incorrect (https://manticoresearch.slack.com/archives/C5EEXJG31/p1675084036163049)
-	set ( LOCALDATADIR "${_LOCALSTATEDIR}/manticore/data" )
+	set ( LOCALDATADIR "$ENV{HOMEBREW_PREFIX}/var/manticore/data" )
+	set ( SPLIT_SYMBOLS 1 )
+
+	# configure specific stuff
+	set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch ${CMAKE_SYSTEM_PROCESSOR}" )
+	set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch ${CMAKE_SYSTEM_PROCESSOR}" )
+	set ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-osx${CMAKE_OSX_DEPLOYMENT_TARGET}-${CMAKE_SYSTEM_PROCESSOR}" )
+
 	set ( installed ON )
-	
-	install(DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/lib/manticore)
 endif ()
 
 if (only_set_paths)
 	return ()
 endif ()
+
+set ( CPACK_GENERATOR "TGZ" )
+message ( STATUS "Will create ${CPACK_GENERATOR} with build for MacOS" )
 
 #fixup - CMAKE_INSTALL_DOCDIR is share/doc/MANTICORE, fixup to share/doc/manticore
 set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore" )

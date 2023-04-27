@@ -1,7 +1,6 @@
 chown -R %{manticore_user}:%{manticore_group} @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
 
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
-%systemd_post manticore.service
 if [ $1 == 1 ]; then
     /usr/bin/systemctl enable manticore >/dev/null 2>&1 || :
 	systemd-tmpfiles --create /usr/lib/tmpfiles.d/searchd.conf

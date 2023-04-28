@@ -73,6 +73,7 @@ For more information on this topic, see [here](../../Data_creation_and_modificat
 
 #### Plain table files structure
 The following table outlines the various file extensions used in a plain table and their respective descriptions:
+
 | Extension | Description |
 | - | - |
 |`.spa` | stores document attributes in [row-wise mode](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) |

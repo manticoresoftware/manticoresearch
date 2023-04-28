@@ -37,6 +37,7 @@ function StrBegins ( $str, $substr )
 function mysqli_wr ($q, $conn)
 {
 //	printf ( "$q\n");
+	mysqli_report(MYSQLI_REPORT_OFF);
 	return @$conn->query ( $q );
 }
 
@@ -176,6 +177,7 @@ if ( !function_exists("mysql_query") ) {
 
 	function mysql_connect($host, $user, $password, $newlink)
 	{
+		mysqli_report(MYSQLI_REPORT_OFF);
 		global $gl_conn;
 		$conndetails = explode(":",$host);
 		if ( count($conndetails)==1 )
@@ -296,7 +298,7 @@ function ConnectDB ()
 		print ( "ERROR: missing required mysqli_connect(); add php_mysqli.so (.dll on Windows) to your php.ini!\n" );
 		exit ( 1 );
 	}
-
+	mysqli_report(MYSQLI_REPORT_OFF);
 	$conn = new mysqli(
 		$g_locals["db-host"],
 		$g_locals["db-user"],
@@ -431,6 +433,13 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip, &$e
 		return false;
 
 	return $conn;
+}
+
+function from_utf8 ( $to, $text )
+{
+    if (is_null($to))
+        return $text;
+    return iconv ('utf-8', $to, $text);
 }
 
 
@@ -1144,6 +1153,7 @@ function ConnectSpecificQL($agent, $vip=false)
 //	echo "Connecting to agent $address:$port\n";
 	if ($address == "localhost")
 		$address = "127.0.0.1";
+	mysqli_report(MYSQLI_REPORT_OFF);
 	return @mysqli_connect ( $address, '', '', '', $port );
 }
 
@@ -1520,6 +1530,8 @@ class SphinxConfig
 	private $_indexdata;			///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
 	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
+	private $_compat098;
+	private $_skip_indexer;
 
 	function SetConnection ( $connection )
 	{
@@ -1719,7 +1731,8 @@ class SphinxConfig
 		if ( $node->nodeType != XML_TEXT_NODE && $node->nodeType != XML_DOCUMENT_NODE
 			&& strtolower ( $node->nodeName ) == "dynamic" )
 		{
-			$node->id = count ( $this->_dynamic_entries );
+		    $count = count ( $this->_dynamic_entries );
+		    $node->setAttribute ( "count", $count );
 			array_push ( $this->_dynamic_entries, $node );
 			array_push ( $this->_counters, 0 );
 		}
@@ -1811,7 +1824,7 @@ class SphinxConfig
             $limit = $this->GetLocal('qlimit');
             $res["query"] = $limit ? array_slice( $queries, 0, $limit ) : $queries;
         } else
-            $res["query"] = array ( iconv ( 'utf-8', $encoding, $q->nodeValue ) );
+            $res["query"] = array ( from_utf8 ( $encoding, $q->nodeValue ) );
 
         // parse query mode
         $mode = 0;
@@ -2027,13 +2040,13 @@ class SphinxConfig
                 break;
             case 'comment':
                 $this->_queries[] = array (
-                    "query" => iconv('utf-8', $encoding, trim($this->GenerateQueryText($q))),
+                    "query" => from_utf8 ( $encoding, trim($this->GenerateQueryText($q))),
                     "attrs" => $attrs,
                     "type" => 'comment');
                 return;
             case '#comment':
                 $this->_queries[] = array (
-                    "query" => iconv('utf-8', $encoding, trim($q->nodeValue)),
+                    "query" => from_utf8 ( $encoding, trim($q->nodeValue)),
                     "attrs" => $attrs,
                     "type" => 'comment');
                 return;
@@ -2049,7 +2062,7 @@ class SphinxConfig
             case 'bulk': // bulk as is
             {
                 $this->_queries[] = array (
-                    "query" => iconv ( 'utf-8', $encoding, $q->nodeValue ),
+                    "query" => from_utf8 ( $encoding, $q->nodeValue ),
                     "attrs" => $attrs,
                     "type" => 'query');
                 return;
@@ -2069,14 +2082,14 @@ class SphinxConfig
             if ( !$query_chunk[0] ) // 0-th is bool 'statement/comment'
             {
                 $this->_queries[] = array (
-                    "query" => iconv('utf-8', $encoding, $query_chunk[1]),
+                    "query" => from_utf8 ( $encoding, $query_chunk[1]),
                     "attrs" => $attrs,
                     "type" => 'comment');
                 continue;
             }
             $query_texts = preg_split ( "/;\n\s*/", $query_chunk[1], -1, PREG_SPLIT_NO_EMPTY );
             foreach ($query_texts as $query_text)
-                $this->ExposeMetaIndexes (iconv('utf-8', $encoding, trim($query_text)), $attrs, $lowername, $metaindexes);
+                $this->ExposeMetaIndexes (from_utf8( $encoding, trim($query_text)), $attrs, $lowername, $metaindexes);
         }
 	}
 
@@ -2104,7 +2117,7 @@ class SphinxConfig
     {
         $q = trim ($q);
         if ($q!='')
-            $this->_db_insert [] = iconv ( 'utf-8', $encoding, $q);
+            $this->_db_insert [] = from_utf8 ($encoding, $q);
     }
 
 	function AddDbInsertNode( $q, $encoding, &$accum )
@@ -2159,7 +2172,7 @@ class SphinxConfig
 		{
 			$this->_custom_test = $custom->nodeValue;
 			if ( $doc->encoding != 'utf-8' )
-				$this->_custom_test = iconv ( 'utf-8', $doc->encoding, $this->_custom_test );
+				$this->_custom_test = from_utf8 ( $doc->encoding, $this->_custom_test );
 		}
 
 		// extract indexer run params
@@ -2176,7 +2189,7 @@ class SphinxConfig
 		{
 			$tmp = array();
 			foreach ( ChildrenArray ( $meta, "index") as $idx )
-				$tmp[] = iconv ( 'utf-8', $doc->encoding, $idx->nodeValue );
+				$tmp[] = from_utf8 ( $doc->encoding, $idx->nodeValue );
 
 			$name = GetFirstAttr ( $meta );
 			$metaindexes[$name->nodeValue] = $tmp;
@@ -3346,7 +3359,7 @@ class SphinxConfig
 
 		// format header
 		$qinfo = @$this->_queries[$nquery-1];
-		while ( $nquery>0 && (!@array_key_exists ( "type", $qinfo) || $qinfo['type'] != 'api' ))
+		while ( $nquery>0 && is_array($qinfo) && (!@array_key_exists ( "type", $qinfo) || $qinfo['type'] != 'api' ))
         {
             --$nquery;
             $qinfo = @$this->_queries[$nquery-1];
@@ -4294,10 +4307,11 @@ class SphinxConfig
 
 		if ( $nodename=="dynamic" )
 		{
-			if ( !is_null($node->id) )
+			if ( $node->hasAttribute("count") )
 			{
+			    $count = $node->getAttribute("count");
 				$variants = ChildrenArray ( $node,"variant" );
-				$this->Dump ( $variants[$this->_counters[$node->id]], $fp, $dynamic_only, $agentid );
+				$this->Dump ( $variants[$this->_counters[$count]], $fp, $dynamic_only, $agentid );
 			}
 		} else if ( strpos ( $nodename, "agent" )===0 )
 		{

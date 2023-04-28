@@ -168,8 +168,6 @@ $results = array_merge ( $results, $query ( "TRUNCATE RTINDEX rt_stem", $sock ) 
 $results = array_merge ( $results, $query ( "ATTACH INDEX plain_stem TO RTINDEX rt_stem", $sock ) );
 $results = array_merge ( $results, $query ( "SELECT * FROM rt_stem", $sock ) );
 
-$close ( $sock );
-
 ]]></custom_test>
 
 </test>

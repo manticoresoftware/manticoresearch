@@ -467,6 +467,8 @@ class SphinxClient
 	var $_mbenc;		///< stored mbstring encoding
 	var $_arrayresult;	///< whether $result["matches"] should be a hash or an array
 	var $_timeout;		///< connect timeout
+	var $_path;
+	var $_socket;
 
 	/////////////////////////////////////////////////////////////////////////////
 	// common stuff

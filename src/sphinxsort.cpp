@@ -1446,6 +1446,7 @@ private:
 	StrVec_t					m_dColumns;
 	CSphVector<int>				m_dOrder;
 	bool						m_bDynamicDocid;
+	bool						m_bNotYetFinalized = true;
 
 	inline bool			PushMatch ( CSphMatch & tEntry );
 	void				SendSchema();
@@ -1535,7 +1536,7 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 /// final update pass
 void DirectSqlQueue_c::Finalize ( MatchProcessor_i&, bool bCallProcessInResultSetOrder, bool bFinalizeMatches )
 {
-	if ( bFinalizeMatches )
+	if ( bFinalizeMatches && std::exchange ( m_bNotYetFinalized, false ) )
 		m_pOutput->Eof();
 }
 

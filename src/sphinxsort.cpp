@@ -1269,7 +1269,7 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 	pRows->HeadEnd ( false, 0 );
 }
 
-void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder )
+void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
 	auto& dRows = *pRows;
 	for ( int i : dOrder )
@@ -1291,11 +1291,17 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				const BYTE* pStr = nullptr;
 				if ( dAttr.m_eStage == SPH_EVAL_POSTLIMIT )
 				{
-					auto pDynamic = tMatch.m_pDynamic;
-					if ( tMatch.m_pStatic )
-						tMatch.m_pDynamic = nullptr;
-					dAttr.m_pExpr->StringEval ( tMatch, &pStr );
-					tMatch.m_pDynamic = pDynamic;
+					if ( bDynamicDocid )
+					{
+						dAttr.m_pExpr->StringEval ( tMatch, &pStr );
+					} else
+					{
+						auto pDynamic = tMatch.m_pDynamic;
+						if ( tMatch.m_pStatic )
+							tMatch.m_pDynamic = nullptr;
+						dAttr.m_pExpr->StringEval ( tMatch, &pStr );
+						tMatch.m_pDynamic = pDynamic;
+					}
 					dRows.PutString ( (const char*)pStr );
 				} else {
 					pStr = (const BYTE*)tMatch.GetAttr ( tLoc );
@@ -1438,7 +1444,8 @@ private:
 	CSphQuery					m_dFake;
 	CSphQueryContext			m_dCtx;
 	StrVec_t					m_dColumns;
-	CSphVector<int>			m_dOrder;
+	CSphVector<int>				m_dOrder;
+	bool						m_bDynamicDocid;
 
 	inline bool			PushMatch ( CSphMatch & tEntry );
 	void				SendSchema();
@@ -1465,6 +1472,9 @@ void DirectSqlQueue_c::SendSchema()
 	for ( int i = 0; i < m_pSchema->GetAttrsCount(); ++i )
 	{
 		auto& tCol = const_cast< CSphColumnInfo &>(m_pSchema->GetAttr ( i ));
+		if ( tCol.m_sName == sphGetDocidName() )
+			m_bDynamicDocid = tCol.m_tLocator.m_bDynamic;
+
 		if ( !tCol.m_pExpr )
 			continue;
 		switch ( tCol.m_eStage )
@@ -1518,7 +1528,7 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 
 	m_dCtx.CalcFinal(tEntry);
 
-	SendSqlMatch ( *m_pSchema, m_pOutput, tEntry, m_pBlobPool, m_dOrder );
+	SendSqlMatch ( *m_pSchema, m_pOutput, tEntry, m_pBlobPool, m_dOrder, m_bDynamicDocid );
 	return true;
 }
 

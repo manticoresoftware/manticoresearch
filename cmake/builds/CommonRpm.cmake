@@ -118,8 +118,6 @@ set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
 # server (service)
 set ( CPACK_RPM_SERVER_BUILDREQUIRES "systemd-units" )
 set ( CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE "${dirserver}/manticore.post" )
-set ( CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.postun" )
-set ( CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
 
 # server (core)
 set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )

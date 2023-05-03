@@ -6,7 +6,7 @@ CREATE FUNCTION udf_name
     SONAME 'udf_lib_file'
 ```
 
-`CREATE FUNCTION` statement installs a user-defined function [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) with the given name and type from the given library file. The library file must reside in a trusted [plugin_dir](../../../Server_settings/Common.md#plugin_dir) directory. On success, the function is available for use in all subsequent queries that the server receives. Example:
+`CREATE FUNCTION` statement installs a user-defined function [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) with the specified name and type from the provided library file. The library file must be located in a trusted [plugin_dir](../../../Server_settings/Common.md#plugin_dir) directory. Upon successful installation, the function becomes available for use in all subsequent queries received by the server. Example:
 
 ```sql
 mysql> CREATE FUNCTION avgmva RETURNS INTEGER SONAME 'udfexample.dll';
@@ -22,3 +22,4 @@ mysql> SELECT *, AVGMVA(tag) AS q from test1;
 |    4 |      1 | 7,40    | 23.500000 |
 +------+--------+---------+-----------+
 ```
+<!-- proofread -->

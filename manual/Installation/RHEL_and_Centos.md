@@ -9,7 +9,7 @@
 
 ### YUM repository
 
-The easiest way to install Manticore in RedHat/Centos is by using our YUM repository:
+The simplest method to install Manticore on RedHat/CentOS is by using our YUM repository:
 
 Install the repository:
 ```bash
@@ -85,3 +85,4 @@ ldconfig
 pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
+<!-- proofread -->

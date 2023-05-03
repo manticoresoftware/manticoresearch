@@ -1,26 +1,26 @@
 # Searching and ranking functions
 
 ### BM25A()
-`BM25A(k1,b)` returns precise `BM25A()`. Requires ranker `expr` and enabled `index_field_lengths`. Parameters `k` and `b` must be float.
+`BM25A(k1,b)` returns the exact `BM25A()` value. Requires the `expr` ranker and enabled `index_field_lengths`. Parameters `k1` and `b` must be floats.
 
 ### BM25F()
-`BM25F(k1,b, {field=weight, ...})` returns precise `BM25F()` and `index_field_lengths` to be enabled. Requires `expr` ranker. `k` and `b` parameters must be float.
+`BM25F(k1, b, {field=weight, ...})` returns the exact `BM25F()` value and requires `index_field_lengths` to be enabled. The `expr` ranker is also necessary. Parameters `k1` and `b` must be floats.
 
 ### EXIST()
-Replaces non-existent columns with default values. It returns either a value of an attribute specified by 'attr-name', or 'default-value' if that attribute does not exist. It does not support STRING or MVA attributes. This function is handy when you are searching through several tables with different schemas.
+Substitutes non-existent columns with default values. It returns either the value of an attribute specified by 'attr-name', or the 'default-value' if that attribute does not exist. STRING or MVA attributes are not supported. This function is useful when searching through multiple tables with different schemas.
 
 ```sql
 SELECT *, EXIST('gid', 6) as cnd FROM i1, i2 WHERE cnd>5
 ```
 
 ### MIN_TOP_SORTVAL()
-Returns sort key value of the worst found element in the current top-N matches if sort key is float and 0 otherwise.
+Returns the sort key value of the worst-ranked element in the current top-N matches if the sort key is a float, and 0 otherwise.
 
 ### MIN_TOP_WEIGHT()
-Returns weight of the worst found element in the current top-N matches.
+Returns the weight of the worst-ranked element in the current top-N matches.
 
 ### PACKEDFACTORS()
-`PACKEDFACTORS()` can be used in queries, either to just see all the weighting factors calculated when doing the matching, or to provide a binary attribute that can be used to write a custom ranking UDF. This function works only if expression ranker is specified and the query is not a full scan, otherwise it will return an error. `PACKEDFACTORS()` can take an optional argument that disables ATC ranking factor calculation: `PACKEDFACTORS({no_atc=1})` Calculating ATC slows down query processing considerably, so this option can be useful if you need to see the ranking factors, but do not need ATC. `PACKEDFACTORS()` can also be told to format its output as JSON: `PACKEDFACTORS({json=1})` The respective outputs in either key-value pair or JSON format would look as follows below. (Note that the examples below are wrapped for readability; actual returned values would be single-line.)
+`PACKEDFACTORS()` can be used in queries to display all calculated weighting factors during matching or to provide a binary attribute for creating a custom ranking UDF. This function only works if the expression ranker is specified and the query is not a full scan; otherwise, it returns an error. `PACKEDFACTORS()` can take an optional argument that disables ATC ranking factor calculation: `PACKEDFACTORS({no_atc=1})`. Calculating ATC significantly slows down query processing, so this option can be useful if you need to see the ranking factors but don't require ATC. `PACKEDFACTORS()` can also output in JSON format: `PACKEDFACTORS({json=1})`. The respective outputs in either key-value pair or JSON format are shown below. (Note that the examples below are wrapped for readability; actual returned values would be single-line.)
 
 ```sql
 mysql> SELECT id, PACKEDFACTORS() FROM test1
@@ -84,7 +84,7 @@ packedfactors({json=1}):
 1 row in set (0.01 sec)
 ```
 
-This function can be used to implement custom ranking functions in UDFs, as in
+This function can be used to implement custom ranking functions in UDFs, as in:
 
 ```sql
 SELECT *, CUSTOM_RANK(PACKEDFACTORS()) AS r
@@ -94,7 +94,7 @@ ORDER BY r DESC
 OPTION ranker=expr('1');
 ```
 
-Where `CUSTOM_RANK()` is a function implemented in an UDF. It should declare a `SPH_UDF_FACTORS` structure (defined in sphinxudf.h), initialize this structure, unpack the factors into it before usage, and deinitialize it afterwards, as follows:
+Where `CUSTOM_RANK()` is a function implemented in a UDF. It should declare a `SPH_UDF_FACTORS` structure (defined in sphinxudf.h), initialize this structure, unpack the factors into it before usage, and deinitialize it afterwards, as follows:
 
 ```sql
 SPH_UDF_FACTORS factors;
@@ -104,9 +104,9 @@ sphinx_factors_unpack((DWORD*)args->arg_values[0], &factors);
 sphinx_factors_deinit(&factors);
 ```
 
-`PACKEDFACTORS()` data is available at all query stages, not just when doing the initial matching and ranking pass. That enables another particularly interesting application of `PACKEDFACTORS()`, namely re-ranking.
+`PACKEDFACTORS()` data is available at all query stages, not just during the initial matching and ranking pass. This enables another particularly interesting application of `PACKEDFACTORS()`: re-ranking.
 
-In the example just above, we used an expression-based ranker with a dummy expression, and sorted the result set by the value computed by our UDF. In other words, we used the UDF to rank all our results. Assume now, for the sake of an example, that our UDF is extremely expensive to compute and has a throughput of just 10,000 calls per second. Assume that our query matches 1,000,000 documents. To maintain reasonable performance, we would then want to use a (much) simpler expression to do most of our ranking, and then apply the expensive UDF to only a few top results, say, top-100 results. Or, in other words, build top-100 results using a simpler ranking function and then re-rank those with a complex one. We can do that just as well with subselects:
+In the example above, we used an expression-based ranker with a dummy expression and sorted the result set by the value computed by our UDF. In other words, we used the UDF to rank all our results. Now, let's assume for the sake of an example that our UDF is extremely expensive to compute, with a throughput of only 10,000 calls per second. If our query matches 1,000,000 documents, we would want to use a much simpler expression to do most of our ranking in order to maintain reasonable performance. Then, we would apply the expensive UDF to only a few top results, say, the top 100 results. In other words, we would build the top 100 results using a simpler ranking function and then re-rank those with a more complex one. This can be done with subselects:
 
 ```sql
 SELECT * FROM (
@@ -118,11 +118,11 @@ SELECT * FROM (
 ) ORDER BY r DESC LIMIT 10
 ```
 
-In this example, expression-based ranker will be called for every matched document to compute `WEIGHT()`. So it will get called 1,000,000 times. But the UDF computation can be postponed until the outer sort. And it also will be done for just the top-100 matches by `WEIGHT()`, according to the inner limit. So the UDF will only get called 100 times. And then the final top-10 matches by UDF value will be selected and returned to the application.
+In this example, the expression-based ranker is called for every matched document to compute `WEIGHT()`, so it gets called 1,000,000 times. However, the UDF computation can be postponed until the outer sort, and it will only be performed for the top 100 matches by `WEIGHT()`, according to the inner limit. This means the UDF will only be called 100 times. Finally, the top 10 matches by UDF value are selected and returned to the application.
 
-For reference, in the distributed case `PACKEDFACTORS()` data gets sent from the agents to master in a binary format, too. This makes it technically feasible to implement additional re-ranking pass (or passes) on the master node, if needed.
+For reference, in a distributed setup, the `PACKEDFACTORS()` data is sent from the agents to the master node in binary format. This makes it technically feasible to implement additional re-ranking passes on the master node if needed.
 
-If used in SQL, but not called from any UDFs, the result of `PACKEDFACTORS()` is simply formatted as plain text, which can be used to manually assess the ranking factors. Note that this feature is not currently supported by the Manticore API.
+When used in SQL but not called from any UDFs, the result of `PACKEDFACTORS()` is formatted as plain text, which can be used to manually assess the ranking factors. Note that this feature is not currently supported by the Manticore API.
 
 
 ### REMOVE_REPEATS()
@@ -133,9 +133,9 @@ SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)
 ```
 
 ### WEIGHT()
-`WEIGHT()` function returns the calculated matching score. If no ordering specified, the result is sorted descending by the score provided by `WEIGHT()`. In this example we order first by weight and then by an integer attribute.
+The `WEIGHT()` function returns the calculated matching score. If no ordering is specified, the result is sorted in descending order by the score provided by `WEIGHT()`. In this example, we order first by weight and then by an integer attribute.
 
-The search above does a simple matching, where all words need to be present. But we can do more (and this is just a simple example):
+The search above performs a simple matching, where all words need to be present. However, we can do more (and this is just a simple example):
 
 ```sql
 mysql> SELECT *,WEIGHT() FROM testrt WHERE MATCH('"list of business laptops"/3');
@@ -174,13 +174,14 @@ mysql> SHOW META;
 16 rows in set (0.00 sec)
 ```
 
-Here we search for 4 words, but we can have a match even if only 3 words (of 4) are found. The search will rank higher first the documents that contain all the words.
-
+Here, we search for four words, but a match can occur even if only three of the four words are found. The search will rank documents containing all words higher.
 
 ### ZONESPANLIST()
-`ZONESPANLIST()` function returns pairs of matched zone spans. Each pair contains the matched zone span identifier, a colon, and the order number of the matched zone span. For example, if a document reads `<emphasis role="bold"><i>text</i> the <i>text</i></emphasis>`, and you query for `'ZONESPAN:(i,b) text'`, then `ZONESPANLIST()` will return the string `"1:1 1:2 2:1"` meaning that the first zone span matched "text" in spans 1 and 2, and the second zone span in span 1 only.  
+The `ZONESPANLIST()` function returns pairs of matched zone spans. Each pair contains the matched zone span identifier, a colon, and the order number of the matched zone span. For example, if a document reads `<emphasis role="bold"><i>text</i> the <i>text</i></emphasis>`, and you query for `'ZONESPAN:(i,b) text'`, then `ZONESPANLIST()` will return the string `"1:1 1:2 2:1"`, meaning that the first zone span matched "text" in spans 1 and 2, and the second zone span in span 1 only.
 
 ### QUERY()
 `QUERY()` returns the current search query. `QUERY()` is a postlimit expression and is intended to be used with [SNIPPET()](../Functions/String_functions.md#SNIPPET%28%29).
 
-Table functions is a mechanism of post-query result set processing. Table functions take an arbitrary result set as their input, and return a new, processed set as their output. The first argument should be the input result set, but a table function can optionally take and handle more arguments. Table functions can completely change the result set, including the schema. For now, only built in table functions are supported. Table functions work for both outer `SELECT` and [nested SELECT](../Searching/Sub-selects.md).
+Table functions are a mechanism for post-query result set processing. Table functions take an arbitrary result set as input and return a new, processed set as output. The first argument should be the input result set, but a table function can optionally take and handle more arguments. Table functions can completely change the result set, including the schema. Currently, only built-in table functions are supported. Table functions work for both outer `SELECT` and [nested SELECT](../Searching/Sub-selects.md).
+
+<!-- proofread -->

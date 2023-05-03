@@ -1,17 +1,17 @@
 # SphinxSE
 
-SphinxSE is a MySQL storage engine which can be compiled into MySQL/MariaDB server using its pluggable architecture.
+SphinxSE is a MySQL storage engine that can be compiled into MySQL/MariaDB servers using their pluggable architecture.
 
-Despite the name, SphinxSE does *not* actually store any data itself. It is actually a built-in client which allows MySQL server to talk to `searchd`, run search queries, and obtain search results. All indexing and searching happen outside MySQL.
+Despite its name, SphinxSE does *not* actually store any data itself. Instead, it serves as a built-in client that enables the MySQL server to communicate with `searchd`, execute search queries, and retrieve search results. All indexing and searching take place outside MySQL.
 
-Obvious SphinxSE applications include:
-* easier porting of MySQL FTS applications to Manticore;
-* allowing Manticore use with programming languages for which native APIs are not available yet;
-* optimizations when additional Manticore result set processing on MySQL side is required (eg. JOINs with original document tables, additional MySQL-side filtering, etc).
+Some common SphinxSE applications include:
+* Simplifying the porting of MySQL Full-Text Search (FTS) applications to Manticore;
+* Enabling Manticore use with programming languages for which native APIs are not yet available;
+* Offering optimizations when additional Manticore result set processing is needed on the MySQL side (e.g., JOINs with original document tables or additional MySQL-side filtering).
 
 ## Installing SphinxSE
 
-You will need to obtain a copy of MySQL sources, prepare those, and then recompile MySQL binary. MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from <http://dev.mysql.com> Web site.
+You will need to obtain a copy of MySQL sources, prepare those, and then recompile MySQL binary. MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from <http://dev.mysql.com> website.
 
 ### Compiling MySQL 5.0.x with SphinxSE
 
@@ -40,19 +40,19 @@ $ make install
 
 ### Compiling MySQL 5.1.x with SphinxSE
 
-1.  in MySQL sources directory, create `storage/sphinx` directory in and copy all files in `mysqlse` directory from Manticore sources there. Example:
+1. In the MySQL sources directory, create a `storage/sphinx` directory and copy all files from the `mysqlse` directory in the Manticore sources to this new location. For example:
 ```bash
 $ cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.1.14/storage/sphinx
 ```
-2.  in MySQL sources directory, run
+2.  In the MySQL source directory, run:
 ```bash
 $ sh BUILD/autorun.sh
 ```
-3.  configure MySQL and enable Manticore engine:
+3. Configure MySQL and enable the Manticore engine:
 ```bash
 $ ./configure --with-plugins=sphinx
 ```
-4.  build and install MySQL:
+4. Build and install MySQL:
 ```bash
 $ make
 $ make install
@@ -63,7 +63,7 @@ $ make install
 
 <!-- example Example_1 -->
 
-To check whether SphinxSE has been successfully compiled into MySQL, launch newly built servers, run mysql client and issue `SHOW ENGINES` query. You should see a list of all available engines. Manticore should be present and "Support" column should contain "YES":
+To verify that SphinxSE has been successfully compiled into MySQL, start the newly built server, run the MySQL client, and issue the `SHOW ENGINES` query. You should see a list of all available engines. Manticore should be present, and the "Support" column should display "YES":
 
 <!-- request -->
 
@@ -88,9 +88,9 @@ mysql> show engines;
 
 ## Using SphinxSE
 
-To search via SphinxSE, you would need to create special ENGINE=SPHINX "search table", and then `SELECT` from it with full text query put into `WHERE` clause for query column.
+To search using SphinxSE, you'll need to create a special ENGINE=SPHINX "search table" and then use a `SELECT` statement with the full-text query placed in the `WHERE` clause for the query column.
 
-Let's begin with an example create statement and search query:
+Here's an example create statement and search query:
 
 ```sql
 CREATE TABLE t1
@@ -105,13 +105,13 @@ CREATE TABLE t1
 SELECT * FROM t1 WHERE query='test it;mode=any';
 ```
 
-First 3 columns of search table *must* have a types of `INTEGER UNSINGED` or `BIGINT` for the 1st column (document id), `INTEGER` or `BIGINT` for the 2nd column (match weight), and `VARCHAR`  or `TEXT` for the 3rd column (your query), respectively. This mapping is fixed; you can not omit any of these three required columns, or move them around, or change types. Also, query column must be indexed; all the others must be kept unindexed. Column names are ignored so you can use arbitrary ones.
+In a search table, the first three columns *must* have the following types: `INTEGER UNSIGNED` or `BIGINT` for the 1st column (document ID), `INTEGER` or `BIGINT` for the 2nd column (match weight), and `VARCHAR` or `TEXT` for the 3rd column (your query). This mapping is fixed; you cannot omit any of these three required columns, move them around, or change their types. Additionally, the query column must be indexed, while all others should remain unindexed. Column names are ignored, so you can use any arbitrary names.
 
-Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, or `FLOAT`. They will be bound to attributes provided in Manticore result set by name, so their names must match attribute names specified in `sphinx.conf`. If there's no such attribute name in Manticore search results, column will have `NULL` values.
+Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, or `FLOAT`. They will be bound to attributes provided in the Manticore result set by name, so their names must match the attribute names specified in `sphinx.conf`. If there's no matching attribute name in the Manticore search results, the column will have `NULL` values.
 
-Special "virtual" attributes names can also be bound to SphinxSE columns. `_sph_` needs to be used instead of `@` for that. For instance,  to obtain the values of `@groupby`, `@count`, or `@distinct` virtualattributes, use `_sph_groupby`, `_sph_count` or `_sph_distinct` column names, respectively.
+Special "virtual" attribute names can also be bound to SphinxSE columns. Use `_sph_` instead of `@` for that purpose. For example, to obtain the values of `@groupby`, `@count`, or `@distinct` virtual attributes, use `_sph_groupby`, `_sph_count`, or `_sph_distinct` column names, respectively.
 
-`CONNECTION` string parameter is to be used to specify Manticore host, port and table. If no  connection string is specified in `CREATE TABLE`, table name `*` (i.e. search all tables) and `localhost:9312` are assumed. The connection string syntax is as follows:
+The `CONNECTION` string parameter is used to specify the Manticore host, port, and table. If no connection string is specified in `CREATE TABLE`, the table name `*` (i.e., search all tables) and `localhost:9312` are assumed. The connection string syntax is as follows:
 
 ```
 CONNECTION="sphinx://HOST:PORT/TABLENAME"
@@ -123,19 +123,19 @@ You can change the default connection string later:
 mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWTABLENAME";
 ```
 
-You can also override all these parameters per-query.
+You can also override these parameters on a per-query basis.
 
-As seen in example, both query text and search options should be put into `WHERE` clause on search query column (ie. 3rd column); the options are separated by semicolons; and their names from values by equality sign. Any number of options can be specified. Available options are:
+As shown in the example, both the query text and search options should be placed in the `WHERE` clause on the search query column (i.e., the 3rd column). Options are separated by semicolons and their names from values by an equality sign. Any number of options can be specified. The available options are:
 
 * query - query text;
 * mode - matching mode. Must be one of "all", "any", "phrase", "boolean", or "extended". Default is "all";
-* sort - match sorting mode. Must be one of "relevance", "attr_desc", "attr_asc", "time_segments", or "extended". In all modes besides "relevance" attribute name (or sorting clause for "extended") is also required after a colon:
+* sort - match sorting mode. Must be one of "relevance", "attr_desc", "attr_asc", "time_segments", or "extended". In all modes besides "relevance", the attribute name (or sorting clause for "extended") is also required after a colon:
 ```
 ... WHERE query='test;sort=attr_asc:group_id';
 ... WHERE query='test;sort=extended:@weight desc, group_id asc';
 ```
-* offset - offset into result set, default is 0;
-* limit - amount of matches to retrieve from result set, default is 20;
+* offset - offset into the result set; default is 0;
+* limit - number of matches to retrieve from the result set; default is 20;
 * index - names of the tables to search:
 ```sql
 ... WHERE query='test;index=test1;';
@@ -167,7 +167,7 @@ As seen in example, both query text and search options should be put into `WHERE
 # pick all results within 1000 meter from geoanchor
 ... WHERE query='test;floatrange=@geodist,0,1000;';
 ```
-* maxmatches - per-query max matches value, as in [max_matches search option](../Searching/Options.md#max_matches):
+* maxmatches - maxmatches - per-query max matches value, as in [max_matches search option](../Searching/Options.md#max_matches):
 ```sql
 ... WHERE query='test;maxmatches=2000;';
 ```
@@ -217,7 +217,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ... WHERE query='test;mode=extended;ranker=bm25;';
 ... WHERE query='test;mode=extended;ranker=expr:sum(lcs);';
 ```
-The "export" ranker works exactly like ranker=expr, but it stores the  per-document factor values, while ranker=expr discards them after computing the final `WEIGHT()` value. Note that ranker=export is meant to be used but rarely, only to train a ML (machine learning) function or to define your own ranking function by hand, and never in actual production. When using this ranker, you'll probably want to examine the output of the `RANKFACTORS()` function that produces a string with all the field level factors for each document.
+The "export" ranker functions similarly to ranker=expr, but it retains the per-document factor values, while ranker=expr discards them after computing the final `WEIGHT()` value. Keep in mind that ranker=export is intended for occasional use, such as training a machine learning (ML) function or manually defining your own ranking function, and should not be used in actual production. When utilizing this ranker, you'll likely want to examine the output of the `RANKFACTORS()` function, which generates a string containing all the field-level factors for each document.
 
 <!-- example SQL Example_2 -->
 <!-- request -->
@@ -263,17 +263,17 @@ idf=0.259532)
 
 <!-- end -->
 
-* geoanchor - geodistance anchor. Read more about Geo-search [in this section](../Searching/Geo_search.md). Takes 4 parameters which are latitude and longitude attribute names, and anchor point coordinates respectively:
+* geoanchor - geodistance anchor. Learn more about Geo-search [in this section](../Searching/Geo_search.md). Takes 4 parameters, which are the latitude and longitude attribute names, and anchor point coordinates, respectively:
 ```sql
 ... WHERE query='test;geoanchor=latattr,lonattr,0.123,0.456';
 ```
 
-One **very important** note that it is **much** more efficient to allow Manticore to perform sorting, filtering and slicing the result set than to raise max matches count and use `WHERE`, `ORDER BY` and `LIMIT` clauses on MySQL side. This is for two reasons. First, Manticore does a number of optimizations and performs better than MySQL on these tasks. Second, less data would need to be packed by searchd, transferred and unpacked by SphinxSE.
+One **very important** note is that it is **much** more efficient to let Manticore handle sorting, filtering, and slicing the result set, rather than increasing the max matches count and using `WHERE`, `ORDER BY`, and `LIMIT` clauses on the MySQL side. This is due to two reasons. First, Manticore employs a variety of optimizations and performs these tasks better than MySQL. Second, less data would need to be packed by searchd, transferred, and unpacked by SphinxSE.
 
 
 <!-- example Example_3 -->
 
-Additional query info besides result set could be retrieved with `SHOW ENGINE SPHINX STATUS` statement:
+You can obtain additional information related to the query results using the `SHOW ENGINE SPHINX STATUS` statement:
 
 <!-- request -->
 
@@ -298,7 +298,7 @@ mysql> SHOW ENGINE SPHINX STATUS;
 
 <!-- example Example_4 -->
 
-This information can also be accessed through status variables. Note that this method does not require super-user privileges.
+You can also access this information through status variables. Keep in mind that using this method does not require super-user privileges.
 
 <!-- request -->
 
@@ -325,7 +325,7 @@ mysql> SHOW STATUS LIKE 'sphinx_%';
 
 <!-- example SQL Example_5 -->
 
-You could perform JOINs on SphinxSE search table and tables using other engines. Here's an example with "documents" from example.sql:
+SphinxSE search tables can be joined with tables using other engines. Here's an example using the "documents" table from example.sql:
 
 <!-- request -->
 
@@ -362,19 +362,19 @@ mysql> SHOW ENGINE SPHINX STATUS;
 ## Building snippets via MySQL
 
 
-SphinxSE also includes a UDF function that lets you create snippets through MySQL. The functionality is similar to [HIGHLIGHT()](../../Searching/Highlighting.md#Highlighting), but accessible through MySQL+SphinxSE.
+SphinxSE also features a UDF function that allows you to create snippets using MySQL. This functionality is similar to [HIGHLIGHT()](../../Searching/Highlighting.md#Highlighting), but can be accessed through MySQL+SphinxSE.
 
-The binary that provides the UDF is named `sphinx.so` and should be automatically built and installed to proper location along with SphinxSE itself. If it does not get installed automatically for some reason, look for `sphinx.so` in the build directory and copy it to the plugins directory of your MySQL instance. After that, register the UDF using the following statement:
+The binary providing the UDF is called `sphinx.so` and should be automatically built and installed in the appropriate location along with SphinxSE. If it doesn't install automatically for some reason, locate `sphinx.so` in the build directory and copy it to your MySQL instance's plugins directory. Once done, register the UDF with the following statement:
 
 ```sql
 CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'sphinx.so';
 ```
 
-Function name *must* be sphinx_snippets, you can not use an arbitrary name. Function arguments are as follows:
+The function name *must* be sphinx_snippets; you cannot use an arbitrary name. The function arguments are as follows:
 
 **Prototype:** function sphinx_snippets ( document, table, words [, options] );
 
-Document and words arguments can be either strings or table columns. Options must be specified like this: `'value' AS option_name`. For a list of supported options, refer to [Highlighting section](../Searching/Highlighting.md). The only UDF-specific additional option is named `sphinx` and lets you specify searchd location (host and port).
+The document and words arguments can be either strings or table columns. Options must be specified like this: `'value' AS option_name`. For a list of supported options, refer to the [Highlighting section](../Searching/Highlighting.md). The only UDF-specific additional option is called `sphinx` and allows you to specify the searchd location (host and port).
 
 Usage examples:
 
@@ -388,3 +388,4 @@ SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
     FROM sphinx, documents
     WHERE query='mysql php' AND sphinx.id=documents.id;
 ```
+<!-- proofread -->

@@ -186,3 +186,4 @@
 * [🐞 Reporting bugs](Reporting_bugs.md)
 * [📖 References](References.md)
     * [Previous versions](References.md#Documentation-for-old-Manticore-versions)
+<!-- proofread -->

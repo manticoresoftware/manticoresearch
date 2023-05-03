@@ -1,9 +1,9 @@
 # Other functions
 
 ### LAST_INSERT_ID()
-Returns ids of documents inserted or replaced by last statement in the current session.
+Returns the IDs of documents that were inserted or replaced by the last statement in the current session.
 
-The same value can be also received via `@@session.last_insert_id` variable:
+The same value can also be obtained via the `@@session.last_insert_id` variable.
 
 ```sql
 mysql> select @@session.last_insert_id;
@@ -25,7 +25,7 @@ mysql> select LAST_INSERT_ID();
 
 ### CONNECTION_ID()
 
-Returns current connection id.
+Returns the current connection ID.
 
 ```sql
 mysql> select CONNECTION_ID();
@@ -36,3 +36,4 @@ mysql> select CONNECTION_ID();
 +-----------------+
 1 row in set (0.00 sec)
 ```
+<!-- proofread -->

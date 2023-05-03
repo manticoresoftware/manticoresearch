@@ -18,7 +18,7 @@
   * 20
 
 ### APT repository
-The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository
+The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository.
 
 Install the repository:
 ```bash
@@ -55,7 +55,7 @@ To download standalone DEB files from the Manticore repository, follow the instr
 
 ### More packages you may need
 #### For indexer
-Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
+Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However, if you plan to use [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external storages, you'll need to install appropriate client libraries. To find out what specific libraries `indexer` requires, run it and look at the top of its output:
 
 ```bash
 $ sudo -u manticore indexer
@@ -73,21 +73,21 @@ Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -D
 
 Here you can see mentions of **libodbc.so.2**, **libexpat.so.1**, **libmysqlclient.so.20**, and **libpq.so.5**.
 
-Below is a reference table with list of all the client libraries for different Debian/Ubuntu versions:
+Below is a reference table with a list of all the client libraries for different Debian/Ubuntu versions:
 
 | Distr | MySQL | PostgreSQL | XMLpipe | UnixODBC |
 | - | - | - | - | - |
-|  Ubuntu Trusy  |  libmysqlclient.so.18   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.1 |
-|  Ubuntu Bionic  |  libmysqlclient.so.20   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Ubuntu Focal  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Ubuntu Hirsute  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Ubuntu Jammy  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Debian Jessie  | libmysqlclient.so.18    |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Debian Buster  |  libmariadb.so.3        |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Debian Bullseye  |  libmariadb.so.3        |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
-|  Debian Bookworm  |  libmariadb.so.3        |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
+| Ubuntu Trusty | libmysqlclient.so.18 | libpq.so.5 | libexpat.so.1 | libodbc.so.1 |
+| Ubuntu Bionic | libmysqlclient.so.20 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Ubuntu Focal | libmysqlclient.so.21 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Ubuntu Hirsute | libmysqlclient.so.21 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Ubuntu Jammy | libmysqlclient.so.21 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Debian Jessie | libmysqlclient.so.18 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Debian Buster | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Debian Bullseye | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
+| Debian Bookworm | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 
-To find packages that provide the libraries you can use, for example `apt-file`:
+To find packages that provide the libraries, you can use, for example, `apt-file`:
 
 ```bash
 apt-file find libmysqlclient.so.20
@@ -96,15 +96,15 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-Note that you only need libraries for the types of storages you're going to use. So if you plan to build tables only from mysql then you might need to install only the MySQL library (in the above case `libmysqlclient20`).
+Note that you only need libraries for the types of storages you're going to use. So if you plan to build tables only from MySQL, then you might need to install only the MySQL library (in the above case `libmysqlclient20`).
 
-Finally install the needed packages:
+Finally, install the needed packages:
 
 ```bash
 sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 ```
 
-If you aren't going to use `indexer` tool at all, you don't need to find and install any libraries.
+If you aren't going to use the `indexer` tool at all, you don't need to find and install any libraries.
 
 To enable CJK tokenization support, the official packages contain binaries with embedded ICU library and include ICU data file. They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
 
@@ -140,3 +140,4 @@ sudo ldconfig
 sudo pip3.9 install pymorphy2[fast]
 sudo pip3.9 install pymorphy2-dicts-uk
 ```
+<!-- proofread -->

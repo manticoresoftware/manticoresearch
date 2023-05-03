@@ -7,7 +7,7 @@
 SHOW PLUGINS
 ```
 
-Displays all the loaded plugins (except for Buddy plugins, see below) and UDFs. "Type" column should be one of the `udf`, `ranker`, `index_token_filter`, or `query_token_filter`. "Users" column is the number of thread that are currently using that plugin in a query. "Extra" column is intended for various additional plugin-type specific information; currently, it shows the return type for the UDFs and is empty for all the other plugin types.
+Displays all the loaded plugins (except for Buddy plugins, see below) and UDFs. The "Type" column should be one of the `udf`, `ranker`, `index_token_filter`, or `query_token_filter`. The "Users" column is the number of thread that are currently using that plugin in a query. The "Extra" column is intended for various additional plugin-type specific information; currently, it shows the return type for the UDFs and is empty for all the other plugin types.
 
 
 <!-- intro -->
@@ -74,3 +74,4 @@ SHOW BUDDY PLUGINS;
 ```
 
 <!-- end -->
+<!-- proofread -->

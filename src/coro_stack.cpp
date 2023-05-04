@@ -39,7 +39,8 @@ CoroStack_t AllocateStack ( size_t iStack )
 	case StackFlavour_E::protected_fixedsize:
 		{
 			boost::context::protected_fixedsize_stack allocator { iStack ? AlignStackSize ( iStack ) : DEFAULT_CORO_STACK_SIZE };
-			return { allocator.allocate(), StackFlavour_E::protected_fixedsize };
+			auto tStack = allocator.allocate(); tStack.size -= boost::context::protected_fixedsize_stack::traits_type::page_size(); // align guard page
+			return { tStack, StackFlavour_E::protected_fixedsize };
 		}
 	default:
 		assert(false && "should not be here");
@@ -70,6 +71,7 @@ void DeallocateStack ( CoroStack_t tStack )
 		case StackFlavour_E::protected_fixedsize:
 		{
 			boost::context::protected_fixedsize_stack allocator { 0 };
+			tStack.first.size += boost::context::protected_fixedsize_stack::traits_type::page_size(); // undo guard page align
 			allocator.deallocate ( tStack.first );
 			break;
 		}

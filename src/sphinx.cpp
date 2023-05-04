@@ -9925,7 +9925,7 @@ bool CSphQueryContext::CreateFilters ( CreateFilterContext_t & tCtx, CSphString 
 
 static int sphQueryHeightCalc ( const XQNode_t * pNode )
 {
-	if ( !pNode->m_dChildren.GetLength() )
+	if ( pNode->m_dChildren.IsEmpty() )
 	{
 		// exception, pre-cached OR of tiny (rare) keywords is just one node
 		if ( pNode->GetOp()==SPH_QUERY_OR )
@@ -9975,21 +9975,42 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 #define SPH_EXTNODE_STACK_SIZE ( 160 )
 #endif
 
+// extra stack which need despite EXTNODE_STACK_SIZE
+constexpr DWORD SPH_EXTRA_BUDGET = 0x2000;
+
+/*
+Why EXTRA_BUDGET?
+
+CREATE TABLE if not exists t ( id bigint, f text );
+replace into t (id,f) values (1, 'a b');
+flush rtindex t;
+
+crash:
+SELECT * FROM t WHERE MATCH('(a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b "a b") | ( a -b )');
+WARNING: Stack used 42409, need 88000, sum 130409, have 131072
+(data got on debug build with clang 14 on linux)
+
+Strictly speaking, we need to mock it - create rt, then query - without any disk footprint.
+ You see, that having 131072 is not enough to process query which needs 130409. Tree size is right, but extra space is need - first, to move inside query evaluation,
+ and also on query leaves - reading docs/hits from disk with extra functions for caching, working with fs, profiling, etc. That is oneshot extra budget over calculated expression stuff.
+*/
+
 int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 {
 	int iHeight = 0;
 	if ( pRoot )
 		iHeight = sphQueryHeightCalc ( pRoot );
 
-	auto iStackNeed = iHeight * SPH_EXTNODE_STACK_SIZE;
-	int64_t iQueryStack = Threads::GetStackUsed ()+iStackNeed;
+	auto iStackNeed = iHeight * SPH_EXTNODE_STACK_SIZE + SPH_EXTRA_BUDGET;
+	int64_t iQueryStack = Threads::GetStackUsed() + iStackNeed;
+//	sphWarning ( "Stack used %d, need %d, sum %d, have %d", (int)Threads::GetStackUsed(), iStackNeed, (int)iQueryStack, Threads::MyStackSize() );
 	auto iMyStackSize = Threads::MyStackSize ();
 	if ( iMyStackSize>=iQueryStack )
 		return -1;
 
-	// align as stack of tree + 32K
-	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enouth)
-	iQueryStack = iStackNeed + 32*1024;
+	// align as stack of tree + 8K
+	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enough)
+	iQueryStack = iStackNeed + 8*1024;
 	if ( Threads::GetMaxCoroStackSize()>=iQueryStack )
 		return (int)iQueryStack;
 

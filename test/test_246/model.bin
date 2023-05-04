@@ -2,52 +2,52 @@ a:2:{i:0;a:1:{i:0;a:8:{i:0;s:18:"all index presents";i:1;s:37:"
 plain1 | local
 plain2 | local
 2 rows";i:2;s:120:"
-10 | 2 | one
-1 | 1 | first
-2 | 1 | second
-11 | 2 | two
-3 | 1 | third
-12 | 2 | three
-4 | 1 | fourth
-5 | 1 | fifth
+10 | one | 2
+1 | first | 1
+2 | second | 1
+11 | two | 2
+3 | third | 1
+12 | three | 2
+4 | fourth | 1
+5 | fifth | 1
 8 rows";i:3;s:15:"plain2 disabled";i:4;s:22:"
 plain1 | local
 1 rows";i:5;s:17:"plain2 re-enabled";i:6;s:37:"
 plain1 | local
 plain2 | local
 2 rows";i:7;s:120:"
-10 | 2 | one
-1 | 1 | first
-2 | 1 | second
-11 | 2 | two
-3 | 1 | third
-12 | 2 | three
-4 | 1 | fourth
-5 | 1 | fifth
+10 | one | 2
+1 | first | 1
+2 | second | 1
+11 | two | 2
+3 | third | 1
+12 | three | 2
+4 | fourth | 1
+5 | fifth | 1
 8 rows";}}i:1;a:1:{i:0;a:8:{i:0;s:18:"all index presents";i:1;s:37:"
 plain1 | local
 plain2 | local
 2 rows";i:2;s:120:"
-10 | 2 | one
-1 | 1 | first
-2 | 1 | second
-11 | 2 | two
-3 | 1 | third
-12 | 2 | three
-4 | 1 | fourth
-5 | 1 | fifth
+10 | one | 2
+1 | first | 1
+2 | second | 1
+11 | two | 2
+3 | third | 1
+12 | three | 2
+4 | fourth | 1
+5 | fifth | 1
 8 rows";i:3;s:15:"plain2 disabled";i:4;s:22:"
 plain1 | local
 1 rows";i:5;s:17:"plain2 re-enabled";i:6;s:37:"
 plain1 | local
 plain2 | local
 2 rows";i:7;s:120:"
-10 | 2 | one
-1 | 1 | first
-2 | 1 | second
-11 | 2 | two
-3 | 1 | third
-12 | 2 | three
-4 | 1 | fourth
-5 | 1 | fifth
+10 | one | 2
+1 | first | 1
+2 | second | 1
+11 | two | 2
+3 | third | 1
+12 | three | 2
+4 | fourth | 1
+5 | fifth | 1
 8 rows";}}}

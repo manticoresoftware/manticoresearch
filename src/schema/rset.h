@@ -50,6 +50,7 @@ public:
 	int		GetAttrsCount() const final;
 	int		GetFieldsCount() const final;
 	int		GetAttrIndex ( const char* sName ) const final;
+	int		GetAttrIndexOriginal ( const char * szName ) const final;
 	int		GetFieldIndex ( const char* sName ) const final;
 	const CSphColumnInfo &	GetField ( int iIndex ) const final;
 	const CSphColumnInfo *	GetField ( const char * szName ) const final;

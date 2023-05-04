@@ -69,6 +69,9 @@ public:
 	/// free all allocated attibures. Does NOT free m_pDynamic of match itself!
 	virtual void					FreeDataPtrs ( CSphMatch & tMatch ) const = 0;
 
+	/// return original attribute id (for compound schemas)
+	virtual int						GetAttrIndexOriginal ( const char * szName ) const = 0;
+
 	/// simple copy; clones either the entire dynamic part, or a part thereof
 	virtual void					CloneMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const = 0;
 

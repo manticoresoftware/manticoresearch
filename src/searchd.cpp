@@ -3881,6 +3881,55 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 }
 
 
+struct AttrSort_fn
+{
+	const ISphSchema & m_tSchema;
+
+	AttrSort_fn ( const ISphSchema & tSchema )
+		: m_tSchema ( tSchema )
+	{}
+
+	bool IsLess ( int iA, int iB ) const
+	{
+		const auto & sNameA = m_tSchema.GetAttr(iA).m_sName;
+		const auto & sNameB = m_tSchema.GetAttr(iB).m_sName;
+		bool bDocIdA = sNameA==sphGetDocidName();
+		bool bDocIdB = sNameB==sphGetDocidName();
+		if ( bDocIdA || bDocIdB )
+			return bDocIdA || !bDocIdB;
+
+		bool bBlobLocA = sNameA==sphGetBlobLocatorName();
+		bool bBlobLocB = sNameB==sphGetBlobLocatorName();
+		if ( bBlobLocA ||bBlobLocB )
+			return bBlobLocA || !bBlobLocB;
+
+		bool bFieldA = !!m_tSchema.GetField ( sNameA.cstr() );
+		bool bFieldB = !!m_tSchema.GetField ( sNameB.cstr() );
+		if ( bFieldA || bFieldB )
+		{
+			if ( bFieldA && bFieldB )
+			{
+				int iFieldIdA = m_tSchema.GetFieldIndex ( sNameA.cstr() );
+				int iFieldIdB = m_tSchema.GetFieldIndex ( sNameB.cstr() );
+				return iFieldIdA < iFieldIdB;
+			}
+
+			return bFieldA || !bFieldB;
+		}
+
+		int iIndexA = m_tSchema.GetAttr(iA).m_iIndex;
+		int iIndexB = m_tSchema.GetAttr(iB).m_iIndex;
+		if ( iIndexA==-1 )
+			iIndexA = iA;
+
+		if ( iIndexB==-1 )
+			iIndexB = iB;
+
+		return iIndexA < iIndexB;
+	}
+};
+
+
 void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & dExpanded )
 {
 	bool bExpandedAsterisk = false;
@@ -3893,7 +3942,10 @@ void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInS
 
 			bExpandedAsterisk = true;
 
-			for ( auto iAttr : dAttrsInSchema )
+			IntVec_t dSortedAttrsInSchema = dAttrsInSchema;
+			dSortedAttrsInSchema.Sort ( AttrSort_fn(tSchema) );
+
+			for ( auto iAttr : dSortedAttrsInSchema )
 			{
 				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 				CSphQueryItem & tExpanded = dExpanded.Add();
@@ -4741,7 +4793,9 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_tLocator = s.m_tLocator;
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
-		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+		if ( !m_bAgent )
+			tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+
 		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
 	}
 

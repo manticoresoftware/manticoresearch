@@ -92,6 +92,12 @@ int CSphRsetSchema::GetAttrIndex ( const char* sName ) const
 }
 
 
+int	CSphRsetSchema::GetAttrIndexOriginal ( const char * szName ) const
+{
+	return m_pIndexSchema->GetAttrIndex ( szName );
+}
+
+
 int CSphRsetSchema::GetFieldIndex ( const char * szName ) const
 {
 	if ( !m_pIndexSchema )
@@ -203,7 +209,6 @@ CSphRsetSchema::CSphRsetSchema ( const CSphRsetSchema& rhs )
 	m_dExtraAttrs = rhs.m_dExtraAttrs;
 	m_dRemoved = rhs.m_dRemoved;
 }
-
 
 void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 {

@@ -135,6 +135,9 @@ void TransformedSchemaBuilder_c::AddAttr ( const CSphString & sName )
 	CSphColumnInfo tAttr = *pAttr;
 	tAttr.m_tLocator.Reset();
 
+	if ( tAttr.m_iIndex==-1 )
+		tAttr.m_iIndex = m_tOldSchema.GetAttrIndexOriginal ( tAttr.m_sName.cstr() );
+
 	// check if new columnar attributes were added (that were not in the select list originally)
 	if ( tAttr.IsColumnar() )
 		ReplaceColumnarAttrWithExpression ( tAttr, m_tNewSchema.GetAttrsCount() );
@@ -6146,6 +6149,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	m_bZonespanlist |= bHasZonespanlist;
 	m_bExprsNeedDocids |= bExprsNeedDocids;
 	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
+	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
 

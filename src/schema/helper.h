@@ -19,6 +19,8 @@ class CSphSchemaHelper : public ISphSchema
 {
 public:
 	void	FreeDataPtrs ( CSphMatch & tMatch ) const final;
+	int		GetAttrIndexOriginal ( const char * szName ) const { return GetAttrIndex(szName); }
+
 	void	CloneMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const final;
 
 	/// clone all raw attrs and only specified ptrs

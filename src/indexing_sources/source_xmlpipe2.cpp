@@ -1060,7 +1060,7 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		m_bInDocument = false;
 		if ( !m_sDocIDError.IsEmpty() )
 		{
-			sphWarn ( "%s", DecorateMessage ( m_sDocIDError.cstr() ) );
+			sphWarn ( "%s", DecorateMessage ( "%s", m_sDocIDError.cstr() ) );
 			m_sDocIDError = "";
 			delete m_pCurDocument;
 		}

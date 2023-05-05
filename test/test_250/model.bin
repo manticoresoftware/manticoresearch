@@ -4,14 +4,14 @@ plain2 | local
 plain3 | local
 plain4 | local
 4 rows";i:1;s:6:"plain2";i:2;s:36:"
-3 | 2 | third
-4 | 2 | fourth
+3 | third | 2
+4 | fourth | 2
 2 rows";i:3;s:6:"plain3";i:4;s:33:"
-5 | 3 | fifth
-6 | 3 | six
+5 | fifth | 3
+6 | six | 3
 2 rows";i:5;s:6:"plain4";i:6;s:35:"
-10 | 4 | many
-11 | 4 | more
+10 | many | 4
+11 | more | 4
 2 rows";i:7;s:31:"plain3 and plain4 changed paths";i:8;s:6:"plain3";i:9;s:19:"
 3 | 2
 4 | 2

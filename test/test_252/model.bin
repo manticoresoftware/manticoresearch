@@ -1,12 +1,12 @@
 a:1:{i:0;a:1:{i:0;a:14:{i:0;s:8:"insert 1";i:1;s:3:"
 OK";i:2;s:18:"query: color table";i:3;s:7:"
 0 rows";i:4;s:17:"query: blue table";i:5;s:27:"
-1 | 11 | blue table
+1 | blue table | 11
 1 rows";i:6;s:5:"alter";i:7;s:3:"
 OK";i:8;s:8:"insert 2";i:9;s:3:"
 OK";i:10;s:18:"query: color table";i:11;s:27:"
-2 | 11 | blue table
+2 | blue table | 11
 1 rows";i:12;s:17:"query: blue table";i:13;s:47:"
-2 | 11 | blue table
-1 | 11 | blue table
+2 | blue table | 11
+1 | blue table | 11
 2 rows";}}}

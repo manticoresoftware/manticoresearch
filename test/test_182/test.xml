@@ -5,7 +5,6 @@
 
 <requires>
 <non-rt/>
-<non-windows/>
 </requires>
 
 <config>

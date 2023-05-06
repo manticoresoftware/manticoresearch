@@ -1,0 +1,33 @@
+[Unit]
+Description=Manticore Search Indexer
+After=network.target remote-fs.target nss-lookup.target
+After=syslog.target
+
+After=manticore.service
+
+StartLimitIntervalSec=5m
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+User=manticore
+Group=manticore
+
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/indexer $INDEXER_ARGS --all
+EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore-indexer-global
+EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore-indexer
+KillMode=process
+KillSignal=SIGTERM
+
+CPUQuota=100%
+MemoryMax=2560M
+LimitNOFILE=1024
+
+Restart=on-failure
+RestartSec=30s
+
+TimeoutStartSec=infinity
+PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/indexer.pid
+
+[Install]
+WantedBy=multi-user.target

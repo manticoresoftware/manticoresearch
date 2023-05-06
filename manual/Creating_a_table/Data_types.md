@@ -891,7 +891,7 @@ table products
 
 <!-- example for bigints  -->
 
-Big integers are 64-bit wide **signed** integers.
+Big integers (bigint) are 64-bit wide **signed** integers.
 
 <!-- intro -->
 ##### SQL:

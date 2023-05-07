@@ -3,6 +3,7 @@
   <Name>SphinxQL: additional stuff over rt index</Name>
 	<requires>
 		<force-rt/>
+		<non-columnar/>
 	</requires>
 	<skip_indexer/>
 <Config>

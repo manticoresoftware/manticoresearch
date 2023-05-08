@@ -30,7 +30,7 @@ public:
 			PushQuery();
 		else
 			m_pStmt = &m_dStmt.Last();
-		m_sErrorHeader = "sphinxql-second:";
+		m_sErrorHeader = "P02:";
 	}
 
 	CSphString StrFromBlob ( BlobLocator_t tStr ) const

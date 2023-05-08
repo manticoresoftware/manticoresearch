@@ -132,6 +132,7 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, C
 	else
 		m_pStmt = &m_dStmt.Last();
 	assert ( m_dStmt.GetLength()==1 );
+	m_sErrorHeader = "P03:";
 }
 
 

@@ -30,7 +30,7 @@ public:
 		: SqlParserTraits_c ( dStmt, sQuery.first, &sError )
 		, m_tCmd ( tCmd )
 	{
-		m_sErrorHeader = "sphinxql-debug:";
+		m_sErrorHeader = "P04:";
 	}
 
 	CSphString StrFromBlob ( BlobLocator_t tStr ) const

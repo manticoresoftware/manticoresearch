@@ -326,7 +326,7 @@ public:
 	const char *	m_pLastTokenStart = nullptr;
 	CSphQuery *		m_pQuery = nullptr;
 	SqlStmt_t *		m_pStmt = nullptr;
-	CSphString		m_sErrorHeader = "sphinxql:";
+	CSphString		m_sErrorHeader = "PER:";
 
 	void			PushQuery();
 	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;

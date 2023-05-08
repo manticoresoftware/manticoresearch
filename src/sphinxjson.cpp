@@ -794,7 +794,7 @@ public:
 static void yyerror ( JsonParser_c * pParser, const char * sMessage )
 {
 	yy2lex_unhold ( pParser->m_pScanner );
-	pParser->m_sError.Sprintf ( "%s near '%s'", sMessage, pParser->m_pLastToken );
+	pParser->m_sError.Sprintf ( "P10: %s near '%s'", sMessage, pParser->m_pLastToken );
 }
 
 #ifndef NDEBUG

@@ -811,7 +811,7 @@ static int yylex ( YYSTYPE * lvalp, XQParser_t * pParser )
 void yyerror ( XQParser_t * pParser, const char * sMessage )
 {
 	if ( pParser->m_pParsed->m_sParseError.IsEmpty() )
-		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pErrorAt );
+		pParser->m_pParsed->m_sParseError.SetSprintf ( "P08: %s near '%s'", sMessage, pParser->m_pErrorAt );
 }
 
 #include "bissphinxquery.c"

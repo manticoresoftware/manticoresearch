@@ -9012,7 +9012,7 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 {
 	// flex put a zero at last token boundary; make it undo that
 	const auto* szToken = yy1lex_unhold ( pParser->m_pScanner );
-	pParser->m_sParserError.SetSprintf ( "Sphinx expr: %s near '%s'", sMessage, szToken );
+	pParser->m_sParserError.SetSprintf ( "P09: %s near '%s'", sMessage, szToken );
 }
 
 #include "bissphinxexpr.c"

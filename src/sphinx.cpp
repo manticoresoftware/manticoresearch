@@ -1649,7 +1649,7 @@ static int yylex ( YYSTYPE * lvalp, SelectParser_t * pParser )
 
 static void yyerror ( SelectParser_t * pParser, const char * sMessage )
 {
-	pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
+	pParser->m_sParserError.SetSprintf ( "P07: %s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
 #include "bissphinxselect.c"

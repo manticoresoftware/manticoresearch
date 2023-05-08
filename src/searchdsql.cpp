@@ -200,6 +200,7 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 {
 	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
+	// notice: szMessage here is NOT prefixed with "PXX:"
 	if ( ( m_pBuf == m_pLastTokenStart ) && ( strncmp ( szMessage, "syntax error", 12 ) == 0 ) )
 		m_bWrongParserSyntaxError = true;
 
@@ -384,6 +385,7 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 {
 	assert ( m_dStmt.IsEmpty() );
 	PushQuery ();
+	m_sErrorHeader = "P01:";
 }
 
 void SqlParser_c::PushQuery ()
@@ -1873,7 +1875,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 
 	CSphVector<SqlStmt_t> dStmt;
 	SqlParser_c tParser ( dStmt, eCollation, sBuf.cstr(), &sError );
-	tParser.m_sErrorHeader = "percolate filters:";
+	tParser.m_sErrorHeader = "P06:";
 
 	char * sEnd = const_cast<char *>( sBuf.cstr() ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -1957,7 +1959,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 
 	// TODO: change way of filter -> expression create: produce single error, share parser code
 	// try expression
-	if ( iRes!=0 && !dFilters.GetLength() && sError.Begins ( "percolate filters: syntax error" ) )
+	if ( iRes!=0 && !dFilters.GetLength() && sError.Begins ( "P06: syntax error" ) )
 	{
 		ESphAttr eAttrType = SPH_ATTR_NONE;
 		ExprParseArgs_t tExprArgs;

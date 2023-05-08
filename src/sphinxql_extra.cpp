@@ -31,7 +31,7 @@ public:
 			PushQuery();
 		else
 			m_pStmt = &m_dStmt.Last();
-		m_sErrorHeader = "sphinxql-extra:";
+		m_sErrorHeader = "P05:";
 	}
 
 	CSphString StrFromBlob ( BlobLocator_t tStr ) const
@@ -133,7 +133,7 @@ ParseResult_e ParseExtra ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphStrin
 	yy6lex_destroy ( tParser.m_pScanner );
 
 	// special case - processing single comment directive
-	if ( sQuery.second > 1 && sQuery.first[0] == '/' && sQuery.first[1] == '*' && sError == "sphinxql-extra: syntax error, unexpected $end near '(null)'" )
+	if ( sQuery.second > 1 && sQuery.first[0] == '/' && sQuery.first[1] == '*' && sError == "P05: syntax error, unexpected $end near '(null)'" )
 	{
 		tParser.DefaultOk();
 		iRes = 0;

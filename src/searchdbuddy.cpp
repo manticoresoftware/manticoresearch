@@ -541,7 +541,8 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 }
 
 static const sph::StringSet g_dAllowedEndpoints = {
-	"/_license"
+	"/_license",
+	"/_license?human=false"
 };
 
 static bool RequestSkipBuddy ( Str_t sSrcQuery, const CSphString & sURL )

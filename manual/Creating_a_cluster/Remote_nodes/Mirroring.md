@@ -38,4 +38,7 @@ agent = node3:9312|node4:9312:shard2
 # config on node3, node4
 agent = node1:9312|node2:9312:shard1
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Remote_nodes/Mirroring.md)
+
 <!-- proofread -->

@@ -2260,4 +2260,7 @@ table tbl {
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Data_types.md)
+
 <!-- proofread -->

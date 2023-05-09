@@ -6,4 +6,6 @@ In case of a full cluster shutdown, the server that was stopped last should be s
 
 In the event of a hard crash or an unclean shutdown of all servers in the cluster, the most advanced node with the largest `seqno` in the `grastate.dat` file located at the cluster [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) must be identified and started with the `--new-cluster-force` command line key.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
+
 <!-- proofread -->

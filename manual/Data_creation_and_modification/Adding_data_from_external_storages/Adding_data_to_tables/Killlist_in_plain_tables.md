@@ -84,4 +84,7 @@ POST /cli -d "
 ALTER TABLE delta KILLLIST_TARGET='new_main_table:kl'"
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+
 <!-- proofread -->

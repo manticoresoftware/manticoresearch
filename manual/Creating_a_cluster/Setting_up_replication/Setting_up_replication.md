@@ -509,4 +509,7 @@ sqlresult = indexApi.insert(newdoc);
 <!-- end -->
 
 All queries that modify tables in the cluster are now replicated to all nodes in the cluster.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)
+
 <!-- proofread -->

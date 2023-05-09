@@ -185,4 +185,6 @@ mysql> SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
 
 This example formats the current date and time, displaying the four-digit year and the time in 24-hour format.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/Date_and_time_functions.md)
+
 <!-- proofread -->

@@ -11,4 +11,6 @@ mysql> FLUSH HOSTNAMES;
 Query OK, 5 rows affected (0.01 sec)
 ```
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Flushing_hostnames.md)
+
 <!-- proofread -->

@@ -108,4 +108,7 @@ mysql> SELECT * FROM plain WHERE MATCH('test');
 ERROR 1064 (42000): no enabled local indexes to search
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
+
 <!-- proofread -->

@@ -104,4 +104,7 @@ odbc_dsn = Driver={Oracle ODBC Driver};Dbq=myDBName;Uid=myUsername;Pwd=myPasswor
 ```
 
 Please note that the format depends on the specific ODBC driver used.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md)
+
 <!-- proofread -->

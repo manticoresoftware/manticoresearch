@@ -1995,4 +1995,7 @@ CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 +-----------------------+-----------+
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Percolate_query.md)
+
 <!-- proofread -->

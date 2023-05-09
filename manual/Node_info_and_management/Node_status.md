@@ -980,4 +980,6 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/Node_status.md)
+
 <!-- proofread -->

@@ -245,4 +245,6 @@ Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we a
 
 IDF flags can be mixed; `plain` and `normalized` are mutually exclusive;`tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.    
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Sorting_and_ranking.md)
+
 <!-- proofread -->

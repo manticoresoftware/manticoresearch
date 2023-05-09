@@ -52,4 +52,6 @@ The call workflow for query-time token filter is as follows:
 
 Absence of the functions is tolerated.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/Plugins/Token_filter_plugins.md)
+
 <!-- proofread -->

@@ -1954,4 +1954,7 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Highlighting.md)
+
 <!-- proofread -->

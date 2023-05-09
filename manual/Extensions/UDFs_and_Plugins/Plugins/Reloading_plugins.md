@@ -20,4 +20,7 @@ On Windows, overwriting or deleting a DLL library currently in use can be proble
 mysql> RELOAD PLUGINS FROM SONAME 'udfexample.dll';
 Query OK, 0 rows affected (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md)
+
 <!-- proofread -->

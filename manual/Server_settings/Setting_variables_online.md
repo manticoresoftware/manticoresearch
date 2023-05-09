@@ -86,4 +86,7 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 
 To make user variables persistent, make sure [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) is enabled.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Server_settings/Setting_variables_online.md)
+
 <!-- proofread -->

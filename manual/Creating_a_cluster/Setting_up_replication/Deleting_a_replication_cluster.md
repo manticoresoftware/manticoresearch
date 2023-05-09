@@ -65,4 +65,7 @@ res = await utilsApi.sql('DELETE CLUSTER click_query');
 utilsApi.sql("DELETE CLUSTER click_query");
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md)
+
 <!-- proofread -->

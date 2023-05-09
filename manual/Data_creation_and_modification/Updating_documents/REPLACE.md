@@ -360,4 +360,6 @@ class BulkResponse {
 ```
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Updating_documents/REPLACE.md)
+
 <!-- proofread -->

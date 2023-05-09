@@ -69,4 +69,7 @@ Example:
 ```ini
 plugin_dir = /usr/local/lib/manticore/
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Server_settings/Common.md)
+
 <!-- proofread -->

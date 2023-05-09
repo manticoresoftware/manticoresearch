@@ -173,4 +173,6 @@ This feature is somewhat similar to the [SHOW PLAN](../../Node_info_and_manageme
 * `field_end`: keyword must occur at the very end of the field. Keyword nodes only
 * `boost`: keyword IDF will be multiplied by this. Keyword nodes only
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/Profiling/Query_profile.md)
+
 <!-- proofread -->

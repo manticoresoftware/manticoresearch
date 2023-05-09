@@ -136,5 +136,6 @@ select * from indexrt where id=2;
 1 row in set (0.01 sec)
 ```
 
+[transactions](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Transactions.md)
 
 <!-- proofread -->

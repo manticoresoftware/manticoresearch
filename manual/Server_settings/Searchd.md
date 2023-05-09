@@ -1406,4 +1406,7 @@ When a Manticore query crashes, it can take down the entire server. With the wat
 watchdog = 0 # disable watchdog
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Server_settings/Searchd.md)
+
 <!-- proofread -->

@@ -22,4 +22,7 @@ mysql> SELECT *, AVGMVA(tag) AS q from test1;
 |    4 |      1 | 7,40    | 23.500000 |
 +------+--------+---------+-----------+
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)
+
 <!-- proofread -->

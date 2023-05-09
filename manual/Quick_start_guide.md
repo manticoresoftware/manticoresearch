@@ -770,4 +770,7 @@ indexApi.delete(deleteRequest);
 
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Quick_start_guide.md)
+
 <!-- proofread -->

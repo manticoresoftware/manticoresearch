@@ -52,4 +52,7 @@ mysql -P 9306 -h0 < /tmp/dump_regular.sql
 rm /tmp/dump_regular.sql
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
+
 <!-- proofread -->

@@ -328,4 +328,7 @@ mysql> desc pq table like '%title%';
 +-------+------+----------------+
 1 row in set (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Listing_tables.md)
+
 <!-- proofread -->

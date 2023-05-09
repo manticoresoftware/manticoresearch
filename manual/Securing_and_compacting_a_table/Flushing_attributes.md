@@ -19,4 +19,6 @@ mysql> FLUSH ATTRIBUTES;
 1 row in set (0.19 sec)
 ```
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Flushing_attributes.md)
+
 <!-- proofread -->

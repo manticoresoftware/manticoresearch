@@ -27,4 +27,7 @@ POST /search
     }
 }
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Intro.md)
+
 <!-- proofread -->

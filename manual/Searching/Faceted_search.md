@@ -1345,4 +1345,7 @@ SHOW META LIKE 'multiplier';
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Faceted_search.md)
+
 <!-- proofread -->

@@ -89,4 +89,5 @@ Manticore has a variety of use cases, including:
 * [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), which provides [columnar storage](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) and [secondary indexes](Introduction.md#Automatic-secondary-indexes), requires a CPU with SSE >= 4.2.
 * No specific disk space or RAM requirements are needed. An empty Manticore Search instance only uses around 40MB of RSS RAM.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Introduction.md)
 <!-- proofread -->

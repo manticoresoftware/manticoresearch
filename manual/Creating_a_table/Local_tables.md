@@ -31,4 +31,6 @@ All table types are supported in this mode.
 | Distributed | supported      | supported   |
 | Template    | not supported  | supported   |
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Local_tables.md)
+
 <!-- proofread -->

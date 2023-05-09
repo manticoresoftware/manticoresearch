@@ -66,4 +66,7 @@ utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='i
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
+
 <!-- proofread -->

@@ -184,4 +184,6 @@ The `ZONESPANLIST()` function returns pairs of matched zone spans. Each pair con
 
 Table functions are a mechanism for post-query result set processing. Table functions take an arbitrary result set as input and return a new, processed set as output. The first argument should be the input result set, but a table function can optionally take and handle more arguments. Table functions can completely change the result set, including the schema. Currently, only built-in table functions are supported. Table functions work for both outer `SELECT` and [nested SELECT](../Searching/Sub-selects.md).
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/Searching_and_ranking_functions.md)
+
 <!-- proofread -->

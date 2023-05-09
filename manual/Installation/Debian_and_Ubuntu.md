@@ -140,4 +140,7 @@ sudo ldconfig
 sudo pip3.9 install pymorphy2[fast]
 sudo pip3.9 install pymorphy2-dicts-uk
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Installation/Debian_and_Ubuntu.md)
+
 <!-- proofread -->

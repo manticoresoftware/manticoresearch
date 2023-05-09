@@ -216,4 +216,6 @@ By default, expression values are included in the `_source` array of the result 
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Expressions.md)
+
 <!-- proofread -->

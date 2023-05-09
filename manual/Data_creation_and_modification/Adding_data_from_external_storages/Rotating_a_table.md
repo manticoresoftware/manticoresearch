@@ -75,4 +75,7 @@ Example:
 ```ini
 seamless_rotate = 1
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
+
 <!-- proofread -->

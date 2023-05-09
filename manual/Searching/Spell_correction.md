@@ -182,4 +182,7 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 [This interactive course](https://play.manticoresearch.com/didyoumean/) demonstrates online how the spell correction feature works on a web page and experiment with different examples.
 
 ![Typical flow with Manticore and a database](didyoumean.png){.scale-0.5}
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Spell_correction.md)
+
 <!-- proofread -->

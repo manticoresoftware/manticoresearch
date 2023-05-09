@@ -868,4 +868,7 @@ packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
 1 row in set (0.00 sec)
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Full_text_matching/Profiling.md)
+
 <!-- proofread -->

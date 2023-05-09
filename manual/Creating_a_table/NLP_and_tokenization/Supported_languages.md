@@ -85,4 +85,7 @@ The table below lists all supported languages and indicates how to enable:
 | Ukrainian | charset_table=non_cjk,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | Requires [installation](../../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) of UK lemmatizer |
 | Yoruba | charset_table=non_cjk | yo | - | |
 | Zulu | charset_table=non_cjk | zu | - |  |
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/NLP_and_tokenization/Supported_languages.md)
+
 <!-- proofread -->

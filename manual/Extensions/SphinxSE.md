@@ -388,4 +388,7 @@ SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
     FROM sphinx, documents
     WHERE query='mysql php' AND sphinx.id=documents.id;
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/SphinxSE.md)
+
 <!-- proofread -->

@@ -455,4 +455,6 @@ expansion_limit = number
 
 Maximum number of expanded keywords for a single wildcard. Details are [here](../../Server_settings/Searchd.md#expansion_limit).
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md)
+
 <!-- proofread -->

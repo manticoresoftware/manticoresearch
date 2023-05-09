@@ -13,5 +13,7 @@ Queries can be automatically optimized if `OPTION boolean_simplify=1` is specifi
 Note that optimizing queries consumes CPU time, so for simple queries or hand-optimized queries, you'll achieve better results with the default `boolean_simplify=0` value. Simplifications often benefit complex queries or algorithmically generated queries.
 
 Queries like "-dog," which implicitly include all documents from the collection, cannot be evaluated. This is due to both technical and performance reasons. Technically, Manticore does not always maintain a list of all IDs. Performance-wise, evaluating such queries could take a long time when the collection is massive (e.g., 10-100M documents).
- 
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Full_text_matching/Boolean_optimization.md)
+
 <!-- proofread -->

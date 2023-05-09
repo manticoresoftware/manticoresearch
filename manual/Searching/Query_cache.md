@@ -42,4 +42,7 @@ mysql> SHOW STATUS LIKE 'qcache%';
 +-----------------------+----------+
 6 rows in set (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Query_cache.md)
+
 <!-- proofread -->

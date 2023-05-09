@@ -190,4 +190,7 @@ utilsApi.sql("SHOW STATUS");
   warning= }
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
+
 <!-- proofread -->

@@ -149,4 +149,7 @@ utilsApi.sql("ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md)
+
 <!-- proofread -->

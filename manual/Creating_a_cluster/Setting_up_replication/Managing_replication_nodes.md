@@ -85,4 +85,7 @@ To remove a node from the replication cluster, follow these steps:
 3. Run `ALTER CLUSTER cluster_name UPDATE nodes` on any other node.
 
 After these steps, the other nodes will forget about the detached node and the detached node will forget about the cluster. This action will not impact the tables in the cluster or on the detached node.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)
+
 <!-- proofread -->

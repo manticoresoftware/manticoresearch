@@ -67,4 +67,7 @@ It is important to note that `SNIPPET()` does not support field-based limitation
 SELECT SUBSTRING_INDEX('www.w3schools.com', '.', 2) FROM test;
 SELECT SUBSTRING_INDEX(j.coord, ' ', 1) FROM test;
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/String_functions.md)
+
 <!-- proofread -->

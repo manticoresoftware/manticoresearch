@@ -15,5 +15,6 @@ searchd {
 * You can also use `syslog` as the file name. In this case, events will be sent to your server's syslog daemon.
 * In some cases, you might want to use `/dev/stdout` as the file name. In this case, on Linux, Manticore will simply output the events. This can be useful in Docker/Kubernetes environments.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Logging/Server_logging.md)
 
 <!-- proofread -->

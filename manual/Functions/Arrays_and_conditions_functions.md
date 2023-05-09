@@ -347,4 +347,7 @@ More examples:
 SELECT REMAP(userid, karmapoints, (1, 67), (999, 0)) FROM users;
 SELECT REMAP(id%10, salary, (0), (0.0)) FROM employes;
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/Arrays_and_conditions_functions.md)
+
 <!-- proofread -->

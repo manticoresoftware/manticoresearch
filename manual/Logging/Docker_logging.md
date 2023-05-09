@@ -8,4 +8,7 @@ docker logs manticore
 The query log can be diverted to the Docker log by passing the variable `QUERY_LOG_TO_STDOUT=true`.
 
 The log folder is the same as in the case of the Linux package, set to `/var/log/manticore`. If desired, it can be mounted to a local path to view or process the logs.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Logging/Docker_logging.md)
+
 <!-- proofread -->

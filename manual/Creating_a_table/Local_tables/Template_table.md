@@ -24,4 +24,7 @@ table template {
 }
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Local_tables/Template_table.md)
+
 <!-- proofread -->

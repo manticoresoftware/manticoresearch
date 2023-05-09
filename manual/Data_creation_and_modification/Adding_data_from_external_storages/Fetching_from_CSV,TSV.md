@@ -85,4 +85,7 @@ source csv_test
 2,"Deep Purple","35,92"
 3,"Frank Zappa","35,23,16,92,33,24"
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_CSV,TSV.md)
+
 <!-- proofread -->

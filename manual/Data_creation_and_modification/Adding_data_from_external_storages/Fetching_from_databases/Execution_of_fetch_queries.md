@@ -84,4 +84,6 @@ sql_query_post_index = REPLACE INTO counters ( id, val ) \
 
 The difference between `sql_query_post` and `sql_query_post_index` is that `sql_query_post` is run immediately when Manticore receives all the documents, but further indexing may still fail for some other reason. On the contrary, by the time the `sql_query_post_index` query gets executed, it is guaranteed that the table was created successfully. Database connection is dropped and re-established because sorting phase can be very lengthy and would just time out otherwise.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md)
+
 <!-- proofread -->

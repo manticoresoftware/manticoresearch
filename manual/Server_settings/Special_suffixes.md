@@ -17,4 +17,6 @@ Manticore Search supports the use of special suffixes to simplify numeric values
   - `d` for days
   - `w` for weeks
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Server_settings/Special_suffixes.md)
+
 <!-- proofread -->

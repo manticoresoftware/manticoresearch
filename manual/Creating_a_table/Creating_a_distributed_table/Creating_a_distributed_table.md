@@ -48,4 +48,6 @@ Each agent can have multiple external locations and options for how it should wo
 
 It is important to note that the server does not have any information about the type of table it is working with. This may lead to errors if, for example, you issue a `CALL PQ` to a remote table 'foo' that is not a percolate table.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
+
 <!-- proofread -->

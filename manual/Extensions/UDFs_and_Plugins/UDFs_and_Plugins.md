@@ -76,5 +76,8 @@ mysql> SELECT id, weight() FROM test1 WHERE MATCH('test') OPTION ranker=myrank('
 +------+----------+
 2 rows in set (0.01 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+
 <!-- proofread -->
 

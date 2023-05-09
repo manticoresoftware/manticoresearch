@@ -64,4 +64,6 @@ Returns the sine of the argument.
 ### SQRT()
 Returns the square root of the argument.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/Mathematical_functions.md)
+
 <!-- proofread -->

@@ -44,4 +44,7 @@ mysql> show session variables like 'autocommit';
 +---------------+-------+
 1 row in set (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/SHOW_VARIABLES.md)
+
 <!-- proofread -->

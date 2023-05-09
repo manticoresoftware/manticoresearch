@@ -386,4 +386,7 @@ GET /pq/pq/doc/2810823411335430149
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
+
 <!-- proofread -->

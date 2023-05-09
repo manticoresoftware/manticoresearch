@@ -94,4 +94,6 @@ utilsApi.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clic
 
 If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md)
+
 <!-- proofread -->

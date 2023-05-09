@@ -10,4 +10,7 @@ DROP FUNCTION udf_name
 mysql> DROP FUNCTION avgmva;
 Query OK, 0 rows affected (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md)
+
 <!-- proofread -->

@@ -743,4 +743,7 @@ The following settings are supported. They are all described in section [NLP and
 * [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields)
 * [stored_only_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
 * [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/blob/master/manual/Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
+
 <!-- proofread -->

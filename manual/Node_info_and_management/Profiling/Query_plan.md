@@ -342,4 +342,7 @@ Variable: transformed_tree
 ```
 
 ![SHOW PLAN graphviz example](graphviz.png)
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/Profiling/Query_plan.md)
+
 <!-- proofread -->

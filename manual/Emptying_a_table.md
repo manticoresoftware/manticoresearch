@@ -204,4 +204,7 @@ utilsApi.sql("TRUNCATE TABLE products WITH RECONFIGURE");
 {total=0, error=, warning=}
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Emptying_a_table.md)
+
 <!-- proofread -->

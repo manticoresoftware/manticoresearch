@@ -282,4 +282,7 @@ prereading 0 indexes
 prereaded 0 indexes in 0.000 sec
 accepting connections
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Starting_the_server/Docker.md)
+
 <!-- proofread -->

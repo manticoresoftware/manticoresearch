@@ -30,4 +30,7 @@ DELETE BUDDY PLUGIN manticoresoftware/buddy-plugin-show-hostname
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md)
+
 <!-- proofread -->

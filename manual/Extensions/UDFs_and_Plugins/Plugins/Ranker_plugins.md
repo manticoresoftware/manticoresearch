@@ -12,5 +12,6 @@ The call workflow proceeds as follows:
 3. `XXX_finalize()` is called once for each matched document when there are no more keyword occurrences. It must return the `WEIGHT()` value. This function is the only mandatory one.
 4. `XXX_deinit()` is invoked once per query, at the very end.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/Plugins/Ranker_plugins.md)
 
 <!-- proofread -->

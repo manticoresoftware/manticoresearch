@@ -81,4 +81,6 @@ UNFREEZE tbl;
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Freezing_a_table.md)
+
 <!-- proofread -->

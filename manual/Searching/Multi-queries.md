@@ -78,4 +78,6 @@ For reference, this is how the regular log would look like if the queries were n
 
 Notice how the per-query time in the multi-query case improved by a factor of 1.5x to 2.3x, depending on the specific sorting mode.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/blob/master/manual/Searching/Multi-queries.md)
+
 <!-- proofread -->

@@ -223,4 +223,6 @@ Manticore config
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Backup_and_restore.md)
+
 <!-- proofread -->

@@ -92,4 +92,6 @@ indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.con
 
 which will write the 100,000 most frequent words along with their counts from myindex into dict.txt. The output file is a text file, so it can be edited by hand if necessary to add or remove words.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Miscellaneous_tools.md)
+
 <!-- proofread -->

@@ -427,4 +427,7 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }'), 1 as verbose); SHOW META;
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/SHOW_META.md)
+
 <!-- proofread -->

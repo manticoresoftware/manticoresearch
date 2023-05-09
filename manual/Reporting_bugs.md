@@ -239,4 +239,6 @@ The subcommand `crash` literally causes a crash. It may be used for testing purp
 
 If some commands are found to be useful in a more general context, they may be moved from the debug subcommands to a more stable and generic location (as exemplified by the `debug tasks` and `debug sched` in the table).
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Reporting_bugs.md)
+
 <!-- proofread -->

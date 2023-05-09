@@ -273,4 +273,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Updating_table_schema_and_settings.md)
+
 <!-- proofread -->

@@ -90,4 +90,7 @@ MySQL [(none)]> select * from t where json.`a:b`=123;
 | 8215557549554925577 | {"a:b":123} |      |
 +---------------------+-------------+------+
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Full_text_matching/Escaping.md)
+
 <!-- proofread -->

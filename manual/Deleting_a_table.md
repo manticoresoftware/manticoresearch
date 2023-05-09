@@ -185,4 +185,7 @@ sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Deleting_a_table.md)
+
 <!-- proofread -->

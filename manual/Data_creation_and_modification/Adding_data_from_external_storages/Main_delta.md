@@ -53,5 +53,6 @@ table delta {
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)
 
 <!-- proofread -->

@@ -436,4 +436,8 @@ class DeleteResponse {
 }
 ```
 <!-- end -->
+
+
+[deleting_documents](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Deleting_documents.md)
+
 <!-- proofread -->

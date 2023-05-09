@@ -280,4 +280,6 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Options.md)
+
 <!-- proofread -->

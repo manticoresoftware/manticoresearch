@@ -16,4 +16,7 @@ and then start it:
 ```bash
 brew services start manticoresearch
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Installation/Old_linuxes.md)
+
 <!-- proofread -->

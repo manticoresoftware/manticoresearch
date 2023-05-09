@@ -14,4 +14,7 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/KILL.md)
+
 <!-- proofread -->

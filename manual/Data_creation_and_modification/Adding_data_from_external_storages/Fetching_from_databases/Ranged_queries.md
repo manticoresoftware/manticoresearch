@@ -36,4 +36,7 @@ Throttling can be useful when the indexer imposes too much load on the database 
 ```ini
 sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Ranged_queries.md)
+
 <!-- proofread -->

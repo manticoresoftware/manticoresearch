@@ -32,4 +32,6 @@ Queries using secondary indexes and docid indexes always run in a single thread,
 
 At present, the optimizer only uses CPU costs and does not take memory or disk usage into account.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Cost_based_optimizer.md)
+
 <!-- proofread -->

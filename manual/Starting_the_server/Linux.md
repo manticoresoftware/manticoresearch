@@ -91,4 +91,6 @@ update-rc.d manticore defaults
 
 Please note that `searchd` is started by the init system under the `manticore` user and all files created by the server will be owned by this user. If `searchd` is started under, for example, the root user, the file permissions will be changed, which may result in issues when running `searchd` as a service again.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Starting_the_server/Linux.md)
+
 <!-- proofread -->

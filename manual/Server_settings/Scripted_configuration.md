@@ -36,4 +36,7 @@ table test_<?=$i?> {
  }
  ?>
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Server_settings/Scripted_configuration.md)
+
 <!-- proofread -->

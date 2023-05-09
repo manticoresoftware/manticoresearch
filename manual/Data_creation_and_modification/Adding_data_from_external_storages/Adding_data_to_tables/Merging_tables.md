@@ -21,4 +21,7 @@ sudo -u manticore indexer --merge main delta --merge-dst-range deleted 0 0
 This switch allows you to apply filters to the destination table along with merging. There can be several filters; all of their conditions must be met in order to include the document in the resulting merged table. In the example above, the filter passes only those records where 'deleted' is 0, eliminating all records that were flagged as deleted.
 
 `--drop-src` enables dropping SRCINDEX after the merge and before rotating the tables, which is important if you specify DSTINDEX in `killlist_target` of DSTINDEX. Otherwise, when rotating the tables, the documents that have been merged into DSTINDEX may be suppressed by SRCINDEX.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
+
 <!-- proofread -->

@@ -249,4 +249,7 @@ POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') 
 ### Keep-alive
 
 HTTP keep-alive is also supported, which makes working via the HTTP JSON interface stateful as long as the client supports keep-alive too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Connecting_to_the_server/HTTP.md)
+
 <!-- proofread -->

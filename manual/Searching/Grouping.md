@@ -1065,4 +1065,7 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 +------+----------+
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Grouping.md)
+
 <!-- proofread -->

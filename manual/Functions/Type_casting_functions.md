@@ -20,4 +20,7 @@ Converts the given argument to a 64-bit unsigned integer type.
 
 ### SINT()
 Forcefully reinterprets its 32-bit unsigned integer argument as signed and expands it to a 64-bit type (because the 32-bit type is unsigned). This is easily illustrated by the following example: 1-2 normally evaluates to 4294967295, but `SINT(1-2)` evaluates to -1.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/Type_casting_functions.md)
+
 <!-- proofread -->

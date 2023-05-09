@@ -345,4 +345,7 @@ class SearchResponse {
 }
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Full_text_matching/Basic_usage.md)
+
 <!-- proofread -->

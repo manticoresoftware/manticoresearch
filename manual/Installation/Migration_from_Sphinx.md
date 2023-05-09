@@ -126,4 +126,6 @@ Here's the complete list of `index_converter` options:
 * `--all` - converts all tables from the config
 * `--killlist-target <targets>` sets the target tables for which kill-lists will be applied. This option should be used only in conjunction with the `--index` option
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Installation/Migration_from_Sphinx.md)
+
 <!-- proofread -->

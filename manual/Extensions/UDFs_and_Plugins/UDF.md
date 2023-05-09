@@ -115,4 +115,6 @@ The calling sequence of the other functions is fixed, though. Namely,
 * `testfunc()` is called for every eligible row (see above), whenever Manticore needs to compute the UDF value. It can also indicate an (internal) failure error by writing a non-zero byte value to `error_flag`. In that case, it is guaranteed that it will not be called for subsequent rows, and a default return value of 0 will be substituted. Manticore might or might not choose to terminate such queries early; neither behavior is currently guaranteed.
 * `testfunc_deinit()` is called once when the query processing (in a given table shard) ends.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/UDF.md)
+
 <!-- proofread -->

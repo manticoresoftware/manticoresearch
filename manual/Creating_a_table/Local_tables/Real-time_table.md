@@ -117,4 +117,7 @@ The following table outlines the different file extensions and their respective 
 | `.*.sp*` | Disk chunks that are stored on disk with the same format as plain tables. They are created when the RAM chunk size exceeds the  rt_mem_limit.|
 
  For more information on the structure of disk chunks, refer to the [plain table format](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure))
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/blob/master/manual/Creating_a_table/Local_tables/Real-time_table.md)
+
 <!-- proofread -->

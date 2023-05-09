@@ -120,4 +120,7 @@ source xml_test_2
     xmlpipe_attr_uint = author_id:16
 }
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_XML_streams.md)
+
 <!-- proofread -->

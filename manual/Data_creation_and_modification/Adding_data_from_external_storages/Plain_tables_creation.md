@@ -240,4 +240,7 @@ ignore_non_plain = 1
 ```
 
 `ignore_non_plain` allows you to completely ignore warnings about skipping non-plain tables. The default is 0 (not ignoring).
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
+
 <!-- proofread -->

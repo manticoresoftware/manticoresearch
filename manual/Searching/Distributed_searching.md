@@ -26,4 +26,6 @@ From the application's perspective, there are no differences between searching t
 
 Learn more about [remote nodes](../Creating_a_cluster/Remote_nodes.md).
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Distributed_searching.md)
+
 <!-- proofread -->

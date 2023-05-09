@@ -210,4 +210,7 @@ For DPQ, the operations of listing stored queries and searching through them (us
 If you include a non-percolate table in the list of agents, the behavior will be undefined. If the incorrect agent has the same schema as the outer schema of the PQ table (id, query, tags, filters), it will not trigger an error when listing stored PQ rules, and may pollute the list of actual PQ rules stored in PQ tables with its own non-PQ strings. As a result, be cautious and aware of the confusion that this may cause. A`CALL PQ` to such an incorrect agent will trigger an error.
 
 For more information on making queries to a distributed percolate table, see [making queries to a distribute percolate table](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
+
 <!-- proofread -->

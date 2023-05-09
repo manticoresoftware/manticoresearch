@@ -126,4 +126,7 @@ Manticore utilizes the [plugin_dir](../Server_settings/Common.md#plugin_dir) for
 ## Environment variables
 
 * `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` enables detailed logging while searchd is shutting down. It's useful in case of some shutdown problems, such as when Manticore takes too long to shut down or freezes during the shutdown process.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Starting_the_server/Manually.md)
+
 <!-- proofread -->

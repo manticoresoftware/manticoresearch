@@ -45,4 +45,7 @@ The outer select allows only `ORDER BY` and `LIMIT` clauses. Sub-select queries 
     ```
 
     In this case, the nodes receive only the inner query and execute it. This means the master will receive only 20x10K=200K records. The master will take all the records received, reorder them by the OUTER clause, and return the best 50K records. The sub-select helps reduce the traffic between the master and the nodes, as well as reduce the master's computation time (since it processes only 200K instead of 1M records).
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/blob/master/manual/Searching/Sub-selects.md)
+
 <!-- proofread -->

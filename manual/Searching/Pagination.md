@@ -79,4 +79,7 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Pagination.md)
+
 <!-- proofread -->

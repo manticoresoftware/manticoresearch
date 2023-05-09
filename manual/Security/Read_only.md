@@ -16,4 +16,6 @@ If you're connected to a [VIP](../Server_settings/Searchd.md#listen) socket, you
 
 For standard (non-VIP) connections, escaping read-only mode is only possible by reconnecting if it was set interactively, or by updating the configuration file and restarting the daemon.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Security/Read_only.md)
+
 <!-- proofread -->

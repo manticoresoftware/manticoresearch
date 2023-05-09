@@ -95,4 +95,6 @@ The following table outlines the various file extensions used in a plain table a
 |`.new.sp*` | new version of a plain table before rotation |
 |`.old.sp*` | old version of a plain table after rotation |
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/Local_tables/Plain_table.md)
+
 <!-- proofread -->

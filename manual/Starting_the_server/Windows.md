@@ -17,4 +17,7 @@ Alternatively, if you don't install Manticore as a Windows service, you can star
 .\bin\searchd -c manticore.conf
 ```
 This command assumes that you have the Manticore's binary and the configuration file in the current directory.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Starting_the_server/Windows.md)
+
 <!-- proofread -->

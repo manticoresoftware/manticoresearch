@@ -7,4 +7,7 @@ For example, during table compaction, a pair of disk chunks are merged and a new
 The same applies to flushing a RAM chunk, where suitable RAM segments are merged into a new disk chunk and the participated RAM chunk segments are abandoned. During this operation, Manticore provides isolation for queries that started before the operation began.
 
 Furthermore, these operations are transparent for replaces and updates. If you update an attribute in a document that belongs to a disk chunk being merged with another one, the update will be applied to both that chunk and the resulting merged chunk. If you delete a document during a merge, it will be deleted in the original chunk and also in the resulting merged chunk, which will either have the document marked as deleted or have no such document at all if the deletion happened early in the merging process.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Isolation_during_flushing_and_merging.md)
+
 <!-- proofread -->

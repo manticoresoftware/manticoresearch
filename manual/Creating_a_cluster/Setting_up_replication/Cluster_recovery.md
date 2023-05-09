@@ -95,4 +95,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 <!-- end -->
 
 However, it's important to note that if the statement is issued at both groups, it will result in the formation of two separate clusters, and the subsequent network recovery will not result in the groups rejoining.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
+
 <!-- proofread -->

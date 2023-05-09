@@ -435,4 +435,7 @@ table products {
 }
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/blob/master/manual/Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
+
 <!-- proofread -->

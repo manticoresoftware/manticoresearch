@@ -10,4 +10,6 @@ docker pull manticoresearch/manticore
 
 For more information about using Manticore in Docker, see the [Using Manticore in Docker](../Starting_the_server/Docker.md) section.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Installation/Docker.md)
+
 <!-- proofread -->

@@ -28,4 +28,6 @@ Query OK, 0 rows affected (0.05 sec)
 ```
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md)
+
 <!-- proofread -->

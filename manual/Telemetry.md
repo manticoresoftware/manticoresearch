@@ -65,4 +65,7 @@ The following is a list of all collected metrics:
 | config_unreachable | Specified configuration file does not exist |
 | config_data_dir_missing | Failed to parse `data_dir` from specified configuration file |
 | config_data_dir_is_relative | `data_dir` path in Manticore instance's configuration file is relative |
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Telemetry.md)
+
 <!-- proofread -->

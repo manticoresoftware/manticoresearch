@@ -57,4 +57,7 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
+
 <!-- proofread -->

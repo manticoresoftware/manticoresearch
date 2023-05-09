@@ -15,4 +15,7 @@ Very common words can have some unwanted effects on searching, mostly because of
 A more advanced blacklisting is [bigrams](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index), which allows creating a special token between a "bigram" (common) word and an uncommon word. This can speed up several times when common words are used in phrase searches.
 
 In case of indexing HTML content, it's important not to index the HTML tags, as they can introduce a lot of "noise" in the index. [HTML stripping](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#Stripping-HTML-tags) can be used and can be configured to strip, but index certain tag attributes or completely ignore the content of certain HTML elements.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
+
 <!-- proofread -->

@@ -165,4 +165,7 @@ MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 <!-- end -->
 
 `CALL KEYWORDS` supports distributed tables so no matter how big your data set you can benefit from using it.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Autocomplete.md)
+
 <!-- proofread -->

@@ -248,4 +248,6 @@ Example:
 sql_query = SELECT id, mytitle, mycontent FROM documents
 sql_column_buffers = mytitle=64K, mycontent=10M
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md)
 <!-- proofread -->

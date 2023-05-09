@@ -85,4 +85,6 @@ ldconfig
 pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Installation/RHEL_and_Centos.md)
+
 <!-- proofread -->

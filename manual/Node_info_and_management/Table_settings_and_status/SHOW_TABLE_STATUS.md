@@ -221,4 +221,7 @@ utilsApi.sql("SHOW TABLE statistic STATUS");
   warning= }
 ```
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md)
+
 <!-- proofread -->

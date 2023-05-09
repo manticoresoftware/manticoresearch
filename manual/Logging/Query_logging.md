@@ -150,4 +150,7 @@ searchd {
 ...
 }
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Logging/Query_logging.md)
+
 <!-- proofread -->

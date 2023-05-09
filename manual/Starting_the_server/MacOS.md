@@ -14,4 +14,7 @@ To stop Manticore, run the following command:
 ```bash
 brew services stop manticoresearch
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Starting_the_server/MacOS.md)
+
 <!-- proofread -->

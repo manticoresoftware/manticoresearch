@@ -189,6 +189,8 @@ You can also explicitly specify which attributes you want to include and which t
 
 An empty list of includes is interpreted as "include all attributes," while an empty list of excludes does not match anything. If an attribute matches both the includes and excludes, then the excludes win.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Search_results.md)
+
 <!-- proofread -->
 
 

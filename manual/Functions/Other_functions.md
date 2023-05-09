@@ -36,4 +36,7 @@ mysql> select CONNECTION_ID();
 +-----------------+
 1 row in set (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Functions/Other_functions.md)
+
 <!-- proofread -->

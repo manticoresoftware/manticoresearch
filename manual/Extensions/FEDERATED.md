@@ -107,4 +107,7 @@ SELECT t1.id, t1.year, comments.comment FROM t1 JOIN comments ON t1.id=comments.
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/FEDERATED.md)
+
 <!-- proofread -->

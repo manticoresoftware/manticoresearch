@@ -157,4 +157,7 @@ utilsApi.sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;
 <!-- end -->
 
 The `JOIN CLUSTER` command works synchronously and completes as soon as the node receives all data from the other nodes in the cluster and is in sync with them.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)
+
 <!-- proofread -->

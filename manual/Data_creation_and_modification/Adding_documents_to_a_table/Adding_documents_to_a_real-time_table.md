@@ -865,4 +865,6 @@ sqlresult = indexApi.insert(newdoc);
 
 <!-- end -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/blob/master/manual/Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
+
 <!-- proofread -->

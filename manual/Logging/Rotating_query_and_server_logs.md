@@ -26,4 +26,7 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 
 Additionally, the `FLUSH LOGS` SQL command is available, which works the same way as the USR1 system signal. It initiates the reopening of searchd log and query log files, allowing you to implement log file rotation. The command is non-blocking (i.e., it returns immediately).
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Logging/Rotating_query_and_server_logs.md)
+
 <!-- proofread -->

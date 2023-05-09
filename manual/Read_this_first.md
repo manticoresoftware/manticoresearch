@@ -55,4 +55,5 @@ Manticore provides multiple ways and interfaces to manage your schemas and data,
   * design your queries as SQL is much closer to natural language than the JSON DSL which is important when you design something new. You can use Manticore SQL via any MySQL client or [/sql](Connecting_to_the_server/MySQL_protocol.md).
 * **JSON**. Most functionality is also available via JSON domain specific language. This is especially useful when you integrate Manticore with your application as with JSON you can do it more programmatically than with SQL. The best practice is to **first explore how to do something via SQL and then use JSON to integrate it into your application.**
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Read_this_first.md)
 <!-- proofread -->

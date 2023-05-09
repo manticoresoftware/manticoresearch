@@ -118,4 +118,6 @@ For a distributed table with agent mirrors, the server sends all mirrors a ping 
 
 If you want to disable pings, set ha_ping_interval to 0.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Creating_a_cluster/Remote_nodes/Load_balancing.md)
+
 <!-- proofread -->

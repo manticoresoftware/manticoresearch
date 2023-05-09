@@ -45,4 +45,6 @@ Manticore configuration file is `./etc/manticoresearch/manticore.conf` after you
 
 -->
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Installation/MacOS.md)
+
 <!-- proofread -->

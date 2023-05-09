@@ -90,4 +90,7 @@ If your SSL configuration is not valid for any reason (which the daemon detects 
 * Binary API connections (such as connections from old clients or inter-daemons master-agent communication) are not secured.
 * SSL for replication needs to be set up separately. However, since the SST stage of the replication is done through the binary API connection, it is not secured either.
 * You can still use any external proxies (e.g., SSH tunneling) to secure your connections.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Security/SSL.md)
+
 <!-- proofread -->

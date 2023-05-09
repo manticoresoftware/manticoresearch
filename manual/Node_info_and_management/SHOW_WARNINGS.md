@@ -26,4 +26,7 @@ Message: quorum threshold too high (words=2, thresh=3); replacing quorum operato
          with AND operator
 1 row in set (0.00 sec)
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Node_info_and_management/SHOW_WARNINGS.md)
+
 <!-- proofread -->

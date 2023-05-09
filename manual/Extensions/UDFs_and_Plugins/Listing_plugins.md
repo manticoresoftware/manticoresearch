@@ -74,4 +74,7 @@ SHOW BUDDY PLUGINS;
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Extensions/UDFs_and_Plugins/Listing_plugins.md)
+
 <!-- proofread -->

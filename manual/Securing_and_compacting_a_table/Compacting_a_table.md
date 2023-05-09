@@ -106,4 +106,6 @@ Once the table is added back to the cluster, you must resume write operations on
 
 Search operations are available as usual during the process on any of the nodes.
 
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Securing_and_compacting_a_table/Compacting_a_table.md)
+
 <!-- proofread -->

@@ -465,4 +465,7 @@ POST /search
 ```
 
 <!-- end -->
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Searching/Filters.md)
+
 <!-- proofread -->

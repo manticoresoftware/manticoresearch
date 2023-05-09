@@ -23,4 +23,7 @@ The child will inherit the entire configuration of the parent. Any settings decl
 Note that existing values of a multi-value setting will not be copied if the child declares one value for that setting.
 
 The inheritance behavior applies to fields and attributes, not just table options. For example, if the parent has two integer attributes and the child needs a new integer attribute, the integer attribute declarations from the parent must be copied into the child configuration.
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Server_settings/Inheritance_of_index_and_source_declarations.md)
+
 <!-- proofread -->

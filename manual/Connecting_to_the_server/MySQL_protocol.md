@@ -92,4 +92,7 @@ Manticore SQL over MySQL supports C-style comment syntax. Everything from an ope
 ```sql
 SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 ```
+
+[Edit this page on GitHub](https://github.com/manticoresoftware/manticoresearch/tree/master/manual/Connecting_to_the_server/MySQL_protocol.md)
+
 <!-- proofread -->

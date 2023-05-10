@@ -2264,12 +2264,14 @@ class SphinxConfig
                 [
                     '/error when sending data: WSA error 10057/', // windows
                     '/connect and query timed out/', // also windows
-                    '/receiving failure .*$/' // linux (errno 111) and mac (errno 64)
+                    '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
+                    '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end'
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
-                    "receiving failure (refused or timedout, substituted)"
+                    "receiving failure (refused or timedout, substituted)",
+                    "\$end",
                 ], $s );
 		return $s;
 	}
@@ -3157,12 +3159,23 @@ class SphinxConfig
 		return 1;
 	}
 
+    function FixupErrorMessageInResult($result)
+    {
+        if ( @is_array($result) && @array_key_exists ( "error", $result ) && $result["error"] ) {
+            $origerror = $result["error"];
+            $fixup = $this->FixupErrorMessage(1064,$origerror);
+            if ( $fixup!=$origerror )
+                $result["error"] = $fixup;
+        }
+        return $result;
+    }
+
 	function ImportantResults()
     {
         $_results			= array ();
         foreach ( $this->_results as $result )
             if ( !result_must_be_skipped ($result) )
-                $_results[] = $result;
+                $_results[] = $this->FixupErrorMessageInResult($result);
         return $_results;
     }
 

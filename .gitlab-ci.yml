@@ -152,7 +152,7 @@ docs_deploy:
       junit: build/junit_tests.xml
     paths:
       - build/junit_tests.xml
-      - build/test/test_*/report.txt
+      - build/test/test_*/report.*
       - build/test/error*.txt
       - build/test/searchd.log
       - $DOCS_EXAMPLES_FILEPATH

@@ -1490,7 +1490,8 @@ class SphinxConfig
 	private $_subtest;
 	private $_subtestcount;
 	private $_results;
-	private $_results_model;
+	public $_results_model;
+    public $_shadow_results_model;
 	private $_prereqs;
 	private $_config;				///< config DOM node
 	private $_indexdata;			///< data for use "insert into" instead of run indexer
@@ -1515,6 +1516,7 @@ class SphinxConfig
 		$this->_sphqueries		= array ();
 		$this->_results			= array ();
 		$this->_results_model	= array ();
+        $this->_shadow_results_model	= array ();
 		$this->_query_attributes = array ();
 		$this->_indexer_runs	= array ();
 		$this->_db_create		= array ();
@@ -1618,6 +1620,7 @@ class SphinxConfig
 
 		if ( IsModelGenMode () )
 			array_push ( $this->_results_model, $failed );
+        array_push ( $this->_shadow_results_model, $failed );
 	}
 
 	
@@ -2288,8 +2291,12 @@ class SphinxConfig
 	function PickResult ( $query_result )
     {
         array_push($this->_results, $query_result);
-        if (IsModelGenMode() && !result_must_be_skipped($query_result))
-            $this->_results_model[$this->SubtestNo()][] = $query_result;
+        if ( !result_must_be_skipped($query_result))
+        {
+            if (IsModelGenMode())
+                $this->_results_model[$this->SubtestNo()][] = $query_result;
+            $this->_shadow_results_model[$this->SubtestNo()][] = $query_result;
+        }
     }
 
 	function PickResults( $query_results )
@@ -2297,6 +2304,7 @@ class SphinxConfig
         $this->_results = $query_results;
         if ( IsModelGenMode () )
             array_push ( $this->_results_model, $query_results );
+        array_push ( $this->_shadow_results_model, $query_results );
     }
 
 	function FixupJsonTimeAndFloats ( &$query_result, &$error, $keep_json_ctrls=false )
@@ -4094,29 +4102,26 @@ class SphinxConfig
 	}
 
 
-	function WriteModel ( $filename )
+	function WriteModel ( $filename, $model )
 	{
-		if ( IsModelGenMode () )
-				{
-					$result = serialize ( $this->_results_model );
-					if (PHP_INT_SIZE>4)
-					{
-						$keys = array();
-						$this->FixSerialize64 ( $this->_results_model, $keys );
-						if ( sizeof($keys)>0 )
-						{
-							$findes=array();
-							$replaces=array();
-							foreach ($keys as $key)
-							{
-								$findes[]="i:$key";
-								$replaces[]="s:".strlen($key).":\"$key\"";
-							}
-							$result = str_replace ( $findes, $replaces, $result );
-						}
-					}
-					file_put_contents ( $filename, $result );
-				}
+        $result = serialize ( $model );
+        if (PHP_INT_SIZE>4)
+        {
+            $keys = array();
+            $this->FixSerialize64 ( $model, $keys );
+            if ( sizeof($keys)>0 )
+            {
+                $findes=array();
+                $replaces=array();
+                foreach ($keys as $key)
+                {
+                    $findes[]="i:$key";
+                    $replaces[]="s:".strlen($key).":\"$key\"";
+                }
+                $result = str_replace ( $findes, $replaces, $result );
+            }
+        }
+        file_put_contents ( $filename, $result );
 	}
 
 
@@ -4540,6 +4545,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$report_path = "$res_path/report";
 	$report_file = "$report_path.txt";
 	$report = fopen ( $report_file, "w" );
+    $shadow_model_file = "$report_path.bin";
 
 	$example_file = scriptdir("examples.txt");
 	$examples = [];
@@ -4751,6 +4757,8 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			$config->WriteReferenceResultsDiff ( $report );
 		}
 
+        $config->WriteModel($shadow_model_file, $config->_shadow_results_model);
+
 		$config->SubtestFinished ();
 	}
 	while ( $config->CreateNextConfig () );
@@ -4772,7 +4780,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		$variant = $config->CheckVariants ( $report_path."_variant.txt" );
 		if ($variant===false)
 		{
-			$config->WriteModel ( $model_file );
+			$config->WriteModel ( $model_file, $config->_results_model );
 			printf ( "$prefix done; %d/%d subtests run\n", $config->SubtestNo(), $nsubtests );
 		} else
 		{

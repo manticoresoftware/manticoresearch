@@ -3819,8 +3819,10 @@ class SphinxConfig
 					foreach ($sql_file_fields as $ff)
 					{
 						$index = $insert_schema[$ff]; // FIXME? what if it does not exist?
-						for ($i=0; $i<count($insert_values); $i++)
-							$insert_values[$i][$index] = @file_get_contents($insert_values[$i][$index]); // FIXME? handle errors
+						for ($i=0; $i<count($insert_values); $i++) {
+                            if ( $insert_values[$i][$index]!='' )
+                                $insert_values[$i][$index] = @file_get_contents($insert_values[$i][$index]); // FIXME? handle errors
+                        }
 					}
 
 

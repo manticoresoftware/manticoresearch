@@ -12171,6 +12171,7 @@ static CSphString ConcatWarnings ( StrVec_t & dWarnings )
 	return sRes.cstr();
 }
 
+static Threads::Coro::Mutex_c g_tCreateTableMutex;
 
 static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
@@ -12186,6 +12187,9 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
+
+	// only one create table at the time allowed and multiple concurent CREATE TABLE if not exists passes well
+	Threads::ScopedCoroMutex_t tCreateTableLock ( g_tCreateTableMutex );
 
 	if ( !CheckCreateTable ( tStmt, sError ) )
 	{

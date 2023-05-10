@@ -3086,14 +3086,16 @@ protected:
 	{
 		struct kevent tSignaller;
 		EV_SET ( &tSignaller, 0, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, 0 );
-		assert ( 0 == kevent ( m_iEFD, &tSignaller, 1, 0, 0, 0 ) );
+		[[maybe_unused]] bool bRes = 0 == kevent ( m_iEFD, &tSignaller, 1, 0, 0, 0 );
+		assert ( bRes );
 	}
 
 	inline void fire_event() const
 	{
 		struct kevent tSignaller;
 		EV_SET ( &tSignaller, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, 0 );
-		assert ( 0 == kevent ( m_iEFD, &tSignaller, 1, 0, 0, 0 ) );
+		[[maybe_unused]] bool bRes = 0 == kevent ( m_iEFD, &tSignaller, 1, 0, 0, 0 );
+		assert ( bRes );
 	}
 
 private:

@@ -10,6 +10,10 @@ for ((i = 0; i < 3; i++)); do
       docker info | grep Username|grep $DOCKER_USER && break
 done
 
+# Login to ghcr.io with provided token and username
+
+echo $GHCR_PASSWORD | docker login -u$GHCR_USER --password-stdin ghcr.io
+
 if ! (docker info | grep Username) > /dev/null 2>&1; then
       echo "Can't authorise to dockerhub"
       exit 1
@@ -49,6 +53,12 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
       fi
     done
 
+    docker rm -f manticore-with-extra || true
+    docker create --name manticore-with-extra manticoresearch/manticore:$BUILD_TAG
+    docker start manticore-with-extra
+    docker exec -e EXTRA=1 manticore-with-extra /entrypoint.sh  
+    docker commit manticore-with-extra ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
+    docker push ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
 
   else
     echo "Can't find branch for tag $BUILD_TAG"

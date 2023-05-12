@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  rhel:
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          {"image": "centos:7"},
+          {"image": "almalinux:8"},
+          {"image": "almalinux:9"}
+        ]
+      test_prefix: rhel-
+  deb:
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          {"image": "ubuntu:focal"},
+          {"image": "ubuntu:jammy"},
+          {"image": "debian:buster"},
+          {"image": "debian:bullseye"},
+          {"image": "debian:bookworm"}
+        ]
+      test_prefix: deb-

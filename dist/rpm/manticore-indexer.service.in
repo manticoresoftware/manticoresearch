@@ -25,9 +25,7 @@ LimitNOFILE=1024
 
 Restart=on-failure
 RestartSec=30s
-
 TimeoutStartSec=infinity
-PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/indexer.pid
 
 [Install]
 WantedBy=multi-user.target

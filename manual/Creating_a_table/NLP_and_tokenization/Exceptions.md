@@ -104,7 +104,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = \'/usr
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = \'/usr/local/manticore/data/exceptions.txt\'');
 ```
 
@@ -114,6 +114,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) excepti
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'");
+```
+
 <!-- request CONFIG -->
 
 ```ini

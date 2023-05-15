@@ -189,5 +189,35 @@ utilsApi.sql("SHOW STATUS");
   total=0,
   warning= }
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.sql("SHOW STATUS");
+```
+<!-- response C# -->
+
+```C#
+{columns=[{ Key : { type=String }},
+              { Value : { type=String }}],
+  data : [
+	{ Key=cluster_name, Value=post},
+	{ Key=cluster_post_state_uuid, Value=fba97c45-36df-11e9-a84e-eb09d14b8ea7},
+	{ Key=cluster_post_conf_id, Value=1},
+	{ Key=cluster_post_status, Value=primary},
+	{ Key=cluster_post_size, Value=5},
+	{ Key=cluster_post_local_index, Value=0},
+	{ Key=cluster_post_node_state, Value=synced},
+	{ Key=cluster_post_indexes_count, Value=2},
+	{ Key=cluster_post_indexes, Value=pq1,pq_posts},
+	{ Key=cluster_post_nodes_set, Value=10.10.0.1:9312},
+	{ Key=cluster_post_nodes_view, Value=10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication}],
+  error="" ,
+  total=0,
+  warning="" }
+```
 <!-- end -->
 <!-- proofread -->

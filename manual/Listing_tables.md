@@ -105,6 +105,20 @@ utilsApi.sql("SHOW TABLES")
 {columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error=, warning=}
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("SHOW TABLES")
+```
+
+<!-- response C# -->
+```C#
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
+```
+
 <!-- end -->
 
 <!-- example Example_2 -->
@@ -193,6 +207,20 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'")
 <!-- response Java -->
 ```java
 {columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error=, warning=}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("SHOW TABLES LIKE 'pro%'")
+```
+
+<!-- response C# -->
+```clike
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
 ```
 
 

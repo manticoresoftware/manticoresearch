@@ -171,6 +171,34 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "try|gets|down|said");
+var highlight = new Highlight();
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
 <!-- end -->
 
 When using SQL for highlighting search results, you will receive snippets from various fields combined into a single string due to the limitations of the MySQL protocol. You can adjust the concatenation separators with the `field_separator` and `snippet_separator` options, as detailed below.
@@ -451,6 +479,35 @@ searchResponse = searchApi.search(searchRequest);
 
 <!-- response Java -->
 ```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "try|gets|down|said");
+var highlight = new Highlight();
+highlight.Limit = 50;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- response C# -->
+```clike
 class SearchResponse {
     took: 0
     timedOut: false
@@ -818,6 +875,36 @@ class SearchResponse {
 
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content"};
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=Books one, content=They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. }, highlight={title=[Books <b>one</b>], content=[They followed Bander. The <b>robots</b> remained at a polite distance, ,  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander,  gestured the other <b>robots</b> away and entered itself. The]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
 <!-- end -->
 
 <!-- example highlight JSON all field  -->
@@ -973,6 +1060,35 @@ class SearchResponse {
 }
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=Books one, content=They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. }, highlight={title=[Books <b>one</b>], content=[They followed Bander. The <b>robots</b> remained at a polite distance, ,  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander,  gestured the other <b>robots</b> away and entered itself. The]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
 <!-- end -->
 
 In addition to common highlighting options, several synonyms are available for JSON queries via HTTP:
@@ -1087,6 +1203,25 @@ put("highlight_query",
 }};
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+match.Add("*", "polite distance");
+Dictionary<string, Object> highlightQuery = new Dictionary<string, Object>(); 
+highlightQuery.Add("match", match);
+highlight.HighlightQuery = highlightQuery;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- end -->
 
@@ -1206,6 +1341,22 @@ highlight = new HashMap<String,Object>(){{
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.PreTags = "before_";
+highlight.PostTags = "_after";
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
 <!-- end -->
 
 <!-- example no_match_size  -->
@@ -1320,6 +1471,21 @@ highlight = new HashMap<String,Object>(){{
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.NoMatchSize = 0;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
 <!-- end -->
 
 <!-- example order  -->
@@ -1432,6 +1598,22 @@ highlight = new HashMap<String,Object>(){{
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.Order =  "score";
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
 <!-- end -->
 
 <!-- example fragment_size -->
@@ -1538,6 +1720,21 @@ highlight = new HashMap<String,Object>(){{
 }};
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.FragmentSize = 100;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- end -->
 
@@ -1646,11 +1843,27 @@ query.put("match",new HashMap<String,Object>(){{
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
-    put("fragment_size",10);
+    put("number_of_fragments",10);
 }};
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.NumberOfFragments = 10;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
 <!-- end -->
 
 <!-- example highlight json per-field limits -->
@@ -1765,6 +1978,22 @@ highlight = new HashMap<String,Object>(){{
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+var highlightField = new HighlightField("title");
+highlightField.Limit = 50;
+highlight.Fields = new List<Object> {highlightField};
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
 <!-- end -->
 
 <!-- example highlight json global limits -->
@@ -1878,6 +2107,23 @@ highlight = new HashMap<String,Object>(){{
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.LimitsPerField = 0;
+var highlightField = new HighlightField("title");
+highlight.Fields = new List<Object> {highlightField};
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
 <!-- end -->
 
 # CALL SNIPPETS

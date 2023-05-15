@@ -96,7 +96,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) wordforms = \'/var/
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float)wordforms = \'/var/lib/manticore/wordforms.txt\' wordforms = \'/var/lib/manticore/alternateforms.txt\' wordforms = \'/var/lib/manticore/dict*.txt\'');
 ```
 
@@ -106,6 +106,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float)wordform
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'");
+```
+
 <!-- request CONFIG -->
 
 ```ini

@@ -64,7 +64,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = \'1\''
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = \'1\'');
 ```
 
@@ -74,6 +74,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_st
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) html_strip = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) html_strip = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -142,7 +150,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = 
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'');
 ```
 
@@ -152,6 +160,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_in
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -224,7 +240,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_element
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'');
 ```
 
@@ -234,6 +250,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_re
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -319,7 +343,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) index_sp = \'1\' ht
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = \'1\'');
 ```
 
@@ -329,6 +353,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_s
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -404,7 +436,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) index_zones = \'h, 
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'');
 ```
 
@@ -414,6 +446,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_z
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini

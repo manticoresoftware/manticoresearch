@@ -28,6 +28,7 @@
 * [Commit ec19](https://github.com/manticoresoftware/manticoresearch/commit/ec19c5b) fixed suggest for short words; added sentence option to show whole qsuggest sentence
 * [Commit 1d3f](https://github.com/manticoresoftware/manticoresearch/commit/1d3f0da) fixed duplicate documents at the result set for the query with not_terms_only_allowed option to RT index with killed documents
 * [Commit 122b](https://github.com/manticoresoftware/manticoresearch/commit/122bbf2) fixed error of alter with empty string for external files; fixed RT index external files left after alter of external files
+* [Commit bc04](https://github.com/manticoresoftware/manticoresearch/commit/bc04908) changed the response format of the /cli endpoint, added the /cli_json endpoint to work as the previous /cli
 
 ### Major new features
 * Query optimizer now works for fulltext queries

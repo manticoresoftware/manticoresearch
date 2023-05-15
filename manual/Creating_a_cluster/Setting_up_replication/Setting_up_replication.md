@@ -132,6 +132,22 @@ deleteRequest.index("weekly_index").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Crossbody Bag with Tassel");
+doc.Add("price", 19.85);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "weekly_index", cluster:posts, id: 1, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "weekly_index", cluster: "posts", id: 1);
+indexApi.Delete(deleteDocumentRequest);
+```
 <!-- end -->
 
 ## Read statements
@@ -297,6 +313,16 @@ res = await utilsApi.sql('CREATE CLUSTER posts');
 utilsApi.sql("CREATE CLUSTER posts");
 
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE CLUSTER posts");
+
+```
 <!-- end -->
 
 <!-- example replication and cluster 3 -->
@@ -374,6 +400,17 @@ res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks');
 utilsApi.sql("ALTER CLUSTER posts ADD pq_title");
 utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.Sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
 <!-- end -->
 
 <!-- example replication and cluster 4 -->
@@ -432,6 +469,16 @@ res = await utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'');
 
 ```java
 utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 
 ```
 <!-- end -->
@@ -502,9 +549,18 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
 }};
 newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
+```
 
+<!-- intro -->
+##### C#:
 
+<!-- request C# -->
 
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "test me");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
 ```
 <!-- end -->
 

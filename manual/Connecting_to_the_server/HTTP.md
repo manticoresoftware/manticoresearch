@@ -185,13 +185,13 @@ POST /sql?mode=raw -d "query=desc%20test"
 <!-- end -->
 
 <!-- example SQL_over_HTTP_4 -->
-### /cli
-While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
+### /cli_json
+While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli_json` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli_json?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
 
 <!-- request HTTP -->
 
 ```bash
-POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
+POST /cli_json -d "select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
 ```
 
 <!-- response HTTP -->
@@ -245,6 +245,32 @@ POST /cli -d "select id,1+2 as a, packedfactors() from test where match('tes*') 
 ![using /cli in browser](cli_browser.png)
 
 <!-- end -->
+
+<!-- example SQL_over_HTTP_cli -->
+
+### /cli
+The `/cli` endpoint provides the same functionality as `/cli_json` , but returns the response in a tabular format, similar to the one returned by  MySQL console.
+
+<!-- request HTTP -->
+
+```bash
+POST /cli -d "desc test"
+```
+
+<!-- response HTTP -->
+
+```bash
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| body  | text   | indexed stored |
+| title | string |                |
++-------+--------+----------------+
+3 rows in set (0.001 sec)
+```
+<!-- end -->
+
 
 ### Keep-alive
 

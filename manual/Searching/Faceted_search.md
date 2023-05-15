@@ -394,14 +394,14 @@ res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"lim
 ```java
 aggs = new HashMap<String,Object>(){{
     put("group_property", new HashMap<String,Object>(){{
-        put("sizes", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
                 put("field","price");
 
 
         }});
     }});
     put("group_brand_id", new HashMap<String,Object>(){{
-        put("sizes", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
                 put("field","brand_id");
 
 
@@ -421,6 +421,32 @@ searchResponse = searchApi.search(searchRequest);
 ```
 <!-- response Java -->
 ```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {group_property={buckets=[{key=1000, doc_count=11}, {key=999, doc_count=12}, {key=998, doc_count=7}, {key=997, doc_count=14}, {key=996, doc_count=8}]}, group_brand_id={buckets=[{key=10, doc_count=1019}, {key=9, doc_count=954}, {key=8, doc_count=1021}, {key=7, doc_count=1011}, {key=6, doc_count=997}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 10000
+        hits: [{_id=1, _score=1, _source={price=197, brand_id=10, brand_name=Brand Ten, categories=[10], title=Product Eight One, property=Six}}, {_id=2, _score=1, _source={price=671, brand_id=6, brand_name=Brand Six, categories=[12, 13, 14], title=Product Nine Seven, property=Four}}, {_id=3, _score=1, _source={price=92, brand_id=3, brand_name=Brand Three, categories=[13, 14, 15], title=Product Five Four, property=Six}}, {_id=4, _score=1, _source={price=713, brand_id=10, brand_name=Brand Ten, categories=[11], title=Product Eight Nine, property=Five}}, {_id=5, _score=1, _source={price=805, brand_id=7, brand_name=Brand Seven, categories=[11, 12, 13], title=Product Ten Three, property=Two}}]
+    }
+    profile: null
+}
+```
+
+<!-- request C# -->
+```clike
+var agg1 = new Aggregation("group_property", "price");
+var agg2 = new Aggregation("group_brand_id", "brand_id");
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("facetdemo", query);
+searchRequest.Limit = 5;
+searchRequest.Aggs = new List<Aggregation> {agg1, agg2};
+var searchResponse = searchApi.Search(searchRequest);
+
+```
+<!-- response C# -->
+```clike
 class SearchResponse {
     took: 0
     timedOut: false
@@ -816,7 +842,7 @@ expressions = new HashMap<String,Object>(){{
 searchRequest.setExpressions(expressions);
 aggs = new HashMap<String,Object>(){{
     put("group_property", new HashMap<String,Object>(){{
-        put("sizes", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
                 put("field","price_range");
 
 
@@ -835,6 +861,33 @@ searchResponse = searchApi.search(searchRequest);
 ```
 <!-- response Java -->
 ```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {group_property={buckets=[{key=4, doc_count=2100}, {key=3, doc_count=1973}, {key=2, doc_count=1999}, {key=1, doc_count=2043}, {key=0, doc_count=1885}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 10000
+        hits: [{_id=1, _score=1, _source={price=197, brand_id=10, brand_name=Brand Ten, categories=[10], title=Product Eight One, property=Six, price_range=0}}, {_id=2, _score=1, _source={price=671, brand_id=6, brand_name=Brand Six, categories=[12, 13, 14], title=Product Nine Seven, property=Four, price_range=3}}, {_id=3, _score=1, _source={price=92, brand_id=3, brand_name=Brand Three, categories=[13, 14, 15], title=Product Five Four, property=Six, price_range=0}}, {_id=4, _score=1, _source={price=713, brand_id=10, brand_name=Brand Ten, categories=[11], title=Product Eight Nine, property=Five, price_range=3}}, {_id=5, _score=1, _source={price=805, brand_id=7, brand_name=Brand Seven, categories=[11, 12, 13], title=Product Ten Three, property=Two, price_range=4}}]
+    }
+    profile: null
+}
+```
+
+<!-- request C# -->
+```clike
+var expr = new Dictionary<string, string> { {"price_range", "INTERVAL(price,200,400,600,800"} } ;
+var agg = new Aggregation("group_property", "price_range");
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("facetdemo", query);
+searchRequest.Limit = 5;
+searchRequest.Expressions = new List<Object> {expr};
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+
+```
+<!-- response C# -->
+```clike
 class SearchResponse {
     took: 0
     timedOut: false
@@ -1251,7 +1304,7 @@ res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"lim
 searchRequest = new SearchRequest();
 aggs = new HashMap<String,Object>(){{
     put("group_property", new HashMap<String,Object>(){{
-        put("sizes", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
                 put("field","price");
                 put("size",1);
 
@@ -1259,7 +1312,7 @@ aggs = new HashMap<String,Object>(){{
         }});
     }});
     put("group_brand_id", new HashMap<String,Object>(){{
-        put("sizes", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
                 put("field","brand_id");
                 put("size",3);
 
@@ -1277,6 +1330,33 @@ searchResponse = searchApi.search(searchRequest);
 ```
 <!-- response Java -->
 ```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {group_property={buckets=[{key=1000, doc_count=11}]}, group_brand_id={buckets=[{key=10, doc_count=1019}, {key=9, doc_count=954}, {key=8, doc_count=1021}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 10000
+        hits: [{_id=1, _score=1, _source={price=197, brand_id=10, brand_name=Brand Ten, categories=[10], title=Product Eight One, property=Six}}, {_id=2, _score=1, _source={price=671, brand_id=6, brand_name=Brand Six, categories=[12, 13, 14], title=Product Nine Seven, property=Four}}, {_id=3, _score=1, _source={price=92, brand_id=3, brand_name=Brand Three, categories=[13, 14, 15], title=Product Five Four, property=Six}}, {_id=4, _score=1, _source={price=713, brand_id=10, brand_name=Brand Ten, categories=[11], title=Product Eight Nine, property=Five}}, {_id=5, _score=1, _source={price=805, brand_id=7, brand_name=Brand Seven, categories=[11, 12, 13], title=Product Ten Three, property=Two}}]
+    }
+    profile: null
+}
+```
+
+<!-- request C# -->
+```clike
+var agg1 = new Aggregation("group_property", "price");
+agg1.Size = 1;
+var agg2 = new Aggregation("group_brand_id", "brand_id");
+agg2.Size = 3;
+agg2.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("facetdemo", query);
+searchRequest.Aggs = new List<Aggregation> {agg1, agg2};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+```clike
 class SearchResponse {
     took: 0
     timedOut: false

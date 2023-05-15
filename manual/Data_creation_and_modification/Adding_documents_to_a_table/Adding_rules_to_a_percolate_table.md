@@ -119,6 +119,20 @@ newdoc.index("test_pq").id(2L).setDoc(doc);
 indexApi.insert(newdoc);
 ```
 
+<!-- intro -->
+##### C#
+<!-- request C# -->
+```clike
+Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+query.Add("q1", "@title shoes");
+query.Add("filters", "price>5");
+query.Add("tags", new List<string> {"Loius Vuitton"});
+Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>(); 
+newstoredquery.Add("query", query);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", id: 2, doc: doc);
+indexApi.Insert(newdoc);
+```
+
 <!-- end -->
 
 <!-- example noid -->
@@ -264,6 +278,20 @@ newstoredquery = new HashMap<String,Object>(){{
 }};
 newdoc.index("test_pq").setDoc(doc);
 indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#
+<!-- request C# -->
+```clike
+Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+query.Add("q1", "@title shoes");
+query.Add("filters", "price>5");
+query.Add("tags", new List<string> {"Loius Vuitton"});
+Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>(); 
+newstoredquery.Add("query", query);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", doc: doc);
+indexApi.Insert(newdoc);
 ```
 
 <!-- end -->

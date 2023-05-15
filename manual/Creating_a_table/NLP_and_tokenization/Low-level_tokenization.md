@@ -121,6 +121,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -193,6 +203,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -288,6 +308,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -381,6 +411,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_c
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
 ```
 
 <!-- request CONFIG -->
@@ -483,6 +522,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_m
 utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -559,6 +607,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_wor
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'");
 ```
 
 <!-- request CONFIG -->
@@ -644,6 +701,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -717,10 +783,20 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 
 <!-- intro -->
 ##### Java:
+
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -733,23 +809,6 @@ table products {
   rt_field = title
   rt_attr_uint = price
 }
-```
-<!-- intro -->
-##### java:
-
-<!-- request Java -->
-
-```java
-res = async utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
-```
-
-<!-- intro -->
-##### java:
-
-<!-- request Java -->
-
-```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
 ```
 
 <!-- end -->
@@ -799,6 +858,23 @@ utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk
 ```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
 ```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -876,6 +952,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
 ```
 
 <!-- request CONFIG -->
@@ -963,6 +1048,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_
 utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1041,6 +1135,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
 ```
 
 <!-- request CONFIG -->
@@ -1130,6 +1233,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) dict = 
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'");
 ```
 
 <!-- request CONFIG -->
@@ -1240,6 +1352,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_
 utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
+```
 
 <!-- request CONFIG -->
 
@@ -1327,6 +1447,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless
 utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1406,6 +1535,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_f
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1481,6 +1620,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_t
 utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1553,6 +1701,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) oversho
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'");
 ```
 
 <!-- request CONFIG -->
@@ -1635,6 +1792,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1711,6 +1878,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
 ```
 
 <!-- request CONFIG -->
@@ -1797,6 +1973,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
 ```
 
 <!-- request CONFIG -->

@@ -85,6 +85,15 @@ utilsApi.sql("CREATE TABLE forum(title text, content text, author_id int, forum_
 
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```java
+utilsApi.Sql("CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
+
+```
 
 <!-- intro -->
 ##### config:
@@ -221,6 +230,25 @@ searchRequest.setSort(new ArrayList<Object>(){{
 }});
 SearchResponse searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+var boolFilter = new BoolFilter();
+boolFilter.Must = new List<Object> { 
+    new EqualsFilter("author_id", 123), 
+    new InFilter("forum_id", new List<Object> {1,3,7}) 
+};
+searchRequest.AttrFilter = boolFilter;
+searchRequest.Sort = new List<Object> { new SortOrder("post_date", SortOrder.OrderEnum.Desc) };
+var searchResponse = searchApi.Search(searchRequest);
+```
+
 <!-- end -->
 
 ### Row-wise and columnar attribute storages
@@ -401,6 +429,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text)');
 ```java
 utilsApi.sql("CREATE TABLE products(title text)");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text)");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -478,6 +516,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text indexed)');
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text indexed)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text indexed)");
 ```
 
 <!-- intro -->
@@ -562,6 +609,15 @@ res = await searchApi.search({"index":"products","query":{"match":{"title":"firs
 utilsApi.sql("CREATE TABLE products(title text indexed)");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text indexed)");
+```
+
 <!-- end -->
 
 ### String
@@ -624,6 +680,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, keys string)');
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, keys string)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, keys string)");
 ```
 
 <!-- intro -->
@@ -707,6 +772,16 @@ res = await utilsApi.sql('CREATE TABLE products ( title string attribute indexed
 ```java
 utilsApi.sql("CREATE TABLE products ( title string attribute indexed )");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products ( title string attribute indexed )");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -787,6 +862,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price int)');
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price int)");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price int)");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -864,6 +949,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags b
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)");
 ```
 
 <!-- intro -->
@@ -949,6 +1043,15 @@ utilsApi.sql("CREATE TABLE products(title text, price bigint )");
 ```
 
 <!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price bigint )");
+```
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -1027,6 +1130,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, sold bool )');
 
 ```java
 utilsApi.sql("CREATE TABLE products(title text, sold bool )");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, sold bool )");
 ```
 
 <!-- intro -->
@@ -1111,6 +1223,15 @@ utilsApi.sql("CREATE TABLE products(title text, date timestamp)");
 ```
 
 <!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, date timestamp)");
+```
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -1175,14 +1296,6 @@ utilsApi.sql('CREATE TABLE products(title text, coeff float)')
 ```
 
 <!-- intro -->
-##### java:
-
-<!-- request java -->
-
-```java
-utilsApi.sql("CREATE TABLE products(title text, coeff float)");
-```
-<!-- intro -->
 ##### javascript:
 
 <!-- request javascript -->
@@ -1191,6 +1304,23 @@ utilsApi.sql("CREATE TABLE products(title text, coeff float)");
 res = await utilsApi.sql('CREATE TABLE products(title text, coeff float)');
 ```
 
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, coeff float)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, coeff float)");
+```
 
 <!-- intro -->
 ##### config:
@@ -1278,6 +1408,21 @@ Object expressions = new HashMap<String,Object>(){{
 searchRequest.setExpressions(expressions);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+searchRequest.Expressions = new List<Object>{ 
+    new Dictionary<string, string> { {"ebs", "abs(a-b)"} } 
+};
+var searchResponse = searchApi.Search(searchRequest);
+
+```
 <!-- end -->
 
 <!-- example for float mul -->
@@ -1346,6 +1491,20 @@ Object expressions = new HashMap<String,Object>(){{
 searchRequest.setExpressions(expressions);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+searchRequest.Expressions = new List<Object> { 
+    new Dictionary<string, string> { {"ebs", "in(ceil(attr*100),200,250,350)"} } 
+};
+var searchResponse = searchApi.Search(searchRequest);
+```
 <!-- end -->
 
 ## JSON
@@ -1408,6 +1567,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, data json)');
 ```java
 utilsApi.sql'CREATE TABLE products(title text, data json)');
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql'CREATE TABLE products(title text, data json)');
+```
+
 <!-- intro -->
 ##### config:
 
@@ -1496,6 +1665,21 @@ Object expressions = new HashMap<String,Object>(){{
 searchRequest.setExpressions(expressions);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+searchRequest.Expressions = new List<Object> { 
+    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} } 
+};
+var searchResponse = searchApi.Search(searchRequest);
+```
+
 <!-- end -->
 
 <!-- example for REGEX() json -->
@@ -1574,6 +1758,23 @@ Object expressions = new HashMap<String,Object>(){{
 searchRequest.setExpressions(expressions);
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+var rangeFilter = new RangeFilter("c");
+rangeFilter.Gt = 0;
+searchRequest.AttrFilter = rangeFilter;
+searchRequest.Expressions = new List<Object> { 
+    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} } 
+};
+var searchResponse = searchApi.Search(searchRequest);
+```
 <!-- end -->
 
 <!-- example for DOUBLE() -->
@@ -1641,6 +1842,21 @@ searchRequest.setSort(new ArrayList<Object>(){{
 }});
 searchResponse = searchApi.search(searchRequest);
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+searchRequest.Sort = new List<Object> { 
+    new SortOrder("double(data.myfloat)", SortOrder.OrderEnum.Desc) 
+};
+var searchResponse = searchApi.Search(searchRequest);
+```
+
 <!-- end -->
 
 ## Multi-value integer (MVA)
@@ -1705,6 +1921,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)
 utilsApi.sql("CREATE TABLE products(title text, product_codes multi)");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, product_codes multi)");
+```
 
 <!-- intro -->
 ##### config:
@@ -1793,8 +2017,19 @@ query.put("equals",new HashMap<String,Integer>(){{
      put("any(product_codes)",3);
 }});
 searchRequest.setQuery(query);
-searchRequest.setExpressions(expressions);
 searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+searchRequest.AttrFilter = new EqualsFilter("any(product_codes)", 3);
+var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- end -->
 
@@ -1865,6 +2100,20 @@ searchRequest.setQuery(query);
 searchRequest.setSort(new ArrayList<Object>(){{
     add(new HashMap<String,String>(){{ put("product_codes",new HashMap<String,String>(){{ put("order","asc");put("mode","min");}});}});
 }});
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("forum", query);
+searchRequest.Sort = new List<Object> { 
+    new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min) 
+};
 searchResponse = searchApi.search(searchRequest);
 ```
 
@@ -2114,6 +2363,38 @@ class SearchResponse {
 
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "first");
+doc.Add("product_codes", new List<Object> {4,2,1,3});
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+object query =  new { match_all=null };
+var searchRequest = new SearchRequest("products", query);
+var searchResponse = searchApi.Search(searchRequest);
+Console.WriteLine(searchResponse.ToString())
+```
+<!-- response C# -->
+
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=1, _score=1, _source={product_codes=[1, 2, 3, 4], title=first}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
 <!-- end -->
 
 
@@ -2178,6 +2459,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, values multi64))');
 ```java
 utilsApi.sql("CREATE TABLE products(title text, values multi64))");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, values multi64))");
+```
+
 <!-- intro -->
 ##### config:
 

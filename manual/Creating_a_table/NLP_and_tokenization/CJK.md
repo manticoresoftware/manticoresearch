@@ -62,6 +62,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -137,6 +147,16 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -214,6 +234,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
+```
 
 <!-- request CONFIG -->
 

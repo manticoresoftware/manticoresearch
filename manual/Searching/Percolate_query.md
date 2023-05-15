@@ -289,6 +289,58 @@ class SuccessResponse {
 }
 
 ```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("create table products(title text, color string) type='pq'");
+
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title bag");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", doc: doc);
+indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title shoes");
+doc.Add("filters", "color='red'");
+newdoc = new InsertDocumentRequest(index: "products", doc: doc);
+indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title bag");
+doc.Add("filters", "color IN ('blue', 'green')");
+newdoc = new InsertDocumentRequest(index: "products", doc: doc);
+indexApi.Insert(newdoc);
+```
+<!-- response C# -->
+``` clike
+{total=0, error="", warning=""}
+
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+
+```
 <!-- end -->
 
 <!-- example single -->
@@ -516,6 +568,34 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "what a nice bag" }});
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("test_pq",percolateRequest);
+
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example pq_rules -->
@@ -718,6 +798,34 @@ searchApi.percolate("test_pq",percolateRequest);
 ```
 <!-- response Java -->
 ``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "what a nice bag" }});
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("test_pq",percolateRequest);
+
+```
+<!-- response C# -->
+``` clike
 class SearchResponse {
     took: 0
     timedOut: false
@@ -1046,6 +1154,38 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","nice pair of shoes");
+doc1.Add("color","blue");
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","beautiful bag");
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("products",percolateRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example docs_1 -->
@@ -1324,6 +1464,38 @@ searchApi.percolate("products",percolateRequest);
 ```
 <!-- response Java -->
 ``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","nice pair of shoes");
+doc1.Add("color","blue");
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","beautiful bag");
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("products",percolateRequest);
+```
+<!-- response C# -->
+``` clike
 class SearchResponse {
     took: 0
     timedOut: false
@@ -1640,6 +1812,32 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+SearchRequest searchRequest = new SearchRequest("pq", query);
+SearchResponse searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=angry,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 
@@ -1880,6 +2078,39 @@ searchApi.percolate("pq",percolateRequest);
 ```
 <!-- response java -->
 ``` java
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","angry test");
+doc1.Add("gid",3);
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","filter test doc2");
+doc2.Add("gid",13);
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("pq",percolateRequest);
+```
+<!-- response C# -->
+``` clike
 class SearchResponse {
     took: 10
     timedOut: false

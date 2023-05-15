@@ -327,6 +327,30 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request C# -->
+``` clike
+var agg = new Aggregation("release_year", "release_year");
+agg.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("films", query);
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
 <!-- end -->
 
 <!-- example sort1 -->
@@ -737,6 +761,33 @@ class SearchResponse {
 }
 
 ```
+
+<!-- request C# -->
+``` clike
+var agg = new Aggregation("release_year", "release_year");
+agg.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("films", query);
+searchRequest.Limit = 0;
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
 <!-- end -->
 
 <!-- example json -->
@@ -898,6 +949,32 @@ searchResponse = searchApi.search(searchRequest);
 ```
 <!-- response Java -->
 ``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=green, doc_count=1}, {key=red, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request C# -->
+``` clike
+var agg = new Aggregation("color", "meta.color");
+agg.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("products", query);
+searchRequest.Limit = 0;
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
 class SearchResponse {
     took: 0
     timedOut: false

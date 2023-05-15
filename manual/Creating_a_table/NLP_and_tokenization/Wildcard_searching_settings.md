@@ -69,7 +69,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) min_prefix_len = \'
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_prefix_len = \'3\'');
 ```
 
@@ -79,6 +79,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_pre
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -164,7 +172,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) min_infix_len = \'3
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_infix_len = \'3\'');
 ```
 
@@ -174,6 +182,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_inf
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) min_infix_len = '3'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_infix_len = '3'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -334,7 +350,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) expand_keywords = \
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) expand_keywords = \'1\'');
 ```
 
@@ -344,6 +360,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) expand_
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) expand_keywords = '1'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) expand_keywords = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini

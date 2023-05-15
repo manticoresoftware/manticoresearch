@@ -68,6 +68,16 @@ res = await utilsApi.sql('JOIN CLUSTER posts AT \'10.12.1.35:9312\'');
 ```java
 utilsApi.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
+```
+
 <!-- end -->
 
 <!-- example joining a replication cluster 1_1 -->
@@ -153,6 +163,15 @@ res = await utilsApi.sql('JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_
 
 ```java
 utilsApi.sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes");
 ```
 <!-- end -->
 

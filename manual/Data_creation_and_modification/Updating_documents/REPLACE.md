@@ -184,6 +184,31 @@ class SuccessResponse {
 }
 
 ```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "document one");
+doc.Add("price", 10);
+InsertDocumentRequest docRequest = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+var sqlresult = indexApi.replace(docRequest);
+```
+
+<!-- response C# -->
+```clike
+class SuccessResponse {
+    index: products
+    id: 1
+    created: false
+    result: updated
+    found: null
+}
+
+```
 <!-- end -->
 
 `REPLACE` is available for both RT and PQ tables.
@@ -352,6 +377,23 @@ indexApi.bulk(body);
 
 <!-- response Java -->
 ```java
+class BulkResponse {
+    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
+<!-- request C# -->
+
+``` clike
+string body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+indexApi.Bulk(body);
+```
+
+<!-- response C# -->
+```clike
 class BulkResponse {
     items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
     error: null

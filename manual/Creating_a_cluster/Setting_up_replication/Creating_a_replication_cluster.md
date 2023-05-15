@@ -90,6 +90,17 @@ utilsApi.sql("CREATE CLUSTER posts");
 utilsApi.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path");
 utilsApi.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE CLUSTER posts");
+utilsApi.Sql("CREATE CLUSTER click_query '/var/data/click_query/' as path");
+utilsApi.Sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes");
+```
 <!-- end -->
 
 If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.

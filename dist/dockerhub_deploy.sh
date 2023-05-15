@@ -1,9 +1,5 @@
 #!/bin/bash
 
-declare -A tags
-#tags["latest"]=release
-tags["dev"]=dev
-
 for ((i = 0; i < 3; i++)); do
      echo "Trying to authorise into dockerhub"
       echo $DOCKER_PASSWORD|docker login -u$DOCKER_USER --password-stdin docker.io
@@ -20,7 +16,7 @@ if ! (docker info | grep Username) > /dev/null 2>&1; then
 fi
 
 if [ ! -n "$BUILD_TAGS" ]; then
-  BUILD_TAGS="dev"
+  BUILD_TAGS="dev dev-$( cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d" " -f3 | cut -d'"' -f2 )-$CI_COMMIT_SHORT_SHA"
 fi
 
 IFS=' ' read -r -a SPLITTED_BUILD_TAGS <<<"$BUILD_TAGS"
@@ -38,10 +34,6 @@ if [[ ! $(docker ps | grep manticore_build) ]]; then
 fi
 
 for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
-  echo "Start to build $BUILD_TAG from branch ${tags[$BUILD_TAG]}"
-
-  if [ -n ${tags[$BUILD_TAG]} ]; then
-
     for ((i = 0; i < 3; i++)); do
       echo "Started to buid manticoresearch/manticore:$BUILD_TAG"
 
@@ -56,13 +48,9 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
     docker rm -f manticore-with-extra || true
     docker create --name manticore-with-extra manticoresearch/manticore:$BUILD_TAG
     docker start manticore-with-extra
-    docker exec -e EXTRA=1 manticore-with-extra /entrypoint.sh  
+    docker exec -e EXTRA=1 manticore-with-extra /entrypoint.sh
     docker commit manticore-with-extra ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
     docker push ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
-
-  else
-    echo "Can't find branch for tag $BUILD_TAG"
-  fi
 done
 
 echo "Done"

@@ -7940,23 +7940,21 @@ RowidIterator_i * CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( CSphVector<
 	ToColumnarFilters ( dFilters, dColumnarFilters, dFilterMap, tSchema, eCollation, sWarning );
 
 	// remove disabled analyzers
-	int iRemoved = 0;
-	for ( size_t i = 0; i < dFilterMap.size(); )
+	std::vector<int> dToDelete;
+	for ( size_t i = 0; i < dFilterMap.size(); i++ )
 	{
-		bool bAnalyzer = dSIInfo[i].m_eType==SecondaryIndexType_e::ANALYZER;
-		bool bRowIdFilter = dFilterMap[i]!=-1 && dFilters[dFilterMap[i]].m_sAttrName=="@rowid";
-		if ( !bAnalyzer && !bRowIdFilter )
-		{
-			int iColumnarFilter = dFilterMap[i];
-			dFilterMap.erase ( dFilterMap.begin()+i );
-			iRemoved++;
+		if ( dFilterMap[i]==-1 )
+			continue;
 
-			if ( iColumnarFilter!=-1 )
-				dColumnarFilters.erase ( dColumnarFilters.begin() + ( iColumnarFilter-iRemoved+1 ) );
+		if ( dSIInfo[i].m_eType!=SecondaryIndexType_e::ANALYZER && dFilters[i].m_sAttrName!="@rowid" )
+		{
+			dToDelete.push_back ( dFilterMap[i] );
+			dFilterMap[i] = -1;
 		}
-		else
-			i++;
 	}
+
+	for ( int i = (int)dToDelete.size()-1; i>=0; i-- )
+		dColumnarFilters.erase ( dColumnarFilters.begin() + dToDelete[i] );
 
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return nullptr;

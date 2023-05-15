@@ -20409,7 +20409,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 		if ( sLogFormat=="sphinxql" )
 			g_eLogFormat = LOG_FORMAT_SPHINXQL;
-		else if ( sLogFormat=="plain" )
+		else if ( sLogFormat!="plain" )
 		{
 			StrVec_t dParams;
 			sphSplit ( dParams, sLogFormat.cstr() );

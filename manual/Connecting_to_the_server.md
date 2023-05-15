@@ -52,11 +52,11 @@ utilsApi = manticoresearch.UtilsApi(client)
 <!-- request Javascript -->
 ```javascript
 var Manticoresearch = require('manticoresearch');
-    var client= new Manticoresearch.ApiClient()
-    client.basePath="http://127.0.0.1:9308";
-    indexApi = new Manticoresearch.IndexApi(client);
-    searchApi = new Manticoresearch.SearchApi(client);
-    utilsApi = new Manticoresearch.UtilsApi(client);
+var client= new Manticoresearch.ApiClient()
+client.basePath="http://127.0.0.1:9308";
+indexApi = new Manticoresearch.IndexApi(client);
+searchApi = new Manticoresearch.SearchApi(client);
+utilsApi = new Manticoresearch.UtilsApi(client);
 ```
 
 <!-- intro -->
@@ -74,10 +74,25 @@ import com.manticoresearch.client.api.SearchApi;
 ApiClient client = Configuration.getDefaultApiClient();
 client.setBasePath("http://127.0.0.1:9308");
 
-    IndexApi indexApi = new IndexApi(client);
-    SearchApi searchApi = new UtilsApi(client);
-    UtilsApi utilsApi = new UtilsApi(client);
+IndexApi indexApi = new IndexApi(client);
+SearchApi searchApi = new UtilsApi(client);
+UtilsApi utilsApi = new UtilsApi(client);
 ```
+
+<!-- intro -->
+##### C#
+<!-- request C# -->
+```clike
+using ManticoreSearch.Client;
+using ManticoreSearch.Api;
+using ManticoreSearch.Model;
+
+string basePath = "http://127.0.0.1:9308";
+IndexApi indexApi = new IndexApi(basePath);
+SearchApi searchApi = new UtilsApi(basePath);
+UtilsApi utilsApi = new UtilsApi(basePath);
+```
+
 <!-- intro -->
 ##### Connect via Docker
 If you are familiar with Docker, you can use Manticore's [official Docker image](https://github.com/manticoresoftware/docker) to run Manticore. Here is how you can connect to Manticore's docker via MySQL:

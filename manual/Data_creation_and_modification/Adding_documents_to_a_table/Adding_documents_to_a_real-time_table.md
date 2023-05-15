@@ -226,6 +226,30 @@ sqlresult = indexApi.insert(newdoc);
 
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Crossbody Bag with Tassel");
+doc.Add("price", 19.85);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Crossbody Bag with Tassel");
+newdoc = new InsertDocumentRequest(index: "products", id: 2, doc: doc);
+sqlresult = indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Yellow bag");
+newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+sqlresult = indexApi.Insert(newdoc);
+
+```
+
 <!-- end -->
 
 ## Auto schema
@@ -449,6 +473,17 @@ newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Yellow bag");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+```
 <!-- end -->
 
 <!-- example bulk_insert -->
@@ -697,6 +732,18 @@ String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";                                 
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
 <!-- end -->
 <!-- example MVA_insert -->
 ## Inserting multi-value attributes (MVA) values
@@ -769,6 +816,19 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
  }};
 newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Yellow bag");
+doc.Add("sizes", new List<Object> {40,41,42,43});
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
 ```
 <!-- end -->
 
@@ -861,6 +921,22 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
  }};
 newdoc.index("products").id(0L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+meta.Add("size", 41);
+meta.Add("color", "red");
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "Yellow bag");
+doc.Add("meta", meta);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
 ```
 
 <!-- end -->

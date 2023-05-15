@@ -104,6 +104,20 @@ utilsApi.sql("TRUNCATE TABLE products");
 {total=0, error=, warning=}
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("TRUNCATE TABLE products");
+```
+
+<!-- response C# -->
+```clike
+{total=0, error="", warning=""}
+```
+
 <!-- end -->
 
 One of the possible uses of this command is before [attaching a table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md).
@@ -202,6 +216,20 @@ utilsApi.sql("TRUNCATE TABLE products WITH RECONFIGURE");
 <!-- response Java -->
 ```java
 {total=0, error=, warning=}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("TRUNCATE TABLE products WITH RECONFIGURE");
+```
+
+<!-- response C# -->
+```clike
+{total=0, error="", warning=""}
 ```
 <!-- end -->
 <!-- proofread -->

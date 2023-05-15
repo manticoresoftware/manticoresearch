@@ -77,6 +77,13 @@ utilsApi.sql("CREATE TABLE forum(title text, price float)");
 ```
 
 <!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE forum(title text, price float)");
+```
+
+<!-- intro -->
 ##### Creating a real-time table via a configuration file:
 <!-- request CONFIG -->
 

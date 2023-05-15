@@ -159,6 +159,13 @@ res = await utilsApi.sql('CREATE TABLE products(title text, content text stored 
 utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
 ```
 
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
+```
+
 <!-- request CONFIG -->
 
 ```ini

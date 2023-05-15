@@ -93,7 +93,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'');
 ```
 
@@ -103,6 +103,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -166,7 +174,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fie
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'');
 ```
 
@@ -176,6 +184,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -244,7 +260,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = 
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'');
 ```
 
@@ -254,6 +270,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_ste
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -321,7 +345,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words =
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'');
 ```
 
@@ -331,6 +355,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_e
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
+```
+
 <!-- request CONFIG -->
 
 ```ini

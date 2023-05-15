@@ -546,6 +546,114 @@ utilsApi.sql("SHOW THREADS");
 }
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```java
+utilsApi.Sql("SHOW THREADS");
+```
+<!-- response C# -->
+
+```clike
+
+{
+  columns=[
+    {
+      Tid={
+        type=string
+      }
+    },
+    {
+      Name={
+        type=string
+      }
+    },
+    {
+      Proto={
+        type=string
+      }
+    },
+    {
+      State={
+        type=string
+      }
+    },
+    {
+      Host={
+        type=string
+      }
+    },
+    {
+      ConnID={
+        type=string
+      }
+    },
+    {
+      Time={
+        type=string
+      }
+    },
+    {
+      Work time={
+        type=string
+      }
+    },
+    {
+      Work time CPU={
+        type=string
+      }
+    },
+    {
+      Thd efficiency={
+        type=string
+      }
+    },
+    {
+      Jobs done={
+        type=string
+      }
+    },
+    {
+      Last job took={
+        type=string
+      }
+    },
+    {
+      In idle={
+        type=string
+      }
+    },
+    {
+      Info={
+        type=string
+      }
+    }
+  ],
+  data=[
+    {
+      Tid=6844,
+      Name=work_3,
+      Proto=http,
+      State=query,
+      Host=127.0.0.1:51752,
+      ConnID=91,
+      Time=3245,
+      Work time=2h,
+      Work time CPU=0us,
+      Thd efficiency=0.00%,
+      Jobs done=1073587960,
+      Last job took=16ms,
+      In idle=No (working),
+      Info=show_threads
+    }
+  ],
+  total=0,
+  error="",
+  warning=""
+}
+```
 
 <!-- end -->
 
@@ -1085,5 +1193,115 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
   warning=
 }
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("SHOW THREADS OPTION columns=30");
+```
+<!-- response C# -->
+
+```clike
+
+{
+  columns=[
+    {
+      Tid={
+        type=string
+      }
+    },
+    {
+      Name={
+        type=string
+      }
+    },
+    {
+      Proto={
+        type=string
+      }
+    },
+    {
+      State={
+        type=string
+      }
+    },
+    {
+      Host={
+        type=string
+      }
+    },
+    {
+      ConnID={
+        type=string
+      }
+    },
+    {
+      Time={
+        type=string
+      }
+    },
+    {
+      Work time={
+        type=string
+      }
+    },
+    {
+      Work time CPU={
+        type=string
+      }
+    },
+    {
+      Thd efficiency={
+        type=string
+      }
+    },
+    {
+      Jobs done={
+        type=string
+      }
+    },
+    {
+      Last job took={
+        type=string
+      }
+    },
+    {
+      In idle={
+        type=string
+      }
+    },
+    {
+      Info={
+        type=string
+      }
+    }
+  ],
+  data=[
+    {
+      Tid=6844,
+      Name=work_3,
+      Proto=http,
+      State=query,
+      Host=127.0.0.1:51752,
+      ConnID=91,
+      Time=3245,
+      Work time=2h,
+      Work time CPU=0us,
+      Thd efficiency=0.00%,
+      Jobs done=1073587960,
+      Last job took=16ms,
+      In idle=No (working),
+      Info=show_threads
+    }
+  ],
+  total=0,
+  error="",
+  warning=""
+}
+```
+
 <!-- end -->
 <!-- proofread -->

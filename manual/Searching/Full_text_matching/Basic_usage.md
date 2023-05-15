@@ -344,5 +344,33 @@ class SearchResponse {
     warning: null
 }
 ```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+object query =  new { query_string="@comment_text \"find joe fast \"/2" };
+var searchRequest = new SearchRequest("hn_small", query);
+searchRequest.Source = new List<string> {"story_author", "comment_author"};
+searchRequest.Limit = 1;
+SearchResponse searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 1
+    timedOut: false
+    aggregations: null
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1864
+        totalRelation: eq
+        hits: [{_id=807160, _score=2566, _source={story_author=rbanffy, comment_author=runjake}}]
+    }
+    profile: null
+    warning: null
+}
+```
 <!-- end -->
 <!-- proofread -->

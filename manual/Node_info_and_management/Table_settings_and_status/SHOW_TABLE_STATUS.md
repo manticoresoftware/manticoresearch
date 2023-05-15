@@ -220,5 +220,42 @@ utilsApi.sql("SHOW TABLE statistic STATUS");
   total=0,
   warning= }
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("SHOW TABLE statistic STATUS");
+
+```
+<!-- response C# -->
+```clike
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+   { Key=index_type, Value=rt}
+    { Key=indexed_documents, Value=3}
+    { Key=indexed_bytes, Value=0}
+    { Key=ram_bytes, Value=6678}
+    { Key=disk_bytes, Value=611}
+    { Key=ram_chunk, Value=990}
+    { Key=ram_chunk_segments_count, Value=2}
+    { Key=mem_limit, Value=134217728}
+    { Key=ram_bytes_retired, Value=0}
+    { Key=tid, Value=15}
+    { Key=query_time_1min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=query_time_5min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=query_time_15min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=query_time_total, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=found_rows_1min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=found_rows_5min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=found_rows_15min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}],
+  error="" ,
+  total=0,
+  warning="" }
+```
 <!-- end -->
 <!-- proofread -->

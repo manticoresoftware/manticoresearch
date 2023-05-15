@@ -64,5 +64,14 @@ res = await utilsApi.sql('DELETE CLUSTER click_query');
 ```java
 utilsApi.sql("DELETE CLUSTER click_query");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("DELETE CLUSTER click_query");
+```
 <!-- end -->
 <!-- proofread -->

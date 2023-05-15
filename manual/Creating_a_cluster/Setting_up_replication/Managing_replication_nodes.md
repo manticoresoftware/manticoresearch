@@ -68,6 +68,15 @@ res = await utilsApi.sql('ALTER CLUSTER posts UPDATE nodes');
 ```java
 utilsApi.sql("ALTER CLUSTER posts UPDATE nodes");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("ALTER CLUSTER posts UPDATE nodes");
+```
 <!-- end -->
 
 

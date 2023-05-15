@@ -54,7 +54,7 @@ utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' loca
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'');
 ```
 
@@ -63,6 +63,13 @@ res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'i
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
 ```
 
 <!-- end -->

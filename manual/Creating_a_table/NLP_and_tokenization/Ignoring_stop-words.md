@@ -63,7 +63,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'/usr/
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'');
 ```
 
@@ -73,6 +73,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -186,7 +194,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'it\''
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'it\'');
 ```
 
@@ -196,6 +204,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'it'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = 'it'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -255,7 +271,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en, i
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'');
 ```
 
@@ -265,6 +281,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -331,7 +355,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' 
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'');
 ```
 
@@ -341,6 +365,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -411,7 +443,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' 
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'');
 ```
 
@@ -421,6 +453,14 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
 ```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
+```
+
 <!-- request CONFIG -->
 
 ```ini

@@ -99,6 +99,21 @@ sqlresult = utilsApi.sql("DROP TABLE products");
 ```java
 {total=0, error=, warning=}
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+sqlresult = utilsApi.Sql("DROP TABLE products");
+```
+
+<!-- response C# -->
+```clike
+{total=0, error="", warning=""}
+```
+
 <!-- end -->
 
 Here is the syntax of the `DROP TABLE` statement in SQL:
@@ -182,6 +197,20 @@ sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
 <!-- response Java -->
 ```java
 {total=0, error=, warning=}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+sqlresult = utilsApi.Sql("DROP TABLE IF EXISTS products");
+```
+
+<!-- response C# -->
+```clike
+{total=0, error="", warning=""}
 ```
 
 <!-- end -->

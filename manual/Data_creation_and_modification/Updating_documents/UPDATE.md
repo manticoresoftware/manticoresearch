@@ -119,6 +119,27 @@ class UpdateResponse {
 }
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("price", 10);
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
+indexApi.Update(updateRequest);
+```
+
+<!-- response C# -->
+```clike
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
 <!-- end -->
 
 <!-- example update multiple attributes -->
@@ -254,6 +275,31 @@ indexApi.update(updateRequest);
 
 <!-- response Java -->
 ```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("price", 10);
+doc.Add("coeff", 3465.23);
+doc.Add("tags1", new List<int> {3,6,4});
+doc.Add("tags2", new List<int> {});
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
+indexApi.Update(updateRequest);
+
+```
+
+<!-- response C# -->
+```clike
 class UpdateResponse {
     index: products
     updated: null
@@ -408,6 +454,28 @@ indexApi.update(updateRequest);
 
 <!-- response Java -->
 ```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("meta.tags[0]", 100);
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
+indexApi.Update(updateRequest);
+
+```
+
+<!-- response C# -->
+```clike
 class UpdateResponse {
     index: products
     updated: null
@@ -593,6 +661,45 @@ class UpdateResponse {
 }
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+meta.Add("tags", new List<int> {1,2,3});
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title", "title");
+doc.Add("meta", meta);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 100, doc: doc);
+indexApi.Insert(newdoc);
+
+meta = new Dictionary<string, Object>();
+meta.Add("tags", new List<string> {"one","two","three"}); 
+doc = new Dictionary<string, Object>(); 
+doc.Add("meta", meta);
+UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 100, doc: doc);
+indexApi.Update(updatedoc);
+```
+
+<!-- response C# -->
+```clike
+class SuccessResponse {
+    index: products
+    id: 100
+    created: true
+    result: created
+    found: null
+}
+
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 100
+    result: updated
+}
+```
+
 <!-- end -->
 
 <!-- example cluster update -->
@@ -679,6 +786,27 @@ indexApi.update(updatedoc);
 
 <!-- response Java -->
 ```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("enabled", 0);
+UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", cluster: "weekly", id: 1, doc: doc);
+indexApi.Update(updatedoc);
+```
+
+<!-- response C# -->
+```clike
 class UpdateResponse {
     index: products
     updated: null
@@ -809,6 +937,27 @@ indexApi.update(updatedoc);
 
 <!-- response Java -->
 ```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("tags1", new List<int> {});
+UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
+indexApi.Update(updatedoc);
+```
+
+<!-- response C# -->
+```clike
 class UpdateResponse {
     index: products
     updated: null
@@ -1137,6 +1286,25 @@ class BulkResponse {
 }
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+string   body = "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 1000 }, \"query\": { \"range\": { \"price\": { \"gte\": 1000 } } } }} "+"\n"+
+    "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 0 }, \"query\": { \"range\": { \"price\": { \"lt\": 1000 } } } } }"+"\n";         
+indexApi.Bulk(body);
+```
+
+<!-- response C# -->
+```clike
+class BulkResponse {
+    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
 <!-- end -->
 
 
@@ -1215,6 +1383,13 @@ res = await utilsApi.sql('create table products(title text, price float) attr_up
 <!-- request Java -->
 ```java
 utilsApi.sql("create table products(title text, price float) attr_update_reserve = '1M'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("create table products(title text, price float) attr_update_reserve = '1M'");
 ```
 <!-- request CONFIG -->
 

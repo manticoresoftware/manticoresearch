@@ -190,6 +190,31 @@ class DeleteResponse {
     result: null
 }
 ```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+match.Add("*", "dummy");
+Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+query.Add("match", match);
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest(index: "products", query: query);
+indexApi.Delete(deleteRequest);
+
+```
+
+<!-- response C# -->
+```clike
+class DeleteResponse {
+    index: products
+    deleted: 2
+    id: null
+    result: null
+}
+```
 <!-- end -->
 
 <!-- example delete 3 -->
@@ -299,6 +324,26 @@ res = await indexApi.delete({"index" : "products", "id" : 1});
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
 deleteRequest.index("products").setId(1L);
 indexApi.delete(deleteRequest);
+
+```
+
+<!-- response Java -->
+```java
+class DeleteResponse {
+    index: products
+    _id: 1
+    result: deleted
+}
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest(index: "products", id: 1);
+indexApi.Delete(deleteRequest);
 
 ```
 
@@ -429,6 +474,26 @@ indexApi.delete(deleteRequest);
 
 <!-- response Java -->
 ```java
+class DeleteResponse {
+    index: products
+    _id: 100
+    result: deleted
+}
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest(index: "products", cluster: "cluster", id: 100);
+indexApi.Delete(deleteRequest);
+
+```
+
+<!-- response C# -->
+```clike
 class DeleteResponse {
     index: products
     _id: 100

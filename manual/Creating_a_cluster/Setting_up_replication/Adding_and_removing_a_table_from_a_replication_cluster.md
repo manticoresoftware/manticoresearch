@@ -74,6 +74,15 @@ res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
 utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 ```
 
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
+```
+
 <!-- end -->
 
 <!-- example adding and removing a table from a replication cluster 2 -->
@@ -146,6 +155,15 @@ res = await utilsApi.sql('ALTER CLUSTER posts DROP weekly_index');
 
 ```java
 utilsApi.sql("ALTER CLUSTER posts DROP weekly_index");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- end -->

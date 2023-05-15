@@ -155,6 +155,28 @@ SearchApi searchApi = new UtilsApi(client);
 UtilsApi utilsApi = new UtilsApi(client);
 ```
 
+<!-- intro -->
+##### Connect via [.Net client](https://github.com/manticoresoftware/manticoresearch-net):
+
+<!-- request C# -->
+```clike
+// https://github.com/manticoresoftware/manticoresearch-net
+using System.Net.Http;
+...
+using ManticoreSearch.Client;
+using ManticoreSearch.Api;
+using ManticoreSearch.Model;
+...
+config = new Configuration();
+config.BasePath = "http://localhost:9308";
+httpClient = new HttpClient();
+httpClientHandler = new HttpClientHandler();
+...
+var indexApi = new IndexApi(httpClient, config, httpClientHandler);
+var searchApi = new SearchApi(httpClient, config, httpClientHandler);
+var utilsApi = new UtilsApi(httpClient, config, httpClientHandler);
+```
+
 <!-- end -->
 
 <!-- example create -->
@@ -234,6 +256,16 @@ res = await utilsApi.sql('create table products(title text, price float) morphol
 
 ```java
 utilsApi.sql("create table products(title text, price float) morphology='stem_en'");
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("create table products(title text, price float) morphology='stem_en'");
 
 ```
 <!-- end -->
@@ -386,8 +418,32 @@ doc = new HashMap<String,Object>(){{
 newdoc.index("products").setDoc(doc);
 indexApi.insert(newdoc);
 ```
-<!-- end -->
 
+<!-- intro -->
+##### java:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("title","Crossbody Bag with Tassel");
+doc.Add("price",19.85);
+InsertDocumentRequest insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
+sqlresult = indexApi.Insert(insertDocumentRequest);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("title","microfiber sheet set");
+doc.Add("price",19.99);
+insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
+sqlresult = indexApi.Insert(insertDocumentRequest);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("title","Pet Hair Remover Glove");
+doc.Add("price",7.99);
+insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
+sqlresult = indexApi.Insert(insertDocumentRequest);
+```
+<!-- end -->
 
 <!-- example search -->
 ## Search
@@ -568,6 +624,35 @@ class SearchResponse {
 
 
 ```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+object query =  new { query_string="@title remove hair" };
+var searchRequest = new SearchRequest("products", query);
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"title"};
+searchRequest.Highlight = highlight;
+searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 103
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1513686608316989452, _score=1, _source={price=7.99, title=Pet Hair Remover Glove}, highlight={title=[Pet <b>Hair Remover</b> Glove]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+
+```
 <!-- end -->
 
 <!-- example update -->
@@ -662,6 +747,17 @@ doc = new HashMap<String,Object >(){{
 }};
 updateRequest.index("products").id(1513686608316989452L).setDoc(doc);
 indexApi.update(updateRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
+doc.Add("price", 18.5);
+UpdateDocumentRequest updateDocumentRequest = new UpdateDocumentRequest(index: "products", id: 1513686608316989452L, doc: doc);
+indexApi.Update(updateDocumentRequest);
 ```
 <!-- end -->
 
@@ -761,13 +857,27 @@ res = await indexApi.delete({"index" : "products", "query": {"range":{"price":{"
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
 query = new HashMap<String,Object>();
 query.put("range",new HashMap<String,Object>(){{
-    put("range",new HashMap<String,Object>(){{
+    put("price",new HashMap<String,Object>(){{
         put("lte",10);
     }});
 }});
 deleteRequest.index("products").setQuery(query);
 indexApi.delete(deleteRequest);
 
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+Dictionary<string, Object> price = new Dictionary<string, Object>();
+price.Add("lte", 10);
+Dictionary<string, Object> range = new Dictionary<string, Object>();
+range.Add("price", price);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", range: range);
+indexApi.Delete(deleteDocumentRequest);
 ```
 <!-- end -->
 <!-- proofread -->

@@ -103,6 +103,15 @@ res = await utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq
 ```java
 utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
 <!-- request CONFIG -->
 ##### Creating a percolate table via config:
 

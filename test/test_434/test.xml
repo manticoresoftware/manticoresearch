@@ -38,6 +38,13 @@ index test
 	path				= <data_path/>/test1
 	columnar_attrs 		= id, status, category, kind, date, flt, flt1
 }
+
+index test2
+{
+	source				= test1
+	path				= <data_path/>/test2
+	columnar_attrs 		= id, flt, date
+}
 </config>
 
 <db_create>
@@ -122,6 +129,8 @@ select min(date) from test;
 select max(date) from test;
 select sum(date) from test;
 
+<!-- regression for a crash while spawning ColumnarScan -->
+select id,kind from test2 where flt > 0 and category &lt;= 1 and kind=13 group by date;
 
 </sphinxql></queries>
 

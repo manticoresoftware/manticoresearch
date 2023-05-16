@@ -373,9 +373,9 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"index" : "test", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"index" : "test", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
-indexApi.insert({"index" : "test", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}})
+indexApi.insert({"index" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+indexApi.insert({"index" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
+indexApi.insert({"index" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -383,9 +383,9 @@ indexApi.insert({"index" : "test", "doc" : {"title" : "Pet Hair Remover Glove", 
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"index" : "test", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"index" : "test", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}});
-res = await indexApi.insert({"index" : "test", doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}});
+res = await indexApi.insert({"index" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
+res = await indexApi.insert({"index" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}});
+res = await indexApi.insert({"index" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}});
 ```
 
 <!-- intro -->
@@ -557,7 +557,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"myindex","query":{"query_string":"@title remove hair"},"highlight":{"fields":["title"]}})
+searchApi.search({"index":"products","query":{"query_string":"@title remove hair"},"highlight":{"fields":["title"]}})
 ```
 <!-- response Python -->
 ``` python
@@ -576,7 +576,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"myindex","query":{"query_string":"@title remove hair"}"highlight":{"fields":["title"]}});
+res = await searchApi.search({"index":"products","query":{"query_string":"@title remove hair"}"highlight":{"fields":["title"]}});
 ```
 <!-- response javascript -->
 ```javascript

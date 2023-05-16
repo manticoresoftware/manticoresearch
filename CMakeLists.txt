@@ -54,14 +54,20 @@ if (CXX_COMPILER_ID STREQUAL GNU AND CXX_COMPILER_VERSION VERSION_LESS 4.7.2)
 	message ( FATAL_ERROR "Gcc version error. Minspec is 4.7.2" )
 endif ()
 
-# On Macos plugin_dir should be set to /opt/homebrew/usr/local/lib/manticore (or with another homebrew prefix)
+# On Macos with HOMEBREW plugin_dir should be set to /opt/homebrew/lib/manticore (or with another homebrew prefix)
 if(DEFINED HOMEBREW_PREFIX)
-	set(HARDCODED_PLUGIN_DIR "${HOMEBREW_PREFIX}/usr/local/lib/manticore")
+	set(HARDCODED_PLUGIN_DIR "${HOMEBREW_PREFIX}/lib/manticore")
 # on Windows, plugin_dir should be relative usr/local/lib/manticore by default
 elseif (WIN32)
 	set(HARDCODED_PLUGIN_DIR "usr/local/lib/manticore")
 # on Linux - absolute /usr/local/lib/manticore
-else ()
+elseif (APPLE)
+	if (APPLE_ARM)
+		set(HARDCODED_PLUGIN_DIR "/opt/homebrew/")
+	else()
+		set(HARDCODED_PLUGIN_DIR "/usr/local/")
+	endif()
+else()
        set(HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore")
 endif()
 

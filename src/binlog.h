@@ -53,6 +53,7 @@ namespace Binlog {
 	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags );
 	void Deinit ();
 	bool IsActive();
+	bool MockDisabled ( bool bNewVal );
 
 	bool IsFlushEnabled();
 	void Flush();

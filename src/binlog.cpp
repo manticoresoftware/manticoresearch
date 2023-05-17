@@ -116,6 +116,7 @@ public:
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
 
 	bool	IsActive () const { return !m_bDisabled; }
+	bool 	MockDisabled ( bool bNewVal );
 	void	CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode );
 
 	bool	IsFlushingEnabled() const;
@@ -1246,6 +1247,11 @@ void Binlog_c::CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode )
 	}
 }
 
+bool Binlog_c::MockDisabled ( bool bNewVal )
+{
+	return std::exchange ( m_bDisabled, bNewVal );
+}
+
 bool Binlog_c::CheckCrc ( const char * sOp, const CSphString & sIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader )
 {
 	return !tReader.GetErrorFlag() && tReader.CheckCrc ( sOp, sIndex.cstr(), iTID, iTxnPos );
@@ -1428,6 +1434,13 @@ bool Binlog::IsActive()
 	if (!g_pRtBinlog)
 		return false;
 	return g_pRtBinlog->IsActive();
+}
+
+bool Binlog::MockDisabled ( bool bNewVal )
+{
+	if ( g_pRtBinlog )
+		return g_pRtBinlog->MockDisabled ( bNewVal );
+	return bNewVal;
 }
 
 bool Binlog::Commit ( Blop_e eOp, int64_t * pTID, const char * szIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver )

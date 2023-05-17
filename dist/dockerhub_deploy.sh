@@ -49,6 +49,7 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
     docker create --name manticore-with-extra manticoresearch/manticore:$BUILD_TAG
     docker start manticore-with-extra
     docker exec -e EXTRA=1 manticore-with-extra /entrypoint.sh
+    docker exec manticore-with-extra bash -c 'source /etc/manticoresearch/manticore.conf > /tmp/m.conf && mv /tmp/m.conf /etc/manticoresearch/manticore.conf'
     docker commit manticore-with-extra ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
     docker push ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
 done

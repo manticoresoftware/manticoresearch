@@ -1207,7 +1207,7 @@ DEFINE_RENDER ( RPLRep_t )
 
 
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, CSphString & sError )
+static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_buf_t & tQueries, wsrep_t * pProvider, CommitMonitor_c & tMonitor, bool bUpdate, bool bSharedKeys, CSphString & sError )
 {
 	TRACE_CONN ( "conn", "Replicate" );
 	assert ( pProvider );
@@ -1224,7 +1224,7 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 	tHnd.trx_id = iConnId;
 	tHnd.opaque = nullptr;
 
-	wsrep_status_t tRes = pProvider->append_key ( pProvider, &tHnd, pKeys, iKeysCount, WSREP_KEY_EXCLUSIVE, false );
+	wsrep_status_t tRes = pProvider->append_key ( pProvider, &tHnd, pKeys, iKeysCount, ( bSharedKeys ? WSREP_KEY_SHARED : WSREP_KEY_EXCLUSIVE ), false );
 	bool bOk = CheckResult ( tRes, tLogMeta, "append_key", sError );
 
 	if ( bOk )
@@ -1977,7 +1977,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	END_CONN ( "conn" );
 
 	if ( !bTOI )
-		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, pCluster->m_pProvider, tMonitor, bUpdate, sError );
+		return Replicate ( iKeysCount, dKeys.Begin(), tQueries, pCluster->m_pProvider, tMonitor, bUpdate, tAcc.IsReplace(), sError );
 	else
 		return ReplicateTOI ( iKeysCount, dKeys.Begin(), tQueries, pCluster->m_pProvider, tMonitor, pDesc, sError );
 }

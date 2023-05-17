@@ -1803,6 +1803,7 @@ public:
 		TRACE_CONN ( "conn", "HttpHandler_JsonUpdate_c::Process" );
 		SqlStmt_t tStmt;
 		tStmt.m_bJson = true;
+		tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
 		tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
 
 		DocID_t tDocId = 0;

@@ -3051,7 +3051,10 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 
 static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
-	tBuf << " /*" << q.m_sRawQuery << " */";
+	if ( q.m_sRawQuery.IsEmpty() )
+		tBuf << " /*" << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*" << q.m_sQuery << " */";
+	else
+		tBuf << " /*" << q.m_sRawQuery << " */";
 }
 
 

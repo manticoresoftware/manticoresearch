@@ -133,6 +133,7 @@ public:
 	int				GetPackedLen() const;
 
 	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
+	bool			IsReplace () const { return m_bReplace; }
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)

@@ -62,3 +62,4 @@ bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeT
 
 void DetermineNodeItemStackSize();
 void DetermineFilterItemStackSize();
+void DetermineMatchStackSize();

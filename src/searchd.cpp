@@ -20364,6 +20364,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	ScheduleMallocTrim();
 
+	DetermineNodeItemStackSize();
+	DetermineFilterItemStackSize();
+	DetermineMatchStackSize();
+
 	// initialize timeouts since hook will use them
 	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
 	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 3 * 1000000 ) ); // min 3S
@@ -20395,8 +20399,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// startup
 	///////////
 
-	DetermineNodeItemStackSize();
-	DetermineFilterItemStackSize();
 //	ModifyDaemonPaths ( hSearchd );
 //	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 

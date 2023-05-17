@@ -867,6 +867,9 @@ const BYTE *	SkipQuoted ( const BYTE * p );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );
 
+// stack for evaluating ft nodes
+void			SetExtNodeStackSize ( int iDelta, int iExtra );
+
 // returns 0: query can't be run at all (even hardlimit stack will be exceeded), sError is set.
 // returns -1: query might be run on current frame
 // other positive: necessary free size of stack

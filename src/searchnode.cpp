@@ -138,10 +138,7 @@ static inline bool WarmupDocs ( const ExtDoc_t * & pDocL, const ExtDoc_t * pDocR
 		pLeft->HintRowID ( pDocR->m_tRowID );
 
 	pDocL = pLeft->GetDocsChunk();
-	if ( !HasDocs(pDocL) )
-		return false;
-
-	return true;
+	return HasDocs(pDocL);
 }
 
 //////////////////////////////////////////////////////////////////////////

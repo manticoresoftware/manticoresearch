@@ -1,4 +1,4 @@
-# ---------- macos ----------
+# ---------- homebrew ----------
 
 message ( STATUS "Installing via Homebrew" )
 
@@ -11,13 +11,14 @@ if (NOT installed)
 	set ( CMAKE_INSTALL_PREFIX "$ENV{HOMEBREW_PREFIX}" )
 	include ( GNUInstallDirs )
 	set ( CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX_ORIGINAL}" )
+
 	set ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 
 	set ( CMAKE_INSTALL_FULL_SYSCONFDIR "$ENV{HOMEBREW_PREFIX}/etc" )
 	set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR "$ENV{HOMEBREW_PREFIX}/var" )
 	set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "$ENV{HOMEBREW_PREFIX}/var/run" )
 
-	set ( LOCALDATADIR "$ENV{HOMEBREW_PREFIX}/var/manticore/data" )
+	set ( LOCALDATADIR "$ENV{HOMEBREW_PREFIX}/var/manticore" )
 	set ( SPLIT_SYMBOLS 1 )
 
 	# configure specific stuff

@@ -45,11 +45,28 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
       fi
     done
 
+    # CLT kit image to run tests based on official image
+    echo -e "common { \n\
+        plugin_dir = /usr/local/lib/manticore\n\
+        lemmatizer_base = /usr/share/manticore/morph/\n\
+    }\n\
+    searchd {\n\
+        listen = 9306:mysql41\n\
+        listen = /var/run/mysqld/mysqld.sock:mysql41\n\
+        listen = 9312\n\
+        listen = 9308:http\n\
+        log = /var/log/manticore/searchd.log\n\
+        query_log = /var/log/manticore/query.log\n\
+        pid_file = /var/run/manticore/searchd.pid\n\
+        data_dir = /var/lib/manticore\n\
+        query_log_format = sphinxql\n\
+        # buddy_path = manticore-executor-dev /workdir/src/main.php\n\
+    }\n" > manticore.conf
     docker rm -f manticore-with-extra || true
     docker create --name manticore-with-extra manticoresearch/manticore:$BUILD_TAG
     docker start manticore-with-extra
     docker exec -e EXTRA=1 manticore-with-extra /entrypoint.sh
-    docker exec manticore-with-extra bash -c 'source /etc/manticoresearch/manticore.conf > /tmp/m.conf && mv /tmp/m.conf /etc/manticoresearch/manticore.conf'
+    docker cp manticore.conf manticore-with-extra:/etc/manticoresearch/manticore.conf
     docker commit manticore-with-extra ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
     docker push ghcr.io/manticoresoftware/manticoresearch:clt-$BUILD_TAG
 done

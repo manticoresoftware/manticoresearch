@@ -356,11 +356,15 @@ bool CSphTokenizerSettings::Load ( const FilenameBuilder_i* pFilenameBuilder, co
 
 	m_sCaseFolding = String ( tNode.ChildByName ( "case_folding" ) );
 	m_iMinWordLen = (int)Int ( tNode.ChildByName ( "min_word_len" ), 1 );
+
 	auto tSynonymsNode = tNode.ChildByName ( "synonyms" );
-	if ( !IsNullNode ( tSynonymsNode ) )
+	tEmbeddedFiles.m_bEmbeddedSynonyms = !IsNullNode ( tSynonymsNode );
+	if ( tEmbeddedFiles.m_bEmbeddedSynonyms )
+	{
 		Bson_c ( tSynonymsNode ).ForEach ( [&tEmbeddedFiles] ( const NodeHandle_t& tNode ) {
 			tEmbeddedFiles.m_dSynonyms.Add ( String (tNode));
 		} );
+	}
 
 	m_sSynonymsFile = String ( tNode.ChildByName ( "synonyms_file" ) );
 	if ( !m_sSynonymsFile.IsEmpty() )

@@ -987,29 +987,11 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 {
 	tStmt.m_eStmt = bReplace ? STMT_REPLACE : STMT_INSERT;
 
-	const char * sColName = nullptr;
-	StringBuilder_c tTmpName;
-
 	if ( tSource )
 	{
 		for ( const auto & tItem : tSource )
 		{
-			sColName = tItem.Name();
-
-			// replace internal of elastic and does not support fields with underscore
-			// any '@name' fields
-			// 'ecs' or 'ecs.version' fields
-			if ( bCompat )
-			{
-				if ( sColName[0]=='@' )
-				{
-					tTmpName.Clear();
-					tTmpName.Sprintf ( "_%s", sColName + 1 );
-					sColName = tTmpName.cstr();
-				}
-			}
-
-			tStmt.m_dInsertSchema.Add ( sColName );
+			tStmt.m_dInsertSchema.Add ( tItem.Name() );
 			tStmt.m_dInsertSchema.Last().ToLower();
 
 			SqlInsert_t & tNewValue = tStmt.m_dInsertValues.Add();
@@ -1814,7 +1796,6 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		pCompatVer = tSchema.GetAttr ( "_version" );
 	}
 
-	StringBuilder_c tTmpName;
 	bool bTag = tRes.m_bTagsAssigned;
 	int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
@@ -1862,14 +1843,6 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 				const char * sName = tCol.m_sName.cstr();
-
-				if ( bCompat && sName[0]=='_' ) // replace all hits _name to @name
-				{
-					tTmpName.Clear();
-					tTmpName.Sprintf ( "@%s", sName+1 );
-					sName = tTmpName.cstr();
-				}
-
 				JsonObjAddAttr ( tOut, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator );
 			}
 		}

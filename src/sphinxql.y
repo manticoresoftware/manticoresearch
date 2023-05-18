@@ -680,12 +680,12 @@ filter_item:
 			if ( !pParser->AddStringListFilter ( $1, $5, StrList_e::STR_ALL, true ) )
 				YYERROR;
 		}
-	| expr_ident TOK_IN TOK_USERVAR
+	| expr_ident TOK_IN ident
 		{
 			if ( !pParser->AddUservarFilter ( $1, $3, false ) )
 				YYERROR;
 		}
-	| expr_ident TOK_NOT TOK_IN TOK_USERVAR
+	| expr_ident TOK_NOT TOK_IN ident
 		{
 			if ( !pParser->AddUservarFilter ( $1, $4, true ) )
 				YYERROR;
@@ -1184,7 +1184,6 @@ expr:
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
 	| TOK_DOT_NUMBER
-	| TOK_USERVAR
 	| '-' expr %prec TOK_NEG	{ TRACK_BOUNDS ( $$, $1, $2 ); }
 	| TOK_NOT expr				{ TRACK_BOUNDS ( $$, $1, $2 ); }
 

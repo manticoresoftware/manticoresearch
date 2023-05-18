@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>@column_name vs uservars</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</config>
+
+<queries>
+<sphinxql>create table test1 ( title text, @timestamp integer, idd integer, @version string )</sphinxql>
+<sphinxql>insert into test1 ( id, @timestamp, idd, @version) values (1, 10, 110, '20'), (2, 10, 120, '30'), (3, 20, 120, '20'), (4, 30, 110, '20'), (5, 10, 130, '10')</sphinxql>
+
+<sphinxql>
+SET GLOBAL @uvar = (10, 20);
+SELECT *, IN(@timestamp, @uvar) as cnd FROM test1 WHERE cnd=1;
+SELECT * FROM test1 WHERE @timestamp IN @uvar;
+SELECT * FROM test1 WHERE @timestamp NOT IN @uvar;
+SELECT * FROM test1 WHERE @version IN('20');
+SELECT * FROM test1 group by @timestamp;
+</sphinxql>
+</queries>
+
+<httpqueries>
+<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+<query endpoint="search">
+{ "index": "test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "@timestamp": { "lte": 20 } } }
+      ]
+    }
+  }
+}
+</query>
+<query endpoint="search">{ "index": "test1", "aggs":{ "gr1": { "terms": { "field": "@timestamp" } }, "gr2": { "terms": { "field": "@version" } }} }</query>
+
+<!-- clean up -->
+<query endpoint="sql" method="post">mode=raw&amp;query=drop table test1</query>
+</httpqueries>
+
+</test>

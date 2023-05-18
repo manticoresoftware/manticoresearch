@@ -262,9 +262,26 @@ static void CreateKbnTable ( CreateTableSettings_t & tOpts, const nljson & tTbl,
 		AddComplexField ( tField.m_sName.cstr(), dFields );
 }
 
-uint64_t GetDocID ( const char * szID )
+int64_t GetDocID ( const char * sID )
 {
-	return sphFNV64(szID);
+	uint64_t uDocid = 0;
+	if ( !sID )
+		return uDocid;
+
+	const char * p = sID;
+	while ( sphIsInteger ( *p ) )
+		p++;
+
+	// could be document_id with only numbers or a hash that should fold into number
+	if ( !*p )
+	{
+		uDocid = strtoll ( sID, NULL, 10 );
+	} else
+	{
+		uDocid = sphFNV64 ( sID );
+	}
+
+	return ( uDocid & INT64_MAX );
 }
 
 static int GetVersion ( const nljson & tDoc )
@@ -954,43 +971,6 @@ static void EscapeKibanaColumnNames ( const StrVec_t & dIndexes, nljson & tFullQ
 	}
 }
 
-static void ReplaceAtColumnNames ( nljson & tFullQuery )
-{
-	CSphVector<nljson::json_pointer> dAtNames;
-	nljson::json_pointer tRootPath;
-	RecursiveIterate ( tRootPath, tFullQuery, [&] ( nljson::const_iterator tIt, bool bIsObject, bool bIsArray, const nljson::json_pointer & tParent )
-		{
-			if ( !bIsObject )
-				return;
-
-			const std::string & sKey = tIt.key();
-			if ( sKey.c_str()[0]=='@' )
-			{
-				nljson::json_pointer tPath = tParent;
-				tPath /= tIt.key();
-				dAtNames.Add ( tPath );
-			}
-		}
-	);
-
-	StringBuilder_c sNewKey;
-	for ( const auto & tPath : dAtNames )
-	{
-		const char * sKey = tPath.back().c_str();
-		sNewKey.Clear();
-		sNewKey << '_';
-		sNewKey << ( sKey + 1 );
-
-		nljson::json_pointer tParent = tPath.parent_pointer();
-		nljson::json_pointer tNewPath = tParent;
-		tNewPath /= sNewKey.cstr();
-
-		nljson tVal = tFullQuery[tPath];
-		tFullQuery[tNewPath] = tVal;
-		tFullQuery[tParent].erase ( tPath.back() );
-	}
-}
-
 static void FixupKibana ( const StrVec_t & dIndexes, nljson & tFullQuery )
 {
 	// kibana tables query fixup
@@ -1153,7 +1133,6 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	EscapeKibanaColumnNames ( dIndexes, tReq );
 	FixupKibana ( dIndexes, tReq );
 	FixupFilter ( dIndexes, tReq );
-	ReplaceAtColumnNames ( tReq );
 
 	JsonQuery_c tQuery;
 	tQuery.m_eQueryType = QUERY_JSON;
@@ -1180,17 +1159,18 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		dAggsRes[i+1] = tHandler->GetResult ( i+1 );
 	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, true );
 
+	bool bOk = true;
 	// want to see at log url and query for search error
 	for ( const AggrResult_t * pAggr : dAggsRes )
 	{
 		if ( !pAggr->m_iSuccesses )
 		{
 			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
-			break;
+			bOk = false;
 		}
 	}
 
-	return true;
+	return bOk;
 }
 
 void HttpCompatHandler_c::ProcessMSearch ()
@@ -3261,16 +3241,6 @@ static void AddSpecialColumns ( nljson & tFields )
 	tFields["_id"] = R"( { "_id": { "type": "_id", "searchable": false, "aggregatable": false } } )"_json;
 }
 
-static const char * FixupAtName ( const char * sName, StringBuilder_c & tTmpName )
-{
-	if ( sName[0]!='_' )
-		return sName;
-
-	tTmpName.Clear();
-	tTmpName.Sprintf ( "@%s", sName+1 );
-	return tTmpName.cstr();
-}
-
 // FIXME!!! add support of Elastic \ Kibana tables
 void HttpCompatHandler_c::ProcessFields()
 {
@@ -3278,7 +3248,6 @@ void HttpCompatHandler_c::ProcessFields()
 
 	nljson tRes = R"({"indices":[], "fields":{}})"_json;
 
-	StringBuilder_c tTmpName;
 	StringBuilder_c sError ( "," );
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto & tIt : *hLocal )
@@ -3319,13 +3288,11 @@ void HttpCompatHandler_c::ProcessFields()
 
 			bool bField = ( tSchema.GetField ( tCol.m_sName.cstr() ) );
 
-			const char * sColName = FixupAtName ( tCol.m_sName.cstr(), tTmpName );
-
 			nljson tField = GetFieldDesc ( tCol, bField );
-			if ( !CheckFieldDesc ( tRes["fields"], sColName, tField, sIndex, sError ) )
+			if ( !CheckFieldDesc ( tRes["fields"], tCol.m_sName.cstr(), tField, sIndex, sError ) )
 				continue;
 
-			tRes["fields"][sColName][tField["type"].get<std::string>()] = tField;
+			tRes["fields"][tCol.m_sName.cstr()][tField["type"].get<std::string>()] = tField;
 		}
 	}
 

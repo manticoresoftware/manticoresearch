@@ -4554,6 +4554,9 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	if ( iRes>=0 )
 		return iRes;
 
+	if ( sToken[0]=='@' )
+		return ProcessAtRawToken ( sToken, iLen, lvalp );
+
 	// ask hook func, it may override
 	if ( m_pHook && eTok==FUNC_BM25F ) // tiny ad-hoc - as only known override bm25f, so hardcode it
 	{

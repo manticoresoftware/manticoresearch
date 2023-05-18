@@ -2342,16 +2342,13 @@ static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tR
 		}
 		break;
 
+	case SPH_FILTER_USERVAR:
 	case SPH_FILTER_STRING:
 		tFilter.m_dStrings.Add ( tReq.GetString() );
 		break;
 
 	case SPH_FILTER_NULL:
 		tFilter.m_bIsNull = tReq.GetByte()!=0;
-		break;
-
-	case SPH_FILTER_USERVAR:
-		tFilter.m_dStrings.Add ( tReq.GetString() );
 		break;
 
 	case SPH_FILTER_STRING_LIST:
@@ -14030,7 +14027,7 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 	}
 	if ( sName == "es_compat" )
 	{
-		return !SetLogManagement ( sSetValue, sError );
+		return SetLogManagement ( sSetValue, sError );
 	}
 
 	if ( sName == "net_wait" )

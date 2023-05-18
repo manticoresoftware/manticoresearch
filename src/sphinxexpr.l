@@ -50,7 +50,7 @@
 %option perf-report
 
 DIGIT				[0-9]
-ALPHA				[a-zA-Z_]
+ALPHA				[a-zA-Z_@]
 ALNUM				[a-zA-Z_0-9]
 ID					{ALPHA}{ALNUM}*
 SPACE				[ \t\n\r]
@@ -108,7 +108,6 @@ EXP     			[eE]{SIGN}{INT}
 \>=			{ return TOK_GTE; }
 ==?			{ return TOK_EQ; }
 
-@{ID}		{ return pParser->ProcessAtRawToken(yytext,yyleng,lvalp); }
 {ALPHA}		|
 {ALPHA}{ALNUM}+	{ return pParser->ProcessRawToken ( yytext,yyleng,lvalp ); }
 

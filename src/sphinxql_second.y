@@ -172,7 +172,7 @@ one_or_more_indexes:
 //////////////////////////////////////////////////////////////////////////
 
 set_global_stmt:
-	TOK_SET TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
+	TOK_SET TOK_GLOBAL ident '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $3, SET_GLOBAL_UVAR );
 			pParser->m_pStmt->m_dSetValues = *$6.m_pValues;
@@ -187,7 +187,7 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->m_pStmt->m_iSetValue = $5.GetValueInt();
 		}
-	| TOK_SET index_or_table ident_all TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
+	| TOK_SET index_or_table ident_all TOK_GLOBAL ident '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $5, SET_INDEX_UVAR );
 			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;

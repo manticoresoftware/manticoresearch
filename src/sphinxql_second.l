@@ -47,7 +47,8 @@
 %option prefix="yy5"
 %option align
 
-ID					[a-zA-Z_][a-zA-Z_0-9]*
+ID					[a-zA-Z_@][a-zA-Z_0-9]*
+SYS_ID				[a-zA-Z_][a-zA-Z_0-9]*
 ALPHA				[a-zA-Z_]+
 SPACE				[ \t\n\r]
 DIGIT				[0-9]
@@ -137,8 +138,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 {ID}				{ STORE_BOUNDS; return TOK_IDENT; }
 `{ID}`				{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
 `{DIGIT}+{ID}`		{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
-@{ID}				{ STORE_BOUNDS; return TOK_USERVAR; }
-@@{ID}				{ STORE_BOUNDS; return TOK_SYSVAR; }
+@@{SYS_ID}			{ STORE_BOUNDS; return TOK_SYSVAR; }
 
 {SPACE}+
 .					{  return yytext[0]; }

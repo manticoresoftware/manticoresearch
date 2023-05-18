@@ -40,9 +40,11 @@
 %}
 
 DIGIT				[0-9]
-ALPHA				[a-zA-Z_]
+ALPHA				[a-zA-Z_@]
 ALNUM				[a-zA-Z_0-9]
+ALPHA_SYS			[a-zA-Z_]
 ID					{ALPHA}{ALNUM}*
+ID_SYS				{ALPHA_SYS}{ALNUM}*
 SPACE				[ \t\n\r]
 SIGN                [+-]?
 INT                 {DIGIT}+
@@ -221,8 +223,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "@count"			{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 {ALNUM}+    		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
-@{ID}				{ YYSTOREBOUNDS; return TOK_USERVAR; }
-@@{ID}				{ YYSTOREBOUNDS; return TOK_SYSVAR; }
+@@{ID_SYS}			{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
 `{INT}{ID}`		    { YYSTOREBOUNDS; return TOK_BACKIDENT; } // allow `123xyz` column names
 

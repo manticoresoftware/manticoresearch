@@ -29,7 +29,7 @@
 %}
 
 DIGIT				[0-9]
-ID					[a-zA-Z_][a-zA-Z_0-9]*
+ID					[a-zA-Z_@][a-zA-Z_0-9]*
 SPACE				[ \t\n\r]
 EXPONENT			[eE](\+|-)?{DIGIT}+
 ALPHA				[a-zA-Z_]+

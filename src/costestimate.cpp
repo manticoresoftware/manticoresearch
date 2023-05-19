@@ -174,6 +174,12 @@ float CostEstimate_c::CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSI
 		float fCoeff = Max ( float( tSIInfo.m_iTotalValues )/m_tCtx.m_iTotalDocs, 2.0f );
 		fFilterComplexity *= log2f(fCoeff)*tFilter.m_dValues.GetLength();
 	}
+	else if ( tFilter.m_eType==SPH_FILTER_STRING || tFilter.m_eType==SPH_FILTER_STRING_LIST )
+	{
+		const float STRING_COMPLEXITY = 10.0f;
+		float fCoeff = Max ( float( tSIInfo.m_iTotalValues )/m_tCtx.m_iTotalDocs, 2.0f );
+		fFilterComplexity *= STRING_COMPLEXITY*log2f(fCoeff)*tFilter.m_dStrings.GetLength();
+	}
 
 	return fFilterComplexity;
 }
@@ -202,9 +208,14 @@ float CostEstimate_c::CalcFilterCost ( bool bFromIterator, float fDocsAfterIndex
 		{
 			int64_t iDocs = ApplyCutoff ( tSIInfo.m_iRsetEstimate );
 
-			// the idea is that block filter rejects most docs and 50% of the remaining docs are filtered out
-			fCost += Cost_Filter ( Min ( iDocs*2, m_tCtx.m_iTotalDocs ), fFilterComplexity );
-			fCost += Cost_BlockFilter ( m_tCtx.m_iTotalDocs, fFilterComplexity );
+			if ( tFilter.m_eType==SPH_FILTER_STRING || tFilter.m_eType==SPH_FILTER_STRING_LIST )
+				fCost += Cost_Filter ( m_tCtx.m_iTotalDocs, fFilterComplexity );
+			else
+			{
+				// the idea is that block filter rejects most docs and 50% of the remaining docs are filtered out
+				fCost += Cost_Filter ( Min ( iDocs*2, m_tCtx.m_iTotalDocs ), fFilterComplexity );
+				fCost += Cost_BlockFilter ( m_tCtx.m_iTotalDocs, fFilterComplexity );
+			}
 		}
 	}
 

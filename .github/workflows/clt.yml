@@ -14,7 +14,9 @@ jobs:
         [
           {"image": "centos:7"},
           {"image": "almalinux:8"},
-          {"image": "almalinux:9"}
+          {"image": "almalinux:9"},
+          {"image": "oraclelinux:latest"},
+          {"image": "amazonlinux:latest"}
         ]
       test_prefix: rhel-
   deb:
@@ -22,10 +24,13 @@ jobs:
     with:
       docker_images: |
         [
+          {"image": "ubuntu:bionic"},
           {"image": "ubuntu:focal"},
           {"image": "ubuntu:jammy"},
           {"image": "debian:buster"},
           {"image": "debian:bullseye"},
-          {"image": "debian:bookworm"}
+          {"image": "debian:bookworm"},
+          {"image": "linuxmintd/mint19.2-amd64:latest"},
+          {"image": "linuxmintd/mint20.2-amd64:latest"}
         ]
       test_prefix: deb-

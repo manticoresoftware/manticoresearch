@@ -2,11 +2,11 @@
 export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
 ––– output –––
 ––– input –––
-apt-get update -y > /dev/null; echo $?
+DEBIAN_FRONTEND=noninteractive apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y gnupg2 wget > /dev/null; echo $?
+DEBIAN_FRONTEND=noninteractive apt-get install -y gnupg2 wget > /dev/null; echo $?
 ––– output –––
 perl: warning: Setting locale failed.
 perl: warning: Please check that your locale settings:
@@ -28,11 +28,11 @@ gpg: Total number processed: 1
 gpg:              unchanged: 1
 0
 ––– input –––
-apt-get update -y > /dev/null; echo $?
+DEBIAN_FRONTEND=noninteractive apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y manticore manticore-extra > /dev/null; echo $?
+DEBIAN_FRONTEND=noninteractive apt-get install -y manticore manticore-extra > /dev/null; echo $?
 ––– output –––
 perl: warning: Setting locale failed.
 perl: warning: Please check that your locale settings:

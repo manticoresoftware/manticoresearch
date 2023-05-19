@@ -15,7 +15,7 @@ jobs:
           {"image": "centos:7"},
           {"image": "almalinux:8"},
           {"image": "almalinux:9"},
-          {"image": "oraclelinux:latest"},
+          {"image": "oraclelinux:9"},
           {"image": "amazonlinux:latest"}
         ]
       test_prefix: rhel-

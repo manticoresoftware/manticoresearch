@@ -4748,7 +4748,7 @@ private:
 	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry )
 	{
 		if ( m_bDataInitialized )
-			return false;
+			return true; // always return true, otherwise in RT indexes we won't be able to hit cutoff in disk chunks after the first one
 
 		m_pSchema->CloneMatch ( m_tData, tEntry );
 		m_tData.SetAttr ( m_tLocGroupby, 1 ); // fake group number
@@ -4781,7 +4781,7 @@ private:
 	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry )
 	{
 		if ( m_bDataInitialized )
-			return false;
+			return true; // always return true, otherwise in RT indexes we won't be able to hit cutoff in disk chunks after the first one
 
 		m_pSchema->CloneMatch ( m_tData, tEntry );
 		m_tData.SetAttr ( m_tLocGroupby, 1 ); // fake group number

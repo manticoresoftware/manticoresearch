@@ -7656,7 +7656,7 @@ public:
 		, m_tDeadRowMap	( tDeadRowMap )
 	{}
 
-	inline bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
+	FORCE_INLINE bool GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
 	DWORD		GetNumProcessed() const { return m_tRowID-m_tBoundaries.m_tMinRowID; }
 	bool		WasCutoffHit() const { return false; }
 
@@ -7921,8 +7921,7 @@ bool CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 			}
 		}
 
-		bool bStop = RunFullscanOnAttrs ( tBlockBoundaries, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
-		if ( bStop || !iCutoff )
+		if ( RunFullscanOnAttrs ( tBlockBoundaries, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer ) )
 			return true;
 	}
 

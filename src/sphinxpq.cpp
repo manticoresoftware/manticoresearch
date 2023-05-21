@@ -22,6 +22,7 @@
 #include "indexfiles.h"
 #include "tokenizer/tokenizer.h"
 #include "task_dispatcher.h"
+#include "stackmock.h"
 
 #include <atomic>
 
@@ -43,10 +44,20 @@ struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 	CSphVector<CSphString>			m_dSuffixes;
 	DictMap_t						m_hDict;
 	std::unique_ptr<XQQuery_t>		m_pXQ;
+	int								m_iStackRequired = 0;
+	static int 						m_iStackBaseRequired; // additional stack which was in use at the moment of measuring
 
 	bool							m_bOnlyTerms = false; // flag of simple query, ie only words and no operators
 	bool							IsFullscan() const { return m_pXQ->m_bEmpty; }
 };
+
+#ifdef NDEBUG
+static constexpr int PQ_BASE_STACK = 24 * 1024;
+#else
+static constexpr int PQ_BASE_STACK = 40 * 1024;
+#endif
+
+int StoredQuery_t::m_iStackBaseRequired = PQ_BASE_STACK;
 
 using StoredQuerySharedPtr_t = SharedPtr_t<StoredQuery_t>;
 using StoredQuerySharedPtrVecSharedPtr_t = SharedPtr_t<CSphVector<StoredQuerySharedPtr_t>>;
@@ -158,6 +169,7 @@ private:
 			const CSphMultiQueryArgs &tArgs ) const;
 	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) const REQUIRES_SHARED ( m_tLock );
 	std::unique_ptr<StoredQuery_i> CreateQuery ( PercolateQueryArgs_t& tArgs, const TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, CSphString& sError );
+	static void CalcNecessaryStack ( StoredQuery_t* pStored, CSphString& sError );
 
 public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
@@ -1829,7 +1841,24 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	if ( pStored->m_pXQ->m_bEmpty && sQuery )
 		pStored->m_pXQ->m_bEmpty = IsEmpty ( FromSz ( sQuery ) );
 
+	CalcNecessaryStack ( pStored.get(), sError );
+
 	return pStored;
+}
+
+void PercolateIndex_c::CalcNecessaryStack ( StoredQuery_t* pStored, CSphString& sError )
+{
+	if ( !pStored )
+		return;
+
+	int iStackForFt = -1;
+	if ( pStored->m_pXQ && pStored->m_pXQ->m_pRoot )
+		iStackForFt = ConsiderStackAbsolute ( pStored->m_pXQ->m_pRoot );
+
+	auto iTreeHeight = pStored->m_dFilterTree.IsEmpty() ? 0 : EvalMaxTreeHeight ( pStored->m_dFilterTree, pStored->m_dFilterTree.GetLength() - 1 );
+	int iStackForFilters = iTreeHeight * GetFilterStackItemSize() + GetStartFilterStackItemSize();
+
+	pStored->m_iStackRequired = Max ( iStackForFt, iStackForFilters );
 }
 
 template<typename READER>
@@ -2473,9 +2502,8 @@ void PercolateIndex_c::PostSetupUnl()
 	m_pQueries->ReserveGap( m_dLoadedQueries.GetLength () );
 
 	CSphString sError;
-	ARRAY_FOREACH ( i, m_dLoadedQueries )
+	for ( const StoredQueryDesc_t& tQuery : m_dLoadedQueries )
 	{
-		const StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
 		const TokenizerRefPtr_c& pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		PercolateQueryArgs_t tArgs ( tQuery );
 		if ( CanBeAdded ( tArgs, sError ) )
@@ -2490,7 +2518,7 @@ void PercolateIndex_c::PostSetupUnl()
 				continue;
 			}
 		}
-		sphWarning ( "table '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", GetName(), i, tQuery.m_iQUID );
+		sphWarning ( "table '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", GetName(), m_dLoadedQueries.Idx ( &tQuery ), tQuery.m_iQUID );
 	}
 	m_dLoadedQueries.Reset ( 0 );
 

@@ -427,7 +427,7 @@ void EvalExprStackSize_c::PublishValue ( std::pair<int, int> iStack )
 
 void FilterCreationMeasureStack_c::PublishValue ( std::pair<int, int> iStack )
 {
-	SetFilterStackItemSize ( iStack.first );
+	SetFilterStackItemSize ( iStack );
 }
 
 void FullTextStackSize_c::PublishValue ( std::pair<int, int> iStack )

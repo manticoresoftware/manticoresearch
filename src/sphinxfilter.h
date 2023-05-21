@@ -101,7 +101,9 @@ void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );
 
 CSphString FilterType2Str ( ESphFilter eFilterType );
 
-void SetFilterStackItemSize ( int iSize );
+void SetFilterStackItemSize ( std::pair<int,int> );
+int GetFilterStackItemSize();
+int GetStartFilterStackItemSize();
 
 // fwd
 

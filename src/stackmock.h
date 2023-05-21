@@ -17,6 +17,26 @@
 
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
+template<typename T>
+int EvalMaxTreeHeight ( const VecTraits_T<T>& dTree, int iStartNode )
+{
+	CSphVector<std::pair<int, int>> dNodes;
+	dNodes.Reserve ( dTree.GetLength() / 2 );
+	int iMaxHeight = 1;
+	dNodes.Add ( { iStartNode, 1 } );
+	while ( dNodes.GetLength() )
+	{
+		auto tParent = dNodes.Pop();
+		const auto& tItem = dTree[tParent.first];
+		iMaxHeight = Max ( iMaxHeight, tParent.second );
+		if ( tItem.m_iLeft >= 0 )
+			dNodes.Add ( { tItem.m_iLeft, tParent.second + 1 } );
+		if ( tItem.m_iRight >= 0 )
+			dNodes.Add ( { tItem.m_iRight, tParent.second + 1 } );
+	}
+	return iMaxHeight;
+}
+
 template <typename T>
 bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize, int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
 {
@@ -27,19 +47,7 @@ bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeT
 	if ( dTree.GetLength()<=iTreeSizeThresh )
 		return true;
 
-	CSphVector<std::pair<int,int>> dNodes;
-	dNodes.Reserve ( dTree.GetLength()/2 );
-	int iMaxHeight = 1;
-	dNodes.Add ( { iStartNode, 1 } );
-	while ( dNodes.GetLength() )
-	{
-		auto tParent = dNodes.Pop();
-		const auto & tItem = dTree[tParent.first];
-		iMaxHeight = Max ( iMaxHeight, tParent.second );
-		if ( tItem.m_iLeft>=0 )		dNodes.Add ( { tItem.m_iLeft,  tParent.second+1 } );
-		if ( tItem.m_iRight>=0 )	dNodes.Add ( { tItem.m_iRight, tParent.second+1 } );
-	}
-
+	int iMaxHeight = EvalMaxTreeHeight ( dTree, iStartNode );
 	iCalculatedStack = Threads::GetStackUsed() + iMaxHeight* std::get<CREATE> ( tNodeStackSize );
 
 	if ( iCalculatedStack<=iCurStackSize )

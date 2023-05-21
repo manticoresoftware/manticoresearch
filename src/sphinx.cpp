@@ -10011,13 +10011,19 @@ Strictly speaking, we need to mock it - create rt, then query - without any disk
  and also on query leaves - reading docs/hits from disk with extra functions for caching, working with fs, profiling, etc. That is oneshot extra budget over calculated expression stuff.
 */
 
-int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
+
+int ConsiderStackAbsolute ( const struct XQNode_t* pRoot )
 {
 	int iHeight = 0;
 	if ( pRoot )
 		iHeight = sphQueryHeightCalc ( pRoot );
 
-	auto iStackNeed = iHeight * SPH_EXTNODE_STACK_SIZE + SPH_EXTRA_BUDGET;
+	return iHeight * SPH_EXTNODE_STACK_SIZE + SPH_EXTRA_BUDGET;
+}
+
+int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
+{
+	auto iStackNeed = ConsiderStackAbsolute ( pRoot );
 	int64_t iQueryStack = Threads::GetStackUsed() + iStackNeed;
 //	sphWarning ( "Stack used %d, need %d (%d * %d + %d), sum %d, have %d", (int)Threads::GetStackUsed(), iStackNeed, iHeight, SPH_EXTNODE_STACK_SIZE, SPH_EXTRA_BUDGET, (int)iQueryStack, Threads::MyStackSize() );
 	auto iMyStackSize = Threads::MyStackSize ();

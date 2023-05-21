@@ -15424,11 +15424,16 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	tOut.Eof ();
 }
 
-static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex, bool bMutable )
+static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex, bool bRt, bool bPq )
 {
 	auto iDocs = pIndex->GetStats ().m_iTotalDocuments;
-	dStatus.MatchTupletf ( "indexed_documents", "%l", iDocs );
-	dStatus.MatchTupletf ( "indexed_bytes", "%l", pIndex->GetStats ().m_iTotalBytes );
+	if ( bPq )
+	{
+		dStatus.MatchTupletf ( "stored_queries", "%l", iDocs );
+	} else {
+		dStatus.MatchTupletf ( "indexed_documents", "%l", iDocs );
+		dStatus.MatchTupletf ( "indexed_bytes", "%l", pIndex->GetStats ().m_iTotalBytes );
+	}
 
 	const int64_t * pFieldLens = pIndex->GetFieldLens();
 	if ( pFieldLens )
@@ -15447,23 +15452,26 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 	pIndex->GetStatus ( &tStatus );
 	dStatus.MatchTupletf ( "ram_bytes", "%l", tStatus.m_iRamUse );
 	dStatus.MatchTupletf ( "disk_bytes", "%l", tStatus.m_iDiskUse );
-	dStatus.MatchTupletf ( "disk_mapped", "%l", tStatus.m_iMapped );
-	dStatus.MatchTupletf ( "disk_mapped_cached", "%l", tStatus.m_iMappedResident );
-	dStatus.MatchTupletf ( "disk_mapped_doclists", "%l", tStatus.m_iMappedDocs );
-	dStatus.MatchTupletf ( "disk_mapped_cached_doclists", "%l", tStatus.m_iMappedResidentDocs );
-	dStatus.MatchTupletf ( "disk_mapped_hitlists", "%l", tStatus.m_iMappedHits );
-	dStatus.MatchTupletf ( "disk_mapped_cached_hitlists", "%l", tStatus.m_iMappedResidentHits );
-	dStatus.MatchTupletf ( "killed_documents", "%l", tStatus.m_iDead );
-	dStatus.MatchTupletFn ( "killed_rate", [&tStatus, iDocs] {
-		StringBuilder_c sPercent;
-		auto iTotalDocs = iDocs + tStatus.m_iDead;
-		if ( iTotalDocs )
-			sPercent.Sprintf ( "%0.2F%%", tStatus.m_iDead * 10000 / iTotalDocs );
-		else
-			sPercent << "0.00%";
-		return CSphString ( sPercent.cstr () );
-	} );
-	if ( bMutable )
+	if ( !bPq )
+	{
+		dStatus.MatchTupletf ( "disk_mapped", "%l", tStatus.m_iMapped );
+		dStatus.MatchTupletf ( "disk_mapped_cached", "%l", tStatus.m_iMappedResident );
+		dStatus.MatchTupletf ( "disk_mapped_doclists", "%l", tStatus.m_iMappedDocs );
+		dStatus.MatchTupletf ( "disk_mapped_cached_doclists", "%l", tStatus.m_iMappedResidentDocs );
+		dStatus.MatchTupletf ( "disk_mapped_hitlists", "%l", tStatus.m_iMappedHits );
+		dStatus.MatchTupletf ( "disk_mapped_cached_hitlists", "%l", tStatus.m_iMappedResidentHits );
+		dStatus.MatchTupletf ( "killed_documents", "%l", tStatus.m_iDead );
+		dStatus.MatchTupletFn ( "killed_rate", [&tStatus, iDocs] {
+			StringBuilder_c sPercent;
+			auto iTotalDocs = iDocs + tStatus.m_iDead;
+			if ( iTotalDocs )
+				sPercent.Sprintf ( "%0.2F%%", tStatus.m_iDead * 10000 / iTotalDocs );
+			else
+				sPercent << "0.00%";
+			return CSphString ( sPercent.cstr () );
+		} );
+	}
+	if ( bRt )
 	{
 		dStatus.MatchTupletf ( "ram_chunk", "%l", tStatus.m_iRamChunkSize );
 		dStatus.MatchTupletf ( "ram_chunk_segments_count", "%d", tStatus.m_iNumRamChunks );
@@ -15471,6 +15479,16 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
 		dStatus.MatchTupletf ( "mem_limit_rate", "%0.2F%%", PercentOf ( tStatus.m_fSaveRateLimit, 1.0, 2 ) );
 		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );
+	}
+	if ( bPq )
+	{
+		dStatus.MatchTupletf ( "max_stack_need", "%l", tStatus.m_iStackNeed );
+		dStatus.MatchTupletf ( "average_stack_base", "%l", tStatus.m_iStackBase );
+		dStatus.MatchTupletf ( "desired_thread_stack", "%l", sphRoundUp ( tStatus.m_iStackNeed + tStatus.m_iStackBase, 128 ) );
+	}
+
+	if ( bRt || bPq )
+	{
 		dStatus.MatchTupletf ( "tid", "%l", tStatus.m_iTID );
 		dStatus.MatchTupletf ( "tid_saved", "%l", tStatus.m_iSavedTID );
 	}
@@ -15504,8 +15522,11 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c
 
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet ( "index_type", szIndexType ( pServed->m_eType ) );
-	AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pServed ) );
-	AddIndexQueryStats ( dStatus, tStats );
+	if ( pServed->m_eType != IndexType_e::TEMPLATE )
+	{
+		AddDiskIndexStatus ( dStatus, pIndex, pServed->m_eType == IndexType_e::RT, pServed->m_eType == IndexType_e::PERCOLATE );
+		AddIndexQueryStats ( dStatus, tStats );
+	}
 	tOut.DataTable ( dStatus );
 }
 
@@ -15551,7 +15572,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 				}
 
 				VectorLike dStatus ( tStmt.m_sStringParam );
-				AddDiskIndexStatus ( dStatus, pIndex, false );
+				AddDiskIndexStatus ( dStatus, pIndex, false, false );
 				tOut.DataTable ( dStatus );
 			});
 		} else

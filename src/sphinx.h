@@ -867,8 +867,14 @@ struct CSphIndexStatus
 	int64_t			m_iRamUse = 0;
 	int64_t			m_iRamRetired = 0;
 	int64_t			m_iMapped = 0; // total size of mmapped files
-	int64_t			m_iMappedResident = 0; // size of mmaped which are in core
-	int64_t			m_iMappedDocs = 0; // size of mmapped doclists
+	union {
+		int64_t			m_iMappedResident = 0;	// size of mmaped which are in core
+		int64_t			m_iStackNeed;			// for pq - max size of stack for eval node over all index on *this* node
+	};
+	union {
+		int64_t			m_iMappedDocs = 0; // size of mmapped doclists
+		int64_t			m_iStackBase;	   // for pq - base size over necessary
+	};
 	int64_t			m_iMappedResidentDocs = 0; // size of mmaped resident doclists
 	int64_t			m_iMappedHits = 0; // size of mmapped hitlists
 	int64_t			m_iMappedResidentHits = 0; // size of mmaped resident doclists

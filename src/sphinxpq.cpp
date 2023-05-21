@@ -1611,6 +1611,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iSavedTID = m_iSavedTID;
 
 	int64_t iRamUse = 0;
+	int 	iMaxStack = 0;
 	{
 		ScRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
@@ -1618,6 +1619,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		iRamUse = m_pQueries->GetLengthBytes64 ();
 		for ( auto & pItem : *m_pQueries )
 		{
+			iMaxStack = Max ( iMaxStack, pItem->m_iStackRequired );
 			iRamUse += sizeof ( StoredQuery_t ) + sizeof ( XQQuery_t )
 					+ pItem->m_dRejectTerms.GetLengthBytes64()
 					+ pItem->m_dRejectWilds.GetLengthBytes64()
@@ -1632,6 +1634,8 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		}
 	}
 	pRes->m_iRamUse = iRamUse;
+	pRes->m_iStackNeed = iMaxStack;
+	pRes->m_iStackBase = StoredQuery_t::m_iStackBaseRequired;
 }
 
 class XQTreeCompressor_t

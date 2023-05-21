@@ -69,15 +69,15 @@ static RowIdBlock_t DoRowIdFiltering ( const RowIdBlock_t & dRowIdBlock, const R
 //////////////////////////////////////////////////////////////////////////
 
 template <typename T,  bool ROWID_LIMITS>
-struct IteratorState_T
+class IteratorState_T
 {
+public:
 	std::unique_ptr<T>	m_pIterator;
 
 	const RowID_t *		m_pRowID = nullptr;
 	const RowID_t *		m_pRowIDMax = nullptr;
 
 	RowIdBoundaries_t	m_tBoundaries;
-	CSphVector<RowID_t> m_dCollected;
 
 						IteratorState_T() = default;
 						IteratorState_T ( T * pIterator ) : m_pIterator(pIterator) {}
@@ -85,8 +85,14 @@ struct IteratorState_T
 	FORCE_INLINE bool	RewindTo  ( RowID_t tRowID );
 	FORCE_INLINE bool	WarmupDocs();
 	FORCE_INLINE bool	WarmupDocs ( RowID_t tRowID );
+	void				Stop();
+	FORCE_INLINE bool	IsStopped() const { return m_bStopped; }
 
 	static inline bool	IsLess ( const IteratorState_T * pA, const IteratorState_T * pB ) { return ( *pA->m_pRowID < *pB->m_pRowID ); }
+
+private:
+	bool				m_bStopped = false;
+	CSphVector<RowID_t> m_dCollected;
 };
 
 template <typename T, bool ROWID_LIMITS>
@@ -98,7 +104,7 @@ bool IteratorState_T<T, ROWID_LIMITS>::WarmupDocs()
 	RowIdBlock_t dRowIdBlock;
 	if ( !m_pIterator->GetNextRowIdBlock(dRowIdBlock) )
 	{
-		m_pRowID = m_pRowIDMax = nullptr;
+		Stop();
 		return false;
 	}
 
@@ -120,7 +126,7 @@ bool IteratorState_T<common::BlockIterator_i,true>::WarmupDocs()
 		util::Span_T<uint32_t> dSpan;
 		if ( !m_pIterator->GetNextRowIdBlock(dSpan) )
 		{
-			m_pRowID = m_pRowIDMax = nullptr;
+			Stop();
 			return false;
 		}
 
@@ -150,7 +156,7 @@ bool IteratorState_T<common::BlockIterator_i,false>::WarmupDocs()
 	util::Span_T<uint32_t> dRowIdBlock;
 	if ( !m_pIterator->GetNextRowIdBlock(dRowIdBlock) )
 	{
-		m_pRowID = m_pRowIDMax = nullptr;
+		Stop();
 		return false;
 	}
 
@@ -164,19 +170,28 @@ template <typename T, bool ROWID_LIMITS>
 bool IteratorState_T<T,ROWID_LIMITS>::WarmupDocs ( RowID_t tRowID )
 {
 	if ( !m_pIterator->HintRowID(tRowID) )
+	{
+		Stop();
 		return false;
+	}
 
 	return WarmupDocs();
 }
 
 template <typename T, bool ROWID_LIMITS>
+void IteratorState_T<T,ROWID_LIMITS>::Stop()
+{
+	m_pRowID = m_pRowIDMax = nullptr;
+	m_bStopped = true;
+}
+
+template <typename T, bool ROWID_LIMITS>
 bool IteratorState_T<T,ROWID_LIMITS>::RewindTo ( RowID_t tRowID )
 {
+	assert ( !m_bStopped );
+
 	if ( tRowID>*(m_pRowIDMax-1) && !WarmupDocs(tRowID) )
-	{
-		m_pRowID = m_pRowIDMax = nullptr;
 		return false;
-	}
 
 	const RowID_t * pRowID = m_pRowID;
 
@@ -195,6 +210,7 @@ bool IteratorState_T<T,ROWID_LIMITS>::RewindTo ( RowID_t tRowID )
 	}
 
 	m_pRowID = pRowID;
+	assert(pRowID);
 	return true;
 }
 
@@ -246,7 +262,7 @@ class RowidIterator_Intersect_T : public RowidIterator_Base_T<T,ROWID_LIMITS>
 public:
 				RowidIterator_Intersect_T ( T ** ppIterators, int iNumIterators, const RowIdBoundaries_t * pBoundaries = nullptr );
 
-	bool		HintRowID ( RowID_t tRowID ) override { return BASE::m_dIterators[0].RewindTo(tRowID); }
+	bool		HintRowID ( RowID_t tRowID ) override;
 	bool		GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	void		SetCutoff ( int iCutoff ) override { m_iRowsLeft = iCutoff; }
 	bool		WasCutoffHit() const override { return !m_iRowsLeft; }
@@ -267,6 +283,15 @@ RowidIterator_Intersect_T<T,ROWID_LIMITS>::RowidIterator_Intersect_T ( T ** ppIt
 }
 
 template <typename T, bool ROWID_LIMITS>
+bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::HintRowID ( RowID_t tRowID )
+{
+	if ( BASE::m_dIterators[0].IsStopped() )
+		return false;
+
+	return BASE::m_dIterators[0].RewindTo(tRowID);
+}
+
+template <typename T, bool ROWID_LIMITS>
 bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = BASE::m_dCollected.Begin();
@@ -283,7 +308,7 @@ bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t
 
 		if ( !AdvanceIterators() )
 		{
-			tFirst.m_pRowID = nullptr;
+			tFirst.Stop();
 			break;
 		}
 

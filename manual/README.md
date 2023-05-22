@@ -1,6 +1,6 @@
 * [☝ Introduction](Introduction.md)
 * [❗ Read this first](Read_this_first.md)
-* [✔ Installation](Installation.md)
+* [✔ Installation](Installation/Installation.md)
     * [Docker](Installation/Docker.md)
     * [RedHat and Centos](Installation/RHEL_and_Centos.md)
     * [Debian and Ubuntu](Installation/Debian_and_Ubuntu.md)
@@ -187,3 +187,4 @@
 * [🐞 Reporting bugs](Reporting_bugs.md)
 * [📖 References](References.md)
     * [Previous versions](References.md#Documentation-for-old-Manticore-versions)
+<!-- proofread -->

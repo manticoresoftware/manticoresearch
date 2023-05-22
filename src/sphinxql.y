@@ -1290,32 +1290,32 @@ show_what:
 	| TOK_CREATE TOK_TABLE identidx
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+			pParser->SetIndex ($3);
 		}
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->m_pStmt->m_sIndex = pParser->ToStringUnescape ( $2 );
+			pParser->SetIndex(pParser->ToStringUnescape ( $2 ));
 		}
 	| TOK_AGENT only_one_index TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
+			pParser->SetIndex( $2 );
 		}
 	| index_or_table one_index_opt_chunk TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
+			pParser->SetIndex( $2 );
 		}
 	| index_or_table one_index_opt_chunk TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
+			pParser->SetIndex( $2 );
 		}
 	| index_or_table TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
-			pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_sStringParam;
+			pParser->SetIndex( pParser->m_pStmt->m_sStringParam );
 		}
 	| TOK_COLLATION
 		{
@@ -1711,7 +1711,7 @@ optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
 		index_or_table identidx opt_option_clause
 			{
-				pParser->ToString ( pParser->m_pStmt->m_sIndex, $4 );
+				pParser->SetIndex( $4 );
 			}
 	;
 
@@ -1818,7 +1818,7 @@ explain_query:
 			{
 				SqlStmt_t & tStmt = *pParser->m_pStmt;
 				pParser->ToString ( tStmt.m_sCallProc, $3 );
-				pParser->ToString ( tStmt.m_sIndex, $4 );
+				pParser->SetIndex( $4 );
 				pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $5 );
 			}
 	;

@@ -41,7 +41,6 @@ public:
 	}
 
 	void SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
-	void SetIndex ( const SqlNode_t& tNode ) const;
 };
 
 void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
@@ -49,14 +48,6 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
 	m_pStmt->m_eStmt = STMT_SET;
 	m_pStmt->m_eSet = eSet;
 	ToString ( m_pStmt->m_sSetName, tName );
-}
-
-void SqlSecondParser_c::SetIndex ( const SqlNode_t& tNode ) const
-{
-	ToString ( m_pStmt->m_sIndex, tNode );
-	// unquote index name
-	if ( ( tNode.m_iEnd - tNode.m_iStart ) > 2 && m_pStmt->m_sIndex.cstr()[0] == '\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1] == '\'' )
-		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
 }
 
 #define YYSTYPE SqlNode_t

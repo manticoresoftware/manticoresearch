@@ -2011,9 +2011,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 						   TREE_SIZE_THRESH, iStackNeeded, "filters", sError ) )
 			return false;
 
-		bool bOk = false;
-		Threads::Coro::Continue ( iStackNeeded, [&] { bOk = CreateFilterTree ( tCtx, sError, sWarning ); } );
-		return bOk;
+		return Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
 	}
 
 	assert ( tCtx.m_pSchema );

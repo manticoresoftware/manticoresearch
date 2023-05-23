@@ -17,7 +17,8 @@ jobs:
           {"image": "centos:7"},
           {"image": "almalinux:8"},
           {"image": "almalinux:9"},
-          {"image": "oraclelinux:9"}
+          {"image": "oraclelinux:9"},
+          {"image": "amazonlinux:latest"}
         ]
       test_prefix: rhel-release-
   deb-release:
@@ -43,7 +44,8 @@ jobs:
           {"image": "centos:7"},
           {"image": "almalinux:8"},
           {"image": "almalinux:9"},
-          {"image": "oraclelinux:9"}
+          {"image": "oraclelinux:9"},
+          {"image": "amazonlinux:latest"}
         ]
       test_prefix: rhel-dev-
   deb-dev:

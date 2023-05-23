@@ -9982,7 +9982,7 @@ void SetExtNodeStackSize ( int iDelta, int iExtra )
 		SPH_EXTNODE_STACK_SIZE = iDelta;
 
 #if defined( _WIN32 )
-		SPH_EXTNODE_STACK_SIZE += 0x70;
+		SPH_EXTNODE_STACK_SIZE += 0x80;
 #endif
 	}
 

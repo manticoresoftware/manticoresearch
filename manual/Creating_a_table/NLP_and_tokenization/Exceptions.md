@@ -52,19 +52,7 @@ The whitespace in the map-from tokens list matters, but its amount does not. Any
 
 Exceptions also allow capturing special characters (that are exceptions from general charset_table rules; hence the name). Assume that you generally do not want to treat '+' as a valid character, but still want to be able to search for some exceptions from this rule such as 'C++'. The sample above will do just that, totally independent of what characters are in the table and what are not.
 
-Exceptions are applied to raw incoming document and query data during indexing and searching, respectively. Therefore, when it comes to a [plain table](../../Creating_a_table/Local_tables/ rules. Thus, with the example exceptions file above, the "at&t" text will be tokenized as two keywords "at" and "t" due to lowercase letters. On the other hand, "AT&T" will match exactly and produce a single "AT&T" keyword.
-
-Note that this map-to keyword:
-* is always interpreted as a *single* word
-* is both case and space sensitive
-
-In our sample, "ms windows" query will not match the document with "MS Windows" text. The query will be interpreted as a query for two keywords, "ms" and "windows". The mapping for "MS Windows" is a single keyword "ms windows", with a space in the middle. On the other hand, "standartenfuhrer" will retrieve documents with "Standarten Fuhrer" or "Standarten Fuehrer" contents (capitalized exactly like this), or any capitalization variant of the keyword itself, e.g., "staNdarTenfUhreR". (It won't catch "standarten fuhrer", however: this text does not match any of the listed exceptions because of case sensitivity and gets indexed as two separate keywords.)
-
-The whitespace in the map-from tokens list matters, but its amount does not. Any amount of whitespace in the map-form list will match any other amount of whitespace in the indexed document or query. For instance, the "AT & T" map-from token will match "AT & T" text, whatever the amount of space in both map-from part and the indexed text. Such text will, therefore, be indexed as a special "AT&T" keyword, thanks to the very first entry from the sample.
-
-Exceptions also allow capturing special characters (that are exceptions from general [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) rules; hence the name). Assume that you generally do not want to treat '+' as a valid character, but still want to be able to search for some exceptions from this rule such as 'C++'. The sample above will do just that, totally independent of what characters are in the table and what are not.
-
-Exceptions are applied to raw incoming document and query data during indexing and searching, respectively. Therefore, when it comes to a [plain table](../../Creating_a_table/Local_tables/
+Therefore, when it comes to a [plain table](../../Creating_a_table/Local_tables/Plain_table.md), it's required to rotate the table in order to pick up changes in the exceptions file.
 
 <!-- request SQL -->
 

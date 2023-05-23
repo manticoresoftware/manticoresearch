@@ -18,86 +18,41 @@
 #include <cassert>
 #include <climits>
 
-
-struct HashFunc_Int64_t
-{
-	static DWORD GetHash ( int64_t k )
-	{
-		return ( DWORD(k) * 0x607cbb77UL ) ^ ( k>>32 );
-	}
-};
-
-
-template < typename VALUE, typename KEY, typename HASHFUNC >
-OpenHash_T<VALUE,KEY,HASHFUNC>::OpenHash_T ( int64_t iSize )
-{
-	Reset ( iSize );
-}
-
-template<typename VALUE, typename KEY, typename HASHFUNC>
-OpenHash_T<VALUE, KEY, HASHFUNC>::OpenHash_T ( const OpenHash_T& rhs )
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::OpenHashTraits_T ( const OpenHashTraits_T & rhs )
 {
 	m_iSize = rhs.m_iSize;
 	m_iUsed = rhs.m_iUsed;
 	m_iMaxUsed = rhs.m_iMaxUsed;
 
 	// as we anyway copy raw data, don't need to call ctrs with this allocation
-	using Entry_Storage = typename std::aligned_storage<sizeof ( Entry_t ), alignof ( Entry_t )>::type;
-	m_pHash = (Entry_t*)new Entry_Storage[m_iSize];
-	sph::DefaultCopy_T<Entry_t>::CopyVoid ( m_pHash, rhs.m_pHash, m_iSize );
+	using Entry_Storage = typename std::aligned_storage<sizeof ( ENTRY ), alignof ( ENTRY )>::type;
+	m_pHash = (ENTRY*)new Entry_Storage[m_iSize];
+	sph::DefaultCopy_T<ENTRY>::CopyVoid ( m_pHash, rhs.m_pHash, m_iSize );
 }
 
-template<typename VALUE, typename KEY, typename HASHFUNC>
-OpenHash_T<VALUE, KEY, HASHFUNC>::OpenHash_T ( OpenHash_T&& rhs ) noexcept
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+ENTRY * OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::FindEntry ( KEY k ) const
 {
-	Swap ( rhs );
-}
+	if ( !m_iSize )
+		return nullptr;
 
-template<typename VALUE, typename KEY, typename HASHFUNC>
-OpenHash_T<VALUE, KEY, HASHFUNC>& OpenHash_T<VALUE, KEY, HASHFUNC>::operator= ( OpenHash_T rhs ) noexcept
-{
-	Swap ( rhs );
-	return *this;
-}
+	int64_t iIndex = HASHFUNC::GetHash(k) & ( m_iSize-1 );
 
-template<typename VALUE, typename KEY, typename HASHFUNC>
-OpenHash_T<VALUE, KEY, HASHFUNC>::~OpenHash_T()
-{
-	SafeDeleteArray ( m_pHash );
-}
-
-/// reset to a given size
-template<typename VALUE, typename KEY, typename HASHFUNC>
-void OpenHash_T<VALUE, KEY, HASHFUNC>::Reset ( int64_t iSize )
-{
-	assert ( iSize<=UINT_MAX ); 		// sanity check
-	SafeDeleteArray ( m_pHash );
-	if ( iSize<=0 )
+	while ( m_pHash[iIndex].IsUsed(*this) )
 	{
-		m_iSize = m_iUsed = m_iMaxUsed = 0;
-		return;
+		ENTRY & tEntry = m_pHash[iIndex];
+		if ( tEntry.m_Key==k )
+			return &tEntry;
+
+		iIndex = ( iIndex+1 ) & ( m_iSize-1 );
 	}
 
-	iSize = ( 1ULL<<sphLog2 ( iSize-1 ) );
-	assert ( iSize<=UINT_MAX ); 		// sanity check
-	m_pHash = new Entry_t[iSize];
-	m_iSize = iSize;
-	m_iUsed = 0;
-	m_iMaxUsed = GetMaxLoad ( iSize );
+	return nullptr;
 }
 
-template<typename VALUE, typename KEY, typename HASHFUNC>
-void OpenHash_T<VALUE, KEY, HASHFUNC>::Clear()
-{
-	for ( int i=0; i<m_iSize; i++ )
-		m_pHash[i] = Entry_t();
-
-	m_iUsed = 0;
-}
-
-/// acquire value by key (ie. get existing hashed value, or add a new default value)
-template<typename VALUE, typename KEY, typename HASHFUNC>
-VALUE & OpenHash_T<VALUE, KEY, HASHFUNC>::Acquire ( KEY k )
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+ENTRY & OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::AcquireEntry ( KEY k )
 {
 	if ( !m_iSize )
 		Grow();
@@ -108,12 +63,13 @@ VALUE & OpenHash_T<VALUE, KEY, HASHFUNC>::Acquire ( KEY k )
 	while (true)
 	{
 		// found matching key? great, return the value
-		Entry_t * p = m_pHash + iIndex;
-		if ( p->m_bUsed && p->m_Key==k )
-			return p->m_Value;
-
-		// no matching keys? add it
-		if ( !p->m_bUsed )
+		ENTRY * p = m_pHash + iIndex;
+		if ( p->IsUsed(*this) )
+		{
+			if ( p->m_Key==k )
+				return *p;
+		}
+		else // no matching keys? add it
 		{
 			// not enough space? grow the hash and force rescan
 			if ( m_iUsed>=m_iMaxUsed )
@@ -125,9 +81,9 @@ VALUE & OpenHash_T<VALUE, KEY, HASHFUNC>::Acquire ( KEY k )
 
 			// store the newly added key
 			p->m_Key = k;
-			p->m_bUsed = true;
+			p->SetUsed ( *this, true );
 			m_iUsed++;
-			return p->m_Value;
+			return *p;
 		}
 
 		// no match so far, keep probing
@@ -135,176 +91,15 @@ VALUE & OpenHash_T<VALUE, KEY, HASHFUNC>::Acquire ( KEY k )
 	}
 }
 
-/// find an existing value by key
-template<typename VALUE, typename KEY, typename HASHFUNC>
-VALUE * OpenHash_T<VALUE, KEY, HASHFUNC>::Find ( KEY k ) const
-{
-	Entry_t * e = FindEntry(k);
-	return e ? &e->m_Value : nullptr;
-}
-
-/// add or fail (if key already exists)
-template<typename VALUE, typename KEY, typename HASHFUNC>
-bool OpenHash_T<VALUE, KEY, HASHFUNC>::Add ( KEY k, const VALUE & v )
-{
-	int64_t u = m_iUsed;
-	VALUE & x = Acquire(k);
-	if ( u==m_iUsed )
-		return false; // found an existing value by k, can not add v
-	x = v;
-
-	return true;
-}
-
-/// find existing value, or add a new value
-template<typename VALUE, typename KEY, typename HASHFUNC>
-VALUE & OpenHash_T<VALUE, KEY, HASHFUNC>::FindOrAdd ( KEY k, const VALUE & v )
-{
-	int64_t u = m_iUsed;
-	VALUE & x = Acquire(k);
-	if ( u!=m_iUsed )
-		x = v; // did not find an existing value by k, so add v
-
-	return x;
-}
-
-/// delete by key
-template<typename VALUE, typename KEY, typename HASHFUNC>
-bool OpenHash_T<VALUE, KEY, HASHFUNC>::Delete ( KEY k )
-{
-	Entry_t * pEntry = FindEntry(k);
-	if ( !pEntry )
-		return false;
-
-	int64_t iIndex = pEntry-m_pHash;
-	int64_t iNext = iIndex;
-	while ( true )
-	{
-		iNext = ( iNext+1 ) & ( m_iSize-1 );
-		Entry_t & tEntry = m_pHash[iNext];
-		if ( !tEntry.m_bUsed )
-			break;
-
-		int64_t iDesired = HASHFUNC::GetHash ( tEntry.m_Key ) & ( m_iSize-1 );
-		if ( ( iNext>iIndex && ( iDesired<=iIndex || iDesired>iNext ) ) ||
-			 ( iNext<iIndex && ( iDesired<=iIndex && iDesired>iNext ) ) )
-		{
-			m_pHash[iIndex] = m_pHash[iNext];
-			iIndex = iNext;
-		}
-	}
-
-	m_pHash[iIndex].m_bUsed = false;
-	m_iUsed--;
-
-	return true;
-}
-
-/// get number of inserted key-value pairs
-template<typename VALUE, typename KEY, typename HASHFUNC>
-int64_t OpenHash_T<VALUE, KEY, HASHFUNC>::GetLength() const
-{
-	return m_iUsed;
-}
-
-template<typename VALUE, typename KEY, typename HASHFUNC>
-int64_t OpenHash_T<VALUE, KEY, HASHFUNC>::GetLengthBytes() const
-{
-	return m_iSize * sizeof ( Entry_t );
-}
-
-template<typename VALUE, typename KEY, typename HASHFUNC>
-int64_t OpenHash_T<VALUE, KEY, HASHFUNC>::GetUsedLengthBytes() const
-{
-	return m_iUsed * sizeof ( Entry_t );
-}
-
-/// iterate the hash by entry index, starting from 0
-/// finds the next alive key-value pair starting from the given index
-/// returns that pair and updates the index on success
-/// returns NULL when the hash is over
-template<typename VALUE, typename KEY, typename HASHFUNC>
-VALUE * OpenHash_T<VALUE, KEY, HASHFUNC>::Iterate ( int64_t * pIndex, KEY * pKey ) const
-{
-	if ( !pIndex || *pIndex<0 )
-		return nullptr;
-
-	for ( int64_t i = *pIndex; i < m_iSize; ++i )
-		if ( m_pHash[i].m_bUsed )
-		{
-			*pIndex = i+1;
-			if ( pKey )
-				*pKey = m_pHash[i].m_Key;
-
-			return &m_pHash[i].m_Value;
-		}
-
-	return nullptr;
-}
-
-// same as above, but without messing of return value/return param
-template<typename VALUE, typename KEY, typename HASHFUNC>
-std::pair<KEY,VALUE*> OpenHash_T<VALUE, KEY, HASHFUNC>::Iterate ( int64_t * pIndex ) const
-{
-	if ( !pIndex || *pIndex<0 )
-		return {0, nullptr};
-
-	for ( int64_t i = *pIndex; i<m_iSize; ++i )
-		if ( m_pHash[i].m_bUsed )
-		{
-			*pIndex = i+1;
-			return {m_pHash[i].m_Key, &m_pHash[i].m_Value};
-		}
-
-	return {0,nullptr};
-}
-
-template<typename VALUE, typename KEY, typename HASHFUNC>
-void OpenHash_T<VALUE, KEY, HASHFUNC>::Swap ( MYTYPE& rhs ) noexcept
-{
-	std::swap ( m_iSize, rhs.m_iSize );
-	std::swap ( m_iUsed, rhs.m_iUsed );
-	std::swap ( m_iMaxUsed, rhs.m_iMaxUsed );
-	std::swap ( m_pHash, rhs.m_pHash );
-}
-
-#pragma pack(push,4)
-template<typename VALUE, typename KEY, typename HASHFUNC>
-struct OpenHash_T<VALUE, KEY, HASHFUNC>::Entry_t
-{
-	KEY		m_Key;
-	VALUE	m_Value;
-	bool	m_bUsed = false;
-
-	Entry_t();
-};
-#pragma pack(pop)
-
-
-template<typename VALUE, typename KEY, typename HASHFUNC>
-int64_t OpenHash_T<VALUE, KEY, HASHFUNC>::GetMaxLoad ( int64_t iSize ) const
-{
-	return (int64_t)( iSize*LOAD_FACTOR );
-}
-
-/// we are overloaded, lets grow 2x and rehash
-template<typename VALUE, typename KEY, typename HASHFUNC>
-void OpenHash_T<VALUE, KEY, HASHFUNC>::Grow()
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::Grow()
 {
 	int64_t iNewSize = 2*Max(m_iSize,8);
 	assert ( iNewSize<=UINT_MAX ); 		// sanity check
 
-	Entry_t * pNew = new Entry_t[iNewSize];
+	ENTRY * pNew = new ENTRY[iNewSize];
 
-	for ( int64_t i=0; i<m_iSize; i++ )
-		if ( m_pHash[i].m_bUsed )
-		{
-			int64_t j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
-			while ( pNew[j].m_bUsed )
-				j = ( j+1 ) & ( iNewSize-1 );
-
-			pNew[j] = m_pHash[i];
-		}
+	MoveToNewStorage ( *this, pNew, iNewSize );
 
 	SafeDeleteArray ( m_pHash );
 	m_pHash = pNew;
@@ -312,31 +107,257 @@ void OpenHash_T<VALUE, KEY, HASHFUNC>::Grow()
 	m_iMaxUsed = GetMaxLoad ( m_iSize );
 }
 
-/// find (and do not touch!) entry by key
-template<typename VALUE, typename KEY, typename HASHFUNC>
-inline typename OpenHash_T<VALUE, KEY, HASHFUNC>::Entry_t * OpenHash_T<VALUE, KEY, HASHFUNC>::FindEntry ( KEY k ) const
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::DeleteEntry ( ENTRY * pEntry )
 {
-	if ( !m_iSize )
+	int64_t iIndex = pEntry-m_pHash;
+	int64_t iNext = iIndex;
+	while ( true )
+	{
+		iNext = ( iNext+1 ) & ( m_iSize-1 );
+		ENTRY & tEntry = m_pHash[iNext];
+		if ( !tEntry.IsUsed(*this) )
+			break;
+
+		int64_t iDesired = HASHFUNC::GetHash ( tEntry.m_Key ) & ( m_iSize-1 );
+		if ( ( iNext>iIndex && ( iDesired<=iIndex || iDesired>iNext ) ) ||
+			( iNext<iIndex && ( iDesired<=iIndex && iDesired>iNext ) ) )
+		{
+			m_pHash[iIndex] = m_pHash[iNext];
+			iIndex = iNext;
+		}
+	}
+
+	m_pHash[iIndex].SetUsed ( *this, false );
+	m_iUsed--;
+}
+
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::MoveToNewStorage ( MYTYPE & rhs, ENTRY * pNew, int64_t iNewSize ) const
+{
+	for ( int64_t i=0; i<m_iSize; i++ )
+		if ( m_pHash[i].IsUsed(*this) )
+		{
+			int64_t j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
+			while ( pNew[j].IsUsed(rhs) )
+				j = ( j+1 ) & ( iNewSize-1 );
+
+			pNew[j] = m_pHash[i];
+			pNew[j].SetUsed ( rhs, true );
+		}
+}
+
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::Swap ( MYTYPE & rhs ) noexcept
+{
+	STATE::Swap ( (STATE &)rhs );
+
+	std::swap ( m_iSize, rhs.m_iSize );
+	std::swap ( m_iUsed, rhs.m_iUsed );
+	std::swap ( m_iMaxUsed, rhs.m_iMaxUsed );
+	std::swap ( m_pHash, rhs.m_pHash );
+}
+
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::MoveTo ( MYTYPE & rhs ) const
+{
+	assert ( rhs.m_iSize>=m_iSize );
+	MoveToNewStorage ( rhs, rhs.m_pHash, rhs.m_iSize );
+	rhs.m_iUsed = m_iUsed;
+}
+
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+bool OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::Delete ( KEY k )
+{
+	ENTRY * pEntry = FindEntry(k);
+	if ( !pEntry )
+		return false;
+
+	DeleteEntry(pEntry);
+	return true;
+}
+
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::Reset ( int64_t iSize )
+{
+	assert ( iSize<=UINT_MAX ); 		// sanity check
+	SafeDeleteArray ( m_pHash );
+	if ( iSize<=0 )
+	{
+		m_iSize = m_iUsed = m_iMaxUsed = 0;
+		return;
+	}
+
+	iSize = ( 1ULL<<sphLog2 ( iSize-1 ) );
+	assert ( iSize<=UINT_MAX ); 		// sanity check
+	m_pHash = new ENTRY[iSize];
+	m_iSize = iSize;
+	m_iUsed = 0;
+	m_iMaxUsed = GetMaxLoad ( iSize );
+}
+
+template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
+void OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::Clear()
+{
+	for ( int i=0; i<m_iSize; i++ )
+		m_pHash[i] = ENTRY();
+
+	m_iUsed = 0;
+}
+
+/////////////////////////////////////////////////////////////////////
+
+struct HashFunc_Int64_t
+{
+	static FORCE_INLINE DWORD GetHash ( int64_t k )
+	{
+		return ( DWORD(k) * 0x607cbb77UL ) ^ ( k>>32 );
+	}
+};
+
+template<typename KEY, typename VALUE> OpenHashEntry_T<KEY,VALUE>::OpenHashEntry_T() = default;
+template<> inline OpenHashEntry_T<int64_t,int>::OpenHashEntry_T() : m_Key{0}, m_Value{0} {}
+template<> inline OpenHashEntry_T<int64_t, DWORD>::OpenHashEntry_T() : m_Key{0}, m_Value{0} {}
+template<> inline OpenHashEntry_T<int64_t,float>::OpenHashEntry_T() : m_Key{0}, m_Value{0.0f} {}
+template<> inline OpenHashEntry_T<int64_t,int64_t>::OpenHashEntry_T() : m_Key{0}, m_Value{0} {}
+template<> inline OpenHashEntry_T<int64_t,uint64_t>::OpenHashEntry_T() : m_Key{0}, m_Value{0} {}
+
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::OpenHashTable_T ( const OpenHashTable_T & rhs )
+	: BASE(rhs)
+{}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE> & OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::operator = ( OpenHashTable_T && rhs ) noexcept
+{
+	BASE::Swap ( rhs );
+	return *this;
+}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE> & OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::operator = ( const OpenHashTable_T & rhs ) noexcept
+{
+	OpenHashTable_T tNew(rhs);
+	*this = std::move(tNew);
+	return *this;
+}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+VALUE * OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::Find ( KEY k ) const
+{
+	ENTRY * e = BASE::FindEntry(k);
+	return e ? &e->m_Value : nullptr;
+}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+VALUE OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::FindAndDelete ( KEY k )
+{
+	ENTRY * pEntry = BASE::FindEntry(k);
+	assert(pEntry);
+
+	VALUE tRes = pEntry->m_Value;
+	BASE::DeleteEntry(pEntry);
+
+	return tRes;
+}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+bool OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::Add ( KEY k, const VALUE & v )
+{
+	int64_t u = BASE::GetLength();
+	VALUE & x = Acquire(k);
+	if ( u==BASE::GetLength() )
+		return false; // found an existing value by k, can not add v
+	x = v;
+
+	return true;
+}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+VALUE & OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::FindOrAdd ( KEY k, const VALUE & v )
+{
+	int64_t u = BASE::GetLength();
+	VALUE & x = Acquire(k);
+	if ( u!=BASE::GetLength() )
+		x = v; // did not find an existing value by k, so add v
+
+	return x;
+}
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+VALUE * OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::Iterate ( int64_t * pIndex, KEY * pKey ) const
+{
+	if ( !pIndex || *pIndex<0 )
 		return nullptr;
 
-	int64_t iIndex = HASHFUNC::GetHash(k) & ( m_iSize-1 );
+	for ( int64_t i = *pIndex; i < BASE::m_iSize; ++i )
+		if ( BASE::m_pHash[i].IsUsed(*this) )
+		{
+			*pIndex = i+1;
+			if ( pKey )
+				*pKey = BASE::m_pHash[i].m_Key;
 
-	while ( m_pHash[iIndex].m_bUsed )
-	{
-		Entry_t & tEntry = m_pHash[iIndex];
-		if ( tEntry.m_Key==k )
-			return &tEntry;
-
-		iIndex = ( iIndex+1 ) & ( m_iSize-1 );
-	}
+			return &BASE::m_pHash[i].m_Value;
+		}
 
 	return nullptr;
 }
 
-template<typename V, typename K, typename H> OpenHash_T<V,K,H>::Entry_t::Entry_t() = default;
-template<> inline OpenHash_T<int,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
-template<> inline OpenHash_T<DWORD,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
-template<> inline OpenHash_T<float,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0.0f} {}
-template<> inline OpenHash_T<int64_t,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
-template<> inline OpenHash_T<uint64_t,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typename STATE>
+std::pair<KEY,VALUE*> OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::Iterate ( int64_t & iIndex ) const
+{
+	assert ( iIndex>=0 );
 
+	for ( int64_t i = iIndex; i<BASE::m_iSize; ++i )
+		if ( BASE::m_pHash[i].IsUsed(*this) )
+		{
+			iIndex = i+1;
+			return { BASE::m_pHash[i].m_Key, &BASE::m_pHash[i].m_Value};
+		}
+
+	return {0,nullptr};
+}
+
+/////////////////////////////////////////////////////////////////////
+
+template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY>
+void OpenHashTableFastClear_T<KEY,VALUE,HASHFUNC,ENTRY>::Clear()
+{
+	BASE::m_uVersion++;
+	BASE::m_iUsed = 0;
+}
+
+/////////////////////////////////////////////////////////////////////
+
+template <typename KEY, typename HASHFUNC, typename ENTRY, typename STATE>
+bool OpenHashSet_T<KEY,HASHFUNC,ENTRY,STATE>::Add ( KEY k )
+{
+	int64_t u = BASE::GetLength();
+	BASE::AcquireEntry(k);
+	return u!=BASE::GetLength();
+}
+
+template <typename KEY, typename HASHFUNC, typename ENTRY, typename STATE>
+KEY * OpenHashSet_T<KEY,HASHFUNC,ENTRY,STATE>::Iterate ( int64_t & iIndex ) const
+{
+	assert ( iIndex>=0 );
+
+	for ( int64_t i = iIndex; i<BASE::m_iSize; i++ )
+		if ( BASE::m_pHash[i].IsUsed(*this) )
+		{
+			iIndex = i+1;
+			return &BASE::m_pHash[i].m_Key;
+		}
+
+	return nullptr;
+}
+
+/////////////////////////////////////////////////////////////////////
+
+template <typename KEY, typename HASHFUNC, typename ENTRY>
+void OpenHashSetFastClear_T<KEY,HASHFUNC,ENTRY>::Clear()
+{
+	BASE::m_uVersion++;
+	BASE::m_iUsed = 0;
+}

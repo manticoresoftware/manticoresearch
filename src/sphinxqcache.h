@@ -49,7 +49,7 @@ private:
 
 	// entry build-time only members
 	CSphVector<QcacheMatch_t>	m_dFrame;			///< current compression frame
-	OpenHash_T<int, int,HashFunc_Int64_t> m_hWeights; ///< hashed weights
+	OpenHashTable_T<int, int>	m_hWeights;			///< hashed weights
 	RowID_t						m_tLastRowID = INVALID_ROWID;	///< last encoded rowid
 
 public:

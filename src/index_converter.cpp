@@ -969,8 +969,8 @@ private:
 	CSphVector<Checkpoint_t>		m_dCheckpoints;
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	
-	OpenHash_T<RowID_t, SphDocID_t, HashFunc_Int64_t> m_hDoc2Row;
-	OpenHash_T<DoclistOffsets_t, SphOffset_t, HashFunc_Int64_t> m_hDoclist;
+	OpenHashTable_T<SphDocID_t, RowID_t> m_hDoc2Row;
+	OpenHashTable_T<SphOffset_t, DoclistOffsets_t> m_hDoclist;
 
 	bool WriteLookup ( Index_t & tIndex, CSphString & sError );
 	bool WriteAttributes ( Index_t & tIndex, CSphString & sError );

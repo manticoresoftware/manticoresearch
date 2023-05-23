@@ -493,8 +493,11 @@ struct CSphQuery
 	DWORD			m_uDebugFlags = 0;
 	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion
 
-	bool			m_bAccurateAggregation = false;		///< setting via options
+	bool			m_bAccurateAggregation = false;			///< setting via options
 	bool			m_bExplicitAccurateAggregation = false; ///< whether anything was set via options
+
+	int				m_iDistinctThresh = 3500;			///< distinct accuracy thresh
+	bool			m_bExplicitDistinctThresh = false;	///< whether thresh was set via options
 
 	int				m_iMaxMatchThresh = 16384;
 
@@ -1363,6 +1366,7 @@ struct SphQueueSettings_t
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
+	bool						m_bGrouped = false;	// are we going to push already grouped matches to it?
 	std::function<int64_t (const CSphString &)>			m_fnGetCountDistinct;
 	std::function<int64_t (const CSphFilterSettings &)>	m_fnGetCountFilter;
 	std::function<int64_t ()>							m_fnGetCount;

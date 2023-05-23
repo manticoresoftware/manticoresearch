@@ -108,7 +108,7 @@ struct CSphSource_SQL : CSphSource
 	void				PostIndex () override;
 
 	ISphHits *			IterateJoinedHits ( CSphReader & tReader, CSphString & sError ) override;
-	bool				FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError ) override;
+	bool				FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError ) override;
 
 	bool				IterateMultivaluedStart ( int iAttr, CSphString & sError ) override;
 	bool				IterateMultivaluedNext ( int64_t & iDocID, int64_t & iMvaValue ) override;

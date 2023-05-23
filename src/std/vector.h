@@ -72,10 +72,10 @@ public:
 
 	/// add entry
 	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed>::type Add ( T tValue );
+	FORCE_INLINE typename std::enable_if<S::is_constructed>::type Add ( T tValue );
 
 	template<typename S = STORE>
-	typename std::enable_if<!S::is_constructed>::type Add ( T tValue );
+	FORCE_INLINE typename std::enable_if<!S::is_constructed>::type Add ( T tValue );
 
 	template<typename S = STORE, class... Args>
 	typename std::enable_if<!S::is_constructed>::type Emplace_back ( Args&&... args );
@@ -100,7 +100,7 @@ public:
 
 	/// pop last value by ref (for constructed storage)
 	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed, T&>::type Pop();
+	FORCE_INLINE typename std::enable_if<S::is_constructed, T&>::type Pop();
 
 	/// pop last value
 	template<typename S = STORE>
@@ -123,7 +123,7 @@ public:
 
 	/// resize
 	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed>::type Resize ( int64_t iNewLength );
+	inline typename std::enable_if<S::is_constructed>::type Resize ( int64_t iNewLength );
 
 	/// for non-constructed imply destroy when shrinking, of construct when widening
 	template<typename S = STORE>
@@ -150,7 +150,7 @@ public:
 	inline int64_t AllocatedBytes() const;
 
 	/// filter unique
-	void Uniq();
+	void Uniq ( bool bSort=true );
 
 	void MergeSorted ( const Vector_T<T>& dA, const Vector_T<T>& dB );
 

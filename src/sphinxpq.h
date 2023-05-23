@@ -127,7 +127,7 @@ struct DictTerm_t
 
 struct DictMap_t
 {
-	OpenHash_T<DictTerm_t, int64_t, HashFunc_Int64_t> m_hTerms { 0 };
+	OpenHashTable_T<int64_t, DictTerm_t> m_hTerms { 0 };
 	CSphFixedVector<BYTE> m_dKeywords { 0 };
 
 	SphWordID_t GetTerm ( BYTE * pWord ) const;

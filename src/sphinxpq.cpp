@@ -145,7 +145,7 @@ private:
 	bool							m_bIndexDeleted = false;
 
 	StoredQuerySharedPtrVecSharedPtr_t	m_pQueries GUARDED_BY ( m_tLock );
-	OpenHash_T< int, int64_t, HashFunc_Int64_t> m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
+	OpenHashTable_T<int64_t, int>		m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
 	int64_t							m_iGeneration GUARDED_BY ( m_tLock ) { 0 }; // eliminate ABA race on insert/delete
 	mutable RwLock_t				m_tLock;
 
@@ -1889,7 +1889,7 @@ CSphVector<StoredQuerySharedPtr_t> UniqAndWrapQueries ( const VecTraits_T<Stored
 {
 	CSphVector<StoredQuerySharedPtr_t> dNewSharedQueries;
 	dNewSharedQueries.Reserve ( dNewQueries.GetLength() );
-	OpenHash_T<int, int64_t, HashFunc_Int64_t> hQueries;
+	OpenHashTable_T<int64_t, int> hQueries;
 	for ( StoredQuery_i* pQuery : dNewQueries )
 	{
 		int* pIdx = hQueries.Find ( pQuery->m_iQUID );
@@ -1944,7 +1944,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		}
 
 		// for both deletion and addition we need hash and snapshot
-		OpenHash_T<int, int64_t, HashFunc_Int64_t> hQueries { 0 };
+		OpenHashTable_T<int64_t, int> hQueries { 0 };
 		{
 			ScRL_t rLock ( m_tLock );
 			if ( iLimit<0 )
@@ -2026,7 +2026,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		if ( bWithFullClone )
 		{
 			m_pQueries = pNewVec;
-			m_hQueries.Swap ( hQueries );
+			m_hQueries = std::move(hQueries);
 			++m_iGeneration;
 		} else {
 			for ( auto& pQuery : dNewSharedQueries )
@@ -3200,7 +3200,7 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 		assert ( pDocs );
 	}
 
-	OpenHash_T<int, int64_t, HashFunc_Int64_t> hDocids ( iGotDocids + 1 );
+	OpenHashTable_T<int64_t, int> hDocids ( iGotDocids + 1 );
 	bool bHasDocids = iGotDocids!=0;
 	if ( bHasDocids )
 		hDocids.Add ( iGotDocids, 0 );
@@ -3262,7 +3262,6 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 		int * pIndex = nullptr;
 		while ( nullptr != ( pIndex = hDocids.Iterate ( &i, &iDocid ) ) )
 			dRes.m_dDocids[*pIndex] = iDocid;
-
 	}
 }
 

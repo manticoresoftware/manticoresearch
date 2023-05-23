@@ -32,4 +32,7 @@ int sphLog2 ( int iValue );
 int sphLog2 ( long iValue );
 int sphLog2 ( long long iValue );
 
+int GetLeadingZeroBits ( uint32_t uValue );
+int GetLeadingZeroBits ( uint64_t uValue );
+
 #include "log2_impl.h"

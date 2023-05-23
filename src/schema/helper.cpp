@@ -13,7 +13,6 @@
 #include "helper.h"
 
 #include "attribute.h"
-#include "match.h"
 
 
 void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo>& dAttrs, CSphVector<int>& dUsed, int iPos, const CSphColumnInfo& tCol, bool bDynamic )
@@ -133,16 +132,6 @@ CSphVector<int> CSphSchemaHelper::SubsetPtrs ( CSphVector<int>& dDiscarded ) con
 	return dFiltered;
 }
 
-// in destination free listed attrs, then copy new from rhs
-void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch& tDst, const CSphMatch& rhs, const VecTraits_T<int>& dSpecials ) const
-{
-	FreeDataSpecial ( tDst, dSpecials );
-	tDst.Combine ( rhs, GetDynamicSize() );
-	for ( auto i : m_dDataPtrAttrs )
-		*(BYTE**)( tDst.m_pDynamic + i ) = nullptr;
-	CopyPtrsSpecial ( tDst, rhs, dSpecials );
-}
-
 // declared in sphinxstd.h
 void sphDeallocatePacked ( BYTE* pBlob )
 {
@@ -154,37 +143,6 @@ void sphDeallocatePacked ( BYTE* pBlob )
 #else
 	sphDeallocateSmall ( pBlob );
 #endif
-}
-
-// fixme! direct reinterpreting rows is not good idea. Use sphGetAttr/sphSetAttr!
-/*
- * wide (64bit) attributes occupies 2 rows and placed order lo,high
- * On LE arch (intel) it is ok to reinterpret them back as 64-bit pointer
- * However on BE (mips) you have problems since such cast gives garbage.
- */
-void CSphSchemaHelper::FreeDataSpecial ( CSphMatch& tMatch, const VecTraits_T<int>& dSpecials )
-{
-	if ( !tMatch.m_pDynamic )
-		return;
-
-	for ( auto iOffset : dSpecials )
-	{
-		BYTE*& pData = *(BYTE**)( tMatch.m_pDynamic + iOffset );
-		sphDeallocatePacked ( pData );
-		pData = nullptr;
-	}
-}
-
-void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch& tDst, const CSphMatch& tSrc, const VecTraits_T<int>& dSpecials )
-{
-	auto pSrc = tSrc.m_pDynamic;
-	assert ( pSrc || dSpecials.IsEmpty() );
-	for ( auto i : dSpecials )
-	{
-		const BYTE* pData = *(BYTE**)( pSrc + i );
-		if ( pData )
-			*(BYTE**)( tDst.m_pDynamic + i ) = sph::CopyPackedAttr ( pData );
-	}
 }
 
 void CSphSchemaHelper::MovePtrsSpecial ( CSphMatch& tDst, CSphMatch& tSrc, const VecTraits_T<int>& dSpecials )

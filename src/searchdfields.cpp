@@ -31,14 +31,14 @@ struct FieldBlob_t
 	CSphVector<FieldLoc_t>	m_dLocs;
 };
 
-struct DocHash_t : private OpenHash_T<int, DocID_t>
+struct DocHash_t : private OpenHashTable_T<DocID_t, int>
 {
-	explicit DocHash_t ( int iElems ) : OpenHash_T<int, DocID_t> { iElems } {}
+	explicit DocHash_t ( int iElems ) : OpenHashTable_T<DocID_t,int> { iElems } {}
 	int Count () const { return (int)GetLength(); }
 	bool Exists ( DocID_t tId ) const { return ( Find ( tId )!=nullptr ); }
 	void Set ( DocID_t tId, int iOff ) { Acquire ( tId ) = iOff;}
-	using OpenHash_T<int, DocID_t>::Acquire;
-	using OpenHash_T<int, DocID_t>::Find;
+	using OpenHashTable_T<DocID_t,int>::Acquire;
+	using OpenHashTable_T<DocID_t,int>::Find;
 };
 
 struct ResLoc_t

@@ -1043,6 +1043,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "optimize_cutoff",		0, nullptr },
 	{ "secondary_indexes",		0, nullptr },
 	{ "accurate_aggregation",	0, nullptr },
+	{ "distinct_precision_threshold", 0, nullptr },
 	{ "preopen_tables",			0, nullptr },
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },

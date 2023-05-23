@@ -1398,7 +1398,7 @@ struct SchemaItemVariant_t
 };
 
 
-using SchemaItemHash_c = OpenHash_T<SchemaItemVariant_t, uint64_t, HashFunc_Int64_t>;
+using SchemaItemHash_c = OpenHashTable_T<uint64_t, SchemaItemVariant_t>;
 
 template <typename T>
 BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk, CSphBufferTrait<T> & tBuf )

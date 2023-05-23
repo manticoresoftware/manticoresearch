@@ -247,7 +247,7 @@ public:
 	CSphTightVector<BYTE>			m_dBlobs GUARDED_BY ( m_tLock );            ///< storage for blob attrs
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
-	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
+	OpenHashTable_T<DocID_t, RowID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
 	std::unique_ptr<ColumnarRT_i>	m_pColumnar;

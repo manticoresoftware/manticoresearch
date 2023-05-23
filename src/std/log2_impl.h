@@ -45,6 +45,18 @@ inline int sphLog2 ( unsigned long long uValue )
 	return sphLog2const ( uValue );
 }
 
+inline int GetLeadingZeroBits ( uint32_t uValue )
+{
+	assert(uValue);
+	return __builtin_clz ( uValue );
+}
+
+inline int GetLeadingZeroBits ( uint64_t uValue )
+{
+	assert(uValue);
+	return __builtin_clzll ( uValue );
+}
+
 #else
 
 namespace {
@@ -104,6 +116,21 @@ inline int sphLog2 ( unsigned long long uValue )
 	return 1 + uRes;
 }
 
+inline int GetLeadingZeroBits ( uint32_t uValue )
+{
+	assert(uValue);
+	DWORD uRes;
+	BitScanReverse64 ( &uRes, uValue );
+	return 31 - uRes;
+}
+
+inline int GetLeadingZeroBits ( uint64_t uValue )
+{
+	assert(uValue);
+	DWORD uRes;
+	BitScanReverse64 ( &uRes, uValue );
+	return 63 - uRes;
+}
 
 #else
 

@@ -1343,7 +1343,7 @@ static uint64_t CreateKey ( DocID_t tDocID, int iEntry )
 }
 
 
-bool CSphSource_SQL::FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError )
+bool CSphSource_SQL::FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError )
 {
 	if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
 	{
@@ -1362,7 +1362,7 @@ bool CSphSource_SQL::FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::u
 		if ( SqlFetchRow() )
 		{
 			if ( !dJoinedOffsets[m_iJoinedHitField] )
-				dJoinedOffsets[m_iJoinedHitField] = std::make_unique<OpenHash_T<uint64_t, uint64_t>>();
+				dJoinedOffsets[m_iJoinedHitField] = std::make_unique<OpenHashTable_T<uint64_t, uint64_t>>();
 
 			auto & hOffsets = *dJoinedOffsets[m_iJoinedHitField];
 			DocID_t tDocId = sphToInt64 ( SqlColumn(0) ); // FIXME! handle conversion errors and zero/max values?

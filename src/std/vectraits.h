@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "generics.h"
 
 /// vector traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
@@ -36,18 +37,18 @@ public:
 	VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const;
 
 	/// accessor by forward index
-	T& operator[] ( int64_t iIndex ) const;
+	FORCE_INLINE T & operator[] ( int64_t iIndex ) const;
 	T& At ( int64_t iIndex ) const;
 
 	/// get first entry ptr
-	T* Begin() const;
+	FORCE_INLINE T * Begin() const;
 
 	/// pointer to the item after the last
-	T* End() const;
+	FORCE_INLINE T * End() const;
 
 	/// make happy C++11 ranged for loops
-	T* begin() const;
-	T* end() const;
+	FORCE_INLINE T * begin() const;
+	FORCE_INLINE T * end() const;
 
 	/// get first entry
 	T& First() const;
@@ -56,7 +57,7 @@ public:
 	T& Last() const;
 
 	/// return idx of the item pointed by pBuf, or -1
-	inline int Idx ( const T* pBuf ) const;
+	FORCE_INLINE int Idx ( const T* pBuf ) const;
 
 	/// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
 	operator VecTraits_T<const typename std::remove_pointer<T>::type*>&() const;
@@ -68,11 +69,11 @@ public:
 	operator std::pair<TT*, INT>() const;
 
 	/// check if i'm empty
-	bool IsEmpty() const;
+	FORCE_INLINE bool IsEmpty() const;
 
 	/// query current length, in elements
-	int64_t GetLength64() const;
-	int GetLength() const;
+	FORCE_INLINE int64_t GetLength64() const;
+	FORCE_INLINE int GetLength() const;
 
 	/// get length in bytes
 	size_t GetLengthBytes() const;
@@ -98,30 +99,30 @@ public:
 	T* BinarySearch ( T tRef ) const;
 
 	template<typename FILTER>
-	inline int GetFirst ( FILTER&& cond ) const;
+	FORCE_INLINE int GetFirst ( FILTER&& cond ) const;
 
 	/// generic 'ARRAY_ALL'
 	template<typename FILTER>
-	inline bool all_of ( FILTER&& cond ) const;
+	FORCE_INLINE bool all_of ( FILTER&& cond ) const;
 
 	/// generic linear search - 'ARRAY_ANY' replace
 	/// see 'Contains()' below for examlpe of usage.
 	template<typename FILTER>
-	inline bool any_of ( FILTER&& cond ) const;
+	FORCE_INLINE bool any_of ( FILTER&& cond ) const;
 
 	template<typename FILTER>
-	inline bool none_of ( FILTER&& cond ) const;
+	FORCE_INLINE bool none_of ( FILTER&& cond ) const;
 
 	template<typename FILTER>
-	inline int64_t count_of ( FILTER&& cond ) const;
+	FORCE_INLINE int64_t count_of ( FILTER&& cond ) const;
 
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template<typename ACTION>
-	void Apply ( ACTION&& Verb ) const;
+	FORCE_INLINE void Apply ( ACTION&& Verb ) const;
 
 	template<typename ACTION>
-	void for_each ( ACTION&& tAction ) const;
+	FORCE_INLINE void for_each ( ACTION&& tAction ) const;
 
 	/// generic linear search
 	bool Contains ( T tRef ) const;

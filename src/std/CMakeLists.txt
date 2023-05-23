@@ -55,6 +55,7 @@ add_library ( manticore_std OBJECT
 		mutex.h
 		num_conv.h
 		openhash.h
+		openhash_impl.h
 		orderedhash.h
 		orderedhash_impl.h
 		queue.h

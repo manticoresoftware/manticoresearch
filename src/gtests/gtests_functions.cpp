@@ -599,7 +599,7 @@ TEST ( functions, OneshotAutoEvent )
 TEST ( functions, Hash_simple )
 {
 	// add and verify a couple keys manually
-	OpenHash_T<int, int64_t, HashFunc_Int64_t> h;
+	OpenHashTable_T<int64_t, int> h;
 	int &a = h.Acquire ( 123 );
 	ASSERT_FALSE ( a );
 	a = 1;
@@ -663,7 +663,7 @@ TEST ( functions, HASH_randomized )
 
 // big randomized test
 {
-	OpenHash_T<int, int64_t, HashFunc_Int64_t> h;
+	OpenHashTable_T<int64_t, int> h;
 	const int NVALS = 996146; // 0.95f out of 1M
 
 	// add N numbers

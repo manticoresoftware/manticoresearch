@@ -13,7 +13,7 @@
 #include "thread_annotations.h"
 
 template<typename CONTAINER, typename FILTER>
-inline bool all_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
+FORCE_INLINE bool all_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
 {
 	for ( const auto& dItem : dData )
 		if ( !cond ( dItem ) )
@@ -22,7 +22,7 @@ inline bool all_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_AN
 }
 
 template<typename CONTAINER, typename FILTER>
-inline bool any_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
+FORCE_INLINE bool any_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
 {
 	for ( const auto& dItem : dData )
 		if ( cond ( dItem ) )
@@ -32,13 +32,13 @@ inline bool any_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_AN
 }
 
 template<typename CONTAINER, typename FILTER>
-inline bool none_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
+FORCE_INLINE bool none_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
 {
 	return !any_of ( dData, std::forward<FILTER> ( cond ) );
 }
 
 template<typename CONTAINER, typename FILTER>
-inline int64_t count_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
+FORCE_INLINE int64_t count_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFETY_ANALYSIS
 {
 	int64_t iRes = 0;
 	for ( const auto& dItem : dData )
@@ -49,7 +49,7 @@ inline int64_t count_of ( const CONTAINER& dData, FILTER&& cond ) NO_THREAD_SAFE
 }
 
 template<typename CONTAINER, typename ACTION>
-void for_each ( CONTAINER& dData, ACTION&& fnAction ) NO_THREAD_SAFETY_ANALYSIS
+FORCE_INLINE void for_each ( CONTAINER& dData, ACTION&& fnAction ) NO_THREAD_SAFETY_ANALYSIS
 {
 	for ( auto& dItem : dData )
 		fnAction ( dItem );

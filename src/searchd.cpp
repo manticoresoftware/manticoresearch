@@ -4942,6 +4942,7 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches, tRes.GetLength() );
 
 	tQueueSettings.m_iMaxMatches = Max ( tQueueSettings.m_iMaxMatches, 1 );
+	tQueueSettings.m_bGrouped = true;
 
 	SphQueueRes_t tQueueRes;
 	std::unique_ptr<ISphMatchSorter> pSorter ( sphCreateQueue ( tQueueSettings, tQueryCopy, tRes.m_sError, tQueueRes ) );
@@ -14161,6 +14162,12 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 		return true;
 	}
 
+	if ( sName == "distinct_precision_threshold" )
+	{
+		SetDistinctThreshDefault ( iSetValue );
+		return true;
+	}
+
 	if ( sName == "threads_ex" )
 	{
 		if ( !THREAD_EX_NEEDS_VIP || tSess.GetVip() )
@@ -15271,6 +15278,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 	}
 
 	dTable.MatchTuplet ( "accurate_aggregation", GetAccurateAggregationDefault() ? "1" : "0" );
+	dTable.MatchTupletf ( "distinct_precision_threshold", "%d", GetDistinctThreshDefault() );
 	dTable.MatchTupletFn ( "threads_ex_effective", [] {
 		StringBuilder_c tBuf;
 		auto x = GetEffectiveBaseDispatcherTemplate();
@@ -19376,6 +19384,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
+	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

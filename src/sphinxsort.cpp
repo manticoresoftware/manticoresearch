@@ -25,6 +25,7 @@
 #include "docstore.h"
 #include "schema/rset.h"
 #include "aggregate.h"
+#include "distinct.h"
 #include "netreceive_ql.h"
 
 #include <time.h>
@@ -36,6 +37,7 @@
 #endif
 
 static bool g_bAccurateAggregation = false;
+static int g_iDistinctThresh = 3500;
 
 void SetAccurateAggregationDefault ( bool bEnabled )
 {
@@ -46,6 +48,18 @@ void SetAccurateAggregationDefault ( bool bEnabled )
 bool GetAccurateAggregationDefault()
 {
 	return g_bAccurateAggregation;
+}
+
+
+void SetDistinctThreshDefault ( int iThresh )
+{
+	g_iDistinctThresh = iThresh;
+}
+
+
+int GetDistinctThreshDefault()
+{
+	return g_iDistinctThresh;
 }
 
 
@@ -676,7 +690,7 @@ public:
 		: CSphMatchQueueTraits ( iSize )
 		, m_fnComp ( *this )
 	{
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_dJustPopped.Reserve(1);
 	}
 
@@ -805,7 +819,7 @@ private:
 	{
 		++m_iTotal;
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 		{
 			m_tJustPushed = RowTagged_t();
 			m_dJustPopped.Resize(0);
@@ -823,7 +837,7 @@ private:
 		// do add
 		PUSH ( Add(), std::forward<MATCH> ( tEntry ));
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( *Last() );
 
 		int iEntry = Used()-1;
@@ -855,7 +869,7 @@ private:
 		if ( !fnProcess ( m_dData[iJustRemoved] ) )
 		{
 			// make the last entry my new root
-			if_const ( NOTIFICATIONS )
+			if constexpr ( NOTIFICATIONS )
 			{
 				if ( m_dJustPopped.IsEmpty () )
 					m_dJustPopped.Add (  RowTagged_t ( m_dData[iJustRemoved] ) );
@@ -915,7 +929,7 @@ public:
 		, m_dComp ( *this )
 	{
 		m_iSize /= COEFF;
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize*(COEFF-1) );
 	}
 
@@ -1034,7 +1048,7 @@ private:
 
 	void FreeMatch ( int iMatch )
 	{
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
 	}
@@ -1108,7 +1122,7 @@ private:
 	template<typename MATCH, typename PUSHER>
 	FORCE_INLINE bool PushT ( MATCH && tEntry, PUSHER && PUSH )
 	{
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 		{
 			m_tJustPushed = RowTagged_t();
 			m_dJustPopped.Resize(0);
@@ -1124,7 +1138,7 @@ private:
 		m_bFinalized = false;
 		PUSH ( Add(), std::forward<MATCH> ( tEntry ));
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( *Last() );
 
 		// do the initial sort once
@@ -1732,9 +1746,9 @@ public:
 template < typename T >
 inline static char * FormatInt ( char sBuf[32], T v )
 {
-	if_const ( sizeof(T)==4 && v==INT_MIN )
+	if ( sizeof(T)==4 && v==INT_MIN )
 		return strncpy ( sBuf, "-2147483648", 32 );
-	if_const ( sizeof(T)==8 && v==LLONG_MIN )
+	if ( sizeof(T)==8 && v==LLONG_MIN )
 		return strncpy ( sBuf, "-9223372036854775808", 32 );
 
 	bool s = ( v<0 );
@@ -2233,67 +2247,68 @@ public:
 			explicit DistinctFetcher_c ( const CSphAttrLocator & tLocator ) : m_tLocator(tLocator) {}
 
 	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override {}
-	void	SetBlobPool ( const BYTE * pBlobPool ) override {}
+	void	SetBlobPool ( const BYTE * pBlobPool ) override { m_pBlobPool = pBlobPool; }
 	void	FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema ); }
 
 protected:
 	CSphAttrLocator m_tLocator;
-};
-
-
-class DistinctFetcherBlob_c : public DistinctFetcher_c
-{
-	using DistinctFetcher_c::DistinctFetcher_c;
-
-public:
-	void	SetBlobPool ( const BYTE * pBlobPool ) override { m_pBlobPool = pBlobPool; }
-
-protected:
 	const BYTE * m_pBlobPool = nullptr;
 };
 
 
-class DistinctFetcherInt_c : public DistinctFetcher_c
+class DistinctFetcherPlain_c : public DistinctFetcher_c
 {
 	using DistinctFetcher_c::DistinctFetcher_c;
 
 public:
-	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override { assert ( 0 && " Requesting multiple keys from plain distinct fetcher" ); }
+	bool	IsMultiValue() const override { return false; }
+};
+
+
+class DistinctFetcherMulti_c : public DistinctFetcher_c
+{
+	using DistinctFetcher_c::DistinctFetcher_c;
+
+public:
+	SphAttr_t	GetKey ( const CSphMatch & tMatch ) const override { assert ( 0 && " Requesting single keys from multi distinct fetcher" ); return 0; }
+	bool		IsMultiValue() const override { return true; }
+};
+
+
+class DistinctFetcherInt_c : public DistinctFetcherPlain_c
+{
+	using DistinctFetcherPlain_c::DistinctFetcherPlain_c;
+
+public:
+	SphAttr_t			GetKey ( const CSphMatch & tMatch ) const override { return tMatch.GetAttr(m_tLocator); }
 	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherInt_c(m_tLocator); }
 };
 
 
-void DistinctFetcherInt_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+class DistinctFetcherString_c : public DistinctFetcherPlain_c
 {
-	dKeys.Resize(1);
-	dKeys[0] = tMatch.GetAttr(m_tLocator);
-}
-
-
-class DistinctFetcherString_c : public DistinctFetcherBlob_c
-{
-	using DistinctFetcherBlob_c::DistinctFetcherBlob_c;
+	using DistinctFetcherPlain_c::DistinctFetcherPlain_c;
 
 public:
-	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	SphAttr_t			GetKey ( const CSphMatch & tMatch ) const override;
 	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherString_c(m_tLocator); }
 };
 
 
-void DistinctFetcherString_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+SphAttr_t DistinctFetcherString_c::GetKey ( const CSphMatch & tMatch ) const
 {
-	dKeys.Resize(1);
 	auto dBlob = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-	dKeys[0] = (SphAttr_t) sphFNV64 ( dBlob );
+	return (SphAttr_t) sphFNV64 ( dBlob );
 }
 
 
-class DistinctFetcherJsonField_c : public DistinctFetcherBlob_c
+class DistinctFetcherJsonField_c : public DistinctFetcherMulti_c
 {
-	using DistinctFetcherBlob_c::DistinctFetcherBlob_c;
+	using DistinctFetcherMulti_c::DistinctFetcherMulti_c;
 
 public:
-	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	void				GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
 	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherJsonField_c(m_tLocator); }
 };
 
@@ -2312,12 +2327,12 @@ void DistinctFetcherJsonField_c::GetKeys ( const CSphMatch & tMatch, CSphVector<
 
 
 template<typename T>
-class DistinctFetcherMva_T : public DistinctFetcherBlob_c
+class DistinctFetcherMva_T : public DistinctFetcherMulti_c
 {
-	using DistinctFetcherBlob_c::DistinctFetcherBlob_c;
+	using DistinctFetcherMulti_c::DistinctFetcherMulti_c;
 
 public:
-	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	void				GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
 	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherMva_T(m_tLocator); }
 };
 
@@ -2346,177 +2361,6 @@ static DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, con
 }
 
 /////////////////////////////////////////////////////////////////////////////
-/// (attrvalue,count) pair
-struct SphUngroupedValue_t
-{
-	SphAttr_t attr;
-	int count;
-};
-
-inline bool operator<( const SphUngroupedValue_t& lhs, const SphUngroupedValue_t& rhs )
-{
-	if ( lhs.attr != rhs.attr )
-		return lhs.attr < rhs.attr;
-	return lhs.count > rhs.count;
-}
-
-inline bool operator== ( const SphUngroupedValue_t& lhs, const SphUngroupedValue_t& rhs )
-{
-	return lhs.attr == rhs.attr;
-}
-
-/// (group,attrvalue,count) tuplet
-struct SphGroupedValue_t
-{
-public:
-	SphGroupKey_t	m_uGroup;
-	SphAttr_t		m_uValue;
-	int				m_iCount;
-
-public:
-	SphGroupedValue_t () = default;
-
-	SphGroupedValue_t ( SphGroupKey_t uGroup, SphAttr_t uValue, int iCount )
-		: m_uGroup ( uGroup )
-		, m_uValue ( uValue )
-		, m_iCount ( iCount )
-	{}
-
-	inline bool operator < ( const SphGroupedValue_t & rhs ) const
-	{
-		if ( m_uGroup!=rhs.m_uGroup ) return m_uGroup<rhs.m_uGroup;
-		if ( m_uValue!=rhs.m_uValue ) return m_uValue<rhs.m_uValue;
-		return m_iCount>rhs.m_iCount;
-	}
-
-	inline bool operator == ( const SphGroupedValue_t & rhs ) const
-	{
-		return m_uGroup==rhs.m_uGroup && m_uValue==rhs.m_uValue;
-	}
-};
-
-
-/// unique values counter
-/// used for COUNT(DISTINCT xxx) GROUP BY yyy queries
-class CSphUniqounter : public CSphVector<SphGroupedValue_t>
-{
-public:
-					CSphUniqounter () { Reserve ( 16384 ); }
-	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector<SphGroupedValue_t>::Add ( tValue ); m_bSorted = false; }
-	void			Sort();
-
-	int				CountStart ( SphGroupKey_t * pOutGroup );	///< starting counting distinct values, returns count and group key (0 if empty)
-	int				CountNext ( SphGroupKey_t * pOutGroup );	///< continues counting distinct values, returns count and group key (0 if done)
-	void			Compact ( VecTraits_T<SphGroupKey_t> & dRemoveGroups );
-	void			CopyTo ( CSphUniqounter & dRhs );
-
-protected:
-	int				m_iCountPos = 0;
-	bool			m_bSorted = true;
-};
-
-
-void CSphUniqounter::Sort()
-{
-	if ( m_bSorted )
-		return;
-
-	CSphVector<SphGroupedValue_t>::Sort();
-	m_bSorted = true;
-}
-
-
-int CSphUniqounter::CountStart ( SphGroupKey_t * pOutGroup )
-{
-	m_iCountPos = 0;
-	return CountNext ( pOutGroup );
-}
-
-
-int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
-{
-	assert ( m_bSorted );
-	if ( m_iCountPos>=m_iCount )
-		return 0;
-
-	auto uGroup = m_pData[m_iCountPos].m_uGroup;
-	auto uValue = m_pData[m_iCountPos].m_uValue;
-	auto iCount = m_pData[m_iCountPos].m_iCount;
-	*pOutGroup = uGroup;
-
-	while ( m_iCountPos<m_iCount && m_pData[m_iCountPos].m_uGroup==uGroup )
-	{
-		if ( m_pData[m_iCountPos].m_uValue!=uValue )
-			iCount += m_pData[m_iCountPos].m_iCount;
-		uValue = m_pData[m_iCountPos].m_uValue;
-		++m_iCountPos;
-	}
-	return iCount;
-}
-
-// works like 'uniq', and also throw away provided values to remove.
-void CSphUniqounter::Compact ( VecTraits_T<SphGroupKey_t>& dRemoveGroups )
-{
-	assert ( m_bSorted );
-	if ( !m_iCount )
-		return;
-
-	dRemoveGroups.Sort();
-	auto * pRemoveGroups = dRemoveGroups.begin ();
-	auto iRemoveGroups = dRemoveGroups.GetLength ();
-
-	SphGroupedValue_t * pSrc = m_pData;
-	SphGroupedValue_t * pDst = m_pData;
-	SphGroupedValue_t * pEnd = m_pData + m_iCount;
-
-	// skip remove-groups which are not in my list
-	while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
-	{
-		++pRemoveGroups;
-		--iRemoveGroups;
-	}
-
-	for ( ; pSrc<pEnd; ++pSrc )
-	{
-		// check if this entry needs to be removed
-		while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
-		{
-			++pRemoveGroups;
-			--iRemoveGroups;
-		}
-		if ( iRemoveGroups && pSrc->m_uGroup==*pRemoveGroups )
-			continue;
-
-		// check if it's a dupe
-		if ( pDst>m_pData && pDst[-1]==pSrc[0] )
-			continue;
-
-		*pDst++ = *pSrc;
-	}
-
-	assert ( pDst-m_pData<=m_iCount );
-	m_iCount = pDst-m_pData;
-}
-
-
-void CSphUniqounter::CopyTo ( CSphUniqounter & dRhs )
-{
-	if ( m_bSorted && dRhs.m_bSorted )
-	{
-		CSphUniqounter dRes;
-		dRes.MergeSorted ( dRhs, *this );
-		dRes.m_bSorted = true;
-		dRhs = std::move(dRes);
-	}
-	else
-	{
-		auto * pNewValues = dRhs.AddN ( GetLength() );
-		memcpy ( pNewValues, Begin(), GetLengthBytes64() );
-		dRhs.m_bSorted = false;
-	}
-}
-
-/////////////////////////////////////////////////////////////////////////////
 /// group sorting functor
 template < typename COMPGROUP >
 struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccessor_t
@@ -2527,7 +2371,7 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccesso
 		: m_dBase ( dBase.GetMatches() )
 	{}
 
-	bool IsLess ( int a, int b ) const
+	FORCE_INLINE bool IsLess ( int a, int b ) const
 	{
 		return COMPGROUP::IsLess ( m_dBase[b], m_dBase[a], *this );
 	}
@@ -2549,6 +2393,8 @@ struct CSphGroupSorterSettings
 	SharedPtr_t<ISphFilter>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
 	int					m_iMaxMatches = 0;
+	bool				m_bGrouped = false;	///< are we going to push already grouped matches to it?
+	int					m_iDistinctAccuracy = 16;	///< HyperLogLog accuracy. 0 means "don't use HLL"
 
 	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
 	{
@@ -2559,6 +2405,20 @@ struct CSphGroupSorterSettings
 
 		if ( m_pDistinctFetcher )
 			m_pDistinctFetcher->FixupLocators ( pOldSchema, pNewSchema );
+	}
+
+	void SetupDistinctAccuracy ( int iThresh )
+	{
+		if ( !iThresh )
+		{
+			m_iDistinctAccuracy = 0;
+			return;
+		}
+
+		iThresh = int ( float(iThresh) / OpenHashTable_T<int,int>::GetLoadFactor() ) + 1;
+		m_iDistinctAccuracy = iThresh ? sphLog2(iThresh) + 4 : 0;
+		m_iDistinctAccuracy = Min ( m_iDistinctAccuracy, 18 );
+		m_iDistinctAccuracy = Max ( m_iDistinctAccuracy, 14 );
 	}
 };
 
@@ -2714,7 +2574,7 @@ protected:
 	}
 
 	/// schema, aggregates setup
-	template <bool DISTINCT>
+	template <int DISTINCT>
 	inline void SetupBaseGrouper ( ISphSchema * pSchema, CSphVector<AggrFunc_i *> * pAvgs = nullptr )
 	{
 		m_tPregroup.ResetAttrs();
@@ -2723,7 +2583,7 @@ protected:
 		m_tPregroup.SetSchema ( pSchema );
 		m_tPregroup.AddRaw ( m_tLocGroupby ); // @groupby
 		m_tPregroup.AddRaw ( m_tLocCount ); // @count
-		if_const ( DISTINCT )
+		if constexpr ( DISTINCT )
 			m_tPregroup.AddRaw ( m_tLocDistinct ); // @distinct
 
 		// extract aggregates
@@ -2837,10 +2697,10 @@ public:
 };
 
 /// match sorter with k-buffering and group-by - common part
-template<typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS>
+template<typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS>
 class KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSorter_c
 {
-	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>;
+	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>;
 	using BASE = CSphMatchQueueTraits;
 
 public:
@@ -2854,11 +2714,12 @@ public:
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( !DISTINCT || tSettings.m_pDistinctFetcher );
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
 
 		m_pGrouper = tSettings.m_pGrouper;
 		m_pDistinctFetcher = tSettings.m_pDistinctFetcher;
+		m_tUniq.SetAccuracy ( tSettings.m_iDistinctAccuracy );
 	}
 
 	/// schema setup
@@ -2923,7 +2784,7 @@ public:
 		m_tGroupSorter.m_iNow = tState.m_iNow;
 
 		// check whether we sort by distinct
-		if_const ( DISTINCT )
+		if constexpr ( DISTINCT )
 		{
 			const CSphColumnInfo * pDistinct = m_pSchema->GetAttr("@distinct");
 			assert(pDistinct);
@@ -2942,7 +2803,7 @@ public:
 protected:
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
 	int							m_iLimit;		///< max matches to be retrieved
-	CSphUniqounter				m_tUniq;
+	UNIQ						m_tUniq;
 	bool						m_bSortByDistinct = false;
 	GroupSorter_fn<COMPGROUP>	m_tGroupSorter;
 	SubGroupSorter_fn			m_tSubSorter;
@@ -2957,7 +2818,7 @@ protected:
 	{
 		m_tUniq.Sort ();
 		SphGroupKey_t uGroup;
-		for ( int iCount = m_tUniq.CountStart ( &uGroup ); iCount; iCount = m_tUniq.CountNext ( &uGroup ) )
+		for ( int iCount = m_tUniq.CountStart ( uGroup ); iCount; iCount = m_tUniq.CountNext ( uGroup ) )
 		{
 			CSphMatch * pMatch = fnFind ( uGroup );
 			if ( pMatch )
@@ -3020,9 +2881,9 @@ protected:
 		return dAggrs;
 	}
 
-	void FreeMatchPtrs ( int iMatch, bool bNotify=true )
+	FORCE_INLINE void FreeMatchPtrs ( int iMatch, bool bNotify=true )
 	{
-		if_const ( NOTIFICATIONS && bNotify )
+		if ( NOTIFICATIONS && bNotify )
 			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
 
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
@@ -3034,14 +2895,23 @@ protected:
 			m_dData[iMatch].ResetDynamic ();
 	}
 
-	inline void UpdateDistinct ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped )
+	template <bool GROUPED>
+	FORCE_INLINE void UpdateDistinct ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey )
 	{
-		int iCount = bGrouped ? (int) tEntry.GetAttr ( m_tLocDistinct ) : 1;
+		int iCount = 1;
+		if constexpr ( GROUPED )
+			iCount = (int)tEntry.GetAttr ( m_tLocDistinct );
 
 		assert(m_pDistinctFetcher);
-		m_pDistinctFetcher->GetKeys ( tEntry, this->m_dDistinctKeys );
-		for ( auto i : this->m_dDistinctKeys )
-			m_tUniq.Add ( {uGroupKey, i, iCount} );
+
+		if constexpr ( DISTINCT==1 )
+			m_tUniq.Add ( {uGroupKey, m_pDistinctFetcher->GetKey(tEntry), iCount} );
+		else
+		{
+			m_pDistinctFetcher->GetKeys ( tEntry, this->m_dDistinctKeys );
+			for ( auto i : this->m_dDistinctKeys )
+				m_tUniq.Add ( {uGroupKey, i, iCount} );
+		}	
 	}
 
 	void RemoveDistinct ( VecTraits_T<SphGroupKey_t>& dRemove )
@@ -3055,18 +2925,18 @@ protected:
 
 /// match sorter with k-buffering and group-by
 /// invoking by select ... group by ... where only plain attributes (i.e. NO mva, NO jsons)
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
-class CSphKBufferGroupSorter : public KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>
+template < typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
+class CSphKBufferGroupSorter : public KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>
 {
-	using MYTYPE = CSphKBufferGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
+	using MYTYPE = CSphKBufferGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
 	bool m_bMatchesFinalized = false;
 	int m_iMaxUsed = -1;
 
 protected:
-	OpenHash_T < CSphMatch *, SphGroupKey_t >	m_hGroup2Match;
+	OpenHashTableFastClear_T <SphGroupKey_t, CSphMatch *> m_hGroup2Match;
 
 	// since we inherit from template, we need to write boring 'using' block
-	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS>;
 	using KBufferGroupSorter::m_eGroupBy;
 	using KBufferGroupSorter::m_pGrouper;
 	using KBufferGroupSorter::m_iLimit;
@@ -3127,7 +2997,7 @@ public:
 		for ( auto iMatch : this->m_dIData )
 		{
 			CSphMatch & tMatch = m_dData[iMatch];
-			if_const ( HAS_AGGREGATES )
+			if constexpr ( HAS_AGGREGATES )
 				dAggrs.Apply ( [&tMatch] ( AggrFunc_i * pAggr ) { pAggr->Finalize ( tMatch ); } );
 
 			if ( !EvalHAVING ( tMatch ))
@@ -3143,8 +3013,8 @@ public:
 		m_iTotal = 0;
 		m_bMatchesFinalized = false;
 
-		if_const ( DISTINCT )
-			m_tUniq.Resize ( 0 );
+		if constexpr ( DISTINCT )
+			m_tUniq.Reset();
 
 		ResetAfterFlatten ();
 
@@ -3165,11 +3035,11 @@ public:
 		if ( dRhs.IsEmpty () )
 		{
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
-			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
+			dRhs.m_hGroup2Match = std::move ( m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
 			dRhs.m_iMaxUsed = m_iMaxUsed;
 			if ( !m_bMatchesFinalized && bCopyMeta )
-				dRhs.m_tUniq = m_tUniq;
+				dRhs.m_tUniq = std::move(m_tUniq);
 
 			m_iMaxUsed = -1;
 			return;
@@ -3222,7 +3092,7 @@ public:
 
 		if ( bFinalizeMatches )
 			FinalizeMatches();
-		else if_const ( DISTINCT )
+		else if constexpr ( DISTINCT )
 		{
 			// if we are not finalizing matches, we are using global sorters
 			// let's try to remove dupes while we are processing data in separate threads
@@ -3240,24 +3110,25 @@ public:
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
 
 protected:
-	bool PushIntoExistingGroup( CSphMatch & tGroup, const CSphMatch & tEntry, SphGroupKey_t uGroupKey, bool bGrouped, SphAttr_t * pAttr )
+	template <bool GROUPED>
+	bool PushIntoExistingGroup( CSphMatch & tGroup, const CSphMatch & tEntry, SphGroupKey_t uGroupKey, SphAttr_t * pAttr )
 	{
 		assert ( tGroup.GetAttr ( m_tLocGroupby )==uGroupKey );
 		assert ( tGroup.m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
 
 		auto & tLocCount = m_tLocCount;
-		if ( bGrouped )
+		if constexpr ( GROUPED )
 			tGroup.AddCounterAttr ( tLocCount, tEntry );
 		else
 			tGroup.AddCounterScalar ( tLocCount, 1 );
 
-		if_const ( HAS_AGGREGATES )
-			AggrUpdate ( tGroup, tEntry, bGrouped, m_bMerge );
+		if constexpr ( HAS_AGGREGATES )
+			AggrUpdate ( tGroup, tEntry, GROUPED, m_bMerge );
 
 		// if new entry is more relevant, update from it
 		if ( m_tSubSorter.MatchIsGreater ( tEntry, tGroup ) )
 		{
-			if_const ( NOTIFICATIONS )
+			if constexpr ( NOTIFICATIONS )
 			{
 				m_tJustPushed = RowTagged_t ( tEntry );
 				this->m_dJustPopped.Add ( RowTagged_t ( tGroup ) );
@@ -3271,7 +3142,7 @@ protected:
 
 		// submit actual distinct value
 		if ( DISTINCT && m_bUpdateDistinct )
-			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
+			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		return false; // since it is a dupe
 	}
@@ -3280,7 +3151,7 @@ protected:
 	template <bool GROUPED>
 	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool, SphAttr_t * pAttr=nullptr )
 	{
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 		{
 			m_tJustPushed = RowTagged_t();
 			this->m_dJustPopped.Resize ( 0 );
@@ -3288,7 +3159,7 @@ protected:
 		auto & tLocCount = m_tLocCount;
 
 		m_bMatchesFinalized = false;
-		if_const ( HAS_AGGREGATES && m_bAvgFinal )
+		if ( HAS_AGGREGATES && m_bAvgFinal )
 			CalcAvg ( Avg_e::UNGROUP );
 
 		// if this group is already hashed, we only need to update the corresponding match
@@ -3298,12 +3169,12 @@ protected:
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
 			assert ( pMatch->GetAttr ( m_tLocGroupby )==uGroupKey );
-			return PushIntoExistingGroup ( *pMatch, tEntry, uGroupKey, GROUPED, pAttr );
+			return PushIntoExistingGroup<GROUPED> ( *pMatch, tEntry, uGroupKey, pAttr );
 		}
 
 		// submit actual distinct value
-		if_const ( DISTINCT )
-			UpdateDistinct ( tEntry, uGroupKey, GROUPED );
+		if constexpr ( DISTINCT )
+			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// if we're full, let's cut off some worst groups
 		if ( Used()==m_iSize )
@@ -3314,15 +3185,15 @@ protected:
 		CSphMatch & tNew = Add();
 		m_pSchema->CloneMatch ( tNew, tEntry );
 
-		if_const ( HAS_AGGREGATES )
+		if constexpr ( HAS_AGGREGATES )
 			AggrSetup ( tNew, tEntry, m_bMerge );
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
 
-		if_const ( GROUPED )
+		if constexpr ( GROUPED )
 		{
-			if_const ( HAS_AGGREGATES )
+			if constexpr ( HAS_AGGREGATES )
 				AggrUngroup(tNew);
 		}
 		else
@@ -3345,6 +3216,7 @@ private:
 	enum class Avg_e { FINALIZE, UNGROUP };
 	bool	m_bUpdateDistinct = true;
 	bool	m_bMerge = false;
+	CSphVector<SphGroupKey_t> m_dRemove;
 
 	void CalcAvg ( Avg_e eGroup )
 	{
@@ -3403,7 +3275,7 @@ private:
 	void CutWorst ( int iBound, bool bFinalize=false )
 	{
 		// prepare to partition - finalize distinct, avgs to provide smooth sorting
-		if_const ( DISTINCT && m_bSortByDistinct )
+		if ( DISTINCT && m_bSortByDistinct )
 			CountDistinct ();
 
 		CalcAvg ( Avg_e::FINALIZE );
@@ -3414,12 +3286,12 @@ private:
 		// take worst matches and free them (distinct stuff, data ptrs)
 		auto dWorst = this->m_dIData.Slice ( iBound );
 
-		if_const ( DISTINCT )
+		if constexpr ( DISTINCT )
 		{
-			CSphVector<SphGroupKey_t> dRemove;
+			m_dRemove.Resize(0);
 			for ( auto iMatch : dWorst )
-				dRemove.Add ( m_dData[iMatch].GetAttr ( m_tLocGroupby ));
-			RemoveDistinct ( dRemove );
+				m_dRemove.Add ( m_dData[iMatch].GetAttr ( m_tLocGroupby ));
+			RemoveDistinct ( m_dRemove );
 		}
 
 		dWorst.Apply ( [this,bFinalize] ( int iMatch ) { FreeMatchPtrs ( iMatch, !bFinalize ); } );
@@ -3428,14 +3300,16 @@ private:
 		this->m_dIData.Resize ( iBound );
 		m_hGroup2Match.Clear();
 
-		if ( bFinalize ) {
-			SortGroups ();
-			if_const ( DISTINCT && !m_bSortByDistinct ) // since they haven't counted at the top
+		if ( bFinalize )
+		{
+			SortGroups();
+			if ( DISTINCT && !m_bSortByDistinct ) // since they haven't counted at the top
 			{
 				RebuildHash(); // distinct uses m_hGroup2Match
 				CountDistinct();
 			}
-		} else {
+		} else
+		{
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
 			// now we can undo this calculation for the rest apart from thrown away
 			// on finalize (sorting) cut we don't need to ungroup here
@@ -3559,13 +3433,13 @@ private:
  *
  */
 
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
-class CSphKBufferNGroupSorter : public KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>
+template < typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
+class CSphKBufferNGroupSorter : public KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>
 {
-	using MYTYPE = CSphKBufferNGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS,HAS_AGGREGATES>;
+	using MYTYPE = CSphKBufferNGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS,HAS_AGGREGATES>;
 
 protected:
-	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS>;
 	using KBufferGroupSorter::m_eGroupBy;
 	using KBufferGroupSorter::m_pGrouper;
 	using KBufferGroupSorter::m_iLimit;
@@ -3661,8 +3535,8 @@ public:
 		m_iTotal = 0;
 		m_dFinalizedHeads.Reset ();
 		m_hGroup2Index.Clear();
-		if_const ( DISTINCT )
-			m_tUniq.Resize ( 0 );
+		if constexpr ( DISTINCT )
+			m_tUniq.Reset();
 
 		return int ( pTo-pBegin );
 	}
@@ -3687,7 +3561,7 @@ public:
 		{
 			ProcessData ( tProcessor, GetAllHeads() );
 
-			if_const ( DISTINCT )
+			if constexpr ( DISTINCT )
 			{
 				// if we are not finalizing matches, we are using global sorters
 				// let's try to remove dupes while we are processing data in separate threads
@@ -3717,7 +3591,7 @@ public:
 		{
 			DBG << " Rhs is empty, adopt! ";
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
-			m_hGroup2Index.Swap ( dRhs.m_hGroup2Index );
+			dRhs.m_hGroup2Index = std::move ( m_hGroup2Index );
 			::Swap ( m_uLastGroupKey, dRhs.m_uLastGroupKey );
 			::Swap ( m_iFree, dRhs.m_iFree );
 			::Swap ( m_iUsed, dRhs.m_iUsed );
@@ -3730,7 +3604,7 @@ public:
 			LOC_SWAP(dRhs);
 #endif
 			if ( !m_bFinalized && bCopyMeta )
-				dRhs.m_tUniq = m_tUniq;
+				dRhs.m_tUniq = std::move(m_tUniq);
 
 			return;
 		}
@@ -3777,7 +3651,7 @@ public:
 
 protected:
 	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
-	OpenHash_T<int, SphGroupKey_t> m_hGroup2Index; // used to quickly locate group for incoming match
+	OpenHashTable_T<SphGroupKey_t, int> m_hGroup2Index; // used to quickly locate group for incoming match
 
 	int				m_iGLimit;		///< limit per one group
 	SphGroupKey_t	m_uLastGroupKey = -1;	///< helps to determine in pushEx whether the new subgroup started
@@ -3810,14 +3684,14 @@ protected:
 			<< " g" << GROUPED << " n" << bNewSet;
 #endif
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 		{
 			m_tJustPushed = RowTagged_t();
 			this->m_dJustPopped.Resize ( 0 );
 		}
 
 		this->m_bFinalized = false;
-		if_const ( HAS_AGGREGATES && m_bAvgFinal )
+		if ( HAS_AGGREGATES && m_bAvgFinal )
 			CalcAvg ( Avg_e::UNGROUP );
 
 		// place elem into the set
@@ -3827,7 +3701,7 @@ protected:
 		// if such group already hashed
 		int * pGroupIdx = m_hGroup2Index.Find ( uGroupKey );
 		if ( pGroupIdx )
-			return PushAlreadyHashed ( pGroupIdx, iNew, tEntry, uGroupKey, GROUPED, bNewSet, bTailFinalized );
+			return PushAlreadyHashed<GROUPED> ( pGroupIdx, iNew, tEntry, uGroupKey, bNewSet, bTailFinalized );
 
 		// match came from MoveTo of another sorter, it is tail, and it has no group here (m.b. it is already
 		// deleted during finalization as one of worst). Just discard the whole group in the case.
@@ -3845,26 +3719,26 @@ protected:
 
 		// submit actual distinct value in all cases
 		if ( DISTINCT && m_bUpdateDistinct )
-			UpdateDistinct ( tNew, uGroupKey, GROUPED );
+			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tNew, uGroupKey );
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
 
 		this->m_dIData[iNew] = iNew; // new head - points to self (0-ring)
 		Verify ( m_hGroup2Index.Add ( uGroupKey, iNew ));
 		++m_iTotal;
 
-		if_const ( GROUPED )
+		if constexpr ( GROUPED )
 		{
 			m_uLastGroupKey = uGroupKey;
 
-			if_const ( HAS_AGGREGATES )
+			if constexpr ( HAS_AGGREGATES )
 				AggrUngroup ( m_dData[iNew] );
 		} else
 		{
 			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( m_tLocCount, 1 );
-			if_const ( DISTINCT )
+			if constexpr ( DISTINCT )
 				tNew.SetAttr ( m_tLocDistinct, 0 );
 		}
 		return true;
@@ -3889,7 +3763,7 @@ private:
 	}
 
 	// return match and free it's dataptrs
-	inline void FreeMatch ( int iElem, bool bNotify ) // fixme! intersects with parent by name
+	FORCE_INLINE void FreeMatch ( int iElem, bool bNotify ) // fixme! intersects with parent by name
 	{
 		FreeMatchPtrs ( iElem, bNotify );
 		DeallocateMatch ( iElem );
@@ -3939,7 +3813,7 @@ private:
 	{
 		CSphMatch & tNew = m_dData[iNew];
 		this->m_tPregroup.CloneWithoutAggrs ( tNew, tEntry );
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
 
 		// put after the head
@@ -3955,7 +3829,8 @@ private:
 	 * If group is full, and new match is less than head, it will be early rejected.
 	 * In all other cases new match will be inserted into the group right after head
 	 */
-	bool PushAlreadyHashed ( int * pHead, int iNew, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool bNewSet, bool bTailFinalized )
+	template <bool GROUPED>
+	bool PushAlreadyHashed ( int * pHead, int iNew, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bNewSet, bool bTailFinalized )
 	{
 		int & iHead = *pHead;
 
@@ -3979,11 +3854,11 @@ private:
 		auto & tHeadMatch = m_dData[iHead];
 		// submit actual distinct value in all cases
 		if ( DISTINCT && m_bUpdateDistinct )
-			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
+			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// update group-wide counters
 		auto & tLocCount = m_tLocCount;
-		if ( bGrouped )
+		if constexpr ( GROUPED )
 		{
 			// it's already grouped match
 			// sum grouped matches count
@@ -4002,10 +3877,10 @@ private:
 		}
 
 		// update aggregates
-		if_const ( HAS_AGGREGATES )
+		if constexpr ( HAS_AGGREGATES )
 		{
 			if ( bNewSet )
-				AggrUpdate ( tHeadMatch, tEntry, bGrouped, m_bMerge );
+				AggrUpdate ( tHeadMatch, tEntry, GROUPED, m_bMerge );
 		}
 
 		// since it is dupe (i.e. such group is already pushed) - return false;
@@ -4022,12 +3897,12 @@ private:
 
 		int64_t i = 0;
 		if ( eGroup==Avg_e::FINALIZE )
-			for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
+			for ( auto tData = m_hGroup2Index.Iterate(i); tData.second; tData = m_hGroup2Index.Iterate(i) )
 				m_dAvgs.Apply ( [this, &tData] ( AggrFunc_i * pAvg ) {
 					pAvg->Finalize ( m_dData[*tData.second] );
 				});
 		else
-			for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
+			for ( auto tData = m_hGroup2Index.Iterate(i); tData.second; tData = m_hGroup2Index.Iterate(i) )
 				m_dAvgs.Apply ( [this, &tData] ( AggrFunc_i * pAvg ) {
 					pAvg->Ungroup ( m_dData[*tData.second] );
 				});
@@ -4063,7 +3938,7 @@ private:
 		CSphVector<int> dAllHeads;
 		dAllHeads.Reserve ( m_hGroup2Index.GetLength ());
 		int64_t i = 0;
-		for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
+		for ( auto tData = m_hGroup2Index.Iterate(i); tData.second; tData = m_hGroup2Index.Iterate(i) )
 			dAllHeads.Add ( *tData.second );
 		return dAllHeads;
 	}
@@ -4076,7 +3951,7 @@ private:
 		// first try to cut out too long tails
 		int iSize = 0;
 		int64_t i = 0;
-		for ( auto tData = m_hGroup2Index.Iterate(&i); tData.second; tData = m_hGroup2Index.Iterate(&i) )
+		for ( auto tData = m_hGroup2Index.Iterate(i); tData.second; tData = m_hGroup2Index.Iterate(i) )
 			iSize += VacuumTail ( tData.second, m_iGLimit );
 
 		// if we reached the limit now - bail, no need to free more.
@@ -4096,7 +3971,7 @@ private:
 		m_bFinalized = true;
 
 		int64_t i = 0;
-		for ( auto tData = m_hGroup2Index.Iterate(&i); tData.second; tData = m_hGroup2Index.Iterate(&i) )
+		for ( auto tData = m_hGroup2Index.Iterate(i); tData.second; tData = m_hGroup2Index.Iterate(i) )
 			VacuumTail ( tData.second, m_iGLimit, Stage_e::FINAL );
 
 		// Continue by cut out whole groups
@@ -4189,13 +4064,13 @@ private:
 			{
 				 // all quota exceeded, the rest just to be cut totally
 				auto iRemoved = DeleteChain ( m_dFinalizedHeads[i], eStage==Stage_e::COLLECT );
-				if_const ( DISTINCT )
+				if constexpr ( DISTINCT )
 					dRemovedHeads.Add( iRemoved );
 				m_dFinalizedHeads.RemoveFast ( i-- );
 			}
 
 		// discard removed distinct
-		if_const ( DISTINCT )
+		if constexpr ( DISTINCT )
 			RemoveDistinct ( dRemovedHeads );
 
 		if ( eStage==Stage_e::COLLECT )
@@ -4292,7 +4167,7 @@ private:
 	/// count distinct values if necessary
 	void CountDistinct ()
 	{
-		if_const ( DISTINCT )
+		if constexpr ( DISTINCT )
 			Distinct ( [this] ( SphGroupKey_t uGroup )->CSphMatch *
 			{
 				auto pIdx = m_hGroup2Index.Find ( uGroup );
@@ -4343,11 +4218,11 @@ private:
 	CSphVector<SphGroupKey_t>	m_dKeys;
 };
 
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
-class MultiValueGroupSorter_T : public MultiValueGroupSorterTraits_T <CSphKBufferGroupSorter <COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>
+template < typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
+class MultiValueGroupSorter_T : public MultiValueGroupSorterTraits_T <CSphKBufferGroupSorter <COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>
 {
-	using BASE = MultiValueGroupSorterTraits_T <CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>;
-	using MYTYPE = MultiValueGroupSorter_T < COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES >;
+	using BASE = MultiValueGroupSorterTraits_T <CSphKBufferGroupSorter < COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>;
+	using MYTYPE = MultiValueGroupSorter_T < COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES >;
 
 public:
 	using BASE::BASE;
@@ -4355,11 +4230,11 @@ public:
 	ISphMatchSorter * Clone () const final { return this->template CloneSorterT<MYTYPE>(); }
 };
 
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
-class MultiValueNGroupSorter_T : public MultiValueGroupSorterTraits_T < CSphKBufferNGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>
+template < typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
+class MultiValueNGroupSorter_T : public MultiValueGroupSorterTraits_T < CSphKBufferNGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>
 {
-	using BASE = MultiValueGroupSorterTraits_T <CSphKBufferNGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>;
-	using MYTYPE = MultiValueNGroupSorter_T <COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
+	using BASE = MultiValueGroupSorterTraits_T <CSphKBufferNGroupSorter < COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>>;
+	using MYTYPE = MultiValueNGroupSorter_T <COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
 
 public:
 	using BASE::BASE;
@@ -4375,15 +4250,15 @@ public:
 /////////////////////////////////////////////////////////////////////
 
 /// match sorter with k-buffering and group-by for JSON arrays
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
-class CSphKBufferJsonGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES >
+template < typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES >
+class CSphKBufferJsonGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES >
 {
 public:
-	using BASE = CSphKBufferGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
-	using MYTYPE = CSphKBufferJsonGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
+	using BASE = CSphKBufferGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
+	using MYTYPE = CSphKBufferJsonGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
 
 	// since we inherit from template, we need to write boring 'using' block
-	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS>;
 	using KBufferGroupSorter::m_eGroupBy;
 	using KBufferGroupSorter::m_iLimit;
 	using KBufferGroupSorter::m_tSubSorter;
@@ -4426,10 +4301,10 @@ private:
 
 /// implicit group-by sorter
 /// invoked when no 'group-by', but count(*) or count(distinct attr) are in game
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES>
+template < typename COMPGROUP, typename UNIQ, int DISTINCT, bool NOTIFICATIONS, bool HAS_AGGREGATES>
 class CSphImplicitGroupSorter final : public MatchSorter_c, ISphNoncopyable, protected BaseGroupSorter_c
 {
-	using MYTYPE = CSphImplicitGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
+	using MYTYPE = CSphImplicitGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
 	using BASE = MatchSorter_c;
 
 public:
@@ -4439,11 +4314,9 @@ public:
 		assert ( !DISTINCT || tSettings.m_pDistinctFetcher );
 		assert ( !pComp );
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_dJustPopped.Reserve(1);
 
-		if_const ( DISTINCT )
-			m_dUniq.Reserve ( 16384 );
 		m_iMatchCapacity = 1;
 
 		m_pDistinctFetcher = tSettings.m_pDistinctFetcher;
@@ -4483,7 +4356,7 @@ public:
 	bool	IsCutoffDisabled() const final { return true; }
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx<false>(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool ) final		{ return PushEx<true>(tEntry); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool ) final			{ return PushEx<true>(tEntry); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) final
@@ -4492,7 +4365,7 @@ public:
 
 		CountDistinct ();
 
-		if_const ( HAS_AGGREGATES )
+		if constexpr ( HAS_AGGREGATES )
 		{
 			for ( auto * pAggregate : m_dAggregates )
 				pAggregate->Finalize ( m_tData );
@@ -4512,8 +4385,8 @@ public:
 		m_iTotal = 0;
 		m_bDataInitialized = false;
 
-		if_const ( DISTINCT )
-			m_dUniq.Resize(0);
+		if constexpr ( DISTINCT )
+			m_tUniq.Reset();
 
 		return iCopied;
 	}
@@ -4527,7 +4400,7 @@ public:
 		tProcessor.Process ( &m_tData );
 
 		if ( !bFinalizeMatches )
-			m_dUniq.Uniq();
+			m_tUniq.Compact();
 	}
 
 	int		GetLength() final			{ return m_bDataInitialized ? 1 : 0; }
@@ -4544,7 +4417,6 @@ public:
 		return pClone;
 	}
 
-	// FIXME! test CSphImplicitGroupSorter
 	void MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) final
 	{
 		if (!m_bDataInitialized)
@@ -4557,22 +4429,21 @@ public:
 			::Swap ( m_iTotal, dRhs.m_iTotal );
 			::Swap ( m_tData, dRhs.m_tData );
 			::Swap ( m_bDataInitialized, dRhs.m_bDataInitialized );
-			m_dUniq.SwapData ( dRhs.m_dUniq );
+			if ( bCopyMeta )
+				dRhs.m_tUniq = std::move ( m_tUniq );
+
 			return;
 		}
 
 		if ( bCopyMeta )
-		{
-			auto * pNewData = dRhs.m_dUniq.AddN ( m_dUniq.GetLength() );
-			memcpy ( pNewData, m_dUniq.Begin(), m_dUniq.GetLengthBytes() );
-		}
+			m_tUniq.CopyTo ( dRhs.m_tUniq );
 
 		// other step is a bit tricky:
-		// we just can't add current count uniq to final; need to append m_dUniq instead,
+		// we just can't add current count uniq to final; need to append m_tUniq instead,
 		// so that final flattening will calculate real uniq count.
 		dRhs.AddCount ( m_tData );
 
-		if_const ( HAS_AGGREGATES )
+		if constexpr ( HAS_AGGREGATES )
 			dRhs.UpdateAggregates ( m_tData, false, true );
 
 		if ( !bCopyMeta && DISTINCT )
@@ -4582,11 +4453,11 @@ public:
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
 
 protected:
-	CSphMatch		m_tData;
-	bool			m_bDataInitialized = false;
-	bool			m_bMerge = false;
+	CSphMatch	m_tData;
+	bool		m_bDataInitialized = false;
+	bool		m_bMerge = false;
 
-	CSphVector<SphUngroupedValue_t>	m_dUniq;
+	UNIQ		 m_tUniq;
 
 private:
 	CSphVector<SphAttr_t> m_dDistinctKeys;
@@ -4598,23 +4469,28 @@ private:
 	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry, m_bMerge ); }
 
 	// submit actual distinct value in all cases
-	void UpdateDistinct ( const CSphMatch & tEntry, bool bGrouped = true )
+	template <bool GROUPED = true>
+	void UpdateDistinct ( const CSphMatch & tEntry )
 	{
 		int iCount = 1;
-		if ( bGrouped )
+		if constexpr ( GROUPED )
 			iCount = (int) tEntry.GetAttr ( m_tLocDistinct );
 
-		assert(m_pDistinctFetcher);
-		m_pDistinctFetcher->GetKeys ( tEntry, m_dDistinctKeys );
-		for ( auto i : m_dDistinctKeys )
-			this->m_dUniq.Add ( { i, iCount } );
+		if constexpr ( DISTINCT==1 )
+			m_tUniq.Add ( { 0, m_pDistinctFetcher->GetKey(tEntry), iCount } );
+		else
+		{
+			m_pDistinctFetcher->GetKeys ( tEntry, m_dDistinctKeys );
+			for ( auto i : m_dDistinctKeys )
+				this->m_tUniq.Add ( { 0, i, iCount } );
+		}	
 	}
 
 	/// add entry to the queue
 	template <bool GROUPED>
 	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry )
 	{
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 		{
 			m_tJustPushed = RowTagged_t();
 			m_dJustPopped.Resize(0);
@@ -4624,7 +4500,7 @@ private:
 		{
 			assert ( m_tData.m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
 
-			if_const ( GROUPED )
+			if constexpr ( GROUPED )
 			{
 				// it's already grouped match
 				// sum grouped matches count
@@ -4637,12 +4513,12 @@ private:
 			}
 
 			// update aggregates
-			if_const ( HAS_AGGREGATES )
+			if constexpr ( HAS_AGGREGATES )
 				UpdateAggregates ( tEntry, GROUPED, m_bMerge );
 		}
 
-		if_const ( DISTINCT )
-			UpdateDistinct ( tEntry, GROUPED );
+		if constexpr ( DISTINCT )
+			UpdateDistinct<GROUPED> ( tEntry );
 
 		// it's a dupe anyway, so we shouldn't update total matches count
 		if ( m_bDataInitialized )
@@ -4652,22 +4528,22 @@ private:
 		m_pSchema->CloneMatch ( m_tData, tEntry );
 
 		// first-time aggregate setup
-		if_const ( HAS_AGGREGATES )
+		if constexpr ( HAS_AGGREGATES )
 			SetupAggregates(tEntry);
 
-		if_const ( NOTIFICATIONS )
+		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( m_tData );
 
-		if_const ( !GROUPED )
+		if constexpr ( !GROUPED )
 		{
 			m_tData.SetAttr ( m_tLocGroupby, 1 ); // fake group number
 			m_tData.SetAttr ( m_tLocCount, 1 );
-			if_const ( DISTINCT )
+			if constexpr ( DISTINCT )
 				m_tData.SetAttr ( m_tLocDistinct, 0 );
 		}
 		else
 		{
-			if_const ( HAS_AGGREGATES )
+			if constexpr ( HAS_AGGREGATES )
 				AggrUngroup ( m_tData );
 		}
 
@@ -4679,22 +4555,11 @@ private:
 	/// count distinct values if necessary
 	void CountDistinct ()
 	{
-		if_const ( DISTINCT )
-		{
-			assert ( m_bDataInitialized );
+		if constexpr ( !DISTINCT )
+			return;
 
-			m_dUniq.Sort ();
-			int iCount = m_dUniq[0].count;
-
-			for ( int i = 1, iLen = m_dUniq.GetLength (); i<iLen; ++i )
-			{
-				if ( m_dUniq[i-1]==m_dUniq[i] )
-					continue;
-				iCount += m_dUniq[i].count;
-			}
-
-			m_tData.SetAttr ( m_tLocDistinct, iCount );
-		}
+		assert ( m_bDataInitialized );
+		m_tData.SetAttr ( m_tLocDistinct, m_tUniq.CountDistinct() );
 	}
 };
 
@@ -4919,19 +4784,29 @@ struct Precalculated_t
 	int64_t		m_iCount = -1;
 };
 
-#define CREATE_SORTER_4TH(SORTER,COMPGROUP,COMP,QUERY,SETTINGS,HAS_PACKEDFACTORS,HAS_AGGREGATES) \
+#define CREATE_SORTER_4TH(SORTER,COMPGROUP,UNIQ,COMP,QUERY,SETTINGS,HAS_PACKEDFACTORS,HAS_AGGREGATES) \
 { \
-	BYTE uSelector = 4*(tSettings.m_bDistinct?1:0) + 2*(bHasPackedFactors?1:0) + (HAS_AGGREGATES?1:0); \
+	int iMultiDistict = 0; \
+	if ( tSettings.m_bDistinct ) \
+	{ \
+		assert(tSettings.m_pDistinctFetcher); \
+		iMultiDistict = tSettings.m_pDistinctFetcher->IsMultiValue() ? 2 : 1; \
+	} \
+	BYTE uSelector = 4*iMultiDistict + 2*(bHasPackedFactors?1:0) + (HAS_AGGREGATES?1:0); \
 	switch ( uSelector ) \
 	{ \
-	case 0:	return new SORTER<COMPGROUP,false,false,false> ( pComp, pQuery, tSettings ); \
-	case 1:	return new SORTER<COMPGROUP,false,false,true>  ( pComp, pQuery, tSettings ); \
-	case 2:	return new SORTER<COMPGROUP,false,true, false> ( pComp, pQuery, tSettings ); \
-	case 3:	return new SORTER<COMPGROUP,false,true, true>  ( pComp, pQuery, tSettings ); \
-	case 4:	return new SORTER<COMPGROUP,true, false,false> ( pComp, pQuery, tSettings ); \
-	case 5:	return new SORTER<COMPGROUP,true, false,true>  ( pComp, pQuery, tSettings ); \
-	case 6:	return new SORTER<COMPGROUP,true, true, false> ( pComp, pQuery, tSettings ); \
-	case 7:	return new SORTER<COMPGROUP,true, true, true>  ( pComp, pQuery, tSettings ); \
+	case 0:	return new SORTER<COMPGROUP,UNIQ,0,	false,false> ( pComp, pQuery, tSettings ); \
+	case 1:	return new SORTER<COMPGROUP,UNIQ,0,	false,true>  ( pComp, pQuery, tSettings ); \
+	case 2:	return new SORTER<COMPGROUP,UNIQ,0,	true, false> ( pComp, pQuery, tSettings ); \
+	case 3:	return new SORTER<COMPGROUP,UNIQ,0,	true, true>  ( pComp, pQuery, tSettings ); \
+	case 4:	return new SORTER<COMPGROUP,UNIQ,1, false,false> ( pComp, pQuery, tSettings ); \
+	case 5:	return new SORTER<COMPGROUP,UNIQ,1, false,true>  ( pComp, pQuery, tSettings ); \
+	case 6:	return new SORTER<COMPGROUP,UNIQ,1, true, false> ( pComp, pQuery, tSettings ); \
+	case 7:	return new SORTER<COMPGROUP,UNIQ,1, true, true>  ( pComp, pQuery, tSettings ); \
+	case 8:	return new SORTER<COMPGROUP,UNIQ,2, false,false> ( pComp, pQuery, tSettings ); \
+	case 9:	return new SORTER<COMPGROUP,UNIQ,2, false,true>  ( pComp, pQuery, tSettings ); \
+	case 10:return new SORTER<COMPGROUP,UNIQ,2, true, false> ( pComp, pQuery, tSettings ); \
+	case 11:return new SORTER<COMPGROUP,UNIQ,2, true, true>  ( pComp, pQuery, tSettings ); \
 	default: assert(0); return nullptr; \
 	} \
 }
@@ -4948,15 +4823,41 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 	if ( tPrecalc.m_iCount!=-1 )
 		return new FastCountFilterSorter_c ( tPrecalc.m_iCount, tSettings );
 
-	BYTE uSelector3rd = 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
+	bool bUseHLL = tSettings.m_iDistinctAccuracy > 0;
+
+	using Uniq_c			= UniqGrouped_T<ValueWithGroup_t>;
+	using UniqSingle_c		= UniqSingle_T<SphAttr_t>;
+	using UniqCount_c		= UniqGrouped_T<ValueWithGroupCount_t>;
+	using UniqCountSingle_c = UniqSingle_T<ValueWithCount_t>;
+
+	BYTE uSelector3rd = 32*( bUseHLL ? 1 : 0 ) + 16*( tSettings.m_bGrouped ? 1:0 ) + 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
 	switch ( uSelector3rd )
 	{
-	case 0:	CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-	case 1: CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-	case 2: CREATE_SORTER_4TH ( CSphImplicitGroupSorter,	COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-	case 4:	CREATE_SORTER_4TH ( CSphKBufferNGroupSorter,	COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-	case 5: CREATE_SORTER_4TH ( MultiValueNGroupSorter_T,	COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
-	case 8: CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 0:	CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, Uniq_c,		pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 1: CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, Uniq_c,		pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 2: CREATE_SORTER_4TH ( CSphImplicitGroupSorter,	COMPGROUP, UniqSingle_c, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 4:	CREATE_SORTER_4TH ( CSphKBufferNGroupSorter,	COMPGROUP, Uniq_c,		pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 5: CREATE_SORTER_4TH ( MultiValueNGroupSorter_T,	COMPGROUP, Uniq_c,		pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 8: CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, Uniq_c,		pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 16:CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 17:CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 18:CREATE_SORTER_4TH ( CSphImplicitGroupSorter,	COMPGROUP, UniqCountSingle_c, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 20:CREATE_SORTER_4TH ( CSphKBufferNGroupSorter,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 21:CREATE_SORTER_4TH ( MultiValueNGroupSorter_T,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 24:CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 32:CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 33:CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 34:CREATE_SORTER_4TH ( CSphImplicitGroupSorter,	COMPGROUP, UniqHLLSingle_c, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 36:CREATE_SORTER_4TH ( CSphKBufferNGroupSorter,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 37:CREATE_SORTER_4TH ( MultiValueNGroupSorter_T,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 40:CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 48:CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 49:CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 50:CREATE_SORTER_4TH ( CSphImplicitGroupSorter,	COMPGROUP, UniqCountSingle_c, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 52:CREATE_SORTER_4TH ( CSphKBufferNGroupSorter,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 53:CREATE_SORTER_4TH ( MultiValueNGroupSorter_T,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 56:CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+
 	default: assert(0); return nullptr;
 	}
 }
@@ -6931,6 +6832,9 @@ bool QueueCreator_c::SetGroupSorting()
 
 			m_tGroupSorterSettings.m_pAggrFilterTrait = pFilter.release();
 		}
+
+		int iDistinctAccuracyThresh = m_tQuery.m_bExplicitDistinctThresh ? m_tQuery.m_iDistinctThresh : GetDistinctThreshDefault();
+		m_tGroupSorterSettings.SetupDistinctAccuracy ( iDistinctAccuracyThresh );
 	}
 
 	for ( auto & tIdx: m_hExtra )
@@ -7032,6 +6936,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 
 	if ( m_bGotGroupby )
 	{
+		m_tGroupSorterSettings.m_bGrouped = m_tSettings.m_bGrouped;
 		m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
 		if ( m_pProfile )
 			m_pProfile->m_iMaxMatches = m_tGroupSorterSettings.m_iMaxMatches;

@@ -1157,7 +1157,7 @@ bool IndexSegment_c::Update_UpdateAttributes ( const RowsToUpdate_t& dRows, Upda
 class QueryMvaContainer_c
 {
 public:
-	CSphVector<OpenHash_T<CSphVector<int64_t>, int64_t, HashFunc_Int64_t>*> m_tContainer;
+	CSphVector<OpenHashTable_T<int64_t,CSphVector<int64_t>>*> m_tContainer;
 
 	~QueryMvaContainer_c()
 	{
@@ -1376,10 +1376,10 @@ private:
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder, CSphBitvec & tColumnarAttrs ); // fixme! build only
 
-	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader ); // fixme! build only
+	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader ); // fixme! build only
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
 	bool						Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer ); // build only
-	bool						Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets );
+	bool						Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets );
 
 	bool						SpawnReader ( DataReaderFactoryPtr_c & m_pFile, ESphExt eExt, DataReaderFactory_c::Kind_e eKind, int iBuffer, FileAccess_e eAccess );
 	bool						SpawnReaders();
@@ -4479,7 +4479,7 @@ bool CSphIndex_VLN::Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSo
 
 			auto * & pHash = tMvaContainer.m_tContainer[i];
 			if ( !pHash )
-				pHash = new OpenHash_T<CSphVector<int64_t>, int64_t, HashFunc_Int64_t>;
+				pHash = new OpenHashTable_T<int64_t, CSphVector<int64_t>>;
 
 			if ( !pSource->IterateMultivaluedStart ( i, m_sLastError ) )
 				return false;
@@ -4500,7 +4500,7 @@ bool CSphIndex_VLN::Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSo
 }
 
 
-bool CSphIndex_VLN::Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets )
+bool CSphIndex_VLN::Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets )
 {
 	for ( auto & pSource : dSources )
 	{
@@ -5302,7 +5302,7 @@ static uint64_t CreateJoinedKey ( DocID_t tDocID, int iEntry )
 }
 
 
-void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader )
+void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader )
 {
 	if ( !pDocstoreBuilder )
 		return;
@@ -5432,7 +5432,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	CSphAutofile tTmpJoinedFields ( GetFilename ( "tmp3" ), SPH_O_NEW, m_sLastError, true );
-	CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> dJoinedOffsets;
+	CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> dJoinedOffsets;
 	CSphReader tJoinedReader;
 	if ( bHaveJoined )
 	{
@@ -7746,7 +7746,7 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-template <bool HAS_FILTER_CALC, bool HAS_SORT_CALC, bool HAS_FILTER, bool HAS_RANDOMIZE, bool HAS_MAX_TIMER, bool HAS_CUTOFF, typename ITERATOR, typename TO_STATIC>
+template <bool SINGLE_SORTER, bool HAS_FILTER_CALC, bool HAS_SORT_CALC, bool HAS_FILTER, bool HAS_RANDOMIZE, bool HAS_MAX_TIMER, bool HAS_CUTOFF, typename ITERATOR, typename TO_STATIC>
 bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, int iIndexWeight, int64_t tmMaxTimer )
 {
 	auto tScopedStats = AtScopeExit ( [&tMeta, &tIterator]{tMeta.m_tStats.m_iFetchedDocs = (DWORD)tIterator.GetNumProcessed(); } );
@@ -7784,7 +7784,10 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				tCtx.CalcSort(tMatch);
 
 			bool bNewMatch = false;
-			dSorters.for_each( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
+			if constexpr  ( SINGLE_SORTER )
+				bNewMatch = dSorters[0]->Push(tMatch);
+			else
+				dSorters.for_each( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
 
 			// stringptr expressions should be duplicated (or taken over) at this point
 			if constexpr ( HAS_FILTER_CALC )
@@ -7833,12 +7836,13 @@ bool RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQuer
 	bool bHasFilter = !!tCtx.m_pFilter;
 	bool bHasTimer = tmMaxTimer>0;
 	bool bHasCutoff = iCutoff!=-1;
-	int iIndex = bHasFilterCalc*32 + bHasSortCalc*16 + bHasFilter*8 + bRandomize*4 + bHasTimer*2 + bHasCutoff;
+	bool bSingleSorter = dSorters.GetLength()==1;
+	int iIndex = bSingleSorter*64 + bHasFilterCalc*32 + bHasSortCalc*16 + bHasFilter*8 + bRandomize*4 + bHasTimer*2 + bHasCutoff;
 
 	switch ( iIndex )
 	{
-#define DECL_FNSCAN( _, n, params ) case n: return Fullscan<!!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1), ITERATOR, TO_STATIC> params;
-	BOOST_PP_REPEAT ( 64, DECL_FNSCAN, ( tIterator, std::forward<TO_STATIC> ( fnToStatic ), tCtx, tMeta, dSorters, tMatch, iCutoff, iIndexWeight, tmMaxTimer ) )
+#define DECL_FNSCAN( _, n, params ) case n: return Fullscan<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1), ITERATOR, TO_STATIC> params;
+	BOOST_PP_REPEAT ( 128, DECL_FNSCAN, ( tIterator, std::forward<TO_STATIC> ( fnToStatic ), tCtx, tMeta, dSorters, tMatch, iCutoff, iIndexWeight, tmMaxTimer ) )
 #undef DECL_FNSCAN
 		default:
 			assert ( 0 && "Internal error" );
@@ -12853,7 +12857,7 @@ bool ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorp
 	if ( !sFields.Length() )
 		return true;
 
-	OpenHash_T<int, int64_t, HashFunc_Int64_t> hFields;
+	OpenHashTable_T<int64_t, int> hFields;
 	ARRAY_FOREACH ( i, dFields )
 		hFields.Add ( sphFNV64 ( dFields[i].m_sName.cstr() ), i );
 
@@ -13525,7 +13529,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	const int iMinWordLen = ( tArgs.m_iDeltaLen>0 ? Max ( 0, tRes.m_iCodepoints - tArgs.m_iDeltaLen ) : -1 );
 	const int iMaxWordLen = ( tArgs.m_iDeltaLen>0 ? tRes.m_iCodepoints + tArgs.m_iDeltaLen : INT_MAX );
 
-	OpenHash_T<int, int64_t, HashFunc_Int64_t> dHashTrigrams;
+	OpenHashTable_T<int64_t, int> dHashTrigrams;
 	const char * sBuf = tRes.m_dTrigrams.Begin ();
 	const char * sEnd = sBuf + tRes.m_dTrigrams.GetLength();
 	while ( sBuf<sEnd )

@@ -47,7 +47,7 @@ protected:
 	int64_t				m_iCacheSize = 0;
 	int64_t				m_iMemUsed = 0;
 	CSphMutex			m_tLock;
-	OpenHash_T<LinkedEntry_t *, KEY, HELPER> m_tHash;
+	OpenHashTable_T<KEY, LinkedEntry_t *, HELPER> m_tHash;
 
 	void	Delete ( LinkedEntry_t * pEntry );
 

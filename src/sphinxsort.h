@@ -177,10 +177,12 @@ protected:
 class DistinctFetcher_i : public ISphRefcountedMT
 {
 public:
+	virtual SphAttr_t		GetKey ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const = 0;
 	virtual void			SetBlobPool ( const BYTE * pBlobPool ) = 0;
 	virtual void			SetColumnar ( const columnar::Columnar_i * pColumnar ) = 0;
 	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
+	virtual bool			IsMultiValue() const = 0;
 	virtual DistinctFetcher_i *	Clone() const = 0;
 };
 
@@ -194,6 +196,9 @@ int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery,
 
 void			SetAccurateAggregationDefault ( bool bEnabled );
 bool			GetAccurateAggregationDefault();
+
+void			SetDistinctThreshDefault ( int iThresh );
+int 			GetDistinctThreshDefault();
 
 int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
 bool			HasImplicitGrouping ( const CSphQuery & tQuery );

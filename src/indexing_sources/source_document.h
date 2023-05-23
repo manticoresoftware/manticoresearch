@@ -144,7 +144,7 @@ public:
 
 	/// get fields and store them in a file
 	/// dJoinedOffsets holds per-field offsets to data in that file
-	virtual bool			FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHash_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError ) { return false; }
+	virtual bool			FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphString & sError ) { return false; }
 
 	/// begin iterating values of out-of-document multi-valued attribute iAttr
 	/// will fail if iAttr is out of range, or is not multi-valued

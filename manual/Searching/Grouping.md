@@ -1019,6 +1019,16 @@ In the example, you can see that if we GROUP BY major and display both `COUNT(*)
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
+** By default, counts are approximate **
+
+Actually, some of them are exact, while others are approximate. More on that below.
+
+Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain index. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
+
+The other algorithm (enabled by default) loads counts into a hash table and returns its size. If the hash table becomes too large, its contents are moved into a `HyperLogLog`. This is where the counts become approximate since `HyperLogLog` is a probabilistic algorithm. The advantage is that the maximum memory usage per group is fixed and depends on the accuracy of the `HyperLogLog`. The overall memory usage also depends on the [max_matches](../Searching/Options.md#max_matches) setting, which reflects the number of groups.
+
+The [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option sets the threshold below which counts are guaranteed to be exact. The `HyperLogLog` accuracy setting and the threshold for the "hash table to HyperLogLog" conversion are derived from this setting. It's important to use this option with caution because doubling it will double the maximum memory required for count calculations. The maximum memory usage can be roughly estimated using this formula: `4 * max_matches * 2^(log2(distinct_precision_threshold) + 4)`. Note that this is the worst-case scenario, and in most cases, count calculations will use significantly less RAM.
+
 **`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may have different tokenization settings).
 
 <!-- intro -->

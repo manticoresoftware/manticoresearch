@@ -9978,7 +9978,13 @@ static DWORD SPH_EXTRA_BUDGET = 0x2000;
 void SetExtNodeStackSize ( int iDelta, int iExtra )
 {
 	if ( iDelta )
-		SPH_EXTNODE_STACK_SIZE = iDelta;// + 0x10;
+	{
+		SPH_EXTNODE_STACK_SIZE = iDelta;
+
+#if defined( _WIN32 )
+		SPH_EXTNODE_STACK_SIZE += 0x70;
+#endif
+	}
 
 	if ( iExtra )
 		SPH_EXTRA_BUDGET = iExtra;// + 0x100;

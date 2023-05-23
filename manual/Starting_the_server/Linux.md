@@ -42,12 +42,10 @@ To make Manticore start at boot, run:
 sudo systemctl enable manticore
 ```
 
-If you still need the generator again, just install the Manticore packages again and it will recover the generator file.
-
 `searchd` process logs startup information in `systemd` journal. If `systemd` logging is enabled you can view the logged information with the following command:
 
 ```shell
-sudo journalctl --unit manticore
+sudo journalctl -u manticore
 ```
 
 ### Custom startup flags using systemd

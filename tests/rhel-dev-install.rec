@@ -1,0 +1,21 @@
+––– input –––
+yum install -y -q https://repo.manticoresearch.com/manticore-repo.noarch.rpm > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+yum install --enablerepo manticore-dev -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+searchd --version
+––– output –––
+Manticore #!/[0-9]+\.[0-9]+\.[0-9]+ [a-f0-9]{9}@[0-9]{6}/!# (columnar #!/[0-9]+\.[0-9]+\.[0-9]+ [a-f0-9]{7}@[0-9]{6}/!#) (secondary #!/[0-9]+\.[0-9]+\.[0-9]+ [a-f0-9]{7}@[0-9]{6}/!#)
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-#!/[0-9]{4}/!#, Manticore Software LTD (https://manticoresearch.com)
+––– input –––
+manticore-executor -v
+––– output –––
+PHP #!/[0-9]+\.[0-9]+\.[0-9]+/!# (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# #!/[0-9]{4}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!#) (ZTS)
+Copyright (c) The PHP Group
+Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies

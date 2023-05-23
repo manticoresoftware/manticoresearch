@@ -1,31 +1,63 @@
-name: tests
+name: CLT tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
 
 jobs:
-  rhel:
+  rhel-release:
+    if: github.event_name == 'workflow_dispatch'
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
     with:
       docker_images: |
         [
           {"image": "centos:7"},
           {"image": "almalinux:8"},
-          {"image": "almalinux:9"}
+          {"image": "almalinux:9"},
+          {"image": "oraclelinux:9"},
+          {"image": "amazonlinux:latest"}
         ]
-      test_prefix: rhel-
-  deb:
+      test_prefix: rhel-release-
+  deb-release:
+    if: github.event_name == 'workflow_dispatch'
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
     with:
       docker_images: |
         [
+          {"image": "ubuntu:bionic"},
           {"image": "ubuntu:focal"},
           {"image": "ubuntu:jammy"},
           {"image": "debian:buster"},
           {"image": "debian:bullseye"},
           {"image": "debian:bookworm"}
         ]
-      test_prefix: deb-
+      test_prefix: deb-release-
+
+  rhel-dev:
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          {"image": "centos:7"},
+          {"image": "almalinux:8"},
+          {"image": "almalinux:9"},
+          {"image": "oraclelinux:9"},
+          {"image": "amazonlinux:latest"}
+        ]
+      test_prefix: rhel-dev-
+  deb-dev:
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          {"image": "ubuntu:bionic"},
+          {"image": "ubuntu:focal"},
+          {"image": "ubuntu:jammy"},
+          {"image": "debian:buster"},
+          {"image": "debian:bullseye"},
+          {"image": "debian:bookworm"}
+        ]
+      test_prefix: deb-dev-

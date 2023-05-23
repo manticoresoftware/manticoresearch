@@ -1,6 +1,39 @@
-# Backup and restore
+# Backup and Restore
 
-It's crucial to regularly back up your tables to recover them in case of system crashes, hardware failure, or data corruption/loss. Backups are also necessary before upgrading to a new version of Manticore Search that changes the table format, and for transferring data to another system when migrating to a new server.
+Backing up your tables on a regular basis is essential for recovery in the event of system crashes, hardware failure, or data corruption/loss. It's also highly recommended to make backups before upgrading to a new Manticore Search version or running [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
+
+Backing up database systems can be done in two unique ways: logical and physical backups. Each of these methods has its pros and cons, which may vary based on the specific database environment and needs. Here, we'll delve into the distinction between these two types of backups.
+
+### Logical Backups
+
+Logical backups entail exporting the database schema and data as SQL statements or as data formats specific to the database. This backup form is typically readable by humans and can be employed to restore the database on various systems or database engines.
+
+Pros and cons of logical backups:
+- ➕ **Portability:** Logical backups are generally more portable than physical backups, as they can be used to restore the database on different hardware or operating systems.
+- ➕ **Flexibility:** Logical backups allow you to selectively restore specific tables, indexes, or other database objects.
+- ➕ **Compatibility:** Logical backups can be used to migrate data between different database management systems or versions, provided the target system supports the exported format or SQL statements.
+- ➖ **Slower Backup and Restore:** Logical backups can be slower than physical backups, as they require the database engine to convert the data into SQL statements or another export format.
+- ➖ **Increased System Load:** Creating logical backups can cause higher system load, as the process requires more CPU and memory resources to process and export the data.
+
+Manticore Search supports [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) for logical backups.
+
+### Physical Backups
+
+Physical backups involve copying the raw data files and system files that comprise the database. This type of backup essentially creates a snapshot of the database's physical state at a given point in time.
+
+Pros and cons of physical backups:
+- ➕ **Speed:** Physical backups are usually faster than logical backups, as they involve copying raw data files directly from disk.
+- ➕ **Consistency:** Physical backups ensure a consistent backup of the entire database, as all related files are copied together.
+- ➕ **Lower System Load:** Creating physical backups generally places less load on the system compared to logical backups, as the process does not involve additional data processing.
+- ➖ **Portability:** Physical backups are typically less portable than logical backups, as they may be dependent on the specific hardware, operating system, or database engine configuration.
+- ➖ **Flexibility:** Physical backups do not allow for the selective restoration of specific database objects, as the backup contains the entire database's raw files.
+- ➖ **Compatibility:** Physical backups cannot be used to migrate data between different database management systems or versions, as the raw data files may not be compatible across different platforms or software.
+
+Manticore Search has [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md#Using-manticore-backup-command-line-tool) command line tool for physical backups.
+
+In summary, logical backups provide more flexibility, portability, and compatibility but can be slower and more resource-intensive, while physical backups are faster, more consistent, and less resource-intensive but may be limited in terms of portability and flexibility. The choice between these two backup methods will depend on your specific database environment, hardware, and requirements.
+
+## Using manticore-backup command line tool
 
 The `manticore-backup` tool, included in the official Manticore Search [packages](https://manticoresearch.com/install), automates the process of backing up tables for an instance running in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
 
@@ -96,7 +129,7 @@ Manticore versions:
 ```
 <!-- end -->
 
-## Arguments
+### Arguments
 
 | Argument | Description |
 |-|-|
@@ -158,7 +191,7 @@ When you use `manticore-backup` or the SQL `BACKUP` command, the `FREEZE` comman
 
 If backup fails or gets interrupted, the tool tries to unfreeze all the tables.
 
-## Restore
+## Restore by using manticore-backup tool
 
 <!-- example restore_list -->
 To restore a Manticore instance from a backup, use the `manticore-backup` command with the `--backup-dir` and `--restore` arguments. For example: `manticore-backup --backup-dir=/path/to/backups --restore`. If you don't provide any argument for `--restore`, it will simply list all the backups in the `--backup-dir`.
@@ -222,5 +255,41 @@ Manticore config
 ```
 
 <!-- end -->
+
+## Backup and restore with mysqldump
+
+<!-- example mysqldump_backup -->
+To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
+
+<!-- request SQL -->
+```bash
+mysqldump -h0 -P9306 --all-databases > manticore_backup.sql
+```
+
+Executing this command will produce a backup file named `manticore_backup.sql`. This file will hold all data and table schemas.
+
+<!-- end -->
+<!-- example mysqldump_restore -->
+### Restore
+
+If you're looking to restore a Manticore Search database from a backup file, the mysql client is your tool of choice.
+
+<!-- request SQL -->
+```bash
+mysql -h0 -P9306 < manticore_backup.sql
+```
+
+This command enables you to restore everything from the `manticore_backup.sql` file.
+
+<!-- end -->
+### Additional options
+
+Here are some more settings that can be used with mysqldump to tailor your backup:
+
+- `--add-drop-table`: This injects a DROP TABLE command before each CREATE TABLE command in the backup file.
+- `--no-data`: This setting omits table data from the backup, leading to a backup file that consists of only table schemas.
+- `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note, the database name must be `Manticore`.
+
+For a comprehensive list of settings and their thorough descriptions, kindly refer to the [official MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html).
 
 <!-- proofread -->

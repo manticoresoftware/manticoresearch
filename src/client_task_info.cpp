@@ -47,7 +47,7 @@ ClientTaskInfo_t * HazardGetClient ()
 	return (ClientTaskInfo_t *) myinfo::GetHazardTypedNode ( ClientTaskInfo_t::Task() );
 }
 
-ClientTaskInfo_t & ClientTaskInfo_t::Info ( bool bStrict )
+ClientTaskInfo_t & ClientTaskInfo_t::Info ( bool bStrict ) noexcept
 {
 	auto * pInfo = HazardGetClient();
 	if ( !pInfo )

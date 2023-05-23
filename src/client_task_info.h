@@ -51,6 +51,7 @@ public:
 	int m_iDesiredStack = -1;
 	int m_iTimeoutS = -1;
 	int m_iWTimeoutS = -1;
+	int64_t m_iMaxStackSize = Threads::GetMaxCoroStackSize();
 	bool m_bSqlQuoteShowCreate = false;
 
 	ESphCollation m_eCollation { GlobalCollation () };
@@ -140,7 +141,7 @@ public:
 	ClientSession_c* GetClientSession();
 
 public:
-	static ClientTaskInfo_t& Info ( bool bStrict = false );
+	static ClientTaskInfo_t& Info ( bool bStrict = false ) noexcept;
 };
 
 inline bool operator== ( const ClientTaskInfo_t& lhs, const ClientTaskInfo_t& rhs )
@@ -206,6 +207,9 @@ namespace session {
 
 	inline void SetPersistent ( bool bPersistent ) { ClientTaskInfo_t::Info().SetPersistent(bPersistent); }
 	inline bool GetPersistent () { return ClientTaskInfo_t::Info().GetPersistent(); }
+
+	inline void SetMaxStackSize ( int64_t iStackSize ) { ClientTaskInfo_t::Info().m_iMaxStackSize = iStackSize; }
+	inline int64_t GetMaxStackSize() noexcept { return ClientTaskInfo_t::Info().m_iMaxStackSize; }
 
 } // namespace session
 

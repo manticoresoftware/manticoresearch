@@ -13863,6 +13863,12 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		return true;
 	}
 
+	if ( sName == "thread_stack" )
+	{
+		session::SetMaxStackSize ( Max ( iSetValue, 1024 * 1024 ) );
+		return true;
+	}
+
 	if ( sName == "optimize_by_id" )
 	{
 		session::SetOptimizeById ( !!iSetValue );
@@ -14069,6 +14075,15 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 			g_bMaintenance = !!iSetValue;
 		else
 			sError = "Only VIP connections can set maintenance mode";
+		return true;
+	}
+
+	if ( sName == "thread_stack" )
+	{
+		if ( tSess.GetVip() )
+			Threads::SetMaxCoroStackSize ( Max ( iSetValue, 1024 * 1024 ) );
+		else
+			sError = "Only VIP connections can change global thread_stack value";
 		return true;
 	}
 
@@ -15289,6 +15304,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 
 	if ( tStmt.m_iIntParam>=0 ) // that is SHOW GLOBAL VARIABLES
 	{
+		dTable.MatchTupletf ( "thread_stack", "%d", Threads::GetMaxCoroStackSize() );
 		dTable.MatchTupletFn ( "threads_ex", [] {
 			StringBuilder_c tBuf;
 			auto x = Dispatcher::GetGlobalBaseDispatcherTemplate();
@@ -15302,6 +15318,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 				dTable.MatchTupletf ( dVar.first.cstr(), "%d", dVar.second.m_pVal ? dVar.second.m_pVal->GetLength() : 0 );
 		});
 	} else { // that is local (session) variables
+		dTable.MatchTupletf ( "thread_stack", "%d", session::GetMaxStackSize() );
 		dTable.MatchTupletFn ( "threads_ex", [] {
 			StringBuilder_c tBuf;
 			auto x = ClientTaskInfo_t::Info().GetBaseDispatcherTemplate();

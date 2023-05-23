@@ -733,6 +733,7 @@ static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
 		{
 			i.m_dCapabilities.Resize(0);
 			i.m_dCapabilities.Add ( i.m_eForce );
+			i.m_eType = i.m_eForce;
 		}
 }
 
@@ -890,6 +891,10 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	CSphVector<int> dBest ( dSIInfo.GetLength() );
 	dCapabilities.ZeroVec();
 	dBest.ZeroVec();
+
+	// if we don't have any options, no need to do cost calculation
+	if ( dSIInfo.all_of ( []( const auto & tSIInfo ){ return tSIInfo.m_dCapabilities.GetLength()==1; } ) )
+		return dSIInfo;
 
 	const int MAX_TRIES = 1024;
 	for ( int iTry = 0; iTry < MAX_TRIES; iTry++ )

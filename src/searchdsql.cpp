@@ -1558,12 +1558,14 @@ struct HintComp_fn
 {
 	bool IsLess ( const IndexHint_t & tA, const IndexHint_t & tB ) const
 	{
+		if ( tA.m_bFulltext ) return false;
+		if ( tB.m_bFulltext ) return true;
 		return strcasecmp ( tA.m_sIndex.cstr(), tB.m_sIndex.cstr() ) < 0;
 	}
 
 	bool IsEq ( const IndexHint_t & tA, const IndexHint_t & tB ) const
 	{
-		return tA.m_sIndex==tB.m_sIndex && tA.m_eType==tB.m_eType && tA.m_bForce==tB.m_bForce;
+		return tA.m_sIndex==tB.m_sIndex && tA.m_eType==tB.m_eType && tA.m_bForce==tB.m_bForce && tA.m_bFulltext==tB.m_bFulltext;
 	}
 };
 

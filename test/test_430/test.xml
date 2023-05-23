@@ -180,6 +180,9 @@ show meta;
 select title from META:all where match('two') and property='Ten' /*+ OptimizeFulltextFilters */;
 show meta;
 
+select title from META:all where match('two') and property='Ten' /*+ OptimizeFulltextFilters ColumnarScan(property) */;
+show meta;
+
 select title from META:all where match('two') and property='Ten' /*+ NO_OptimizeFulltextFilters */;
 show meta;
 

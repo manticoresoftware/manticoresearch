@@ -1169,7 +1169,7 @@ int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchCont
 }
 
 // percolate matching
-void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
+void MatchingWorkAction ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
 	int64_t tmQueryStart = ( tMatchCtx.m_bVerbose ? sphMicroTimer() : 0 );
 	tMatchCtx.m_iOnlyTerms += ( pStored->m_bOnlyTerms ? 1 : 0 );
@@ -1182,7 +1182,7 @@ void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMa
 	const BYTE * pBlobs = pSeg->m_dBlobs.Begin();
 
 	++tMatchCtx.m_iEarlyPassed;
-	tMatchCtx.m_pCtx->ResetFilters();
+	AT_SCOPE_EXIT ( [&tMatchCtx]() { tMatchCtx.m_pCtx->ResetFilters(); } );
 
 	CSphString sError;
 	CSphString sWarning;
@@ -1237,6 +1237,26 @@ void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMa
 
 	if ( tMatchCtx.m_bVerbose )
 		tMatchCtx.m_dDt.Add ( (int)( sphMicroTimer() - tmQueryStart ) );
+}
+
+void MatchingWork ( const StoredQuery_t* pStored, PercolateMatchContext_t& tMatchCtx )
+{
+	int iStackBase = Threads::GetStackUsed();
+	if ( StoredQuery_t::m_iStackBaseRequired < iStackBase )
+		StoredQuery_t::m_iStackBaseRequired = iStackBase;
+
+	int iQueryStack = Threads::GetStackUsed() + pStored->m_iStackRequired;
+	auto iMyStackSize = Threads::MyStackSize();
+	if ( iMyStackSize >= iQueryStack )
+		return MatchingWorkAction ( pStored, tMatchCtx );
+
+	if ( tMatchCtx.m_iMaxStackSize >= iQueryStack )
+		return Threads::Coro::Continue ( iQueryStack, [&] {
+			MatchingWorkAction ( pStored, tMatchCtx );
+		});
+
+	tMatchCtx.m_dMsg.Err ( "PQ requires %d bytes of stack (%d + %d), but only %d available", iQueryStack, pStored->m_iStackRequired, Threads::GetStackUsed(), (int)tMatchCtx.m_iMaxStackSize);
+	++tMatchCtx.m_iQueriesFailed;
 }
 } // static namespace
 
@@ -1309,6 +1329,9 @@ void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatc
 
 	for ( PQMatchContextResult_t * pMatch : dMatches )
 	{
+		tRes.m_iQueriesFailed += pMatch->m_iQueriesFailed;
+		tRes.m_sMessages.AddStringsFrom ( pMatch->m_dMsg );
+
 		if ( pMatch->m_dQueryMatched.IsEmpty() )
 			continue;
 
@@ -1320,7 +1343,6 @@ void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatc
 
 		tRes.m_iEarlyOutQueries -= pMatch->m_iEarlyPassed;
 		tRes.m_iOnlyTerms += pMatch->m_iOnlyTerms;
-		tRes.m_iQueriesFailed += pMatch->m_iQueriesFailed;
 	}
 
 	tRes.m_iQueriesMatched = iGotQueries;

@@ -207,6 +207,7 @@ struct PQMatchContextResult_t
 	int m_iEarlyPassed = 0;
 	int m_iOnlyTerms = 0;
 	int m_iQueriesFailed = 0;
+	Warner_c m_dMsg;
 };
 
 struct PercolateMatchContext_t : public PQMatchContextResult_t
@@ -225,7 +226,7 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 	const ISphSchema &m_tSchema;
 	const SegmentReject_t &m_tReject;
 	const bool m_bUtf8 = false;
-	Warner_c m_dMsg;
+	int64_t m_iMaxStackSize = session::GetMaxStackSize();
 
 	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph, DictRefPtr_c pDictMorph, const PercolateIndex_i * pIndex, const ISphSchema & tSchema,
 			const SegmentReject_t & tReject, ESphHitless eHitless, bool bHasWideFields )

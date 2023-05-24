@@ -1388,7 +1388,7 @@ private:
 
 	bool						SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
-	bool						SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, CSphString & sWarning ) const;
+	bool						SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery ) const;
 	bool						CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads, bool & bFastQuery ) const;
@@ -3070,9 +3070,9 @@ bool CSphIndex_VLN::CheckEnabledIndexes ( const CSphQuery & tQuery, int iThreads
 	float fCost = FLT_MAX;
 	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
 
-	CSphString sWarning;
+	StrVec_t dWarnings;
 	SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
-	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost, sWarning );
+	CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = SelectIterators ( tCtx, fCost, dWarnings );
 
 	// disable pseudo sharding if any of the queries use secondary indexes/docid lookups
 	if ( dEnabledIndexes.any_of ( []( const SecondaryIndexInfo_t & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::LOOKUP; } ) )
@@ -7995,19 +7995,8 @@ static void RecreateFilters ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, 
 }
 
 
-bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, CSphString & sWarning ) const
+bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const
 {
-	bool bForce = false;
-	for ( const auto & tHint : tQuery.m_dIndexHints )
-		if ( tHint.m_bFulltext )
-		{
-			if ( !tHint.m_bForce )
-				return false;
-
-			bForce = true;
-			break;
-		}
-
 	// in fulltext case we do the following:
 	// 1. calculate cost of FT search and number of docs after FT search
 	// 2. calculate cost of filters over the number of docs after FT search
@@ -8018,14 +8007,15 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
 	tSelectIteratorCtx.IgnorePushCost();
 	float fBestCost = FLT_MAX;
-	dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, sWarning );
+	dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 
 	// check that we have anything non-plain-filter. if not, bail out
 	if ( !dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eType==SecondaryIndexType_e::LOOKUP || tInfo.m_eType==SecondaryIndexType_e::INDEX || tInfo.m_eType==SecondaryIndexType_e::ANALYZER; } ) )
 		return false;
 
 	// if we are forcing this behavior, there's no point in further calculations
-	if ( bForce )
+	// and we are forcing it if we have any hints specified
+	if ( tQuery.m_dIndexHints.GetLength() )
 		return true;
 
 	CSphVector<SecondaryIndexInfo_t> dSIInfoFilters { dSIInfo.GetLength() };
@@ -8068,6 +8058,7 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 		return nullptr;
 
 	CSphVector<SecondaryIndexInfo_t> dSIInfo;
+	StrVec_t dWarnings;
 
 	if ( !pRanker )
 	{
@@ -8077,11 +8068,17 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 		// For now we use approach b) as it is simpler
 		float fBestCost = FLT_MAX;
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
-		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, tMeta.m_sWarning );
+		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
+		if ( dWarnings.GetLength() )
+			tMeta.m_sWarning = ConcatWarnings(dWarnings);
 	}
 	else
 	{
-		if ( !SelectIteratorsFT ( tQuery, pRanker, dSIInfo, iCutoff, iThreads, tMeta.m_sWarning ) )
+		bool bRes = SelectIteratorsFT ( tQuery, pRanker, dSIInfo, iCutoff, iThreads, dWarnings );
+		if ( dWarnings.GetLength() )
+			tMeta.m_sWarning = ConcatWarnings(dWarnings);
+
+		if ( !bRes )
 			return nullptr;
 	}
 

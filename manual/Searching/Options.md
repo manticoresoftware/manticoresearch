@@ -11,7 +11,7 @@ The SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) clause and 
 **SQL**:
 
 ```sql
-SELECT ... [OPTION <optionname>=<value> [ , ... ]] [/*+ [NO_][ColumnarScan|DocidIndex|SecondaryIndex|OptimizeFulltextFilters(<attribute>[,...])]] /*]
+SELECT ... [OPTION <optionname>=<value> [ , ... ]] [/*+ [NO_][ColumnarScan|DocidIndex|SecondaryIndex(<attribute>[,...])]] /*]
 ```
 
 **HTTP**:
@@ -279,7 +279,8 @@ In rare cases, Manticore's built-in query analyzer may be incorrect in understan
 * `/*+ DocidIndex(id) */`  to force the use of a docid index, `/*+ NO_DocidIndex(id) */` to tell the optimizer to ignore it
 * `/*+ SecondaryIndex(<attr_name1>[, <attr_nameN>]) */` to force the use of a secondary index (if available), `/*+ NO_SecondaryIndex(id) */`  to tell the optimizer to ignore it
 * `/*+ ColumnarScan(<attr_name1>[, <attr_nameN>]) */`  to force the use of a columnar scan (if the attribute is columnar), `/*+ NO_ColumnarScan(id) */` to tell the optimizer to ignore it
-* `/*+ OptimizeFulltextFilters */` to force intersection of full-text tree results with filter results (as opposed to standard match-then-filter scheme), `/*+ NO_OptimizeFulltextFilters */`  to use standard full-text matching. Note that other hints can be used to control what entities are used to calculate filter results.
+
+Note that when executing a full-text query with filters, the query optimizer decides between intersecting the results of the full-text tree with the filter results or using a standard match-then-filter approach. Specifying *any* hint will force the daemon to use the code path that performs the intersection of the full-text tree results with the filter results.
 
 For more information on how the query optimizer works, refer to the [Cost based optimizer](../Searching/Cost_based_optimizer.md) page.
 

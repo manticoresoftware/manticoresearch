@@ -229,4 +229,6 @@ inline char* Tail ( StringBuilder_c& tBuilder )
 }
 
 
+CSphString ConcatWarnings ( StrVec_t & dWarnings );
+
 #include "stringbuilder_impl.h"

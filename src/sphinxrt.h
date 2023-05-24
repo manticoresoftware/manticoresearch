@@ -148,12 +148,6 @@ public:
 	/// hides internal disk chunks storage
 	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const {};
 
-	/// get disk chunk
-	virtual CSphIndex* GetDiskChunk ( int iChunk )
-	{
-		return nullptr;
-	}
-
 	/// bind indexing accumulator
 	/// returns false if another index already uses it in an open txn
 	virtual bool BindAccum ( RtAccum_t * pAccExt, CSphString * pError ) = 0;

@@ -261,7 +261,6 @@ public:
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
-	void			AddIndexHintFT ( bool bForce );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddCount ();
@@ -954,14 +953,6 @@ void SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const 
 }
 
 
-void SqlParser_c::AddIndexHintFT ( bool bForce )
-{
-	IndexHint_t & tHint = m_pQuery->m_dIndexHints.Add();
-	tHint.m_bFulltext = true;
-	tHint.m_bForce = bForce;
-}
-
-
 void SqlParser_c::AliasLastItem ( SqlNode_t * pAlias )
 {
 	if ( pAlias )
@@ -1561,14 +1552,12 @@ struct HintComp_fn
 {
 	bool IsLess ( const IndexHint_t & tA, const IndexHint_t & tB ) const
 	{
-		if ( tA.m_bFulltext ) return false;
-		if ( tB.m_bFulltext ) return true;
 		return strcasecmp ( tA.m_sIndex.cstr(), tB.m_sIndex.cstr() ) < 0;
 	}
 
 	bool IsEq ( const IndexHint_t & tA, const IndexHint_t & tB ) const
 	{
-		return tA.m_sIndex==tB.m_sIndex && tA.m_eType==tB.m_eType && tA.m_bForce==tB.m_bForce && tA.m_bFulltext==tB.m_bFulltext;
+		return tA.m_sIndex==tB.m_sIndex && tA.m_eType==tB.m_eType && tA.m_bForce==tB.m_bForce;
 	}
 };
 

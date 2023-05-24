@@ -343,3 +343,15 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 	fnAddNext();
 	return m_sPrefix;
 }
+
+
+CSphString ConcatWarnings ( StrVec_t & dWarnings )
+{
+	dWarnings.Uniq();
+
+	StringBuilder_c sRes ( "; " );
+	for ( const auto & i : dWarnings )
+		sRes << i;
+
+	return sRes.cstr();
+}

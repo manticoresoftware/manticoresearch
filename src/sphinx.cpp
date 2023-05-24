@@ -8069,12 +8069,15 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, CSph
 		float fBestCost = FLT_MAX;
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
-		tMeta.m_sWarning = ConcatWarnings(dWarnings);
+		if ( dWarnings.GetLength() )
+			tMeta.m_sWarning = ConcatWarnings(dWarnings);
 	}
 	else
 	{
 		bool bRes = SelectIteratorsFT ( tQuery, pRanker, dSIInfo, iCutoff, iThreads, dWarnings );
-		tMeta.m_sWarning = ConcatWarnings(dWarnings);
+		if ( dWarnings.GetLength() )
+			tMeta.m_sWarning = ConcatWarnings(dWarnings);
+
 		if ( !bRes )
 			return nullptr;
 	}

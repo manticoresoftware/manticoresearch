@@ -347,7 +347,7 @@ indexApi.Delete(deleteRequest);
 
 ```
 
-<!-- response Java -->
+<!-- response C# -->
 ```java
 class DeleteResponse {
     index: products
@@ -500,5 +500,50 @@ class DeleteResponse {
     result: deleted
 }
 ```
+<!-- end -->
+
+
+## Bulk deletion
+
+<!-- example bulk delete -->
+
+You can also perform multiple delete operations in a single call using the `/bulk` endpoint. This endpoint only works with data that has `Content-Type` set to `application/x-ndjson`. The data should be formatted as newline-delimited JSON (NDJSON). Essentially, this means that each line should contain exactly one JSON statement and end with a newline `\n` and, possibly, a `\r`.
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON --Content-type=application/x-ndjson -->
+
+```json
+POST /bulk
+
+{ "update" : { "delete" : "products", "id" : 1 } }
+{ "update" : { "delete" : "products", "id" : 2, "query": { "equals": { "price" : 20 } } } }
+```
+
+<!-- response JSON -->
+
+```json
+{
+   "items":
+   [
+      {
+         "bulk":
+         {
+            "_index":"products",
+            "_id":0,
+            "created":0,
+            "deleted":2,
+            "updated":0,
+            "result":"created",
+            "status":201
+         }
+      }
+   ],
+   "errors":false
+}
+```
+
 <!-- end -->
 <!-- proofread -->

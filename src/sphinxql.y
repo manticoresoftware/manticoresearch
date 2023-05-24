@@ -1312,10 +1312,9 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
 			pParser->SetIndex( $2 );
 		}
-	| index_or_table TOK_STATUS like_filter
+	| TOK_TABLE TOK_STATUS like_filter
 		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
-			pParser->SetIndex( pParser->m_pStmt->m_sStringParam );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_FEDERATED_INDEX_STATUS;
 		}
 	| TOK_COLLATION
 		{

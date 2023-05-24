@@ -826,47 +826,86 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 }
 
 
-static bool CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, CSphString & sWarning )
+static void CheckHint ( const IndexHint_t & tHint, const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
+{
+	CSphString sWarning;
+	if ( !tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr() ) )
+	{
+		sWarning.SetSprintf ( "hint error: '%s' attribute not found", tHint.m_sIndex.cstr() );
+		dWarnings.Add (sWarning);
+		return;
+	}
+
+	switch ( tHint.m_eType )
+	{
+	case SecondaryIndexType_e::LOOKUP:
+		if ( tHint.m_sIndex!=sphGetDocidName() )
+			dWarnings.Add ( "hint error: DocidIndex can only be applied to 'id' attribute" );
+		break;
+
+	case SecondaryIndexType_e::ANALYZER:
+		if ( tHint.m_bForce )
+		{
+			if ( !IsColumnarLibLoaded() )
+				dWarnings.Add ( "columnar library not loaded" );
+			else if ( !tCtx.m_pColumnar )
+				dWarnings.Add ( "no columnar storage" );
+			else
+			{
+				const auto * pAttr = tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr()) ;
+				if ( !pAttr->IsColumnar() && !pAttr->IsColumnarExpr() )
+				{
+					sWarning.SetSprintf ( "attribute '%s' is not columnar", tHint.m_sIndex.cstr() );
+					dWarnings.Add(sWarning);
+				}
+			}
+		}
+		break;
+
+	case SecondaryIndexType_e::INDEX:
+		if ( tHint.m_bForce )
+		{
+			if ( !IsSecondaryLibLoaded() )
+				dWarnings.Add ( "secondary library not loaded" );
+			else if ( GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
+				dWarnings.Add ( "secondary indexes are disabled" );
+			else if ( !tCtx.m_pSI )
+				dWarnings.Add ( "index has no secondary indexes" );
+			if ( !tCtx.m_pHistograms )
+				dWarnings.Add ( "index has no histograms; secondary indexes are unavailable" );
+			else if ( !tCtx.m_pSI->IsEnabled ( tHint.m_sIndex.cstr() ) )
+			{
+				sWarning.SetSprintf ( "secondary index disabled for '%s' (attribute was updated?)", tHint.m_sIndex.cstr() );
+				dWarnings.Add(sWarning);
+			}
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+
+static void CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
 {
 	for ( auto & i : tCtx.m_tQuery.m_dIndexHints )
-		switch ( i.m_eType )
-		{
-		case SecondaryIndexType_e::LOOKUP:
-			if ( i.m_sIndex!=sphGetDocidName() )
-			{
-				sWarning = "hint error: DocidIndex can only be applied to 'id' attribute";
-				return false;
-			}
-			break;
-
-		case SecondaryIndexType_e::ANALYZER:
-		case SecondaryIndexType_e::INDEX:
-			if ( !tCtx.m_tSchema.GetAttr ( i.m_sIndex.cstr() ) )
-			{
-				sWarning.SetSprintf ( "hint error: '%s' attribute not found", i.m_sIndex.cstr() );
-				return false;
-			}
-			break;
-
-		default:
-			break;
-		}
+		CheckHint ( i, dSIInfo, tCtx, dWarnings );
 
 	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 		for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
 			if ( tHint.m_sIndex==tCtx.m_tQuery.m_dFilters[i].m_sAttrName && tHint.m_bForce )
 				if ( !dSIInfo[i].m_dCapabilities.any_of ( [&tHint]( auto eSupported ){ return tHint.m_eType==eSupported; } ) )
 				{
+					CSphString sWarning;
 					sWarning.SetSprintf ( "hint error: requested hint type not supported for '%s' attribute", tHint.m_sIndex.cstr() );
-					return false;
+					dWarnings.Add(sWarning);
 				}
-
-	return true;
 }
 
 /////////////////////////////////////////////////////////////////////
 
-CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost, CSphString & sWarning )
+CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost, StrVec_t & dWarnings )
 {
 	fBestCost = FLT_MAX;
 
@@ -885,7 +924,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	DisableRowidFilters ( dSIInfo, tCtx );
 	FetchPartialColumnarMinMax ( dSIInfo, tCtx );
 	FetchNumSIIterators ( dSIInfo, tCtx );
-	CheckHints ( dSIInfo, tCtx, sWarning );
+	CheckHints ( dSIInfo, tCtx, dWarnings );
 
 	CSphVector<int> dCapabilities ( dSIInfo.GetLength() );
 	CSphVector<int> dBest ( dSIInfo.GetLength() );

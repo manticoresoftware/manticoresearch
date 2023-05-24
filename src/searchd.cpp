@@ -12160,18 +12160,6 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
-
-static CSphString ConcatWarnings ( StrVec_t & dWarnings )
-{
-	dWarnings.Uniq();
-
-	StringBuilder_c sRes ( "; " );
-	for ( const auto & i : dWarnings )
-		sRes << i;
-
-	return sRes.cstr();
-}
-
 static Threads::Coro::Mutex_c g_tCreateTableMutex;
 
 static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )

@@ -16597,11 +16597,22 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	tCrashQuery.m_dQuery = { (const BYTE*) sQuery.first, sQuery.second };
 
 	// ad-hoc, make generalized select()
-	if ( StrEq ( sQuery.first, "select DATABASE(), USER() limit 1" ) )
+	if ( StrEqN ( sQuery.first, "select DATABASE()" ) )
+	{
+		// result set header packet
+		tOut.HeadOfStrings ( { "DATABASE()" } );
+		tOut.PutString ( g_sDbName );
+		tOut.Commit();
+		tOut.Eof ( false );
+		return true;
+	}
+
+	// notice order! if sQuery is 'select DATABASE()' it will match this condition, but it is already processed by ad-hoc above
+	if ( StrEqN ( sQuery, "select DATABASE(), USER() limit 1" ) )
 	{
 		// result set header packet
 		tOut.HeadTuplet ( "DATABASE()", "USER()" );
-		tOut.DataTuplet ( g_sDbName.cstr(), tSess.GetVip () ? "VIP" : "Usual" );
+		tOut.DataTuplet ( g_sDbName.cstr(), tSess.GetVip() ? "VIP" : "Usual" );
 		tOut.Eof ( false );
 		return true;
 	}

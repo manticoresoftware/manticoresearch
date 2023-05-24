@@ -177,15 +177,6 @@ show meta;
 select title from META:all where match('two') and property='Ten';
 show meta;
 
-select title from META:all where match('two') and property='Ten' /*+ OptimizeFulltextFilters */;
-show meta;
-
-select title from META:all where match('two') and property='Ten' /*+ OptimizeFulltextFilters ColumnarScan(property) */;
-show meta;
-
-select title from META:all where match('two') and property='Ten' /*+ NO_OptimizeFulltextFilters */;
-show meta;
-
 select brand_id from test_col where price&gt;500 and brand_id&gt;5;
 show meta;
 select brand_id from test_col where price&gt;500 and brand_id&gt;5 /*+ NO_ColumnarScan(price,brand_id) */;

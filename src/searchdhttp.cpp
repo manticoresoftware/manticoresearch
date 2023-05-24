@@ -1626,6 +1626,9 @@ public:
 
 	std::unique_ptr<QueryParser_i> PreParseQuery() override
 	{
+		// TODO!!! add parsing collation from the query
+		m_tQuery.m_eCollation = session::GetCollation();
+
 		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, m_sError, m_sWarning ) )
 		{
 			ReportError ( SPH_HTTP_STATUS_400 );

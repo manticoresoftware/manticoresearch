@@ -12040,12 +12040,11 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.DataTable ( dOut );
 }
 
+using NamedIndexType_t = std::pair<CSphString, IndexType_e>;
 
-void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+CSphVector<NamedIndexType_t> GetAllServedIndexes()
 {
-	// 0 local, 1 distributed, 2 rt, 3 template, 4 percolate, 5 unknown
-	static const char* sTypes[] = {"local", "distributed", "rt", "template", "percolate", "unknown"};
-	CSphVector<CSphNamedInt> dIndexes;
+	CSphVector<NamedIndexType_t> dIndexes;
 
 	// collect local, rt, percolate
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
@@ -12056,20 +12055,14 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 		switch ( tIt.second->m_eType )
 		{
-			case IndexType_e::PLAIN:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 0 ) );
-				break;
-			case IndexType_e::RT:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 2 ) );
-				break;
-			case IndexType_e::PERCOLATE:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 4 ) );
-				break;
-			case IndexType_e::TEMPLATE:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 3 ) );
-				break;
-			default:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 5 ) );
+		case IndexType_e::PLAIN:
+		case IndexType_e::RT:
+		case IndexType_e::PERCOLATE:
+		case IndexType_e::TEMPLATE:
+			dIndexes.Add ( NamedIndexType_t ( tIt.first, tIt.second->m_eType ) );
+			break;
+		default:
+			dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::ERROR_ ) );
 		}
 	}
 
@@ -12078,15 +12071,20 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( CSphNamedInt ( tIt.first, 1 ) );
+		dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::DISTR ) );
 
-	dIndexes.Sort ( Lesser ([] ( const CSphNamedInt & a, const CSphNamedInt & b)
-			{ return strcasecmp ( a.first.cstr (), b.first.cstr () )<0; }));
+	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.first.cstr(), b.first.cstr() ) < 0; } ) );
+	return dIndexes;
+}
+
+void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+{
+	auto dIndexes = GetAllServedIndexes();
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
 	for ( auto& dPair : dIndexes )
-		dTable.MatchTuplet( dPair.first.cstr (), sTypes[dPair.second] );
+		dTable.MatchTuplet( dPair.first.cstr (), szIndexType(dPair.second) );
 	tOut.DataTable ( dTable );
 }
 
@@ -15515,7 +15513,7 @@ const char * szIndexType ( IndexType_e eType )
 {
 	switch ( eType )
 	{
-	case IndexType_e::PLAIN: return "disk";
+	case IndexType_e::PLAIN: return "local";
 	case IndexType_e::TEMPLATE: return "template";
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";

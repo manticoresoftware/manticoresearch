@@ -7997,17 +7997,6 @@ static void RecreateFilters ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, 
 
 bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, CSphString & sWarning ) const
 {
-	bool bForce = false;
-	for ( const auto & tHint : tQuery.m_dIndexHints )
-		if ( tHint.m_bFulltext )
-		{
-			if ( !tHint.m_bForce )
-				return false;
-
-			bForce = true;
-			break;
-		}
-
 	// in fulltext case we do the following:
 	// 1. calculate cost of FT search and number of docs after FT search
 	// 2. calculate cost of filters over the number of docs after FT search
@@ -8025,7 +8014,8 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 		return false;
 
 	// if we are forcing this behavior, there's no point in further calculations
-	if ( bForce )
+	// and we are forcing it if we have any hints specified
+	if ( tQuery.m_dIndexHints.GetLength() )
 		return true;
 
 	CSphVector<SecondaryIndexInfo_t> dSIInfoFilters { dSIInfo.GetLength() };

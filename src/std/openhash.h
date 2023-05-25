@@ -98,7 +98,7 @@ struct HashFunc_Int64_t;
 template <typename KEY, typename ENTRY, typename HASHFUNC, typename STATE>
 class OpenHashTraits_T : public STATE
 {
-	using MYTYPE = class OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>;
+	using MYTYPE = OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>;
 
 public:
 	explicit			OpenHashTraits_T ( int64_t iSize=256 ) { Reset(iSize); }

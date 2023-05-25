@@ -41,7 +41,7 @@ For more details on the installation, see [below](../Installation/Debian_and_Ubu
 <!-- request MacOS -->
 
 ``` bash
-brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra
+brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 Please find more details on the installation [below](../Installation/MacOS.md).

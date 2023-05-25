@@ -149,6 +149,8 @@
 %token	TOK_GTE ">="
 %token	TOK_NE "!="
 
+%right TOK_TABLE TOK_STATUS
+
 %left TOK_OR
 %left TOK_AND
 %left '|'

@@ -7715,7 +7715,7 @@ static const char * g_dSqlStmts[] =
 	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
 	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
 	"select_sysvar", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
-	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
+	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
@@ -12040,12 +12040,11 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.DataTable ( dOut );
 }
 
+using NamedIndexType_t = std::pair<CSphString, IndexType_e>;
 
-void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+CSphVector<NamedIndexType_t> GetAllServedIndexes()
 {
-	// 0 local, 1 distributed, 2 rt, 3 template, 4 percolate, 5 unknown
-	static const char* sTypes[] = {"local", "distributed", "rt", "template", "percolate", "unknown"};
-	CSphVector<CSphNamedInt> dIndexes;
+	CSphVector<NamedIndexType_t> dIndexes;
 
 	// collect local, rt, percolate
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
@@ -12056,20 +12055,14 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 		switch ( tIt.second->m_eType )
 		{
-			case IndexType_e::PLAIN:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 0 ) );
-				break;
-			case IndexType_e::RT:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 2 ) );
-				break;
-			case IndexType_e::PERCOLATE:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 4 ) );
-				break;
-			case IndexType_e::TEMPLATE:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 3 ) );
-				break;
-			default:
-				dIndexes.Add ( CSphNamedInt ( tIt.first, 5 ) );
+		case IndexType_e::PLAIN:
+		case IndexType_e::RT:
+		case IndexType_e::PERCOLATE:
+		case IndexType_e::TEMPLATE:
+			dIndexes.Add ( NamedIndexType_t ( tIt.first, tIt.second->m_eType ) );
+			break;
+		default:
+			dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::ERROR_ ) );
 		}
 	}
 
@@ -12078,15 +12071,20 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( CSphNamedInt ( tIt.first, 1 ) );
+		dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::DISTR ) );
 
-	dIndexes.Sort ( Lesser ([] ( const CSphNamedInt & a, const CSphNamedInt & b)
-			{ return strcasecmp ( a.first.cstr (), b.first.cstr () )<0; }));
+	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.first.cstr(), b.first.cstr() ) < 0; } ) );
+	return dIndexes;
+}
+
+void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+{
+	auto dIndexes = GetAllServedIndexes();
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
 	for ( auto& dPair : dIndexes )
-		dTable.MatchTuplet( dPair.first.cstr (), sTypes[dPair.second] );
+		dTable.MatchTuplet( dPair.first.cstr (), szIndexType(dPair.second) );
 	tOut.DataTable ( dTable );
 }
 
@@ -15399,36 +15397,6 @@ static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c& tSta
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 }
 
-static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, RowBuffer_i & tOut )
-{
-	if (!tOut.HeadOfStrings ( { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length",
-		"Max_data_length", "Index_length", "Data_free",	"Auto_increment", "Create_time", "Update_time", "Check_time",
-		"Collation", "Checksum", "Create_options", "Comment" } ))
-		return;
-
-	tOut.PutString ( sName );	// Name
-	tOut.PutString ( "InnoDB" );		// Engine
-	tOut.PutString ( "10" );			// Version
-	tOut.PutString ( "Dynamic" );		// Row_format
-	tOut.PutNumAsString ( tStats.m_iTotalDocuments );	// Rows
-	tOut.PutString ( "4096" );			// Avg_row_length
-	tOut.PutString ( "0" );				// Data_length
-	tOut.PutString ( "0" );				// Max_data_length
-	tOut.PutString ( "0" );				// Index_length
-	tOut.PutString ( "0" );				// Data_free
-	tOut.PutString ( "5" );				// Auto_increment
-	tOut.PutNULL();						// Create_time
-	tOut.PutNULL();						// Update_time
-	tOut.PutNULL();						// Check_time
-	tOut.PutString ( "utf8" );			// Collation
-	tOut.PutNULL();						// Checksum
-	tOut.PutString ( "" );				// Create_options
-	tOut.PutString ( "" );				// Comment
-
-	tOut.Commit();
-	tOut.Eof ();
-}
-
 static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex, bool bRt, bool bPq )
 {
 	auto iDocs = pIndex->GetStats ().m_iTotalDocuments;
@@ -15503,7 +15471,7 @@ const char * szIndexType ( IndexType_e eType )
 {
 	switch ( eType )
 	{
-	case IndexType_e::PLAIN: return "disk";
+	case IndexType_e::PLAIN: return "local";
 	case IndexType_e::TEMPLATE: return "template";
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";
@@ -15512,18 +15480,11 @@ const char * szIndexType ( IndexType_e eType )
 	}
 }
 
-static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c& pServed, const ServedStats_c& tStats,
-		bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
+static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c& pServed, const ServedStats_c& tStats, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pServed );
 	RIdx_c pIndex { pServed };
 	assert ( pIndex );
-
-	if ( bModeFederated )
-	{
-		AddFederatedIndexStatus ( pIndex->GetStats (), sName, tOut );
-		return;
-	}
 
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet ( "index_type", szIndexType ( pServed->m_eType ) );
@@ -15536,40 +15497,29 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c
 }
 
 
-static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedIndexRefPtr_t& pIndex, bool bFederatedUser, const CSphString & sName, const CSphString & sPattern )
+static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedIndexRefPtr_t& pIndex, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pIndex );
-
-	if ( bFederatedUser )
-	{
-		CSphSourceStats tStats;
-		tStats.m_iTotalDocuments = 1000; // TODO: check is it worth to query that number from agents
-		AddFederatedIndexStatus ( tStats, sName, tOut );
-		return;
-	}
-
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet( "index_type", "distributed" );
 	AddIndexQueryStats ( dStatus, pIndex->m_tStats );
 	tOut.DataTable ( dStatus );
 }
 
-
-void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bFederatedUser )
+void HandleMysqlShowIndexStatus ( RowBuffer_i& tOut, const SqlStmt_t& tStmt )
 {
 	CSphString sError;
 	auto pServed = GetServed ( tStmt.m_sIndex );
 
 	int iChunk = tStmt.m_iIntParam;
-	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
+	if ( tStmt.m_dIntSubkeys.GetLength() >= 1 )
 		iChunk = tStmt.m_dIntSubkeys[0];
 
 	if ( pServed )
 	{
-		if ( iChunk>=0 && pServed->m_eType == IndexType_e::RT )
+		if ( iChunk >= 0 && pServed->m_eType == IndexType_e::RT )
 		{
-			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] ( const CSphIndex* pIndex )
-			{
+			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] ( const CSphIndex* pIndex ) {
 				if ( !pIndex )
 				{
 					tOut.Error ( tStmt.m_sStmt, "SHOW TABLE STATUS requires an existing table" );
@@ -15579,18 +15529,80 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 				VectorLike dStatus ( tStmt.m_sStringParam );
 				AddDiskIndexStatus ( dStatus, pIndex, false, false );
 				tOut.DataTable ( dStatus );
-			});
+			} );
 		} else
-			AddPlainIndexStatus ( tOut, pServed, *pServed->m_pStats, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
+			AddPlainIndexStatus ( tOut, pServed, *pServed->m_pStats, tStmt.m_sIndex, tStmt.m_sStringParam );
 		return;
 	}
 
 	auto pIndex = GetDistr ( tStmt.m_sIndex );
 
 	if ( pIndex )
-		AddDistibutedIndexStatus ( tOut, pIndex, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
+		AddDistibutedIndexStatus ( tOut, pIndex, tStmt.m_sIndex, tStmt.m_sStringParam );
 	else
 		tOut.Error ( tStmt.m_sStmt, "SHOW TABLE STATUS requires an existing table" );
+}
+
+static bool AddFederatedIndexStatusHeader ( RowBuffer_i& tOut )
+{
+	return tOut.HeadOfStrings ( { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free", "Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" } );
+}
+
+static void AddFederatedIndexStatusLine ( const CSphSourceStats& tStats, const CSphString& sName, RowBuffer_i& tOut )
+{
+	tOut.PutString ( sName );						  // Name
+	tOut.PutString ( "InnoDB" );					  // Engine
+	tOut.PutString ( "10" );						  // Version
+	tOut.PutString ( "Dynamic" );					  // Row_format
+	tOut.PutNumAsString ( tStats.m_iTotalDocuments ); // Rows
+	tOut.PutString ( "4096" );						  // Avg_row_length
+	tOut.PutString ( "0" );							  // Data_length
+	tOut.PutString ( "0" );							  // Max_data_length
+	tOut.PutString ( "0" );							  // Index_length
+	tOut.PutString ( "0" );							  // Data_free
+	tOut.PutString ( "5" );							  // Auto_increment
+	tOut.PutNULL();									  // Create_time
+	tOut.PutNULL();									  // Update_time
+	tOut.PutNULL();									  // Check_time
+	tOut.PutString ( "utf8" );						  // Collation
+	tOut.PutNULL();									  // Checksum
+	tOut.PutString ( "" );							  // Create_options
+	tOut.PutString ( "" );							  // Comment
+	tOut.Commit();
+}
+
+void HandleMysqlShowFederatedIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+
+	if ( !AddFederatedIndexStatusHeader ( tOut ) )
+		return;
+
+	CheckLike tSelector { tStmt.m_sStringParam.cstr() };
+	auto dIndexes = GetAllServedIndexes();
+
+	// fake stat for distrs
+	CSphSourceStats tFakeStats;
+	tFakeStats.m_iTotalDocuments = 1000; // TODO: check is it worth to query that number from agents
+
+	for ( const NamedIndexType_t& tIndex : dIndexes )
+	{
+		if ( !tSelector.Match ( tIndex.first.cstr() ) )
+			continue;
+
+		if ( tIndex.second == IndexType_e::DISTR )
+			AddFederatedIndexStatusLine ( tFakeStats, tIndex.first, tOut );
+		else {
+			auto pServed = GetServed ( tIndex.first );
+			if ( !pServed )
+				continue; // really rare case when between GetAllServedIndexes and that moment table was removed.
+			RIdx_c pIndex { pServed };
+			assert ( pIndex );
+			AddFederatedIndexStatusLine ( pIndex->GetStats(), tIndex.first, tOut );
+		}
+	}
+
+	tOut.Eof ();
 }
 
 void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
@@ -16573,11 +16585,22 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	tCrashQuery.m_dQuery = { (const BYTE*) sQuery.first, sQuery.second };
 
 	// ad-hoc, make generalized select()
-	if ( StrEq ( sQuery.first, "select DATABASE(), USER() limit 1" ) )
+	if ( StrEqN ( sQuery.first, "select DATABASE()" ) )
+	{
+		// result set header packet
+		tOut.HeadOfStrings ( { "DATABASE()" } );
+		tOut.PutString ( g_sDbName );
+		tOut.Commit();
+		tOut.Eof ( false );
+		return true;
+	}
+
+	// notice order! if sQuery is 'select DATABASE()' it will match this condition, but it is already processed by ad-hoc above
+	if ( StrEqN ( sQuery, "select DATABASE(), USER() limit 1" ) )
 	{
 		// result set header packet
 		tOut.HeadTuplet ( "DATABASE()", "USER()" );
-		tOut.DataTuplet ( g_sDbName.cstr(), tSess.GetVip () ? "VIP" : "Usual" );
+		tOut.DataTuplet ( g_sDbName.cstr(), tSess.GetVip() ? "VIP" : "Usual" );
 		tOut.Eof ( false );
 		return true;
 	}
@@ -16894,7 +16917,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_SHOW_INDEX_STATUS:
-		HandleMysqlShowIndexStatus ( tOut, *pStmt, m_bFederatedUser );
+		HandleMysqlShowIndexStatus ( tOut, *pStmt );
+		return true;
+
+	case STMT_SHOW_FEDERATED_INDEX_STATUS:
+		HandleMysqlShowFederatedIndexStatus ( tOut, *pStmt );
 		return true;
 
 	case STMT_SHOW_INDEX_SETTINGS:
@@ -17173,6 +17200,7 @@ void StatCountCommand ( SearchdCommand_e eCmd )
 		gStats ().m_iCommandCount[eCmd].fetch_add ( 1, std::memory_order_relaxed );
 }
 
+// fixme! move federated stuff to another parser and remove all kind of 'fixups'
 bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )
 {
 	if ( !dStmt.GetLength() )
@@ -17187,7 +17215,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 
 	SqlStmt_t & tStmt = dStmt[0];
 
-	if ( tStmt.m_eStmt==STMT_SHOW_INDEX_STATUS )
+	if ( tStmt.m_eStmt==STMT_SHOW_FEDERATED_INDEX_STATUS )
 		return true;
 	else if ( tStmt.m_eStmt == STMT_SET )
 		return true;

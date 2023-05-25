@@ -239,6 +239,15 @@ void SqlParserTraits_c::SetIndex ( const SqlNode_t& tNode ) const
 		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
 }
 
+void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
+{
+	auto iLen = sIndex.Length();
+	if ( iLen > 2 && sIndex.cstr()[0] == '\'' && sIndex.cstr()[iLen-1] == '\'' )
+		m_pStmt->m_sIndex = sIndex.SubString ( 1, iLen - 2 );
+	else
+		m_pStmt->m_sIndex = sIndex;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -324,7 +333,6 @@ public:
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
 	void 			AddIntSubkey ( const SqlNode_t & tNode ) const;
 	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
-	void			SetIndex ( const SqlNode_t & tNode ) const;
 
 	void			AddComment ( const SqlNode_t* tNode );
 
@@ -1146,14 +1154,6 @@ void SqlParser_c::SwapSubkeys ()
 {
 	m_pQuery->m_dIntSubkeys.SwapData ( m_pStmt->m_dIntSubkeys );
 	m_pQuery->m_dStringSubkeys.SwapData ( m_pStmt->m_dStringSubkeys );
-}
-
-void SqlParser_c::SetIndex ( const SqlNode_t & tNode ) const
-{
-	ToString ( m_pStmt->m_sIndex, tNode );
-	// unquote index name
-	if ( ( tNode.m_iEnd - tNode.m_iStart )>2 && m_pStmt->m_sIndex.cstr()[0]=='\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1]=='\'' )
-		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length()-2 );
 }
 
 void SqlParser_c::AddComment ( const SqlNode_t* tNode )

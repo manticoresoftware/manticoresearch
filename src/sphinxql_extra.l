@@ -71,7 +71,8 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 <QSTR>[^'\n\\]+
 <QSTR>'             {  Q_END; BEGIN(INITIAL); return TOK_QUOTED_STRING; }
 
-
+"CREATE"			{ STORE_BOUNDS; return TOK_CREATE; }
+"DATABASE"			{ STORE_BOUNDS; return TOK_DATABASE; }
 "FIELDS"			{ STORE_BOUNDS; return TOK_FIELDS; }
 "FLUSH" 			{ STORE_BOUNDS; return TOK_FLUSH; }
 "FROM"				{ STORE_BOUNDS; return TOK_FROM; }

@@ -109,6 +109,7 @@ enum SqlStmt_e
 	STMT_OPTIMIZE_INDEX,
 	STMT_SHOW_AGENT_STATUS,
 	STMT_SHOW_INDEX_STATUS,
+	STMT_SHOW_FEDERATED_INDEX_STATUS,
 	STMT_SHOW_PROFILE,
 	STMT_ALTER_ADD,
 	STMT_ALTER_DROP,
@@ -336,6 +337,7 @@ public:
 
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
+	void			SetIndex ( const CSphString& sIndex ) const;
 	void 			AddComment ( const SqlNode_t* tNode ) const;
 
 protected:

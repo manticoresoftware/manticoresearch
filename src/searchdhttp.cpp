@@ -2404,12 +2404,18 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	{
 		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
 		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_iQUID );
-		if ( !tDesc.m_bQL )
-			tOut.Sprintf ( R"("_source":{"query":%s})", tDesc.m_sQuery.cstr () );
-		else
 		{
-			ScopedComma_c sBrackets ( tOut, nullptr, R"("_source":{ "query": {"ql":)", " } }");
-			tOut.AppendEscapedWithComma ( tDesc.m_sQuery.cstr() );
+			ScopedComma_c sBrackets ( tOut, ",", R"("_source":{)", "}");
+			if ( !tDesc.m_bQL )
+			{
+				tOut.Sprintf ( R"("query":%s)", tDesc.m_sQuery.cstr() );
+			} else
+			{
+				ScopedComma_c sBrackets ( tOut, nullptr, R"("query": {"ql":)", "}");
+				tOut.AppendEscapedWithComma ( tDesc.m_sQuery.cstr() );
+			}
+			if ( !tDesc.m_sTags.IsEmpty() )
+				tOut.Sprintf ( R"("tags":"%s")", tDesc.m_sTags.cstr() );
 		}
 
 		// document count + document id(s)

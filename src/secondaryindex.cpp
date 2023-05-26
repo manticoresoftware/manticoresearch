@@ -663,10 +663,35 @@ static bool HaveLookup ( const CSphFilterSettings & tFilter, const CSphVector<In
 }
 
 
+static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	if ( !tCtx.m_pHistograms )
+		return;
+
+	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+	{
+		const CSphFilterSettings & tFilter = tCtx.m_tQuery.m_dFilters[i];
+		const Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tFilter.m_sAttrName );
+		if ( !pHistogram )
+			continue;
+
+		HistogramRset_t tEstimate;
+		auto & tSIInfo = dSIInfo[i];
+		tSIInfo.m_bUsable = pHistogram->EstimateRsetSize ( tFilter, tEstimate );
+		tSIInfo.m_iRsetEstimate = tEstimate.m_iTotal;
+		tSIInfo.m_iTotalValues = pHistogram->GetNumValues();
+		tSIInfo.m_bHasHistograms = true;
+	}
+}
+
+
 static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
 	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
+		if ( !dSIInfo[i].m_bUsable )
+			continue;
+
 		bool bForce = false;
 		if ( !HaveLookup( tCtx.m_tQuery.m_dFilters[i], tCtx.m_tQuery.m_dIndexHints, bForce ) )
 			continue;
@@ -685,18 +710,11 @@ static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const 
 
 	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
-		const CSphFilterSettings & tFilter = tCtx.m_tQuery.m_dFilters[i];
-		const Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tFilter.m_sAttrName );
-		if ( !pHistogram )
+		if ( !dSIInfo[i].m_bUsable )
 			continue;
 
-		HistogramRset_t tEstimate;
-		bool bUsable = pHistogram->EstimateRsetSize ( tFilter, tEstimate );
-		dSIInfo[i].m_iRsetEstimate = tEstimate.m_iTotal;
-		dSIInfo[i].m_iTotalValues = pHistogram->GetNumValues();
-
 		bool bForce = false;
-		if ( !bUsable || !HaveSI ( tFilter, tCtx, bForce ) )
+		if ( !HaveSI ( tCtx.m_tQuery.m_dFilters[i], tCtx, bForce ) )
 			continue;
 
 		if ( bForce )
@@ -711,6 +729,9 @@ static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo,
 {
 	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
+		if ( !dSIInfo[i].m_bUsable )
+			continue;
+
 		bool bForce = false;
 		if ( !HaveAnalyzer ( tCtx.m_tQuery.m_dFilters[i], tCtx, bForce ) )
 			continue;
@@ -826,14 +847,26 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 }
 
 
-static void CheckHint ( const IndexHint_t & tHint, const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
+static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tFilter, const SecondaryIndexInfo_t & tSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
 {
 	CSphString sWarning;
-	if ( !tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr() ) )
+	const auto * pAttr = tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr() );
+	if ( !pAttr )
 	{
 		sWarning.SetSprintf ( "hint error: '%s' attribute not found", tHint.m_sIndex.cstr() );
 		dWarnings.Add (sWarning);
 		return;
+	}
+
+	if ( !tSIInfo.m_bHasHistograms )
+	{
+		sWarning.SetSprintf ( "hint error: histogram not found for attribute '%s'", tHint.m_sIndex.cstr() );
+		dWarnings.Add (sWarning);
+	}
+	else if ( !tSIInfo.m_bUsable )
+	{
+		sWarning.SetSprintf ( "hint error: histogram unusable for attribute '%s'", tHint.m_sIndex.cstr() );
+		dWarnings.Add (sWarning);
 	}
 
 	switch ( tHint.m_eType )
@@ -847,15 +880,20 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphVector<SecondaryInd
 		if ( tHint.m_bForce )
 		{
 			if ( !IsColumnarLibLoaded() )
-				dWarnings.Add ( "columnar library not loaded" );
+				dWarnings.Add ( "hint error: columnar library not loaded" );
 			else if ( !tCtx.m_pColumnar )
-				dWarnings.Add ( "no columnar storage" );
+				dWarnings.Add ( "hint error: no columnar storage" );
+			else if ( pAttr->m_eAttrType==SPH_ATTR_STRING && tCtx.m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+			{
+				sWarning.SetSprintf ( "hint error: unsupported collation; ColumnarScan might be slow for '%s'", tHint.m_sIndex.cstr() );
+				dWarnings.Add(sWarning);
+			}
 			else
 			{
 				const auto * pAttr = tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr()) ;
 				if ( !pAttr->IsColumnar() && !pAttr->IsColumnarExpr() )
 				{
-					sWarning.SetSprintf ( "attribute '%s' is not columnar", tHint.m_sIndex.cstr() );
+					sWarning.SetSprintf ( "hint error: attribute '%s' is not columnar", tHint.m_sIndex.cstr() );
 					dWarnings.Add(sWarning);
 				}
 			}
@@ -866,16 +904,34 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphVector<SecondaryInd
 		if ( tHint.m_bForce )
 		{
 			if ( !IsSecondaryLibLoaded() )
-				dWarnings.Add ( "secondary library not loaded" );
+				dWarnings.Add ( "hint error: secondary library not loaded" );
 			else if ( GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
-				dWarnings.Add ( "secondary indexes are disabled" );
+				dWarnings.Add ( "hint error: secondary indexes are disabled" );
 			else if ( !tCtx.m_pSI )
-				dWarnings.Add ( "index has no secondary indexes" );
-			if ( !tCtx.m_pHistograms )
-				dWarnings.Add ( "index has no histograms; secondary indexes are unavailable" );
+				dWarnings.Add ( "hint error: table has no secondary indexes" );
 			else if ( !tCtx.m_pSI->IsEnabled ( tHint.m_sIndex.cstr() ) )
 			{
-				sWarning.SetSprintf ( "secondary index disabled for '%s' (attribute was updated?)", tHint.m_sIndex.cstr() );
+				sWarning.SetSprintf ( "hint error: secondary index disabled for '%s' (attribute was updated?)", tHint.m_sIndex.cstr() );
+				dWarnings.Add(sWarning);
+			}
+			else if ( pAttr->m_eAttrType==SPH_ATTR_STRING && tCtx.m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+			{
+				sWarning.SetSprintf ( "hint error: unsupported collation; secondary index disabled for '%s'", tHint.m_sIndex.cstr() );
+				dWarnings.Add(sWarning);
+			}
+			else if ( pAttr->m_pExpr.Ptr() && !pAttr->IsColumnarExpr() ) 
+			{
+				sWarning.SetSprintf ( "hint error: attribute is an expression; secondary index disabled for '%s'", tHint.m_sIndex.cstr() );
+				dWarnings.Add(sWarning);
+			}
+			else if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE )
+			{
+				sWarning.SetSprintf ( "hint error: unsupported filter type; secondary index disabled for '%s'", tHint.m_sIndex.cstr() );
+				dWarnings.Add(sWarning);
+			}
+			else if ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL )
+			{
+				sWarning.SetSprintf ( "hint error: unsupported mva eval type; secondary index disabled for '%s'", tHint.m_sIndex.cstr() );
 				dWarnings.Add(sWarning);
 			}
 		}
@@ -889,16 +945,34 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphVector<SecondaryInd
 
 static void CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
 {
-	for ( auto & i : tCtx.m_tQuery.m_dIndexHints )
-		CheckHint ( i, dSIInfo, tCtx, dWarnings );
+	const auto & dFilters = tCtx.m_tQuery.m_dFilters;
+	for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
+	{
+		int iFilter = -1;
+		ARRAY_FOREACH ( i, dFilters )
+			if ( dFilters[i].m_sAttrName==tHint.m_sIndex )
+			{
+				iFilter = i;
+				break;
+			}
 
-	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+		if ( iFilter==-1 )
+		{
+			CSphString sWarning;
+			sWarning.SetSprintf ( "hint error: filter not found for attribute '%s'", tHint.m_sIndex.cstr() );
+			dWarnings.Add(sWarning);
+		}
+		else
+			CheckHint ( tHint, dFilters[iFilter], dSIInfo[iFilter], tCtx, dWarnings );
+	}
+
+	ARRAY_FOREACH ( i, dFilters )
 		for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
-			if ( tHint.m_sIndex==tCtx.m_tQuery.m_dFilters[i].m_sAttrName && tHint.m_bForce )
+			if ( tHint.m_sIndex==dFilters[i].m_sAttrName && tHint.m_bForce )
 				if ( !dSIInfo[i].m_dCapabilities.any_of ( [&tHint]( auto eSupported ){ return tHint.m_eType==eSupported; } ) )
 				{
 					CSphString sWarning;
-					sWarning.SetSprintf ( "hint error: requested hint type not supported for '%s' attribute", tHint.m_sIndex.cstr() );
+					sWarning.SetSprintf ( "hint error: requested hint type not supported for attribute '%s'", tHint.m_sIndex.cstr() );
 					dWarnings.Add(sWarning);
 				}
 }
@@ -913,10 +987,24 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	ARRAY_FOREACH ( i, dSIInfo )
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::FILTER );
 
-	// no iterators with OR queries
-	if ( !tCtx.m_tQuery.m_dFilterTree.IsEmpty() || !tCtx.m_pHistograms )
-		return dSIInfo;
+	if ( !tCtx.m_pHistograms )
+	{
+		if ( tCtx.m_tQuery.m_dIndexHints.GetLength() )
+			dWarnings.Add ( "index has no histograms; secondary indexes are unavailable" );
 
+		return dSIInfo;
+	}
+
+	// no iterators with OR queries
+	if ( !tCtx.m_tQuery.m_dFilterTree.IsEmpty() )
+	{
+		if ( tCtx.m_tQuery.m_dIndexHints.GetLength() )
+			dWarnings.Add ( "secondary indexes are not available when using the OR operator between filters" );
+
+		return dSIInfo;
+	}
+
+	FetchHistogramInfo ( dSIInfo, tCtx );
 	MarkAvailableLookup ( dSIInfo, tCtx );
 	MarkAvailableSI ( dSIInfo, tCtx );
 	MarkAvailableAnalyzers ( dSIInfo, tCtx );

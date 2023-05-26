@@ -29,6 +29,8 @@ struct SecondaryIndexInfo_t
 	int64_t					m_iTotalValues = 0;	// total values (used mainly for MVAs; different from total docs)
 	int64_t					m_iPartialColumnarMinMax = -1;
 	uint32_t				m_uNumSIIterators = 0;
+	bool					m_bHasHistograms = false;
+	bool					m_bUsable = false;
 	bool					m_bCreated = false;
 };
 

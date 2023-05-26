@@ -3184,7 +3184,11 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 
 	// LIMIT clause
 	if ( q.m_iOffset!=0 || q.m_iLimit!=20 )
-		tBuf << " LIMIT " << q.m_iOffset << ',' << q.m_iLimit;
+		tBuf << " LIMIT ";
+	if ( q.m_iOffset )
+		tBuf << q.m_iOffset << ',';
+	if ( q.m_iLimit != 20 )
+		tBuf << q.m_iLimit;
 
 	// OPTION clause
 	FormatOption ( q, tBuf );

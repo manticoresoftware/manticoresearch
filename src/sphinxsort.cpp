@@ -1466,7 +1466,7 @@ private:
 	bool						m_bNotYetFinalized = true;
 
 	inline bool			PushMatch ( CSphMatch & tEntry );
-	void				SendSchema();
+	void				SendSchemaOnce();
 	void				MakeCtx();
 };
 
@@ -1478,8 +1478,12 @@ DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec
 	, m_dColumns ( std::move ( dColumns ) )
 {}
 
-void DirectSqlQueue_c::SendSchema()
+void DirectSqlQueue_c::SendSchemaOnce()
 {
+	if ( m_bSchemaSent )
+		return;
+
+	assert ( !m_iDocs );
 	for ( const auto& sColumn : m_dColumns )
 	{
 		auto iIdx = m_pSchema->GetAttrIndex ( sColumn.cstr() );
@@ -1518,8 +1522,7 @@ void DirectSqlQueue_c::MakeCtx()
 
 bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 {
-	if (!m_bSchemaSent)
-		SendSchema();
+	SendSchemaOnce();
 	++m_iDocs;
 	auto* pDocstores = *(std::pair<void*,void*>**)m_pOpaque;
 	auto pDocstoreReader = pDocstores->first;
@@ -1551,10 +1554,13 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 }
 
 /// final update pass
-void DirectSqlQueue_c::Finalize ( MatchProcessor_i&, bool bCallProcessInResultSetOrder, bool bFinalizeMatches )
+void DirectSqlQueue_c::Finalize ( MatchProcessor_i&, bool, bool bFinalizeMatches )
 {
-	if ( bFinalizeMatches && std::exchange ( m_bNotYetFinalized, false ) )
-		m_pOutput->Eof();
+	if ( !bFinalizeMatches || !std::exchange ( m_bNotYetFinalized, false ) )
+		return;
+
+	SendSchemaOnce();
+	m_pOutput->Eof();
 }
 
 

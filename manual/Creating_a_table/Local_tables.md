@@ -8,7 +8,7 @@ Replication is available only in this mode.
 
 In this mode you can use SQL commands like `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and change table schema and drop it. This mode is especially useful for **real-time** and **percolate tables**.
 
-Table names are case insensitive in the RT mode.
+Table names are converted to lowercase when created.
 
 ## Defining table schema in config (Plain mode)
 In this mode you can specify table schema in config which will be read on Manticore start and if the table doesn't exist yet it will be created. This mode is especially useful for **plain tables** that are built upon indexing data from an external storage.

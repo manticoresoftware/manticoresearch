@@ -85,6 +85,16 @@ agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 agent = test:9312|box2:9312:any2[retry_count=2,conn=pconn,ha_strategy=noerrors]
 ```
 
+For optimal performance, it's recommended to place remote tables that reside on the same server within the same record. For instance, instead of:
+```ini
+agent = remote:9312:idx1
+agent = remote:9312:idx2
+```
+you should prefer:
+```ini
+agent = remote:9312:idx1,idx2
+```
+
 ## agent_persistent
 
 ```ini

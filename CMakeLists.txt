@@ -1,5 +1,30 @@
 cmake_minimum_required ( VERSION 3.17 )
 
+if (ASAN)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+endif ()
+
+if (LSAN)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=leak")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=leak")
+endif ()
+
+if (MSAN)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
+endif ()
+
+if (TSAN)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+endif ()
+
+if (UBSAN)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+endif ()
+
 FOREACH (policy CMP0012 CMP0013 CMP0014 CMP0048 CMP0074 CMP0077 CMP0091 CMP0110)
 	IF (POLICY ${policy})
 		CMAKE_POLICY ( SET ${policy} NEW )
@@ -455,4 +480,3 @@ feature_summary ( WHAT ENABLED_FEATURES INCLUDE_QUIET_PACKAGES DESCRIPTION "Enab
 feature_summary ( WHAT RUNTIME_PACKAGES_FOUND INCLUDE_QUIET_PACKAGES DESCRIPTION "Available runtime features:" )
 
 #feature_summary (WHAT ALL DESCRIPTION "Enabled ALL features4:")
-

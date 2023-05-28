@@ -48,7 +48,10 @@ RUN cd / \
 && curl -L https://github.com/Kitware/CMake/releases/download/v$cmakever/cmake-$cmakever-linux-$arch.tar.gz | tar -zx
 ENV PATH $PATH:/cmake-$cmakever-linux-x86_64/bin:/cmake-$cmakever-linux-aarch64/bin
 
-# 5-th layer. Everything to build, except actual sysroot archives
+# 5-th layer, cargo toolchain for Rust Programming Language
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# 6-th layer. Everything to build, except actual sysroot archives
 ENV CMAKE_GENERATOR=Ninja
 ENV CMAKE_TOOLCHAIN_FILE=/sysroot/root/toolchain.cmake
 RUN git config --global --add safe.directory '*'

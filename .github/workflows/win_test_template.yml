@@ -1,0 +1,99 @@
+name: Windows Test Template
+
+on:
+  workflow_call:
+    inputs:
+      CTEST_START:
+        required: false
+        type: number
+        default: 1
+      CTEST_END:
+        required: false
+        type: number
+        default: 999999
+      artifact_name:
+        required: true
+        type: string
+
+jobs:
+  test_windows:
+    runs-on: windows-2019
+    env:
+      CACHEB: "../cache"
+      LIBS_BUNDLE: "../bundle"
+      BOOST_ROOT: "../boost_1_75_0"
+      CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
+      CTEST_CONFIGURATION_TYPE: Debug
+      CTEST_START: ${{ inputs.CTEST_START }}
+      CTEST_END: ${{ inputs.CTEST_END }}
+      # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
+      # CTEST_REGEX: test_234
+      NO_BUILD: 1
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download build artifacts
+        uses: ./.github/workflows/download_artifact_with_retries/
+        with:
+          name: build_windows_Debug_x64
+          path: build
+      - name: Check out Windows bundle cache
+        uses: actions/cache@v3.3.1
+        with:
+          path: |
+            bundle
+            boost_1_75_0
+          enableCrossOsArchive: true
+          key: win_bundle
+      - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: instead zstd in our images, so we don't have to do these hacks
+        run: rm C:\tools\zstd\zstd.exe
+      - name: Check out cache before building
+        uses: actions/cache@v3.3.1
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: build_windows_x64
+      - name: Copy libraries close to the binaries
+        run: |
+          cp bundle/mysql-x64/lib/debug/libmysql* build/src/Debug/
+          cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
+          cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
+      - name: Setup Flex and Bison
+        run: choco install winflexbison
+      - name: Run mysql
+        run: |
+          mkdir C:\mysql\data
+          C:\mysql\bin\mysqld.exe --initialize-insecure
+          C:\mysql\bin\mysqld.exe --install mysql
+          net start mysql
+          mysql -e "create user 'test'@'localhost'; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
+      - name: Setup PHP and mysqli
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli
+      - name: 🚀 Test
+        id: test
+        run: |
+          env
+          ctest -V -S misc/ctest/gltest.cmake --no-compress-output # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        continue-on-error: true
+      - name: Remember status
+        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+        continue-on-error: true
+      - name: Prepare test results
+        if: always()
+        run: |
+          mkdir build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+          cp -r build/Testing/2*/*.xml build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
+          mv build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+        continue-on-error: true
+      - name: Upload test artifacts
+        if: always()
+        continue-on-error: true
+        uses: ./.github/workflows/upload_artifact_with_retries/
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/searchd.log build/status*"

@@ -1,0 +1,27 @@
+name: 📊 Code coverage test
+
+on:
+  push:
+    branches: [ master ]
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: coverage_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simple_build:
+    uses: ./.github/workflows/build_template.yml
+    with:
+      CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
+      CTEST_CONFIGURATION_TYPE: "Debug"
+      WITH_COVERAGE: 1
+
+  simple_test_coverage:
+    needs: simple_build
+    uses: ./.github/workflows/test_template.yml
+    with:
+      CTEST_CONFIGURATION_TYPE: Debug
+      WITH_COVERAGE: 1
+      artifact_name: test_debug_coverage
+      timeout: 20

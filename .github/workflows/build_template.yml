@@ -1,0 +1,101 @@
+name: Build Template
+
+on:
+  workflow_call:
+    inputs:
+      arch:
+        required: false
+        type: string
+        default: x86_64
+      DISTR:
+        required: false
+        type: string
+        default: bionic
+      CTEST_CMAKE_GENERATOR:
+        required: false
+        type: string
+        default: Ninja
+      CTEST_CONFIGURATION_TYPE:
+        required: false
+        type: string
+        default: RelWithDebInfo
+      WITH_COVERAGE:
+        required: false
+        type: number
+        default: 0
+      cmake_command:
+        required: false
+        type: string
+        default: "ctest -VV -S misc/ctest/gltest.cmake --no-compress-output"
+      cache_key:
+        required: false
+        type: string
+        default: build_linux_x86_64
+      boost:
+        required: false
+        type: string
+        default: boost_nov22
+      sysroot:
+        required: false
+        type: string
+        default: roots_nov22
+      artifact_list:
+        required: false
+        type: string
+        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+      HOMEBREW_PREFIX:
+        required: false
+        type: string
+        default:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    container:
+      image: manticoresearch/external_toolchain:clang15_cmake3263
+      env:
+        CACHEB: "../cache"
+        DIAGNOSTIC: 1
+        PACK_ICUDATA: 0
+        NO_TESTS: 1
+        DISTR: ${{ inputs.DISTR }}
+        boost: ${{ inputs.boost }}
+        sysroot: ${{ inputs.sysroot }}
+        arch: ${{ inputs.arch }}
+        CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
+        CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
+        WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
+        SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
+        HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          set-safe-directory: true
+
+      - name: Initialization
+        run: | # without adding the safe.directory the cmake fails to do git log -1 --date=short --format=%cd
+          bash /sysroot/root/entry_point.sh
+          git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+
+      - name: Check out cache before building
+        uses: actions/cache@v3.3.1
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: ${{ inputs.cache_key }}
+
+      - name: 🚀 Build
+        run: ${{ inputs.cmake_command }}
+
+      - name: Upload build artifacts
+        if: success()
+        uses: ./.github/workflows/upload_artifact_with_retries/
+        with:
+          name: build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}
+          path: ${{ inputs.artifact_list }}

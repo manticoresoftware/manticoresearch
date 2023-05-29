@@ -1,0 +1,52 @@
+name: 'Download artifact with retries'
+description: 'This action makes a few attempts to download an artifact'
+inputs:
+  name:
+    required: true
+    type: string
+  path:
+    required: true
+    type: string
+runs:
+  using: "composite"
+  steps:
+    - name: Download - 1st attempt
+      id: download1
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+      continue-on-error: true
+    - name: Download - 2nd attempt
+      id: download2
+      if: steps.download1.outcome == 'failure'
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+      continue-on-error: true
+    - name: Download - 3rd attempt
+      id: download3
+      if: steps.download2.outcome == 'failure'
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+      continue-on-error: true
+    - name: Check if any download was successful
+      if: success() || failure()
+      run: |
+        if [ "${{ steps.download1.outcome }}" == "success" ] || [ "${{ steps.download2.outcome }}" == "success" ] || [ "${{ steps.download3.outcome }}" == "success" ]; then
+          echo "Download was successful"
+        else
+          echo "All download attempts failed"
+          exit 1
+        fi
+      shell: bash
+    - name: Untar
+      if: success() || failure()
+      run: |
+        ls -la ${{ inputs.path }}/artifact.tar
+        tar -xvf ${{ inputs.path }}/artifact.tar
+        ls -la
+      shell: bash

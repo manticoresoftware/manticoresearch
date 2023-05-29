@@ -1,0 +1,532 @@
+name: 🚀 Tests, builds, packs
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: CI_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  win_bundle:
+    name: Windows supplementary files preparation
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out cache
+        id: cache
+        uses: actions/cache@v3.3.1
+        with:
+          path: |
+            bundle
+            boost_1_75_0
+          enableCrossOsArchive: true
+          key: win_bundle
+          lookup-only: true
+      - name: Extract Windows bundle from Windows sysroot
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_nov22/sysroot_windows_x64.tar.xz
+          tar -xvf sysroot_windows_x64.tar.xz
+          mv diskc/winbundle bundle
+      - name: Extract Boost to put it to the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wget https://repo.manticoresearch.com/repository/tmp/boost_1_75_0.tgz
+          tar -xf boost_1_75_0.tgz
+
+  build_linux_debug:
+    name: Linux debug build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      CTEST_CONFIGURATION_TYPE: "Debug"
+
+  test_linux_debug:
+    name: Linux debug mode tests
+    needs: build_linux_debug
+    uses: ./.github/workflows/test_template.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [1_100, 101_200, 201_330, 331_400, 401_500, 501_600, 601_700, 701_800, 801_870, 871_and_on]
+        include:
+          - name: 1_100
+            start: 1
+            end: 100
+          - name: 101_200
+            start: 101
+            end: 200
+          - name: 201_330
+            start: 201
+            end: 330
+          - name: 331_400
+            start: 331
+            end: 400
+          - name: 401_500
+            start: 401
+            end: 500
+          - name: 501_600
+            start: 501
+            end: 600
+          - name: 601_700
+            start: 601
+            end: 700
+          - name: 701_800
+            start: 701
+            end: 800
+          - name: 801_870
+            start: 801
+            end: 870
+          - name: 871_and_on
+            start: 871
+            end: 999999
+    with:
+      CTEST_CONFIGURATION_TYPE: "Debug"
+      CTEST_START: ${{ matrix.start }}
+      CTEST_END: ${{ matrix.end }}
+      artifact_name: debug_test_${{ matrix.name }}
+      xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
+      timeout: 10
+
+  debug_tests_report:
+    name: Debug mode tests summary and report
+    needs: test_linux_debug
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download test report artifacts 1_100
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_1_100
+          path: .
+      - name: Download test report artifacts 101_200
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_101_200
+          path: .
+      - name: Download test report artifacts 201_330
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_201_330
+          path: .
+      - name: Download test report artifacts 331_400
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_331_400
+          path: .
+      - name: Download test report artifacts 401_500
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_401_500
+          path: .
+      - name: Download test report artifacts 501_600
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_501_600
+          path: .
+      - name: Download test report artifacts 601_700
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_601_700
+          path: .
+      - name: Download test report artifacts 701_800
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_701_800
+          path: .
+      - name: Download test report artifacts 801_870
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_801_870
+          path: .
+      - name: Download test report artifacts 871_and_on
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: debug_test_871_and_on
+          path: .
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        continue-on-error: true
+        with:
+          files: build/junit*.xml
+      - name: Per-test results
+        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        run: |
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          grep -o "success" build/status* | wc -l | awk '{exit $1==10?0:1}'
+        shell: bash
+      - name: Delete unneded per-shard artifacts
+        if: always()
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: debug_test_*
+          failOnError: false
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: ./.github/workflows/upload_artifact_with_retries/
+        with:
+          name: debug_test_resuls
+          path: build
+
+  build_linux_release:
+    name: Liniux release build
+    uses: ./.github/workflows/build_template.yml
+
+  test_linux_release:
+    name: Linux release mode tests
+    needs: build_linux_release
+    uses: ./.github/workflows/test_template.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [1_100, 101_200, 201_330, 331_400, 401_500, 501_600, 601_700, 701_800, 801_870, 871_and_on]
+        include:
+          - name: 1_100
+            start: 1
+            end: 100
+          - name: 101_200
+            start: 101
+            end: 200
+          - name: 201_330
+            start: 201
+            end: 330
+          - name: 331_400
+            start: 331
+            end: 400
+          - name: 401_500
+            start: 401
+            end: 500
+          - name: 501_600
+            start: 501
+            end: 600
+          - name: 601_700
+            start: 601
+            end: 700
+          - name: 701_800
+            start: 701
+            end: 800
+          - name: 801_870
+            start: 801
+            end: 870
+          - name: 871_and_on
+            start: 871
+            end: 999999
+    with:
+      CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
+      CTEST_START: ${{ matrix.start }}
+      CTEST_END: ${{ matrix.end }}
+      artifact_name: release_test_${{ matrix.name }}
+      xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
+      timeout: 10
+
+  release_tests_report:
+    name: Release mode tests summary and report
+    needs: test_linux_release
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download test report artifacts 1_100
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_1_100
+          path: .
+      - name: Download test report artifacts 101_200
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_101_200
+          path: .
+      - name: Download test report artifacts 201_330
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_201_330
+          path: .
+      - name: Download test report artifacts 331_400
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_331_400
+          path: .
+      - name: Download test report artifacts 401_500
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_401_500
+          path: .
+      - name: Download test report artifacts 501_600
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_501_600
+          path: .
+      - name: Download test report artifacts 601_700
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_601_700
+          path: .
+      - name: Download test report artifacts 701_800
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_701_800
+          path: .
+      - name: Download test report artifacts 801_870
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_801_870
+          path: .
+      - name: Download test report artifacts 871_and_on
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: release_test_871_and_on
+          path: .
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        continue-on-error: true
+        with:
+          files: build/junit*.xml
+      - name: Per-test results
+        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        run: |
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          grep -o "success" build/status* | wc -l | awk '{exit $1==10?0:1}'
+        shell: bash
+      - name: Delete unneded per-shard artifacts
+        if: always()
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: release_test_*
+          failOnError: false
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: ./.github/workflows/upload_artifact_with_retries/
+        with:
+          name: release_test_resuls
+          path: build
+
+  build_aarch64:
+    name: Linux aarch64 build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      arch: aarch64
+      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cache_key: build_bionic_aarch64
+
+  build_freebsd:
+    name: FreeBSD x86_64 build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      DISTR: freebsd13
+      boost: none
+      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cache_key: build_freebsd_x86_64
+
+  build_windows:
+    name: Windows x64 build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      DISTR: windows
+      arch: x64
+      sysroot: roots_apr12
+      CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+      CTEST_CONFIGURATION_TYPE: Debug
+      cache_key: build_windows_x64
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
+
+
+  test_windows:
+    name: Windows tests
+    needs: [build_windows, win_bundle]
+    uses: ./.github/workflows/win_test_template.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [1_400, 401_650, 651_and_on]
+        include:
+          - name: 1_400
+            start: 1
+            end: 400
+          - name: 401_650
+            start: 401
+            end: 650
+          - name: 651_and_on
+            start: 651
+            end: 999999
+    with:
+      CTEST_START: ${{ matrix.start }}
+      CTEST_END: ${{ matrix.end }}
+      artifact_name: windows_test_${{ matrix.name }}
+
+  windows_tests_report:
+    name: Windows tests summary and report
+    needs: test_windows
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/ubertests_ctest:3263
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download test report artifacts 1_400
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: windows_test_1_400
+          path: .
+      - name: Download test report artifacts 401_650
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: windows_test_401_650
+          path: .
+      - name: Download test report artifacts 651_and_on
+        uses: ./.github/workflows/download_artifact_with_retries/
+        continue-on-error: true
+        with:
+          name: windows_test_651_and_on
+          path: .
+      - name: Convert the XML to JUnit format
+        run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
+        shell: bash
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: build/xml_*/junit_tests.xml
+      - name: Per-test results
+        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        run: |
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          grep -o "success" build/status* | wc -l | awk '{exit $1==3?0:1}'
+        shell: bash
+      - name: Delete unneded per-shard artifacts
+        if: always()
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: windows_test_*
+          failOnError: false
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: ./.github/workflows/upload_artifact_with_retries/
+        with:
+          name: windows_test_resuls
+          path: build
+
+  # virtual job to simplify the CI
+  # This job depends on all the tests that have to pass before we can start building packages
+  pack:
+    name: Ready for packages?
+    runs-on: ubuntu-22.04
+    needs: [debug_tests_report, release_tests_report, windows_tests_report, build_freebsd, build_aarch64]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'pull_request' && github.event.label.name == 'pack')
+    steps:
+      - run: echo "Ready to pack"
+
+  pack_debian_ubuntu:
+    name: Debian/Ubuntu packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        arch: [x86_64, aarch64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*deb"
+
+  pack_rhel:
+    name: RHEL packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [rhel7, rhel8, rhel9]
+        arch: [x86_64, aarch64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      boost: boost_rhel_feb17
+      cmake_command: |
+        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*rpm"
+
+  pack_macos:
+    name: MacOS packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [macos]
+        arch: [x86_64, arm64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      HOMEBREW_PREFIX: /opt/homebrew
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*rpm"
+
+
+  pack_windows:
+    name: Windows x64 package
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    with:
+      DISTR: windows
+      arch: x64
+      sysroot: roots_apr12
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*rpm"

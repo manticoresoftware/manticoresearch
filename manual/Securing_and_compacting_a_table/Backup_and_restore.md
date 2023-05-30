@@ -268,6 +268,8 @@ mysqldump -h0 -P9306 manticore > manticore_backup.sql
 
 Executing this command will produce a backup file named `manticore_backup.sql`. This file will hold all data and table schemas.
 
+<!-- end -->
+
 Please note that the `--all-databases` flag will not work with mysqldump from the original MySQL client; however, it does work with the MariaDB client. For better results, we recommend explicitly passing the database when you want to back up all databases.
 
 <!-- example mysqldump_restore -->

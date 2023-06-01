@@ -1,4 +1,4 @@
-# ---------- homebrew ----------
+# ---------- macos ----------
 
 message ( STATUS "Installing via Homebrew" )
 

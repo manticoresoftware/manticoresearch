@@ -63,7 +63,7 @@
 /doc/Makefile
 
 # /test
-/test/test_*/report.txt
+/test/test_*/report.*
 /test/test_*/Conf
 /test/data
 /test/localsettings.inc

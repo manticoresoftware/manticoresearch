@@ -235,7 +235,7 @@ win_tests:
     when: always
     paths:
       - build/xml
-      - build/test/test_*/report.txt
+      - build/test/test_*/report.*
       - build/test/error*.txt
       - build/test/searchd.log
   cache: { }

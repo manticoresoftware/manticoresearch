@@ -13195,19 +13195,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 				continue;
 
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			MysqlColumnType_e eType = MYSQL_COL_STRING;
-			switch ( tCol.m_eAttrType )
-			{
-			case SPH_ATTR_INTEGER:
-			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:		eType = MYSQL_COL_LONG; break;
-			case SPH_ATTR_FLOAT:	eType = MYSQL_COL_FLOAT; break;
-			case SPH_ATTR_DOUBLE:	eType = MYSQL_COL_DOUBLE; break;
-			case SPH_ATTR_BIGINT:	eType = MYSQL_COL_LONGLONG; break;
-			case SPH_ATTR_UINT64:	eType = MYSQL_COL_UINT64; break;
-			default: break;
-			}
-			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
+			dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
 		}
 	}
 

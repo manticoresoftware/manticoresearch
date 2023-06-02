@@ -5178,7 +5178,7 @@ static const char * TokName (int iTok, int iFunc)
 		case TOK_DIV:          return "div";
 		case TOK_NOT:          return "not";
 		case TOK_NEG:          return "neg";
-		default: return "Uknown_need_to_fix";
+		default: return "Unknown_need_to_fix";
 	}
 }
 

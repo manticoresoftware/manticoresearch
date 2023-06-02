@@ -1513,6 +1513,21 @@ enum MysqlColumnType_e
 };
 
 
+inline constexpr MysqlColumnType_e ESphAttr2MysqlColumn ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
+	case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
+	case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
+	case SPH_ATTR_BIGINT: return MYSQL_COL_LONGLONG;
+	case SPH_ATTR_UINT64: return MYSQL_COL_UINT64;
+	default: return MYSQL_COL_STRING;
+	}
+}
+
 class RowBuffer_i : public ISphNoncopyable
 {
 public:

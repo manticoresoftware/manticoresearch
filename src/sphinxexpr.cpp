@@ -497,6 +497,10 @@ public:
 			m_iLen = m_sVal.Length();
 	}
 
+	Expr_GetStrConst_c ( Str_t sVal, bool bUnescape )
+		: Expr_GetStrConst_c ( (const char*) sVal.first, (int) sVal.second, bUnescape )
+	{}
+
 	int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const final
 	{
 		*ppStr = (const BYTE*) m_sVal.cstr();
@@ -3665,6 +3669,8 @@ enum Tokh_e : BYTE
 	FUNC_LAST_INSERT_ID,
 	FUNC_LEVENSHTEIN,
 	FUNC_DATE_FORMAT,
+	FUNC_DATABASE,
+	FUNC_USER,
 
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
 	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
@@ -3794,6 +3800,8 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 	{ "levenshtein",	FUNC_LEVENSHTEIN	 },
 	{ "date_format",	FUNC_DATE_FORMAT	 },
+	{ "database",		FUNC_DATABASE		 },
+	{ "user",			FUNC_USER			 },
 
 	// other reserved (operators, columns, etc.)
 	{ "count",			TOKH_COUNT			},
@@ -3845,49 +3853,48 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
 	{
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121,  28, 121,
-       43,  36,  12, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121,   4,  37,  14,   3,  37,
-	   29,  44,  54,  29, 121, 121,  16,  36,   4,  26,
-	   16,  11,   9,   5,   8,  27,  57,  35,  33,  34,
-	   18, 121, 121, 121, 121,   3, 121,   4,  37,  14,
-        3,  37,  29,  44,  54,  29, 121, 121,  16,  36,
-        4,  26,  16,  11,   9,   5,   8,  27,  57,  35,
-       33,  34,  18, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-      121, 121, 121, 121, 121, 121
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113,  39, 113,
+       37,  44,  47, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113,  33,  39,  11,   0,  17,
+	   31,  29,  40,  6,  113, 113,  13,  23,   1,  34,
+	   19,  33,   6,  2,    5,  27,  49,  44,  31,  23,
+	   55, 113, 113, 113, 113,  37, 113,  33,  39,  11,
+        0,  17,  31,  29,  40,   6, 113, 113,  13,  23,
+        1,  34,  19,  33,   6,   2,   5,  27,  49,  44,
+       31,  23,  55, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113, 113, 113, 113, 113,
+      113, 113, 113, 113, 113, 113
 	};
 
 	const static short dIndexes[] =
     {
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 78, -1, -1, 4, 1, -1, -1,
-		66, 12, 6, 80, 77, -1, 10, 5, 22, 42,
-		73, 38, 40, 49, 59, 31, 84, 79, 71, 60,
-		85, 36, 39, 51, 58, 82, 28, 23, 43, 52,
-		83, 17, -1, 46, 74, 44, 65, 69, -1, 32,
-		27, 30, 63, 2, 41, 70, 33, 54, 62, 3,
-		56, 64, 9, 47, 15, 61, 13, 0, 75, 35,
-		48, 57, 37, 21, 19, 34, 55, 53, 72, 25,
-		68, 67, 29, 8, 20, 11, -1, 50, -1, 16,
-		-1, 18, -1, -1, 14, 24, -1, 7, -1, -1,
-		-1, 76, -1, -1, 45, -1, -1, -1, -1, 26,
-		81,
+		-1, -1, -1, -1, -1, -1, -1, 4, -1, 31,
+		86, 66, 12, -1, 82, 79, 6, 10, 5, 22,
+		42, 73, 38, 40, 46, 59, 84, 28, 23, 71,
+		74, 87, 30, 35, 2, 58, 80, 51, 36, 27,
+		1, 54, 81, 63, 62, 43, 85, 21, 76, 15,
+		47, 44, 64, 33, 75, 32, 49, 69, 9, 50,
+		48, 77, 60, 55, 13, 26, 17, 57, 70, 16,
+		56, 67, 37, 39, 72, 34, 3, 20, 53, 11,
+		41, 52, 61, 7, 29, 14, 8, 68, 24, -1,
+		-1, 19, 0, 78, -1, -1, -1, -1, -1, -1,
+		-1, 83, -1, -1, -1, 18, -1, -1, 65, -1,
+		25, -1, 45,
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -3960,7 +3967,7 @@ static int VARIABLE_IS_NOT_USED G_FUNC_HASH_CHECK = TokHashCheck();
 struct FuncDesc_t
 {
 	//const char *	m_sName;
-	int				m_iArgs;
+	int				m_iArgs;	// positive assume exact N, negative assume 'at least'
 	int				m_iNodeType; // usually TOK_FUNC, but sometimes not
 	//	Tokh_e			m_eFunc;
 	ESphAttr		m_eRet;
@@ -4053,6 +4060,8 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
 	{ /*"date_format", */		2,	TOK_FUNC,		/*FUNC_DATE_FORMAT,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"database", */			0,	TOK_FUNC,		/*FUNC_DATABASE,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"user", */				0,	TOK_FUNC,		/*FUNC_USER,			*/	SPH_ATTR_STRINGPTR },
 };
 
 
@@ -7075,6 +7084,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 
 	case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
 	case FUNC_CURRENT_USER:
+	case FUNC_USER:
 	{
 		auto sUser = CurrentUser();
 		return new Expr_GetStrConst_c ( sUser.first, sUser.second, false );
@@ -7083,6 +7093,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
 
 	case FUNC_DATE_FORMAT: return new ExprDateFormat_c ( dArgs[0], dArgs[1] );
+	case FUNC_DATABASE: return new Expr_GetStrConst_c ( FROMS ( "Manticore" ), false ) ;
 
 	default: // just make gcc happy
 		assert ( 0 && "unhandled function id" );
@@ -7131,6 +7142,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_QUERY:
 		case FUNC_CURRENT_USER:
 		case FUNC_CONNECTION_ID:
+		case FUNC_DATABASE:
+		case FUNC_USER:
 			bSkipChildren = true;
 			break;
 		default:

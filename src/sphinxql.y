@@ -207,8 +207,7 @@ statement:
 	| call_proc
 	| describe
 	| update
-	| select_sysvar
-	| select_dual
+	| select_without_from
 	| optimize_index
 	| sysfilters
 	| explain_query
@@ -452,6 +451,15 @@ sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.l
 	| TOK_SYSVAR chunk
 	;
 
+//////////////////////////////////////////////////////////////////////////
+
+select_without_from:
+	TOK_SELECT select_items_list opt_limit_clause
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SELECT_COLUMNS;
+		}
+	;
+
 // statements
 //////////////////////////////////////////////////////////////////////////
 
@@ -551,6 +559,7 @@ select_from:
 	opt_hint_clause
 	;
 
+// common to ALL select statements
 select_items_list:
 	select_item
 	| select_items_list ',' select_item
@@ -568,6 +577,7 @@ opt_alias:
 
 select_expr:
 	expr								{ pParser->AddItem ( &$1 ); }
+	| sysvar							{ pParser->AddItem ( &$1 ); }
 	| TOK_AVG '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_AVG, &$1, &$4 ); }
 	| TOK_MAX '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MAX, &$1, &$4 ); }
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
@@ -1663,37 +1673,6 @@ global_or_session:
 		{
     		pParser->m_pStmt->m_iIntParam = 1;
     	}
-	;
-
-//////////////////////////////////////////////////////////////////////////
-
-select_sysvar:
-	TOK_SELECT sysvar_list opt_limit_clause
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SELECT_SYSVAR;
-			pParser->ToString ( pParser->m_pStmt->m_tQuery.m_sQuery, $2 );
-		}
-	;
-
-sysvar_list:
-	sysvar_item
-	| sysvar_list ',' sysvar_item
-	;
-
-sysvar_item:
-	sysvar_name opt_alias
-	;
-
-sysvar_name:
-	sysvar { pParser->AddItem ( &$1 ); }
-	;
-
-select_dual:
-	TOK_SELECT expr
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SELECT_DUAL;
-			pParser->ToString ( pParser->m_pStmt->m_tQuery.m_sQuery, $2 );
-		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

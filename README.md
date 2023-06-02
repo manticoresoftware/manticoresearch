@@ -145,10 +145,10 @@ Read [the full instruction for the docker image](https://github.com/manticoresof
 
 ## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
 
-### YUM repo for RHEL/Centos/Amazon Linux
+### YUM repo for RHEL/Centos/Amazon/Oracle Linux
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
+sudo yum install manticore manticore-extra
 ```
 
 ### APT repo for Ubuntu/Debian/Mint
@@ -156,20 +156,16 @@ sudo yum install manticore manticore-columnar-lib
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-columnar-lib
+sudo apt install manticore manticore-extra
 ```
 
 ### Homebrew on MacOS
 ```
-brew install manticoresearch
+brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 ### Windows
 See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
-
-### MacOS tarball
-See [instruction here](https://manual.manticoresearch.com/Installation/MacOS#From-tarball-with-binaries).
-
 
 # Documentation and community sites
 

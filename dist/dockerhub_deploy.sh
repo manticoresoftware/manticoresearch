@@ -62,6 +62,7 @@ for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
         query_log_format = sphinxql\n\
         # buddy_path = manticore-executor-dev /workdir/src/main.php\n\
     }\n" > manticore.conf
+    docker pull manticoresearch/manticore:$BUILD_TAG
     docker rm -f manticore-with-extra || true
     docker create --name manticore-with-extra manticoresearch/manticore:$BUILD_TAG
     docker start manticore-with-extra

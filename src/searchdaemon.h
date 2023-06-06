@@ -533,6 +533,8 @@ public:
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }
 	void			ResetError();
+	int				GetMaxPacketSize() const { return m_iMaxPacketSize; }
+	void			SetMaxPacketSize( int iMaxPacketSize );
 
 protected:
 	const BYTE *	m_pBuf;
@@ -557,6 +559,7 @@ protected:
 private:
 	CSphString		m_sError;
 	bool			m_bError = false;
+	int				m_iMaxPacketSize = g_iMaxPacketSize;
 };
 
 /// simple memory request buffer

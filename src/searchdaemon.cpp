@@ -993,9 +993,9 @@ bool InputBuffer_c::IsLessMaxPacket ( int iSize )
 	{
 		SetError( "negative data length %d", iSize );
 		return false;
-	} else if ( iSize>g_iMaxPacketSize )
+	} else if ( iSize>m_iMaxPacketSize )
 	{
-		SetError( "length out of bounds %d(%d)", iSize, g_iMaxPacketSize );
+		SetError( "length out of bounds %d(%d)", iSize, m_iMaxPacketSize );
 		return false;
 	}
 
@@ -1012,6 +1012,11 @@ void GenericOutputBuffer_c::ResetError()
 {
 	m_bError = false;
 	m_sError = "";
+}
+
+void InputBuffer_c::SetMaxPacketSize( int iMaxPacketSize )
+{
+	m_iMaxPacketSize = Max ( g_iMaxPacketSize, iMaxPacketSize );
 }
 
 /////////////////////////////////////////////////////////////////////////////

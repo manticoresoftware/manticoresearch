@@ -15068,10 +15068,10 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		}},
 		{ MYSQL_COL_LONG, "@@autocommit", [pSession] { return pSession->m_bAutoCommit ? "1" : "0"; } },
 	};
-	constexpr auto iSysvars = sizeof ( dSysvars ) / sizeof ( dSysvars[0] );
 
 	auto VarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
 	{
+		constexpr auto iSysvars = sizeof ( dSysvars ) / sizeof ( dSysvars[0] );
 		for ( int i = 1; i < iSysvars; ++i )
 			if ( sName == dSysvars[i].m_szName )
 				return i;

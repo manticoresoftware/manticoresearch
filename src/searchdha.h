@@ -550,6 +550,7 @@ public:
 	void TimeoutCallback ();
 	void AbortCallback();
 	bool CheckOrphaned();
+	void SetNoLimitReplySize();
 
 #if _WIN32
 	// move recv buffer to dOut, reinit mine.
@@ -578,10 +579,11 @@ private:
 
 	// receiving buffer stuff
 	CSphFixedVector<BYTE>	m_dReplyBuf { 0 };
-	int			m_iReplySize = -1;    ///< how many reply bytes are there
+	int						m_iReplySize = -1;    ///< how many reply bytes are there
 	static const size_t	REPLY_HEADER_SIZE = 12;
 	CSphFixedVector<BYTE>	m_dReplyHeader { REPLY_HEADER_SIZE };
-	BYTE *		m_pReplyCur = nullptr;
+	BYTE *					m_pReplyCur = nullptr;
+	bool					m_bReplyLimitSize = true;
 
 	// sending buffer stuff
 	SmartOutputBuffer_t m_tOutput;		///< chain of blobs we're sending to a host

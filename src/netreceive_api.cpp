@@ -135,8 +135,10 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
 
 
+		bool bCheckLen = ( eCommand!=SEARCHD_COMMAND_CLUSTERPQ );
 		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
-		bool bBadLength = ( iReplySize<0 || iReplySize>g_iMaxPacketSize );
+		// should not fail replication commands from other nodes as max_packet_size could be different between nodes
+		bool bBadLength = ( iReplySize<0 || ( bCheckLen && iReplySize>tIn.GetMaxPacketSize() ) );
 		if ( bBadCommand || bBadLength )
 		{
 			// unknown command, default response header
@@ -151,6 +153,9 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}
+
+		if ( !bCheckLen )
+			tIn.SetMaxPacketSize ( tIn.GetBufferPos() + iReplySize );
 
 		if ( iReplySize && !tIn.ReadFrom ( iReplySize, true ))
 		{

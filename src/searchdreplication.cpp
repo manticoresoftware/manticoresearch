@@ -1365,6 +1365,9 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 
 		dOut.Add( tBuf.cstr() );
 	}
+	// show last cluster error if any
+	if ( !pCluster->m_sError.IsEmpty() && dOut.MatchAddf ( "cluster_%s_last_error", sName ) )
+		dOut.Add ( pCluster->m_sError.cstr() );
 
 	// cluster status
 	// trick
@@ -3229,6 +3232,7 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 {
 	AgentConn_t * pAgent = new AgentConn_t;
 	pAgent->m_tDesc.CloneFrom ( tDesc );
+	pAgent->SetNoLimitReplySize();
 
 	HostDesc_t tHost;
 	pAgent->m_tDesc.m_pDash = new HostDashboard_t ( tHost );

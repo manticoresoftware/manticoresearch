@@ -914,7 +914,7 @@ Proto_e AsyncNetInputBuffer_c::Probe ( bool bLight )
 	int iRest = 0;
 	if ( !HasBytes() )
 	{
-		iRest = GetRoomForTail ( g_iMaxPacketSize );
+		iRest = GetRoomForTail();
 		if ( !iRest )
 			return eResult; // hard limit reached
 		AppendData ( 0, iRest, true );
@@ -1028,7 +1028,7 @@ int AsyncNetInputBuffer_c::ReadAny ()
 {
 	m_bIntr = false;
 
-	auto iRest = GetRoomForTail ( g_iMaxPacketSize );
+	auto iRest = GetRoomForTail();
 	if ( !iRest )
 		return 0;
 
@@ -1056,8 +1056,9 @@ ByteBlob_t AsyncNetInputBuffer_c::PopTail ( int iSize )
 		return { nullptr, 0 };
 }
 
-int AsyncNetInputBuffer_c::GetRoomForTail ( int iHardLimit )
+int AsyncNetInputBuffer_c::GetRoomForTail()
 {
+	int iHardLimit = GetMaxPacketSize();
 	if ( iHardLimit-m_iLen<=0 )
 		DiscardProcessed ( -1 );
 

@@ -2445,10 +2445,8 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 
 				sphLogDebugA ( "%d Header (Status=%d, Version=%d, answer need %d bytes)", m_iStoreTag, uStat, uVer, iReplySize );
 
-				if ( iReplySize<0
-					|| iReplySize>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
-					return Fatal ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)"
-								   , uStat, iReplySize, g_iMaxPacketSize );
+				if ( iReplySize<0 || ( m_bReplyLimitSize && iReplySize>g_iMaxPacketSize ) ) // FIXME! add reasonable max packet len too
+					return Fatal ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)", uStat, iReplySize, g_iMaxPacketSize );
 
 				// allocate buf for reply
 				InitReplyBuf ( iReplySize );
@@ -2476,6 +2474,11 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 
 	ScheduleCallbacks();
 	return true;
+}
+
+void AgentConn_t::SetNoLimitReplySize()
+{
+	m_bReplyLimitSize = false;
 }
 
 // when full blob with expected size is received...

@@ -360,5 +360,10 @@ float GeodistAdaptiveRad ( float lat1, float lon1, float lat2, float lon2 );
 /// get geodist conversion coeff
 bool sphGeoDistanceUnit ( const char * szUnit, float & fCoeff );
 
+/// provide mysql version string
+namespace sphinxexpr {
+CSphString& MySQLVersion();
+}
+
 #endif // _sphinxexpr_
 

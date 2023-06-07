@@ -164,6 +164,7 @@ public:
 
 	virtual void	ZipInt ( DWORD uValue ) = 0;
 	virtual void	ZipOffset ( uint64_t uValue ) = 0;
+	virtual			~Writer_i() = default;
 };
 
 

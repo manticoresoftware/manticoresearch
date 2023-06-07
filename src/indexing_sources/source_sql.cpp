@@ -498,8 +498,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	// some post-query setup
 	m_tSchema.Reset();
 
-	for ( int i=0; i<SPH_MAX_FIELDS; ++i )
-		m_dUnpack[i] = SPH_UNPACK_NONE;
+	for (auto & i : m_dUnpack)
+		i = SPH_UNPACK_NONE;
 
 	m_iSqlFields = SqlNumFields(); // for rowdump
 

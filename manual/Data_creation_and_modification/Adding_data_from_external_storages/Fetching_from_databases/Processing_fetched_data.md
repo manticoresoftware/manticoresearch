@@ -159,7 +159,7 @@ Document IDs can be duplicate, but they must be in ascending order. Payloads **m
 
 The only ranker that accounts for payloads is `proximity_bm25` (the default [ranker](../../Searching/Sorting_and_ranking.md#Available-built-in-rankers)). On tables with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
 
-Pleas note that the payload field is ignored for full-text queries containing complex operators. It only works for simple bag-of-words queries.
+Please note that the payload field is ignored for full-text queries containing complex operators. It only works for simple bag-of-words queries.
 
 <!-- intro -->
 Configuration example:

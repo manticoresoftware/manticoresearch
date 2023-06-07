@@ -65,6 +65,7 @@ struct CSphSourceParams_SQL
 	CSphString						m_sDumpRTIndex;
 
 	StrVec_t						m_dQueryPre;
+	StrVec_t						m_dQueryPreAll;
 	StrVec_t						m_dQueryPost;
 	StrVec_t						m_dQueryPostIndex;
 	CSphVector<CSphColumnInfo>		m_dAttrs;
@@ -189,6 +190,8 @@ protected:
 
 	void					DumpDocument();
 	void					DumpDocumentSphinxql();
+
+	bool 					QueryPreAll ( CSphString& sError) ;
 
 private:
 	bool					m_bSqlConnected = false;	///< am i connected?

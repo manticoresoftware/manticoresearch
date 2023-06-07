@@ -3,7 +3,10 @@
 With all the SQL drivers, building a plain table generally works as follows.
 
 * A connection to the database is established.
-* Pre-query as `sql_query_pre` is executed to perform any necessary initial setup, such as setting per-connection encoding with MySQL.
+* Pre-queries as `sql_query_pre_all` is executed to perform any necessary initial setup, such as setting per-connection
+  encoding with MySQL. These queries run before whole indexing, and also after reconnect for indexing mva attributes and joined fields.
+* Pre-queries as `sql_query_pre` is executed to perform any necessary initial setup, such as setting up temporary
+  tables, or maintaining counter table. These queries run once per whole indexing.
 * Main query as `sql_query` is executed and the rows it returns are processed.
 * Post-query as `sql_query_post` is executed to perform some necessary cleanup.
 * The connection to the database is closed.

@@ -741,6 +741,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "mssql_winauth",			0, NULL },
 	{ "mssql_unicode",			KEY_REMOVED, NULL },
 	{ "sql_query_pre",			KEY_LIST, NULL },
+	{ "sql_query_pre_all",		KEY_LIST, NULL },
 	{ "sql_query",				0, NULL },
 	{ "sql_query_range",		0, NULL },
 	{ "sql_range_step",			0, NULL },

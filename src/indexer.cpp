@@ -630,6 +630,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
 	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETA ( tParams.m_dQueryPreAll,		"sql_query_pre_all" );
 	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
 	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );

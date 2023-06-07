@@ -15079,15 +15079,23 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	};
 
 	const auto& dItems = tStmt.m_tQuery.m_dItems;
-	CSphVector<std::pair<ESphAttr, ISphExprRefPtr_c>> dColumns;
+
+	struct PreparedItem_t {
+		ESphAttr m_eType;
+		MysqlColumnType_e m_eTypeMysql;
+		ISphExprRefPtr_c m_pExpr;
+		int m_iSysvarIdx;
+		const char* m_szAlias;
+	};
+
+	CSphVector<PreparedItem_t> dColumns;
 
 	bool bHaveExprs = false;
+	bool bHaveErrors = false;
 
-	// fill header
-	tOut.HeadBegin ( dItems.GetLength () );
 	for ( const auto& dItem : dItems )
 	{
-		auto iVar = VarIdxByName ( dItem.m_sAlias );
+		auto iVar = VarIdxByName ( dItem.m_sExpr );
 		if ( !iVar )
 		{
 			CSphString sVar = dItem.m_sExpr;
@@ -15099,45 +15107,57 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, sError, tExprArgs ) };
 			if ( pExpr )
 			{
-				dColumns.Add ( { eAttrType, pExpr } );
-				tOut.HeadColumn ( dItem.m_sAlias.cstr(), ESphAttr2MysqlColumn ( eAttrType ) );
+				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, dItem.m_sAlias.cstr() } );
 				bHaveExprs = true;
 				continue;
 			}
+			bHaveErrors = true;
 		}
-		dColumns.Add ( { SPH_ATTR_NONE, nullptr } );
-		tOut.HeadColumn ( dItem.m_sAlias.cstr(), dSysvars[iVar].m_eType );
+		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, dItem.m_sAlias.cstr() } );
 	}
-	if ( !tOut.HeadEnd() )
+
+	if ( bHaveErrors
+		 && HasBuddy()
+		)
+	{
+		tOut.ErrorEx ( tStmt.m_sStmt, "error in %s", tStmt.m_sStmt );
 		return;
+	}
 
 	assert ( dColumns.GetLength() == dItems.GetLength() );
+
+	// fill header
+	tOut.HeadBegin ( dColumns.GetLength() );
+	for ( const auto& dColumn : dColumns )
+		tOut.HeadColumn ( dColumn.m_szAlias, dColumn.m_eTypeMysql );
+
+	if ( !tOut.HeadEnd() )
+		return;
 
 	if ( bHaveExprs )
 	{
 		ExtraLastInsertID_c tIds;
 		for ( auto& pExpr : dColumns )
-			if ( pExpr.second )
-				pExpr.second->Command ( SPH_EXPR_SET_EXTRA_DATA, &tIds );
+			if ( pExpr.m_pExpr )
+				pExpr.m_pExpr->Command ( SPH_EXPR_SET_EXTRA_DATA, &tIds );
 	}
 
 	std::optional<ExtraLastInsertID_c> tIds;
 
 	// fill values
-	ARRAY_FOREACH ( i, dItems )
+	for ( auto& dColumn : dColumns )
 	{
-		if ( dColumns[i].second ) // expression
+		if ( dColumn.m_pExpr ) // expression
 		{
-
 			if ( !tIds.has_value() )
 				tIds.emplace();
 
-			auto& pExpr = dColumns[i].second;
+			auto& pExpr = dColumn.m_pExpr;
 			pExpr->Command ( SPH_EXPR_SET_EXTRA_DATA, &tIds.value() );
 
 			CSphMatch tMatch;
 
-			switch ( dColumns[i].first )
+			switch ( dColumn.m_eType )
 			{
 			case SPH_ATTR_STRINGPTR:
 				{
@@ -15158,7 +15178,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			}
 		}
 		else
-			tOut.PutString ( dSysvars[VarIdxByName ( dItems[i].m_sExpr )].m_fnValue() );
+			tOut.PutString ( dSysvars[dColumn.m_iSysvarIdx].m_fnValue() );
 	}
 
 	// finalize

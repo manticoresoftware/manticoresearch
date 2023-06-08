@@ -1672,9 +1672,9 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 
 
 namespace { // static func
+thread_local CrashQuery_t* pTlsCrashQuery = nullptr;
 CrashQuery_t** g_ppTlsCrashQuery ()
 {
-	static thread_local CrashQuery_t* pTlsCrashQuery = nullptr;
 	return &pTlsCrashQuery;
 }
 

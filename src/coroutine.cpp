@@ -298,7 +298,7 @@ private:
 			ResetRunningAndReschedule();
 	}
 
-	inline void Schedule(bool bVip=true) noexcept
+	inline void Schedule(bool bVip=false) noexcept
 	{
 		LOG ( DEBUGV, COROW ) << "Coro::Worker_c::Schedule (" << bVip << ", " << m_pScheduler << ")";
 		assert ( m_pScheduler );
@@ -327,7 +327,7 @@ public:
 	// May refer to parent's task info as read-only. For changes has dedicated mini info, also can create and use it's own local.
 	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		( new Worker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
+		( new Worker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ();
 	}
 
 	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
@@ -335,7 +335,7 @@ public:
 	// Parent thread at the moment blocked and may display info about it
 	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )
 	{
-		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) ) )->Schedule ();
+		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) ) )->Schedule ( true );
 	}
 
 	// from Coro::Continue -> all continuations (main purpose - continue with extended stack).
@@ -376,15 +376,15 @@ public:
 			ScheduleContinuation();
 	}
 
-	inline void Pause() noexcept
+	inline void Pause ( bool bVip = true ) noexcept
 	{
 		if ( ( m_tState.SetFlags ( CoroState_t::Running_e | CoroState_t::Paused_e ) & CoroState_t::Running_e ) == 0 )
-			Schedule();
+			Schedule ( bVip );
 	}
 
-	inline void Reschedule () noexcept
+	inline void Reschedule ( bool bVip = true ) noexcept
 	{
-		Pause();
+		Pause ( bVip );
 		Yield_();
 		m_tState.ResetFlags ( CoroState_t::Paused_e );
 	}
@@ -844,10 +844,10 @@ int64_t GetThrottlingPeriodUS ()
 	return Worker()->GetTimePeriodUS ();
 }
 
-void RescheduleAndKeepCrashQuery()
+void RescheduleAndKeepCrashQuery ( bool bVip ) noexcept
 {
 	CrashQueryKeeper_c _;
-	Coro::Worker()->Reschedule(); // timer will be automatically re-engaged on resume
+	Coro::Worker()->Reschedule ( bVip ); // timer will be automatically re-engaged on resume
 }
 
 inline void fnResume ( volatile Worker_c* pCtx )

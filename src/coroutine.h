@@ -261,15 +261,15 @@ bool RuntimeExceeded() noexcept;
 const int64_t& GetNextTimePointUS() noexcept;
 
 // common throttle action - keep crash query and reschedule. Timer will be re-engaged on resume
-void RescheduleAndKeepCrashQuery();
+void RescheduleAndKeepCrashQuery ( bool bVip = false ) noexcept;
 
 // just re-engage timer, without rescheduling
 void RestartRuntime() noexcept;
 
-inline void ThrottleAndKeepCrashQuery()
+inline void ThrottleAndKeepCrashQuery ( bool bVip = false ) noexcept
 {
 	if ( RuntimeExceeded() )
-		RescheduleAndKeepCrashQuery();
+		RescheduleAndKeepCrashQuery ( bVip );
 }
 
 // yield and reschedule after given period of time (in milliseconds)

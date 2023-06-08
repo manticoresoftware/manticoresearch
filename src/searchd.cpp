@@ -5320,7 +5320,7 @@ private:
 	bool							AcquireInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
-	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
+	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, int iAgentQueryTimeoutMs ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
@@ -6945,7 +6945,7 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 }
 
 // returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
-bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
+bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, int iAgentQueryTimeoutMs )
 {
 	const CSphQuery & tQuery = m_dNQueries.First ();
 
@@ -7001,7 +7001,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				pConn->m_iStoreTag = iOrderTag++;
 				pConn->m_iWeight = iWeight;
 				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+				pConn->m_iMyQueryTimeoutMs = iAgentQueryTimeoutMs ? iAgentQueryTimeoutMs : pDist->m_iAgentQueryTimeoutMs;
 				dRemotes.Add ( pConn );
 			}
 
@@ -7116,7 +7116,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dNAggrResults.for_each ( [this] ( auto& r ) { r.m_sError = (CSphString) m_sError; } );
 	});
 
-	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent ) )
+	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent, tFirst.m_iAgentQueryTimeoutMs ) )
 	{
 		// process query to meta, as myindex.status, etc.
 		if ( !tFirst.m_dStringSubkeys.IsEmpty () )

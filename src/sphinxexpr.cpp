@@ -1996,12 +1996,6 @@ public:
 			return iLen;
 
 		case JSON_DOUBLE_VECTOR:
-			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
-			sBuf.SetSprintf ( "%f", fVal );
-			iLen = sBuf.Length();
-			*ppStr = (const BYTE *) sBuf.Leak();
-			return iLen;
-
 		case JSON_MIXED_VECTOR:
 			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
 			sBuf.SetSprintf ( "%f", fVal );
@@ -9350,21 +9344,27 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	bool bGotString = false, bGotMva = false;
 	CSphVector<ESphAttr> dRetTypes;
 	GatherArgRetTypes ( iArg, dRetTypes );
-	ARRAY_FOREACH ( i, dRetTypes )
+	for ( ESphAttr eRetType: dRetTypes ) switch ( eRetType )
 	{
-		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
-		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
+		case SPH_ATTR_UINT32SET: case SPH_ATTR_INT64SET: case SPH_ATTR_UINT32SET_PTR: case SPH_ATTR_INT64SET_PTR: bGotMva = true; break;
+		case SPH_ATTR_STRING : bGotString = true;
+		default:;
 	}
-	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER  || eFunc ==FUNC_LOWER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN || eFunc==FUNC_DATE_FORMAT ) )
+
+	if ( bGotString ) switch ( eFunc )
 	{
-		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
-		return -1;
+		default: m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName ); return -1;
+		case FUNC_LENGTH: case FUNC_TO_STRING: case FUNC_CONCAT: case FUNC_SUBSTRING_INDEX: case FUNC_UPPER: case FUNC_LOWER: case FUNC_CRC32:
+		case FUNC_EXIST: case FUNC_POLY2D: case FUNC_GEOPOLY2D: case FUNC_REGEX: case FUNC_LEVENSHTEIN: case FUNC_DATE_FORMAT: case FUNC_BIGINT:;
 	}
-	if ( bGotMva && !( eFunc==FUNC_TO_STRING || eFunc==FUNC_LENGTH || eFunc==FUNC_LEAST || eFunc==FUNC_GREATEST ) )
+
+	if ( bGotMva ) switch ( eFunc )
 	{
-		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName );
-		return -1;
+		default: m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName ); return -1;
+		case FUNC_TO_STRING: case FUNC_LENGTH: case FUNC_LEAST: case FUNC_GREATEST:;
 	}
+
+	auto& dArg = m_dNodes[iArg];
 
 	switch ( eFunc )
 	{
@@ -9385,13 +9385,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		break;
 	case FUNC_EXIST:
 		{
-			int iExistLeft = m_dNodes[iArg].m_iLeft;
-			int iExistRight = m_dNodes[iArg].m_iRight;
-			bool bIsLeftGood = ( m_dNodes[iExistLeft].m_eRetType==SPH_ATTR_STRING );
-			ESphAttr eRight = m_dNodes[iExistRight].m_eRetType;
-			bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_BOOL
-				|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
-
+			ESphAttr eLeft = m_dNodes[dArg.m_iLeft].m_eRetType, eRight = m_dNodes[dArg.m_iRight].m_eRetType;
+			bool bIsLeftGood = ( eLeft==SPH_ATTR_STRING );
+			bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_BOOL || eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
 			if ( !bIsLeftGood || !bIsRightGood )
 			{
 				if ( bIsRightGood )
@@ -9413,8 +9409,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_HOUR:
 	case FUNC_MINUTE:
 	case FUNC_SECOND:
-		assert ( iArg>=0 );
-		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT )
+		assert ( iArg >= 0 );
+		if ( !(dArg.m_eRetType==SPH_ATTR_INTEGER || dArg.m_eRetType==SPH_ATTR_TIMESTAMP || dArg.m_eRetType==SPH_ATTR_BIGINT) )
 		{
 			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint or timestamp", sFuncName );
 			return -1;
@@ -9543,8 +9539,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_REGEX:
 		{
 #if WITH_RE2
-			int iLeft = m_dNodes[iArg].m_iLeft;
-			ESphAttr eLeft = m_dNodes[iLeft].m_eRetType;
+			ESphAttr eLeft = m_dNodes[dArg.m_iLeft].m_eRetType;
 			bool bIsLeftGood = ( eLeft==SPH_ATTR_STRING || eLeft==SPH_ATTR_STRINGPTR || eLeft==SPH_ATTR_JSON_FIELD );
 			if ( !bIsLeftGood )
 			{
@@ -9552,8 +9547,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 				return -1;
 			}
 
-			int iRight = m_dNodes[iArg].m_iRight;
-			ESphAttr eRight = m_dNodes[iRight].m_eRetType;
+			ESphAttr eRight = m_dNodes[dArg.m_iRight].m_eRetType;
 			bool bIsRightGood = ( eRight==SPH_ATTR_STRING );
 			if ( !bIsRightGood )
 			{

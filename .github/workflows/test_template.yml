@@ -29,13 +29,10 @@ on:
         required: false
         type: string
         default: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests.xml ../misc/junit/ctest2junit.xsl Test.xml"
-      cache:
-        required: false
-        type: boolean
-        default: true
 
 jobs:
   test:
+    name: ${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
     runs-on: ubuntu-22.04
     timeout-minutes: ${{ inputs.timeout }}
     continue-on-error: true
@@ -64,7 +61,6 @@ jobs:
         run: bash /entry_point.sh &
 
       - name: Check out cache before building
-        if: ${{ inputs.cache }}
         uses: actions/cache@v3.3.1
         with:
           path: cache
@@ -72,7 +68,7 @@ jobs:
           key: build_linux_x86_64
 
       - name: Download build artifacts
-        uses: ./.github/workflows/download_artifact_with_retries/
+        uses: manticoresoftware/download_artifact_with_retries@main
         with:
           name: build_bionic_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
           path: build
@@ -82,7 +78,7 @@ jobs:
 
       - name: 🚀 Test
         id: test
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60 # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60 # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         continue-on-error: true
 
       - name: Remember status
@@ -96,7 +92,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: ./.github/workflows/upload_artifact_with_retries/
+        uses: manticoresoftware/upload_artifact_with_retries@main
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/searchd.log build/status*"

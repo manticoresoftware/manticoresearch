@@ -86,7 +86,7 @@ index test
 	select year(timediff(908, 0));
 	select yearmonth(timediff(908, 0));
 	select yearmonthday(timediff(908, 0));
-	select hour(timediff(908, 0));
+<!--	select hour(timediff(908, 0)); // depends from tz, so excluded from test as non-stable -->
 	select minute(timediff(908, 0));
 	select second(timediff(908, 0));
 

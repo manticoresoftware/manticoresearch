@@ -72,7 +72,10 @@ index test
     <!-- date_format-->
 	SELECT date_format(22496904880, '%m');
 	select id, 1096904880 + id * 1000 as a, date_format(a, '%m and year of %Y') from test;
-    
+
+	SELECT bigint(date_format(22496904880, '%m'));
+	SELECT sint(date_format(22496904880, '%m'));
+
 	</sphinxql>
     
 </queries>

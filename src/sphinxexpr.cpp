@@ -4038,10 +4038,10 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"uint64",		*/		1,	TOK_FUNC,		/*FUNC_UINT64,			*/	SPH_ATTR_UINT64 },
 	{ /*"query",		*/		0,	TOK_FUNC,		/*FUNC_QUERY,			*/	SPH_ATTR_STRINGPTR },
 
-	{ /*"curtime",		*/		0,	TOK_FUNC,		/*FUNC_CURTIME,			*/	SPH_ATTR_STRINGPTR },
-	{ /*"utc_time",		*/		0,	TOK_FUNC,		/*FUNC_UTC_TIME,		*/	SPH_ATTR_STRINGPTR },
-	{ /*"utc_timestamp",*/		0,	TOK_FUNC,		/*FUNC_UTC_TIMESTAMP,	*/	SPH_ATTR_STRINGPTR },
-	{ /*"timediff",		*/		2,	TOK_FUNC,		/*FUNC_TIMEDIFF,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"curtime",		*/		0,	TOK_FUNC,		/*FUNC_CURTIME,			*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{ /*"utc_time",		*/		0,	TOK_FUNC,		/*FUNC_UTC_TIME,		*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{ /*"utc_timestamp",*/		0,	TOK_FUNC,		/*FUNC_UTC_TIMESTAMP,	*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{ /*"timediff",		*/		2,	TOK_FUNC,		/*FUNC_TIMEDIFF,		*/	SPH_ATTR_STRINGPTR }, // also evals numerics
 	{ /*"current_user",	*/		0,	TOK_FUNC,		/*FUNC_CURRENT_USER,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"connection_id",*/		0,	TOK_FUNC,		/*FUNC_CONNECTION_ID,	*/	SPH_ATTR_INTEGER },
 	{ /*"all",			*/		-1,	TOK_FUNC_JA,	/*FUNC_ALL,				*/	SPH_ATTR_INTEGER },
@@ -4056,9 +4056,9 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 
 	{  /*"regex",		*/		2,	TOK_FUNC,		/*FUNC_REGEX,			*/	SPH_ATTR_INTEGER },
 
-	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
-	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
-	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
+	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR }, // also evals numerics
 
 	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
@@ -4088,6 +4088,22 @@ static inline const char* FuncNameByHash ( int iFunc )
 	return dNames[iFunc];
 }
 
+// set of functions which evals to SPH_ATTR_STRINGPTR, but also can eval to numerics
+static inline bool CanEvalNumbers ( int iFunc )
+{
+	switch (iFunc)
+	{
+	case FUNC_CURTIME:
+	case FUNC_UTC_TIME:
+	case FUNC_UTC_TIMESTAMP:
+	case FUNC_TIMEDIFF:
+	case FUNC_SUBSTRING_INDEX:
+	case FUNC_UPPER:
+	case FUNC_LOWER: return true;
+	default: return false;
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 static ISphExpr * ConvertExprJson ( ISphExpr * pExpr );
@@ -4097,6 +4113,32 @@ static void ConvertArgsJson ( VecRefPtrs_t<ISphExpr*> & dArgs );
 static inline bool IsInt ( ESphAttr eType )
 {
 	return eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT;
+}
+
+/// check whether the type can be promoted to integer
+static inline bool IsNumericLike ( ESphAttr eType )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL:
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_TOKENCOUNT:
+	case SPH_ATTR_UINT64: return true;
+	default: return false;
+	}
+}
+
+/// check whether the type can be promoted to float
+static inline bool IsFloatLike ( ESphAttr eType )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_FLOAT:
+	case SPH_ATTR_DOUBLE: return true;
+	default: return false;
+	}
 }
 
 static inline bool IsJson ( ESphAttr eAttr )
@@ -9413,6 +9455,18 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		if ( !(dArg.m_eRetType==SPH_ATTR_INTEGER || dArg.m_eRetType==SPH_ATTR_TIMESTAMP || dArg.m_eRetType==SPH_ATTR_BIGINT) )
 		{
 			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint or timestamp", sFuncName );
+			return -1;
+		}
+		break;
+
+	case FUNC_BIGINT:
+		assert ( iArg >= 0 );
+		if ( !( dArg.m_eRetType == SPH_ATTR_JSON_FIELD
+				 || IsFloatLike ( dArg.m_eRetType )
+				 || IsNumericLike ( dArg.m_eRetType )
+				 || CanEvalNumbers ( dArg.m_iFunc ) ) )
+		{
+			m_sParserError.SetSprintf ( "%s() argument must be number, or evaluated to number", sFuncName );
 			return -1;
 		}
 		break;

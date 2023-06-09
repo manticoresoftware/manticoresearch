@@ -9452,9 +9452,12 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_MINUTE:
 	case FUNC_SECOND:
 		assert ( iArg >= 0 );
-		if ( !(dArg.m_eRetType==SPH_ATTR_INTEGER || dArg.m_eRetType==SPH_ATTR_TIMESTAMP || dArg.m_eRetType==SPH_ATTR_BIGINT) )
+		if ( !( dArg.m_eRetType==SPH_ATTR_INTEGER
+				 || dArg.m_eRetType==SPH_ATTR_TIMESTAMP
+				 || dArg.m_eRetType==SPH_ATTR_BIGINT
+				 || CanEvalNumbers ( dArg.m_iFunc ) ) )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint or timestamp", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint, timestamp, or evaluated to number", sFuncName );
 			return -1;
 		}
 		break;

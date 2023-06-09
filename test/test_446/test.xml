@@ -76,6 +76,20 @@ index test
 	SELECT bigint(date_format(22496904880, '%m'));
 	SELECT sint(date_format(22496904880, '%m'));
 
+	<!-- implicit conversion -->
+	select timediff(908, 0);
+	select bigint(timediff(908, 0));
+	select sint(timediff(908, 0));
+	select fibonacci(timediff(60, 0));
+	select day(timediff(908, 0));
+	select month(timediff(908, 0));
+	select year(timediff(908, 0));
+	select yearmonth(timediff(908, 0));
+	select yearmonthday(timediff(908, 0));
+	select hour(timediff(908, 0));
+	select minute(timediff(908, 0));
+	select second(timediff(908, 0));
+
 	</sphinxql>
     
 </queries>

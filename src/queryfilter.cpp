@@ -133,7 +133,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 		int iKeywordQpos = dKeywords[iTokenized].m_iQpos;
 
 		// do not transform expanded wild-cards
-		if ( !tSkipTransform.IsEmpty() && tSkipTransform.BitGet ( iKeywordQpos ) )
+		if ( tSkipTransform.BitGetOr ( iKeywordQpos ) )
 			continue;
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols

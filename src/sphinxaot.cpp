@@ -1464,12 +1464,12 @@ public:
 	}
 
 
-	bool TokenIsBlended() const final
+	bool TokenIsBlended() const noexcept final
 	{
 		return m_iCurrent>=0 || m_pTokenizer->TokenIsBlended();
 	}
 
-	uint64_t GetSettingsFNV () const final
+	uint64_t GetSettingsFNV () const noexcept final
 	{
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash ^= (uint64_t)m_pWordforms;
@@ -1486,7 +1486,7 @@ public:
 		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_RU )
 	{}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
@@ -1616,7 +1616,7 @@ public:
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
@@ -1774,7 +1774,7 @@ class TokenizerUk_c : public CSphAotTokenizerTmpl
 
 public:
 	TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact );
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
 	BYTE * GetToken() final;
 };
 
@@ -1950,7 +1950,7 @@ TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict
 {
 }
 
-TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const noexcept
 {
 	// this token filter must NOT be created as escaped
 	// it must only be used during indexing time, NEVER in searching time

@@ -121,10 +121,10 @@ public:
 	virtual BYTE *					GetToken () = 0;
 
 	/// calc codepoint length
-	virtual int						GetCodepointLength ( int iCode ) const = 0;
+	virtual int						GetCodepointLength ( int iCode ) const noexcept = 0;
 
 	/// get max codepoint length
-	virtual int						GetMaxCodepointLength () const = 0;
+	virtual int						GetMaxCodepointLength () const noexcept = 0;
 
 	/// enable indexing-time sentence boundary detection, and paragraph indexing
 	virtual bool					EnableSentenceIndexing ( CSphString & sError );
@@ -136,67 +136,67 @@ public:
 	virtual void					EnableTokenizedMultiformTracking () {}
 
 	/// get last token length, in codepoints
-	virtual int						GetLastTokenLen () const { return m_iLastTokenLen; }
+	virtual int						GetLastTokenLen () const noexcept { return m_iLastTokenLen; }
 
 	/// get last token boundary flag (true if there was a boundary before the token)
-	virtual bool					GetBoundary () { return m_bTokenBoundary; }
+	virtual bool					GetBoundary () const noexcept { return m_bTokenBoundary; }
 
 	/// get byte offset of the last boundary character
-	virtual int						GetBoundaryOffset () { return m_iBoundaryOffset; }
+	virtual int						GetBoundaryOffset () const noexcept { return m_iBoundaryOffset; }
 
 	/// was last token a special one?
-	virtual bool					WasTokenSpecial () { return m_bWasSpecial; }
+	virtual bool					WasTokenSpecial () const noexcept { return m_bWasSpecial; }
 
-	virtual bool					WasTokenSynonym () const { return m_bWasSynonym; }
+	virtual bool					WasTokenSynonym () const noexcept { return m_bWasSynonym; }
 
 	/// get amount of overshort keywords skipped before this token
-	virtual int						GetOvershortCount () { return ( !m_bBlended && m_bBlendedPart ? 0 : m_iOvershortCount ); }
+	virtual int						GetOvershortCount () const noexcept { return ( !m_bBlended && m_bBlendedPart ? 0 : m_iOvershortCount ); }
 
 	/// get original tokenized multiform (if any); NULL means there was none
-	virtual BYTE *					GetTokenizedMultiform () { return nullptr; }
+	virtual BYTE *					GetTokenizedMultiform () noexcept { return nullptr; }
 
 	/// was last token a part of multi-wordforms destination
 	/// head parameter might be useful to distinguish between sequence of different multi-wordforms
-	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const = 0;
+	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const noexcept = 0;
 
 	/// check whether this token is a generated morphological guess
-	ESphTokenMorph					GetTokenMorph() const { return m_eTokenMorph; }
+	ESphTokenMorph					GetTokenMorph() const noexcept { return m_eTokenMorph; }
 
-	virtual bool					TokenIsBlended () const { return m_bBlended; }
-	virtual bool					TokenIsBlendedPart () const { return m_bBlendedPart; }
+	virtual bool					TokenIsBlended () const noexcept { return m_bBlended; }
+	virtual bool					TokenIsBlendedPart () const noexcept { return m_bBlendedPart; }
 	virtual int						SkipBlended () { return 0; }
 
 public:
 	/// spawn a clone of my own
-	virtual TokenizerRefPtr_c		Clone ( ESphTokenizerClone eMode ) const = 0;
+	virtual TokenizerRefPtr_c		Clone ( ESphTokenizerClone eMode ) const noexcept = 0;
 
 	/// start buffer point of last token
-	virtual const char *			GetTokenStart () const = 0;
+	virtual const char *			GetTokenStart () const noexcept = 0;
 
 	/// end buffer point of last token (exclusive, ie. *GetTokenEnd() is already NOT part of a token!)
-	virtual const char *			GetTokenEnd () const = 0;
+	virtual const char *			GetTokenEnd () const noexcept = 0;
 
 	/// current buffer ptr
-	virtual const char *			GetBufferPtr () const = 0;
+	virtual const char *			GetBufferPtr () const noexcept = 0;
 
 	/// buffer end
-	virtual const char *			GetBufferEnd () const = 0;
+	virtual const char *			GetBufferEnd () const noexcept  = 0;
 
 	/// set new buffer ptr (must be within current bounds)
 	virtual void					SetBufferPtr ( const char * sNewPtr ) = 0;
 
 	/// get settings hash
-	virtual uint64_t				GetSettingsFNV () const;
+	virtual uint64_t				GetSettingsFNV () const noexcept ;
 
 	/// if I'm cloned in index, or any kind of query mode
 	virtual bool					IsQueryTok() const noexcept = 0;
 
 	/// get (readonly) lowercaser
-	const CSphLowercaser &			GetLowercaser() const { assert ( m_pLC ); return *m_pLC; }
+	const CSphLowercaser &			GetLowercaser() const noexcept { assert ( m_pLC ); return *m_pLC; }
 
 	/// set the phrase mode for precessing tokens
 	virtual void					SetPhraseMode ( bool bPhrase ) { m_bPhrase = bPhrase; }
-	virtual bool					IsPhraseMode () const  { return m_bPhrase; }
+	virtual bool					IsPhraseMode () const  noexcept { return m_bPhrase; }
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -216,7 +216,7 @@ private:
 
 protected:
 	CSphLowercaser &				StagingLowercaser();
-	LowercaserRefcountedConstPtr	GetLC() const;
+	LowercaserRefcountedConstPtr	GetLC() const noexcept;
 	void							SetLC ( LowercaserRefcountedConstPtr rhs) ;
 
 protected:

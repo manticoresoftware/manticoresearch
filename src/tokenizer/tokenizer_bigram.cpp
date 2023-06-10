@@ -101,13 +101,13 @@ public:
 		}
 	}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
 	{
 		return TokenizerRefPtr_c { new BigramTokenizer ( m_pTokenizer->Clone ( eMode ), this ) };
 	}
 
 
-	bool TokenIsBlended() const final
+	bool TokenIsBlended() const noexcept final
 	{
 		if ( m_eState == BIGRAM_PAIR )
 			return true;
@@ -227,7 +227,7 @@ public:
 		return nullptr;
 	}
 
-	uint64_t GetSettingsFNV() const final
+	uint64_t GetSettingsFNV() const noexcept final
 	{
 		if ( m_pFather )
 			return m_pFather->GetSettingsFNV();

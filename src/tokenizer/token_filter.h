@@ -43,24 +43,24 @@ public:
 	int						SkipBlended () override													{ return m_pTokenizer->SkipBlended(); }
 	bool					IsQueryTok() const noexcept override									{ return m_pTokenizer->IsQueryTok(); }
 	void					SetPhraseMode ( bool bPhrase ) override { m_pTokenizer->SetPhraseMode ( bPhrase ); }
-	bool					IsPhraseMode () const override { return m_pTokenizer->IsPhraseMode(); }
+	bool					IsPhraseMode () const noexcept override { return m_pTokenizer->IsPhraseMode(); }
 
 
 
-	int						GetCodepointLength ( int iCode ) const final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
-	int						GetMaxCodepointLength () const final				{ return m_pTokenizer->GetMaxCodepointLength(); }
+	int						GetCodepointLength ( int iCode ) const noexcept final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
+	int						GetMaxCodepointLength () const noexcept final				{ return m_pTokenizer->GetMaxCodepointLength(); }
 
-	const char *			GetTokenStart () const override						{ return m_pTokenizer->GetTokenStart(); }
-	const char *			GetTokenEnd () const override						{ return m_pTokenizer->GetTokenEnd(); }
-	const char *			GetBufferPtr () const override						{ return m_pTokenizer->GetBufferPtr(); }
-	const char *			GetBufferEnd () const final							{ return m_pTokenizer->GetBufferEnd (); }
+	const char *			GetTokenStart () const noexcept override			{ return m_pTokenizer->GetTokenStart(); }
+	const char *			GetTokenEnd () const noexcept override				{ return m_pTokenizer->GetTokenEnd(); }
+	const char *			GetBufferPtr () const noexcept override				{ return m_pTokenizer->GetBufferPtr(); }
+	const char *			GetBufferEnd () const noexcept final				{ return m_pTokenizer->GetBufferEnd (); }
 	void					SetBufferPtr ( const char * sNewPtr ) override		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
-	uint64_t				GetSettingsFNV () const override						{ return m_pTokenizer->GetSettingsFNV(); }
+	uint64_t				GetSettingsFNV () const noexcept override			{ return m_pTokenizer->GetSettingsFNV(); }
 
 	void					SetBuffer ( const BYTE * sBuffer, int iLength ) override	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
 	BYTE *					GetToken () override										{ return m_pTokenizer->GetToken(); }
 
-	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const override { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
+	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const noexcept override { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
 
 protected:
 	TokenizerRefPtr_c		m_pTokenizer;

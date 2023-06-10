@@ -22,8 +22,8 @@ class Tokenizer_UTF8_Base_c: public CSphTokenizerBase2
 public:
 	explicit Tokenizer_UTF8_Base_c ( bool bDefaultCharset );
 	void SetBuffer ( const BYTE* sBuffer, int iLength ) final;
-	int GetCodepointLength ( int iCode ) const final;
-	int GetMaxCodepointLength() const final
+	int GetCodepointLength ( int iCode ) const noexcept final;
+	int GetMaxCodepointLength() const noexcept final
 	{
 		return GetLowercaser().GetMaxCodepointLength();
 	}
@@ -56,7 +56,7 @@ void Tokenizer_UTF8_Base_c::SetBuffer ( const BYTE* sBuffer, int iLength )
 	m_bBoundary = m_bTokenBoundary = false;
 }
 
-int Tokenizer_UTF8_Base_c::GetCodepointLength ( int iCode ) const
+int Tokenizer_UTF8_Base_c::GetCodepointLength ( int iCode ) const noexcept
 {
 	if ( iCode < 128 )
 		return 1;
@@ -80,7 +80,7 @@ public:
 		: Tokenizer_UTF8_Base_c ( bDefaultCharset )
 	{}
 	BYTE* GetToken() override;
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
 };
 
 
@@ -99,7 +99,7 @@ BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetToken()
 }
 
 template<bool IS_QUERY>
-TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const noexcept
 {
 	CSphTokenizerBase* pClone;
 	if ( eMode != SPH_CLONE_INDEX )

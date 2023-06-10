@@ -691,27 +691,27 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 		}
 
 		ESphTokenMorph eMorph = m_pTokenizer->GetTokenMorph();
-		if ( m_bIndexExactWords && eMorph!=SPH_TOKEN_MORPH_GUESS )
+		if ( m_bIndexExactWords && eMorph != SPH_TOKEN_MORPH_GUESS )
 		{
 			auto iBytes = strlen ( (const char*)sWord );
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			sBuf[iBytes+1] = '\0';
-		}
+			sBuf[iBytes + 1] = '\0';
 
-		if ( m_bIndexExactWords && ( eMorph==SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled ) )
-		{
-			// can not use GetWordID here due to exception vs missed hit, ie
-			// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary
-			// that causes error at hit sorting phase \ dictionary HitblockPatch
-			if ( !m_pDict->GetSettings().m_bStopwordsUnstemmed )
-				m_pDict->ApplyStemmers ( sWord );
+			if ( eMorph == SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled )
+			{
+				// can not use GetWordID here due to exception vs missed hit, ie
+				// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary
+				// that causes error at hit sorting phase \ dictionary HitblockPatch
+				if ( !m_pDict->GetSettings().m_bStopwordsUnstemmed )
+					m_pDict->ApplyStemmers ( sWord );
 
-			if ( !m_pDict->IsStopWord ( sWord ) )
-				m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
+				if ( !m_pDict->IsStopWord ( sWord ) )
+					m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
 
-			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
-			continue;
+				m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
+				continue;
+			}
 		}
 
 		SphWordID_t iWord = ( eMorph==SPH_TOKEN_MORPH_GUESS )

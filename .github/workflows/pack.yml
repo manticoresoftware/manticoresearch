@@ -15,36 +15,36 @@ concurrency:
 
 jobs:
 
-  # pack:
-  #   name: OK to pack?
-  #   runs-on: ubuntu-22.04
-  #   if: |
-  #     (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
-  #     || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
-  #   steps:
-  #     - run: echo "All set to build packages"
-  #
-  # pack_debian_ubuntu:
-  #   name: Debian/Ubuntu packages
-  #   uses: ./.github/workflows/build_template.yml
-  #   needs: pack
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       # DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
-  #       # arch: [x86_64, aarch64]
-  #       DISTR: [bionic]
-  #       arch: [x86_64]
-  #   with:
-  #     DISTR: ${{ matrix.DISTR }}
-  #     arch: ${{ matrix.arch }}
-  #     cmake_command: |
-  #       mkdir build
-  #       cd build
-  #       cmake -DPACK=1 ..
-  #       cmake --build . --target package
-  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-  #     artifact_list: "build/manticore*deb"
+  pack:
+    name: OK to pack?
+    runs-on: ubuntu-22.04
+    if: |
+      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+    steps:
+      - run: echo "All set to build packages"
+
+  pack_debian_ubuntu:
+    name: Debian/Ubuntu packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        # DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        # arch: [x86_64, aarch64]
+        DISTR: [bionic]
+        arch: [x86_64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*deb"
 
   # pack_rhel:
   #   name: RHEL packages
@@ -120,6 +120,7 @@ jobs:
 
   publish_debian_ubuntu:
 #    needs: publish
+    needs: pack_debian_ubuntu
     name: Publishing Debian/Ubuntu
     uses: ./.github/workflows/publish_template.yml
     secrets: inherit

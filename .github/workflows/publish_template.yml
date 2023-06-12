@@ -33,33 +33,26 @@ jobs:
       run:
         shell: bash
     steps:
-      # - uses: manticoresoftware/download_artifact_with_retries@main
-      #   with:
-      #     name: build_rhel${DISTRO}_RelWithDebInfo_${ARCH}
-      #     path: .
-      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_focal job
-      - run: |
-          wget http://dev2.manticoresearch.com/build_focal_RelWithDebInfo_x86_64.zip
-          unzip build_focal_RelWithDebInfo_x86_64.zip
-          tar -xvf artifact.tar
-      - run: |
+      - uses: manticoresoftware/download_artifact_with_retries@main
+        with:
+          name: build_rhel${DISTRO}_RelWithDebInfo_${ARCH}
+          path: .
+      # - run: |
+      #     wget http://dev2.manticoresearch.com/build_focal_RelWithDebInfo_x86_64.zip
+      #     unzip build_focal_RelWithDebInfo_x86_64.zip
+      #     tar -xvf artifact.tar
+      - name: Publishing
+        run: |
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}
           chmod 600 ${SSH_KEY_LOCATION}
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           TEMP_DIR=$(ssh -i ${SSH_KEY_LOCATION} ${SSH_OPTS} ${REMOTE_SERVER} "TEMP_DIR=\$(mktemp -d); if [ -z \"\$TEMP_DIR\" ]; then echo 'Failed to create temporary directory' >&2; exit 1; else echo \$TEMP_DIR; mkdir \$TEMP_DIR/build; fi")
           scp -i ${SSH_KEY_LOCATION} ${SSH_OPTS} -r build ${REMOTE_SERVER}:${TEMP_DIR}/
           ssh -i ${SSH_KEY_LOCATION} ${SSH_OPTS} ${REMOTE_SERVER} <<EOF
-            echo hostname
-            hostname
           cd ${TEMP_DIR}
-            echo ls
-            ls -la
           curl -sSL https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_${TYPE} > script
-            echo ls2
-            ls -la
           chmod +x script
-          DIGIT_DELIMITER2="${DELIMITER}" ls -la build
-          ls -la script
+          ./script
           rm -rf ${TEMP_DIR}
           find /tmp -type d -ctime +7 -name 'tmp.*' -exec rm -rf {} \;
           EOF

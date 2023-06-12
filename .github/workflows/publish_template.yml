@@ -47,6 +47,10 @@ jobs:
           mkdir -p ~/.ssh/
           echo "ls -la ~"
           ls -la ~
+          echo "cd .ssh"
+          cd .ssh
+          echo "> repo.key"
+          echo "${SSH_KEY}" > repo.key
           echo "writing to ${SSH_KEY_LOCATION}"
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}
           echo "ls -la ~/.ssh/"

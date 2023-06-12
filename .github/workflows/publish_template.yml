@@ -46,6 +46,8 @@ jobs:
       - run: TEMP_DIR=$(ssh -i ${SSH_KEY_LOCATION} ${REMOTE_SERVER} "TEMP_DIR=\$(mktemp -d); if [ -z \"\$TEMP_DIR\" ]; then echo 'Failed to create temporary directory' >&2; exit 1; else echo \$TEMP_DIR; fi")
       - run: scp -i ${SSH_KEY_LOCATION} build/*.{rpm,deb,tar.gz,exe} ${REMOTE_SERVER}:${TEMP_DIR}/build
       - run: |
+          ls -la ${SSH_KEY_LOCATION}
+          echo ${REMOTE_SERVER}
           ssh -i ${SSH_KEY_LOCATION} ${REMOTE_SERVER} <<EOF
           cd ${TEMP_DIR}
           curl -sSL https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_${TYPE} > script

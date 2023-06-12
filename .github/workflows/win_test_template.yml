@@ -78,8 +78,7 @@ jobs:
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
-        # TODO: remove -E rt_385
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60 -E rt_385
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status
         if: always()

@@ -134,7 +134,7 @@ jobs:
           distr: ${{ matrix.DISTR }}
           arch: ${{ matrix.arch }}
           type: deb
-          delimiter: -
+          delimiter: "-"
 
   # publish_rhel:
   #   needs: publish

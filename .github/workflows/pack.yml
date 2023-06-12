@@ -120,6 +120,8 @@ jobs:
 
   publish_debian_ubuntu:
 #    needs: publish
+    name: Publishing Debian/Ubuntu
+    uses: ./.github/workflows/publish_template.yml
     strategy:
       fail-fast: true
       matrix:
@@ -127,18 +129,11 @@ jobs:
         # arch: [x86_64, aarch64]
         DISTR: [focal]
         arch: [x86_64]
-    name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: ./.github/workflows/publish_template.yml
-        with:
-          distr: ${{ matrix.DISTR }}
-          arch: ${{ matrix.arch }}
-          type: deb
-          delimiter: "-"
+    with:
+      distr: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      type: deb
+      delimiter: "-"
 
   # publish_rhel:
   #   needs: publish

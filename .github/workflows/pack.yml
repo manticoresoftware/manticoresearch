@@ -130,6 +130,10 @@ jobs:
         arch: [x86_64]
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: ./.github/workflows/publish_template.yml
         with:
           distr: ${{ matrix.DISTR }}

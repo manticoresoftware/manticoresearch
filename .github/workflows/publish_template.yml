@@ -45,6 +45,7 @@ jobs:
       - run: |
           mkdir -p ~/.ssh/
           ls -la ~/.ssh/
+          echo "writing to ${SSH_KEY_LOCATION}"
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}
           ls -la ~/.ssh/
           chmod 600 ${SSH_KEY_LOCATION}

@@ -270,7 +270,7 @@ StringBuilder_c& StringBuilder_c::operator<< ( double fVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
-	m_iUsed += sprintf ( end(), "%f", fVal );
+	m_iUsed += snprintf ( end(), 31, "%f", fVal );
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -279,7 +279,7 @@ StringBuilder_c& StringBuilder_c::operator<< ( float fVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
-	m_iUsed += sph::PrintVarFloat ( end(), fVal );
+	m_iUsed += sph::PrintVarFloat ( end(), 31, fVal );
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -291,7 +291,7 @@ void StringBuilder_c::FtoA ( float fVal )
 	const int MAX_NUMERIC_STR = 64;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::PrintVarFloat ( (char*)m_szBuffer + m_iUsed, fVal );
+	int iLen = sph::PrintVarFloat ( (char*)m_szBuffer + m_iUsed, MAX_NUMERIC_STR, fVal );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }
@@ -304,7 +304,7 @@ void StringBuilder_c::DtoA ( double fVal )
 	const int MAX_NUMERIC_STR = 64;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::PrintVarDouble ( (char*)m_szBuffer + m_iUsed, fVal );
+	int iLen = sph::PrintVarDouble ( (char*)m_szBuffer + m_iUsed, MAX_NUMERIC_STR, fVal );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }

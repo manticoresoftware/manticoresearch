@@ -2364,11 +2364,11 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 					// invoke standard sprintf
 					char sFormat[32] = { 0 };
 					memcpy ( sFormat, pF, sFmt - pF );
-					pOutput += sprintf ( Tail ( pOutput ), sFormat, fValue );
+					pOutput += snprintf ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, sFormat, fValue );
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( Tail ( pOutput ), (float)fValue );
+					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 
@@ -2417,21 +2417,21 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		va_end ( ap );
 	}
 
-	int PrintVarFloat ( char* sBuffer, float fVal )
+	int PrintVarFloat ( char* sBuffer, int iSize, float fVal )
 	{
-		int iLen = sprintf ( sBuffer, "%f", fVal );
+		int iLen = snprintf ( sBuffer, iSize, "%f", fVal );
 		auto fTest = strtof ( sBuffer, nullptr );
 		if ( fTest!=fVal )
-			return sprintf ( sBuffer, "%1.8f", fVal );
+			return snprintf ( sBuffer, iSize, "%1.8f", fVal );
 		return iLen;
 	}
 
-	int PrintVarDouble ( char* sBuffer, double fVal )
+	int PrintVarDouble ( char* sBuffer, int iSize, double fVal )
 	{
-		int iLen = sprintf ( sBuffer, "%f", fVal );
+		int iLen = snprintf ( sBuffer, iSize, "%f", fVal );
 		auto fTest = strtod ( sBuffer, nullptr );
 		if ( fTest!=fVal )
-			return sprintf ( sBuffer, "%1.8f", fVal );
+			return snprintf ( sBuffer, iSize, "%1.8f", fVal );
 		return iLen;
 	}
 

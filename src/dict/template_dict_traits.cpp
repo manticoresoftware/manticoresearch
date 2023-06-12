@@ -216,8 +216,10 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 	{
 		char buf[20];
 		char buf_all[20];
-		sprintf ( buf, "lemmatize_%s", AOT_LANGUAGES[j] );		   // NOLINT
-		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		snprintf ( buf, 19, "lemmatize_%s", AOT_LANGUAGES[j] );		   // NOLINT
+		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		buf[19] = '\0';
+		buf_all[19] = '\0';
 
 		if ( iLength == 12 && !strncmp ( szMorph, buf, iLength ) )
 		{

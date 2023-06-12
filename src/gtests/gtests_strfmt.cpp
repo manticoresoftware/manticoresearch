@@ -113,7 +113,7 @@ void test_mysprintf ( const char* sFmt, int64_t iNum, const char* sResult )
 void test_sprintf ( const char* sFmt, int64_t iNum )
 {
 	char sBuf[50];
-	sprintf ( sBuf, sFmt, iNum );
+	snprintf ( sBuf, 49, sFmt, iNum );
 	test_mysprintf ( sFmt, iNum, sBuf );
 }
 

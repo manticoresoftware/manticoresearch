@@ -9761,7 +9761,8 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 	for ( int j=0; j<AOT_LENGTH; ++j )
 	{
 		char buf_all[20];
-		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		buf_all[19] = '\0';
 		ARRAY_FOREACH ( i, dMorphs )
 		{
 			if ( dMorphs[i]==buf_all )

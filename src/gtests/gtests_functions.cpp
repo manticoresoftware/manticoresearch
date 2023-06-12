@@ -1822,7 +1822,7 @@ int iCompared;
 int make_partition (DWORD iPivot, int iNeedElems, VecTraits_T<DWORD> dData )
 {
 //	printf ( "iPivot=%d, need %d, has %d\n", iPivot, iNeedElems, dData.GetLength() );
-	int iPass = 0;
+//	int iPass = 0;
 	auto cmp = Lesser ( [] ( int a, int b ) {
 		++iCompared;
 		return a>b;
@@ -1863,7 +1863,7 @@ int make_partition (DWORD iPivot, int iNeedElems, VecTraits_T<DWORD> dData )
 //		iPivot = dData[(a+b)/2];
 		iPivot = dData[( a*3+b ) / 4]; // ( a*(COEF-1)+b)/COEF
 //		printf ( "a=%d, b=%d, pivot=%d\n", a,b,iPivot );
-		++iPass;
+//		++iPass;
 	}
 
 //	printf ( "partitioning completed in %d passes, %d comparisions, new pivot %d\n", iPass, iCompared, iPivot );

@@ -227,7 +227,6 @@ jobs:
     name: Publishing Windows NSIS installer to repo.manticoresearch.com
     runs-on: [self-hosted, Linux, X64]
     needs: build_nsis
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'pull_request' && github.event.label.name == 'ci_publish')
     steps:
       - uses: manticoresoftware/download_artifact_with_retries@main
         with:

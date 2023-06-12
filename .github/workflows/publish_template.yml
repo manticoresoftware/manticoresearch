@@ -15,15 +15,15 @@ on:
       delimiter:
         required: true
         type: string
+      artifact:
+        required: true
+        type: string
 
 jobs:
   test:
     name: ${{ inputs.distr }}_${{ inputs.arch }}
     runs-on: ubuntu-22.04
     env:
-      DISTRO: ${{ inputs.DISTR }}
-      ARCH: ${{ inputs.arch }}
-      DIGIT_DELIMITER2: ${{ inputs.delimiter }}
       REMOTE_SERVER: root@repo.manticoresearch.com
       SSH_KEY: ${{ secrets.REPO_SSH_KEY }}
       SSH_KEY_LOCATION: /tmp/repo.key
@@ -35,12 +35,8 @@ jobs:
     steps:
       - uses: manticoresoftware/download_artifact_with_retries@main
         with:
-          name: build_${{ inputs.distr }}_RelWithDebInfo_${{ inputs.arch }}
+          name: ${{ inputs.artifact }}
           path: .
-      # - run: |
-      #     wget http://dev2.manticoresearch.com/build_focal_RelWithDebInfo_x86_64.zip
-      #     unzip build_focal_RelWithDebInfo_x86_64.zip
-      #     tar -xvf artifact.tar
       - name: Publishing
         run: |
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}
@@ -52,7 +48,7 @@ jobs:
           cd ${TEMP_DIR}
           curl -sSL https://raw.githubusercontent.com/manticoresoftware/repo_scripts/main/upload_repo_${TYPE} > script
           chmod +x script
-          ./script
+          DISTRO="${{ inputs.distr }}" DIGIT_DELIMITER2="${{ inputs.delimiter }}" ./script
           rm -rf ${TEMP_DIR}
           find /tmp -type d -ctime +7 -name 'tmp.*' -exec rm -rf {} \;
           EOF

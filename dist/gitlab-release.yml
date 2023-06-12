@@ -18,6 +18,7 @@ variables:
     - if: $CI_MERGE_REQUEST_ID
       when: manual
     - if: $CI_MERGE_REQUEST_ID == null
+      when: manual
   needs: [ ]
   tags:
     - docker

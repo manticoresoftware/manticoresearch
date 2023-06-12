@@ -48,7 +48,7 @@ jobs:
           echo "ls -la ~"
           ls -la ~
           echo "cd .ssh"
-          cd .ssh
+          cd ~/.ssh
           echo "> repo.key"
           echo "${SSH_KEY}" > repo.key
           echo "writing to ${SSH_KEY_LOCATION}"

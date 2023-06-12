@@ -303,16 +303,16 @@ check_docs_examples:
 
 # ==================== Run secondary pipeline ======================
 
-#deploy_hook:
-#  stage: hooks
-#  trigger:
-#    include: dist/gitlab-release.yml
-#  needs:
-#    - job: simple_tests
-#      artifacts: false
-#    - job: win_tests
-#      artifacts: false
-#    - job: release_tests
-#      artifacts: false
-#    - job: build_arm
-#      artifacts: false
+deploy_hook:
+  stage: hooks
+  trigger:
+    include: dist/gitlab-release.yml
+  needs:
+    - job: simple_tests
+      artifacts: false
+    - job: win_tests
+      artifacts: false
+    - job: release_tests
+      artifacts: false
+    - job: build_arm
+      artifacts: false

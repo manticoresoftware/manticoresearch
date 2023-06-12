@@ -33,7 +33,7 @@ jobs:
       matrix:
         # DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
         # arch: [x86_64, aarch64]
-        DISTR: [bionic]
+        DISTR: [focal]
         arch: [x86_64]
     with:
       DISTR: ${{ matrix.DISTR }}

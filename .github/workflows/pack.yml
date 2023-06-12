@@ -120,7 +120,6 @@ jobs:
 
   publish_debian_ubuntu:
 #    needs: publish
-    runs-on: [self-hosted, Linux, X64]
     strategy:
       fail-fast: true
       matrix:

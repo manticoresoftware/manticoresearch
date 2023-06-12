@@ -9,17 +9,15 @@ variables:
   DIAGNOSTIC: 1
   PACK_ICUDATA: 0
 
-workflow:
-  rules:
-    - when: never
-
 # ==================== .helper generic build ======================
 
 .build:
   stage: build
   interruptible: true
   rules:
-    - when: manual
+    - if: $CI_MERGE_REQUEST_ID
+      when: manual
+    - if: $CI_MERGE_REQUEST_ID == null
   needs: [ ]
   tags:
     - docker

@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: manticoresoftware/download_artifact_with_retries@main
         with:
-          name: build_${DISTRO}_RelWithDebInfo_${ARCH}
+          name: build_${{ inputs.distr }}_RelWithDebInfo_${{ inputs.arch }}
           path: .
       # - run: |
       #     wget http://dev2.manticoresearch.com/build_focal_RelWithDebInfo_x86_64.zip

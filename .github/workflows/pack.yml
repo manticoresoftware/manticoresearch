@@ -15,36 +15,36 @@ concurrency:
 
 jobs:
 
-  pack:
-    name: OK to pack?
-    runs-on: ubuntu-22.04
-    if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
-    steps:
-      - run: echo "All set to build packages"
-
-  pack_debian_ubuntu:
-    name: Debian/Ubuntu packages
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    strategy:
-      fail-fast: false
-      matrix:
-        # DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
-        # arch: [x86_64, aarch64]
-        DISTR: [bionic]
-        arch: [x86_64]
-    with:
-      DISTR: ${{ matrix.DISTR }}
-      arch: ${{ matrix.arch }}
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*deb"
+  # pack:
+  #   name: OK to pack?
+  #   runs-on: ubuntu-22.04
+  #   if: |
+  #     (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
+  #     || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+  #   steps:
+  #     - run: echo "All set to build packages"
+  #
+  # pack_debian_ubuntu:
+  #   name: Debian/Ubuntu packages
+  #   uses: ./.github/workflows/build_template.yml
+  #   needs: pack
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       # DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+  #       # arch: [x86_64, aarch64]
+  #       DISTR: [bionic]
+  #       arch: [x86_64]
+  #   with:
+  #     DISTR: ${{ matrix.DISTR }}
+  #     arch: ${{ matrix.arch }}
+  #     cmake_command: |
+  #       mkdir build
+  #       cd build
+  #       cmake -DPACK=1 ..
+  #       cmake --build . --target package
+  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+  #     artifact_list: "build/manticore*deb"
 
   # pack_rhel:
   #   name: RHEL packages
@@ -108,25 +108,26 @@ jobs:
 
   # virtual job to simplify the CI
   # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
-  publish:
-    name: OK to publish?
-    runs-on: ubuntu-22.04
-#    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
-    needs: [pack_debian_ubuntu]
-    if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
-    steps:
-      - run: echo "Ready to publish"
+  # publish:
+  #   name: OK to publish?
+  #   runs-on: ubuntu-22.04
+  #   needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
+  #   if: |
+  #     (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
+  #     || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+  #   steps:
+  #     - run: echo "Ready to publish"
 
   publish_debian_ubuntu:
-    needs: publish
+#    needs: publish
     runs-on: [self-hosted, Linux, X64]
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
-        arch: [x86_64, aarch64]
+        # DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        # arch: [x86_64, aarch64]
+        DISTR: [focal]
+        arch: [x86_64]
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
       - uses: ./.github/workflows/publish_template.yml

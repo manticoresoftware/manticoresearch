@@ -43,7 +43,6 @@ jobs:
           unzip build_focal_RelWithDebInfo_x86_64.zip
           tar -xvf artifact.tar
       - run: |
-          ls -la ~/.ssh/
           mkdir -p ~/.ssh/
           ls -la ~/.ssh/
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}

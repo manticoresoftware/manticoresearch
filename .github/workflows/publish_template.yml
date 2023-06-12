@@ -26,7 +26,7 @@ jobs:
       DIGIT_DELIMITER2: ${{ inputs.delimiter }}
       REMOTE_SERVER: root@repo.manticoresearch.com
       SSH_KEY: ${{ secrets.REPO_SSH_KEY }}
-      SSH_KEY_LOCATION: "~/.ssh/repo.key"
+      SSH_KEY_LOCATION: /home/runner/.ssh/repo.key
       TYPE: ${{ inputs.type }}
       DELIMITER: ${{ inputs.delimiter }}
     defaults:
@@ -43,21 +43,10 @@ jobs:
           unzip build_focal_RelWithDebInfo_x86_64.zip
           tar -xvf artifact.tar
       - run: |
-          echo "mkdir"
-          mkdir -p ~/.ssh/
-          echo "ls -la ~"
-          ls -la ~
-          echo "cd .ssh"
-          cd ~/.ssh
-          echo "> repo.key"
-          echo "${SSH_KEY}" > repo.key
-          ls -la ~/.ssh/repo.key
-          echo "writing to ${SSH_KEY_LOCATION}"
+          mkdir -p /home/runner/.ssh/
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}
-          echo "ls -la ~/.ssh/"
-          ls -la ~/.ssh/
           chmod 600 ${SSH_KEY_LOCATION}
-          cat >>~/.ssh/config <<END
+          cat >>/home/runner/.ssh/config <<END
           Host repo
             HostName ${REMOTE_SERVER}
             User root

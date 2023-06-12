@@ -48,7 +48,7 @@ jobs:
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           TEMP_DIR=$(ssh -i ${SSH_KEY_LOCATION} ${SSH_OPTS} ${REMOTE_SERVER} "TEMP_DIR=\$(mktemp -d); if [ -z \"\$TEMP_DIR\" ]; then echo 'Failed to create temporary directory' >&2; exit 1; else echo \$TEMP_DIR; mkdir \$TEMP_DIR/build; fi")
           ls -la build/
-          scp -i ${SSH_KEY_LOCATION} ${SSH_OPTS} build/*{rpm,deb,tar.gz,exe} ${REMOTE_SERVER}:${TEMP_DIR}/build
+          scp -vv -i ${SSH_KEY_LOCATION} ${SSH_OPTS} build/*{rpm,deb,tar.gz,exe} ${REMOTE_SERVER}:${TEMP_DIR}/build
           ssh -i ${SSH_KEY_LOCATION} ${SSH_OPTS} ${REMOTE_SERVER} <<EOF
             echo hostname
             hostname

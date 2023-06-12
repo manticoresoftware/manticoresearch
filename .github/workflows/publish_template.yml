@@ -29,9 +29,10 @@ jobs:
       SSH_KEY_LOCATION: /tmp/ssh_key
       TYPE: ${{ inputs.type }}
       DELIMITER: ${{ inputs.delimiter }}
-
+    defaults:
+      run:
+        shell: bash
     steps:
-      shell: bash
       # - uses: manticoresoftware/download_artifact_with_retries@main
       #   with:
       #     name: build_rhel${DISTRO}_RelWithDebInfo_${ARCH}

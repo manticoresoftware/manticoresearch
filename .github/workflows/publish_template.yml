@@ -26,7 +26,7 @@ jobs:
       DIGIT_DELIMITER2: ${{ inputs.delimiter }}
       REMOTE_SERVER: root@repo.manticoresearch.com
       SSH_KEY: ${{ secrets.REPO_SSH_KEY }}
-      SSH_KEY_LOCATION: /ssh_key
+      SSH_KEY_LOCATION: /tmp/ssh_key
       TYPE: ${{ inputs.type }}
       DELIMITER: ${{ inputs.delimiter }}
 

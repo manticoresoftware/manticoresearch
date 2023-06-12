@@ -43,10 +43,13 @@ jobs:
           unzip build_focal_RelWithDebInfo_x86_64.zip
           tar -xvf artifact.tar
       - run: |
+          echo "mkdir"
           mkdir -p ~/.ssh/
+          echo "ls -la ~"
           ls -la ~
           echo "writing to ${SSH_KEY_LOCATION}"
           echo "${SSH_KEY}" > ${SSH_KEY_LOCATION}
+          echo "ls -la ~/.ssh/"
           ls -la ~/.ssh/
           chmod 600 ${SSH_KEY_LOCATION}
           cat >>~/.ssh/config <<END

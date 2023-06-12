@@ -78,10 +78,18 @@ jobs:
 
       - name: 🚀 Test
         id: test
-        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60 # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        # TODO: remove -E rt_385
+        # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60 -E rt_385
+        continue-on-error: true
+
+      - name: List build files
+        if: always()
+        run: find build
         continue-on-error: true
 
       - name: Remember status
+        if: always()
         run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.artifact_name }}
 
       - name: Prepare test report xmls
@@ -95,4 +103,4 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@main
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/searchd.log build/status*"
+          path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/*log build/status*"

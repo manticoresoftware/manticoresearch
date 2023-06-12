@@ -122,6 +122,7 @@ jobs:
 #    needs: publish
     name: Publishing Debian/Ubuntu
     uses: ./.github/workflows/publish_template.yml
+    secrets: inherit
     strategy:
       fail-fast: true
       matrix:

@@ -12,7 +12,7 @@ if [[ "$FAILED_TO_LOGIN" == 'true' ]]; then
 fi
 
 if [ ! -n "$BUILD_TAGS" ]; then
-  BUILD_TAGS="dev-tmp dev-tmp-$( cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d" " -f3 | cut -d'"' -f2 )-$CI_COMMIT_SHORT_SHA"
+  BUILD_TAGS="dev dev-$( cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d" " -f3 | cut -d'"' -f2 )-$CI_COMMIT_SHORT_SHA"
 fi
 
 IFS=' ' read -r -a SPLITTED_BUILD_TAGS <<<"$BUILD_TAGS"

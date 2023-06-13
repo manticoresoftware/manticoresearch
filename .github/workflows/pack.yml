@@ -119,7 +119,7 @@ jobs:
   publish_debian_ubuntu:
     name: Publishing Debian/Ubuntu
     needs: publish
-    secrets: inherit
+#    secrets: inherit
     strategy:
       fail-fast: true
       matrix:

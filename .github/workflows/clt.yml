@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [ master ]
 
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: clt_${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rhel-release:
     if: github.event_name == 'workflow_dispatch'

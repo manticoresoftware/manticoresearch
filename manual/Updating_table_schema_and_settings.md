@@ -257,9 +257,11 @@ ALTER TABLE table REBUILD SECONDARY
 
 You can also use `ALTER` to rebuild secondary indexes in a given table. Sometimes, a secondary index can be disabled for the entire table or for one or multiple attributes within the table:
 * When an attribute is updated, its secondary index gets disabled.
-* If Manticore loads a table with outdated formatted secondary indexes, the secondary indexes will be disabled for the entire table.
+* If Manticore loads a table with an old version of secondary indexes that is no longer supported, the secondary indexes will be disabled for the entire table.
 
 `ALTER TABLE table REBUILD SECONDARY` rebuilds secondary indexes from attribute data and enables them again.
+
+Additionally, an old version of secondary indexes may be supported but will lack certain features. `REBUILD SECONDARY` can be used to update secondary indexes.
 
 <!-- request Example -->
 ```sql

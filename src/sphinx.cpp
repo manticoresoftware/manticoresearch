@@ -11861,20 +11861,6 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 		return false;
 	}
 
-	bool bValid = !!m_pSIdx;
-	if ( bValid )
-	{
-		for ( int i=0; i<m_tSchema.GetAttrsCount() && bValid; i++ )
-		{
-			bValid &= m_pSIdx->IsEnabled ( m_tSchema.GetAttr ( i ).m_sName.cstr() );
-		}
-	}
-
-	// the existing .spidx is supported version
-    // secondary index was NOT disabled on UPDATE
-	if ( bValid )
-		return true;
-
 	MergeCb_c tMonitor;
 	CSphFixedVector<RowID_t> dDeadRows {0}, dTmpRows{0};
 	CreateRowMapsAndCountTotalDocs ( this, this, dTmpRows, dDeadRows, nullptr, false, tMonitor );

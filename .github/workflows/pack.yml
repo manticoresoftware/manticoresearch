@@ -14,118 +14,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
-  pack:
-    name: OK to pack?
+  test:
+    name: test
     runs-on: ubuntu-22.04
-    if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
-    steps:
-      - run: echo "All set to build packages"
-
-  pack_debian_ubuntu:
-    name: Debian/Ubuntu packages
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    strategy:
-      fail-fast: false
-      matrix:
-        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
-        arch: [x86_64, aarch64]
-    with:
-      DISTR: ${{ matrix.DISTR }}
-      arch: ${{ matrix.arch }}
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*deb"
-
-  pack_rhel:
-    name: RHEL packages
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    strategy:
-      fail-fast: false
-      matrix:
-        DISTR: [rhel7, rhel8, rhel9]
-        arch: [x86_64, aarch64]
-    with:
-      DISTR: ${{ matrix.DISTR }}
-      arch: ${{ matrix.arch }}
-      boost: boost_rhel_feb17
-      cmake_command: |
-        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
-        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*rpm"
-
-  pack_macos:
-    name: MacOS packages
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    strategy:
-      fail-fast: false
-      matrix:
-        DISTR: [macos]
-        arch: [x86_64, arm64]
-    with:
-      DISTR: ${{ matrix.DISTR }}
-      arch: ${{ matrix.arch }}
-      HOMEBREW_PREFIX: /opt/homebrew
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*tar.gz"
-
-  pack_windows:
-    name: Windows x64 package
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    with:
-      DISTR: windows
-      arch: x64
-      sysroot: roots_apr12
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*exe build/manticore*zip"
-
-  # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
-  publish:
-    name: OK to publish?
-    runs-on: ubuntu-22.04
-    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
-    if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
-    steps:
-      - run: echo "Ready to publish"
-
-  publish_debian_ubuntu:
-    name: Publishing Debian/Ubuntu
-    needs: publish
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
-        arch: [x86_64, aarch64]
-    runs-on: ubuntu-22.04
+        DISTR: [focal]
+        arch: [x86_64]
     steps:
+      - run: |
+          wget http://dev2.manticoresearch.com/build_focal_RelWithDebInfo_x86_64.zip
+          unzip build_focal_RelWithDebInfo_x86_64.zip
+          tar -xvf artifact.tar
+      - name: Upload build artifacts
+        uses: manticoresoftware/upload_artifact_with_retries@main
+        with:
+          name: build_focal_RelWithDebInfo_x86_64
+          path: build
       - uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
@@ -135,116 +41,236 @@ jobs:
           type: deb
           delimiter: "-"
 
-  publish_rhel:
-    name: Publishing RHEL
-    needs: publish
-    strategy:
-      fail-fast: true
-      matrix:
-        DISTR: [7, 8, 9]
-        arch: [x86_64, aarch64]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: ${{ matrix.DISTR }}
-          arch: ${{ matrix.arch }}
-          artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
-          type: rpm
-          delimiter: "_"
-
-  publish_macos:
-    name: Publishing MacOS
-    needs: publish
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: [x86_64, arm64]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: macos
-          arch: ${{ matrix.arch }}
-          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
-          type: arc
-          delimiter: "-"
-
-  publish_windows:
-    name: Publishing Windows
-    needs: publish
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: windows
-          arch: x64
-          artifact: build_windows_RelWithDebInfo_x64
-          type: arc
-          delimiter: "-"
-
-  build_nsis:
-    name: Making and publishing Windows NSIS installer
-    needs: publish_windows
-    runs-on: ubuntu-22.04
-    container:
-      image: manticoresearch/build_nsis:1.0.0
-    env:
-      CI_COMMIT_SHA: ${{ github.sha }}
-    steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Initialization
-        # without adding the safe.directory the script fails to do git show ...
-        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-      - name: Make installer
-        # TODO: remove the hardcoded paths /builds/ below
-        run: |
-          mkdir -p /builds/manticoresearch/dev/build/
-          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
-        shell: bash
-      - run: mv /builds/manticoresearch/dev/build build
-      - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@main
-        with:
-          name: win_installer
-          path: build/manticore-*.exe
-
-  publish_nsis:
-    name: Publishing Windows NSIS installer
-    needs: build_nsis
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr:
-          arch:
-          artifact: win_installer
-          type: arc
-          delimiter:
-
-  build_docker:
-    name: Building and pushing docker
-    needs: publish_debian_ubuntu
-    runs-on: ubuntu-22.04
-    env:
-      DOCKER_USER: ${{ secrets.DOCKER_USER }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GHCR_USER: ${{ secrets.GHCR_USER }}
-      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-    steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Calculate short commit hash
-        id: sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      - name: Building docker
-        run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
+  # pack:
+  #   name: OK to pack?
+  #   runs-on: ubuntu-22.04
+  #   if: |
+  #     (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
+  #     || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+  #   steps:
+  #     - run: echo "All set to build packages"
+  #
+  # pack_debian_ubuntu:
+  #   name: Debian/Ubuntu packages
+  #   uses: ./.github/workflows/build_template.yml
+  #   needs: pack
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+  #       arch: [x86_64, aarch64]
+  #   with:
+  #     DISTR: ${{ matrix.DISTR }}
+  #     arch: ${{ matrix.arch }}
+  #     cmake_command: |
+  #       mkdir build
+  #       cd build
+  #       cmake -DPACK=1 ..
+  #       cmake --build . --target package
+  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+  #     artifact_list: "build/manticore*deb"
+  #
+  # pack_rhel:
+  #   name: RHEL packages
+  #   uses: ./.github/workflows/build_template.yml
+  #   needs: pack
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       DISTR: [rhel7, rhel8, rhel9]
+  #       arch: [x86_64, aarch64]
+  #   with:
+  #     DISTR: ${{ matrix.DISTR }}
+  #     arch: ${{ matrix.arch }}
+  #     boost: boost_rhel_feb17
+  #     cmake_command: |
+  #       ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+  #       cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+  #       mkdir build
+  #       cd build
+  #       cmake -DPACK=1 ..
+  #       cmake --build . --target package
+  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+  #     artifact_list: "build/manticore*rpm"
+  #
+  # pack_macos:
+  #   name: MacOS packages
+  #   uses: ./.github/workflows/build_template.yml
+  #   needs: pack
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       DISTR: [macos]
+  #       arch: [x86_64, arm64]
+  #   with:
+  #     DISTR: ${{ matrix.DISTR }}
+  #     arch: ${{ matrix.arch }}
+  #     HOMEBREW_PREFIX: /opt/homebrew
+  #     cmake_command: |
+  #       mkdir build
+  #       cd build
+  #       cmake -DPACK=1 ..
+  #       cmake --build . --target package
+  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+  #     artifact_list: "build/manticore*tar.gz"
+  #
+  # pack_windows:
+  #   name: Windows x64 package
+  #   uses: ./.github/workflows/build_template.yml
+  #   needs: pack
+  #   with:
+  #     DISTR: windows
+  #     arch: x64
+  #     sysroot: roots_apr12
+  #     cmake_command: |
+  #       mkdir build
+  #       cd build
+  #       cmake -DPACK=1 ..
+  #       cmake --build . --target package
+  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+  #     artifact_list: "build/manticore*exe build/manticore*zip"
+  #
+  # # virtual job to simplify the CI
+  # # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
+  # publish:
+  #   name: OK to publish?
+  #   runs-on: ubuntu-22.04
+  #   needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
+  #   if: |
+  #     (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
+  #     || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+  #   steps:
+  #     - run: echo "Ready to publish"
+  #
+  # publish_debian_ubuntu:
+  #   name: Publishing Debian/Ubuntu
+  #   needs: publish
+  #   strategy:
+  #     fail-fast: true
+  #     matrix:
+  #       DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+  #       arch: [x86_64, aarch64]
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: manticoresoftware/publish_to_repo@main
+  #       with:
+  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
+  #         distr: ${{ matrix.DISTR }}
+  #         arch: ${{ matrix.arch }}
+  #         artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+  #         type: deb
+  #         delimiter: "-"
+  #
+  # publish_rhel:
+  #   name: Publishing RHEL
+  #   needs: publish
+  #   strategy:
+  #     fail-fast: true
+  #     matrix:
+  #       DISTR: [7, 8, 9]
+  #       arch: [x86_64, aarch64]
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: manticoresoftware/publish_to_repo@main
+  #       with:
+  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
+  #         distr: ${{ matrix.DISTR }}
+  #         arch: ${{ matrix.arch }}
+  #         artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+  #         type: rpm
+  #         delimiter: "_"
+  #
+  # publish_macos:
+  #   name: Publishing MacOS
+  #   needs: publish
+  #   strategy:
+  #     fail-fast: true
+  #     matrix:
+  #       arch: [x86_64, arm64]
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: manticoresoftware/publish_to_repo@main
+  #       with:
+  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
+  #         distr: macos
+  #         arch: ${{ matrix.arch }}
+  #         artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
+  #         type: arc
+  #         delimiter: "-"
+  #
+  # publish_windows:
+  #   name: Publishing Windows
+  #   needs: publish
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: manticoresoftware/publish_to_repo@main
+  #       with:
+  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
+  #         distr: windows
+  #         arch: x64
+  #         artifact: build_windows_RelWithDebInfo_x64
+  #         type: arc
+  #         delimiter: "-"
+  #
+  # build_nsis:
+  #   name: Making and publishing Windows NSIS installer
+  #   needs: publish_windows
+  #   runs-on: ubuntu-22.04
+  #   container:
+  #     image: manticoresearch/build_nsis:1.0.0
+  #   env:
+  #     CI_COMMIT_SHA: ${{ github.sha }}
+  #   steps:
+  #     - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+  #       uses: actions/checkout@v3
+  #       with:
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Initialization
+  #       # without adding the safe.directory the script fails to do git show ...
+  #       run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+  #     - name: Make installer
+  #       # TODO: remove the hardcoded paths /builds/ below
+  #       run: |
+  #         mkdir -p /builds/manticoresearch/dev/build/
+  #         /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
+  #       shell: bash
+  #     - run: mv /builds/manticoresearch/dev/build build
+  #     - name: Upload artifact
+  #       uses: manticoresoftware/upload_artifact_with_retries@main
+  #       with:
+  #         name: win_installer
+  #         path: build/manticore-*.exe
+  #
+  # publish_nsis:
+  #   name: Publishing Windows NSIS installer
+  #   needs: build_nsis
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: manticoresoftware/publish_to_repo@main
+  #       with:
+  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
+  #         distr:
+  #         arch:
+  #         artifact: win_installer
+  #         type: arc
+  #         delimiter:
+  #
+  # build_docker:
+  #   name: Building and pushing docker
+  #   needs: publish_debian_ubuntu
+  #   runs-on: ubuntu-22.04
+  #   env:
+  #     DOCKER_USER: ${{ secrets.DOCKER_USER }}
+  #     DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  #     GHCR_USER: ${{ secrets.GHCR_USER }}
+  #     GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+  #   steps:
+  #     - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+  #       uses: actions/checkout@v3
+  #       with:
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Calculate short commit hash
+  #       id: sha
+  #       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+  #     - name: Building docker
+  #       run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh

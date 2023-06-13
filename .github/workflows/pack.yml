@@ -136,6 +136,7 @@ jobs:
   publish_rhel:
     name: Publishing RHEL
     needs: publish
+    secrets: inherit
     strategy:
       fail-fast: true
       matrix:
@@ -152,6 +153,7 @@ jobs:
   publish_macos:
     name: Publishing MacOS
     needs: publish
+    secrets: inherit
     strategy:
       fail-fast: true
       matrix:
@@ -167,6 +169,7 @@ jobs:
   publish_windows:
     name: Publishing Windows
     needs: publish
+    secrets: inherit
     uses: ./.github/workflows/publish_template.yml
     with:
       distr: windows
@@ -207,6 +210,7 @@ jobs:
   publish_nsis:
     name: Publishing Windows NSIS installer
     needs: build_nsis
+    secrets: inherit
     uses: ./.github/workflows/publish_template.yml
     with:
       distr:

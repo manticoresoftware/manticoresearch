@@ -142,7 +142,6 @@ The query must return exactly 2 columns: document ID, and text to append to a jo
 then the indexing results would be equivalent to adding a new text field with a value of 'red right hand' to document 1 and 'mysql sphinx' to document 2, including the keyword positions inside the field in the order they come from the query. If the rows need to be in a specific order, that needs to be explicitly defined in the query.
 
 Joined fields are only indexed differently. There are no other differences between joined fields and regular text fields.
-Before joined fields query, set of `sql_query_pre_all`, if any, will be executed. That will allow you to set desired encoding, etc. for joined fields context.
 
 Before executing the joined fields query, any set of `sql_query_pre_all` will be run, if any exist. This allows you to set the desired encoding, etc., within the joined fields' context.
 

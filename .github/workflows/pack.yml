@@ -145,7 +145,7 @@ jobs:
     with:
       distr: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+      artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
       type: rpm
       delimiter: "_"
 

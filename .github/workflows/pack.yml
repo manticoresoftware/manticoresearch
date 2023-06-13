@@ -127,8 +127,7 @@ jobs:
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     steps:
-      - name: ${{ matrix.DISTR }} ${{ matrix.arch }}
-        uses: manticoresoftware/publish_to_repo@main
+      - uses: manticoresoftware/publish_to_repo@main
         with:
           distr: ${{ matrix.DISTR }}
           arch: ${{ matrix.arch }}

@@ -410,7 +410,7 @@ jobs:
         id: build
         run: |
           BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }} 
-          /bin/bash dist/clt_docker.sh
+          BUILD_TAG=$BUILD_TAG /bin/bash dist/clt_docker.sh
           echo "build_image=ghcr.io/manticoresoftware/manticoresearch:$BUILD_TAG" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@main

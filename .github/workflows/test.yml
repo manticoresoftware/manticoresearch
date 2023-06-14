@@ -420,7 +420,6 @@ jobs:
   clt_logstash_test:
     name: CLT test on Logstash and Filebeat
     needs: build_clt_docker
-    runs-on: ubuntu-22.04
     strategy:
       matrix:
         image: ["${{ needs.build_clt_docker.outputs.out-build }}"]

@@ -384,6 +384,8 @@ jobs:
     env:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    outputs:
+      out-build: ${{ steps.build.outputs.build_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -405,12 +407,33 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       # TODO: remove tmp
       - name: Building docker
-        run: BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }} /bin/bash dist/clt_docker.sh
+        id: build
+        run: |
+          BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }} /bin/bash dist/clt_docker.sh
+          echo "build_image=ghcr.io/manticoresoftware/manticoresearch:$BUILD_TAG" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@main
         with:
           name: docker_clt_image
           path: docker/manticore_clt.img
+
+  clt_logstash_test:
+    name: CLT test on Logstash and Filebeat
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
+    needs: build_clt_docker
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        image: ["${{ needs.build_clt_docker.outputs.out-build }}"]
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          { "image": "${{matrix.image}}"},
+        ]
+      test_prefix: logstash-
 
   build_aarch64:
     name: Linux aarch64 build

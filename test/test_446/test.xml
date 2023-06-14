@@ -70,9 +70,26 @@ index test
 	select id, 22496904880 + (id*500000000) as a, yearmonthday(a), yearmonth(a), year(a), month(a), day(a) from test;
 
     <!-- date_format-->
-	SELECT date_format(22496904880, '%F');
-	select id, 1096904880 + id * 1000 as a, date_format(a, '%F and yead of %Y') from test;
-    
+	SELECT date_format(22496904880, '%m');
+	select id, 1096904880 + id * 1000 as a, date_format(a, '%m and year of %Y') from test;
+
+	SELECT bigint(date_format(22496904880, '%m'));
+	SELECT sint(date_format(22496904880, '%m'));
+
+	<!-- implicit conversion -->
+	select timediff(908, 0);
+	select bigint(timediff(908, 0));
+	select sint(timediff(908, 0));
+	select fibonacci(timediff(60, 0));
+	select day(timediff(908, 0));
+	select month(timediff(908, 0));
+	select year(timediff(908, 0));
+	select yearmonth(timediff(908, 0));
+	select yearmonthday(timediff(908, 0));
+<!--	select hour(timediff(908, 0)); // depends from tz, so excluded from test as non-stable -->
+	select minute(timediff(908, 0));
+	select second(timediff(908, 0));
+
 	</sphinxql>
     
 </queries>

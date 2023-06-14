@@ -401,6 +401,8 @@ static bool BuildIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CS
 	// write data
 	tWriter.PutBytes ( dEntries.Begin(), dEntries.GetLength()*sizeof(IDFWord_t) );
 
+	tWriter.CloseFile();
+
 	int tmWallMsec = (int)( ( sphMicroTimer() - tmStart )/1000 );
 	fprintf ( stdout, "finished in %d.%d sec\n", tmWallMsec/1000, (tmWallMsec/100)%10 );
 

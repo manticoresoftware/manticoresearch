@@ -205,6 +205,10 @@
 
 		select id, j.jobs, upper(j.jobs[1]) from test_json_string;
 		select id, j.jobs, lower(j.jobs[1]) from test_json_string;
+
+		<!-- num conversion with upper/lower -->
+		SELECT double (upper ('1.2e3'));
+		SELECT integer (lower ('12345'));
       
         <!-- upper and lower cases of utf8 chars -->
 <sphinxql>select id, upper('abc') as res from test_json;</sphinxql>

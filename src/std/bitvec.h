@@ -36,16 +36,17 @@ public:
 	void Init ( int iElements );
 	void Clear();
 	void Set ();
-	bool BitGet ( int iIndex ) const;
+	bool BitGet ( int iIndex ) const noexcept;
+	bool BitGetOr ( int iIndex, bool bAlternative=false ) const noexcept;
 	void BitSet ( int iIndex );
 	void BitClear ( int iIndex );
-	const T * Begin() const;
+	const T * Begin() const noexcept;
 	T * Begin();
-	int GetSizeBytes () const;
-	int GetSize() const;
+	int GetSizeBytes () const noexcept;
+	int GetSize() const noexcept;
 
-	bool IsEmpty() const;
-	int BitCount () const;
+	bool IsEmpty() const noexcept;
+	int BitCount () const noexcept;
 	int Scan ( int iStart );
 
 protected:
@@ -60,7 +61,7 @@ protected:
 
 private:
 	int ScanBit ( int iIndex, int iStart );
-	int CalcStorage() const;
+	int CalcStorage() const noexcept;
 };
 
 using CSphBitvec = BitVec_T<>;

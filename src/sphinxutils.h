@@ -133,8 +133,8 @@ namespace sph {
 
 	/// output fVal with arbitrary 6 or 8 digits
 	/// ensure that sBuffer has enough space to fit fVal!
-	int PrintVarFloat ( char* sBuffer, float fVal );
-	int PrintVarDouble ( char* sBuffer, double fVal );
+	int PrintVarFloat ( char* sBuffer, int iSize, float fVal );
+	int PrintVarDouble ( char* sBuffer, int iSize, double fVal );
 }
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)

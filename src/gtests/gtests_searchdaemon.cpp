@@ -63,8 +63,8 @@ class tstlogger
 				break;
 			}
 			char * pOut = sLogBuff;
-			pOut += sprintf( pOut, "%s", lvl );
-			vsprintf( pOut, sFmt, ap );
+			pOut += snprintf( pOut, 1023, "%s", lvl );
+			vsnprintf( pOut, 1013, sFmt, ap );
 		}
 	}
 

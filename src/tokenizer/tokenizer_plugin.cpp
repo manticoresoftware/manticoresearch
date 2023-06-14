@@ -43,7 +43,7 @@ public:
 		SetFilterSchema ( CSphSchema(), sError );
 	}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
 	{
 		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode ), m_pFilter, m_sOptions.cstr() ) };
 	}
@@ -147,7 +147,7 @@ public:
 		}
 	}
 
-	int GetOvershortCount() final
+	int GetOvershortCount() const noexcept final
 	{
 		return m_iPosDelta - 1;
 	}

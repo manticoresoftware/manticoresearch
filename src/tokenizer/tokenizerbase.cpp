@@ -177,7 +177,7 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenize
 	}
 }
 
-uint64_t CSphTokenizerBase::GetSettingsFNV() const
+uint64_t CSphTokenizerBase::GetSettingsFNV() const noexcept
 {
 	uint64_t uHash = ISphTokenizer::GetSettingsFNV();
 

@@ -15086,45 +15086,48 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		ISphExprRefPtr_c m_pExpr;
 		int m_iSysvarIdx;
 		const char* m_szAlias;
+		CSphString m_sError;
 	};
 
 	CSphVector<PreparedItem_t> dColumns;
 
-	bool bHaveExprs = false;
-	bool bHaveErrors = false;
+	bool bHaveValidExpressions = false; // whether we have at least one expression among @@sysvars
+	bool bHaveInvalidExpressions = false; // whether at least one expression is erroneous
 
 	for ( const auto& dItem : dItems )
 	{
+		bool bIsExpr = !dItem.m_sExpr.Begins ( "@@" );
+		CSphString sError;
 		auto iVar = VarIdxByName ( dItem.m_sExpr );
 		if ( !iVar )
 		{
 			CSphString sVar = dItem.m_sExpr;
 			CSphSchema tSchema;
 			ESphAttr eAttrType;
-			CSphString sError;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
 			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, sError, tExprArgs ) };
 			if ( pExpr )
 			{
 				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, dItem.m_sAlias.cstr() } );
-				bHaveExprs = true;
+				bHaveValidExpressions = true;
 				continue;
 			}
-			bHaveErrors = true;
+			bHaveInvalidExpressions |= bIsExpr;
 		}
-		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, dItem.m_sAlias.cstr() } );
-	}
-
-	if ( bHaveErrors
-		 && HasBuddy()
-		)
-	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "error in %s", tStmt.m_sStmt );
-		return;
+		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, dItem.m_sAlias.cstr(), sError } );
 	}
 
 	assert ( dColumns.GetLength() == dItems.GetLength() );
+
+	// fail when we have error(s) in expression(s).
+	if ( bHaveInvalidExpressions )
+	{
+		StringBuilder_c sError ("; ");
+		dColumns.for_each( [&sError] (const PreparedItem_t& dCol) { if ( !dCol.m_sError.IsEmpty()) sError << dCol.m_sError; });
+		tOut.ErrorEx ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
 
 	// fill header
 	tOut.HeadBegin ( dColumns.GetLength() );
@@ -15134,7 +15137,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	if ( !tOut.HeadEnd() )
 		return;
 
-	if ( bHaveExprs )
+	if ( bHaveValidExpressions )
 	{
 		ExtraLastInsertID_c tIds;
 		for ( auto& pExpr : dColumns )

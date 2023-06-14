@@ -79,9 +79,10 @@ jobs:
           set-safe-directory: true
 
       - name: Initialization
-        run: | # without adding the safe.directory the cmake fails to do git log -1 --date=short --format=%cd
+        run: | # without adding the safe.directory cmake fails to do git log -1 --date=short --format=%cd
           bash /sysroot/root/entry_point.sh
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+          git config --global core.abbrev 9
 
       - name: Check out cache before building
         uses: actions/cache@v3.3.1
@@ -95,7 +96,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: ./.github/workflows/upload_artifact_with_retries/
+        uses: manticoresoftware/upload_artifact_with_retries@main
         with:
           name: build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}
           path: ${{ inputs.artifact_list }}

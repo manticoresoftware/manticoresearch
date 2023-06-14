@@ -2090,7 +2090,13 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 	{
 		case SPH_FILTER_VALUES:
 			//tBuf << " " << f.m_sAttrName;
-			tBuf << f.m_sAttrName;
+			switch (f.m_eMvaFunc)
+			{
+				case SPH_MVAFUNC_ALL: tBuf << "ALL(" << f.m_sAttrName << ")"; break;
+				case SPH_MVAFUNC_ANY: tBuf << "ANY(" << f.m_sAttrName << ")"; break;
+				case SPH_MVAFUNC_NONE: default: tBuf << f.m_sAttrName;
+			}
+
 			if ( f.m_dValues.GetLength()==1 )
 				tBuf.Sprintf ( ( f.m_bExclude ? "!=%l" : "=%l" ), (int64_t)f.m_dValues[0] );
 			else

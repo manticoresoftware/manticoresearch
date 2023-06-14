@@ -12,7 +12,7 @@ $sd_log				= "searchd.log";
 $sd_split_logs		= false; // if we want one log per agent, its easier to investigate problems!
 $sd_query_log		= "query.log";
 $sd_network_timeout	= 5;
-$sd_max_children	= 30;
+$sd_max_children	= 100;
 $sd_pid_file		= "searchd.pid";
 
 $agent_address		= "127.0.0.1";

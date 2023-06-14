@@ -3145,7 +3145,7 @@ private:
 		}
 
 		bool bApply = pTask->m_ifd != -1;
-		if ( pTask->m_ifd == -1 )
+		if ( !bApply )
 			sphLogDebugL ( "L kqueue not called since sock is closed" );
 		else {
 			auto iRes = kevent ( m_iEFD, tEv, nEvs, nullptr, 0, nullptr );

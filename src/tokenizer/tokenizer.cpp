@@ -100,7 +100,7 @@ CSphLowercaser& ISphTokenizer::StagingLowercaser()
 	return *pNewCreatedLC;
 }
 
-LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const
+LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const noexcept
 {
 	assert ( m_pLC );
 	return m_pLC;
@@ -144,7 +144,7 @@ bool ISphTokenizer::EnableZoneIndexing ( CSphString& sError )
 	return AddSpecialsSPZ ( sSpecials, "index_zones", sError );
 }
 
-uint64_t ISphTokenizer::GetSettingsFNV() const
+uint64_t ISphTokenizer::GetSettingsFNV() const noexcept
 {
 	uint64_t uHash = GetLowercaser().GetFNV();
 

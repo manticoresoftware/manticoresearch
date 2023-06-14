@@ -39,7 +39,7 @@ Plain attributes only allow attaching 1 value per each document. However, there 
 
 The MVA can take the values from a column (like the rest of the data types) - in this case, the column in the result set must provide a string with multiple integer values separated by commas - or by running a separate query to get the values.
 
-In case of query, the engine runs the query, groups the result by IDs, and attaches the values to their corresponding documents in the table. Values with an ID not found in the table are discarded. Before query, set of `sql_query_pre_all`, if any, will be executed.
+When executing a query, the engine runs the query, groups the results by IDs, and assigns the values to their corresponding documents in the table. Values with an ID not found in the table are discarded. Before executing the query, any defined `sql_query_pre_all` will be run.
 
 The declaration format for sql_attr_multi is as follows:
 
@@ -142,7 +142,8 @@ The query must return exactly 2 columns: document ID, and text to append to a jo
 then the indexing results would be equivalent to adding a new text field with a value of 'red right hand' to document 1 and 'mysql sphinx' to document 2, including the keyword positions inside the field in the order they come from the query. If the rows need to be in a specific order, that needs to be explicitly defined in the query.
 
 Joined fields are only indexed differently. There are no other differences between joined fields and regular text fields.
-Before joined fields query, set of `sql_query_pre_all`, if any, will be executed. That will allow you to set desired encoding, etc. for joined fields context.
+
+Before executing the joined fields query, any set of `sql_query_pre_all` will be run, if any exist. This allows you to set the desired encoding, etc., within the joined fields' context.
 
 When a single query is not efficient enough or does not work because of the database driver limitations, ranged queries can be used. It works similarly to the ranged queries in the main indexing loop. The range will be queried for and fetched upfront once, then multiple queries with different `$start` and `$end` substitutions will be run to fetch the actual data.
 

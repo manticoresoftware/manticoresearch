@@ -9761,7 +9761,8 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 	for ( int j=0; j<AOT_LENGTH; ++j )
 	{
 		char buf_all[20];
-		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		buf_all[19] = '\0';
 		ARRAY_FOREACH ( i, dMorphs )
 		{
 			if ( dMorphs[i]==buf_all )
@@ -11859,20 +11860,6 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 		sError = "secondary index library not loaded";
 		return false;
 	}
-
-	bool bValid = !!m_pSIdx;
-	if ( bValid )
-	{
-		for ( int i=0; i<m_tSchema.GetAttrsCount() && bValid; i++ )
-		{
-			bValid &= m_pSIdx->IsEnabled ( m_tSchema.GetAttr ( i ).m_sName.cstr() );
-		}
-	}
-
-	// the existing .spidx is supported version
-    // secondary index was NOT disabled on UPDATE
-	if ( bValid )
-		return true;
 
 	MergeCb_c tMonitor;
 	CSphFixedVector<RowID_t> dDeadRows {0}, dTmpRows{0};

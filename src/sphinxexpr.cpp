@@ -1996,12 +1996,6 @@ public:
 			return iLen;
 
 		case JSON_DOUBLE_VECTOR:
-			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
-			sBuf.SetSprintf ( "%f", fVal );
-			iLen = sBuf.Length();
-			*ppStr = (const BYTE *) sBuf.Leak();
-			return iLen;
-
 		case JSON_MIXED_VECTOR:
 			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
 			sBuf.SetSprintf ( "%f", fVal );
@@ -4044,10 +4038,10 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"uint64",		*/		1,	TOK_FUNC,		/*FUNC_UINT64,			*/	SPH_ATTR_UINT64 },
 	{ /*"query",		*/		0,	TOK_FUNC,		/*FUNC_QUERY,			*/	SPH_ATTR_STRINGPTR },
 
-	{ /*"curtime",		*/		0,	TOK_FUNC,		/*FUNC_CURTIME,			*/	SPH_ATTR_STRINGPTR },
-	{ /*"utc_time",		*/		0,	TOK_FUNC,		/*FUNC_UTC_TIME,		*/	SPH_ATTR_STRINGPTR },
-	{ /*"utc_timestamp",*/		0,	TOK_FUNC,		/*FUNC_UTC_TIMESTAMP,	*/	SPH_ATTR_STRINGPTR },
-	{ /*"timediff",		*/		2,	TOK_FUNC,		/*FUNC_TIMEDIFF,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"curtime",		*/		0,	TOK_FUNC,		/*FUNC_CURTIME,			*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{ /*"utc_time",		*/		0,	TOK_FUNC,		/*FUNC_UTC_TIME,		*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{ /*"utc_timestamp",*/		0,	TOK_FUNC,		/*FUNC_UTC_TIMESTAMP,	*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{ /*"timediff",		*/		2,	TOK_FUNC,		/*FUNC_TIMEDIFF,		*/	SPH_ATTR_STRINGPTR }, // also evals numerics
 	{ /*"current_user",	*/		0,	TOK_FUNC,		/*FUNC_CURRENT_USER,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"connection_id",*/		0,	TOK_FUNC,		/*FUNC_CONNECTION_ID,	*/	SPH_ATTR_INTEGER },
 	{ /*"all",			*/		-1,	TOK_FUNC_JA,	/*FUNC_ALL,				*/	SPH_ATTR_INTEGER },
@@ -4062,9 +4056,9 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 
 	{  /*"regex",		*/		2,	TOK_FUNC,		/*FUNC_REGEX,			*/	SPH_ATTR_INTEGER },
 
-	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
-	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR },
-	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR },
+	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{  /*"upper",          */	1,	TOK_FUNC,		/*FUNC_UPPER,           */	SPH_ATTR_STRINGPTR }, // also evals numerics
+	{  /*"lower",          */	1,	TOK_FUNC,		/*FUNC_LOWER,           */	SPH_ATTR_STRINGPTR }, // also evals numerics
 
 	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR },
 	{ /*"levenshtein", */		-1,	TOK_FUNC,		/*FUNC_LEVENSHTEIN,		*/	SPH_ATTR_NONE },
@@ -4094,6 +4088,22 @@ static inline const char* FuncNameByHash ( int iFunc )
 	return dNames[iFunc];
 }
 
+// set of functions which evals to SPH_ATTR_STRINGPTR, but also can eval to numerics
+static inline bool CanEvalNumbers ( int iFunc )
+{
+	switch (iFunc)
+	{
+	case FUNC_CURTIME:
+	case FUNC_UTC_TIME:
+	case FUNC_UTC_TIMESTAMP:
+	case FUNC_TIMEDIFF:
+	case FUNC_SUBSTRING_INDEX:
+	case FUNC_UPPER:
+	case FUNC_LOWER: return true;
+	default: return false;
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 static ISphExpr * ConvertExprJson ( ISphExpr * pExpr );
@@ -4103,6 +4113,32 @@ static void ConvertArgsJson ( VecRefPtrs_t<ISphExpr*> & dArgs );
 static inline bool IsInt ( ESphAttr eType )
 {
 	return eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT;
+}
+
+/// check whether the type can be promoted to integer
+static inline bool IsNumericLike ( ESphAttr eType )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL:
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_TOKENCOUNT:
+	case SPH_ATTR_UINT64: return true;
+	default: return false;
+	}
+}
+
+/// check whether the type can be promoted to float
+static inline bool IsFloatLike ( ESphAttr eType )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_FLOAT:
+	case SPH_ATTR_DOUBLE: return true;
+	default: return false;
+	}
 }
 
 static inline bool IsJson ( ESphAttr eAttr )
@@ -9350,21 +9386,27 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	bool bGotString = false, bGotMva = false;
 	CSphVector<ESphAttr> dRetTypes;
 	GatherArgRetTypes ( iArg, dRetTypes );
-	ARRAY_FOREACH ( i, dRetTypes )
+	for ( ESphAttr eRetType: dRetTypes ) switch ( eRetType )
 	{
-		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
-		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
+		case SPH_ATTR_UINT32SET: case SPH_ATTR_INT64SET: case SPH_ATTR_UINT32SET_PTR: case SPH_ATTR_INT64SET_PTR: bGotMva = true; break;
+		case SPH_ATTR_STRING : bGotString = true;
+		default:;
 	}
-	if ( bGotString && !( eFunc==FUNC_LENGTH || eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_UPPER  || eFunc ==FUNC_LOWER || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX || eFunc==FUNC_LEVENSHTEIN || eFunc==FUNC_DATE_FORMAT ) )
+
+	if ( bGotString ) switch ( eFunc )
 	{
-		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
-		return -1;
+		default: m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName ); return -1;
+		case FUNC_LENGTH: case FUNC_TO_STRING: case FUNC_CONCAT: case FUNC_SUBSTRING_INDEX: case FUNC_UPPER: case FUNC_LOWER: case FUNC_CRC32:
+		case FUNC_EXIST: case FUNC_POLY2D: case FUNC_GEOPOLY2D: case FUNC_REGEX: case FUNC_LEVENSHTEIN: case FUNC_DATE_FORMAT: case FUNC_BIGINT:;
 	}
-	if ( bGotMva && !( eFunc==FUNC_TO_STRING || eFunc==FUNC_LENGTH || eFunc==FUNC_LEAST || eFunc==FUNC_GREATEST ) )
+
+	if ( bGotMva ) switch ( eFunc )
 	{
-		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName );
-		return -1;
+		default: m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName ); return -1;
+		case FUNC_TO_STRING: case FUNC_LENGTH: case FUNC_LEAST: case FUNC_GREATEST:;
 	}
+
+	auto& dArg = m_dNodes[iArg];
 
 	switch ( eFunc )
 	{
@@ -9385,13 +9427,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		break;
 	case FUNC_EXIST:
 		{
-			int iExistLeft = m_dNodes[iArg].m_iLeft;
-			int iExistRight = m_dNodes[iArg].m_iRight;
-			bool bIsLeftGood = ( m_dNodes[iExistLeft].m_eRetType==SPH_ATTR_STRING );
-			ESphAttr eRight = m_dNodes[iExistRight].m_eRetType;
-			bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_BOOL
-				|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
-
+			ESphAttr eLeft = m_dNodes[dArg.m_iLeft].m_eRetType, eRight = m_dNodes[dArg.m_iRight].m_eRetType;
+			bool bIsLeftGood = ( eLeft==SPH_ATTR_STRING );
+			bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_BOOL || eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
 			if ( !bIsLeftGood || !bIsRightGood )
 			{
 				if ( bIsRightGood )
@@ -9413,10 +9451,25 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_HOUR:
 	case FUNC_MINUTE:
 	case FUNC_SECOND:
-		assert ( iArg>=0 );
-		if ( m_dNodes[iArg].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[iArg].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[iArg].m_eRetType!=SPH_ATTR_BIGINT )
+		assert ( iArg >= 0 );
+		if ( !( dArg.m_eRetType==SPH_ATTR_INTEGER
+				 || dArg.m_eRetType==SPH_ATTR_TIMESTAMP
+				 || dArg.m_eRetType==SPH_ATTR_BIGINT
+				 || CanEvalNumbers ( dArg.m_iFunc ) ) )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint or timestamp", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint, timestamp, or evaluated to number", sFuncName );
+			return -1;
+		}
+		break;
+
+	case FUNC_BIGINT:
+		assert ( iArg >= 0 );
+		if ( !( dArg.m_eRetType == SPH_ATTR_JSON_FIELD
+				 || IsFloatLike ( dArg.m_eRetType )
+				 || IsNumericLike ( dArg.m_eRetType )
+				 || CanEvalNumbers ( dArg.m_iFunc ) ) )
+		{
+			m_sParserError.SetSprintf ( "%s() argument must be number, or evaluated to number", sFuncName );
 			return -1;
 		}
 		break;
@@ -9543,8 +9596,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_REGEX:
 		{
 #if WITH_RE2
-			int iLeft = m_dNodes[iArg].m_iLeft;
-			ESphAttr eLeft = m_dNodes[iLeft].m_eRetType;
+			ESphAttr eLeft = m_dNodes[dArg.m_iLeft].m_eRetType;
 			bool bIsLeftGood = ( eLeft==SPH_ATTR_STRING || eLeft==SPH_ATTR_STRINGPTR || eLeft==SPH_ATTR_JSON_FIELD );
 			if ( !bIsLeftGood )
 			{
@@ -9552,8 +9604,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 				return -1;
 			}
 
-			int iRight = m_dNodes[iArg].m_iRight;
-			ESphAttr eRight = m_dNodes[iRight].m_eRetType;
+			ESphAttr eRight = m_dNodes[dArg.m_iRight].m_eRetType;
 			bool bIsRightGood = ( eRight==SPH_ATTR_STRING );
 			if ( !bIsRightGood )
 			{

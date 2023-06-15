@@ -389,6 +389,12 @@ protected:
 		ContainterType_e	m_eType = ContainterType_e::ARRAY;
 		int					m_iHashIdx = 0;
 
+							Container_t() = default;
+							Container_t ( const Container_t & tRhs );
+
+		Container_t &		operator = ( Container_t && tRhs );
+		Container_t &		operator = ( const Container_t & tRhs );
+
 		int					Estimate() const;
 		void				Reset();
 		bool				IsEmpty() const;

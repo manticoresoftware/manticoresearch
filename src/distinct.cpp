@@ -22,6 +22,36 @@ static void CopyHashToHLL ( HLL & tHLL, const HASH & tHash )
 }
 
 /////////////////////////////////////////////////////////////////////
+UniqHLLTraits_c::Container_t::Container_t ( const Container_t & tRhs )
+	: m_pArray ( tRhs.m_pArray )
+	, m_eType ( tRhs.m_eType )
+	, m_iHashIdx ( tRhs.m_iHashIdx )
+{}
+
+
+UniqHLLTraits_c::Container_t & UniqHLLTraits_c::Container_t::operator = ( Container_t && tRhs )
+{
+	m_pArray = std::move ( tRhs.m_pArray );
+	m_eType = std::move ( tRhs.m_eType );
+	m_iHashIdx = std::move ( tRhs.m_iHashIdx );
+
+	tRhs.m_pArray = nullptr;
+	tRhs.m_eType = ContainterType_e::ARRAY;
+	tRhs.m_iHashIdx = 0;
+
+	return *this;
+}
+
+
+UniqHLLTraits_c::Container_t & UniqHLLTraits_c::Container_t::operator = ( const Container_t & tRhs )
+{
+	// we assume that the caller is responsible for managing the copied pointers
+	Container_t tNew(tRhs);
+	*this = std::move(tNew);
+	return *this;
+}
+
+
 int UniqHLLTraits_c::Container_t::Estimate() const
 {
 	switch ( m_eType )

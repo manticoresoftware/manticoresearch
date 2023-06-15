@@ -572,6 +572,9 @@ select count(*) c from dist21 where id = 10;
 select count(*) c from dist22 where id = 10;
 select count(*) c from dist22 where id = 3;
 
+<!-- crash on implicit count distinct on multiple tables -->
+select id, count (distinct tag) from idx1, idx2;
+
 </sphinxql></queries>
 
 <db_create>

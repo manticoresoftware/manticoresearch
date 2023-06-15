@@ -200,6 +200,9 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "WHERE"				{ YYSTOREBOUNDS; return TOK_WHERE; }
 "WITHIN"			{ YYSTOREBOUNDS; return TOK_WITHIN; }
 
+"MANTICORE."
+"`MANTICORE`."      { YYSTOREBOUNDS; return TOK_MANTICORE; }
+
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }
 "<="				{ YYSTOREBOUNDS; return TOK_LTE; }

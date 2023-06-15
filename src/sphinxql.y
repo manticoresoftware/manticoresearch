@@ -29,6 +29,7 @@
 %token	TOK_SUBKEY
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
+%token	TOK_MANTICORE "Manticore."
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -294,7 +295,7 @@ identcol:
 	;
 
 /// indexes
-identidx:
+idxname:
 	TOK_BACKIDENT
 	{
 		$$ = $1;
@@ -302,6 +303,11 @@ identidx:
 		--$$.m_iEnd;
 	}
 	| ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
+	;
+
+identidx:
+	 idxname
+	 | TOK_MANTICORE idxname
 	;
 
 one_index:

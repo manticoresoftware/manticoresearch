@@ -117,7 +117,6 @@ jobs:
       - run: echo "Ready to publish"
 
   publish_debian_ubuntu:
-    name: Publishing Debian/Ubuntu
     needs: publish
     strategy:
       fail-fast: true
@@ -125,6 +124,7 @@ jobs:
         DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
+    name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
       - uses: manticoresoftware/publish_to_repo@main
         with:
@@ -136,7 +136,6 @@ jobs:
           delimiter: "-"
 
   publish_rhel:
-    name: Publishing RHEL
     needs: publish
     strategy:
       fail-fast: true
@@ -144,6 +143,7 @@ jobs:
         DISTR: [7, 8, 9]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
+    name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
       - uses: manticoresoftware/publish_to_repo@main
         with:
@@ -173,7 +173,7 @@ jobs:
           delimiter: "-"
 
   publish_windows:
-    name: Publishing Windows
+    name: Publishing Windows packages to repo.manticoresearch.com
     needs: publish
     runs-on: ubuntu-22.04
     steps:

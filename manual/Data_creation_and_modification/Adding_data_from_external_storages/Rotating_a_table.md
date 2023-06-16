@@ -36,7 +36,7 @@ mysql> RELOAD TABLE plain_table FROM '/home/mighty/new_table_files';
 RELOAD TABLES;
 ```
 
-This command functions similarly to the HUP system signal, triggering a rotation of tables. Nevertheless, it doesn't exactly mirror the typical HUP signal (which can come from a `kill -HUP` command or `indexer --rotate`). This command actively searches for any tables needing rotation and is capable of re-reading the configuration. Suppose you launch Manticore in plain mode with a config file that points to a nonexistent plain table. If you then attempt to `indexer --rotate` the table, the constructed table won't communicate with the server until you execute `RELOAD TABLES` or restart the server..
+This command functions similarly to the HUP system signal, triggering a rotation of tables. Nevertheless, it doesn't exactly mirror the typical HUP signal (which can come from a `kill -HUP` command or `indexer --rotate`). This command actively searches for any tables needing rotation and is capable of re-reading the configuration. Suppose you launch Manticore in plain mode with a config file that points to a nonexistent plain table. If you then attempt to `indexer --rotate` the table, the constructed table won't communicate with the server until you execute `RELOAD TABLES` or restart the server.
 
 Depending on the value of the [seamless_rotate](../../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled, and clients will receive temporary errors.
 

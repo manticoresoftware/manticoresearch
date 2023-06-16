@@ -248,3 +248,34 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Building docker
         run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
+
+  clt_rhel_dev_installation:
+    name: Tetsting RHEL dev packages installation
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    needs: publish_rhel
+    with:
+      docker_images: |
+        [
+          {"image": "centos:7"},
+          {"image": "almalinux:8"},
+          {"image": "almalinux:9"},
+          {"image": "oraclelinux:9"},
+          {"image": "amazonlinux:latest"}
+        ]
+      test_prefix: rhel-dev-
+        
+  clt_deb_dev_installation:
+    name: Tetsting DEB dev packages installation
+    needs: publish_debian_ubuntu
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          {"image": "ubuntu:bionic"},
+          {"image": "ubuntu:focal"},
+          {"image": "ubuntu:jammy"},
+          {"image": "debian:buster"},
+          {"image": "debian:bullseye"},
+          {"image": "debian:bookworm"}
+        ]
+      test_prefix: deb-dev-

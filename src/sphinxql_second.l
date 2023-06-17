@@ -132,8 +132,8 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 "WITH"              { STORE_BOUNDS; return TOK_WITH; }
 
 
-{FLOAT_CONSTANT}	{  lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
-{INT}   			{  lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false); return TOK_CONST_INT; }
+{FLOAT_CONSTANT}	{ STORE_BOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+{INT}   			{ STORE_BOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false); return TOK_CONST_INT; }
 
 {ID}				{ STORE_BOUNDS; return TOK_IDENT; }
 `{ID}`				{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }

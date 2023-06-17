@@ -16316,6 +16316,12 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 
 	if ( !tStmt.m_sStringParam.IsEmpty () )
 	{
+		if ( tStmt.m_iIntParam==1 )
+		{
+			// here switchover=1 logic goes...
+			tOut.Ok();
+			return;
+		}
 		// try move files from arbitrary path to current index path before rotate, if needed.
 		// fixme! what about concurrency? if 2 sessions simultaneously ask to rotate,
 		// or if we have unapplied rotates from indexer - seems that it will garbage .new files?

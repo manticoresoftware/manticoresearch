@@ -103,19 +103,30 @@ statement:
 
 //////////////////////////////////////////////////////////////////////////
 
-ident:
+ident_no_option:
 	TOK_ATTACH | TOK_ATTRIBUTES | TOK_CLUSTER | TOK_COMMITTED | TOK_COMPRESS | TOK_FLUSH | TOK_FREEZE | TOK_GLOBAL
 	| TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXES | TOK_ISOLATION | TOK_KILL | TOK_LEVEL | TOK_LIKE | TOK_LOGS | TOK_OFF
-	| TOK_ON | TOK_OPTION | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE
+	| TOK_ON | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE
 	| TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET | TOK_TABLE | TOK_TABLES | TOK_TO
 	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_WAIT | TOK_WITH | TOK_FROM | TOK_PLUGINS | TOK_RELOAD | TOK_SONAME
 	| TOK_TRUNCATE | TOK_IDENT
 	;
 
+ident:
+	ident_no_option
+	| TOK_OPTION
+	;
+
 ident_all:
 	ident
 	| TOK_TRANSACTION
+	;
 
+/// id of columns
+identcol:
+	ident
+	| identcol ':' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	;
 //////////////////////////////////////////////////////////////////////////
 
 set_string_value:
@@ -374,11 +385,11 @@ opt_reload_index_from:
 	;
 
 reload_index:
-	TOK_RELOAD index_or_table ident_all opt_reload_index_from
+	TOK_RELOAD index_or_table ident_all
 		{
 			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);
-		}
+		} opt_reload_index_from opt_option_clause
 	;
 
 reload_indexes:
@@ -424,6 +435,37 @@ kill_connid:
 			pParser->m_pStmt->m_iIntParam = $3.GetValueInt();
 		}
     ;
+
+//////////////////////////////////////////////////////////////////////////
+// common option clause
+
+opt_option_clause:
+	// empty
+	| TOK_OPTION option_list
+	;
+
+option_list:
+	option_item
+	| option_list ',' option_item
+	;
+
+option_item:
+	ident_no_option '=' identcol
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| ident_no_option '=' TOK_CONST_INT
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| ident_no_option '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	;
 
 
 %%

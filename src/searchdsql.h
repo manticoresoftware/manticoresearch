@@ -315,6 +315,7 @@ public:
 	}
 };
 
+enum class Option_e : BYTE;
 
 class SqlParserTraits_c : ISphNoncopyable
 {
@@ -335,6 +336,9 @@ public:
 	void			ProcessParsingError ( const char* szMessage );
 	bool 			IsWrongSyntaxError() const noexcept;
 
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
+	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
@@ -342,6 +346,8 @@ public:
 
 protected:
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
+	bool			CheckInteger ( const CSphString& sOpt, const CSphString& sVal ) const;
+	virtual bool	CheckOption ( Option_e eOption ) const;
 
 	CSphVector<SqlStmt_t> &	m_dStmt;
 };

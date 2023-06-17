@@ -266,9 +266,6 @@ public:
 
 	void			PushQuery ();
 
-	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
-	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
-	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
@@ -343,8 +340,7 @@ private:
 	CSphVector<CSphNamedInt>	m_dNamedVec;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
-	bool			CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const;
-	bool			CheckOption ( Option_e eOption ) const;
+	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
 };
 
@@ -435,7 +431,7 @@ static bool CheckInteger ( const CSphString & sOpt, const CSphString & sVal, CSp
 }
 
 
-bool SqlParser_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
+bool SqlParserTraits_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
 {
 	return ::CheckInteger ( sOpt, sVal, *m_pParseError );
 }
@@ -507,6 +503,7 @@ enum class Option_e : BYTE
 	MAXMATCH_THRESH,
 	DISTINCT_THRESH,
 	THREADS_EX,
+	SWITCHOVER,
 
 	INVALID_OPTION
 };
@@ -521,7 +518,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex" };
+		"threads_ex", "switchover" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -562,6 +559,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 
 	static Option_e dShowOptions[] = { Option_e::COLUMNS, Option_e::FORMAT };
 
+	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
+
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
 	switch ( eStmt )
@@ -577,6 +576,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 		return CHKOPT( dInsertOptions, eOption );
 	case STMT_OPTIMIZE_INDEX:
 		return CHKOPT( dOptimizeOptions, eOption );
+	case STMT_RELOAD_INDEX:
+		return CHKOPT( dReloadOptions, eOption );
 	case STMT_EXPLAIN:
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_THREADS:
@@ -597,6 +598,12 @@ SqlStmt_e SqlParser_c::GetSecondaryStmt () const
 	return STMT_PARSE_ERROR;
 }
 
+bool SqlParserTraits_c::CheckOption ( Option_e eOption ) const
+{
+	assert ( m_pStmt );
+	return ::CheckOption ( m_pStmt->m_eStmt, eOption );
+}
+
 bool SqlParser_c::CheckOption ( Option_e eOption ) const
 {
 	assert ( m_pStmt );
@@ -605,7 +612,7 @@ bool SqlParser_c::CheckOption ( Option_e eOption ) const
 	if ( bRes )
 		return true;
 
-	if ( m_pStmt->m_eStmt!=STMT_SELECT )
+	if ( m_pStmt->m_eStmt != STMT_SELECT )
 		return false;
 
 	return ::CheckOption ( GetSecondaryStmt(), eOption );
@@ -642,7 +649,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::BOOLEAN_SIMPLIFY, Option_e::GLOBAL_IDF, Option_e::LOCAL_DF, Option_e::IGNORE_NONEXISTENT_INDEXES,
 		Option_e::STRICT_, Option_e::COLUMNS, Option_e::RAND_SEED, Option_e::SYNC, Option_e::EXPAND_KEYWORDS,
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
-		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH
+		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -851,7 +858,7 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 }
 
 
-bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
+bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
 {
 	CSphString sOpt, sVal;
 	ToString ( sOpt, tIdent ).ToLower();
@@ -895,6 +902,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		m_pStmt->m_sStringParam = sVal;
 		break;
 
+	case Option_e::SWITCHOVER:
+		m_pStmt->m_iIntParam = tValue.GetValueInt() ? 1 : 0;
+		break;
+
 	default: //} else
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 		return false;
@@ -904,7 +915,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 }
 
 
-bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & tArg )
+bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & tArg )
 {
 	CSphString sOpt, sVal;
 	ToString ( sOpt, tIdent ).ToLower();
@@ -925,7 +936,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 }
 
 
-bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed )
+bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed )
 {
 	CSphString sOpt;
 	ToString ( sOpt, tIdent ).ToLower ();

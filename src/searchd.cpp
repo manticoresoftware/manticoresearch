@@ -16297,40 +16297,32 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	CSphString sError;
 	cServedIndexRefPtr_c pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
-	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "unknown local table '%s'", tStmt.m_sIndex.cstr() );
-		return;
-	}
+		return tOut.ErrorEx ( tStmt.m_sStmt, "unknown local table '%s'", tStmt.m_sIndex.cstr() );
 
 	if ( ServedDesc_t::IsMutable ( pServed ) )
-	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "can not reload real-time or percolate table" );
-		return;
-	}
+		return tOut.Error ( tStmt.m_sStmt, "can not reload real-time or percolate table" );
 
 	if ( tStmt.m_sStringParam == pServed->m_sIndexPath )
+		return tOut.Error ( tStmt.m_sStmt, "reload path should be different from current path" );
+
+	if ( tStmt.m_iIntParam == 1 )
 	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "reload path should be different from current path" );
-		return;
+		if ( tStmt.m_sStringParam.IsEmpty() )
+			return tOut.Error ( tStmt.m_sStmt, "reload with switchover requires explicit new path to the index" );
+
+		// here switchover=1 logic goes...
+		return tOut.Ok();
 	}
+	assert ( tStmt.m_iIntParam!=1 );
 
 	if ( !tStmt.m_sStringParam.IsEmpty () )
 	{
-		if ( tStmt.m_iIntParam==1 )
-		{
-			// here switchover=1 logic goes...
-			tOut.Ok();
-			return;
-		}
 		// try move files from arbitrary path to current index path before rotate, if needed.
 		// fixme! what about concurrency? if 2 sessions simultaneously ask to rotate,
 		// or if we have unapplied rotates from indexer - seems that it will garbage .new files?
 		IndexFiles_c sIndexFiles ( pServed->m_sIndexPath );
 		if ( !sIndexFiles.RelocateToNew ( tStmt.m_sStringParam ) )
-		{
-			tOut.Error ( tStmt.m_sStmt, sIndexFiles.ErrorMsg () );
-			return;
-		}
+			return tOut.Error ( tStmt.m_sStmt, sIndexFiles.ErrorMsg () );
 	}
 
 	StrVec_t dWarnings;
@@ -16340,8 +16332,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		if ( !LimitedRotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			return;
+			return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		}
 	} else {
 		WIdx_c WLock { pServed };

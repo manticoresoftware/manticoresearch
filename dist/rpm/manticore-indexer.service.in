@@ -19,10 +19,6 @@ EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore-indexer
 KillMode=process
 KillSignal=SIGTERM
 
-CPUQuota=100%
-MemoryMax=2560M
-LimitNOFILE=1024
-
 Restart=on-failure
 RestartSec=30s
 TimeoutStartSec=infinity

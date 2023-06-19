@@ -189,12 +189,6 @@ jobs:
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
         shell: bash
-      - name: Delete unneded per-shard artifacts
-        if: always()
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: debug_test_*
-          failOnError: false
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
@@ -345,12 +339,6 @@ jobs:
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
         shell: bash
-      - name: Delete unneded per-shard artifacts
-        if: always()
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: release_test_*
-          failOnError: false
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
@@ -525,12 +513,6 @@ jobs:
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'
         shell: bash
-      - name: Delete unneded per-shard artifacts
-        if: always()
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: windows_test_*
-          failOnError: false
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true

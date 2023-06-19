@@ -11,7 +11,6 @@ concurrency:
 
 jobs:
   clt_rhel_release_installation:
-    if: github.event_name == 'workflow_dispatch'
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
     with:
       docker_images: |
@@ -24,7 +23,6 @@ jobs:
         ]
       test_prefix: rhel-release-
   clt_deb_release_installation:
-    if: github.event_name == 'workflow_dispatch'
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
     with:
       docker_images: |

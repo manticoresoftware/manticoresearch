@@ -1,8 +1,9 @@
 name: 📊 Code coverage test
 
 on:
-  push:
-    branches: [ master ]
+ workflow_run:
+   workflows: [ 🔬 Test ]
+   types: [ completed ]
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -11,6 +12,7 @@ concurrency:
 
 jobs:
   simple_build:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     uses: ./.github/workflows/build_template.yml
     with:
       CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage

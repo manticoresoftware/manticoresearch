@@ -36,8 +36,8 @@ SELECT REGEX(content, '(?i)box') FROM test;
 ### SNIPPET()
 The `SNIPPET()` function can be used to highlight search results within a given text. The first two arguments are: the text to be highlighted, and a query. [Options](../Searching/Highlighting.md#Highlighting-options) can be passed to the function as the third, fourth, and so on arguments. `SNIPPET()` can obtain the text for highlighting directly from the table. In this case, the first argument should be the field name:
 
-```sql 
-SELECT SNIPPET(body, QUERY()) FROM myIndex WHERE MATCH('my.query') 
+```sql
+SELECT SNIPPET(body, QUERY()) FROM myIndex WHERE MATCH('my.query')
 ```
 
 In this example, the `QUERY()`  expression returns the current full-text query. `SNIPPET()` can also highlight non-indexed text:
@@ -57,14 +57,39 @@ In this context, `myUdf()` is a User-Defined Function (UDF) that retrieves a doc
 It is important to note that `SNIPPET()` does not support field-based limitations. For this functionality, use [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting-via-SQL) instead.
 
 ### SUBSTRING_INDEX()
+
+<!-- example substring_index -->
 `SUBSTRING_INDEX(string, delimiter, number)` returns a substring of the original string, based on a specified number of delimiter occurrences:
 
    *   string - The original string, which can be a constant string or a string from a string/JSON attribute.
    *   delimiter - The delimiter to search for.
    *   number - The number of times to search for the delimiter. This can be either a positive or negative number. If it is a positive number, the function will return everything to the left of the delimiter. If it is a negative number, the function will return everything to the right of the delimiter.
 
+`SUBSTRING_INDEX()` by default returns a string, but it can also be coerced into other types (such as integer or float) if necessary. Numeric values can be converted using specific functions (such as `BIGINT()`, `DOUBLE()`, etc.).
+
+<!-- request SQL -->
 ```sql
 SELECT SUBSTRING_INDEX('www.w3schools.com', '.', 2) FROM test;
 SELECT SUBSTRING_INDEX(j.coord, ' ', 1) FROM test;
+SELECT          SUBSTRING_INDEX('1.2 3.4', ' ',  1);  /* '1.2' */
+SELECT          SUBSTRING_INDEX('1.2 3.4', ' ', -1);  /* '3.4' */
+SELECT sint (   SUBSTRING_INDEX('1.2 3.4', ' ',  1)); /* 1 */
+SELECT sint (   SUBSTRING_INDEX('1.2 3.4', ' ', -1)); /* 3 */
+SELECT double ( SUBSTRING_INDEX('1.2 3.4', ' ',  1)); /* 1.200000 */
+SELECT double ( SUBSTRING_INDEX('1.2 3.4', ' ', -1)); /* 3.400000 */
+```
+
+<!-- end -->
+
+### UPPER() and LOWER()
+
+`UPPER(string)` convert argument to upper case, `LOWER(string)` convert argument to lower case.
+
+Result also can be promoted to numeric, but only if string argument is convertible to a number. Numeric values could be promoted with arbitrary functions (`BITINT`, `DOUBLE`, etc.).
+
+```sql
+SELECT upper('www.w3schools.com', '.', 2); /* WWW.W3SCHOOLS.COM  */
+SELECT double (upper ('1.2e3')); /* 1200.000000 */
+SELECT integer (lower ('12345')); /* 12345 */
 ```
 <!-- proofread -->

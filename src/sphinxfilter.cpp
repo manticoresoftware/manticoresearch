@@ -2182,11 +2182,11 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 			if ( f.m_bExclude )
 				tBuf << " NOT";
 			if ( f.m_eMvaFunc==SPH_MVAFUNC_ANY )
-				tBuf.StartBlock ( ", '", " ANY ('", "')" );
+				tBuf.StartBlock ( "', '", " ANY ('", "')" );
 			else if ( f.m_eMvaFunc==SPH_MVAFUNC_ALL )
-				tBuf.StartBlock ( ", '", " ALL ('", "')" );
+				tBuf.StartBlock ( "', '", " ALL ('", "')" );
 			else
-				tBuf.StartBlock ( ", '", " IN ('", "')" );
+				tBuf.StartBlock ( "', '", " IN ('", "')" );
 			for ( const auto &sString : f.m_dStrings )
 				tBuf << sString;
 

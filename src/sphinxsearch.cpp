@@ -747,7 +747,7 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 
 void ExtRanker_c::UpdateQcache ( int iMatches )
 {
-	if ( m_pQcacheEntry )
+	if ( m_pQcacheEntry && iMatches )
 	{
 		CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_UP );
 		for ( int i=0; i<iMatches; i++ )
@@ -1313,10 +1313,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 	{
 		pDocs = this->GetFilteredDocs ();
 		if ( !pDocs )
-		{
-			this->UpdateQcache(0);
 			return 0;
-		}
 
 		pHlist = RankerGetHits ( pProfile, this->m_pRoot.get(), pDocs );
 	}

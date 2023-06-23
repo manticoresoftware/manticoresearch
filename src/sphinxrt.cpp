@@ -39,6 +39,8 @@
 #include "indexfiles.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
+#include "pseudosharding.h"
+#include "std/sys.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -134,7 +136,7 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 
 volatile int AutoOptimizeCutoff() noexcept
 {
-	static int iAutoOptimizeCutoff = sphCpuThreadsCount() * 2;
+	static int iAutoOptimizeCutoff = GetNumLogicalCPUs() * 2;
 	return iAutoOptimizeCutoff;
 }
 
@@ -1159,6 +1161,7 @@ public:
 	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
 	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
 	int64_t				GetCount() const override;
+	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 
 	// helpers
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
@@ -6812,37 +6815,28 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 }
 
 
-static bool CalcDiskChunkSplits ( IntVec_t & dSplits, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard )
+static bool CalcDiskChunkSplits ( IntVec_t & dThreads, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard )
 {
-	assert ( dSplits.GetLength()==iJobs );
+	CSphVector<SplitData_t> dSplitData ( iJobs );
 
+	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( tArgs.m_iThreads, iJobs );
 	int64_t iMaxCountDistinct = CalcMaxCountDistinct ( tQuery, tGuard );
-	int iNumSingleThreads = 0;
-	int64_t iTotalMetric = 0;
-	CSphVector<int64_t> dMetrics { iJobs };
-	ARRAY_FOREACH ( i, dMetrics )
+	ARRAY_FOREACH ( i, dSplitData )
 	{
 		bool bForceSingleThread = false;
-		dMetrics[i] = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 }, { &iMaxCountDistinct, 1 }, tArgs.m_iThreads, bForceSingleThread );
+		auto tMetric = tGuard.m_dDiskChunks[i]->Cidx().GetPseudoShardingMetric ( { &tQuery, 1 }, { &iMaxCountDistinct, 1 }, iMaxThreadsPerIndex, bForceSingleThread );
 		if ( bForceSingleThread )
 			return false;
 
-		if ( dMetrics[i]>0 )
-			iTotalMetric += dMetrics[i];
-		else
-			iNumSingleThreads++;
+		assert ( tMetric.first>=0 );
+		auto & tSplitData = dSplitData[i];
+		tSplitData.m_iMetric = tMetric.first;
+		tSplitData.m_iThreadCap = tMetric.second;
 	}
 
 	// we have more free threads than disk chunks; makes sense to apply pseudo_sharding
 	if ( tArgs.m_iThreads>iJobs )
-	{
-		int iLeft = tArgs.m_iThreads - iNumSingleThreads;
-		assert(iLeft>=0);
-
-		ARRAY_FOREACH ( i, dSplits )
-			if ( dMetrics[i]>0 )
-				dSplits[i] = Max ( (int)round ( double ( dMetrics[i] ) / iTotalMetric * iLeft ), 1 );
-	}
+		DistributeThreadsOverIndexes ( dThreads, dSplitData, tArgs.m_iThreads );
 
 	return true;
 }
@@ -8685,6 +8679,17 @@ int64_t RtIndex_c::GetCount() const
 		}
 
 	return iCount;
+}
+
+
+ std::pair<int64_t,int> RtIndex_c::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
+{
+	 if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
+		 return { 0, 1 };
+
+	auto tGuard = RtGuard();
+	int iThreadCap = GetPseudoSharding() ? 0 : tGuard.m_dDiskChunks.GetLength();
+	return { GetStats().m_iTotalDocuments, iThreadCap };
 }
 
 

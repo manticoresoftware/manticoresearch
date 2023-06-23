@@ -47,6 +47,12 @@ typename std::common_type<T, U>::type Max ( T a, U b )
 	using common_type = typename std::common_type<T, U>::type;
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? b : a;
 }
+
+inline int sphRoundUp ( int iValue, int iLimit )
+{
+	return ( iValue + iLimit - 1 ) & ~( iLimit - 1 );
+}
+
 #define SafeDelete( _x )		do { if ( _x ) { delete ( _x ); ( _x ) = nullptr; } } while ( 0 )
 #define SafeDeleteArray( _x )	do { if ( _x ) { delete[] ( _x ); ( _x ) = nullptr; } } while ( 0 )
 #define SafeReleaseAndZero( _x)	do { if ( _x ) { ( _x )->Release(); ( _x ) = nullptr; } } while ( 0 )

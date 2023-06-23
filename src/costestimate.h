@@ -20,6 +20,9 @@ public:
 	virtual float	CalcQueryCost() = 0;
 };
 
+float EstimateMTCost ( float fCost, int iThreads );
+float EstimateMTCostSI ( float fCost, int iThreads );
+
 struct SecondaryIndexInfo_t
 {
 	CSphVector<SecondaryIndexType_e> m_dCapabilities;

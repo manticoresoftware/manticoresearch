@@ -52,6 +52,7 @@
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
+#include "pseudosharding.h"
 
 // services
 #include "taskping.h"
@@ -163,8 +164,6 @@ static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
-
-static bool				g_bSplit = true;
 
 static CSphVector<Listener_t>	g_dListeners;
 
@@ -5334,7 +5333,7 @@ private:
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 
 	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const;
-	void							CalcMaxThreadsPerIndex ( CSphVector<std::pair<int64_t,int>> & dSplitData, int iConcurrency ) const;
+	int								CalcMaxThreadsPerIndex ( int iConcurrency ) const;
 	void							CalcThreadsPerIndex ( int iConcurrency );
 };
 
@@ -5896,11 +5895,8 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 }
 
 
-void SearchHandler_c::CalcMaxThreadsPerIndex ( CSphVector<std::pair<int64_t,int>> & dSplitData, int iConcurrency ) const
+int SearchHandler_c::CalcMaxThreadsPerIndex ( int iConcurrency ) const
 {
-	dSplitData.Resize ( m_dLocal.GetLength() );
-	dSplitData.Fill ( { -1, 0 } );
-
 	int iNumValid = 0;
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
@@ -5911,9 +5907,7 @@ void SearchHandler_c::CalcMaxThreadsPerIndex ( CSphVector<std::pair<int64_t,int>
 		iNumValid++;
 	}
 
-	int iMaxThreadsPerIndex = iNumValid<iConcurrency ? ( iConcurrency-iNumValid ) + 1 : 1;
-	for ( auto & i : dSplitData )
-		i.second = iMaxThreadsPerIndex;
+	return ::CalcMaxThreadsPerIndex ( iConcurrency, iNumValid );
 }
 
 
@@ -5925,14 +5919,12 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
 	PopulateCountDistinct ( dCountDistinct );
 
-	CSphVector<std::pair<int64_t,int>> dSplitData;
-	CalcMaxThreadsPerIndex ( dSplitData, iConcurrency );
+	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( iConcurrency );
+
+	CSphVector<SplitData_t> dSplitData ( m_dLocal.GetLength() );
 
 	// FIXME! what about PQ?
-	int64_t iTotalMetric = 0;
-	int iSingleSplits = 0;
-	int iMTSplits = 0;
-
+	int iEnabledIndexes = 0;
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const LocalIndex_t & tLocal = m_dLocal[iLocal];
@@ -5940,43 +5932,34 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		if ( !pIndex )
 			continue;
 
+		iEnabledIndexes++;
 		auto & tPSInfo = m_dPSInfo[iLocal];
-
-		if ( g_bSplit || RIdx_c(pIndex)->IsRT() )
+		auto & tSplitData = dSplitData[iLocal];
+		if ( GetPseudoSharding() || RIdx_c(pIndex)->IsRT() )
 		{
 			// do metric calcs
-			auto & tSplitData = dSplitData[iLocal];
-			tPSInfo.m_iMaxThreads = tSplitData.second;
-			int64_t iMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
-			if ( iMetric==-1 )
-				iSingleSplits++;
-			else
-			{
-				tSplitData.first = iMetric;
-				iTotalMetric += iMetric;
-				iMTSplits++;
-			}
+			tPSInfo.m_iMaxThreads = iMaxThreadsPerIndex;
+			auto tMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
+			assert ( tMetric.first>=0 );
+
+			tSplitData.m_iMetric = tMetric.first;
+			tSplitData.m_iThreadCap = tMetric.second;
 		}
 		else
 		{
 			// don't do metric calcs; we are guaranteed to have one thread
 			// set the 'force single thread' flag to make sure max_matches won't be increased when it is not necessary
 			tPSInfo = { 1, 1, true };
-			iSingleSplits++;
+			tSplitData.m_iThreadCap = 1;
 		}
 	}
 
-	if ( iConcurrency>iSingleSplits+iMTSplits )
+	if ( iConcurrency>iEnabledIndexes )
 	{
-		int iLeft = iConcurrency-iSingleSplits;
-		ARRAY_FOREACH ( i, dSplitData )
-		{
-			const auto & tSplitData = dSplitData[i];
-			if ( tSplitData.first==-1 )
-				continue;
-
-			m_dPSInfo[i].m_iThreads = Max ( (int)round ( double(tSplitData.first) / iTotalMetric * iLeft ), 1 );
-		}
+		IntVec_t dThreads;
+		DistributeThreadsOverIndexes ( dThreads, dSplitData, iConcurrency );
+		ARRAY_FOREACH ( i, dThreads )
+			m_dPSInfo[i].m_iThreads = dThreads[i];
 	}
 }
 
@@ -14140,7 +14123,7 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 
 	if ( sName == "pseudo_sharding" )
 	{
-		g_bSplit = !!iSetValue;
+		SetPseudoSharding ( !!iSetValue );
 		return true;
 	}
 
@@ -15291,7 +15274,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 			return tBuf;
 		});
 	}
-	dTable.MatchTuplet ( "pseudo_sharding", g_bSplit ? "1" : "0" );
+	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
 
 	switch ( GetSecondaryIndexDefault() )
 	{
@@ -19488,7 +19471,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
 
 	g_iMaxConnection = hSearchd.GetInt ( "max_connections", g_iMaxConnection );
-	g_iThreads = hSearchd.GetInt ( "threads", sphCpuThreadsCount() );
+	g_iThreads = hSearchd.GetInt ( "threads", GetNumLogicalCPUs() );
 	SetMaxChildrenThreads ( g_iThreads );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
@@ -19682,7 +19665,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 
-	g_bSplit = hSearchd.GetInt ( "pseudo_sharding", 1 )!=0;
+	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );
 
 	CSphString sWarning;

@@ -62,7 +62,7 @@ int UniqHLLTraits_c::Container_t::Estimate() const
 	case ContainterType_e::HLL_DENSE_NONPACKED:	return int( m_pHLLDenseNonPacked->Estimate() );
 	default:
 		assert ( 0 && "Unknown container type" );
-		break;
+		return 0;
 	}
 }
 

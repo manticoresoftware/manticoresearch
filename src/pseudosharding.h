@@ -7,13 +7,18 @@
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
 // received a copy of the GPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org
+// did not, you can find it at http://www.gnu.org/
 //
 
 #pragma once
 
-int GetNumLogicalCPUs();
-int GetNumPhysicalCPUs();	// may return -1 if fails
-bool IsSSE42Supported();
+#include "sphinxstd.h"
 
-int sphGetMemPageSize();
+struct SplitData_t
+{
+	int64_t m_iMetric = 0;
+	int		m_iThreadCap = 0;
+};
+
+void	DistributeThreadsOverIndexes ( IntVec_t & dThreads, const CSphVector<SplitData_t> & dSplitData, int iConcurrency );
+int		CalcMaxThreadsPerIndex ( int iConcurrency, int iNumIndexes );

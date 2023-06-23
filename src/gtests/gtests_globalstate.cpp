@@ -63,7 +63,7 @@ public:
 		Tracer::Init();
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
-		auto iThreads = sphCpuThreadsCount();
+		auto iThreads = GetNumLogicalCPUs();
 		//		iThreads = 1; // uncomment if want to run all coro tests in single thread
 		SetMaxChildrenThreads ( iThreads );
 		WipeGlobalSchedulerOnShutdownAndFork();

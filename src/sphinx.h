@@ -1119,7 +1119,7 @@ public:
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
 
-	virtual int64_t				GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const;
+	virtual std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const { return { 0, 0 }; }
 	virtual bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, bool bHasSI, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
 	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const { return -1; }	// returns values if index has some meta on its attributes
@@ -1417,6 +1417,8 @@ int					GetUnhintedBuffer();
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
 
+void				SetPseudoSharding ( bool bSet );
+bool				GetPseudoSharding();
 void				SetPseudoShardingThresh ( int iThresh );
 
 void				InitSkipCache ( int64_t iCacheSize );

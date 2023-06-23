@@ -31,7 +31,6 @@
 #include <signal.h>
 
 #if _WIN32
-	#define snprintf	_snprintf
 	#define popen		_popen
 	#define RMODE "rb"
 

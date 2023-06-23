@@ -15,7 +15,6 @@
 #include "fileutils.h"
 #include "schema/columninfo.h"
 #include "schema/schema.h"
-#include "std/cpuid.h"
 
 using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const common::Schema_t & tSchema, const std::string & sFile, std::string & sError );

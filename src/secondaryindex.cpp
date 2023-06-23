@@ -516,7 +516,7 @@ public:
 	bool	HintRowID ( RowID_t tRowID ) override { return m_pIterator->HintRowID(tRowID); }
 	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t	GetNumProcessed() const override { return m_pIterator->GetNumProcessed(); }
-	void	SetCutoff ( int iCutoff ) override {}
+	void	SetCutoff ( int iCutoff ) override { m_pIterator->SetCutoff(iCutoff); }
 	bool	WasCutoffHit() const override { return false; }
 	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override;
 
@@ -703,14 +703,14 @@ static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 }
 
 
-static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, bool bCheckUsable = true )
 {
 	if ( !tCtx.m_pHistograms )
 		return;
 
 	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
 	{
-		if ( !dSIInfo[i].m_bUsable )
+		if ( bCheckUsable && !dSIInfo[i].m_bUsable )
 			continue;
 
 		bool bForce = false;
@@ -803,22 +803,6 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 			tSIInfo.m_iPartialColumnarMinMax = tCtx.m_pColumnar->EstimateMinMax ( tColumnarFilter, *tCFCtx.m_pFilter );
 		}
 	}
-}
-
-
-static bool IsWideRange ( const CSphFilterSettings & tFilter )
-{
-	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
-		return true;
-
-	if ( tFilter.m_eType!=SPH_FILTER_RANGE )
-		return false;
-
-	if ( tFilter.m_bOpenLeft || tFilter.m_bOpenRight )
-		return true;
-
-	const int WIDE_RANGE_THRESH=10000;
-	return ( tFilter.m_iMaxValue-tFilter.m_iMinValue ) >= WIDE_RANGE_THRESH;
 }
 
 
@@ -1046,6 +1030,14 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 		dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities.GetLength() ? dSIInfo[i].m_dCapabilities[dBest[i]] : SecondaryIndexType_e::NONE;
 
 	return dSIInfo;
+}
+
+
+bool HaveAvailableSI ( const SelectIteratorCtx_t & tCtx )
+{
+	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_tQuery.m_dFilters.GetLength() );
+	MarkAvailableSI ( dSIInfo, tCtx, false );
+	return dSIInfo.any_of ( []( auto & tInfo ){ return tInfo.m_dCapabilities.any_of ( []( auto eType ){ return eType==SecondaryIndexType_e::INDEX; } ); } );
 }
 
 

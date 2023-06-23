@@ -16,7 +16,6 @@
 #include "schema/schema.h"
 #include "columnarmisc.h"
 #include "secondarylib.h"
-#include "std/cpuid.h"
 
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();

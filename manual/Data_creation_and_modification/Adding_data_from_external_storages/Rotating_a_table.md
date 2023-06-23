@@ -16,18 +16,29 @@ There are also two specialized statements that can be used to perform rotations 
 ## RELOAD TABLE
 
 ```sql
-RELOAD TABLE tbl [ FROM '/path/to/table_files' ];
+RELOAD TABLE tbl [ FROM '/path/to/table_files' [ OPTION switchover=1 ] ];
 ```
 
 `RELOAD TABLE` allows you to rotate tables using SQL.
 
-It has two modes of operation. The first one (without specifying a path) makes the Manticore server check for new table files in the directory specified in [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must have names `tbl.new.sp?`.
+It has three modes of operation. The first one (without specifying a path) makes the Manticore server check for new table files in the directory specified in [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must have names `tbl.new.sp?`.
 
 If you additionally specify a path, the server will look for the table files in the specified directory, move them to the table [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), rename them from `tbl.sp?` to `tbl.new.sp?`, and rotate them.
+
+Third mode, ruled by `OPTION switchover=1` will actually switch index to new path. That is, daemon will try to load the table directly from provided new path, without moving the files. On success, this new index will be used instead of previous one.
+
+Also, daemon will write special link file (named `tbl.link`) to the directory, specified in [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). That will make such redirection persistent.
+
+Also, if you switch such redirected index back to the path located in config, daemon will recognize it and remove link file.
+
+Once redirected, daemon will read the table from new linked path. Also, on rotation it will check new versions of a table by new redirected path. Notice, that daemon check the config for generic errors, like dupes of paths among different tables. However, daemon will not recognize, if several tables points to the same path via redirection. In usual workflow tables are locked with `.spl` file, but if you also switch off the locking, you may go to troubles. In case of error (say, if such path is not available by any reason), you should manually fix (or simple remove) link file.
+
+`indextool` also obeys link file, but another tools (`indexer`, `index_converter`, etc.) don't care about link file and always use the path provided in configuration file without any redirection. So, you can check the index with indextool, and will read it from new location. But another complex scenarios with merging, etc. will not read any link file. That is to avoid errors.
 
 ```sql
 mysql> RELOAD TABLE plain_table;
 mysql> RELOAD TABLE plain_table FROM '/home/mighty/new_table_files';
+mysql> RELOAD TABLE plain_table FROM '/home/mighty/new/place/for/table/table_files' OPTION switchover=1;
 ```
 
 ## RELOAD TABLES

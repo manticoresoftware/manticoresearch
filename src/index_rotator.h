@@ -17,6 +17,7 @@ enum class RotateFrom_e : BYTE {
 	NONE,
 	NEW,	  // move index from idx.new.ext into idx.ext
 	REENABLE, // just load the index
+	NEW_AND_OLD,
 };
 
 class CheckIndexRotate_c
@@ -25,8 +26,10 @@ class CheckIndexRotate_c
 
 public:
 	explicit CheckIndexRotate_c ( const ServedDesc_t& tServed );
+	explicit CheckIndexRotate_c ( const CSphString& tPath );
 	bool NothingToRotate() const noexcept;
 	bool RotateFromNew() const noexcept;
+	bool RotateReenable() const noexcept;
 	inline operator RotateFrom_e() const noexcept { return m_eRotateFrom; }
 };
 
@@ -34,6 +37,7 @@ class StepAction_c
 {
 public:
 	virtual bool Action() = 0;
+	virtual bool Rollback() = 0;
 	virtual ~StepAction_c() = default;
 };
 using StepActionPtr_c = std::unique_ptr<StepAction_c>;

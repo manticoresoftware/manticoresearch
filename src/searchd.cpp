@@ -16293,9 +16293,11 @@ ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, 
 static bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread );
 static bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSphString& sError ) REQUIRES ( tServed.m_pIndex->Locker() );
 
+static bool SwitchoverIndexGreedy ( CSphIndex* pIdx, const char* szIndex, const CSphString& sBase, const CSphString& sNewPath, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread );
+
 static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	CSphString sError;
+	// preflight check
 	cServedIndexRefPtr_c pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
 		return tOut.ErrorEx ( tStmt.m_sStmt, "unknown local table '%s'", tStmt.m_sIndex.cstr() );
@@ -16303,8 +16305,17 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( ServedDesc_t::IsMutable ( pServed ) )
 		return tOut.Error ( tStmt.m_sStmt, "can not reload real-time or percolate table" );
 
-	if ( tStmt.m_sStringParam == pServed->m_sIndexPath )
-		return tOut.Error ( tStmt.m_sStmt, "reload path should be different from current path" );
+	assert ( pServed->m_eType == IndexType_e::PLAIN );
+
+	CSphString sError;
+	StrVec_t dWarnings;
+	AT_SCOPE_EXIT ( [&sWarning, &dWarnings]() {
+		if ( dWarnings.IsEmpty() )
+			return;
+		StringBuilder_c sWarn ( "; " );
+		dWarnings.for_each ( [&sWarn] ( const auto& i ) { sWarn << i; } );
+		sWarn.MoveTo ( sWarning );
+	});
 
 	if ( tStmt.m_iIntParam == 1 )
 	{
@@ -16312,7 +16323,24 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			return tOut.Error ( tStmt.m_sStmt, "reload with switchover requires explicit new path to the index" );
 
 		// here switchover=1 logic goes...
-		return tOut.Ok();
+		if ( g_bSeamlessRotate )
+		{
+			; // todo
+		} else {
+			WIdx_c WLock { pServed };
+			CSphIndex* pIdx = UnlockedHazardIdxFromServed ( *pServed );
+
+			if ( !SwitchoverIndexGreedy ( pIdx, tStmt.m_sIndex.cstr(), pServed->m_sIndexPath, tStmt.m_sStringParam, dWarnings, sError ) )
+				g_pLocalIndexes->Delete ( tStmt.m_sIndex ); // since it unusable - no sense just to disable it.
+				// fixme! SwitchoverIndexGreedy does prealloc. Do we need to perform/signal preload also?
+
+			if ( sError.IsEmpty() )
+				return tOut.Ok();
+
+			sphWarning ( "%s", sError.cstr() );
+			return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		}
+		assert ( 0 && "Execution should not reach here" );
 	}
 	assert ( tStmt.m_iIntParam!=1 );
 
@@ -16326,7 +16354,6 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			return tOut.Error ( tStmt.m_sStmt, sIndexFiles.ErrorMsg () );
 	}
 
-	StrVec_t dWarnings;
 	if ( g_bSeamlessRotate )
 	{
 		ServedIndexRefPtr_c pNewServed = MakeCloneForRotation ( pServed, tStmt.m_sIndex );
@@ -16345,14 +16372,6 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			// fixme! RotateIndexGreedy does prealloc. Do we need to perform/signal preload also?
 			return;
 		}
-	}
-
-	if ( dWarnings.GetLength() )
-	{
-		StringBuilder_c sWarn ( "; " );
-		for ( const auto & i : dWarnings )
-			sWarn << i;
-		sWarn.MoveTo ( sWarning );
 	}
 
 	tOut.Ok();
@@ -17376,6 +17395,7 @@ bool PreloadKlistTarget ( const ServedDesc_t & tServed, RotateFrom_e eFrom, StrV
 	switch ( eFrom )
 	{
 	case RotateFrom_e::NEW:
+	case RotateFrom_e::NEW_AND_OLD:
 		return IndexFiles_c ( tServed.m_sIndexPath ).ReadKlistTargets ( dKlistTarget, ".new" );
 
 	case RotateFrom_e::REENABLE:
@@ -17446,12 +17466,7 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	IndexFiles_c dServedFiles ( tServed.m_sIndexPath, szIndex );
 	IndexFiles_c dFreshFiles ( dServedFiles.MakePath ( tCheck.RotateFromNew() ? ".new" : "" ), szIndex );
 
-	if ( !dFreshFiles.CheckHeader() )
-	{
-		// no files or wrong files - no rotation
-		sError = dFreshFiles.ErrorMsg();
-		return false;
-	}
+//	if ( !dFreshFiles.CheckHeader() )... // no need to check, since CheckIndexRotate_c already did it.
 
 	if ( !dFreshFiles.HasAllFiles() )
 	{
@@ -17527,6 +17542,118 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 
 	// uff. all done
 	sphInfo ( "rotating table '%s': success", szIndex );
+	return true;
+}
+
+// return false, if index should not be served.
+// return sError
+bool SwitchoverIndexGreedy ( CSphIndex* pIdx, const char* szIndex, const CSphString& sBase, const CSphString& sNewPath, StrVec_t& dWarnings, CSphString& sError )
+{
+	assert ( pIdx );
+	sphLogDebug ( "SwitchoverIndexGreedy for '%s' invoked. Base %s, path %s", szIndex, sBase.cstr(), sNewPath.cstr() );
+
+	if ( sNewPath == pIdx->GetFilebase() )
+	{
+		sError.SetSprintf ( "reload path should be different from current path" );
+		return true;
+	}
+
+	CheckIndexRotate_c tCheckNew ( sNewPath );
+	if ( tCheckNew.NothingToRotate() )
+	{
+		sError.SetSprintf ( "No index found by given %s path, do nothing.", sNewPath.cstr() );
+		return true;
+	}
+
+	sError = "";
+
+	bool bHaveAllFreshNewFiles = tCheckNew.RotateFromNew() && IndexFiles_c { IndexFiles_c::MakePath ( ".new", sNewPath ), szIndex }.HasAllFiles();
+
+	std::optional<IndexFiles_c> tFreshCurFiles;
+	if ( tCheckNew.RotateReenable() )
+	{
+		IndexFiles_c tCur { IndexFiles_c::MakePath ( "", sNewPath ), szIndex };
+		if ( tCur.HasAllFiles() )
+			tFreshCurFiles.emplace ( std::move ( tCur ) );
+	}
+	auto bHaveAllFreshCurFiles = (bool)tFreshCurFiles;
+
+	if ( !bHaveAllFreshNewFiles && !bHaveAllFreshCurFiles )
+	{
+		sError.SetSprintf ( "rotating table '%s': unreadable: %s; abort rotation", szIndex, strerrorm ( errno ) );
+		return true;
+	}
+
+	bool bHaveOldFiles = false;
+
+	std::optional<ActionSequence_c> tActions;
+	if ( bHaveAllFreshNewFiles )
+	{
+		tActions.emplace();
+		if ( bHaveAllFreshCurFiles )
+		{
+			tActions->Defer ( RenameFiles ( *tFreshCurFiles, "", ".old" ) );
+			bHaveOldFiles = true;
+		}
+		tActions->Defer ( RenameFiles ( *tFreshCurFiles, ".new", "" ) );
+
+		// do files rotation
+		if ( !tActions->RunDefers() )
+		{
+			bool bFatal;
+			std::tie ( sError, bFatal ) = tActions->GetError();
+			sError.SetSprintf ( "SwitchoverIndexGreedy error: %s", sError.cstr() );
+			return !bFatal;
+		}
+	}
+
+	// try to use new index
+	CSphString sOldBase { pIdx->GetFilebase() };
+	pIdx->SetFilebase ( sNewPath );
+
+	AT_SCOPE_EXIT([pIdx,szIndex,&dWarnings](){
+		for ( const auto& i : dWarnings )
+			sphWarning ( "switchover table '%s': %s", szIndex, i.cstr() );
+
+		if ( !pIdx->GetLastWarning().IsEmpty() )
+			sphWarning ( "switchover table '%s': %s", szIndex, pIdx->GetLastWarning().cstr() );
+	});
+
+	if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
+	{
+		sError.SetSprintf ( "rotating table '%s': .new preload failed: %s", szIndex, pIdx->GetLastError().cstr() );
+		if ( tActions && !tActions->UnRunDefers() )
+		{
+			bool bFatal;
+			std::tie ( sError, bFatal ) = tActions->GetError();
+			sError.SetSprintf ( "SwitchoverIndexGreedy error: %s, NOT SERVING", sError.cstr() );
+			return false;
+		}
+
+		pIdx->SetFilebase ( sOldBase );
+		sphLogDebug ( "PreallocIndexGreedy: has recovered. Prealloc it." );
+		if ( pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
+			return true; // after recovering we don't need to do anything else
+
+		sError.SetSprintf ( "switchover table '%s': .new preload failed; ROLLBACK FAILED; TABLE UNUSABLE", szIndex );
+		return false;
+	}
+
+	if ( !WriteLinkFile ( sBase, sNewPath, sError ) )
+		sError.SetSprintf( "switchover wasn't able to populate %s.link; new persistent path to the index is NOT saved: %s", sBase.cstr(), sError.cstr() );
+
+	// finalize
+	assert ( pIdx->GetTokenizer() && pIdx->GetDictionary() );
+
+	if ( !ApplyKilllistsMyAndToMe ( pIdx, szIndex, sError ) )
+		sphWarning ( "switchover error when applying kill-lists: %s", sError.cstr() );
+
+	// unlink .old from new location (it is temporary anyway!)
+	if ( bHaveOldFiles )
+		tFreshCurFiles->Unlink ( ".old" );
+
+	// uff. all done
+	sphInfo ( "switchover table '%s': success", szIndex );
 	return true;
 }
 

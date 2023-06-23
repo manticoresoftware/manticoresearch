@@ -53,12 +53,12 @@ index rt
 	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
 	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 	optimize index rt option sync=1, cutoff=3;
-	select count(*) chunks from rt.status;
+	select count(*) chunks from rt.@status;
 	DELETE FROM rt WHERE id=15;
 	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
 	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 	optimize index rt option sync=1, cutoff=3;
-	select count(*) chunks from rt.status;
+	select count(*) chunks from rt.@status;
 
 	<!-- remove couple of previous values and compare result after optimize -->
 	DELETE FROM rt WHERE id in (3,13);
@@ -69,9 +69,9 @@ index rt
 	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 
 	<!-- only disk chunk -->
-	select count(*) chunks from rt.status;
+	select count(*) chunks from rt.@status;
 	optimize index rt option sync=1, cutoff=1;
-	select count(*) chunks from rt.status;
+	select count(*) chunks from rt.@status;
 	select id, weight() as w from rt where match ('test') order by weight() desc, id asc;
 	select id, weight() as w from rt where match ('best') order by weight() desc, id asc;
 </sphinxql>

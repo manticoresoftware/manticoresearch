@@ -18,7 +18,7 @@ Options effective for all commands:
 The commands are as follows:
 
 *   `--checkconfig` just loads and verifies the config file to check if it's valid, without syntax errors.
-*   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps. Additional parameter `--skip-uniq` will skip unique (df=1) words.
+*   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps (see `--dumpdict`). Additional parameter `--skip-uniq` will skip unique (df=1) words.
 *   `--build-infixes TABLENAME` build infixes for an existing dict=keywords table (upgrades .sph, .spi in place). You can use this option for legacy table files that already use dict=keywords, but now need to support infix searching too; updating the table files with indextool may prove easier or faster than regenerating them from scratch with indexer.
 *   `--dumpheader FILENAME.sph` quickly dumps the provided table header file without touching any other table files or even the configuration file. The report provides a breakdown of all the table settings, in particular the entire attribute and field list.
 *   `--dumpconfig FILENAME.sph` dumps the table definition from the given table header file in (almost) compliant `sphinx.conf` file format.

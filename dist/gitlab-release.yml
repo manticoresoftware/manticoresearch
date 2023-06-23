@@ -18,6 +18,7 @@ variables:
     - if: $CI_MERGE_REQUEST_ID
       when: manual
     - if: $CI_MERGE_REQUEST_ID == null
+      when: manual
   needs: [ ]
   tags:
     - docker
@@ -109,7 +110,7 @@ macos_arm:
     arch: arm64
     HOMEBREW_PREFIX: /opt/homebrew
 
-collect_macos:
+.collect_macos:
   extends: [ .collect_arc ]
   needs: [ macos, macos_arm ]
 
@@ -129,7 +130,7 @@ windows:
   before_script:
     - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows.cmake
 
-collect_windows:
+.collect_windows:
   extends: [ .collect_arc ]
   needs: [ windows ]
 
@@ -145,7 +146,7 @@ rhel7_arm:
   variables:
     arch: aarch64
 
-collect_rhel7:
+.collect_rhel7:
   extends: [ .collect_rpm ]
   needs: [ rhel7, rhel7_arm ]
   variables:
@@ -164,7 +165,7 @@ rhel8_arm:
   variables:
     arch: aarch64
 
-collect_rhel8:
+.collect_rhel8:
   extends: [ .collect_rpm ]
   needs: [ rhel8, rhel8_arm ]
   variables:
@@ -183,7 +184,7 @@ rhel9_arm:
   variables:
     arch: aarch64
 
-collect_rhel9:
+.collect_rhel9:
   extends: [ .collect_rpm ]
   needs: [ rhel9, rhel9_arm ]
   variables:
@@ -203,7 +204,7 @@ bionic_arm:
   variables:
     arch: aarch64
 
-collect_bionic:
+.collect_bionic:
   extends: [ .collect_deb ]
   needs: [ bionic, bionic_arm ]
   variables:
@@ -222,7 +223,7 @@ focal_arm:
   variables:
     arch: aarch64
 
-collect_focal:
+.collect_focal:
   extends: [ .collect_deb ]
   needs: [ focal, focal_arm ]
   variables:
@@ -241,7 +242,7 @@ buster_arm:
   variables:
     arch: aarch64
 
-collect_buster:
+.collect_buster:
   extends: [ .collect_deb ]
   needs: [ buster, buster_arm ]
   variables:
@@ -260,7 +261,7 @@ bullseye_arm:
   variables:
     arch: aarch64
 
-collect_bullseye:
+.collect_bullseye:
   extends: [ .collect_deb ]
   needs: [ bullseye, bullseye_arm ]
   variables:
@@ -279,7 +280,7 @@ jammy_arm:
   variables:
     arch: aarch64
 
-collect_jammy:
+.collect_jammy:
   extends: [ .collect_deb ]
   needs: [ jammy, jammy_arm ]
   variables:
@@ -298,7 +299,7 @@ bookworm_arm:
   variables:
     arch: aarch64
 
-collect_bookworm:
+.collect_bookworm:
   extends: [ .collect_deb ]
   needs: [ bookworm, bookworm_arm ]
   variables:
@@ -306,18 +307,18 @@ collect_bookworm:
 
 # ==================== Docker image ======================
 
-nsis_release:
+.nsis_release:
   stage: deploy
   rules:
   trigger:
     include: dist/nsis-release.yml
   needs:
-    - job: collect_windows
+    - job: .collect_windows
 
-build_docker:
+.build_docker:
   stage: deploy
   needs:
-    - job: collect_focal
+    - job: .collect_focal
       optional: true
   interruptible: true
   variables:

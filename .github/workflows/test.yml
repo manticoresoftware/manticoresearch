@@ -1,5 +1,7 @@
 name: 🔬 Test
 
+#on: workflow_call
+
 on:
   push:
     branches: [ master ]
@@ -187,12 +189,6 @@ jobs:
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
         shell: bash
-      - name: Delete unneded per-shard artifacts
-        if: always()
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: debug_test_*
-          failOnError: false
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
@@ -343,12 +339,6 @@ jobs:
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
         shell: bash
-      - name: Delete unneded per-shard artifacts
-        if: always()
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: release_test_*
-          failOnError: false
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
@@ -384,6 +374,8 @@ jobs:
     env:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    outputs:
+      out-build: ${{ steps.build.outputs.build_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -405,12 +397,30 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       # TODO: remove tmp
       - name: Building docker
-        run: BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }} /bin/bash dist/clt_docker.sh
+        id: build
+        run: |
+          BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }} 
+          BUILD_TAG=$BUILD_TAG /bin/bash dist/clt_docker.sh
+          echo "build_image=ghcr.io/manticoresoftware/manticoresearch:$BUILD_TAG" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@main
         with:
           name: docker_clt_image
           path: docker/manticore_clt.img
+
+  clt_logstash_test:
+    name: CLT test on Logstash and Filebeat
+    needs: build_clt_docker
+    strategy:
+      matrix:
+        image: ["${{ needs.build_clt_docker.outputs.out-build }}"]
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    with:
+      docker_images: |
+        [
+          { "image": "${{matrix.image}}"},
+        ]
+      test_prefix: logstash-
 
   build_aarch64:
     name: Linux aarch64 build
@@ -523,12 +533,6 @@ jobs:
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'
         shell: bash
-      - name: Delete unneded per-shard artifacts
-        if: always()
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: windows_test_*
-          failOnError: false
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true

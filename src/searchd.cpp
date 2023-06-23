@@ -6580,7 +6580,7 @@ bool SearchHandler_c::ParseSysVar ()
 	{
 		if ( !dSubkeys.IsEmpty () )
 		{
-			bool bSchema = ( dSubkeys.Last ()==".table" );
+			bool bSchema = ( dSubkeys.Last ()==".@table" );
 			bool bValid = true;
 			TableFeeder_fn fnFeed;
 			if ( dSubkeys[0]==".threads" ) // select .. from @@system.threads
@@ -6613,7 +6613,7 @@ bool SearchHandler_c::ParseSysVar ()
 				cServedIndexRefPtr_c pIndex;
 				if ( bSchema )
 				{
-					m_dLocal.First ().m_sName.SetSprintf( "@@system.%s.table", dSubkeys[0].cstr() );
+					m_dLocal.First ().m_sName.SetSprintf( "@@system.%s.@table", dSubkeys[0].cstr() );
 					pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
 
 				} else {
@@ -6638,13 +6638,13 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 
 	assert ( !dSubkeys.IsEmpty () );
 
-	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
+	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".@table" );
 	TableFeeder_fn fnFeed;
-	if ( dSubkeys[0]==".table" ) // select .. idx.table
+	if ( dSubkeys[0]==".@table" ) // select .. idx.table
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
-	else if ( dSubkeys[0]==".status" ) // select .. idx.status
+	else if ( dSubkeys[0]==".@status" ) // select .. idx.status
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
-	else if ( dSubkeys[0]==".files" ) // select .. from idx.files
+	else if ( dSubkeys[0]==".@files" ) // select .. from idx.files
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
 	else
 	{
@@ -6656,7 +6656,7 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 	cServedIndexRefPtr_c pIndex;
 	if ( bSchema )
 	{
-		m_dLocal.First ().m_sName.SetSprintf ( "%s%s.table", sVar.cstr (), dSubkeys[0].cstr () );
+		m_dLocal.First ().m_sName.SetSprintf ( "%s%s.@table", sVar.cstr (), dSubkeys[0].cstr () );
 		pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
 	} else
 	{

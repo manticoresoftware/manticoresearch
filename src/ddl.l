@@ -29,10 +29,11 @@
 %}
 
 DIGIT				[0-9]
+ALPHA				[a-zA-Z_]
 ID					[a-zA-Z_@][a-zA-Z_0-9]*
+TABLEID			    {ALPHA}[a-zA-Z_0-9]*
 SPACE				[ \t\n\r]
 EXPONENT			[eE](\+|-)?{DIGIT}+
-ALPHA				[a-zA-Z_]+
 
 %option prefix="yy3"
 %option noyywrap
@@ -103,6 +104,10 @@ ALPHA				[a-zA-Z_]+
 
 {DIGIT}+\.{DIGIT}*{EXPONENT}?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 {DIGIT}+			{ YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
+
+{TABLEID}           { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
+`{TABLEID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; }
+`{DIGIT}+{TABLEID}`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
 
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }

@@ -3242,7 +3242,7 @@ void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict
 class CSphHitBuilder
 {
 public:
-	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError );
+	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles );
 
 	bool	CreateIndexFiles ( const CSphString& sDocName, const CSphString& sHitName, const CSphString& sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset=nullptr );
 	void	HitReset ();
@@ -3288,15 +3288,14 @@ private:
 	ESphHitless					m_eHitless;
 
 	CSphVector<SkiplistEntry_t>	m_dSkiplist;
+	StrVec_t *					m_pCreatedFiles { nullptr };
 #ifndef NDEBUG
 	bool m_bMerging;
 #endif
 };
 
 
-CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
-	const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize,
-	DictRefPtr_c pDict, CSphString * sError )
+CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles )
 	: m_dWriteBuffer ( iBufSize )
 	, m_dHitlessWords ( dHitless )
 	, m_pDict ( std::move ( pDict ) )
@@ -3304,6 +3303,7 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	, m_iSkiplistBlockSize ( tSettings.m_iSkiplistBlockSize )
 	, m_eHitFormat ( tSettings.m_eHitFormat )
 	, m_eHitless ( tSettings.m_eHitless )
+	, m_pCreatedFiles ( pCreatedFiles )
 #ifndef NDEBUG
 	, m_bMerging ( bMerging )
 #endif
@@ -3330,6 +3330,8 @@ bool CSphHitBuilder::CreateIndexFiles ( const CSphString& sDocName, const CSphSt
 
 	if ( !m_wrDoclist.OpenFile ( sDocName, *m_pLastError ) )
 		return false;
+	if ( m_pCreatedFiles )
+		m_pCreatedFiles->Add ( m_wrDoclist.GetFilename() );
 
 	if ( bInplace )
 	{
@@ -3339,10 +3341,14 @@ bool CSphHitBuilder::CreateIndexFiles ( const CSphString& sDocName, const CSphSt
 	{
 		if ( !m_wrHitlist.OpenFile ( sHitName, *m_pLastError ) )
 			return false;
+		if ( m_pCreatedFiles )
+			m_pCreatedFiles->Add ( m_wrHitlist.GetFilename() );
 	}
 
 	if ( !m_wrSkiplist.OpenFile ( sSkipName, *m_pLastError ) )
 		return false;
+	if ( m_pCreatedFiles )
+		m_pCreatedFiles->Add ( m_wrSkiplist.GetFilename() );
 
 	// put dummy byte (otherwise offset would start from 0, first delta would be 0
 	// and VLB encoding of offsets would fuckup)
@@ -5454,7 +5460,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		? Max ( iWriteBuffer, MIN_WRITE_BUFFER )
 		: DEFAULT_WRITE_BUFFER;
 
-	CSphHitBuilder tHitBuilder ( m_tSettings, dHitlessWords, false, iHitBuilderBufferSize, m_pDict, &m_sLastError );
+	CSphHitBuilder tHitBuilder ( m_tSettings, dHitlessWords, false, iHitBuilderBufferSize, m_pDict, &m_sLastError, nullptr );
 
 	////////////////////////////////////////////////
 	// collect and partially sort hits
@@ -6506,7 +6512,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			iWords = 0;
 		}
 
-		if ( tMonitor.NeedStop () )
+		if ( tMonitor.NeedStop () || !sError.IsEmpty () )
 			return false;
 
 		const int iCmp = bCompress ? -1 : tDstReader.CmpWord ( tSrcReader );
@@ -6550,7 +6556,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// transfer hits from destination
 			while ( QwordIteration::NextDocument ( tDstQword, pDstIndex, dDstRows ) )
 			{
-				if ( tMonitor.NeedStop () )
+				if ( tMonitor.NeedStop () || !sError.IsEmpty () )
 					return false;
 
 				if ( bHitless )
@@ -6568,7 +6574,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// transfer hits from source
 			while ( QwordIteration::NextDocument ( tSrcQword, pSrcIndex, dSrcRows ) )
 			{
-				if ( tMonitor.NeedStop () )
+				if ( tMonitor.NeedStop () || !sError.IsEmpty () )
 					return false;
 
 				if ( bHitless )
@@ -6735,6 +6741,15 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// however, if interrupt is requested after that stage - we need list of the files
 	// to gracefully unlink them.
 	StrVec_t dDeleteOnInterrupt;
+	// unlink prepared attribute files on exit, if any
+	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
+	{
+		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
+		{
+			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
+				::unlink ( sFile.cstr() );
+		} ); 
+	});
 
 	// merging attributes
 	{
@@ -6752,9 +6767,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 			return false;
 	}
 
-	// unlink prepared attribute files on exit, if any
-	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt] { dDeleteOnInterrupt.for_each ( [] ( const auto& sFile ) { ::unlink ( sFile.cstr() ); } ); } );
-
 	const CSphIndex_VLN* pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
 	CSphAutofile tTmpDict ( pDstIndex->GetFilename("spi.tmp"), SPH_O_NEW, sError, true ); // that is huge file with bins
 	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError, true );
@@ -6766,7 +6778,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, &dDeleteOnInterrupt );
 
 	// FIXME? is this magic dict block constant any good?..
 	pDict->DictBegin ( tTmpDict, tDict, iHitBufferSize );
@@ -6788,7 +6800,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		));
 	}
 
-	if ( tMonitor.NeedStop () )
+	if ( tMonitor.NeedStop () || !sError.IsEmpty() )
 		return false;
 
 	// finalize
@@ -6933,7 +6945,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
+	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, nullptr );
 
 	// FIXME? is this magic dict block constant any good?..
 	pDict->DictBegin ( tTmpDict, tNewDict, iHitBufferSize );
@@ -12525,7 +12537,6 @@ int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError )
 {
 	assert ( pError );
-	*pError = CSphString();
 	switch ( iCodepointBytes )
 	{
 	case 0:		return nullptr;

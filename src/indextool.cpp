@@ -22,6 +22,7 @@
 #include "tokenizer/charset_definition_parser.h"
 #include "indexcheck.h"
 #include "secondarylib.h"
+#include "detail/indexlink.h"
 
 #include <ctime>
 
@@ -873,7 +874,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 
 		IndexInfo_t & tIndex = dIndexes[iIndex++];
 		tIndex.m_sName = tIndex_.first.cstr();
-		tIndex.m_sPath = hIndex["path"].cstr();
+		tIndex.m_sPath = RedirectToRealPath ( hIndex["path"].strval() );
 
 		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
 
@@ -1191,7 +1192,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 	} else
 	{
 		StringBuilder_c tPath;
-		tPath << hIndex["path"] << ( bRotate ? ".tmp" : nullptr );
+		tPath << RedirectToRealPath ( hIndex["path"].strval() ) << ( bRotate ? ".tmp" : nullptr );
 		return sphCreateIndexPhrase ( std::move ( sIndex ), (CSphString)tPath );
 	}
 
@@ -1532,7 +1533,7 @@ int main ( int argc, char ** argv )
 					sphDie ( "missing 'path' for table '%s'\n", sDumpHeader.cstr() );
 
 				sIndexName = sDumpHeader;
-				sDumpHeader.SetSprintf ( "%s.sph", hConf["index"][sDumpHeader]["path"].cstr() );
+				sDumpHeader.SetSprintf ( "%s.sph", RedirectToRealPath ( hConf["index"][sDumpHeader]["path"].strval() ).cstr() );
 			} else
 				fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
 
@@ -1592,7 +1593,7 @@ int main ( int argc, char ** argv )
 			if ( bRotate )
 			{
 				pIndex->Dealloc();
-				sNewIndex.SetSprintf ( "%s.new", hConf["index"][sIndex]["path"].cstr() );
+				sNewIndex.SetSprintf ( "%s.new", RedirectToRealPath ( hConf["index"][sIndex]["path"].strval() ).cstr() );
 				if ( !pIndex->Rename ( sNewIndex ) )
 					sphDie ( "table '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 			}

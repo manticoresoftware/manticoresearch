@@ -96,7 +96,10 @@ bool			sphIsReadable ( const char * szFilename, CSphString * pError=NULL );
 bool			sphIsReadable ( const CSphString & sFilename, CSphString * pError = NULL );
 
 bool			sphFileExists ( const char * szFilename, CSphString * pError=nullptr );
+bool			sphFileExists ( const CSphString& sFilename, CSphString * pError=nullptr );
+
 bool			sphDirExists ( const char * szFilename, CSphString * pError=nullptr );
+bool			sphDirExists ( const CSphString& sFilename, CSphString * pError=nullptr );
 
 /// return size of file descriptor
 int64_t			sphGetFileSize ( int iFD, CSphString * sError = nullptr );

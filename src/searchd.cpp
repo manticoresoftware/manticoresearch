@@ -66,6 +66,7 @@
 #include "coroutine.h"
 #include "dynamic_idx.h"
 #include "searchdbuddy.h"
+#include "detail/indexlink.h"
 
 extern "C"
 {
@@ -18079,7 +18080,7 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 
 	// try to create index
 	pServed->m_sIndexPath = hIndex["path"].strval ();
-	auto pIdx = sphCreateIndexPhrase ( szIndexName, pServed->m_sIndexPath );
+	auto pIdx = sphCreateIndexPhrase ( szIndexName, RedirectToRealPath ( pServed->m_sIndexPath ) );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );

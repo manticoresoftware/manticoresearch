@@ -350,6 +350,10 @@ bool sphFileExists ( const char * szFilename, CSphString * pError )
 	return true;
 }
 
+bool sphFileExists ( const CSphString& sFilename, CSphString* pError )
+{
+	return sphFileExists ( sFilename.cstr(), pError );
+}
 
 bool sphDirExists ( const char * szFilename, CSphString * pError )
 {
@@ -370,6 +374,11 @@ bool sphDirExists ( const char * szFilename, CSphString * pError )
 	}
 
 	return true;
+}
+
+bool sphDirExists ( const CSphString& sFilename, CSphString* pError )
+{
+	return sphDirExists ( sFilename.cstr(), pError );
 }
 
 

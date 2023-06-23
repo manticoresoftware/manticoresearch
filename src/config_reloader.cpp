@@ -13,6 +13,7 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "index_rotator.h"
+#include "detail/indexlink.h"
 
 static auto& g_bSeamlessRotate = sphGetSeamlessRotate();
 
@@ -110,7 +111,7 @@ private:
 			break;
 		case ADD_NEEDLOAD:
 			assert ( ServedDesc_t::IsLocal ( pFreshLocal ) ); // that is: PLAIN, RT, or PERCOLATE
-			if ( pFreshLocal->m_eType == IndexType_e::PLAIN && !PreloadKlistTarget ( *pFreshLocal, CheckIndexRotate_c ( *pFreshLocal ), pFreshLocal->m_dKilllistTargets ) )
+			if ( pFreshLocal->m_eType == IndexType_e::PLAIN && !PreloadKlistTarget ( RedirectToRealPath ( pFreshLocal->m_sIndexPath ), CheckIndexRotate_c ( *pFreshLocal, CheckIndexRotate_c::CheckLink ), pFreshLocal->m_dKilllistTargets ) )
 				pFreshLocal->m_dKilllistTargets.Reset();
 			AddDeferred ( sIndex, std::move ( pFreshLocal ) );
 			break;
@@ -128,14 +129,14 @@ private:
 	void PreparePlainRotationIfNeed ( const CSphString& sIndex, const cServedIndexRefPtr_c& pAlreadyServed )
 	{
 		assert ( pAlreadyServed->m_eType == IndexType_e::PLAIN );
-		if ( !CheckIndexRotate_c ( *pAlreadyServed ).RotateFromNew() )
+		if ( !CheckIndexRotate_c ( *pAlreadyServed, CheckIndexRotate_c::CheckLink ).RotateFromNew() )
 			return KeepExisting ( sIndex ); // no .new, no need to rotate, just keep existing
 
 		ServedIndexRefPtr_c pIndex = MakeCloneForRotation ( pAlreadyServed, sIndex );
 
 		// reinit klist targets for rotating index
 		pIndex->m_dKilllistTargets.Reset();
-		if ( !PreloadKlistTarget ( *pIndex, RotateFrom_e::NEW, pIndex->m_dKilllistTargets ) )
+		if ( !PreloadKlistTarget ( RedirectToRealPath ( pIndex->m_sIndexPath ), RotateFrom_e::NEW, pIndex->m_dKilllistTargets ) )
 			pIndex->m_dKilllistTargets.Reset();
 
 		AddDeferred ( sIndex, std::move ( pIndex ) );

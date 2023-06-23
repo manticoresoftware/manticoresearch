@@ -12,6 +12,7 @@
 #include "index_rotator.h"
 #include "searchdaemon.h"
 #include "indexfiles.h"
+#include "detail/indexlink.h"
 
 namespace {
 inline RotateFrom_e Check ( const CSphString& sPath ) noexcept
@@ -39,6 +40,14 @@ CheckIndexRotate_c::CheckIndexRotate_c ( const CSphString& sPath )
 CheckIndexRotate_c::CheckIndexRotate_c ( const ServedDesc_t& tServed ) : CheckIndexRotate_c ( tServed.m_sIndexPath )
 {
 };
+
+CheckIndexRotate_c::CheckIndexRotate_c ( const CSphString& sPath, eCheckLink eTag )
+{
+	m_eRotateFrom = Check ( RedirectToRealPath ( sPath ) );
+}
+
+CheckIndexRotate_c::CheckIndexRotate_c ( const ServedDesc_t& tServed, eCheckLink eTag )
+	: CheckIndexRotate_c ( tServed.m_sIndexPath, eTag ) {};
 
 bool CheckIndexRotate_c::RotateFromNew() const noexcept
 {

@@ -25,8 +25,12 @@ class CheckIndexRotate_c
 	RotateFrom_e m_eRotateFrom;
 
 public:
+
+	enum eCheckLink { CheckLink };
 	explicit CheckIndexRotate_c ( const ServedDesc_t& tServed );
 	explicit CheckIndexRotate_c ( const CSphString& tPath );
+	CheckIndexRotate_c ( const CSphString & tPath, eCheckLink );
+	CheckIndexRotate_c ( const ServedDesc_t & tServed, eCheckLink );
 	bool NothingToRotate() const noexcept;
 	bool RotateFromNew() const noexcept;
 	bool RotateReenable() const noexcept;

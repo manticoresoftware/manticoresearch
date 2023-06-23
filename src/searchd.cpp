@@ -17390,16 +17390,16 @@ bool ApplyKillListsTo ( CSphIndex* pKillListTarget, CSphString & sError )
 	return true;
 }
 
-bool PreloadKlistTarget ( const ServedDesc_t & tServed, RotateFrom_e eFrom, StrVec_t & dKlistTarget )
+bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t & dKlistTarget )
 {
 	switch ( eFrom )
 	{
 	case RotateFrom_e::NEW:
 	case RotateFrom_e::NEW_AND_OLD:
-		return IndexFiles_c ( tServed.m_sIndexPath ).ReadKlistTargets ( dKlistTarget, ".new" );
+		return IndexFiles_c ( sBase ).ReadKlistTargets ( dKlistTarget, ".new" );
 
 	case RotateFrom_e::REENABLE:
-		return IndexFiles_c ( tServed.m_sIndexPath ).ReadKlistTargets ( dKlistTarget );
+		return IndexFiles_c ( sBase ).ReadKlistTargets ( dKlistTarget );
 
 	default:
 		return false;
@@ -17459,11 +17459,16 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	/// bool RotateIndexFilesGreedy ( const ServedDesc_t& tServed, const char* szIndex, CSphString& sError )
 	//////////////////
 
-	CheckIndexRotate_c tCheck ( tServed );
+	CSphIndex* pIdx = UnlockedHazardIdxFromServed ( tServed ); // it should be locked, if necessary, before
+	auto sIndexPath = tServed.m_sIndexPath;
+	if ( pIdx )
+		sIndexPath = pIdx->GetFilebase();
+
+	CheckIndexRotate_c tCheck ( sIndexPath );
 	if ( tCheck.NothingToRotate() )
 		return false;
 
-	IndexFiles_c dServedFiles ( tServed.m_sIndexPath, szIndex );
+	IndexFiles_c dServedFiles ( sIndexPath, szIndex );
 	IndexFiles_c dFreshFiles ( dServedFiles.MakePath ( tCheck.RotateFromNew() ? ".new" : "" ), szIndex );
 
 //	if ( !dFreshFiles.CheckHeader() )... // no need to check, since CheckIndexRotate_c already did it.
@@ -17497,8 +17502,6 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	}
 
 	// try to use new index
-	auto pIdx = UnlockedHazardIdxFromServed ( tServed ); // it should be locked, if necessary, before
-
 	StrVec_t dWarnings;
 	if ( !pIdx->Prealloc ( g_bStripPath, nullptr, dWarnings ) )
 	{
@@ -17767,7 +17770,9 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	assert ( pNewServed && pNewServed->m_eType == IndexType_e::PLAIN );
 
 	sphInfo ( "rotating table '%s': started", sIndex.cstr() );
-	CheckIndexRotate_c tCheck ( *pNewServed );
+
+	auto sRealPath = RedirectToRealPath ( pNewServed->m_sIndexPath );
+	CheckIndexRotate_c tCheck ( sRealPath );
 	if ( tCheck.NothingToRotate() )
 	{
 		sError.SetSprintf ( "nothing to rotate for table '%s'", sIndex.cstr() );
@@ -17779,7 +17784,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 	//////////////////
 	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
 	if ( tCheck.RotateFromNew() )
-		pNewIndex->SetFilebase ( IndexFiles_c::MakePath ( ".new", pNewServed->m_sIndexPath ) );
+		pNewIndex->SetFilebase ( IndexFiles_c::MakePath ( ".new", sRealPath ) );
 
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new table" );
@@ -17800,9 +17805,9 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 		ActionSequence_c tActions;
 
 		auto pServed = GetServed ( sIndex );
-		if ( pServed && pServed->m_sIndexPath == pNewServed->m_sIndexPath )
+		if ( pServed && RedirectToRealPath ( pServed->m_sIndexPath ) == sRealPath )
 			tActions.Defer ( RenameIdxSuffix ( pServed, ".old" ) );
-		tActions.Defer ( RenameIdx ( pNewIndex, pNewServed->m_sIndexPath ) ); // rename 'new' to 'current'
+		tActions.Defer ( RenameIdx ( pNewIndex, sRealPath ) ); // rename 'new' to 'current'
 
 		if ( !tActions.RunDefers() )
 		{
@@ -18441,7 +18446,7 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 		auto* pIndex = dDeferredIndexes[i].second.Ptr();
 		assert ( pIndex );
 
-		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexRotate_c ( *pIndex ).NothingToRotate() )
+		if ( !ServedDesc_t::IsMutable ( pIndex ) && CheckIndexRotate_c ( *pIndex, CheckIndexRotate_c::CheckLink ).NothingToRotate() )
 		{
 			++iNotCapableForSeamlessRotation;
 			sphLogDebug ( "queue[] = %s", sIdx.cstr() );

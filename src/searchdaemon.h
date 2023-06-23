@@ -1187,7 +1187,7 @@ bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, CSphIndex* pIndex, int& iUpdate );
 void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bNeedWlock );
 
 enum class RotateFrom_e : BYTE;
-bool PreloadKlistTarget ( const ServedDesc_t& tServed, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
+bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
 void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );

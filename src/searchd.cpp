@@ -17878,23 +17878,27 @@ static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainT
 	});
 }
 
-bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread )
+template<typename FN_ACTION>
+bool LimitedParallelRotationMT ( FN_ACTION&& fnAction ) EXCLUDES ( MainThread )
 {
 	assert ( Threads::IsInsideCoroutine() );
 
 	// allow to run several rotations a time (in parallel)
 	// vip conns has no limit
 	if ( session::GetVip() )
-		return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError );
+		return fnAction();
 
 	// limit is arbitrary set to N/2 of threadpool
 	static Coro::Waitable_T<int> iParallelRotations { 0 };
 	iParallelRotations.Wait ( [] ( int i ) { return i < Max ( 1, NThreads() / 2 ); } );
 	iParallelRotations.ModifyValue ( [] ( int& i ) { ++i; } );
-	auto _ = AtScopeExit ( [] {
-		iParallelRotations.ModifyValueAndNotifyOne ( [] ( int& i ) { --i; } );
-	});
-	return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError );
+	AT_SCOPE_EXIT ( [] { iParallelRotations.ModifyValueAndNotifyOne ( [] ( int& i ) { --i; } ); } );
+	return fnAction();
+}
+
+bool LimitedRotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString& sIndex, StrVec_t& dWarnings, CSphString& sError ) EXCLUDES ( MainThread )
+{
+	return LimitedParallelRotationMT ( [&]() { return RotateIndexMT ( pNewServed, sIndex, dWarnings, sError ); } );
 }
 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )

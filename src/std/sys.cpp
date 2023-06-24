@@ -26,7 +26,7 @@
 #endif
 
 
-int GetNumLogicalCPUs()
+static int GetNumLogicalCPUsImpl()
 {
 #if _WIN32
 	SYSTEM_INFO tInfo;
@@ -38,7 +38,14 @@ int GetNumLogicalCPUs()
 }
 
 
-int GetNumPhysicalCPUs()
+int GetNumLogicalCPUs()
+{
+	static int iCPUs = GetNumLogicalCPUsImpl();
+	return iCPUs;
+}
+
+
+static int GetNumPhysicalCPUsImpl()
 {
 #if _WIN32
 	DWORD uResponseSize = 0;
@@ -98,7 +105,14 @@ int GetNumPhysicalCPUs()
 }
 
 
-bool IsSSE42Supported()
+int GetNumPhysicalCPUs()
+{
+	static int iCPUs = GetNumPhysicalCPUsImpl();
+	return iCPUs;
+}
+
+
+static bool IsSSE42SupportedImpl()
 {
 #if defined(__x86_64__) || defined(__i386__)
 	uint32_t dInfo[4];
@@ -110,7 +124,14 @@ bool IsSSE42Supported()
 }
 
 
-static int GetMemPageSize()
+bool IsSSE42Supported()
+{
+	static bool bSSE = IsSSE42SupportedImpl();
+	return bSSE;
+}
+
+
+static int GetMemPageSizeImpl()
 {
 #if _WIN32
 	SYSTEM_INFO tInfo;
@@ -122,8 +143,8 @@ static int GetMemPageSize()
 }
 
 
-int sphGetMemPageSize()
+int GetMemPageSize()
 {
-	static int iMemPageSize = GetMemPageSize();
+	static int iMemPageSize = GetMemPageSizeImpl();
 	return iMemPageSize;
 }

@@ -12,8 +12,7 @@
 
 #pragma once
 
-int GetNumLogicalCPUs();
-int GetNumPhysicalCPUs();	// may return -1 if fails
-bool IsSSE42Supported();
-
-int sphGetMemPageSize();
+int		GetNumLogicalCPUs();
+int		GetNumPhysicalCPUs();	// may return -1 if fails
+bool	IsSSE42Supported();
+int		GetMemPageSize();

@@ -61,7 +61,7 @@ bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeT
 	}
 
 	iStackNeeded = (int)iCalculatedStack + 32*1024;
-	iStackNeeded = sphRoundUp( iStackNeeded, sphGetMemPageSize() ); // round up to memory page.
+	iStackNeeded = sphRoundUp( iStackNeeded, GetMemPageSize() ); // round up to memory page.
 
 	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
 	session::ExpandDesiredStack ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ));

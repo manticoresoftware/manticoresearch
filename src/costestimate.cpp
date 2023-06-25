@@ -57,8 +57,17 @@ float EstimateMTCost ( float fCost, int iThreads )
 
 float EstimateMTCostSI ( float fCost, int iThreads )
 {
-	const float fKPerf = 0.045f;
-	const float fBPerf = 1.0f;
+	const float fKPerf = 0.10f;
+	const float fBPerf = 1.56f;
+
+	return EstimateMTCost ( fCost, iThreads, fKPerf, fBPerf );
+}
+
+
+float EstimateMTCostSIFT ( float fCost, int iThreads )
+{
+	const float fKPerf = 0.235f;
+	const float fBPerf = 1.25f;
 
 	return EstimateMTCost ( fCost, iThreads, fKPerf, fBPerf );
 }
@@ -83,12 +92,11 @@ private:
 	static constexpr float COST_FILTER					= 8.5f;
 	static constexpr float COST_COLUMNAR_FILTER			= 4.0f;
 	static constexpr float COST_INTERSECT				= 5.0f;
-	static constexpr float COST_INDEX_READ_SINGLE		= 1.5f;
-	static constexpr float COST_INDEX_READ_DENSE_BITMAP	= 1.5f;
-	static constexpr float COST_INDEX_READ_SPARSE		= 30.0f;
+	static constexpr float COST_INDEX_READ_SINGLE		= 4.0f;
+	static constexpr float COST_INDEX_READ_BITMAP		= 4.5f;
 	static constexpr float COST_INDEX_UNION_COEFF		= 4.0f;
 	static constexpr float COST_LOOKUP_READ				= 20.0f;
-	static constexpr float COST_INDEX_ITERATOR_INIT		= 150.0f;
+	static constexpr float COST_INDEX_ITERATOR_INIT		= 30.0f;
 
 	const CSphVector<SecondaryIndexInfo_t> &	m_dSIInfo;
 	const SelectIteratorCtx_t &					m_tCtx;
@@ -100,8 +108,7 @@ private:
 	static float	Cost_PushImplicitGroupby ( int64_t iDocs )				{ return COST_PUSH_IG*iDocs*SCALE; }
 	static float	Cost_Intersect ( int64_t iDocs )						{ return COST_INTERSECT*iDocs*SCALE; }
 	static float	Cost_IndexReadSingle ( int64_t iDocs )					{ return COST_INDEX_READ_SINGLE*iDocs*SCALE; }
-	static float	Cost_IndexReadDenseBitmap ( int64_t iDocs )				{ return COST_INDEX_READ_DENSE_BITMAP*iDocs*SCALE; }
-	static float	Cost_IndexReadSparse ( int64_t iDocs )					{ return COST_INDEX_READ_SPARSE*iDocs*SCALE; }
+	static float	Cost_IndexReadBitmap ( int64_t iDocs )					{ return COST_INDEX_READ_BITMAP*iDocs*SCALE; }
 	static float	Cost_IndexUnionQueue ( int64_t iDocs )					{ return COST_INDEX_UNION_COEFF*iDocs*log2f(iDocs)*SCALE; }
 	static float	Cost_LookupRead ( int64_t iDocs )						{ return COST_LOOKUP_READ*iDocs*SCALE; }
 	static float	Cost_IndexIteratorInit ( int64_t iNumIterators )		{ return COST_INDEX_ITERATOR_INIT*iNumIterators*SCALE; }
@@ -112,6 +119,7 @@ private:
 	float	CalcLookupCost() const;
 	float	CalcPushCost ( float fDocsAfterFilters ) const;
 	float	CalcMTCost ( float fCost ) const;
+	float	CalcMTCostSI ( float fCost ) const;
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const;
@@ -139,13 +147,6 @@ bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64
 	}
 
 	return tFilter.m_eType==SPH_FILTER_FLOATRANGE;
-}
-
-
-static bool IsSingleValueFilter ( const CSphFilterSettings & tFilter )
-{
-	return  ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_dValues.GetLength()==1 ) ||
-			( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength()==1 );
 }
 
 
@@ -186,16 +187,10 @@ float CostEstimate_c::CalcIndexCost() const
 			if ( uNumIterators>1 && !NeedBitmapUnion ( tFilter, iDocs ) )
 				fCost += Cost_IndexUnionQueue(iDocs);
 
-			const int COST_THRESH = 1024;
-			if ( iDocs/uNumIterators < COST_THRESH )
-				fCost += Cost_IndexReadSparse(iDocs);
+			if ( uNumIterators==1 )
+				fCost += Cost_IndexReadSingle(iDocs);
 			else
-			{
-				if ( IsSingleValueFilter(tFilter) )
-					fCost += Cost_IndexReadSingle(iDocs);
-				else
-					fCost += Cost_IndexReadDenseBitmap(iDocs);
-			}
+				fCost += Cost_IndexReadBitmap(iDocs);
 
 			fCost += Cost_IndexIteratorInit(uNumIterators);
 		}
@@ -343,6 +338,12 @@ float CostEstimate_c::CalcMTCost ( float fCost ) const
 }
 
 
+float CostEstimate_c::CalcMTCostSI ( float fCost ) const
+{
+	return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads );
+}
+
+
 float CostEstimate_c::CalcQueryCost()
 {
 	float fCost = 0.0f;
@@ -411,8 +412,8 @@ float CostEstimate_c::CalcQueryCost()
 	if ( m_tCtx.m_bCalcPushCost )
 		fCost += CalcPushCost(fDocsAfterFilters);
 
-	if ( !iNumIndexes && !iNumLookups ) // SI and docid lookups always run in a single thread
-		fCost = CalcMTCost(fCost);
+	if ( !iNumLookups ) // docid lookups always run in a single thread
+		fCost = iNumIndexes ? CalcMTCostSI(fCost) : CalcMTCost(fCost);
 
 	return fCost;
 }

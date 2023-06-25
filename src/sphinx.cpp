@@ -3084,7 +3084,7 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		if ( !tQuery.m_sQuery.IsEmpty() )
 		{
 			// check for fulltext+SI case; limit the number of threads
-			SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), -1, m_iDocinfo, iThreads );
+			SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), -1, m_iDocinfo, 1 );
 			if ( !iThreadCap && tQuery.m_dFilters.GetLength() && HaveAvailableSI(tCtx) )
 				iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
@@ -8055,7 +8055,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 	float fIteratorWithFT = CalcFTIntersectCost ( tIteratorEst, tEstimate, m_iDocinfo, ITERATOR_BLOCK_SIZE, MAX_BLOCK_DOCS );
 	float fFTWithFilters = tEstimate.m_fCost + fCostOfFilters;
 
-	fIteratorWithFT = EstimateMTCostSI ( fIteratorWithFT, iThreads );
+	fIteratorWithFT = EstimateMTCostSIFT ( fIteratorWithFT, iThreads );
 	fFTWithFilters = EstimateMTCost ( fFTWithFilters, iThreads );
 
 	return fIteratorWithFT<fFTWithFilters;

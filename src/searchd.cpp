@@ -68,6 +68,7 @@
 #include "dynamic_idx.h"
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
+#include "detail/expmeter.h"
 
 extern "C"
 {
@@ -260,6 +261,18 @@ static volatile bool						g_bReloadForced = false;	// true in case reload issued
 
 static WorkerSharedPtr_t					g_pTickPoolThread;
 static CSphVector<CSphNetLoop*>				g_dNetLoops;
+
+constexpr int 								g_iExpMeterPeriod = 5000000; // once per 5s
+static ExpMeter_c							g_tStat1m { 12 }; // once a minute (12 * 5s)
+static ExpMeter_c							g_tStat5m { 12*5 }; // once a 5 minutes
+static ExpMeter_c							g_tStat15m { 12*15 }; // once a 15 minutes
+static ExpMeter_c							g_tPriStat1m { 12 }; // once a minute (12 * 5s)
+static ExpMeter_c							g_tPriStat5m { 12*5 }; // once a 5 minutes
+static ExpMeter_c							g_tPriStat15m { 12*15 }; // once a 15 minutes
+static ExpMeter_c							g_tSecStat1m { 12 }; // once a minute (12 * 5s)
+static ExpMeter_c							g_tSecStat5m { 12*5 }; // once a 5 minutes
+static ExpMeter_c							g_tSecStat15m { 12*15 }; // once a 15 minutes
+int64_t g_iNextExpMeterTimestamp = sphMicroTimer() + g_iExpMeterPeriod;
 
 /// command names
 static const char * g_dApiCommands[] =
@@ -8945,6 +8958,9 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
 	dStatus.MatchTupletf ( "workers_clients_vip", "%u", session::GetVips() );
 	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
+	dStatus.MatchTupletf ( "load", "%0.2f %0.2f %0.2f", g_tStat1m.Value(), g_tStat5m.Value(), g_tStat15m.Value() );
+	dStatus.MatchTupletf ( "load_primary", "%0.2f %0.2f %0.2f", g_tPriStat1m.Value(), g_tPriStat5m.Value(), g_tPriStat15m.Value() );
+	dStatus.MatchTupletf ( "load_secondary", "%0.2f %0.2f %0.2f", g_tSecStat1m.Value(), g_tSecStat5m.Value(), g_tSecStat15m.Value() );
 
 	assert ( g_pDistIndexes );
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
@@ -9047,14 +9063,17 @@ void BuildStatus ( VectorLike & dStatus )
 void BuildStatusOneline ( StringBuilder_c & sOut )
 {
 	auto iThreads = GlobalWorkPool ()->WorkingThreads ();
-	auto iQueue = GlobalWorkPool ()->Works ();
+	auto tSample = GlobalWorkPool()->Tasks();
+	auto tCurrent = GlobalWorkPool()->CurTasks();
+	auto iQueue = tSample.iPri + tSample.iSec + tCurrent;
 	auto iTasks = myinfo::CountTasks ();
 	auto & g_tStats = gStats ();
 	sOut.StartBlock ( " " );
 	sOut
 	<< "Uptime:" << (DWORD) time ( NULL )-g_tStats.m_uStarted
-	<< " Threads:" << iThreads
-	<< " Queue:" << iQueue
+	<< " Threads:" << iThreads;
+	sOut.Sprintf (" Queue now+pri+sec=total: %d+%d+%d=%d", tCurrent, tSample.iPri, tSample.iSec, iQueue );
+	sOut
 	<< " Clients:" << myinfo::CountClients()
 	<< " Vip clients:" << session::GetVips()
 	<< " Tasks:" << iTasks
@@ -9063,6 +9082,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) );
 	sOut.Sprintf ( "\nQueue/Th: %0.1F%", iQueue * 10 / iThreads );
 	sOut.Sprintf ( " Tasks/Th: %0.1F%", iTasks * 10 / iThreads );
+	sOut.Sprintf ( "\nLoad average: %0.2f, %0.2f, %0.2f", g_tStat1m.Value(), g_tStat5m.Value(), g_tStat15m.Value() );
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboardRefPtr_t pDash, const char * sPrefix="agent" )
@@ -19260,6 +19280,9 @@ void CheckSignals () REQUIRES ( MainThread )
 #endif
 }
 
+static bool g_bLoadInfo = val_from_env ( "MANTICORE_TRACE_LOAD", false );
+
+
 void TickHead () REQUIRES ( MainThread )
 {
 	CheckSignals ();
@@ -19279,6 +19302,25 @@ void TickHead () REQUIRES ( MainThread )
 	int tmSleep = 500;
 #endif
 	sphSleepMsec ( tmSleep );
+
+	if ( sphMicroTimer() > g_iNextExpMeterTimestamp )
+	{
+		g_iNextExpMeterTimestamp += g_iExpMeterPeriod;
+		auto tSample = GlobalWorkPool()->Tasks();
+		auto tCurrent = GlobalWorkPool()->CurTasks();
+		g_tPriStat1m.Tick ( tSample.iPri );
+		g_tPriStat5m.Tick ( tSample.iPri );
+		g_tPriStat15m.Tick ( tSample.iPri );
+		g_tSecStat1m.Tick ( tSample.iSec );
+		g_tSecStat5m.Tick ( tSample.iSec );
+		g_tSecStat15m.Tick ( tSample.iSec );
+
+		g_tStat1m.Tick ( tSample.iPri + tSample.iSec + tCurrent);
+		g_tStat5m.Tick ( tSample.iPri + tSample.iSec + tCurrent);
+		g_tStat15m.Tick ( tSample.iPri + tSample.iSec + tCurrent);
+		if ( g_bLoadInfo )
+			sphInfo("Sample: %d, %d, %d; Load average: %0.2f, %0.2f, %0.2f, sec: %0.2f, %0.2f, %0.2f, pri: %0.2f, %0.2f, %0.2f", tCurrent, tSample.iSec, tSample.iPri, g_tStat1m.Value(), g_tStat5m.Value(), g_tStat15m.Value(), g_tSecStat1m.Value(), g_tSecStat5m.Value(), g_tSecStat15m.Value(), g_tPriStat1m.Value(), g_tPriStat5m.Value(), g_tPriStat15m.Value());
+	}
 }
 
 bool g_bVtune = false;

@@ -181,7 +181,7 @@ public:
 		}
 
 		// Find the next context with the same key.
-		Value * NextByKey () const
+		Value * NextByKey () const noexcept
 		{
 			for ( auto* pElem = m_pNext; pElem!=nullptr; pElem = pElem->m_pNext )
 				if ( pElem->m_pService==m_pService )
@@ -194,7 +194,7 @@ public:
 
 	// Determine whether the specified owner is on the stack.
 	// Returns address of key, if present, nullptr otherwise.
-	static Value * Contains ( Key * pKey )
+	static Value * Contains ( Key * pKey ) noexcept
 	{
 		for ( auto* pElem = m_pTop; pElem!=nullptr; pElem = pElem->m_pNext )
 			if ( pElem->m_pService==pKey )
@@ -203,7 +203,7 @@ public:
 	}
 
 	// Obtain the value at the top of the stack.
-	static Value * Top ()
+	static Value * Top () noexcept
 	{
 		Context_c * pElem = m_pTop;
 		return pElem ? pElem->m_pThisContext : nullptr;
@@ -240,8 +240,9 @@ struct Service_t : public TaskService_t//, public Service_i
 	bool m_bStopped = false;                	/// dispatcher has been stopped.
 	bool m_bOneThread;                			/// optimize for single-threaded use case
 	sph::Event_c m_tWakeupEvent;				/// event to wake up blocked threads
-	OpSchedule_t m_OpQueue;						/// The queue of handlers that are ready to be delivered
-	OpSchedule_t m_OpVipQueue;					/// The queue of handlers that have to be delivered BEFORE OpQueue
+	OpSchedule_t m_OpQueue GUARDED_BY ( m_dMutex );		/// The queue of handlers that are ready to be delivered
+	OpSchedule_t m_OpVipQueue GUARDED_BY ( m_dMutex );	/// The queue of handlers that have to be delivered BEFORE OpQueue
+	std::atomic<int> m_iWorkingNow {0};
 
 	// Per-thread call stack to track the state of each thread in the service.
 	using ThreadCallStack_c = CallStack_c<Service_t, TaskServiceThreadInfo_t>;
@@ -352,8 +353,10 @@ public:
 			else
 				dLock.Unlock ();
 
+			m_iWorkingNow.fetch_add ( 1, std::memory_order_relaxed );
 			boost::context::detail::prefetch_range ( pOp, sizeof ( Operation_t ) );
 			pOp->Complete (this);
+			m_iWorkingNow.fetch_sub ( 1, std::memory_order_relaxed );
 
 			LOG ( SERVICE, MT ) << "completed & unlocked";
 			if ( this_thread.m_iPrivateOutstandingWork>1 )
@@ -425,9 +428,20 @@ public:
 			dLock.Unlock ();
 	}
 
-	long works() const
+	long works() const noexcept
 	{
 		return m_iOutstandingWork;
+	}
+
+	int curtasks() const noexcept
+	{
+		return m_iWorkingNow.load ( std::memory_order_relaxed );
+	}
+
+	NTasks_t tasks() const
+	{
+		ScopedMutex_t dLock ( m_dMutex );
+		return { (int)m_OpVipQueue.GetLength(), (int)m_OpQueue.GetLength() };
 	}
 };
 
@@ -825,6 +839,16 @@ public:
 		return (int)m_tService.works ();
 	}
 
+	NTasks_t Tasks() const noexcept final
+	{
+		return m_tService.tasks();
+	}
+
+	int CurTasks() const noexcept final
+	{
+		return m_tService.curtasks();
+	}
+
 	void IterateChildren ( ThreadFN& fnHandler ) final
 	{
 		ScRL_t _ ( m_dChildGuard );
@@ -939,6 +963,16 @@ public:
 	int Works () const final
 	{
 		return GetRunners ();
+	}
+
+	NTasks_t Tasks() const noexcept final
+	{
+		return m_tService.tasks();
+	}
+
+	int CurTasks() const noexcept final
+	{
+		return m_tService.curtasks();
 	}
 
 	const char* Name() const override
@@ -1081,10 +1115,11 @@ static int g_iMaxChildrenThreads = 1;
 
 
 namespace {
+static WorkerSharedPtr_t pGlobalPool;
+
 WorkerSharedPtr_t& GlobalPoolSingletone ()
 {
-	static WorkerSharedPtr_t pPool;
-	return pPool;
+	return pGlobalPool;
 }
 }
 

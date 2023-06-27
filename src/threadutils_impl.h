@@ -23,6 +23,7 @@ class OpQueue_T : public ISphNoncopyable
 {
 	Operation * m_pFront = nullptr; // The front of the queue.
 	Operation * m_pBack = nullptr; // The back of the queue.
+	DWORD m_uLen = 0;
 
 public:
 	// destroys all operations.
@@ -36,13 +37,13 @@ public:
 	}
 
 	// Get the operation at the front of the queue.
-	Operation * Front ()
+	Operation * Front () const noexcept
 	{
 		return m_pFront;
 	}
 
 	// Pop an operation from the front of the queue.
-	void Pop ()
+	void Pop () noexcept
 	{
 		if ( m_pFront )
 		{
@@ -51,11 +52,12 @@ public:
 			if ( !m_pFront )
 				m_pBack = nullptr;
 			tmp->m_pNext = nullptr;
+			--m_uLen;
 		}
 	}
 
 	// Push an operation on to the back of the queue.
-	void Push ( Operation * pOp )
+	void Push ( Operation * pOp ) noexcept
 	{
 		pOp->m_pNext = nullptr;
 		if ( m_pBack )
@@ -64,10 +66,11 @@ public:
 			m_pBack = pOp;
 		} else
 			m_pFront = m_pBack = pOp;
+		++m_uLen;
 	}
 
 	// Push an operation on to the front of the queue.
-	void Push_front ( Operation * pOp )
+	void Push_front ( Operation * pOp ) noexcept
 	{
 		if ( m_pFront )
 		{
@@ -78,12 +81,13 @@ public:
 			pOp->m_pNext = nullptr;
 			m_pFront = m_pBack = pOp;
 		}
+		++m_uLen;
 	}
 
 	// Push all operations from another queue on to the back of the queue. The
 	// source queue may contain operations of a derived type.
 	template<typename OtherOperation>
-	void Push ( OpQueue_T<OtherOperation> & rhs )
+	void Push ( OpQueue_T<OtherOperation> & rhs ) noexcept
 	{
 		auto pRhsFront = rhs.m_pFront;
 		if ( pRhsFront )
@@ -95,23 +99,29 @@ public:
 			m_pBack = rhs.m_pBack;
 			rhs.m_pFront = nullptr;
 			rhs.m_pBack = nullptr;
+			m_uLen += std::exchange ( rhs.m_uLen, 0 );
 		}
 	}
 
 	// Whether the queue is empty.
-	bool Empty () const
+	bool Empty () const noexcept
 	{
 		return m_pFront==nullptr;
 	}
 
+	inline DWORD GetLength() const noexcept
+	{
+		return m_uLen;
+	}
+
 	// Test whether an operation is already enqueued.
-	bool IsEnqueued ( Operation * pOp ) const
+	bool IsEnqueued ( Operation * pOp ) const noexcept
 	{
 		return pOp->m_pNext || m_pBack==pOp;
 	}
 
 	// find elem (linear search), remove from list and destroy
-	void RemoveAndDestroy ( Operation * pOp )
+	void RemoveAndDestroy ( Operation * pOp ) noexcept
 	{
 		if ( !pOp )
 			return;
@@ -135,6 +145,7 @@ public:
 		if ( !m_pFront )
 			m_pBack = nullptr;
 		pOp->Destroy ();
+		--m_uLen;
 	}
 
 	class Iterator_c
@@ -144,30 +155,30 @@ public:
 		explicit Iterator_c ( Operation * pIterator = nullptr ) : m_pIterator ( pIterator )
 		{}
 
-		Operation & operator* ()
+		Operation & operator* () noexcept
 		{
 			return *m_pIterator;
 		}
 
-		Iterator_c & operator++ ()
+		Iterator_c & operator++ () noexcept
 		{
 			m_pIterator = m_pIterator->m_pNext;
 			return *this;
 		}
 
-		bool operator!= ( const Iterator_c & rhs ) const
+		bool operator!= ( const Iterator_c & rhs ) const noexcept
 		{
 			return m_pIterator!=rhs.m_pIterator;
 		}
 	};
 
 	// c++11 style iteration
-	Iterator_c begin () const
+	Iterator_c begin () const noexcept
 	{
 		return Iterator_c ( m_pFront );
 	}
 
-	Iterator_c end () const
+	Iterator_c end () const noexcept
 	{
 		return Iterator_c();
 	}
@@ -186,12 +197,12 @@ private:
 	fnFuncType* m_fnFunc;
 
 public:
-	void Complete ( void* pOwner )
+	void Complete ( void* pOwner ) noexcept
 	{
 		m_fnFunc ( pOwner, this );
 	}
 
-	void Destroy()
+	void Destroy() noexcept
 	{
 		m_fnFunc ( nullptr, this );
 	}
@@ -217,7 +228,7 @@ public:
 		, m_Handler ( static_cast<const Handler&> ( h ) ) // force copying
 	{}
 
-	static void DoComplete ( void* pOwner, SchedulerOperation_t* pBase )
+	static void DoComplete ( void* pOwner, SchedulerOperation_t* pBase ) noexcept
 	{
 		// Take ownership of the handler object.
 		auto* pHandler = static_cast<CompletionHandler_c*> ( pBase );
@@ -241,7 +252,7 @@ public:
 };
 
 template<typename HANDLER>
-Threads::details::SchedulerOperation_t* Handler2Op ( HANDLER handler )
+Threads::details::SchedulerOperation_t* Handler2Op ( HANDLER handler ) noexcept
 {
 	return new Threads::details::CompletionHandler_c<HANDLER> ( std::move ( handler ) );
 }
@@ -249,13 +260,13 @@ Threads::details::SchedulerOperation_t* Handler2Op ( HANDLER handler )
 }}
 
 template<typename HANDLER>
-void Threads::Scheduler_i::Schedule ( HANDLER handler, bool bVip )
+void Threads::Scheduler_i::Schedule ( HANDLER handler, bool bVip ) noexcept
 {
 	ScheduleOp ( Threads::details::Handler2Op ( std::move ( handler ) ), bVip );
 }
 
 template<typename HANDLER>
-void Threads::Scheduler_i::ScheduleContinuation ( HANDLER handler )
+void Threads::Scheduler_i::ScheduleContinuation ( HANDLER handler ) noexcept
 {
 	ScheduleContinuationOp ( Threads::details::Handler2Op ( std::move ( handler ) ) );
 }

@@ -66,8 +66,8 @@ public:
 		auto iThreads = GetNumLogicalCPUs();
 		//		iThreads = 1; // uncomment if want to run all coro tests in single thread
 		SetMaxChildrenThreads ( iThreads );
-		WipeGlobalSchedulerOnShutdownAndFork();
 		StartGlobalWorkPool();
+		WipeGlobalSchedulerOnShutdownAndFork();
 #if _WIN32
 		// init WSA on Windows
 	WSADATA wsa_data;
@@ -85,6 +85,7 @@ public:
 	{
 		unlink ( g_sTmpfile );
 		unlink ( g_sMagickTmpfile );
+		StopGlobalWorkPool();
 	}
 };
 

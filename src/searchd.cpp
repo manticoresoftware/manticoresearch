@@ -761,9 +761,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	Detached::ShutdownAllAlones();
 
 	SHUTINFO << "Shutdown main work pool ...";
-	auto pPool = GlobalWorkPool();
-	if ( pPool )
-		pPool->StopAll();
+	StopGlobalWorkPool();
 
 	SHUTINFO << "Remove local tables list ...";
 	g_pLocalIndexes.reset();

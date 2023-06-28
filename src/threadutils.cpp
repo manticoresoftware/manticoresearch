@@ -1133,6 +1133,14 @@ void StartGlobalWorkPool ()
 		pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
 }
 
+void StopGlobalWorkPool()
+{
+	sphLogDebug ( "StopGlobalWorkPool" );
+	WorkerSharedPtr_t& pPool = GlobalPoolSingletone();
+	if ( pPool )
+		pPool->StopAll();
+}
+
 void SetMaxChildrenThreads ( int iThreads )
 {
 	sphLogDebug ( "SetMaxChildrenThreads to %d", iThreads );
@@ -1276,7 +1284,7 @@ bool OperationsQueue_c::IsEmpty() const
 
 namespace { // static
 
-class IterationHandler_c : public Threads::details::SchedulerOperation_t
+	class IterationHandler_c : public Threads::details::SchedulerOperation_t
 	{
 		ThreadIteratorFN m_Handler;
 

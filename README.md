@@ -15,6 +15,7 @@
   <a href="https://t.me/manticoresearch_en">Telegram (En)</a> •
   <a href="https://t.me/manticore_chat">Telegram (Ru)</a> •
   <a href="https://twitter.com/manticoresearch">Twitter</a>
+  <a href="https://github.com/manticoresoftware/manticoresearch/discussions/categories/feedback">User feedback</a>
 </h3>
 
 <p>&nbsp;</p>

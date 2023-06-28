@@ -36,7 +36,12 @@ struct ListedPointer_t : public AtomicPointer_t
 using VecListedPointers_t = CSphFixedVector<ListedPointer_t>;
 
 // raw pointer and specific deleter which knows how to deal with the pointer
-using RetiredPointer_t = std::pair <void*,Deleter_fn>;
+//using RetiredPointer_t = std::pair <void*,Deleter_fn>; <- pair is NOT trivially copyable... need manual struct
+struct RetiredPointer_t
+{
+	void* m_pPtr;
+	hazard::Deleter_fn m_pDeleter;
+};
 
 // for tracking that alloc/dealloc of hazard is in one thread
 static ThreadRole thHazardThread;
@@ -170,15 +175,12 @@ public:
 
 namespace { // unnamed (static)
 
-// raw pointer and specific deleter which knows how to deal with the pointer
-using RetiredPointer_t = std::pair <void*,Deleter_fn>;
-
 // delete an object stored in RetiredPointer
 void PrunePointer ( RetiredPointer_t* pPtr )
 {
 	assert (pPtr);
-	assert (pPtr->second);
-	pPtr->second ( pPtr->first );
+	assert (pPtr->m_pDeleter);
+	pPtr->m_pDeleter ( pPtr->m_pPtr );
 }
 
 // main GC procedure. Implements hazard pointers cleaning
@@ -237,7 +239,7 @@ int PruneRetiredImpl ( RetiredPointer_t * pData, size_t iSize )
 	auto * pEnd = pData + iSize;
 	for ( auto * pSrc = pData; pSrc<pEnd; ++pSrc )
 	{
-		if ( !dActive.BinarySearch ( pSrc->first ) )
+		if ( !dActive.BinarySearch ( pSrc->m_pPtr ) )
 			PrunePointer (pSrc); // stage 3 - delete non-alive
 		else { // stage 4 - copy alive, back in the list
 			if (pDst!=pSrc)
@@ -254,7 +256,7 @@ int PruneRetiredImpl ( RetiredPointer_t * pData, size_t iSize )
 bool TryPruneOnePointer ( RetiredPointer_t* pSrc )
 {
 	auto dActive = CollectActiveHazardPointers ();
-	if ( dActive.BinarySearch ( pSrc->first ) )
+	if ( dActive.BinarySearch ( pSrc->m_pPtr ) )
 		return false;
 
 	PrunePointer ( pSrc );

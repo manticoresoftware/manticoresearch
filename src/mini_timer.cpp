@@ -295,7 +295,8 @@ int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTime
 
 void MiniTimer_c::UnEngage()
 {
-	g_TinyTimer().Remove ( *this );
+	if ( IsTinyTimerCreated() )
+		g_TinyTimer().Remove ( *this );
 }
 
 MiniTimer_c::~MiniTimer_c()

@@ -291,9 +291,48 @@ static void BM_log2int32 ( benchmark::State& st )
 BENCHMARK ( BM_log2int64 )->DenseRange ( 0, 64, 4 );
 BENCHMARK ( BM_log2int32 )->DenseRange ( 0, 32, 4 );
 
+#define SPH_VARINT_DECODE( _type, _getexpr ) \
+	DWORD b = _getexpr; \
+	_type res = 0; \
+	while ( b & 0x80 ) \
+	{ \
+		res = ( res << 7 ) + ( b & 0x7f ); \
+		b = _getexpr; \
+	} \
+	res = ( res << 7 ) + b; \
+	return res;
 
+class heavy
+{
+public:
 
-class zipunzip: public benchmark::Fixture
+	virtual int GetByte();
+
+	BYTE* m_pBuff; ///< the buffer
+	int m_iBuffPos = 0;
+	int m_iBuffUsed = 0;
+	bool m_bError;
+	CSphString m_sError;
+
+	virtual void UpdateCache() = 0;
+
+	inline DWORD UnzipValueBEDWORD_reference()
+	{
+		return UnzipValueBE_reference<DWORD> ( [this]() mutable { return GetByte(); } );
+	};
+
+	inline DWORD UnzipValueBEDWORD()
+	{
+		return UnzipValueBE<DWORD> ( [this]() mutable { return GetByte(); } );
+	};
+
+	inline DWORD UnzipValueBEDWORD_macro()
+	{
+		SPH_VARINT_DECODE ( DWORD, GetByte() );
+	};
+};
+
+class zipunzip: public benchmark::Fixture, public heavy
 {
 public:
 	void SetUp ( const ::benchmark::State& state ) override
@@ -335,7 +374,94 @@ public:
 	CSphVector<BYTE> dBufBE64;
 	CSphVector<BYTE> dBufLE64;
 	volatile int iRes = 0;
+
+	void UpdateCache() override;
 };
+
+// metrics from real run searchd with index - mostly 1 byte, sometimes 2 (about 12%) and few cases when 3. Never 4 and 5
+// for offsets - same way, mostly 1 byte, and about 0.1% when 4. Never 2, 3, 5+
+// | unzip32_hist | 1132420000, 136150000, 50000, 0, 0 |
+// | unzip64_hist | 7140000, 0, 0, 10000, 0, 0, 0, 0, 0, 0 |
+class realunzip: public benchmark::Fixture, public heavy
+{
+public:
+	static constexpr int iProfile = 113242 + 13615 + 5;
+	static constexpr int iSize = 113242 * 1 + 13615 * 2 + 5 * 3;
+	void SetUp ( const ::benchmark::State& state ) override
+	{
+		auto NRUNS = state.range ( 0 );
+		dValues.Resize ( NRUNS*iProfile );
+		dBufBE.Reserve ( NRUNS * iSize );
+		dBufBE.Resize ( 0 );
+
+		sphSrand ( 0 );
+		uint64_t uMask = ( 1ULL << 1 * 7 ) - 1ULL;
+		for ( int i=0; i<113242*NRUNS; ++i )
+		{
+			uint64_t uVal = sphRand();
+			uVal = ( uVal << 32 ) | sphRand();
+			uVal &= uMask;
+			dValues[i] = uVal;
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, uVal & 0xFFFFFFFF );
+		}
+
+		uMask = ( 1ULL << 2 * 7 ) - 1ULL;
+		for ( int i = 0; i < 13615 * NRUNS; ++i )
+		{
+			uint64_t uVal = sphRand();
+			uVal = ( uVal << 32 ) | sphRand();
+			uVal &= uMask;
+			dValues[i] = uVal;
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, uVal & 0xFFFFFFFF );
+		}
+
+		uMask = ( 1ULL << 3 * 7 ) - 1ULL;
+		for ( int i = 0; i < 5 * NRUNS; ++i )
+		{
+			uint64_t uVal = sphRand();
+			uVal = ( uVal << 32 ) | sphRand();
+			uVal &= uMask;
+			dValues[i] = uVal;
+			ZipValueBE ( [this] ( BYTE b ) mutable { dBufBE.Add ( b ); }, uVal & 0xFFFFFFFF );
+		}
+		iRes = 0;
+		//		printf ( "SetUp with mask: %d, %p. %d %d %d %d\n", (int)NSEPTETS, (void*)uMask,
+		//			dBufBE.GetLength(), dBufLE.GetLength(), dBufBE64.GetLength(), dBufLE64.GetLength());
+	}
+
+	CSphVector<uint64_t> dValues;
+	CSphVector<BYTE> dBufBE;
+	volatile int iRes = 0;
+
+	void UpdateCache() override;
+};
+
+int heavy::GetByte()
+{
+	if ( m_iBuffPos >= m_iBuffUsed )
+	{
+		UpdateCache();
+		if ( m_iBuffPos >= m_iBuffUsed )
+		{
+			m_bError = true;
+			m_sError.SetSprintf ( "pread error in: pos=" INT64_FMT ", len=%d", (int64_t)m_iBuffPos, 1 );
+			return 0; // unexpected io failure
+		}
+	}
+
+	assert ( m_iBuffPos < m_iBuffUsed );
+	return m_pBuff[m_iBuffPos++];
+}
+
+void zipunzip::UpdateCache()
+{
+	m_iBuffUsed = dBufBE.GetLengthBytes();
+}
+
+void realunzip::UpdateCache()
+{
+	m_iBuffUsed = dBufBE.GetLengthBytes();
+}
 
 template<typename T, typename WRITER>
 inline int ZipValueBElog2 ( WRITER fnPut, T tValue )
@@ -543,6 +669,58 @@ BENCHMARK_DEFINE_F ( zipunzip, unzipbe32ref )
 	st.SetBytesProcessed ( iBytes );
 }
 
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe32refGetByte )
+( benchmark::State& st )
+{
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
+	for ( auto _ : st )
+	{
+		m_pBuff = dBufBE.begin();
+		m_iBuffPos = m_iBuffUsed = 0;
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipValueBEDWORD_reference() );
+		iBytes += m_iBuffPos;
+	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
+}
+
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe32GetByte )
+( benchmark::State& st )
+{
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
+	for ( auto _ : st )
+	{
+		m_pBuff = dBufBE.begin();
+		m_iBuffPos = m_iBuffUsed = 0;
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipValueBEDWORD() );
+		iBytes += m_iBuffPos;
+	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
+}
+
+BENCHMARK_DEFINE_F ( zipunzip, unzipbe32macroGetByte )
+( benchmark::State& st )
+{
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 1 );
+	for ( auto _ : st )
+	{
+		m_pBuff = dBufBE.begin();
+		m_iBuffPos = m_iBuffUsed = 0;
+		for ( auto i = 0; i < NRUNS; ++i )
+			benchmark::DoNotOptimize ( UnzipValueBEDWORD_macro() );
+		iBytes += m_iBuffPos;
+	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
+}
+
+
 BENCHMARK_DEFINE_F ( zipunzip, unziple32_fastest )
 ( benchmark::State& st )
 {
@@ -597,6 +775,64 @@ BENCHMARK_REGISTER_F ( zipunzip, unzipbe32ref )->ArgsProduct ( { benchmark::Crea
 BENCHMARK_REGISTER_F ( zipunzip, unziple32_fastest )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
 BENCHMARK_REGISTER_F ( zipunzip, unziple32ref )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
 BENCHMARK_REGISTER_F ( zipunzip, unziple32opt )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe32refGetByte )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe32macroGetByte )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+BENCHMARK_REGISTER_F ( zipunzip, unzipbe32GetByte )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 5, 1 ), benchmark::CreateRange ( MINRANGE, MAXRANGE, STEPRANGE ) } );
+
+BENCHMARK_DEFINE_F ( realunzip, unzipbe32refGetByte )
+( benchmark::State& st )
+{
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 0 );
+	for ( auto _ : st )
+	{
+		m_pBuff = dBufBE.begin();
+		m_iBuffPos = m_iBuffUsed = 0;
+		for ( auto i = 0; i < NRUNS* iProfile; ++i )
+			benchmark::DoNotOptimize ( UnzipValueBEDWORD_reference() );
+		iBytes += m_iBuffPos;
+	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
+}
+
+BENCHMARK_DEFINE_F ( realunzip, unzipbe32GetByte )
+( benchmark::State& st )
+{
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 0 );
+	for ( auto _ : st )
+	{
+		m_pBuff = dBufBE.begin();
+		m_iBuffPos = m_iBuffUsed = 0;
+		for ( auto i = 0; i < NRUNS*iProfile; ++i )
+			benchmark::DoNotOptimize ( UnzipValueBEDWORD() );
+		iBytes += m_iBuffPos;
+	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
+}
+
+BENCHMARK_DEFINE_F ( realunzip, unzipbe32macroGetByte )
+( benchmark::State& st )
+{
+	int64_t iBytes = 0;
+	auto NRUNS = st.range ( 0 );
+	for ( auto _ : st )
+	{
+		m_pBuff = dBufBE.begin();
+		m_iBuffPos = m_iBuffUsed = 0;
+		for ( auto i = 0; i < NRUNS*iProfile; ++i )
+			benchmark::DoNotOptimize ( UnzipValueBEDWORD_macro() );
+		iBytes += m_iBuffPos;
+	}
+	st.SetItemsProcessed ( st.iterations() * NRUNS );
+	st.SetBytesProcessed ( iBytes );
+}
+
+BENCHMARK_REGISTER_F ( realunzip, unzipbe32GetByte )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 4, 1 ) } );
+BENCHMARK_REGISTER_F ( realunzip, unzipbe32refGetByte )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 4, 1 ) } );
+BENCHMARK_REGISTER_F ( realunzip, unzipbe32macroGetByte )->ArgsProduct ( { benchmark::CreateDenseRange ( 1, 4, 1 ) } );
 
 BENCHMARK_DEFINE_F ( zipunzip, unzipbe64_fastest )
 ( benchmark::State& st )

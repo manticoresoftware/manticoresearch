@@ -115,3 +115,68 @@ sleep 30
 curl -s localhost:9308/cli_json -d 'describe testlog_2' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
 [{"Field":"@timestamp","Type":"text","Properties":"indexed stored"},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
+––– input –––
+wget -q -P vector https://packages.timber.io/vector/0.30.0/vector_0.30.0-1_amd64.deb
+––– output –––
+––– input –––
+dpkg -i vector/vector_0.30.0-1_amd64.deb > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+vector --version
+––– output –––
+vector 0.30.0 (x86_64-unknown-linux-gnu #!/[a-f0-9]+ v[0-9]+\-[0-9]+\-[0-9]+ v[0-9]+:[0-9]+:[0-9]+\.[0-9]+/!#)
+––– input –––
+printf '[sources.test_file]\ntype = "file"\ninclude = [ "/var/log/dpkg.log" ]\n\n[transforms.modify_test_file]\ntype = "remap"\ninputs = [ "test_file" ]\nsource = """\n.vec_timestamp = del(.timestamp)"""\n\n[sinks.manticore]\ntype = "elasticsearch"\ninputs = [ "modify_test_file" ]\nendpoints = ["http://127.0.0.1:9308"]\nbulk.index = "testlog_3"\n' > vector.toml
+––– output –––
+––– input –––
+nohup vector -c vector.toml 2>/dev/null &
+––– output –––
+[1] #!/[0-9]+/!#
+––– input –––
+sleep 30
+––– output –––
+––– input –––
+curl -s localhost:9308/cli_json -d 'describe testlog_3' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"file","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"source_type","Type":"text","Properties":"indexed stored"},{"Field":"vec_timestamp","Type":"text","Properties":"indexed stored"}]
+––– input –––
+wget -q -P fluentbit http://mirrors.kernel.org/ubuntu/pool/main/liby/libyaml/libyaml-0-2_0.2.2-1_amd64.deb
+––– output –––
+––– input –––
+dpkg -i fluentbit/libyaml-0-2_0.2.2-1_amd64.deb > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s https://packages.fluentbit.io/fluentbit.key | gpg --dearmor > /usr/share/keyrings/fluentbit-keyring.gpg
+––– output –––
+––– input –––
+OS_CODENAME=$(cat /etc/lsb-release | grep 'CODENAME' | cut -d= -f2)
+––– output –––
+––– input –––
+echo "deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/ubuntu/$OS_CODENAME $OS_CODENAME main" | tee /etc/apt/sources.list
+––– output –––
+deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/ubuntu/focal focal main
+––– input –––
+apt-get update  > /dev/null && apt-get -y install fluent-bit > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+printf '[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index testlog_4\n' > fluentbit.conf
+––– output –––
+––– input –––
+/opt/fluent-bit/bin/fluent-bit -c fluentbit.conf
+––– output –––
+[1mFluent Bit v#!/v[0-9]+\.[0-9]+\.[0-9]+/!#[0m
+* [1m[93mCopyright (C) #!/2015\-[0-9]+/!# The Fluent Bit Authors[0m
+* Fluent Bit is a CNCF sub-project under the umbrella of Fluentd
+* https://fluentbit.io
+[1m[[0m#!/v[0-9]+\/[0-9]+\/[0-9]+/!# #!/v[0-9]+:[0-9]+:[0-9]+/!#[1m][0m [[92m info[0m] switching to background mode (PID=#!/[0-9]+/!#)
+––– input –––
+sleep 30
+––– output –––
+––– input –––
+curl -s localhost:9308/cli_json -d 'describe testlog_4' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"text","Properties":"indexed stored"}]

@@ -263,7 +263,7 @@ static void BM_stdSprintf ( benchmark::State & st )
 {
 	char sBuf[40];
 	for ( auto _ : st )
-		sprintf ( sBuf, "%d", 1000000 );
+		snprintf ( sBuf, 39, "%d", 1000000 );
 	st.SetItemsProcessed ( st.iterations() );
 }
 

@@ -17,6 +17,12 @@
 #include "sphinxstd.h"
 #include "sphinxdefs.h"
 
+// set to 1 in order to collect overall histogram of VLB values (displayed in 'show status' output)
+// e.g. how many 1-byte, 2-bytes, 3... 10 bytes vlb encoded values happened in real stream.
+#ifndef TRACE_UNZIP
+#define TRACE_UNZIP 0
+#endif
+
 /// file which closes automatically when going out of scope
 class CSphAutofile : ISphNoncopyable
 {
@@ -102,6 +108,14 @@ public:
 	}
 
 	SphOffset_t				GetFilesize() const;
+
+#if TRACE_UNZIP
+	static std::array<std::atomic<uint64_t>, 5> m_dZip32Stats;
+	static std::array<std::atomic<uint64_t>, 10> m_dZip64Stats;
+
+	inline static std::array<std::atomic<uint64_t>, 5>& GetStat32() { return m_dZip32Stats; }
+	inline static std::array<std::atomic<uint64_t>, 10>& GetStat64() { return m_dZip64Stats; }
+#endif
 
 protected:
 	int			m_iFD = -1;

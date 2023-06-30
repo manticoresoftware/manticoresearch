@@ -8960,6 +8960,25 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "load_primary", "%0.2f %0.2f %0.2f", g_tPriStat1m.Value(), g_tPriStat5m.Value(), g_tPriStat15m.Value() );
 	dStatus.MatchTupletf ( "load_secondary", "%0.2f %0.2f %0.2f", g_tSecStat1m.Value(), g_tSecStat5m.Value(), g_tSecStat15m.Value() );
 
+// macro defined in fileio.h
+#if TRACE_UNZIP
+	{
+		StringBuilder_c sstat {", "};
+		auto& stats = CSphReader::GetStat32();
+		for ( const auto& stat : stats )
+			sstat << stat.load(std::memory_order_relaxed);
+		dStatus.MatchTupletf ( "unzip32_hist", "%s", sstat.cstr() );
+	}
+
+	{
+		StringBuilder_c sstat { ", " };
+		auto& stats = CSphReader::GetStat64();
+		for ( const auto& stat : stats )
+			sstat << stat.load ( std::memory_order_relaxed );
+		dStatus.MatchTupletf ( "unzip64_hist", "%s", sstat.cstr() );
+	}
+#endif
+
 	assert ( g_pDistIndexes );
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )

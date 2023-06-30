@@ -91,3 +91,11 @@
 // Replaced by RELEASE and RELEASE_SHARED
 #define UNLOCK_FUNCTION( ... ) \
     THREAD_ANNOTATION_ATTRIBUTE__ ( unlock_function ( __VA_ARGS__ ) )
+
+#if defined( __clang__ )
+#define LIKELY [[likely]]
+#define UNLIKELY [[unlikely]]
+#else
+#define LIKELY
+#define UNLIKELY
+#endif

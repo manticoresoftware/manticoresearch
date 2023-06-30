@@ -48,7 +48,7 @@ inline int ZipToPtrBE ( BYTE* pData, T tValue )
 }
 
 template<typename T, typename READER>
-inline T UnzipValueBE_reference ( READER fnGet )
+inline T UnzipValueBE_reference ( READER&& fnGet )
 {
 #if PARANOID
 	DWORD b = 0;
@@ -75,15 +75,15 @@ inline T UnzipValueBE_reference ( READER fnGet )
 }
 
 template<typename T, typename READER>
-inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER fnGet )
+inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER&& fnGet )
 {
 	BYTE b = fnGet();
-	DWORD res = b & 0x7f;
-	if ( ( b & 0x80 ) == 0 )
+	T res = b & 0x7f;
+	if ( ( b & 0x80 ) == 0 ) LIKELY
 		return res;
 	b = fnGet();
 	res = ( res << 7 ) | ( b & 0x7f );
-	if ( ( b & 0x80 ) == 0 )
+	if ( ( b & 0x80 ) == 0 ) LIKELY
 		return res;
 	b = fnGet();
 	res = ( res << 7 ) | ( b & 0x7f );
@@ -98,7 +98,7 @@ inline std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER fnGet )
 
 // reference implementation
 template<typename T, typename READER>
-inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER fnGet )
+inline std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER&& fnGet )
 {
 #if PARANOID
 	DWORD b = 0;

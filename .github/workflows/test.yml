@@ -1,17 +1,17 @@
 name: 🔬 Test
 
-on: workflow_call
+#on: workflow_call
 
-#on:
-#  push:
-#    branches: [ master ]
-#    paths-ignore:
-#      - './manual/**'
-#  pull_request:
-#    branches: [ master ]
-#    paths-ignore:
-#      - './manual/**'
-#    types: [opened, synchronize, reopened, labeled, unlabeled]
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - './manual/**'
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - './manual/**'
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

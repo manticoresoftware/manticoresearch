@@ -20,6 +20,7 @@ on:
       - labeled
       - unlabeled
 
+
 concurrency:
   group: deploy_docs_${{ github.ref }}
   cancel-in-progress: true

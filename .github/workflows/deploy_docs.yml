@@ -2,6 +2,8 @@ name: Deploy docs
 
 on:
   push:
+    paths:
+      - ./manual/**
     branches:
       - master
       - maintenance-release
@@ -24,3 +26,5 @@ concurrency:
 jobs:
   docs_deploy:
     uses: ./.github/workflows/deploy_docs_template.yml
+  run_tests:
+    uses ./.github/workflows/test.yml

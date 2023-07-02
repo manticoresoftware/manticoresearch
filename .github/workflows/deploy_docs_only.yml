@@ -1,16 +1,15 @@
-name: Deploy docs
+name: Deploy docs (only)
 
 on:
   push:
     paths:
-      - ./manual/**
+      - './manual/**'
+      - '!./manual/**'
     branches:
       - master
       - maintenance-release
       - manticore-**
   pull_request:
-    paths:
-      - ./manual/**
     branches:
       - master
     types:
@@ -21,7 +20,7 @@ on:
       - unlabeled
 
 concurrency:
-  group: check_docs_${{ github.ref }}
+  group: deploy_docs_${{ github.ref }}
   cancel-in-progress: true
 
 

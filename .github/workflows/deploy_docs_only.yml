@@ -3,8 +3,8 @@ name: Deploy docs (only)
 on:
   push:
     paths:
+      - '!./**'
       - './manual/**'
-      - '!./manual/**'
     branches:
       - master
       - maintenance-release

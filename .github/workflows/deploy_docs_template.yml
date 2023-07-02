@@ -3,11 +3,6 @@ name: Deploy docs
 on:
   workflow_call:
 
-concurrency:
-  group: deploy_docs_${{ github.ref }}
-  cancel-in-progress: true
-
-
 jobs:
   docs_deploy:
     runs-on: ubuntu-22.04

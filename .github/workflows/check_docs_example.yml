@@ -21,7 +21,7 @@ on:
       - unlabeled
 
 concurrency:
-  group: deploy_docs_${{ github.ref }}
+  group: check_docs_${{ github.ref }}
   cancel-in-progress: true
 
 

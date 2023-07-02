@@ -27,4 +27,4 @@ jobs:
   docs_deploy:
     uses: ./.github/workflows/deploy_docs_template.yml
   run_tests:
-    uses ./.github/workflows/test.yml
+    uses: ./.github/workflows/test.yml

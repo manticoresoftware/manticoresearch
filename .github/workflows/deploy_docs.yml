@@ -1,4 +1,4 @@
-name: Deploy docs (not only)
+name: Deploy docs
 
 on:
   push:
@@ -19,7 +19,6 @@ on:
       - reopened
       - labeled
       - unlabeled
-
 
 concurrency:
   group: deploy_docs_${{ github.ref }}

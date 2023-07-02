@@ -1,4 +1,4 @@
-name: Deploy docs
+name: Deploy docs (not only)
 
 on:
   push:
@@ -9,6 +9,8 @@ on:
       - maintenance-release
       - manticore-**
   pull_request:
+    paths:
+      - 'manual/**'
     branches:
       - master
     types:

@@ -118,7 +118,7 @@ import manticoresearch
 config = manticoresearch.Configuration(
     host = "http://127.0.0.1:9308"
 )
-client =  manticoresearch.ApiClient(config)
+client = manticoresearch.ApiClient(config)
 indexApi = manticoresearch.IndexApi(client)
 searchApi = manticoresearch.SearchApi(client)
 utilsApi = manticoresearch.UtilsApi(client)

@@ -1,0 +1,30 @@
+name: Deploy docs
+
+on:
+  push:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+      - maintenance-release
+      - manticore-**
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+
+concurrency:
+  group: deploy_docs_${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  docs_deploy:
+    uses: ./.github/workflows/deploy_docs_template.yml

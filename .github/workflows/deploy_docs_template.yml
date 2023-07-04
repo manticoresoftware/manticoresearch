@@ -26,8 +26,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          set-safe-directory: /__w/manticoresearch/manticoresearch
           fetch-depth: 0
 
       - name: Deploy

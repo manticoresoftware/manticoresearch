@@ -22,6 +22,14 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
         DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
+
+        CI_PROJECT_TITLE: dev
+        CI_PROJECT_PATH: manticoresearch/doc
+        CI_PROJECT_ID: 123321
+        CI_PROJECT_NAME: dev
+        CI_PROJECT_DIR: /__w/manticoresearch/manticoresearch
+        CI_COMMIT_SHA: ${GITHUB_SHA}
+        CI_COMMIT_BRANCH: ${GITHUB_REF_NAME}
     steps:
       - name: Install git
         run: |

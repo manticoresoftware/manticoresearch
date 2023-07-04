@@ -102,3 +102,4 @@ Run Manticore container and use built-in MySQL client to connect to the node.
 docker run -e EXTRA=1 --name manticore -d manticoresearch/manticore && docker exec -it manticore mysql
 ```
 <!-- end -->
+<!-- proofread -->

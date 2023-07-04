@@ -28,7 +28,7 @@ jobs:
           git --version
           apt update
           apt-get update
-          apt upgrade
+          apt upgrade -y
           apt-cache madison git
           git --version
       - name: Checkout

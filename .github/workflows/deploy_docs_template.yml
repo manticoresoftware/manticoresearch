@@ -22,7 +22,6 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
         DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
-        GIT_DISCOVERY_ACROSS_FILESYSTEM: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -32,6 +31,7 @@ jobs:
       - name: Deploy
         run: |
           git --version
+          git config --global --add safe.directory $(realpath .)
           git status
 #          echo $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 #          git log "origin/$CI_COMMIT_BRANCH" --pretty=format:"%H"

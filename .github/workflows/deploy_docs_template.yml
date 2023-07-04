@@ -23,14 +23,26 @@ jobs:
         DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
     steps:
+      - name: Install git
+        run: |
+          apt-get update
+          apt-get install -y git
+
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          set-safe-directory: true
+          fetch-depth: 0
 
       - name: Deploy
-        run: sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+        run: |
+          ls -la | grep ".git"
+          git status
+#          pwd
+#          echo $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+#          git log "origin/$CI_COMMIT_BRANCH" --pretty=format:"%H"
+#          echo "$commits_ids" | grep -n "$PREV_COMMIT_SHA" | cut -d":" -f 1
+#          sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 
       - name: Upload artifact
         uses: manticoresoftware/upload_artifact_with_retries@main

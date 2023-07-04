@@ -25,10 +25,12 @@ jobs:
     steps:
       - name: Git versions
         run: |
+          git --version
           apt update
           apt-get update
-          apt list --upgradable
+          apt upgrade
           apt-cache madison git
+          git --version
       - name: Checkout
         uses: actions/checkout@v3.5.3
         with:

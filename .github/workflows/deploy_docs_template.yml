@@ -29,7 +29,7 @@ jobs:
           apt-get install -y git
 
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -37,6 +37,7 @@ jobs:
       - name: Deploy
         run: |
           ls -la | grep ".git"
+          git status
 #          pwd
 #          echo $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 #          git log "origin/$CI_COMMIT_BRANCH" --pretty=format:"%H"

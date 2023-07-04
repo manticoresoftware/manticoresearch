@@ -25,8 +25,8 @@
 using StrBlock_t = std::tuple<Str_t, Str_t, Str_t>;
 
 // common patterns
-const StrBlock_t dEmptyBl { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
-const StrBlock_t dBracketsComma { FROMS(","), FROMS("("), FROMS(")") }; // collection in brackets, comma separated
+inline const StrBlock_t dEmptyBl { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
+inline const StrBlock_t dBracketsComma { FROMS(","), FROMS("("), FROMS(")") }; // collection in brackets, comma separated
 
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s

@@ -24,7 +24,7 @@ inline bool IsValid ( const ByteBlob_t& dBlob )	noexcept { return IsEmpty ( dBlo
 
 /// blob of chars with length (for zero-copy string processing)
 using Str_t = std::pair<const char*, int>;
-const Str_t dEmptyStr { "", 0 };
+inline const Str_t dEmptyStr { "", 0 };
 
 // Str_t stuff
 [[nodiscard]] inline bool IsEmpty ( const Str_t& dBlob ) noexcept { return !dBlob.second; }

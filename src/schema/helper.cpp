@@ -107,7 +107,7 @@ void CSphSchemaHelper::CloneMatch ( CSphMatch& tDst, const CSphMatch& rhs ) cons
 
 void CSphSchemaHelper::FreeDataPtrs ( CSphMatch& tMatch ) const
 {
-	if ( !m_dDataPtrAttrs.GetLength() )
+	if ( m_dDataPtrAttrs.IsEmpty() )
 		return;
 
 	FreeDataSpecial ( tMatch, m_dDataPtrAttrs );

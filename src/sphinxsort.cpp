@@ -1308,12 +1308,12 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 						tMatch.m_pDynamic = pDynamic;
 					}
 					dRows.PutString ( (const char*)pStr );
+					SafeDelete ( pStr );
 				} else {
 					pStr = (const BYTE*)tMatch.GetAttr ( tLoc );
 					auto dString = sphUnpackPtrAttr ( pStr );
 					dRows.PutArray ( dString );
 				}
-				SafeDelete ( pStr );
 			}
 			break;
 
@@ -1402,6 +1402,7 @@ class DirectSqlQueue_c final : public MatchSorter_c, ISphNoncopyable
 
 public:
 	explicit DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec_t dColumns );
+	~DirectSqlQueue_c() override;
 
 	bool				IsGroupby () const final { return false; }
 	int					GetLength () final { return 0; } // that ensures, flatten() will never called;
@@ -1455,6 +1456,7 @@ private:
 
 	inline bool			PushMatch ( CSphMatch & tEntry );
 	void				SendSchemaOnce();
+	void				FinalizeOnce();
 	void				MakeCtx();
 };
 
@@ -1465,6 +1467,11 @@ DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec
 	, m_dCtx (m_dFake)
 	, m_dColumns ( std::move ( dColumns ) )
 {}
+
+DirectSqlQueue_c::~DirectSqlQueue_c()
+{
+	FinalizeOnce();
+}
 
 void DirectSqlQueue_c::SendSchemaOnce()
 {
@@ -1513,26 +1520,29 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 	SendSchemaOnce();
 	++m_iDocs;
 	auto* pDocstores = *(std::pair<void*,void*>**)m_pOpaque;
-	auto pDocstoreReader = pDocstores->first;
-	if ( pDocstoreReader!=std::exchange (m_pCurDocstore, pDocstoreReader) && pDocstoreReader )
+	if ( pDocstores )
 	{
-		DocstoreSession_c::InfoDocID_t tSessionInfo;
-		tSessionInfo.m_pDocstore = (const DocstoreReader_i *)pDocstoreReader;
-		tSessionInfo.m_iSessionId = -1;
+		auto pDocstoreReader = pDocstores->first;
+		if ( pDocstoreReader!=std::exchange (m_pCurDocstore, pDocstoreReader) && pDocstoreReader )
+		{
+			DocstoreSession_c::InfoDocID_t tSessionInfo;
+			tSessionInfo.m_pDocstore = (const DocstoreReader_i *)pDocstoreReader;
+			tSessionInfo.m_iSessionId = -1;
 
-		// value is copied; no leak of pointer to local here.
-		m_dDocstores.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); } );
-	}
+			// value is copied; no leak of pointer to local here.
+			m_dDocstores.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); } );
+		}
 
-	auto pDocstore = pDocstores->second;
-	if ( pDocstore != std::exchange ( m_pCurDocstoreReader, pDocstore ) && pDocstore )
-	{
-		DocstoreSession_c::InfoRowID_t tSessionInfo;
-		tSessionInfo.m_pDocstore = (Docstore_i*)pDocstore;
-		tSessionInfo.m_iSessionId = -1;
+		auto pDocstore = pDocstores->second;
+		if ( pDocstore != std::exchange ( m_pCurDocstoreReader, pDocstore ) && pDocstore )
+		{
+			DocstoreSession_c::InfoRowID_t tSessionInfo;
+			tSessionInfo.m_pDocstore = (Docstore_i*)pDocstore;
+			tSessionInfo.m_iSessionId = -1;
 
-		// value is copied; no leak of pointer to local here.
-		m_dFinals.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo ); } );
+			// value is copied; no leak of pointer to local here.
+			m_dFinals.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo ); } );
+		}
 	}
 
 	m_dCtx.CalcFinal(tEntry);
@@ -1544,7 +1554,15 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 /// final update pass
 void DirectSqlQueue_c::Finalize ( MatchProcessor_i&, bool, bool bFinalizeMatches )
 {
-	if ( !bFinalizeMatches || !std::exchange ( m_bNotYetFinalized, false ) )
+	if ( !bFinalizeMatches )
+		return;
+
+	FinalizeOnce();
+}
+
+void DirectSqlQueue_c::FinalizeOnce ()
+{
+	if ( !std::exchange ( m_bNotYetFinalized, false ) )
 		return;
 
 	SendSchemaOnce();

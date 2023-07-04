@@ -30,6 +30,7 @@ jobs:
 
       - name: Deploy
         run: |
+          ls -la | grep ".git"
           git --version
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git status

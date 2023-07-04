@@ -26,7 +26,7 @@ jobs:
       - name: Update package database
         run: apt-get update -y
       - name: Install Git
-        run: apt-get -y install git
+        run: apt-get -y install apt-utils git
       - name: Checkout repository
         uses: actions/checkout@v3
         with:

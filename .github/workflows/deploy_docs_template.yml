@@ -36,6 +36,10 @@ jobs:
           set-safe-directory: true
           fetch-depth: 0
 
+      - name: Initialization
+        # without adding the safe.directory the script fails to do git show ...
+        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+
       - name: Deploy
         run: |
           ls -la | grep ".git"

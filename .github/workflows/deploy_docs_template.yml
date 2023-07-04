@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Git versions
         run: |
-          apt upgate
+          apt update
           apt-get update
           apt-cache madison git
       - name: Checkout

@@ -29,7 +29,7 @@ jobs:
         CI_PROJECT_NAME: dev
         CI_PROJECT_DIR: /__w/manticoresearch/manticoresearch
         CI_COMMIT_SHA: ${{ github.sha }}
-        CI_COMMIT_BRANCH: ${{ github.ref.name }}
+        CI_COMMIT_BRANCH: ${{ github.head_ref }}
     steps:
       - name: Install git
         run: |

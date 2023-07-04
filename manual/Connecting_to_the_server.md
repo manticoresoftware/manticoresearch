@@ -1,5 +1,6 @@
 # Connecting to the server
 
+
 <!-- example connect -->
 With default configuration, Manticore is waiting for your connections on:
 

@@ -23,14 +23,12 @@ jobs:
         DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
     steps:
-      - name: Git versions
+      - name: Install git
         run: |
-          git --version
+          add-apt-repository ppa:git-core/ppa
           apt update
-          apt-get update
-          apt upgrade -y
-          apt-cache madison git
-          git --version
+          apt install git
+
       - name: Checkout
         uses: actions/checkout@v3.5.3
         with:

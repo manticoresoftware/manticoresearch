@@ -34,6 +34,8 @@ jobs:
           ls -la
           pwd
           echo $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+          git log "origin/$CI_COMMIT_BRANCH" --pretty=format:"%H"
+          echo "$commits_ids" | grep -n "$PREV_COMMIT_SHA" | cut -d":" -f 1
           sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 
       - name: Upload artifact

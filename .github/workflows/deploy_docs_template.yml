@@ -27,6 +27,7 @@ jobs:
         run: |
           apt update
           apt-get update
+          apt list --upgradable
           apt-cache madison git
       - name: Checkout
         uses: actions/checkout@v3.5.3

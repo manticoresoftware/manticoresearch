@@ -23,6 +23,11 @@ jobs:
         DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
     steps:
+      - name: Install git
+        run: |
+          apt-get update
+          apt-get install -y git
+
       - name: Checkout repository
         uses: actions/checkout@v3
         with:

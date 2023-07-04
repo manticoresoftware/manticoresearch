@@ -7,7 +7,6 @@ With default configuration, Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for HTTP/HTTPS, and connections from other Manticore nodes and clients based on Manticore binary API
 
-
 <!-- intro -->
 ##### Connect via MySQL:
 
@@ -103,4 +102,3 @@ Run Manticore container and use built-in MySQL client to connect to the node.
 docker run -e EXTRA=1 --name manticore -d manticoresearch/manticore && docker exec -it manticore mysql
 ```
 <!-- end -->
-<!-- proofread -->

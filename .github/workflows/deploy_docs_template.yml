@@ -28,6 +28,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
+          fetch-depth: 0
 
       - name: Deploy
         run: |

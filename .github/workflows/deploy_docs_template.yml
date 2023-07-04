@@ -23,21 +23,16 @@ jobs:
         DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
     steps:
-      - name: Update package database
-        run: apt-get update -y
-      - name: Install Git
-        run: apt-get -y install apt-utils git
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Deploy
         run: |
           ls -la | grep ".git"
-          git --version
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git status
+#          pwd
 #          echo $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 #          git log "origin/$CI_COMMIT_BRANCH" --pretty=format:"%H"
 #          echo "$commits_ids" | grep -n "$PREV_COMMIT_SHA" | cut -d":" -f 1

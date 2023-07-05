@@ -15,6 +15,10 @@
 #include "indexcheck.h"
 #include "schema/locator.h"
 
+#if __has_include( <charconv>)
+#include <charconv>
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // blob attributes
 
@@ -1009,9 +1013,13 @@ static void MVA2Str ( const T * pMVA, int iLengthBytes, StringBuilder_c &dStr )
 	for ( int i = 0; i<nValues; ++i )
 	{
 		dStr << sComma;
-		dStr.GrowEnough ( SPH_MAX_NUMERIC_STR );
-		dStr += sph::NtoA ( dStr.end (), pMVA[i] );
+#if __has_include( <charconv>)
+		dStr.SetPos ( std::to_chars ( dStr.end (), dStr.AfterEnd(), pMVA[i] ).ptr );
+#else
+		dStr += sph::NtoA ( dStr.end(), pMVA[i] );
+#endif
 	}
+	*dStr.end() = '\0';
 }
 
 

@@ -12,6 +12,10 @@
 
 #include "num_conv.h"
 
+#if __has_include( <charconv>)
+#include <charconv>
+#endif
+
 inline void StringBuilder_c::AppendRawChunk ( Str_t sText ) // append without any commas
 {
 	if ( !sText.second )
@@ -111,7 +115,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( int iVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), iVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), iVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -120,7 +128,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( long iVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), iVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), iVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -129,7 +141,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( long long iVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), iVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), iVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -138,7 +154,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( unsigned int uVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), uVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -147,7 +167,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( unsigned long uVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), uVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -156,7 +180,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( unsigned long long uVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), uVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -201,7 +229,14 @@ inline void StringBuilder_c::NtoA ( INT uVal )
 	const int MAX_NUMERIC_STR = 22;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
+#if __has_include( <charconv>)
+	if constexpr ( iWidth == 0 && iPrec == 0 && cFill == ' ' )
+		SetPos ( std::to_chars ( end(), AfterEnd(), uVal, iBase ).ptr );
+	else
+		m_iUsed += sph::NtoA ( end(), uVal, iBase, iWidth, iPrec, cFill );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal, iBase, iWidth, iPrec, cFill );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 }
 

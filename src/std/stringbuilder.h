@@ -109,6 +109,7 @@ public:
 	// support for sph::Sprintf - emulate POD 'char*'
 	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }
 	inline void					operator += ( int64_t i ) { GrowEnough ( i ); m_iUsed += i; }
+	inline void 		SetPos ( const char* sPos ) { assert (sPos>=m_szBuffer && sPos<m_szBuffer+m_iSize); m_iUsed = sPos-m_szBuffer; }; // helper. sPos must point inside existing buf
 
 	// append 1 char despite any blocks.
 	inline void			RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
@@ -144,6 +145,7 @@ public:
 
 	inline char *		begin() const { return m_szBuffer; }
 	inline char *		end () const { return m_szBuffer + m_iUsed; }
+	inline char *		AfterEnd () const { return m_szBuffer + m_iSize; }
 
 	// shrink, if necessary, to be able to fit at least iLen more chars
 	void GrowEnough ( int iLen );

@@ -459,7 +459,11 @@ public:
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
+#if __has_include( <charconv>)
+		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, iVal ).ptr - (char*)( pSize + 1 );
+#else
+	int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
+#endif
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}
@@ -468,7 +472,11 @@ public:
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
+#if __has_include( <charconv>)
+		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, uVal ).ptr - (char*)( pSize + 1 );
+#else
+		int iLen = sph::NtoA ( (char*)pSize + 1, uVal );
+#endif
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}
@@ -477,7 +485,12 @@ public:
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
+#if __has_include( <charconv>)
+		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, iVal ).ptr - (char*)( pSize + 1 );
+#else
 		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
+#endif
+
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}
@@ -486,7 +499,11 @@ public:
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
+#if __has_include( <charconv>)
+		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, uVal ).ptr - (char*)( pSize + 1 );
+#else
 		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
+#endif
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}

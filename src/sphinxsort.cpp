@@ -1755,19 +1755,22 @@ public:
 	}
 };
 
-template < typename T >
-inline static char * FormatInt ( char sBuf[32], T v )
+#if __has_include( <charconv>)
+#include <charconv>
+#else
+template<typename T>
+inline static char* FormatInt ( char sBuf[32], T v )
 {
-	if ( sizeof(T)==4 && v==INT_MIN )
+	if ( sizeof ( T ) == 4 && v == INT_MIN )
 		return strncpy ( sBuf, "-2147483648", 32 );
-	if ( sizeof(T)==8 && v==LLONG_MIN )
+	if ( sizeof ( T ) == 8 && v == LLONG_MIN )
 		return strncpy ( sBuf, "-9223372036854775808", 32 );
 
-	bool s = ( v<0 );
+	bool s = ( v < 0 );
 	if ( s )
 		v = -v;
 
-	char * p = sBuf+31;
+	char* p = sBuf + 31;
 	*p = 0;
 	do
 	{
@@ -1778,7 +1781,7 @@ inline static char * FormatInt ( char sBuf[32], T v )
 		*--p = '-';
 	return p;
 }
-
+#endif
 
 /// lookup JSON key, group by looked up value (used in CSphKBufferJsonGroupSorter)
 class CSphGrouperJsonField final : public CSphGrouper
@@ -1922,10 +1925,20 @@ static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPu
 	}
 
 	case JSON_INT32:
-		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword(pValue) ) ) );
+#if __has_include( <charconv>)
+		*std::to_chars ( szBuf, szBuf + 32, (int)sphGetDword ( pValue ) ).ptr = '\0';
+		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
+#else
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword ( pValue ) ) ) );
+#endif
 
 	case JSON_INT64:
+#if __has_include( <charconv>)
+		*std::to_chars ( szBuf, szBuf + 32, sphJsonLoadBigint ( &pValue ) ).ptr = '\0';
+		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
+#else
 		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
+#endif
 
 	case JSON_DOUBLE:
 		snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );

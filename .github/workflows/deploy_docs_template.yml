@@ -1,0 +1,60 @@
+name: Deploy docs
+
+on:
+  workflow_call:
+
+jobs:
+  docs_deploy:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    #    timeout-minutes: 30
+    container:
+      image: manticoresearch/docs_autodeploy:latest
+      env:
+        CACHEB: "../cache"
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_DRIVER: overlay2
+        RELEASE_FILENAME: latest_release_version
+        COMMIT_DIR: manual
+        DEPLOY_TARGET: k8s
+        DOCS_ERRORS_DIR: build/docs/
+        DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
+        DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
+
+        CI_PROJECT_TITLE: dev
+        CI_PROJECT_PATH: manticoresearch/doc
+        CI_PROJECT_ID: 123321
+        CI_PROJECT_NAME: dev
+        CI_PROJECT_DIR: /__w/manticoresearch/manticoresearch
+        CI_COMMIT_SHA: ${{ github.sha }}
+        CI_COMMIT_BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Install git
+        run: |
+          add-apt-repository ppa:git-core/ppa
+          apt update
+          apt install -y git
+
+      - name: Checkout
+        uses: actions/checkout@v3.5.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          set-safe-directory: true
+          fetch-depth: 0
+
+      - name: Initialization
+        # without adding the safe.directory the script fails to do git show ...
+        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+
+      - name: Deploy
+        run: |
+          sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+
+      - name: Upload artifact
+        uses: manticoresoftware/upload_artifact_with_retries@main
+        with:
+          name: Docs error artifact
+          path: $DOCS_ERRORS_DIR
+

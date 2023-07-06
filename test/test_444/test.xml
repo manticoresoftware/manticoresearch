@@ -98,6 +98,32 @@ index idx2:idx
     source = src2 
     path = <data_path/>/idx2 
 } 
+
+source src11
+{
+	type			= mysql
+	<sql_settings/>
+	sql_attr_uint = tag
+	sql_attr_uint = gr
+	sql_query		= SELECT * FROM test_table1 WHERE document_id &lt;= 1000
+}
+
+source src12 : src11
+{
+	sql_query		= SELECT * FROM test_table1 WHERE document_id &gt;= 1001
+}
+
+index i11
+{
+	source			= src11
+	path			= <data_path/>/i11
+}
+
+index i12
+{
+	source			= src12
+	path			= <data_path/>/i12
+}
 </config>
 
 <queries>
@@ -139,6 +165,9 @@ select a, count(distinct id) from idx2, idx  group by a;
 select a, count(distinct id) from idx  group by a;
 select a, count(distinct id) from idx2 group by a;
 
+select id, count(distinct tag) from i11, i12 group by gr limit 10 option max_matches = 100;
+select id, count(distinct tag) from i11, i12 group by gr limit 10 option max_matches = 1000;
+
 </sphinxql>
 </queries>
 
@@ -162,6 +191,32 @@ INSERT INTO `test_table` VALUES
 ( 2, 2, 1, 'main' ),
 ( 3, 1, 1, 'main' ),
 ( 4, 3, 1, 'main' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_table1`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`gr` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table1`
+</db_drop>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="1000" vars="id tag gr" init="1 100 1100" inc="1 12 13"><var name="vals" delimiter=",">(<id/>,<tag/>,<gr/>, 'test 1')</var></repeat>
+	INSERT INTO test_table1 VALUES <vals/>
+</db_insert>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="1000" vars="id tag gr" init="1000 200 1200" inc="1 23 33"><var name="vals" delimiter=",">(<id/>,<tag/>,<gr/>, 'test 12')</var></repeat>
+	INSERT INTO test_table1 VALUES <vals/>
 </db_insert>
 
 </test>

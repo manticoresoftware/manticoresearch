@@ -3042,6 +3042,7 @@ public:
 		bool bUniqUpdated = false;
 		if ( !m_bMatchesFinalized && bCopyMeta )
 		{
+			// can not move m_tUniq into dRhs as move invalidates m_tUniq then breaks FinalizeMatches
 			m_tUniq.CopyTo ( dRhs.m_tUniq );
 			bUniqUpdated = true;
 		}

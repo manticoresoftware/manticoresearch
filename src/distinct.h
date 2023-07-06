@@ -98,7 +98,7 @@ public:
 	int				CountStart ( SphGroupKey_t & tOutGroup );	///< starting counting distinct values, returns count and group key (0 if empty)
 	int				CountNext ( SphGroupKey_t & tOutGroup );	///< continues counting distinct values, returns count and group key (0 if done)
 	void			Compact ( VecTraits_T<SphGroupKey_t> & dRemoveGroups );
-	void			CopyTo (UniqGrouped_T & dRhs );
+	void			CopyTo (UniqGrouped_T & dRhs ) const;
 	void			Reset() { BASE::Resize(0); }
 	void			SetAccuracy ( int iAccuracy ) {}
 
@@ -226,7 +226,7 @@ void UniqGrouped_T<T>::Compact ( VecTraits_T<SphGroupKey_t>& dRemoveGroups )
 }
 
 template <typename T>
-void UniqGrouped_T<T>::CopyTo ( UniqGrouped_T & dRhs )
+void UniqGrouped_T<T>::CopyTo ( UniqGrouped_T & dRhs ) const
 {
 	if ( m_bSorted && dRhs.m_bSorted )
 	{
@@ -256,7 +256,7 @@ public:
 	void	Add ( const ValueWithGroupCount_t & tValue );
 	void	Sort();
 	void	Compact();
-	void	CopyTo ( UniqSingle_T & dRhs );
+	void	CopyTo ( UniqSingle_T & dRhs ) const;
 	void	Reset() { BASE::Resize(0); }
 	int		CountDistinct();
 
@@ -296,7 +296,7 @@ void UniqSingle_T<T>::Compact()
 }
 
 template <typename T>
-void UniqSingle_T<T>::CopyTo ( UniqSingle_T & dRhs )
+void UniqSingle_T<T>::CopyTo ( UniqSingle_T & dRhs ) const
 {
 	if ( m_bSorted && dRhs.m_bSorted )
 	{
@@ -436,62 +436,12 @@ protected:
 		case ContainterType_e::HLL_DENSE_NONPACKED:	m_dUnusedHLLDenseNonPacked.Add ( tContainer.m_pHLLDenseNonPacked ); break;
 		default: assert ( 0 && "Unknown container type" ); break;
 		}
+		tContainer.m_pArray = nullptr;
 	}
 
 	void			ConvertToHash ( Container_t & tContainer );
 	void			ConvertToHLLDensePacked ( Container_t & tContainer );
 	void			ConvertToHLLDenseNonPacked ( Container_t & tContainer );
-
-	template <typename T>
-	void CopyContainerTo ( SphGroupKey_t tGroup, const Container_t & tFrom, Container_t & tTo, T & tRhs )
-	{
-		if ( tFrom.IsEmpty() )
-			return;
-
-		if ( tTo.IsEmpty() )
-		{
-			tTo.Reset();
-			tTo = tFrom;
-			tTo.m_eType = ContainterType_e::ARRAY;
-			tTo.m_pArray = nullptr;
-		}
-		else
-		{
-			if ( tFrom.m_eType==ContainterType_e::ARRAY )
-			{
-				for ( auto i : *tFrom.m_pArray )
-					tRhs.Add ( { tGroup, i, 1 } );
-			}
-			else if ( tFrom.m_eType==ContainterType_e::HASH )
-			{
-				int64_t i = 0;
-				SphAttr_t * pRes;
-				while ( ( pRes = tFrom.m_pHash->Iterate(i) ) != nullptr )
-					tRhs.Add ( { tGroup, *pRes, 1 } );
-			}
-			else
-			{
-				if ( tTo.m_eType==ContainterType_e::ARRAY )
-					tRhs.ConvertToHash ( tTo );
-
-				if ( tTo.m_eType==ContainterType_e::HASH )
-				{
-					assert ( m_iAccuracy==tRhs.m_iAccuracy );
-
-					if ( m_iAccuracy > NON_PACKED_HLL_THRESH )
-					{
-						tRhs.ConvertToHLLDensePacked ( tTo );
-						tTo.m_pHLLDensePacked->Merge ( *tFrom.m_pHLLDensePacked );
-					}
-					else
-					{
-						tRhs.ConvertToHLLDenseNonPacked ( tTo );
-						tTo.m_pHLLDenseNonPacked->Merge ( *tFrom.m_pHLLDenseNonPacked );
-					}
-				}
-			}
-		}
-	}
 
 private:
 	CSphVector<SmallArray_c *>			m_dUnusedArray;
@@ -505,6 +455,9 @@ private:
 	HLLDenseNonPacked_c *	AllocateHLLDenseNonPacked();
 	Hash_c *				AllocateHash ( int iIdx );
 	void					MoveToLargerHash ( Container_t & tContainer );
+
+	template <typename T>
+	friend void CopyContainerTo ( SphGroupKey_t tGroup, const UniqHLLTraits_c::Container_t & tFrom, T & tRhs );
 };
 
 class UniqHLL_c : public UniqHLLTraits_c
@@ -522,7 +475,8 @@ public:
 	int				CountNext ( SphGroupKey_t & tOutGroup );
 	void			Compact ( VecTraits_T<SphGroupKey_t>& dRemoveGroups );
 	void			Reset();
-	void			CopyTo ( UniqHLL_c & tRhs );
+	void			CopyTo ( UniqHLL_c & tRhs ) const;
+	Container_t &	Get ( SphGroupKey_t tGroup );
 
 private:
 	OpenHashTable_T<SphGroupKey_t, Container_t> m_hGroups;
@@ -557,8 +511,9 @@ public:
 	inline void	Add ( const ValueWithGroupCount_t & tValue ) { AddToContainer ( m_tContainer, tValue.m_tValue ); }
 	void		Compact() {}
 	int			CountDistinct() { return m_tContainer.Estimate(); }
-	void		CopyTo ( UniqHLLSingle_c & tRhs );
+	void		CopyTo ( UniqHLLSingle_c & tRhs ) const;
 	void		Reset();
+	Container_t & Get ( SphGroupKey_t tGroup ) { return m_tContainer; }
 
 private:
 	Container_t	m_tContainer;

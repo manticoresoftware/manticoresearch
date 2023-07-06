@@ -205,7 +205,7 @@ void UniqHLLTraits_c::ConvertToHash ( Container_t & tContainer )
 	for ( const auto & i : *tContainer.m_pArray )
 		pHash->Add(i);
 
-	m_dUnusedArray.Add ( tContainer.m_pArray );
+	FreeContainer ( tContainer );
 
 	tContainer.m_pHash = pHash;
 	tContainer.m_iHashIdx = 0;
@@ -221,8 +221,7 @@ void UniqHLLTraits_c::ConvertToHLLDensePacked ( Container_t & tContainer )
 	assert ( pHLL && tContainer.m_pHash );
 
 	CopyHashToHLL ( *pHLL, *tContainer.m_pHash );
-
-	m_dUnusedHashes[tContainer.m_iHashIdx].Add ( tContainer.m_pHash );
+	FreeContainer ( tContainer );
 
 	tContainer.m_pHLLDensePacked = pHLL;
 	tContainer.m_eType = ContainterType_e::HLL_DENSE_PACKED;
@@ -237,8 +236,7 @@ void UniqHLLTraits_c::ConvertToHLLDenseNonPacked ( Container_t & tContainer )
 	assert ( pHLL && tContainer.m_pHash );
 
 	CopyHashToHLL ( *pHLL, *tContainer.m_pHash );
-
-	m_dUnusedHashes[tContainer.m_iHashIdx].Add ( tContainer.m_pHash );
+	FreeContainer ( tContainer );
 
 	tContainer.m_pHLLDenseNonPacked = pHLL;
 	tContainer.m_eType = ContainterType_e::HLL_DENSE_NONPACKED;
@@ -302,6 +300,64 @@ void UniqHLLTraits_c::SetAccuracy ( int iAccuracy )
 	m_dUnusedHashes.Resize ( sphLog2 ( m_iMaxHashSize ) - sphLog2const ( MIN_HASH_SIZE ) + 1 );
 }
 
+UniqHLLTraits_c::Container_t & UniqHLL_c::Get ( SphGroupKey_t tGroup )
+{
+	int iLen = m_hGroups.GetLength();
+	UniqHLLTraits_c::Container_t & tCont = m_hGroups.Acquire ( tGroup );
+
+	// need reset value in case of the Container_t just added 
+	if ( iLen!=m_hGroups.GetLength() )
+		tCont = UniqHLLTraits_c::Container_t();
+
+	return tCont;
+}
+
+template <typename T>
+void CopyContainerTo ( SphGroupKey_t tGroup, const UniqHLLTraits_c::Container_t & tFrom, T & tRhs )
+{
+	if ( tFrom.IsEmpty() )
+		return;
+
+	UniqHLLTraits_c::Container_t & tTo = tRhs.Get ( tGroup );
+	if ( tTo.IsEmpty() )
+		tTo.m_pArray = tRhs.AllocateArray();
+
+	if ( tFrom.m_eType==UniqHLLTraits_c::ContainterType_e::ARRAY )
+	{
+		for ( auto i : *tFrom.m_pArray )
+			tRhs.Add ( { tGroup, i, 1 } );
+
+	} else if ( tFrom.m_eType==UniqHLLTraits_c::ContainterType_e::HASH )
+	{
+		int64_t i = 0;
+		SphAttr_t * pRes;
+		while ( ( pRes = tFrom.m_pHash->Iterate(i) ) != nullptr )
+			tRhs.Add ( { tGroup, *pRes, 1 } );
+
+	} else
+	{
+		if ( tTo.m_eType==UniqHLLTraits_c::ContainterType_e::ARRAY )
+			tRhs.ConvertToHash ( tTo );
+
+		if ( tTo.m_eType==UniqHLLTraits_c::ContainterType_e::HASH )
+		{
+			assert ( tRhs.m_iAccuracy==tRhs.m_iAccuracy );
+
+			if ( tRhs.m_iAccuracy > UniqHLLTraits_c::NON_PACKED_HLL_THRESH )
+			{
+				tRhs.ConvertToHLLDensePacked ( tTo );
+				tTo.m_pHLLDensePacked->Merge ( *tFrom.m_pHLLDensePacked );
+			}
+			else
+			{
+				tRhs.ConvertToHLLDenseNonPacked ( tTo );
+				tTo.m_pHLLDenseNonPacked->Merge ( *tFrom.m_pHLLDenseNonPacked );
+			}
+		}
+	}
+}
+
+
 /////////////////////////////////////////////////////////////////////
 UniqHLL_c &	UniqHLL_c::operator = ( UniqHLL_c && tRhs )
 {
@@ -356,27 +412,14 @@ void UniqHLL_c::Reset()
 }
 
 
-void UniqHLL_c::CopyTo ( UniqHLL_c & tRhs )
+void UniqHLL_c::CopyTo ( UniqHLL_c & tRhs ) const
 {
 	int64_t iIterator = 0;
 	std::pair<SphGroupKey_t, Container_t*> tRes;
 	while ( ( tRes = m_hGroups.Iterate ( iIterator ) ).second )
 	{
-		Container_t * pFrom = tRes.second;
-		if ( pFrom->IsEmpty() )
-			continue;
-
-		Container_t * pTo = tRhs.m_hGroups.Find ( tRes.first );
-		// just move whole group if absent in RHS
-		if ( !pTo )
-		{
-			tRhs.m_hGroups.Add ( tRes.first, *tRes.second );
-			m_hGroups.Delete ( tRes.first );
-			continue;
-		}
-
-		// containers need to be merged
-		CopyContainerTo ( tRes.first, *pFrom, *pTo, tRhs );
+		// can not move Container_t into dRhs as move invalidates this
+		CopyContainerTo ( tRes.first, *tRes.second, tRhs );
 	}
 }
 
@@ -392,9 +435,9 @@ UniqHLLSingle_c & UniqHLLSingle_c::operator = ( UniqHLLSingle_c && tRhs )
 }
 
 
-void UniqHLLSingle_c::CopyTo ( UniqHLLSingle_c & tRhs )
+void UniqHLLSingle_c::CopyTo ( UniqHLLSingle_c & tRhs ) const
 {
-	CopyContainerTo ( 0, m_tContainer, tRhs.m_tContainer, tRhs );
+	CopyContainerTo ( 0, m_tContainer, tRhs );
 }
 
 

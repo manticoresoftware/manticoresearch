@@ -21,6 +21,7 @@ public:
 };
 
 float EstimateMTCost ( float fCost, int iThreads );
+float EstimateMTCostCS ( float fCost, int iThreads );
 float EstimateMTCostSI ( float fCost, int iThreads );
 float EstimateMTCostSIFT ( float fCost, int iThreads );
 

@@ -48,6 +48,15 @@ static float EstimateMTCost ( float fCost, int iThreads, float fKPerf, float fBP
 
 float EstimateMTCost ( float fCost, int iThreads )
 {
+	const float fKPerf = 0.45f;
+	const float fBPerf = 1.40f;
+
+	return EstimateMTCost ( fCost, iThreads, fKPerf, fBPerf );
+}
+
+
+float EstimateMTCostCS ( float fCost, int iThreads )
+{
 	const float fKPerf = 0.16f;
 	const float fBPerf = 1.38f;
 
@@ -118,8 +127,9 @@ private:
 	float	CalcAnalyzerCost() const;
 	float	CalcLookupCost() const;
 	float	CalcPushCost ( float fDocsAfterFilters ) const;
-	float	CalcMTCost ( float fCost ) const;
-	float	CalcMTCostSI ( float fCost ) const;
+	float	CalcMTCost ( float fCost ) const	{ return EstimateMTCost ( fCost, m_tCtx.m_iThreads );}
+	float	CalcMTCostCS ( float fCost ) const	{ return EstimateMTCostCS ( fCost, m_tCtx.m_iThreads );}
+	float	CalcMTCostSI ( float fCost ) const	{ return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads ); }
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const;
@@ -332,18 +342,6 @@ float CostEstimate_c::CalcPushCost ( float fDocsAfterFilters ) const
 }
 
 
-float CostEstimate_c::CalcMTCost ( float fCost ) const
-{
-	return EstimateMTCost ( fCost, m_tCtx.m_iThreads );
-}
-
-
-float CostEstimate_c::CalcMTCostSI ( float fCost ) const
-{
-	return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads );
-}
-
-
 float CostEstimate_c::CalcQueryCost()
 {
 	float fCost = 0.0f;
@@ -413,7 +411,7 @@ float CostEstimate_c::CalcQueryCost()
 		fCost += CalcPushCost(fDocsAfterFilters);
 
 	if ( !iNumLookups ) // docid lookups always run in a single thread
-		fCost = iNumIndexes ? CalcMTCostSI(fCost) : CalcMTCost(fCost);
+		fCost = iNumIndexes ? CalcMTCostSI(fCost) : ( iNumAnalyzers ? CalcMTCostCS(fCost) : CalcMTCost(fCost) );
 
 	return fCost;
 }

@@ -658,6 +658,10 @@ int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
 #endif
 }
 
+static bool IsLocalhost ( DWORD uAddr )
+{
+	return ( ( ntohl ( uAddr )>>24)==127 );
+}
 
 DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pFatal )
 {
@@ -687,7 +691,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pF
 
 	if ( pResult->ai_next )
 	{
-		DWORD uLocalhost = htonl ( INADDR_LOOPBACK );
+		const bool bLocalHost = IsLocalhost ( uAddr );
 		char sAddrBuf[SPH_ADDRESS_SIZE+1];
 		StringBuilder_c sBuf( "; ip=", "ip=" );
 
@@ -699,7 +703,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pF
 			sBuf += sAddrBuf; // can not use << as builder appends string buffer with tail '\0' and next chunks are invisible
 			pResult = pResult->ai_next;
 
-			if ( uAddr==uLocalhost && uNextAddr!=uLocalhost )
+			if ( bLocalHost && !IsLocalhost ( uNextAddr ) )
 				uAddr = uNextAddr;
 		}
 

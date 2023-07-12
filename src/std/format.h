@@ -14,7 +14,7 @@
 
 #include "config.h"
 
-#if HAVE_INTTYPES_H
+#if __has_include(<inttypes.h>)
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #endif

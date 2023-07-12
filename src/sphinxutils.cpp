@@ -25,7 +25,7 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <errno.h>
-#if HAVE_EXECINFO_H
+#if __has_include(<execinfo.h>)
 #include <execinfo.h>
 #endif
 
@@ -43,18 +43,20 @@
 #include <glob.h>
 #endif
 
-#ifdef HAVE_SYS_PRCTL_H
+#if __has_include(<sys/prctl.h>)
+#define HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 
 #include "libutils.h"
 #include "coroutine.h"
 
-#ifdef HAVE_MALLOC_H
+#if __has_include (<malloc.h>)
 #include <malloc.h>
 #endif
 
-#ifdef HAVE_JEMALLOC_JEMALLOC_H
+#if __has_include(<jemalloc/jemalloc.h>)
+#define HAVE_JEMALLOC_JEMALLOC_H
 #include <jemalloc/jemalloc.h>
 #endif
 
@@ -2512,7 +2514,7 @@ static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL
 static CSphString g_sBinaryName;
 static auto& g_bSafeGDB = getSafeGDB ();
 
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 static char g_sNameBuf[512] = {0};
 static char g_sPid[30] = { 0 };
 #endif
@@ -2557,7 +2559,7 @@ static bool DumpGdb ( int iFD )
 		sphSleepMsec (3*1000);
 		return true;
 	}
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 	int iPos = sphSafeInfo ( g_sPid, "%d", getpid () );
 	g_sPid[iPos-1] = '\0'; // make null-terminated from EOL string
 	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = '\0';
@@ -2572,7 +2574,7 @@ static bool DumpGdb ( int iFD )
 
 bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 {
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 	if ( IsDebuggerPresent ())
 		return false;
 

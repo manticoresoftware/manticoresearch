@@ -26,7 +26,7 @@ namespace Threads {
 
 bool StackMockingAllowed()
 {
-#if HAVE_VALGRIND_VALGRIND_H
+#if __has_include( <valgrind/valgrind.h>)
 	if (!!RUNNING_ON_VALGRIND)
 		return false;
 #endif

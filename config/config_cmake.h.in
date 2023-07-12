@@ -32,9 +32,6 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #cmakedefine HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME}
 
-/* Define to 1 if you have the `dlerror' function. */
-#cmakedefine01 HAVE_DLERROR
-
 /* Define to 1 if you have the `dlopen' function. */
 #cmakedefine01 HAVE_DLOPEN
 
@@ -68,26 +65,14 @@
 /* Define if your system supports flag PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP */
 #cmakedefine01 HAVE_RWLOCK_PREFER_WRITER
 
-/* Define to 1 if you have the <execinfo.h> header file. */
-#cmakedefine HAVE_EXECINFO_H ${HAVE_EXECINFO_H}
-
 /* Define if F_SETLKW is defined in fcntl.h */
 #cmakedefine HAVE_F_SETLKW ${HAVE_F_SETLKW}
-
-/* Define to 1 if you have the <inttypes.h> header file. */
-#cmakedefine HAVE_INTTYPES_H ${HAVE_INTTYPES_H}
 
 /* Define to 1 if you have the `logf' function. */
 #cmakedefine HAVE_LOGF ${HAVE_LOGF}
 
 /* Define to 1 if you have the 'mremap' function */
 #cmakedefine HAVE_MREMAP ${HAVE_MREMAP}
-
-/* Define to 1 if you have the 'malloc.h' header */
-#cmakedefine HAVE_MALLOC_H ${HAVE_MALLOC_H}
-
-/* Define to 1 if you have the 'nanosleep' function */
-#cmakedefine HAVE_NANOSLEEP ${HAVE_NANOSLEEP}
 
 /* Define to 1 if you have the `poll' function. */
 #cmakedefine HAVE_POLL ${HAVE_POLL}
@@ -110,26 +95,11 @@
 /* Define to 1 if you have the `pthread_setname_np' function. and it receive only 1 arg (name)*/
 #cmakedefine HAVE_PTHREAD_SETNAME_NP_1ARG ${HAVE_PTHREAD_SETNAME_NP_1ARG}
 
-/* Define to 1 if you have the <stdint.h> header file. */
-#cmakedefine HAVE_STDINT_H ${HAVE_STDINT_H}
-
 /* Define to 1 if you have the `strnlen' function. */
 #cmakedefine HAVE_STRNLEN ${HAVE_STRNLEN}
 
 /* Whether we have internal atomic functions */
 #cmakedefine HAVE_SYNC_FETCH ${HAVE_SYNC_FETCH}
-
-/* Define to 1 if you have the <sys/types.h> header file. */
-#cmakedefine HAVE_SYS_TYPES_H ${HAVE_SYS_TYPES_H}
-
-/* Define to 1 if you have the <sys/prctl.h> header file. */
-#cmakedefine HAVE_SYS_PRCTL_H ${HAVE_SYS_PRCTL_H}
-
-/* Define to 1 if you have valgrind headers (might be used in coroutines to mark mem as stack). */
-#cmakedefine HAVE_VALGRIND_VALGRIND_H ${HAVE_VALGRIND_VALGRIND_H}
-
-/* Define to 1 if you have jemalloc headers (might be used for debug malloc_stats). */
-#cmakedefine HAVE_JEMALLOC_JEMALLOC_H ${HAVE_JEMALLOC_JEMALLOC_H}
 
 /* define if mincore has unsigned 3-rd param */
 #cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}

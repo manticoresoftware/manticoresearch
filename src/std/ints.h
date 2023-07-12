@@ -17,11 +17,11 @@
 #include <stdio.h>
 
 // for 64-bit types
-#if HAVE_STDINT_H
-#include <stdint.h>
+#if __has_include(<cstdint>)
+#include <cstdint>
 #endif
 
-#if HAVE_SYS_TYPES_H
+#if __has_include(<sys/types.h>)
 #include <sys/types.h>
 #endif
 

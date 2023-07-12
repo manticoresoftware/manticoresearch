@@ -12,7 +12,7 @@
 
 #include "config.h"
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
+#if __has_include( <valgrind/valgrind.h>)
 #define BOOST_USE_VALGRIND 1
 #include <valgrind/valgrind.h>
 #else

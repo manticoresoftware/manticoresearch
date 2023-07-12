@@ -92,9 +92,6 @@ include ( CheckIncludeFile )
 if (NOT WIN32)
 	# Checking if mincore has unsigned 3-rd param
 	include ( mincore_test )
-	check_include_file ( "execinfo.h" HAVE_EXECINFO_H )
-	check_include_file ( "sys/eventfd.h" HAVE_SYS_EVENTFD_H )
-	check_include_file ( "sys/prctl.h" HAVE_SYS_PRCTL_H )
 	add_lib_for ( getaddrinfo_a anl lextra )
 	add_lib_for ( setsockopt socket lextra )
 	add_lib_for ( getaddrinfo "nsl;socket;resolv" lextra )
@@ -108,7 +105,6 @@ if (NOT WIN32)
 	check_function_exists ( backtrace HAVE_BACKTRACE )
 	check_function_exists ( backtrace_symbols HAVE_BACKTRACE_SYMBOLS )
 	check_function_exists ( mremap HAVE_MREMAP )
-	check_function_exists ( nanosleep HAVE_NANOSLEEP )
 	check_function_exists ( eventfd HAVE_EVENTFD )
 	check_function_exists ( kqueue HAVE_KQUEUE )
 	check_function_exists ( pthread_getname_np HAVE_PTHREAD_GETNAME_NP )
@@ -136,7 +132,6 @@ if (STATIC_BINARY)
 	# options for clang/gcc c and c++
 	target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-static> )
 	set ( HAVE_DLOPEN 0 CACHE BOOL "" FORCE )
-	set ( HAVE_DLERROR 0 CACHE BOOL "" FORCE )
 	set ( HAVE_GETADDRINFO_A 0 CACHE BOOL "" FORCE )
 	set ( WITH_ODBC 0 CACHE BOOL "" FORCE )
 	set ( WITH_MYSQL 0 CACHE BOOL "" FORCE )
@@ -152,19 +147,12 @@ elseif (NOT WIN32)
 	endif ()
 	set ( CMAKE_REQUIRED_LIBRARIES "${CMAKE_DL_LIBS}" )
 	check_symbol_exists ( dlopen "dlfcn.h" HAVE_DLOPEN )
-	check_symbol_exists ( dlerror "dlfcn.h" HAVE_DLERROR )
 else ()
 	set ( HAVE_DLOPEN 1 CACHE BOOL "Use emulated dlopen" FORCE )
-	set ( HAVE_DLERROR 1 CACHE BOOL "Use emulated dlerror" FORCE )
 endif ()
 
 include ( TestBigEndian ) # fixme! That is deprecated in cmake 3.20 in favor to CMAKE_<LANG>_BYTE_ORDER var
 test_big_endian ( USE_BIG_ENDIAN )
-
-check_include_file ( "sys/types.h" HAVE_SYS_TYPES_H )
-check_include_file ( "stdint.h" HAVE_STDINT_H )
-check_include_file ( "inttypes.h" HAVE_INTTYPES_H )
-check_include_file ( "malloc.h" HAVE_MALLOC_H )
 
 target_compile_options ( lextra INTERFACE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4996 -wd4706 -wd4244 -wd4702 -wd4577> )
 
@@ -266,12 +254,6 @@ with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
 
 trace ( OpenSSL::Crypto )
-
-# Presence of Jemalloc headers
-check_include_file ( "jemalloc/jemalloc.h" HAVE_JEMALLOC_JEMALLOC_H )
-
-# Presence of Valgrind headers
-check_include_file ( "valgrind/valgrind.h" HAVE_VALGRIND_VALGRIND_H )
 
 # Support for ZLIB
 with_menu ( ZLIB "zlib" "for compressed data and networking" )

@@ -242,7 +242,6 @@ struct Service_t : public TaskService_t//, public Service_i
 	sph::Event_c m_tWakeupEvent;				/// event to wake up blocked threads
 	OpSchedule_t m_OpQueue GUARDED_BY ( m_dMutex );		/// The queue of handlers that are ready to be delivered
 	OpSchedule_t m_OpVipQueue GUARDED_BY ( m_dMutex );	/// The queue of handlers that have to be delivered BEFORE OpQueue
-	std::atomic<int> m_iWorkingNow {0};
 
 	// Per-thread call stack to track the state of each thread in the service.
 	using ThreadCallStack_c = CallStack_c<Service_t, TaskServiceThreadInfo_t>;
@@ -306,7 +305,7 @@ public:
 		wake_one_thread_and_unlock ( dLock );
 	}
 
-	void run () NO_THREAD_SAFETY_ANALYSIS //override
+	void run ( std::atomic<bool>& bBusy ) NO_THREAD_SAFETY_ANALYSIS //override
 	{
 		LOG ( SERVICE, SVC ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
 		if ( m_iOutstandingWork==0 )
@@ -321,7 +320,7 @@ public:
 		ThreadCallStack_c::Context_c dCtx ( this, dThisThread );
 
 		ScopedMutex_t dLock ( m_dMutex );
-		while ( do_run_one ( dLock, dThisThread ) )
+		while ( do_run_one ( dLock, dThisThread, bBusy ) )
 			dLock.Lock ();
 	}
 
@@ -330,7 +329,7 @@ public:
 		return m_OpQueue.Empty () && m_OpVipQueue.Empty ();
 	}
 
-	bool do_run_one ( ScopedMutex_t& dLock, TaskServiceThreadInfo_t& this_thread )
+	inline bool do_run_one ( ScopedMutex_t& dLock, TaskServiceThreadInfo_t& this_thread, std::atomic<bool>& bBusy ) noexcept
 		REQUIRES ( dLock ) RELEASE ( dLock ) TRY_ACQUIRE ( false, dLock )
 	{
 		while ( !m_bStopped )
@@ -353,10 +352,10 @@ public:
 			else
 				dLock.Unlock ();
 
-			m_iWorkingNow.fetch_add ( 1, std::memory_order_relaxed );
+			bBusy.store ( true, std::memory_order_relaxed );
 			boost::context::detail::prefetch_range ( pOp, sizeof ( Operation_t ) );
 			pOp->Complete (this);
-			m_iWorkingNow.fetch_sub ( 1, std::memory_order_relaxed );
+			bBusy.store ( false, std::memory_order_relaxed );
 
 			LOG ( SERVICE, MT ) << "completed & unlocked";
 			if ( this_thread.m_iPrivateOutstandingWork>1 )
@@ -431,11 +430,6 @@ public:
 	long works() const noexcept
 	{
 		return m_iOutstandingWork;
-	}
-
-	int curtasks() const noexcept
-	{
-		return m_iWorkingNow.load ( std::memory_order_relaxed );
 	}
 
 	NTasks_t tasks() const
@@ -710,13 +704,19 @@ class ThreadPool_c final : public Worker_i
 	const char * m_szName = nullptr;
 	Service_t m_tService;
 	std::optional<Work> m_dWork;
-	CSphVector<SphThread_t> m_dThreads;
 	CSphMutex m_dMutex;
 	std::atomic<bool> m_bStop {false};
 
+	struct alignas ( 64 ) Thd_t // alignas cacheline, to freely access m_bBusy without cache poisoning
+	{
+		std::atomic<bool> m_bBusy { false };
+		SphThread_t m_tThread;
+		LowThreadDesc_t* m_pChild = nullptr;
+	};
+
 	// support iteration over children for show threads and hazards
-	RwLock_t m_dChildGuard;
-	CSphVector<LowThreadDesc_t *> m_dChildren GUARDED_BY ( m_dChildGuard);
+	mutable RwLock_t m_dChildGuard;
+	CSphVector<Thd_t> m_dThreads GUARDED_BY ( m_dChildGuard );
 
 	void Post ( Threads::details::SchedulerOperation_t* pOp, bool bVip = false ) // post to primary (vip) or secondary queue
 	{
@@ -745,15 +745,15 @@ class ThreadPool_c final : public Worker_i
 		m_dWork.emplace ( m_tService );
 	}
 
-	void loop (int iChild)
+	void loop (int iChild) NO_THREAD_SAFETY_ANALYSIS
 	{
 		{
 			ScWL_t _ ( m_dChildGuard );
-			m_dChildren[iChild] = &MyThd ();
+			m_dThreads[iChild].m_pChild = &MyThd ();
 		}
 		while (true)
 		{
-			m_tService.run ();
+			m_tService.run ( m_dThreads[iChild].m_bBusy );
 			ScopedMutex_t dLock {m_dMutex};
 			if ( m_bStop )
 				break;
@@ -764,7 +764,7 @@ class ThreadPool_c final : public Worker_i
 			}
 		}
 		ScWL_t _ ( m_dChildGuard );
-		m_dChildren[iChild] = nullptr;
+		m_dThreads[iChild].m_pChild = nullptr;
 	}
 
 public:
@@ -774,10 +774,8 @@ public:
 	{
 		createWork ();
 		m_dThreads.Resize ( (int) iThreadCount );
-		m_dChildren.Resize ( (int) iThreadCount );
-		m_dChildren.ZeroVec(); // avoid iterations over not-yet-started threads with garbage here
 		ARRAY_FOREACH ( i, m_dThreads )
-			Threads::CreateQ ( &m_dThreads[i], [this,i] { loop (i); }, false, m_szName, i );
+			Threads::CreateQ ( &m_dThreads[i].m_tThread, [this,i] { loop (i); }, false, m_szName, i );
 		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
 		LOGINFO ( TPLIFE, TP ) << "thread pool created with threads: " << iThreadCount;
 	}
@@ -791,6 +789,7 @@ public:
 
 	void DiscardOnFork () final
 	{
+		ScWL_t _ ( m_dChildGuard );
 		m_dThreads.Reset();
 	}
 
@@ -829,7 +828,7 @@ public:
 	}
 #endif
 
-	int WorkingThreads () const final
+	int WorkingThreads () const final NO_THREAD_SAFETY_ANALYSIS
 	{
 		return m_dThreads.GetLength ();
 	}
@@ -844,19 +843,19 @@ public:
 		return m_tService.tasks();
 	}
 
-	int CurTasks() const noexcept final
+	int CurTasks() const noexcept final NO_THREAD_SAFETY_ANALYSIS
 	{
-		return m_tService.curtasks();
+		return (int)m_dThreads.count_of ( [] ( auto& i ) { return i.m_bBusy.load ( std::memory_order_relaxed ); } );
 	}
 
-	void IterateChildren ( ThreadFN& fnHandler ) final
+	void IterateChildren ( ThreadFN& fnHandler ) noexcept final
 	{
 		ScRL_t _ ( m_dChildGuard );
-		for ( auto* pThread : m_dChildren )
-			fnHandler ( pThread );
+		for ( const auto& tThd : m_dThreads )
+			fnHandler ( tThd.m_pChild );
 	}
 
-	void StopAll () final
+	void StopAll () final NO_THREAD_SAFETY_ANALYSIS
 	{
 		ScopedMutex_t dLock { m_dMutex };
 		m_bStop = true;
@@ -867,7 +866,7 @@ public:
 		LOG ( DEBUG, TP ) << "stopping thread pool";
 		LOGINFO ( TPLIFE, TP ) << "stopping thread pool";
 		for ( auto & dThread : m_dThreads )
-			Threads::Join ( &dThread );
+			Threads::Join ( &dThread.m_tThread );
 		LOG ( DEBUG, TP ) << "thread pool stopped";
 		LOGINFO ( TPLIFE, TP ) << "thread pool stopped";
 		m_dThreads.Resize ( 0 );
@@ -880,6 +879,7 @@ class AloneThread_c final : public Worker_i
 	int m_iThreadNum;
 	Service_t m_tService;
 	std::atomic<bool> m_bStarted {false};
+	std::atomic<bool> m_bBusy {false};
 	static int m_iRunningAlones;
 
 	void Post ( Service_t::operation* pOp, bool bVip=false ) // post to primary (vip) or secondary queue
@@ -903,7 +903,7 @@ class AloneThread_c final : public Worker_i
 	void loop ()
 	{
 		Detached::AddThread ( &MyThd () );
-		m_tService.run ();
+		m_tService.run ( m_bBusy );
 		Detached::RemoveThread ( &MyThd () );
 		delete this;
 	}
@@ -972,7 +972,7 @@ public:
 
 	int CurTasks() const noexcept final
 	{
-		return m_tService.curtasks();
+		return !!m_bBusy.load(std::memory_order_relaxed);
 	}
 
 	const char* Name() const override
@@ -1498,29 +1498,25 @@ struct RuntimeThreadContext_t : ISphNoncopyable
 	void PropagateName ();
 };
 
-namespace { // static func
-RuntimeThreadContext_t*& RuntimeThreadContext ()
-{
-	static RuntimeThreadContext_t tStubForMain;
-	static thread_local RuntimeThreadContext_t* pLocalThread = &tStubForMain;
-	return pLocalThread;
-}
+namespace {
+RuntimeThreadContext_t tStubForMain;
+thread_local RuntimeThreadContext_t* g_pLocalThread = &tStubForMain;
 }
 
 // to be used globally from thread env
 RuntimeThreadContext_t& MyThreadContext()
 {
-	return *RuntimeThreadContext();
+	return *g_pLocalThread;
 }
 
 LowThreadDesc_t& Threads::MyThd ()
 {
-	return RuntimeThreadContext ()->m_tDesc;
+	return g_pLocalThread->m_tDesc;
 }
 
 void Threads::SetSysThreadName ()
 {
-	RuntimeThreadContext ()->PropagateName ();
+	g_pLocalThread->PropagateName ();
 }
 
 void Threads::JobStarted ()
@@ -1615,7 +1611,7 @@ void RuntimeThreadContext_t::Prepare ( const void * pStack )
 
 void RuntimeThreadContext_t::Run ( const void * pStack )
 {
-	RuntimeThreadContext () = this;
+	g_pLocalThread = this;
 	Prepare ( pStack );
 
 #if SPH_ALLOCS_PROFILER

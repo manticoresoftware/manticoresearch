@@ -171,7 +171,7 @@ struct Worker_i: public Scheduler_i
 	virtual int CurTasks() const noexcept = 0;
 	virtual void StopAll () = 0;
 	virtual void DiscardOnFork() {}
-	virtual void IterateChildren ( ThreadFN & fnHandler ) {}
+	virtual void IterateChildren ( ThreadFN & fnHandler ) noexcept {}
 };
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i>;

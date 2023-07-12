@@ -221,6 +221,9 @@ with_get ( re2 "RE2" "a regular expression library" )
 set ( WITH_STEMMER_FORCE_STATIC 1 CACHE BOOL "force to compile stemmer from sources" )
 with_get ( stemmer "Stemmer" "stemming library (Snowball)" )
 
+get_dep ( nlohmann_json NLJSON "JSON for Modern C++ library" )
+get_dep ( uni-algo UniAlgo "unicode algorithm implementation for C/C++" )
+
 # Check for ICU build
 set ( WITH_ICU_FORCE_STATIC 1 CACHE BOOL "force to compile ICU from sources" )
 if (STATIC_BINARY)
@@ -281,9 +284,6 @@ win_install ( Mysql indexer )
 with_menu ( PostgreSQL "pgsql" "for indexing postgresql sources with indexer" )
 dl_package ( PostgreSQL "pgsql" )
 win_install ( PostgreSQL indexer )
-
-include(GetNLJSON)
-include(GetUniAlgo)
 
 # Storing compiler version
 set ( COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}" )

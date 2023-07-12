@@ -85,7 +85,7 @@ set ( NEED_API_NUMERIC_VERSION "${NEED_COLUMNAR_API}.${NEED_SECONDARY_API}" )
 set ( AUTO_TAG "c${NEED_COLUMNAR_API}-s${NEED_SECONDARY_API}" )
 
 # set current path to modules in local usr
-set ( COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/usr/${AUTO_TAG}" )
+get_build ( COLUMNAR_BUILD "mcl/${AUTO_TAG}" )
 
 # store prev find paths to avoid polishing global scope
 backup_paths()

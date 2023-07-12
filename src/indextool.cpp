@@ -1482,7 +1482,8 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-		pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
+		if ( g_eCommand != IndextoolCmd_e::DUMPDOCIDS )
+			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
 		PreallocIndex ( sIndex.cstr(), bStripPath, pIndex.get() );
 

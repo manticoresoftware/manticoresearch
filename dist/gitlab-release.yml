@@ -108,7 +108,6 @@ macos_arm:
   extends: [ macos ]
   variables:
     arch: arm64
-    HOMEBREW_PREFIX: /opt/homebrew
 
 .collect_macos:
   extends: [ .collect_arc ]

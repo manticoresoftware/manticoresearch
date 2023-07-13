@@ -181,6 +181,7 @@ namespace session {
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
 
 	inline bool GetKilled() { return ClientTaskInfo_t::Info().GetKilled(); }
+	inline void SetKilled ( bool bKilled ) { ClientTaskInfo_t::Info().SetKilled(bKilled); }
 
 	inline void SetThrottlingPeriodMS ( int iThrottlingPeriodMS ) { ClientTaskInfo_t::Info().SetThrottlingPeriodMS ( iThrottlingPeriodMS ); }
 	inline int GetThrottlingPeriodMS () { return ClientTaskInfo_t::Info().GetThrottlingPeriodMS(); }

@@ -1392,7 +1392,8 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			break;
 		}
 	}
-	dRows.Commit();
+	if ( !dRows.Commit() )
+		session::SetKilled ( true );
 }
 
 /// stream out matches

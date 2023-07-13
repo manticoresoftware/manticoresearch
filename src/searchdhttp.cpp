@@ -1576,7 +1576,8 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 				else
 					tOut.PutString ( String ( tDataCol ) );
 			} );
-			tOut.Commit();
+			if ( !tOut.Commit() )
+				return;
 		}
 
 		tOut.Eof ( iItem+1!=dItem.NumElems(), ( sWarning.IsEmpty() ? 0 : 1 ) );

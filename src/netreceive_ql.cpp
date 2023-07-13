@@ -554,6 +554,9 @@ public:
 	// sends collected data, then reset
 	bool Commit() override
 	{
+		if ( m_bError )
+			return false;
+
 		int iLeft = GetLength();
 		const BYTE * pBuf = Begin();
 		while ( iLeft )
@@ -564,7 +567,11 @@ public:
 			pBuf += iSize;
 			iLeft -= iSize;
 			if ( m_tOut.GetSentCount() > MAX_PACKET_LEN )
-				m_tOut.Flush();
+				if ( !m_tOut.Flush() )
+				{
+					m_bError = true;
+					return false;
+				}
 		}
 		Resize(0);
 		return true;

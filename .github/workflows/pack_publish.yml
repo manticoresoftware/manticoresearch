@@ -252,7 +252,7 @@ jobs:
         run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
 
   clt_rhel_dev_installation:
-    name: Tetsting RHEL dev packages installation
+    name: Testing RHEL dev packages installation
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
     needs: publish_rhel
     with:
@@ -267,7 +267,7 @@ jobs:
       test_prefix: rhel-dev-
 
   clt_deb_dev_installation:
-    name: Tetsting DEB dev packages installation
+    name: Testing DEB dev packages installation
     needs: publish_debian_ubuntu
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
     with:

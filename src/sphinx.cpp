@@ -8234,9 +8234,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
-	auto& tSess = session::Info();
-	auto tDocstores = std::make_pair ( (const DocstoreReader_i*)this, m_pDocstore.get() );
-	tSess.m_pSessionOpaque = (void*)&tDocstores;
+	auto & tSess = session::Info();
+	tSess.m_pSessionOpaque1 = (void*)(const DocstoreReader_i*)this;
+	tSess.m_pSessionOpaque2 = (void*)m_pDocstore.get();
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
 

@@ -1379,13 +1379,15 @@ struct SphQueueSettings_t
 	bool						m_bForceSingleThread = false;
 	StrVec_t 					m_dCreateSchema;
 	RowBuffer_i*				m_pSqlRowBuffer;
-	void*						m_pOpaque;
+	void **						m_ppOpaque1 = nullptr;
+	void **						m_ppOpaque2 = nullptr;
 
-	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr, RowBuffer_i* pSqlRowBuffer = nullptr, void* pOpaque=nullptr )
+	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr, RowBuffer_i * pSqlRowBuffer = nullptr, void ** ppOpaque1 = nullptr, void ** ppOpaque2 = nullptr )
 		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
 		, m_pSqlRowBuffer ( pSqlRowBuffer )
-		, m_pOpaque ( pOpaque )
+		, m_ppOpaque1 ( ppOpaque1 )
+		, m_ppOpaque2 ( ppOpaque2 )
 	{}
 };
 

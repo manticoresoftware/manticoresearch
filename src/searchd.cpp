@@ -5654,7 +5654,7 @@ static StrVec_t GetDefaultSchema ( const CSphIndex* pIndex )
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
 	auto& tSess = session::Info();
-	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile, tSess.m_pSqlRowBuffer, &tSess.m_pSessionOpaque );
+	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile, tSess.m_pSqlRowBuffer, &tSess.m_pSessionOpaque1, &tSess.m_pSessionOpaque2 );
 	tQS.m_bComputeItems = true;
 	tQS.m_pCollection = m_pCollectedDocs;
 	tQS.m_pHook = pHook;

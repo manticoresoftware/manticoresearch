@@ -1402,8 +1402,8 @@ class DirectSqlQueue_c final : public MatchSorter_c, ISphNoncopyable
 	using BASE = MatchSorter_c;
 
 public:
-	explicit DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec_t dColumns );
-	~DirectSqlQueue_c() override;
+						DirectSqlQueue_c ( RowBuffer_i * pOutput, void ** ppOpaque1, void ** ppOpaque2, StrVec_t dColumns );
+						~DirectSqlQueue_c() override;
 
 	bool				IsGroupby () const final { return false; }
 	int					GetLength () final { return 0; } // that ensures, flatten() will never called;
@@ -1445,9 +1445,10 @@ private:
 	columnar::Columnar_i*		m_pColumnar = nullptr;
 	CSphVector<ISphExpr*>		m_dDocstores;
 	CSphVector<ISphExpr*>		m_dFinals;
-	void * 						m_pOpaque;
-	void * 						m_pCurDocstore = nullptr;
-	void * 						m_pCurDocstoreReader = nullptr;
+	void ** 					m_ppOpaque1 = nullptr;
+	void ** 					m_ppOpaque2 = nullptr;
+	void *						m_pCurDocstore = nullptr;
+	void *						m_pCurDocstoreReader = nullptr;
 	CSphQuery					m_dFake;
 	CSphQueryContext			m_dCtx;
 	StrVec_t					m_dColumns;
@@ -1462,9 +1463,10 @@ private:
 };
 
 
-DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i* pOutput, void* pOpaque, StrVec_t dColumns )
+DirectSqlQueue_c::DirectSqlQueue_c ( RowBuffer_i * pOutput, void ** ppOpaque1, void ** ppOpaque2, StrVec_t dColumns )
 	: m_pOutput ( pOutput )
-	, m_pOpaque ( pOpaque )
+	, m_ppOpaque1 ( ppOpaque1 )
+	, m_ppOpaque2 ( ppOpaque2 )
 	, m_dCtx (m_dFake)
 	, m_dColumns ( std::move ( dColumns ) )
 {}
@@ -1520,10 +1522,10 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 {
 	SendSchemaOnce();
 	++m_iDocs;
-	auto* pDocstores = *(std::pair<void*,void*>**)m_pOpaque;
-	if ( pDocstores )
+
+	if ( m_ppOpaque1 )
 	{
-		auto pDocstoreReader = pDocstores->first;
+		auto pDocstoreReader = *m_ppOpaque1;
 		if ( pDocstoreReader!=std::exchange (m_pCurDocstore, pDocstoreReader) && pDocstoreReader )
 		{
 			DocstoreSession_c::InfoDocID_t tSessionInfo;
@@ -1533,8 +1535,11 @@ bool DirectSqlQueue_c::PushMatch ( CSphMatch & tEntry )
 			// value is copied; no leak of pointer to local here.
 			m_dDocstores.for_each ( [&tSessionInfo] ( ISphExpr* pExpr ) { pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); } );
 		}
+	}
 
-		auto pDocstore = pDocstores->second;
+	if ( m_ppOpaque2 )
+	{
+		auto pDocstore = *m_ppOpaque2;
 		if ( pDocstore != std::exchange ( m_pCurDocstoreReader, pDocstore ) && pDocstore )
 		{
 			DocstoreSession_c::InfoRowID_t tSessionInfo;
@@ -6973,7 +6978,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	}
 
 	if ( m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer )
-		return new DirectSqlQueue_c ( m_tSettings.m_pSqlRowBuffer, m_tSettings.m_pOpaque, std::move (m_tSettings.m_dCreateSchema) );
+		return new DirectSqlQueue_c ( m_tSettings.m_pSqlRowBuffer, m_tSettings.m_ppOpaque1, m_tSettings.m_ppOpaque2, std::move (m_tSettings.m_dCreateSchema) );
 
 	if ( m_tSettings.m_pCollection )
 		return new CollectQueue_c ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );

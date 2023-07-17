@@ -1340,7 +1340,7 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_DATABASES;
 		}
-	| global_or_session TOK_VARIABLES opt_show_variables_where_or_like
+	| global_or_session TOK_VARIABLES like_filter
 		{
       		pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
 		}
@@ -1650,24 +1650,6 @@ update_item:
 	;
 
 //////////////////////////////////////////////////////////////////////////
-
-opt_show_variables_where_or_like:
-	like_filter
-	| show_variables_where
-	;
-
-show_variables_where:
-	TOK_WHERE show_variables_where_list
-	;
-
-show_variables_where_list:
-	show_variables_where_entry
-	| show_variables_where_list TOK_OR show_variables_where_entry
-	;
-
-show_variables_where_entry:
-	ident '=' TOK_QUOTED_STRING // for example, Variable_name = 'character_set'
-	;
 
 global_or_session:
 	// empty

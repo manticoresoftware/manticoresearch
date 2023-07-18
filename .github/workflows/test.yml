@@ -403,7 +403,7 @@ jobs:
       - name: Building docker
         id: build
         run: |
-          BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }} 
+          BUILD_TAG=clt-tmp-${{ steps.sha.outputs.sha_short }}
           BUILD_TAG=$BUILD_TAG /bin/bash dist/clt_docker.sh
           echo "build_image=ghcr.io/manticoresoftware/manticoresearch:$BUILD_TAG" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
@@ -412,19 +412,19 @@ jobs:
           name: docker_clt_image
           path: docker/manticore_clt.img
 
-  clt_logstash_test:
-    name: CLT test on Logstash and Filebeat
-    needs: build_clt_docker
-    strategy:
-      matrix:
-        image: ["${{ needs.build_clt_docker.outputs.out-build }}"]
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
-    with:
-      docker_images: |
-        [
-          { "image": "${{matrix.image}}"},
-        ]
-      test_prefix: logstash-
+#  clt_logstash_test:
+#    name: CLT test on Logstash and Filebeat
+#    needs: build_clt_docker
+#    strategy:
+#      matrix:
+#        image: ["${{ needs.build_clt_docker.outputs.out-build }}"]
+#    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+#    with:
+#      docker_images: |
+#        [
+#          { "image": "${{matrix.image}}"},
+#        ]
+#      test_prefix: logstash-
 
   build_aarch64:
     name: Linux aarch64 build

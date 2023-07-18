@@ -5927,14 +5927,16 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	if ( !iConcurrency )
 		iConcurrency = g_iThreads;
 
+	int iBusyWorkers = Max ( GlobalWorkPool()->CurTasks() - 1, 0 ); // ignore current task
+	int iAvailableWorkers = Max ( iConcurrency-iBusyWorkers, 1 );
+
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
 	PopulateCountDistinct ( dCountDistinct );
 
-	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( iConcurrency );
+	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( iAvailableWorkers );
 
 	CSphVector<SplitData_t> dSplitData ( m_dLocal.GetLength() );
-
-	// FIXME! what about PQ?
+	
 	int iEnabledIndexes = 0;
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
@@ -5965,10 +5967,10 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		}
 	}
 
-	if ( iConcurrency>iEnabledIndexes )
+	if ( iAvailableWorkers>iEnabledIndexes )
 	{
 		IntVec_t dThreads;
-		DistributeThreadsOverIndexes ( dThreads, dSplitData, iConcurrency );
+		DistributeThreadsOverIndexes ( dThreads, dSplitData, iAvailableWorkers );
 		ARRAY_FOREACH ( i, dThreads )
 			m_dPSInfo[i].m_iThreads = dThreads[i];
 	}

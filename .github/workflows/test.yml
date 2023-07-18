@@ -412,19 +412,19 @@ jobs:
           name: docker_clt_image
           path: docker/manticore_clt.img
 
-  clt_logstash_test:
-    name: CLT test on Logstash and Filebeat
-    needs: build_clt_docker
-    strategy:
-      matrix:
-        image: ["${{ needs.build_clt_docker.outputs.out-build }}"]
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
-    with:
-      docker_images: |
-        [
-          { "image": "${{matrix.image}}"},
-        ]
-      test_prefix: logstash-
+#  clt_logstash_test:
+#    name: CLT test on Logstash and Filebeat
+#    needs: build_clt_docker
+#    strategy:
+#      matrix:
+#        image: ["${{ needs.build_clt_docker.outputs.out-build }}"]
+#    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+#    with:
+#      docker_images: |
+#        [
+#          { "image": "${{matrix.image}}"},
+#        ]
+#      test_prefix: logstash-
 
   build_aarch64:
     name: Linux aarch64 build

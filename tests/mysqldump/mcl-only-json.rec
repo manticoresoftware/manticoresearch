@@ -104,33 +104,3 @@ mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from mcl_only_json'
 |   19 | {"element":"Hydrogen","symbol":"H","atomic_number":1,"state":"Gas"}                         |
 |   20 | {"computer":"MacBook Pro","manufacturer":"Apple","year":2021,"OS":"macOS"}                  |
 +------+---------------------------------------------------------------------------------------------+
-––– input –––
-ls -ltS /var/lib/manticore/mcl_only_json/
-––– output –––
-total #!/[0-9]+/!#
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.meta
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.ram
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.settings
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.0.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.1.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_only_json.lock

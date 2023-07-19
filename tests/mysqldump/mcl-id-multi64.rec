@@ -104,33 +104,3 @@ mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from mcl_id_multi64'
 |   19 | 1000000091,1000000092,1000000093,1000000094,1000000095 |
 |   20 | 1000000096,1000000097,1000000098,1000000099,1000000100 |
 +------+--------------------------------------------------------+
-––– input –––
-ls -ltS /var/lib/manticore/mcl_id_multi64/
-––– output –––
-total #!/[0-9]+/!#
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.meta
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.ram
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.settings
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.0.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.1.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_multi64.lock

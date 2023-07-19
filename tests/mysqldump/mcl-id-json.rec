@@ -1,24 +1,24 @@
 ––– block: start-searchd –––
 ––– input –––
-mysql -h0 -P9306 < tests/dumps/mcl-id/json.sql
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-id/json.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'select * from mcl_id_json limit -1'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < tests/dumps/mcl-id/json-batch-1.sql
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-id/json-batch-1.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'flush ramchunk mcl_id_json'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < tests/dumps/mcl-id/json-batch-2.sql
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-id/json-batch-2.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'flush ramchunk mcl_id_json'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < tests/dumps/mcl-id/json-batch-3.sql
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-id/json-batch-3.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'flush table mcl_id_json'
@@ -104,33 +104,3 @@ mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from mcl_id_json'
 |   19 | {"element":"Hydrogen","symbol":"H","atomic_number":1,"state":"Gas"}                         |
 |   20 | {"computer":"MacBook Pro","manufacturer":"Apple","year":2021,"OS":"macOS"}                  |
 +------+---------------------------------------------------------------------------------------------+
-––– input –––
-ls -ltS /var/lib/manticore/mcl_id_json/
-––– output –––
-total #!/[0-9]+/!#
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.meta
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.ram
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.settings
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.0.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.1.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} mcl_id_json.lock

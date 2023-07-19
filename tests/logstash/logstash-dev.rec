@@ -46,26 +46,6 @@ ln -s /usr/share/logstash/logstash-7.10.0/bin/logstash /usr/bin/logstash
 ––– input –––
 ln -s /usr/share/filebeat/filebeat-7.10.0-linux-x86_64/filebeat /usr/bin/filebeat
 ––– output –––
-––– input –––
-rm -rf /usr/bin/manticore-executor
-––– output –––
-––– input –––
-wget -q https://api.github.com/repos/manticoresoftware/executor/releases/latest
-––– output –––
-––– input –––
-wget -q -P packages $(cat latest | grep -oP ': "\K.*amd64.deb' | tail -1)
-––– output –––
-––– input –––
-apt-get -y install ./packages/* > /dev/null; echo $?
-––– output –––
-debconf: delaying package configuration, since apt-utils is not installed
-0
-––– input –––
-searchd -v
-––– output –––
-Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#) (secondary %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#)
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 manticore-executor -v

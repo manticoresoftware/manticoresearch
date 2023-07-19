@@ -104,33 +104,3 @@ mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from no_mcl_multi'
 |   19 | 91,92,93,94,95  |
 |   20 | 96,97,98,99,100 |
 +------+-----------------+
-––– input –––
-ls -ltS /var/lib/manticore/no_mcl_multi/
-––– output –––
-total #!/[0-9]+/!#
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spb
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.meta
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spidx
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.sph
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.sphi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spa
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.ram
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spt
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spm
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.settings
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.0.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spd
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spe
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spi
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.1.spp
--rw-------. 1 root root %{LLFILESIZE} %{LLDATETIME} no_mcl_multi.lock

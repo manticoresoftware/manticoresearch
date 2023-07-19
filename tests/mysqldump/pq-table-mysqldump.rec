@@ -1,0 +1,37 @@
+––– block: start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "create table pq(f text) type='percolate'"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "insert into pq(id, query) values(1, '@f abc'),(2, 'def')"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select * from pq"
+––– output –––
++------+--------+------+---------+
+| id   | query  | tags | filters |
++------+--------+------+---------+
+|    2 | def    |      |         |
+|    1 | @f abc |      |         |
++------+--------+------+---------+
+––– input –––
+mysqldump -h0 -P9306 manticore > /tmp/pq-dump.sql
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e 'drop table pq'
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e 'show tables'
+––– output –––
+––– input –––
+mysql -h0 -P9306 manticore < /tmp/pq-dump.sql
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'select * from pq;'
+––– output –––
++------+--------+------+---------+
+| id   | query  | tags | filters |
++------+--------+------+---------+
+|    2 | def    |      |         |
+|    1 | @f abc |      |         |
++------+--------+------+---------+

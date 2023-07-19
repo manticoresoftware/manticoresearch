@@ -1,124 +1,85 @@
 '\" t
-.\"     Title: indextool
+.\"     Title: indexer
 .\"    Author: [see the "Author" section]
-.\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
-.\"      Date: 12/13/2018
 .\"    Manual: Manticore Search
-.\"    Source: 2.7.0
+.\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "INDEXTOOL" "1" "12/13/2018" "2\&.7\&.0" "Manticore Search"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
+.TH "INDEXTOOL" "1" "19/07/2023" "Manticore Search" ""
 .SH "NAME"
-indextool \- Manticore Search tool dump miscellaneous debug information about the physical index\&.
+indextool
 .SH "SYNOPSIS"
-.HP \w'\fBindextool\fR\ 'u
-\fBindextool\fR {command} [options]
-.SH "DESCRIPTION"
+indextool <command> [options]
+.SH DESCRIPTION
 .PP
-Manticore Search is a collection of programs that aim to provide high quality fulltext search\&.
+\fB\fCindextool\fR is a helpful utility that extracts various information about a physical table, excluding \fB\fCtemplate\fR or \fB\fCdistributed\fR tables. Here's the general syntax for utilizing \fB\fCindextool\fR:
 .PP
-\fBindextool\fR
-is one of the helper tools within the Manticore Search package\&. It is used to dump miscellaneous debug information about the physical index\&. Apart ghe dumping
-\fBindextool\fR
-can perform index verification, hence the indextool name rather than just indexdump\&.
-.SH "COMMANDS"
-.PP
-The commands are as follows:
-.PP
-\fB\-\-dumpheader\fR \fIFILENAME\&.sph\fR
-.RS 4
-quickly dumps the provided index header file without touching any other index files or even the configuration file\&. The report provides a breakdown of all the index settings, in particular the entire attribute and field list\&. Prior to 0\&.9\&.9\-rc2, this command was present in CLI search utility\&.
+.RS
+.nf
+indextool <command> [options]
+.fi
 .RE
+.SH OPTIONS
 .PP
-\fB\-\-dumpconfig\fR \fIFILENAME\&.sph\fR
-.RS 4
-dumps the index definition from the given index header file in (almost) compliant
-sphinx\&.conf
-file format\&.
+These options are applicable to all commands:
+.RS
+.IP \(bu 2
+\fB\fC\-\-config <file>\fR (\fB\fC\-c <file>\fR for short) lets you override the default configuration file names.
+.IP \(bu 2
+\fB\fC\-\-quiet\fR (\fB\fC\-q\fR for short) suppresses the output of banners and such by \fB\fCindextool\fR\&.
+.IP \(bu 2
+\fB\fC\-\-help\fR (\fB\fC\-h\fR for short) displays all parameters available in your specific build of \fB\fCindextool\fR\&.
+.IP \(bu 2
+\fB\fC\-v\fR displays the version information of your specific \fB\fCindextool\fR build.
 .RE
+.SS Commands
 .PP
-\fB\-\-dumpheader\fR \fIINDEXNAME\fR
-.RS 4
-dumps index header by index name with looking up the header path in the configuration file\&.
+Here are the available commands:
+.RS
+.IP \(bu 2
+\fB\fC\-\-checkconfig\fR loads and verifies the config file, checking its validity and for any syntax errors.
+.IP \(bu 2
+\fB\fC\-\-buildidf DICTFILE1 [DICTFILE2 ...] \-\-out IDFILE\fR constructs an IDF file from one or more dictionary dumps (refer to \fB\fC\-\-dumpdict\fR). The additional parameter \fB\fC\-\-skip\-uniq\fR will omit unique words (df=1).
+.IP \(bu 2
+\fB\fC\-\-build\-infixes TABLENAME\fR generates infixes for a pre\-existing dict=keywords table (updates .sph, .spi in place). Use this option for legacy table files already employing dict=keywords, but now requiring infix search support; updating the table files with indextool may be simpler or quicker than recreating them from scratch with indexer.
+.IP \(bu 2
+\fB\fC\-\-dumpheader FILENAME.sph\fR promptly dumps the given table header file without disturbing any other table files or even the config file. The report offers a detailed view of all the table settings, especially the complete attribute and field list.
+.IP \(bu 2
+\fB\fC\-\-dumpconfig FILENAME.sph\fR extracts the table definition from the specified table header file in an (almost) manticore.conf file\-compliant format.
+.IP \(bu 2
+\fB\fC\-\-dumpheader TABLENAME\fR dumps table header by table name while searching for the header path in the config file.
+.IP \(bu 2
+\fB\fC\-\-dumpdict TABLENAME\fR dumps the dictionary. An extra \fB\fC\-stats\fR switch will add the total document count to the dictionary dump. This is necessary for dictionary files used in IDF file creation.
+.IP \(bu 2
+\fB\fC\-\-dumpdocids TABLENAME\fR dumps document IDs by table name.
+.IP \(bu 2
+\fB\fC\-\-dumphitlist TABLENAME KEYWORD\fR dumps all instances (occurrences) of a specified keyword in a given table, with the keyword defined as text.
+.IP \(bu 2
+\fB\fC\-\-dumphitlist TABLENAME \-\-wordid ID\fR dumps all instances (occurrences) of a specific keyword in a given table, with the keyword represented as an internal numeric ID.
+.IP \(bu 2
+\fB\fC\-\-docextract TBL DOCID\fR executes a standard table check pass of the entire dictionary/docs/hits, and gathers all the words and hits associated with the requested document. Subsequently, all the words are arranged according to their fields and positions, and the result is printed, grouped by field.
+.IP \(bu 2
+\fB\fC\-\-fold TABLENAME OPTFILE\fR This option helps understand how the tokenizer processes input. You can supply the indextool with text from a file, if specified, or from stdin otherwise. The output will replace separators with spaces (based on your \fB\fCcharset_table\fR settings) and convert letters in words to lowercase.
+.IP \(bu 2
+\fB\fC\-\-htmlstrip TABLENAME\fR applies the HTML stripper settings for a specified table to filter stdin, and sends the filtering results to stdout. Be aware that the settings will be fetched from manticore.conf, and not from the table header.
+.IP \(bu 2
+\fB\fC\-\-mergeidf NODE1.idf [NODE2.idf ...] \-\-out GLOBAL.idf\fR combines multiple .idf files into a single one. The extra parameter \fB\fC\-\-skip\-uniq\fR will ignore unique words (df=1).
+.IP \(bu 2
+\fB\fC\-\-morph TABLENAME\fR applies morphology to the given stdin and directs the result to stdout.
+.IP \(bu 2
+\fB\fC\-\-check TABLENAME\fR evaluates the table data files for consistency errors that could be caused by bugs in \fB\fCindexer\fR or hardware faults. \fB\fC\-\-check\fR is also functional on RT tables, RAM, and disk chunks. Additional options:
+.RS
+.IP \(bu 2
+\fB\fC\-\-check\-id\-dups\fR assesses for duplicate ids
+.IP \(bu 2
+\fB\fC\-\-check\-disk\-chunk CHUNK_NAME\fR checks only a specific disk chunk of an RT table. The argument is the numeric extension of the RT table's disk chunk to be checked.
 .RE
-.PP
-\fB\-\-dumpdocids\fR \fIINDEXNAME\fR
-.RS 4
-dumps document IDs by index name\&. It takes the data from attribute (\&.spa) file and therefore requires
-\fBdocinfo=extern\fR
-to work\&.
-.RE
-.PP
-\fB\-\-dumphitlist\fR \fIINDEXNAME\fR \fIKEYWORD\fR
-.RS 4
-dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as text\&.
-.RE
-.PP
-\fB\-\-dumphitlist\fR \fIINDEXNAME\fR \fB\-\-wordid\fR \fIID\fR
-.RS 4
-dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as internal numeric ID\&.
-.RE
-.PP
-\fB\-\-htmlstrip\fR INDEXNAME
-.RS 4
-filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout\&. Note that the settings will be taken from
-sphinx\&.conf, and not the index header\&.
-.RE
-.PP
-\fB\-\-check\fR \fIINDEXNAME\fR
-.RS 4
-checks the index data files for consistency errors that might be introduced either by bugs in
-\fBindexer\fR
-and/or hardware faults\&.
-.RE
-.PP
-\fB\-\-strip\-path\fR
-.RS 4
-strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc)\&. This is useful for checking indexes built on another machine with possibly different path layouts\&.
-.RE
-.PP
-\fB\-\-optimize\-rt\-klists\fR
-.RS 4
-optimizes the kill list memory use in the disk chunk of a given RT index\&. That is a one\-off optimization intended for rather old RT indexes, created by development versions prior to 1\&.10\-beta release\&. As of 1\&.10\-beta releases, this kill list optimization (purging) should happen automatically, and there should never be a need to use this option\&.
-.RE
-.PP
-\fB\-\-help\fR, \fB\-h\fR
-.RS 4
-List all of the parameters that can be called in your particular build of
-\fBindextool\fR\&.
-.RE
-.PP
-\fB\-v\fR
-.RS 4
-show version information of your particular build of
-\fBindextool\fR\&.
-.RE
-.SH "OPTIONS"
-.PP
-The only currently available option applies to all commands and lets you specify the configuration file:
-.PP
-\fB\-\-config\fR\ \&\fICONFIGFILE\fR, \fB\-c\fR\ \&\fICONFIGFILE\fR
-.RS 4
-overrides the built\-in config file names\&.
+.IP \(bu 2
+\fB\fC\-\-strip\-path\fR removes the path names from all file names referred to from the table (stopwords, wordforms, exceptions, etc). This is helpful when verifying tables built on a different machine with possibly varying path layouts.
+.IP \(bu 2
+\fB\fC\-\-rotate\fR is only compatible with \fB\fC\-\-check\fR and determines whether to check the table waiting for rotation, i.e., with a .new extension. This is useful when you wish to validate your table before actually putting it into use.
+.IP \(bu 2
+\fB\fC\-\-apply\-killlists\fR loads and applies kill\-lists for all tables listed in the config file. Changes are saved in .SPM files. Kill\-list files (.SPK) are removed. This can be handy if you want to shift the application of tables from server startup to indexing stage.
 .RE
 .SH "AUTHOR"
 .PP
@@ -127,14 +88,12 @@ Manticore Software LTD (https://manticoresearch\&.com)
 .PP
 Copyright 2017\-2023 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
-Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"
 .PP
-\fBindexer\fR(1),
 \fBsearchd\fR(1),
-\fBsearch\fR(1)
+\fBindexer\fR(1)
 .PP
-Manticore Search and it\*(Aqs programs are documented fully by the
-\fIManticore Search reference manual\fR
-available in
-/usr/share/doc/manticore\&.
+Manticore Search and its related programs are thoroughly documented
+in the \fIManticore Search reference manual\fR, which is accessible
+at https://manual.manticoresearch.com/

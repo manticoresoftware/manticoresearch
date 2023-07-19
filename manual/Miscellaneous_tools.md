@@ -2,60 +2,64 @@
 
 ## indextool
 
-`indextool` is a utility tool that helps to dump various information about a physical table (excluding `template` or `distributed`tables). The general syntax for using `indextool` is:
+`indextool` is a helpful utility that extracts various information about a physical table, excluding `template` or `distributed` tables. Here's the general syntax for utilizing `indextool`:
 
 ```sql
 indextool <command> [options]
 ```
 
-Options effective for all commands:
+### Options
 
-*   `--config <file>` (`-c <file>` for short) overrides the built-in config file names.
-*   `--quiet` (`-q` for short) keep indextool quiet - it will not output banner, etc.
-*   `--help` (`-h` for short) lists all of the parameters that can be called in your particular build of `indextool`.
-*   `-v` show version information of your particular build of `indextool`.
+These options are applicable to all commands:
 
-The commands are as follows:
+* `--config <file>` (`-c <file>` for short) lets you override the default configuration file names.
+* `--quiet` (`-q` for short) suppresses the output of banners and such by `indextool`.
+* `--help` (`-h` for short) displays all parameters available in your specific build of `indextool`.
+* `-v` displays the version information of your specific `indextool` build.
 
-*   `--checkconfig` just loads and verifies the config file to check if it's valid, without syntax errors.
-*   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps (see `--dumpdict`). Additional parameter `--skip-uniq` will skip unique (df=1) words.
-*   `--build-infixes TABLENAME` build infixes for an existing dict=keywords table (upgrades .sph, .spi in place). You can use this option for legacy table files that already use dict=keywords, but now need to support infix searching too; updating the table files with indextool may prove easier or faster than regenerating them from scratch with indexer.
-*   `--dumpheader FILENAME.sph` quickly dumps the provided table header file without touching any other table files or even the configuration file. The report provides a breakdown of all the table settings, in particular the entire attribute and field list.
-*   `--dumpconfig FILENAME.sph` dumps the table definition from the given table header file in (almost) compliant `sphinx.conf` file format.
-*   `--dumpheader TABLENAME` dumps table header by table name with looking up the header path in the configuration file.
-*   `--dumpdict TABLENAME` dumps dictionary. Additional `-stats` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used for creation of IDF files.
-*   `--dumpdocids TABLENAME` dumps document IDs by table name.
-*   `--dumphitlist TABLENAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as text.
-*   `--dumphitlist TABLENAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given table, with keyword specified as internal numeric ID.
-*   `--docextract TBL DOCID` runs usual table check pass of whole dictionary/docs/hits, and collects all the words and hits belonging to requested document. Then all of the words are placed in the order according to their fields and positions, and result is printed, grouping by field.
-*   `--fold TABLENAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
-*   `--htmlstrip TABLENAME` filters stdin using HTML stripper settings for a given table, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the table header.
-*   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `--skip-uniq` will skip unique (df=1) words.
-*   `--morph TABLENAME` applies morphology to the given stdin and prints the result to stdout.
-*   `--check TABLENAME` checks the table data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT tables, RAM and disk chunks. Additional options:
-    - `--check-id-dups` checks if there are duplicate ids
-    - `--check-disk-chunk CHUNK_NAME` checks only specific disk chunk of an RT table. The argument is a disk chunk numeric extension of the RT table to check.
-*   `--strip-path` strips the path names from all the file names referenced from the table (stopwords, wordforms, exceptions, etc). This is useful for checking tables built on another machine with possibly different path layouts.
-*   `--rotate` works only with `--check` and defines whether to check table waiting for rotation, i.e. with .new extension. This is useful when you want to check your table before actually using it.
-*   `--apply-killlists` loads and applies kill-lists for all tables listed in the config file. Changes are saved in .SPM files. Kill-list files (.SPK) are deleted. This can be useful if you want to move applying tables from server startup to indexing stage.
+### Commands
+
+Here are the available commands:
+
+* `--checkconfig` loads and verifies the config file, checking its validity and for any syntax errors.
+* `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` constructs an IDF file from one or more dictionary dumps (refer to `--dumpdict`). The additional parameter `--skip-uniq` will omit unique words (df=1).
+* `--build-infixes TABLENAME` generates infixes for a pre-existing dict=keywords table (updates .sph, .spi in place). Use this option for legacy table files already employing dict=keywords, but now requiring infix search support; updating the table files with indextool may be simpler or quicker than recreating them from scratch with indexer.
+* `--dumpheader FILENAME.sph` promptly dumps the given table header file without disturbing any other table files or even the config file. The report offers a detailed view of all the table settings, especially the complete attribute and field list.
+* `--dumpconfig FILENAME.sph` extracts the table definition from the specified table header file in an (almost) manticore.conf file-compliant format.
+* `--dumpheader TABLENAME` dumps table header by table name while searching for the header path in the config file.
+* `--dumpdict TABLENAME` dumps the dictionary. An extra `-stats` switch will add the total document count to the dictionary dump. This is necessary for dictionary files used in IDF file creation.
+* `--dumpdocids TABLENAME` dumps document IDs by table name.
+* `--dumphitlist TABLENAME KEYWORD` dumps all instances (occurrences) of a specified keyword in a given table, with the keyword defined as text.
+* `--dumphitlist TABLENAME --wordid ID` dumps all instances (occurrences) of a specific keyword in a given table, with the keyword represented as an internal numeric ID.
+* `--docextract TBL DOCID` executes a standard table check pass of the entire dictionary/docs/hits, and gathers all the words and hits associated with the requested document. Subsequently, all the words are arranged according to their fields and positions, and the result is printed, grouped by field.
+* `--fold TABLENAME OPTFILE` This option helps understand how the tokenizer processes input. You can supply the indextool with text from a file, if specified, or from stdin otherwise. The output will replace separators with spaces (based on your `charset_table` settings) and convert letters in words to lowercase.
+* `--htmlstrip TABLENAME` applies the HTML stripper settings for a specified table to filter stdin, and sends the filtering results to stdout. Be aware that the settings will be fetched from manticore.conf, and not from the table header.
+* `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` combines multiple .idf files into a single one. The extra parameter `--skip-uniq` will ignore unique words (df=1).
+* `--morph TABLENAME` applies morphology to the given stdin and directs the result to stdout.
+* `--check TABLENAME` evaluates the table data files for consistency errors that could be caused by bugs in `indexer` or hardware faults. `--check` is also functional on RT tables, RAM, and disk chunks. Additional options:
+    - `--check-id-dups` assesses for duplicate ids
+    - `--check-disk-chunk CHUNK_NAME` checks only a specific disk chunk of an RT table. The argument is the numeric extension of the RT table's disk chunk to be checked.
+* `--strip-path` removes the path names from all file names referred to from the table (stopwords, wordforms, exceptions, etc). This is helpful when verifying tables built on a different machine with possibly varying path layouts.
+* `--rotate` is only compatible with `--check` and determines whether to check the table waiting for rotation, i.e., with a .new extension. This is useful when you wish to validate your table before actually putting it into use.
+* `--apply-killlists` loads and applies kill-lists for all tables listed in the config file. Changes are saved in .SPM files. Kill-list files (.SPK) are removed. This can be handy if you want to shift the application of tables from server startup to indexing stage.
 
 ## spelldump
 
-`spelldump` is used to extract the contents of a dictionary file that uses the `ispell` or `MySpell` format, which can be useful in building word lists for wordforms - all of the possible forms are pre-built for you.
+The `spelldump` command is designed to retrieve the contents from a dictionary file that employs the `ispell` or `MySpell` format. This can be handy when you need to compile word lists for wordforms, as it generates all possible forms for you.
 
-The general syntax is:
+Here's the general syntax:
 
 ```bash
 spelldump [options] <dictionary> <affix> [result] [locale-name]
 ```
 
-The two main parameters are the dictionary's main file and its affix file; these are usually named `[language-prefix].dict` and `[language-prefix].aff` and can be found in most common Linux distributions and various online sources.
+The primary parameters are the main file and the affix file of the dictionary. Typically, these are named as `[language-prefix].dict` and `[language-prefix].aff`, respectively. You can find these files in most standard Linux distributions or from numerous online sources.
 
-`[result]` is where the extracted dictionary data will be output, and `[locale-name]` specifies the locale details you wish to use.
+The `[result]` parameter is where the extracted dictionary data will be stored, and `[locale-name]` is the parameter used to specify the locale details of your choice.
 
-There is also an optional `-c [file]` option, which specifies a file for case conversion details.
+There's an optional `-c [file]` option as well. This option allows you to specify a file for case conversion details.
 
-Examples of usage are:
+Here are some usage examples:
 
 ```bash
 spelldump en.dict en.aff
@@ -63,7 +67,7 @@ spelldump ru.dict ru.aff ru.txt ru_RU.CP1251
 spelldump ru.dict ru.aff ru.txt .1251
 ```
 
-The result file will contain a list of all the words in the dictionary, sorted alphabetically, in the format of a wordforms file. This can be used to tailor it to your specific needs. An example of what the result file could look like:
+The resulting file will list all the words from the dictionary, arranged alphabetically and formatted like a wordforms file. You can then modify this file as per your specific requirements. Here's a sample of what the output file might look like:
 
 ```bash
 zone > zone
@@ -73,23 +77,24 @@ zoning > zoning
 
 ## wordbreaker
 
-`wordbreaker` is used to split compound words, such as those commonly found in URLs, into their component words. For example, this tool can split "lordoftherings" into its four component words, or `http://manofsteel.warnerbros.com` into "man of steel warner bros". This helps in searching, as it eliminates the need for prefixes or infixes. For example, searching for "sphinx" would not match "sphinxsearch", but if you break the compound word and index the separate components, you would get a match without the increased file sizes that come with using prefixes and infixes in full-text indexing.
+The `wordbreaker` tool is designed to deconstruct compound words, a common feature in URLs, into their individual components. For instance, it can dissect "lordoftherings" into four separate words or break down `http://manofsteel.warnerbros.com` into "man of steel warner bros". This ability enhances search functionality by eliminating the need for prefixes or infixes. To illustrate, a search for "sphinx" wouldn't yield "sphinxsearch" in the results. However, if you apply `wordbreaker` to disassemble the compound word and index the detached elements, a search will be successful without the file size expansion associated with prefix or infix usage in full-text indexing.
 
-Examples of usage include:
+Here are some examples of how to use `wordbreaker`:
 
 ```bash
 echo manofsteel | bin/wordbreaker -dict dict.txt split
 man of steel
 ```
 
-The input stream will be separated into words using the `-dict` dictionary file. If no dictionary is specified, wordbreaker looks in the working folder for a wordbreaker-dict.txt file. (The dictionary should match the language of the compound word.) The `split` command breaks words from the standard input and outputs the result to the standard output. There are also `test` and `bench` commands that allow you to test the splitting quality and benchmark the splitting functionality.
+The `-dict` dictionary file is used to separate the input stream into individual words. If no dictionary file is specified, Wordbreaker will look for a file named `wordbreaker-dict.txt` in the current working directory. (Ensure that the dictionary file matches the language of the compound word you're working with.) The `split` command breaks words from the standard input and sends the results to the standard output. The `test` and `bench` commands are also available to assess the splitting quality and measure the performance of the splitting function, respectively.
 
-Wordbreaker requires a dictionary to recognize individual substrings within a string. To differentiate between different guesses, it uses the relative frequency of each word in the dictionary, with higher frequency meaning a higher split probability. You can generate such a file using the `indexer` tool:
+Wordbreaker uses a dictionary to identify individual substrings within a given string. To distinguish between multiple potential splits, it considers the relative frequency of each word in the dictionary. A higher frequency indicates a higher likelihood for a word split. To generate a file of this nature, you can use the `indexer` tool:
+
 
 ```bash
-indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf
+indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/manticore.conf
 ```
 
-which will write the 100,000 most frequent words along with their counts from myindex into dict.txt. The output file is a text file, so it can be edited by hand if necessary to add or remove words.
+which will produce a text file named `dict.txt` that contains the 100,000 most frequently occurring words from `myindex`, along with their respective counts. Since this output file is a simple text document, you have the flexibility to manually edit it whenever needed. Feel free to add or remove words as required.
 
 <!-- proofread -->

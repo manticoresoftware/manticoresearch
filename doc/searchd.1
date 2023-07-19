@@ -1,417 +1,235 @@
 '\" t
 .\"     Title: searchd
 .\"    Author: [see the "Author" section]
-.\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
-.\"      Date: 12/13/2018
 .\"    Manual: Manticore Search
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "SEARCHD" "1" "12/13/2018" "Manticore Search" "Manticore Search"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
+.TH "SEARCHD" "1" "18/07/2023" "Manticore Search" ""
 .SH "NAME"
-searchd \- Manticore Search daemon\&.
+searchd \- Manticore Search Server
 .SH "SYNOPSIS"
 .HP \w'\fBsearchd\fR\ 'u
-\fBsearchd\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-cpustats] [\-\-iostats] [\-\-index\ \fIINDEX\fR] [\-\-port\ \fIPORT\fR]
+\fBsearchd\fR [\-\-config\ \fICONFIGFILE\fR] [OPTION ...]
 .HP \w'\fBsearchd\fR\ 'u
-\fBsearchd\fR \-\-status [\-\-config\ \fICONFIGFILE\fR] [\-\-pidfile\ \fIPIDFILE\fR]
-.HP \w'\fBsearchd\fR\ 'u
-\fBsearchd\fR \-\-stop [\-\-config\ \fICONFIGFILE\fR] [\-\-pidfile\ \fIPIDFILE\fR]
-.SH "DESCRIPTION"
+\fBsearchd\fR \-\-stopwait [\-\-config\ \fICONFIGFILE\fR]
+.SH OPTIONS
 .PP
-Manticore Search is a collection of programs that aim to provide high quality fulltext search\&.
-.PP
-Searchd is the second of the two principle tools as part of Manticore Search\&.
-\fBsearchd\fR
-is the part of the system which actually handles searches; it functions as a server and is responsible for receiving queries, processing them and returning a dataset back to the different APIs for client applications\&.
-.PP
-Unlike
-\fBindexer\fR,
-\fBsearchd\fR
-is not designed to be run either from a regular script or command\-line calling, but instead either as a daemon to be called from
-\fIinit\&.d\fR
-(on Unix/Linux type systems) or to be called as a service (on Windows\-type systems)\&. so not all of the command line options will always apply, and so will be build\-dependent\&.
-.SH "OPTIONS"
-.PP
-These programs follow the usual GNU command line syntax, with long options starting with two dashes (`\-\*(Aq)\&.
-.PP
-The options available to searchd on all builds are:
-.PP
-\fB\-\-config\fR\fICONFIGFILE\fR, \fB\-c\fR\fICONFIGFILE\fR
-.RS 4
-Tell
-\fBsearchd\fR
-to use the given file as its configuration, just as with
-\fBindexer\fR\&.
+The options available to \fB\fCsearchd\fR in all operating systems are:
+.RS
+.IP \(bu 2
+\fB\fC\-\-help\fR (\fB\fC\-h\fR for short) lists all of the parameters that can be used in your particular build of \fB\fCsearchd\fR\&.
+.IP \(bu 2
+\fB\fC\-\-version\fR (\fB\fC\-v\fR for short) shows Manticore Search version information.
+.IP \(bu 2
+\fB\fC\-\-config <file>\fR (\fB\fC\-c <file>\fR for short) tells \fB\fCsearchd\fR to use the specified file as its configuration.
+.IP \(bu 2
+\fB\fC\-\-stop\fR is used to asynchronously stop \fB\fCsearchd\fR, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to \fB\fCsearchd\fR which configuration file to use with the \fB\fC\-\-config\fR option. Example:
 .RE
 .PP
-\fB\-\-console\fR
-.RS 4
-Force
-\fBsearchd\fR
-into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in
-sphinx\&.conf)\&. Sometimes though, when debugging issues in the configuration or the daemon itself, or trying to diagnose hard\-to\-track\-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called\&. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to\&. (It should be noted that console mode is not the intended method for running searchd\&.)
-.sp
-You can invoke it as such:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-console
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stop
 .fi
-.if n \{\
 .RE
-.\}
+.RS
+.IP \(bu 2
+\fB\fC\-\-stopwait\fR is used to synchronously stop \fB\fCsearchd\fR\&. \fB\fC\-\-stop\fR essentially tells the running instance to exit (by sending it a SIGTERM) and then immediately returns. \fB\fC\-\-stopwait\fR will also attempt to wait until the running \fB\fCsearchd\fR instance actually finishes the shutdown (eg. saves all the pending attribute changes) and exits. Example:
 .RE
 .PP
-\fB\-\-cpustats\fR
-.RS 4
-Used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated)\&. It depends on
-\fIclock_gettime()\fR
-system call and might therefore be unavailable on certain systems\&.
-.sp
-You might start searchd thus:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-cpustats
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stopwait
 .fi
-.if n \{\
-.RE
-.\}
 .RE
 .PP
-\fB\-\-help\fR, \fB\-h\fR, \fB\-\-?\fR, \fB\-?\fR
-.RS 4
-List all of the parameters that can be called in your particular build of
-\fBsearchd\fR\&.
+Possible exit codes are as follows:
+.RS
+.IP \(bu 2
+0 on success
+.IP \(bu 2
+1 if connection to running searchd server failed
+.IP \(bu 2
+2 if server reported an error during shutdown
+.IP \(bu 2
+3 if server crashed during shutdown
+.RS
+.IP \(bu 2
+\fB\fC\-\-status\fR command is used to query running \fB\fCsearchd\fR instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use \fB\fCSHOW STATUS\fR command to access the very same counters via SQL protocol. Examples:
+.RE
 .RE
 .PP
-\fB\-v\fR
-.RS 4
-show version information of your particular build of
-\fBsearchd\fR\&.
-.RE
-.PP
-\fB\-\-index\fR\ \&\fIINDEX\fR, \fB\-i\fR\ \&\fIINDEX\fR
-.RS 4
-Serve only the specified index\&. Like
-\fB\-\-port\fR, this is usually for debugging purposes; more long\-term changes would generally be applied to the configuration file itself\&.
-.sp
-Usage example:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-index myindex
+  $ searchd \-\-status
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-status
 .fi
-.if n \{\
 .RE
-.\}
+.RS
+.IP \(bu 2
+\fB\fC\-\-pidfile\fR is used to explicitly force using a PID file (where the \fB\fCsearchd\fR process identification number is stored) despite any other debugging options that say otherwise (for instance, \fB\fC\-\-console\fR). This is a debugging option.
 .RE
 .PP
-\fB\-\-iostats\fR
-.RS 4
-Used in conjunction with the logging options (the
-\fBquery_log\fR
-will need to have been activated in
-sphinx\&.conf) to provide more detailed information on a per\-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs\&. Further details are available under the query log format section\&.
-.sp
-You might start searchd thus:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-iostats
+  $ searchd \-\-console \-\-pidfile
 .fi
-.if n \{\
 .RE
-.\}
-.RE
-.PP
-\fB\-\-listen\fR, \fB\-l\fR\ \&\fI( address ":" port | port | path ) [ ":" protocol ]\fR
-.RS 4
-Works as
-\fB\-\-port\fR, but allow you to specify not only the port, but full path, as IP address and port, or Unix\-domain socket path, that
-\fBsearchd\fR
-will listen on\&. Otherwords, you can specify either an IP address (or hostname) and port number, or just a port number, or Unix socket path\&. If you specify port number but not the address, searchd will listen on all network interfaces\&. Unix path is identified by a leading slash\&. As the last param you can also specify a protocol handler (listener) to be used for connections on this socket\&. Supported protocol values are \*(Aqsphinx\*(Aq (Sphinx 0\&.9\&.x API protocol) and \*(Aqmysql41\*(Aq (MySQL protocol used since 4\&.1 up to at least 5\&.1)\&.
+.RS
+.IP \(bu 2
+\fB\fC\-\-console\fR is used to force \fB\fCsearchd\fR into console mode. Typically, Manticore runs as a conventional server application and logs information into log files (as specified in the configuration file). However, when debugging issues in the configuration or the server itself, or trying to diagnose hard\-to\-track\-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running \fB\fCsearchd\fR\&.)  You can invoke it as:
 .RE
 .PP
-\fB\-\-logdebug, \-\-logdebugv, \-\-logdebugvv\fR
-.RS 4
-Enable additional debug output in the daemon log\&. Should only be needed rarely, to assist with debugging issues that could not be easily reproduced on request\&.
-\fB\-\-logdebug\fR
-causes daemon to fire general debug messages\&.
-\fB\-\-logdebugv\fR
-and
-\fB\-\-logdebugvv\fR
-points to \*(Aqverbose\*(Aq and \*(Aqvery verbose\*(Aq debug info\&. The last could really flood your logfile\&.
+.RS
+.nf
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-console
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-logdebug\fR, \fB\fC\-\-logreplication\fR, \fB\fC\-\-logdebugv\fR, and \fB\fC\-\-logdebugvv\fR options enable additional debug output in the server log. They differ by the logging verboseness level. These are debugging options and should not be normally enabled, as they can pollute the log a lot. They can be used temporarily on request to assist with complicated debugging sessions.
+.IP \(bu 2
+\fB\fC\-\-iostats\fR is used in conjunction with the logging options (the \fB\fCquery_log\fR must have been activated in  \fB\fCmanticore.conf\fR) to provide more detailed information on a per\-query basis about the input/output operations carried out in the course of that query, with a slight performance hit and slightly bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap. To enable it, you can start \fB\fCsearchd\fR as follows:
 .RE
 .PP
-\fB\-\-nodetach\fR
-.RS 4
-Do not \*(Aqdaemonize\*(Aq, or, do not detach into background\&. Apart debug purposes, this switch is useful when you manage Manticore Search with upstart init daemon\&. In this case actual \*(Aqdaemonizing\*(Aq will be done by upstart itself, and also all tasks like starting, stopping, reloading the config and respawning on crash will be done by the system, not the sphinx\&.
+.RS
+.nf
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-iostats
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-cpustats\fR is used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated). It depends on \fB\fCclock_gettime()\fR Linux system call or falls back to less precise call on certain systems. You might start \fB\fCsearchd\fR thus:
 .RE
 .PP
-\fB\-\-pidfile\fR \fIPIDFILE\fR
-.RS 4
-Explicitly state a PID file, where the process information is stored regarding
-\fBsearchd\fR, used for inter\-process communications (for example,
-\fBindexer\fR
-will need to know the PID to contact
-\fBsearchd\fR
-for rotating indexes)\&. Normally,
-\fBsearchd\fR
-would use a PID if running in regular mode (i\&.e\&. not with
-\fB\-\-console\fR), but it is possible that you will be running it in console mode whilst the index is being updated and rotated, for which a PID file will be needed\&.
-.sp
+.RS
+.nf
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-cpustats
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-port portnumber\fR (\fB\fC\-p\fR for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.
+.RE
+.IP
+An example of usage:
+.PP
+.RS
+.nf
+  $ searchd \-\-port 9313
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-listen ( address ":" port | port | path ) [ ":" protocol ]\fR (or \fB\fC\-l\fR for short) Works as \fB\fC\-\-port\fR, but allows you to specify not only the port, but the full path, IP address and port, or Unix\-domain socket path that \fB\fCsearchd\fR will listen on. In other words, you can specify either an IP address (or hostname) and port number, just a port number, or a Unix socket path. If you specify a port number but not the address, searchd will listen on all network interfaces. A Unix path is identified by a leading slash. As the last parameter, you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
+.IP \(bu 2
+\fB\fC\-\-force\-preread\fR forbids the server from serving any incoming connection until prereading of table files completes. By default, at startup, the server accepts connections while table files are lazy\-loaded into memory. This extends the behavior and makes it wait until the files are loaded.
+.IP \(bu 2
+\fB\fC\-\-index (\-\-table) <table>\fR (or \fB\fC\-i (\-t) <table>\fR for short) forces this instance of \fB\fCsearchd\fR  to only serve the specified table. Like \fB\fC\-\-port\fR, above, this is usually for debugging purposes; more long\-term changes would generally be applied to the configuration file itself.
+.IP \(bu 2
+\fB\fC\-\-strip\-path\fR strips the path names from all the file names referenced from the table (stopwords, wordforms, exceptions, etc). This is useful for picking up tables built on another machine with possibly different path layouts.
+.IP \(bu 2
+\fB\fC\-\-replay\-flags=<OPTIONS>\fR switch can be used to specify a list of extra binary log replay options. The supported options are:
+.RS
+.IP \(bu 2
+\fB\fCaccept\-desc\-timestamp\fR, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error).
+.IP \(bu 2
+\fB\fCignore\-open\-errors\fR, ignore missing binlog files (the default behavior is to exit with an error).
+.IP \(bu 2
+\fB\fCignore\-trx\-errors\fR, ignore any transaction errors and skip current binlog file (the default behavior is to exit with an error).
+.IP \(bu 2
+\fB\fCignore\-all\-errors\fR, ignore any errors described above (the default behavior is to exit with an error).
+.RE
+.PP
 Example:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-pidfile /home/myuser/sphinx\&.pid
-.fi
-.if n \{\
-.RE
-.\}
-.RE
 .PP
-\fB\-\-replay\-flags\fR\ \&\fIOPTIONS\fR
-.RS 4
-Specify a list of extra binary log replay options\&. The supported options are:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fBaccept\-desc\-timestamp\fR, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error)\&.
-.RE
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
 $ searchd \-\-replay\-flags=accept\-desc\-timestamp
 .fi
-.if n \{\
 .RE
-.\}
+.IP \(bu 2
+\fB\fC\-\-coredump\fR is used to enable saving a core file or a minidump of the server on crash. Disabled by default to speed up of server restart on crash. This is useful for debugging purposes.
 .RE
 .PP
-\fB\-\-port\fR\ \&\fIPORT\fR, \fB\-p\fR\ \&\fIPORT\fR
-.RS 4
-Specify the
-\fIport\fR
-that
-\fBsearchd\fR
-should listen on, usually for debugging purposes\&. This will usually default to
-\fB9312\fR, but sometimes you need to run it on a different port\&. Specifying it on the command line will override anything specified in the configuration file\&. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run\&. Look also the
-\fB\-\-listen\fR
-option, it will give you more possibilities to tune here\&.
-.sp
-An example of usage:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-port 9313
+  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-coredump
 .fi
-.if n \{\
 .RE
-.\}
+.RS
+.IP \(bu 2
+\fB\fC\-\-new\-cluster\fR bootstraps a replication cluster and makes the server a reference node with \fB\fCcluster restart\fR protection. On Linux you can also run \fB\fCmanticore_new_cluster\fR\&. It will start Manticore in \fB\fC\-\-new\-cluster\fR mode via systemd.
+.IP \(bu 2
+\fB\fC\-\-new\-cluster\-force\fR bootstraps a replication cluster and makes the server a reference node bypassing \fB\fCcluster restart\fR protection. On Linux you can also run \fB\fCmanticore_new_cluster \-\-force\fR\&. It will start Manticore in \fB\fC\-\-new\-cluster\-force\fR mode via systemd.
+.RE
+.SS Windows options
+.PP
+There are some options for \fB\fCsearchd\fR that are specific to Windows platforms, concerning handling as a service, and are only available in Windows binaries.
+.PP
+Note that in Windows searchd will default to \fB\fC\-\-console\fR mode, unless you install it as a service.
+.RS
+.IP \(bu 2
+\fB\fC\-\-install\fR installs \fB\fCsearchd\fR as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where \fB\fC\-\-install\fR is specified will also become part of the command line on future starts of the service. For example, as a part of calling \fB\fCsearchd\fR, you will likely also need to specify the configuration file with \fB\fC\-\-config\fR, and you would do that as well as specifying \fB\fC\-\-install\fR\&. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to \fB\fCsearchd\fR\&. Example:
 .RE
 .PP
-\fB\-\-safetrace\fR
-.RS 4
-Forces
-\fBsearchd\fR
-to only use system backtrace() call in crash reports\&. In certain (rare) scenarios, this might be a "safer" way to get that report\&. This is a debugging option\&.
-.RE
-.PP
-\fB\-\-status\fR
-.RS 4
-Query running
-\fBsearchd\fR
-instance status, using the connection details from the (optionally) provided configuration file\&. It will try to connect to the running instance using the first configured UNIX socket or TCP port\&. On success, it will query for a number of status and performance counter values and print them\&. You can use
-\fIStatus()\fR
-API call to access the very same counters from your application\&.
-.sp
-Examples:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-status
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-status
+  C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
+     \-\-config C:\\Manticore\\manticore.conf
 .fi
-.if n \{\
 .RE
-.\}
-.RE
+.IP
+If you want to have the I/O stats every time you start \fB\fCsearchd\fR, you need to specify the option on the same line as the \fB\fC\-\-install\fR command thus:
 .PP
-\fB\-\-stop\fR
-.RS 4
-Asynchronously stop
-\fBsearchd\fR, using the details of the PID file as specified in the
-sphinx\&.conf
-file, so you may also need to confirm to
-\fBsearchd\fR
-which configuration file to use with the
-\fB\-\-config\fR
-option\&. NB, calling
-\fB\-\-stop\fR
-will also make sure any changes applied to the indexes with
-\fIUpdateAttributes()\fR
-will be applied to the index files themselves\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-stop
+  C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
+     \-\-config C:\\Manticore\\manticore.conf \-\-iostats
 .fi
-.if n \{\
 .RE
-.\}
+.RS
+.IP \(bu 2
+\fB\fC\-\-delete\fR removes the service from the Microsoft Management Console and other places where services are registered, after previously being installed with \fB\fC\-\-install\fR\&. Note that this does not uninstall the software or delete the tables. It means the service will not be called from the services system, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot or until \fB\fC\-\-stop\fR). If the service was installed with a custom name (with \fB\fC\-\-servicename\fR), the same name will need to be specified with \fB\fC\-\-servicename\fR when calling to uninstall. Example:
 .RE
 .PP
-\fB\-\-stopwait\fR
-.RS 4
-Synchronously stop
-\fBsearchd\fR\&.
-\fB\-\-stop\fR
-essentially tells the running instance to exit (by sending it a
-\fISIGTERM\fR) and then immediately returns\&.
-\fB\-\-stopwait\fR
-will also attempt to wait until the running
-\fBsearchd\fR
-instance actually finishes the shutdown (eg\&. saves all the pending attribute changes) and exits\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-stopwait
+  C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-delete
 .fi
-.if n \{\
 .RE
-.\}
-.sp
-Possible exit codes are as follows:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-0 on success;
+.RS
+.IP \(bu 2
+\fB\fC\-\-servicename <name>\fR applies the given name to \fB\fCsearchd\fR when installing or deleting the service, as it would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log in to the system, or a system with multiple \fB\fCsearchd\fR instances, a more descriptive name may be applicable. Note that unless combined with \fB\fC\-\-install\fR or \fB\fC\-\-delete\fR, this option does not do anything.  Example:
+\fB\fCbat
+C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
+ \-\-config C:\\Manticore\\manticore.conf \-\-servicename ManticoreSearch
+\fR
+.IP \(bu 2
+\fB\fC\-\-ntservice\fR is an option that is passed by the Microsoft Management Console to \fB\fCsearchd\fR to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service is started, although if you wanted to call this as a regular service from the command\-line (as the complement to \fB\fC\-\-console\fR) you could do so in theory.
+.IP \(bu 2
+\fB\fC\-\-safetrace\fR forces \fB\fCsearchd\fR to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
+.IP \(bu 2
+\fB\fC\-\-nodetach\fR switch (Linux only) tells \fB\fCsearchd\fR not to detach into the background. This will also cause log entries to be printed out to the console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a Docker container to capture its output.
 .RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-1 if connection to running
-\fBsearchd\fR
-daemon failed;
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-2 if daemon reported an error during shutdown;
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-3 if daemon crashed during shutdown
-.RE
-.RE
+.SH PLUGIN DIR
 .PP
-\fB\-\-strip\-path\fR
-.RS 4
-Strip the path names from all the file names referenced from the index (\fIstopwords\fR,
-\fIwordforms\fR,
-\fIexceptions\fR, etc)\&. This is useful for picking up indexes built on another machine with possibly different path layouts\&.
+Manticore utilizes the \fB\fCplugin_dir\fR for storing and using Manticore Buddy plugins. By default, this value is accessible to the "manticore" user in a standard installation. However, if you start the searchd daemon manually with a different user, the daemon might not have access to the \fB\fCplugin_dir\fR\&. To address this problem, ensure you specify a \fB\fCplugin_dir\fR in the common section that the user running the searchd daemon can write to.
+.SH SIGNALS
+.PP
+\fB\fCsearchd\fR supports a number of signals:
+.RS
+.IP \(bu 2
+\fB\fCSIGTERM\fR \- Initiates a clean shutdown. New queries will not be handled, but queries that are already started will not be forcibly interrupted.
+.IP \(bu 2
+\fB\fCSIGHUP\fR \- Initiates tables rotation. Depending on the value of \fB\fCseamless_rotate\fR setting, new queries might be shortly stalled; clients will receive temporary errors.
+.IP \(bu 2
+\fB\fCSIGUSR1\fR \- Forces reopen of searchd log and query log files, allowing for log file rotation.
 .RE
-.SH "SIGNALS"
-.PP
-Last but not least, as every other daemon,
-\fBsearchd\fR
-supports a number of signals\&.
-.PP
-.PP
-SIGTERM
-.RS 4
-Initiates a clean shutdown\&. New queries will not be handled; but queries that are already started will not be forcibly interrupted\&.
-.RE
-.PP
-SIGHUP
-.RS 4
-Initiates index rotation\&. Depending on the value of
-\fBseamless_rotate\fR
-setting, new queries might be shortly stalled; clients will receive temporary errors\&.
-.RE
-.PP
-SIGUSR1
-.RS 4
-Forces reopen of searchd log and query log files, letting you implement log file rotation\&.
+.SH ENVIRONMENT VARIABLES
+.RS
+.IP \(bu 2
+\fB\fCMANTICORE_TRACK_DAEMON_SHUTDOWN=1\fR enables detailed logging while searchd is shutting down. It's useful in case of some shutdown problems, such as when Manticore takes too long to shut down or freezes during the shutdown process.
 .RE
 .SH "AUTHOR"
 .PP
@@ -420,14 +238,12 @@ Manticore Software LTD (https://manticoresearch\&.com)
 .PP
 Copyright 2017\-2023 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
-Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"
 .PP
 \fBindexer\fR(1),
-\fBsearch\fR(1),
 \fBindextool\fR(1)
 .PP
-Manticore Search and it\*(Aqs programs are documented fully by the
-\fIManticore Search reference manual\fR
-available in
-/usr/share/doc/manticore\&.
+Manticore Search and its related programs are thoroughly documented
+in the \fIManticore Search reference manual\fR, which is accessible
+at https://manual.manticoresearch.com/

@@ -9,7 +9,7 @@
 .SH "NAME"
 indexer \- Manticore Search Indexer Tool
 .SH "SYNOPSIS"
-sudo -u manticore indexer ...
+sudo \-u manticore indexer ...
 .SH DESCRIPTION
 .PP
 The \fB\fCindexer\fR tool is used to create plain tables in Manticore Search. It has a general syntax of:
@@ -88,7 +88,7 @@ The exit codes for indexer are as follows:
 .RE
 .RS
 .IP \(bu 2
-\fB\fC\-\-rotate\fR is used for rotating tables. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. \fB\fC\-\-rotate\fR creates a second table, parallel to the first (in the same place, simply including \fB\fC\&.new\fR in the filenames). Once complete, \fB\fCindexer\fR notifies \fB\fCsearchd\fR via sending the \fB\fCSIGHUP\fR signal, and the \fB\fCsearchd\fR will attempt to rename the tables (renaming the existing ones to include \fB\fC\&.old\fR and renaming the \fB\fC\&.new\fR to replace them), and then will start serving from the newer files. Depending on the setting of seamless_rotate \[la]../../Server_settings/Searchd.md#seamless_rotate\[ra] there may be a slight delay in being able to search the newer tables. In case multiple tables are rotated at once which are chained by killlist_target \[la]../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target\[ra] relations rotation will start with the tables that are not targets and finish with the ones at the end of target chain. Example usage:
+\fB\fC\-\-rotate\fR is used for rotating tables. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. \fB\fC\-\-rotate\fR creates a second table, parallel to the first (in the same place, simply including \fB\fC\&.new\fR in the filenames). Once complete, \fB\fCindexer\fR notifies \fB\fCsearchd\fR via sending the \fB\fCSIGHUP\fR signal, and the \fB\fCsearchd\fR will attempt to rename the tables (renaming the existing ones to include \fB\fC\&.old\fR and renaming the \fB\fC\&.new\fR to replace them), and then will start serving from the newer files. Depending on the setting of \fB\fCseamless_rotate\fR there may be a slight delay in being able to search the newer tables. In case multiple tables are rotated at once which are chained by \fB\fCkilllist_target\fR relations rotation will start with the tables that are not targets and finish with the ones at the end of target chain. Example usage:
 .RE
 .PP
 .RS
@@ -118,7 +118,7 @@ The exit codes for indexer are as follows:
 .RE
 .RS
 .IP \(bu 2
-\fB\fC\-\-buildstops <outputfile.text> <N>\fR reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the table. Note, it does not update the table in question, it simply processes the data as if it were indexing, including running queries defined with sql\fIquery\fPpre \[la]../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre\[ra] or sql\fIquery\fPpost \[la]../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post\[ra]\&. \fB\fCoutputfile.txt\fR will contain the list of words, one per line, sorted by frequency with most frequent first, and \fB\fCN\fR specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the table, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with \fB\fC\-\-buildfreqs\fR, below. Example:
+\fB\fC\-\-buildstops <outputfile.text> <N>\fR reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the table. Note, it does not update the table in question, it simply processes the data as if it were indexing, including running queries defined with \fB\fCsql_query_pre\fR or \fB\fCsql_query_post\fR\&. \fB\fCoutputfile.txt\fR will contain the list of words, one per line, sorted by frequency with most frequent first, and \fB\fCN\fR specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the table, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with \fB\fC\-\-buildfreqs\fR, below. Example:
 .RE
 .PP
 .RS
@@ -142,7 +142,7 @@ This would produce a document in the current directory, \fB\fCword_freq.txt\fR, 
 This would produce the \fB\fCword_freq.txt\fR as above, however after each word would be the number of times it occurred in the table in question.
 .RS
 .IP \(bu 2
-\fB\fC\-\-merge <dst\-table> <src\-table>\fR is used for physically merging tables together, for example if you have a main+delta scheme \[la]../../Creating_a_table/Local_tables/Plain_table.md#Main+delta-scenario\[ra], where the main table rarely changes, but the delta table is rebuilt frequently, and \fB\fC\-\-merge\fR would be used to combine the two. The operation moves from right to left \- the contents of \fB\fCsrc\-table\fR get examined and physically combined with the contents of \fB\fCdst\-table\fR and the result is left in \fB\fCdst\-table\fR\&. In pseudo\-code, it might be expressed as: \fB\fCdst\-table += src\-table\fR An example:
+\fB\fC\-\-merge <dst\-table> <src\-table>\fR is used for physically merging tables together, for example if you have a \fB\fCmain+delta scheme\fR, where the main table rarely changes, but the delta table is rebuilt frequently, and \fB\fC\-\-merge\fR would be used to combine the two. The operation moves from right to left \- the contents of \fB\fCsrc\-table\fR get examined and physically combined with the contents of \fB\fCdst\-table\fR and the result is left in \fB\fCdst\-table\fR\&. In pseudo\-code, it might be expressed as: \fB\fCdst\-table += src\-table\fR An example:
 .RE
 .PP
 .RS

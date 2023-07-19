@@ -1,0 +1,106 @@
+––– block: start-searchd –––
+––– input –––
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-all/json.sql
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'select * from mcl_all_json limit -1'
+––– output –––
+––– input –––
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-all/json-batch-1.sql
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'flush ramchunk mcl_all_json'
+––– output –––
+––– input –––
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-all/json-batch-2.sql
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'flush ramchunk mcl_all_json'
+––– output –––
+––– input –––
+mysql -h0 -P9306 < tests/mysqldump/dumps/mcl-all/json-batch-3.sql
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'flush table mcl_all_json'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'select * from mcl_all_json limit 20'
+––– output –––
++------+---------------------------------------------------------------------------------------------+
+| id   | value                                                                                       |
++------+---------------------------------------------------------------------------------------------+
+|   20 | {"computer":"MacBook Pro","manufacturer":"Apple","year":2021,"OS":"macOS"}                  |
+|   19 | {"element":"Hydrogen","symbol":"H","atomic_number":1,"state":"Gas"}                         |
+|    9 | {"song":"Bohemian Rhapsody","artist":"Queen","year":1975,"genre":"Rock"}                    |
+|    1 | {"key1":"value1","key2":"value2","key3":"value3","key4":"value4"}                           |
+|    2 | {"name":"John","age":30,"city":"New York","occupation":"Engineer"}                          |
+|   10 | {"company":"OpenAI","founded":2015,"location":"San Francisco","CEO":"Sam Altman"}           |
+|    3 | {"animal":"dog","color":"brown","age":5,"breed":"Labrador"}                                 |
+|   11 | {"planet":"Mars","distance_from_sun":227.900000,"orbital_period":687,"number_of_moons":2}   |
+|    4 | {"subject":"Math","score":95,"passed":true,"comments":"Excellent"}                          |
+|   12 | {"country":"Australia","continent":"Australia","capital":"Canberra","population":25.360000} |
+|   13 | {"language":"Spanish","speakers":460,"origin":"Spain","script":"Latin"}                     |
+|    5 | {"book":"The Great Gatsby","author":"F. Scott Fitzgerald","year":1925,"genre":"Novel"}      |
+|   14 | {"dish":"Sushi","origin":"Japan","ingredients":["Rice","Fish","Seaweed"],"type":"Seafood"}  |
+|    6 | {"movie":"Inception","director":"Christopher Nolan","year":2010,"genre":"Sci-fi"}           |
+|   15 | {"game":"Chess","origin":"India","players":2,"type":"Board game"}                           |
+|    7 | {"fruit":"Apple","color":"Red","origin":"USA","taste":"Sweet"}                              |
+|   16 | {"painting":"Mona Lisa","artist":"Leonardo da Vinci","year":1503,"museum":"Louvre"}         |
+|    8 | {"car":"Tesla Model S","manufacturer":"Tesla","year":2022,"type":"Electric"}                |
+|   17 | {"sport":"Soccer","origin":"England","players":11,"ball":"Round"}                           |
+|   18 | {"flower":"Rose","color":"Red","symbol":"Love","origin":"Asia"}                             |
++------+---------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e 'select * from mcl_all_json limit -1'
+––– output –––
++------+---------------------------------------------------------------------------------------------+
+| id   | value                                                                                       |
++------+---------------------------------------------------------------------------------------------+
+|    9 | {"song":"Bohemian Rhapsody","artist":"Queen","year":1975,"genre":"Rock"}                    |
+|   10 | {"company":"OpenAI","founded":2015,"location":"San Francisco","CEO":"Sam Altman"}           |
+|   11 | {"planet":"Mars","distance_from_sun":227.900000,"orbital_period":687,"number_of_moons":2}   |
+|   12 | {"country":"Australia","continent":"Australia","capital":"Canberra","population":25.360000} |
+|   13 | {"language":"Spanish","speakers":460,"origin":"Spain","script":"Latin"}                     |
+|   14 | {"dish":"Sushi","origin":"Japan","ingredients":["Rice","Fish","Seaweed"],"type":"Seafood"}  |
+|   15 | {"game":"Chess","origin":"India","players":2,"type":"Board game"}                           |
+|   16 | {"painting":"Mona Lisa","artist":"Leonardo da Vinci","year":1503,"museum":"Louvre"}         |
+|   17 | {"sport":"Soccer","origin":"England","players":11,"ball":"Round"}                           |
+|   18 | {"flower":"Rose","color":"Red","symbol":"Love","origin":"Asia"}                             |
+|    1 | {"key1":"value1","key2":"value2","key3":"value3","key4":"value4"}                           |
+|    2 | {"name":"John","age":30,"city":"New York","occupation":"Engineer"}                          |
+|    3 | {"animal":"dog","color":"brown","age":5,"breed":"Labrador"}                                 |
+|    4 | {"subject":"Math","score":95,"passed":true,"comments":"Excellent"}                          |
+|    5 | {"book":"The Great Gatsby","author":"F. Scott Fitzgerald","year":1925,"genre":"Novel"}      |
+|    6 | {"movie":"Inception","director":"Christopher Nolan","year":2010,"genre":"Sci-fi"}           |
+|    7 | {"fruit":"Apple","color":"Red","origin":"USA","taste":"Sweet"}                              |
+|    8 | {"car":"Tesla Model S","manufacturer":"Tesla","year":2022,"type":"Electric"}                |
+|   19 | {"element":"Hydrogen","symbol":"H","atomic_number":1,"state":"Gas"}                         |
+|   20 | {"computer":"MacBook Pro","manufacturer":"Apple","year":2021,"OS":"macOS"}                  |
++------+---------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from mcl_all_json'
+––– output –––
++------+---------------------------------------------------------------------------------------------+
+| id   | value                                                                                       |
++------+---------------------------------------------------------------------------------------------+
+|    9 | {"song":"Bohemian Rhapsody","artist":"Queen","year":1975,"genre":"Rock"}                    |
+|   10 | {"company":"OpenAI","founded":2015,"location":"San Francisco","CEO":"Sam Altman"}           |
+|   11 | {"planet":"Mars","distance_from_sun":227.900000,"orbital_period":687,"number_of_moons":2}   |
+|   12 | {"country":"Australia","continent":"Australia","capital":"Canberra","population":25.360000} |
+|   13 | {"language":"Spanish","speakers":460,"origin":"Spain","script":"Latin"}                     |
+|   14 | {"dish":"Sushi","origin":"Japan","ingredients":["Rice","Fish","Seaweed"],"type":"Seafood"}  |
+|   15 | {"game":"Chess","origin":"India","players":2,"type":"Board game"}                           |
+|   16 | {"painting":"Mona Lisa","artist":"Leonardo da Vinci","year":1503,"museum":"Louvre"}         |
+|   17 | {"sport":"Soccer","origin":"England","players":11,"ball":"Round"}                           |
+|   18 | {"flower":"Rose","color":"Red","symbol":"Love","origin":"Asia"}                             |
+|    1 | {"key1":"value1","key2":"value2","key3":"value3","key4":"value4"}                           |
+|    2 | {"name":"John","age":30,"city":"New York","occupation":"Engineer"}                          |
+|    3 | {"animal":"dog","color":"brown","age":5,"breed":"Labrador"}                                 |
+|    4 | {"subject":"Math","score":95,"passed":true,"comments":"Excellent"}                          |
+|    5 | {"book":"The Great Gatsby","author":"F. Scott Fitzgerald","year":1925,"genre":"Novel"}      |
+|    6 | {"movie":"Inception","director":"Christopher Nolan","year":2010,"genre":"Sci-fi"}           |
+|    7 | {"fruit":"Apple","color":"Red","origin":"USA","taste":"Sweet"}                              |
+|    8 | {"car":"Tesla Model S","manufacturer":"Tesla","year":2022,"type":"Electric"}                |
+|   19 | {"element":"Hydrogen","symbol":"H","atomic_number":1,"state":"Gas"}                         |
+|   20 | {"computer":"MacBook Pro","manufacturer":"Apple","year":2021,"OS":"macOS"}                  |
++------+---------------------------------------------------------------------------------------------+

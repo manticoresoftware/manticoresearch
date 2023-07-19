@@ -417,6 +417,7 @@ jobs:
     strategy:
       matrix:
         image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
+
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     with:
       version: v2
@@ -424,7 +425,23 @@ jobs:
         [
           { "image": "${{matrix.image}}"},
         ]
-      test_prefix: logstash-
+      test_prefix: logstash/logstash-
+
+  clt_mysqldump_test:
+    name: CLT test on mysqldump features
+    needs: build_test_kit_docker
+    strategy:
+      matrix:
+       image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
+    with:
+      version: v2
+      docker_images: |
+        [
+          { "image": "${{matrix.image}}"},
+        ]
+      test_prefix: mysqldump/
+
 
   build_aarch64:
     name: Linux aarch64 build

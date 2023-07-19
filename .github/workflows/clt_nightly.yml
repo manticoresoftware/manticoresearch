@@ -22,7 +22,7 @@ jobs:
           {"image": "oraclelinux:9"},
           {"image": "amazonlinux:latest"}
         ]
-      test_prefix: rhel-release-
+      test_prefix: installation/rhel-release-
   clt_deb_release_installation:
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     with:
@@ -36,4 +36,4 @@ jobs:
           {"image": "debian:bullseye"},
           {"image": "debian:bookworm"}
         ]
-      test_prefix: deb-release-
+      test_prefix: installation/deb-release-

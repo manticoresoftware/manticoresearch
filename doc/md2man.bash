@@ -68,9 +68,7 @@ Permission is granted to copy, distribute and/or modify this document under the 
 .SH "SEE ALSO"
 .PP
 \fBsearchd\fR(1),
-\fBsearch\fR(1),
-\fBindextool\fR(1),
-\fBspelldump\fR(1)
+\fBindextool\fR(1)
 .PP
 Manticore Search and its related programs are thoroughly documented
 in the \fIManticore Search reference manual\fR, which is accessible

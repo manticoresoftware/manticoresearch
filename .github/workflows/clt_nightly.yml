@@ -11,8 +11,9 @@ concurrency:
 
 jobs:
   clt_rhel_release_installation:
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     with:
+      version: v2
       docker_images: |
         [
           {"image": "centos:7"},
@@ -23,8 +24,9 @@ jobs:
         ]
       test_prefix: rhel-release-
   clt_deb_release_installation:
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     with:
+      version: v2
       docker_images: |
         [
           {"image": "ubuntu:bionic"},

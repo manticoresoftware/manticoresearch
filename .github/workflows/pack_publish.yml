@@ -253,9 +253,10 @@ jobs:
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     needs: publish_rhel
     with:
+      version: v2
       docker_images: |
         [
           {"image": "centos:7"},
@@ -269,8 +270,9 @@ jobs:
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
     needs: publish_debian_ubuntu
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v1
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     with:
+      version: v2
       docker_images: |
         [
           {"image": "ubuntu:bionic"},

@@ -165,10 +165,4 @@
 #define SYSCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/manticoresearch"
 
 /* hardcoded default plugin dir */
-#if _WIN32
-#define HARDCODED_PLUGIN_DIR "usr/local/lib/manticore"
-#elif defined(__linux__)
-#define HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore"
-#else
-#define HARDCODED_PLUGIN_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/manticore"
-#endif
+#define HARDCODED_PLUGIN_DIR "${CMAKE_INSTALL_FULL_LOCALLIBDIR}/manticore"

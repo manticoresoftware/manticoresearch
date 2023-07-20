@@ -1,6 +1,6 @@
 ––– block: start-searchd –––
 ––– input –––
-./tests/clt-tests/mysqldump/scripts/generate-1m-records.sh | mysql -h0 -P9306
+./test/clt-tests/mysqldump/scripts/generate-1m-records.sh | mysql -h0 -P9306
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'show tables'

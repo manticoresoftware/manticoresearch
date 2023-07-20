@@ -5,14 +5,12 @@ on:
     paths:
       - 'manual/**'
     branches:
-      - master
-      - maintenance-release
-      - manticore-**
+      - docs-deploy-test
   pull_request:
     paths:
       - 'manual/**'
     branches:
-      - master
+      - docs-deploy-test
     types:
       - opened
       - synchronize

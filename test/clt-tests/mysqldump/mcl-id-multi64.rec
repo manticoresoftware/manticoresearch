@@ -1,24 +1,24 @@
 ––– block: start-searchd –––
 ––– input –––
-mysql -h0 -P9306 < tests/clt-tests/mysqldump/dumps/mcl-id/multi64.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-id/multi64.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'select * from mcl_id_multi64 limit -1'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < tests/clt-tests/mysqldump/dumps/mcl-id/multi64-batch-1.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-id/multi64-batch-1.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'flush ramchunk mcl_id_multi64'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < tests/clt-tests/mysqldump/dumps/mcl-id/multi64-batch-2.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-id/multi64-batch-2.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'flush ramchunk mcl_id_multi64'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < tests/clt-tests/mysqldump/dumps/mcl-id/multi64-batch-3.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-id/multi64-batch-3.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e 'flush table mcl_id_multi64'

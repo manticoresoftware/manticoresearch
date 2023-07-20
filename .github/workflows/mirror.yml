@@ -6,16 +6,16 @@ on: [push, delete]
 concurrency:
   group: mirror_${{ github.ref }}
 
-jobs:
-  to_gitlab:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: pixta-dev/repository-mirroring-action@v1
-        with:
-          target_repo_url:
-            git@gitlab.com:manticoresearch/dev.git
-          ssh_private_key:
-            ${{ secrets.GITLAB_SSH_KEY }}
+#jobs:
+#  to_gitlab:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#        with:
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#      - uses: pixta-dev/repository-mirroring-action@v1
+#        with:
+#          target_repo_url:
+#            git@gitlab.com:manticoresearch/dev.git
+#          ssh_private_key:
+#            ${{ secrets.GITLAB_SSH_KEY }}

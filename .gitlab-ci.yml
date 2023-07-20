@@ -15,7 +15,7 @@ variables:
   VERBOSE: 1
 
 stages:
-  - mirroring
+#  - mirroring
   - routines
   - ubertests
   - publish
@@ -23,24 +23,24 @@ stages:
 
 # ==================== Mirror repo to github (only 'master' branch) ======================
 
-job_mirror:
-  stage: mirroring
-  needs: [ ]
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
-    - if: $CI_COMMIT_BRANCH == "maintenance-release"
-  tags:
-    - dev-host
-  script:
-    - rm -fr gitlab_github_sync
-    - git clone git@gitlab.com:manticoresearch/dev.git gitlab_github_sync
-    - cd gitlab_github_sync
-    - git checkout $CI_COMMIT_BRANCH
-    - git remote add github git@github.com:manticoresoftware/manticoresearch.git
-    - git fetch github
-    - git push -u github $CI_COMMIT_BRANCH
-  cache: {}
+#job_mirror:
+#  stage: mirroring
+#  needs: [ ]
+#  rules:
+#    - if: $CI_COMMIT_BRANCH == "master"
+#    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+#    - if: $CI_COMMIT_BRANCH == "maintenance-release"
+#  tags:
+#    - dev-host
+#  script:
+#    - rm -fr gitlab_github_sync
+#    - git clone git@gitlab.com:manticoresearch/dev.git gitlab_github_sync
+#    - cd gitlab_github_sync
+#    - git checkout $CI_COMMIT_BRANCH
+#    - git remote add github git@github.com:manticoresoftware/manticoresearch.git
+#    - git fetch github
+#    - git push -u github $CI_COMMIT_BRANCH
+#  cache: {}
 
 # ==================== .helper to work with documentation ======================
 .docs:

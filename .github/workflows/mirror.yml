@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   to_gitlab:
+    name: Sync to GitLab
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

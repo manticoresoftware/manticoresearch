@@ -399,6 +399,8 @@ void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );
 /// analyze vector of trees and tag common parts of them (to cache them later)
 int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
+XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery );
+
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
 bool	IsAllowOnlyNot();

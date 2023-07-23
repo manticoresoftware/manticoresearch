@@ -1,6 +1,6 @@
 # Introduction
 
-Test version.
+Test version
 
 Manticore Search is a multi-storage database specifically designed for search, with robust full-text search capabilities.
 

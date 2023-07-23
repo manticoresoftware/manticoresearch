@@ -5,12 +5,12 @@ on:
     paths:
       - 'manual/**'
     branches:
-      - docs-deploy-test
+      - manticore-7.7.7
   pull_request:
     paths:
       - 'manual/**'
     branches:
-      - docs-deploy-test
+      - manticore-7.7.7
     types:
       - opened
       - synchronize

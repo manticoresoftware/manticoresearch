@@ -5,12 +5,14 @@ on:
     paths:
       - 'manual/**'
     branches:
-      - manticore-7.7.7
+      - master
+      - manticore-*
   pull_request:
     paths:
       - 'manual/**'
     branches:
-      - manticore-7.7.7
+      - master
+      - manticore-*
     types:
       - opened
       - synchronize

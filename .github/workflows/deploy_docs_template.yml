@@ -3,14 +3,19 @@ name: Deploy docs
 on:
   workflow_call:
 
-
 env:
   DOCS_AUTOCOMMIT_TITLE: Docs_examples_update
   
 jobs:
-  docs_deploy:
-    if: ${{ github.event.head_commit.message != env.DOCS_AUTOCOMMIT_TITLE }}
+  docs_autocommit_check:
     runs-on: ubuntu-22.04
+    steps:
+      - name: Check
+        if: ${{ github.event.head_commit.message != env.DOCS_AUTOCOMMIT_TITLE }}
+        run: echo "Commit checked"
+  docs_deploy:
+    runs-on: ubuntu-22.04
+    needs: docs_autocommit_check
     defaults:
       run:
         shell: bash

@@ -3,8 +3,13 @@ name: Deploy docs
 on:
   workflow_call:
 
+
+env:
+  DOCS_AUTOCOMMIT_TITLE: Docs_examples_update
+  
 jobs:
   docs_deploy:
+  	if: github.event.head_commit.message != "$DOCS_AUTOCOMMIT_TITLE"
     runs-on: ubuntu-22.04
     defaults:
       run:
@@ -21,7 +26,7 @@ jobs:
         DEPLOY_SOURCE: github
         DEPLOY_TARGET: k8s
         DOCS_ERRORS_DIR: build/docs/
-        DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
+        DOCS_AUTOCOMMIT_TITLE: "$DOCS_AUTOCOMMIT_TITLE"
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
 
         CI_PROJECT_TITLE: dev
@@ -29,6 +34,7 @@ jobs:
         CI_PROJECT_DIR: /__w/manticoresearch/manticoresearch
         CI_COMMIT_SHA: ${{ github.sha }}
         CI_COMMIT_BRANCH: ${{ github.ref_name }}
+        CI_COMMIT_TITLE: ${{ github.event.head_commit.message }}
     steps:
       - name: Install git
         run: |
@@ -49,7 +55,7 @@ jobs:
 
       - name: Deploy
         run: |
-          sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+          echo "Autocommit title $DOCS_AUTOCOMMIT_TITLE"
 
       - name: Upload artifact
         uses: manticoresoftware/upload_artifact_with_retries@main

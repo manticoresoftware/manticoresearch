@@ -16,6 +16,7 @@ jobs:
   docs_deploy:
     runs-on: ubuntu-22.04
     needs: docs_autocommit_check
+    if: needs.docs_autocommit_check.result != 'skipped' 
     defaults:
       run:
         shell: bash

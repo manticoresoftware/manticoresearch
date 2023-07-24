@@ -1,0 +1,13 @@
+––– block: start-searchd –––
+––– input –––
+BACKUP TABLES users, posts TO '/backup/location';
+––– output –––
+ERROR 1064 (42000): P02: syntax error, unexpected identifier near 'BACKUP TABLES users, posts TO '/backup/location''
+––– input –––
+BACKUP TABLES users, posts TO '/backup/location' OPTIONS compress=true, async=false;
+––– output –––
+ERROR 1064 (42000): P02: syntax error, unexpected identifier near 'BACKUP TABLES users, posts TO '/backup/location' OPTIONS compress=true, async=false'
+––– input –––
+BACKUP TABLES TO '/backup/location' OPTIONS compress=true, async=false;
+––– output –––
+ERROR 1064 (42000): P02: syntax error, unexpected identifier near 'BACKUP TABLES TO '/backup/location' OPTIONS compress=true, async=false'

@@ -8,14 +8,16 @@ env:
   
 jobs:
   docs_autocommit_check:
+    name: Check for doc deployment autocommits
     runs-on: ubuntu-22.04
     outputs:
-      res: ${{ steps.step1.outputs.res }}
+      res: ${{ steps.check.outputs.res }}
     steps:
-      - id: step1
+      - id: check
         if: ${{ github.event.head_commit.message != env.DOCS_AUTOCOMMIT_TITLE }}
         run: echo "res=ok" >> $GITHUB_OUTPUT
   docs_deploy:
+    name: Manticore Manual doc deployment
     runs-on: ubuntu-22.04
     needs: docs_autocommit_check
     if: needs.docs_autocommit_check.outputs.res == 'ok' 

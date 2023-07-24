@@ -6,6 +6,7 @@ on:
       - 'manual/**'
     branches:
       - master
+      - maintenance-release
       - manticore-*
   pull_request:
     paths:

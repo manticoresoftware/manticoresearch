@@ -9,14 +9,16 @@ env:
 jobs:
   docs_autocommit_check:
     runs-on: ubuntu-22.04
+    outputs:
+      res: ${{ steps.step1.outputs.res }}
     steps:
-      - name: Check
+      - id: step1
         if: ${{ github.event.head_commit.message != env.DOCS_AUTOCOMMIT_TITLE }}
-        run: echo "Commit checked"
+        run: echo "res=ok" >> $GITHUB_OUTPUT
   docs_deploy:
     runs-on: ubuntu-22.04
     needs: docs_autocommit_check
-    if: needs.docs_autocommit_check.result != 'skipped' 
+    if: needs.docs_autocommit_check.outputs.res == 'ok' 
     defaults:
       run:
         shell: bash

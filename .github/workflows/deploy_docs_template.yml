@@ -24,7 +24,7 @@ jobs:
         shell: bash
     #    timeout-minutes: 30
     container:
-      image: manticoresearch/docs_autodeploy_test:latest
+      image: manticoresearch/docs_autodeploy:latest
       env:
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/

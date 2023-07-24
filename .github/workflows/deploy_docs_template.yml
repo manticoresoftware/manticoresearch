@@ -63,7 +63,7 @@ jobs:
 
       - name: Deploy
         run: |
-          echo "Autocommit title $DOCS_AUTOCOMMIT_TITLE"
+          sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 
       - name: Upload artifact
         uses: manticoresoftware/upload_artifact_with_retries@main

@@ -9,7 +9,7 @@ env:
   
 jobs:
   docs_deploy:
-    if: github.event.head_commit.message != "$DOCS_AUTOCOMMIT_TITLE"
+    if: ${{ github.event.head_commit.message != env.DOCS_AUTOCOMMIT_TITLE }}
     runs-on: ubuntu-22.04
     defaults:
       run:
@@ -26,7 +26,7 @@ jobs:
         DEPLOY_SOURCE: github
         DEPLOY_TARGET: k8s
         DOCS_ERRORS_DIR: build/docs/
-        DOCS_AUTOCOMMIT_TITLE: "$DOCS_AUTOCOMMIT_TITLE"
+        DOCS_AUTOCOMMIT_TITLE: ${{ env.DOCS_AUTOCOMMIT_TITLE }}
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
 
         CI_PROJECT_TITLE: dev

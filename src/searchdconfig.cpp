@@ -1347,7 +1347,9 @@ static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
 			sFiles += StripPath ( sFile ).cstr();
 	});
 
+	sphWarning ( "index %s directory '%s' is not empty after table drop, clean up files manually: %s", sIndexName.cstr(), sIndexPath.cstr(), sFiles.cstr() );
 	pMsg->SetSprintf ( "index %s directory '%s' is not empty after table drop, clean up files manually: %s", sIndexName.cstr(), sIndexPath.cstr(), sFiles.cstr() );
+
 	return false;
 }
 

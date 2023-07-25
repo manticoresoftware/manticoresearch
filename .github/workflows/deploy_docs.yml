@@ -7,12 +7,13 @@ on:
     branches:
       - master
       - maintenance-release
-      - manticore-**
+      - manticore-*
   pull_request:
     paths:
       - 'manual/**'
     branches:
       - master
+      - manticore-*
     types:
       - opened
       - synchronize

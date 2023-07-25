@@ -111,7 +111,7 @@ CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 
 bool		CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
 bool		AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError );
-bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError );
+bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError, CSphString * pWarning=nullptr );
 bool		CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, StrVec_t & dCopied, CSphString & sError );
 bool		CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, StrVec_t & dWarnings, CSphString & sError );
 

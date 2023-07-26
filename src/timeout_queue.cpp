@@ -126,7 +126,7 @@ CSphString TimeoutQueue_c::DebugDump ( const char* sPrefix ) const
 {
 	StringBuilder_c tBuild;
 	for ( auto* cTask : m_dQueue )
-		tBuild.Appendf ( tBuild.IsEmpty() ? "%p(" INT64_FMT ")" : ", %p(" INT64_FMT ")", cTask, cTask->m_iTimeoutTimeUS );
+		tBuild.Sprintf ( tBuild.IsEmpty() ? "%p (%l)" : ", %p(%l)", cTask, cTask->m_iTimeoutTimeUS );
 	CSphString sRes;
 	if ( !m_dQueue.IsEmpty() )
 		sRes.SetSprintf ( "%s%d:%s", sPrefix, m_dQueue.GetLength(), tBuild.cstr() );

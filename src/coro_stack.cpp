@@ -53,7 +53,7 @@ CoroStack_t MockedStack ( VecTraits_T<BYTE> dStack )
 	tStack.sp = &dStack.Last();
 	tStack.size = dStack.GetLength();
 #if defined( BOOST_USE_VALGRIND )
-	tStack.valgrind_stack_id = VALGRIND_STACK_REGISTER ( tStack.sp, dStack.begin() );
+	tStack.valgrind_stack_id = VALGRIND_STACK_REGISTER ( dStack.begin(), tStack.sp );
 #endif
 	return { tStack, StackFlavour_E::mocked_prealloc };
 }

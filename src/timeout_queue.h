@@ -27,7 +27,7 @@ struct EnqueuedTimeout_t
 
 /// priority queue for timeouts - as CSphQueue,
 /// but specific (can resize, stores internal index in an object)
-class TimeoutQueue_c
+class TimeoutQueue_c final
 {
 	CSphTightVector<EnqueuedTimeout_t*> m_dQueue;
 

@@ -1,4 +1,5 @@
-name: Deploy docs
+name: 📖 Deploy docs
+run-name: 📖 Deploy docs ${{ github.sha }}
 
 on:
   push:

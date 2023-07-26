@@ -1,4 +1,5 @@
 name: 🪞 Mirror
+run-name: 🪞 Mirror ${{ github.sha }}
 
 on:
   push:

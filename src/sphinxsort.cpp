@@ -1308,7 +1308,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 						tMatch.m_pDynamic = pDynamic;
 					}
 					dRows.PutString ( (const char*)pStr );
-					SafeDelete ( pStr );
+					SafeDeleteArray ( pStr );
 				} else {
 					pStr = (const BYTE*)tMatch.GetAttr ( tLoc );
 					auto dString = sphUnpackPtrAttr ( pStr );

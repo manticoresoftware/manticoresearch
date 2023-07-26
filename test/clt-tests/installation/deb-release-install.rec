@@ -56,3 +56,6 @@ manticore-executor -v
 PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!#) (ZTS)
 Copyright (c) The PHP Group
 Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
+––– block: start-searchd –––
+––– block: check-buddy –––
+––– block: check-backup –––

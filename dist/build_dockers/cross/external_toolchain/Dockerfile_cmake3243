@@ -1,0 +1,52 @@
+FROM ubuntu:focal
+ENV DEBIAN_FRONTEND noninteractive
+
+ENV llvm=15
+RUN apt-get update && apt-get install -y \
+    make \
+    ninja-build \
+    git \
+    bison \
+    flex \
+    wget \
+    software-properties-common \
+    rpm \
+    elfutils \
+    nsis \
+    zip \
+&& wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
+&& add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-$llvm main" \
+&& apt-get install -y \
+    clang-$llvm \
+    clang-tools-$llvm \
+    lld-$llvm \
+&& rm -rf /var/lib/apt/lists/* \
+&& ln -s /usr/lib/llvm-$llvm/bin/llvm-objcopy /usr/local/bin/objcopy \
+&& mkdir /zipdll && cd /zipdll \
+&& wget https://nsis.sourceforge.io/mediawiki/images/d/d9/ZipDLL.zip \
+&& unzip ZipDLL.zip \
+&& mv ZipDLL.dll /usr/share/nsis/Plugins/x86-ansi/ \
+&& rm -rf /zipdll
+
+# notice symlink of objcopy. That is need as system objcopy can't deal with alien arch
+
+# 2-nd layer, cmake
+ENV cmakever="3.24.3"
+RUN cd / \
+&& wget https://github.com/Kitware/CMake/releases/download/v${cmakever}/cmake-${cmakever}-linux-$(uname -m).tar.gz \
+&& tar -zxf cmake-${cmakever}-linux-$(uname -m).tar.gz \
+&& rm cmake-${cmakever}-linux-$(uname -m).tar.gz \
+&& export arch=$(uname -m)
+ENV PATH $PATH:/cmake-${cmakever}-linux-x86_64/bin:/cmake-${cmakever}-linux-aarch64/bin
+
+# 3-rd layer. Everything to build, except actual sysroot archives
+RUN git config --global --add safe.directory '*'
+ENV CMAKE_GENERATOR=Ninja
+ENV CMAKE_TOOLCHAIN_FILE=/sysroot/root/toolchain.cmake
+ADD entry_point.sh /sysroot/root/
+ENTRYPOINT ["bash", "/sysroot/root/entry_point.sh"]
+CMD []
+
+# docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
+# docker buildx use manticore_build
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/external_toolchain:clang15_cmake3243 -f ./Dockerfile_3243 .

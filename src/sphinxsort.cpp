@@ -3112,7 +3112,10 @@ public:
 
 		// once we're done copying, cleanup
 		for ( int i = 0; i<m_iMaxUsed; ++i )
+		{
+			m_pSchema->FreeDataPtrs ( m_dData[i] );
 			m_dData[i].ResetDynamic();
+		}
 
 		m_iMaxUsed = -1;
 	}

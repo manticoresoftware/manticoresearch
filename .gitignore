@@ -75,6 +75,6 @@
 /test/ql/*.exe
 
 /local_*_src.txt
-/test/clt-tesets/**/*.rep
+/test/clt-tests/**/*.rep
 /clt
 

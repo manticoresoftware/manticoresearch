@@ -28,7 +28,7 @@ docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/s
 -e boost=boost_rhel_feb17 \
 -e sysroot=roots_nov22 \
 -v /manticore/sources:/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:clang15_cmake3243 bash
+manticoresearch/external_toolchain:clang15_cmake3263 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/

@@ -1,4 +1,5 @@
 name: CLT nightly tests
+run-name: CLT nightly tests ${{ github.sha }}
 
 on:
   schedule:

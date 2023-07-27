@@ -3,9 +3,24 @@ name: Deploy docs
 on:
   workflow_call:
 
+env:
+  DOCS_AUTOCOMMIT_TITLE: Docs_examples_update
+  
 jobs:
-  docs_deploy:
+  docs_autocommit_check:
+    name: Check for doc deployment autocommits
     runs-on: ubuntu-22.04
+    outputs:
+      res: ${{ steps.check.outputs.res }}
+    steps:
+      - id: check
+        if: ${{ github.event.head_commit.message != env.DOCS_AUTOCOMMIT_TITLE }}
+        run: echo "res=ok" >> $GITHUB_OUTPUT
+  docs_deploy:
+    name: Manticore Manual doc deployment
+    runs-on: ubuntu-22.04
+    needs: docs_autocommit_check
+    if: needs.docs_autocommit_check.outputs.res == 'ok' 
     defaults:
       run:
         shell: bash
@@ -18,18 +33,18 @@ jobs:
         DOCKER_DRIVER: overlay2
         RELEASE_FILENAME: latest_release_version
         COMMIT_DIR: manual
+        DEPLOY_SOURCE: github
         DEPLOY_TARGET: k8s
         DOCS_ERRORS_DIR: build/docs/
-        DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
+        DOCS_AUTOCOMMIT_TITLE: ${{ env.DOCS_AUTOCOMMIT_TITLE }}
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
 
         CI_PROJECT_TITLE: dev
-        CI_PROJECT_PATH: manticoresearch/doc
-        CI_PROJECT_ID: 123321
-        CI_PROJECT_NAME: dev
+        CI_PROJECT_PATH: manticoresoftware/manticoresearch
         CI_PROJECT_DIR: /__w/manticoresearch/manticoresearch
         CI_COMMIT_SHA: ${{ github.sha }}
         CI_COMMIT_BRANCH: ${{ github.ref_name }}
+        CI_COMMIT_TITLE: ${{ github.event.head_commit.message }}
     steps:
       - name: Install git
         run: |

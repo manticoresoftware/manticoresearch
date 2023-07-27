@@ -1,0 +1,9 @@
+––– block: start-searchd –––
+––– input –––
+SET @saved_cs_client = @@character_set_client;
+––– output –––
+ERROR 1064 (42000): P01: syntax error, unexpected @@sysvar near '@@character_set_client'
+––– input –––
+SET character_set_client = utf8mb4;
+––– output –––
+ERROR 1064 (42000): Unknown session variable 'character_set_client' in SET statement

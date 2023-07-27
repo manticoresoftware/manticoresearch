@@ -1,0 +1,13 @@
+––– block: start-searchd –––
+––– input –––
+SHOW QUERIES;
+––– output –––
+ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting VARIABLES near 'QUERIES'
+––– input –––
+SHOW FULL TABLES;
+––– output –––
+ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting VARIABLES near 'FULL TABLES'
+––– input –––
+SHOW SCHEMAS;
+––– output –––
+ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting VARIABLES near 'SCHEMAS'

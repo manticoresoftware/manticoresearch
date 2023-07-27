@@ -29,6 +29,19 @@
 * [Commit 1d3f](https://github.com/manticoresoftware/manticoresearch/commit/1d3f0da) fixed duplicate documents at the result set for the query with not_terms_only_allowed option to RT index with killed documents
 * [Commit 122b](https://github.com/manticoresoftware/manticoresearch/commit/122bbf2) fixed error of alter with empty string for external files; fixed RT index external files left after alter of external files
 * [Commit bc04](https://github.com/manticoresoftware/manticoresearch/commit/bc04908) changed the response format of the /cli endpoint, added the /cli_json endpoint to work as the previous /cli
+* [Commit 23a6](https://github.com/manticoresoftware/manticoresearch/commit/23a6b8b) fixed memory consumption by daemon on save large PQ index
+* [Commit b5b5](https://github.com/manticoresoftware/manticoresearch/commit/b5b5438) fixed ngram token position inside phrase query with wordforms
+* [Commit c0b4](https://github.com/manticoresoftware/manticoresearch/commit/c0b47e6) added environment variable MANTICORE_BUDDY_TIMEOUT (default 3 seconds) to control how long daemon could wait for buddy message on buddy start
+* [Commit 6dd3](https://github.com/manticoresoftware/manticoresearch/commit/6dd3964) fixed bad bloom filter for JSON root object; fixed crash of daemon on filter by JSON field
+* [Commit cc59](https://github.com/manticoresoftware/manticoresearch/commit/cc59511) fixed error reply at daemon for query into distributed index with empty result set from the agent
+* [Commit 77cc](https://github.com/manticoresoftware/manticoresearch/commit/77ccd8f) added shared key for replication of replace statement to fix pre_commit error on replication replace from multiple master nodes
+* [Commit 052c](https://github.com/manticoresoftware/manticoresearch/commit/052c7c1) fixed document id substitution from the logstash
+* [Commit 1d44](https://github.com/manticoresoftware/manticoresearch/commit/1d44492) fixed collation to work for filter at HTTP search request
+* [Commit 844b](https://github.com/manticoresoftware/manticoresearch/commit/844b1ae) bypass check of max_packet_size for replication commands between nodes; added last cluster error to show status
+* [Commit ff87](https://github.com/manticoresoftware/manticoresearch/commit/ff87cc4) fixed string list in filter of SphinxQL query log
+* [Commit 89ee](https://github.com/manticoresoftware/manticoresearch/commit/89eeb1e) fixed remove of tmp files left after error of merge or optimize
+* [Commit c472](https://github.com/manticoresoftware/manticoresearch/commit/c472e5b) fixed crash at count distinct with multiple indexes
+* [Commit d77b](https://github.com/manticoresoftware/manticoresearch/commit/d77b832) fixed long wait of finish write operations (optimize, disk chunk save) at RT index at the DROP TABLE statement; added warning about non empty index directory after the DROP TABLE
 
 ### Major new features
 * Query optimizer now works for fulltext queries
@@ -44,6 +57,11 @@
 * [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
 * The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command.
 * [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) `/pq` HTTP endpoint is now an alias of the `/json/pq` HTTP endpoint.
+* [Commit c4fc](https://github.com/manticoresoftware/manticoresearch/commit/c4fc82d) added optional sort property for each bucket of aggs for HTTP interface
+* [Commit 052b](https://github.com/manticoresoftware/manticoresearch/commit/052bf89) fixed failure from parallel CREATE TABLE, only one CREATE TABLE statement allowed to work at the time
+* [Commit 052c](https://github.com/manticoresoftware/manticoresearch/commit/052c7c1) added @ symbol to be a part of the column name
+* [Commit c282](https://github.com/manticoresoftware/manticoresearch/commit/c2823b9) added tags to HTTP PQ reply
+
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.

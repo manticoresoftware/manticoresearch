@@ -270,8 +270,6 @@ Executing this command will produce a backup file named `manticore_backup.sql`. 
 
 <!-- end -->
 
-Please note that the `--all-databases` flag will not work with mysqldump from the original MySQL client; however, it does work with the MariaDB client. For better results, we recommend explicitly passing the database when you want to back up all databases.
-
 <!-- example mysqldump_restore -->
 ### Restore
 
@@ -294,5 +292,11 @@ Here are some more settings that can be used with mysqldump to tailor your backu
 - `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note, the database name must be `Manticore`.
 
 For a comprehensive list of settings and their thorough descriptions, kindly refer to the [official MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html).
+
+### Notes
+
+We recommend specifying the `manticore` database explicitly when you plan to back up all databases, rather than using the `--all-databases` option. 
+
+Keep in mind that `mysqldump` currently lacks support for backing up distributed indexes.
 
 <!-- proofread -->

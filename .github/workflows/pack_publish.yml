@@ -1,4 +1,5 @@
 name: 📦 Pack and publish
+run-name: 📦 Pack and publish ${{ github.sha }}
 
 #on: workflow_call
 
@@ -265,7 +266,7 @@ jobs:
           {"image": "oraclelinux:9"},
           {"image": "amazonlinux:latest"}
         ]
-      test_prefix: rhel-dev-
+      test_prefix: test/clt-tests/installation/rhel-dev-
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
@@ -282,4 +283,4 @@ jobs:
           {"image": "debian:bullseye"},
           {"image": "debian:bookworm"}
         ]
-      test_prefix: deb-dev-
+      test_prefix: test/clt-tests/installation/deb-dev-

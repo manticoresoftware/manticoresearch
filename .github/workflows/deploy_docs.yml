@@ -1,4 +1,5 @@
-name: Deploy docs
+name: 📖 Deploy docs
+run-name: 📖 Deploy docs ${{ github.sha }}
 
 on:
   push:
@@ -7,12 +8,13 @@ on:
     branches:
       - master
       - maintenance-release
-      - manticore-**
+      - manticore-*
   pull_request:
     paths:
       - 'manual/**'
     branches:
       - master
+      - manticore-*
     types:
       - opened
       - synchronize

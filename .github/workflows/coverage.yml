@@ -1,4 +1,5 @@
 name: 📊 Code coverage test
+run-name: 📊 Code coverage test ${{ github.sha }}
 
 on:
  workflow_run:

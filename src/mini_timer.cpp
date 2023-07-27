@@ -64,12 +64,8 @@ int64_t sph::LastTimestamp()
 
 /// timer thread context
 static ThreadRole TimerThread;
-
-volatile bool& IsTinyTimerCreated()
-{
-	static volatile bool bCreated = false;
-	return bCreated;
-}
+static bool g_bTimerCreated = false;
+static bool g_bTimerActive = false;
 
 class TinyTimer_c
 {
@@ -142,6 +138,7 @@ private:
 	{
 		ScopedRole_c thSched ( TimerThread );
 		m_pCounterThread.store ( &Threads::MyThd(), std::memory_order_relaxed );
+		g_bTimerActive = true;
 		while ( !IsInterrupted () )
 		{
 			DEBUGT << "---------------------------- Loop() tick";
@@ -156,6 +153,7 @@ private:
 			bool VARIABLE_IS_NOT_USED bWasKicked = m_tSignal.WaitEvent ( iWait );
 			DEBUGT << "awakened, reason=" << ( bWasKicked ? "kicked" : "timeout or error" );
 		}
+		g_bTimerActive = false;
 		AbortScheduled();
 		m_pCounterThread.store ( nullptr, std::memory_order_relaxed );
 	}
@@ -187,7 +185,7 @@ public:
 	{
 		MicroTimerImpl();
 		m_bInterrupted.store ( false, std::memory_order_release );
-		IsTinyTimerCreated() = true;
+		g_bTimerCreated = true;
 		Threads::RegisterIterator ( [this] ( Threads::ThreadFN& fnHandler ) {
 			fnHandler ( m_pCounterThread.load ( std::memory_order_relaxed ) );
 		} );
@@ -203,11 +201,10 @@ public:
 	void Stop()
 	{
 		m_bInterrupted.store ( true, std::memory_order_release );
-		if ( !IsTinyTimerCreated() )
+		if ( !g_bTimerActive )
 			return;
 		Kick();
 		Threads::Join ( &m_tCounterThread );
-		IsTinyTimerCreated() = false;
 	}
 
 	/// Kick the tasker
@@ -295,7 +292,7 @@ int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTime
 
 void MiniTimer_c::UnEngage()
 {
-	if ( IsTinyTimerCreated() )
+	if ( g_bTimerCreated )
 		g_TinyTimer().Remove ( *this );
 }
 
@@ -314,7 +311,7 @@ bool sph::TimeExceeded ( int64_t tmMicroTimestamp )
 
 void sph::ShutdownMiniTimer()
 {
-	if ( IsTinyTimerCreated() )
+	if ( g_bTimerActive )
 		g_TinyTimer().Stop();
 }
 
@@ -322,7 +319,7 @@ void sph::ShutdownMiniTimer()
 CSphVector<sph::ScheduleInfo_t> sph::GetSchedInfo()
 {
 	CSphVector<sph::ScheduleInfo_t> dRes;
-	if ( IsTinyTimerCreated() )
+	if ( g_bTimerCreated )
 		g_TinyTimer().FillSchedInfo ( dRes );
 	return dRes;
 }

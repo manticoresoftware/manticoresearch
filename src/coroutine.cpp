@@ -28,7 +28,10 @@ bool StackMockingAllowed()
 {
 #if __has_include( <valgrind/valgrind.h>)
 	if (!!RUNNING_ON_VALGRIND)
+	{
+		sphWarning ( "Running under valgrind, so stack mocking is not allowed");
 		return false;
+	}
 #endif
 	return !val_from_env ( "NO_STACK_CALCULATION", false );
 }
@@ -162,7 +165,7 @@ namespace Coro {
 
 class Worker_c : public details::SchedulerOperation_t
 {
-	// our executor (thread pool, etc which provides Schedule(handler) method)
+	// our executor (thread pool, etc. which provides Schedule(handler) method)
 	Scheduler_i * m_pScheduler = nullptr;
 	Keeper_t m_tKeepSchedulerAlive;
 	Waiter_t m_tTracer; // may be set to trace this worker lifetime

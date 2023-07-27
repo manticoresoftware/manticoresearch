@@ -1313,7 +1313,47 @@ static void RemoveConfigIndex ( const CSphString & sIndex )
 		g_dCfgIndexes.Remove ( iIdx );
 }
 
-static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
+static sph::StringSet g_dAllowedExt = { "meta", "ram", "settings", "lock"};
+
+static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
+{
+	if ( !pMsg )
+		return true;
+
+	CSphString sIndexPath = GetPathForNewIndex ( sIndexName );
+	CSphString sSearchPath; 
+	sSearchPath.SetSprintf ( "%s/*", sIndexPath.cstr() );
+
+	StrVec_t dFiles = FindFiles ( sSearchPath.cstr(), false );
+
+	// no files in the index dir is ok
+	if ( dFiles.IsEmpty() )
+		return true;
+	
+	// some files removed at RT index dtor are ok
+	bool bAllAllowed = dFiles.all_of ( [&] ( const CSphString & sFile )
+	{
+		const char * sExt = GetExtension ( sFile );
+		return g_dAllowedExt[sExt];
+	});
+	if ( bAllAllowed )
+		return true;
+
+	StringBuilder_c sFiles ( ", " );
+	dFiles.for_each ( [&] ( CSphString & sFile)
+	{
+		const char * sExt = GetExtension ( sFile );
+		if ( !g_dAllowedExt[sExt] )
+			sFiles += StripPath ( sFile ).cstr();
+	});
+
+	sphWarning ( "index %s directory '%s' is not empty after table drop, clean up files manually: %s", sIndexName.cstr(), sIndexPath.cstr(), sFiles.cstr() );
+	pMsg->SetSprintf ( "index %s directory '%s' is not empty after table drop, clean up files manually: %s", sIndexName.cstr(), sIndexPath.cstr(), sFiles.cstr() );
+
+	return false;
+}
+
+static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
 	auto pServed = GetServed(sIndex);
@@ -1329,29 +1369,39 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 	}
 
-	WIdx_T<RtIndex_i*> pRt { pServed };
-	if ( !pRt )
+	// need to stop all long time write operation at the index as it will be dropped anyway
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unknown local table '%s'", sIndex.cstr() );
-		return false;
+		RIdx_T<RtIndex_i*> pRt ( pServed );
+		pRt->ProhibitSave();
 	}
 
-	// need to collect all external files prior to truncate as disk chunks could have different options for externals
-	StrVec_t dIndexFiles;
-	StrVec_t dExtFiles;
-	pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
+	// scope for index removal on exit
+	{
+		WIdx_T<RtIndex_i*> pRt { pServed };
+		if ( !pRt )
+		{
+			sError.SetSprintf ( "DROP TABLE failed: unknown local table '%s'", sIndex.cstr() );
+			return false;
+		}
 
-	if ( !pRt->Truncate(sError) )
-		return false;
+		// need to collect all external files prior to truncate as disk chunks could have different options for externals
+		StrVec_t dIndexFiles;
+		StrVec_t dExtFiles;
+		pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
 
-	DeleteRtIndex ( pRt, &dExtFiles );
-	RemoveConfigIndex ( sIndex );
+		if ( !pRt->Truncate(sError) )
+			return false;
 
+		DeleteRtIndex ( pRt, &dExtFiles );
+		RemoveConfigIndex ( sIndex );
+	}
+
+	ReportEmptyDir ( sIndex, pWarning );
 	return true;
 }
 
 
-bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError )
+bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
 	bool bLocal = !!GetServed(sIndex);
@@ -1363,7 +1413,7 @@ bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sErr
 	}
 	else if ( bLocal )
 	{
-		if ( !DropLocalIndex ( sIndex, sError ) )
+		if ( !DropLocalIndex ( sIndex, sError, pWarning ) )
 			return false;
 	}
 	else

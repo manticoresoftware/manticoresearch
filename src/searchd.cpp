@@ -12319,7 +12319,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 }
 
 
-static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
 		return;
@@ -12333,12 +12333,12 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError );
+	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError, &sWarning );
 	sphLogDebug ( "dropped table %s, ok %d, error %s", tStmt.m_sIndex.cstr(), (int)bDropped, sError.scstr() ); // FIXME!!! remove
 	if ( !bDropped )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
-		tOut.Ok();
+		tOut.Ok ( 0, ( sWarning.IsEmpty() ? 0 : 1 ) );
 }
 
 
@@ -16875,7 +16875,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_DROP_TABLE:
-		HandleMysqlDropTable ( tOut, *pStmt );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlDropTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_CREATE_TABLE:

@@ -3131,35 +3131,79 @@ struct VecAgentDesc_t : public ISphNoncopyable, public CSphVector<AgentDesc_t *>
 };
 
 // get nodes of specific type from string
-template <typename NODE_ITERATOR>
-void GetNodes_T ( const CSphString & sNodes, NODE_ITERATOR & tIt )
+class ISphDescIterator
 {
-	if ( sNodes.IsEmpty () )
-		return;
+protected:
+	CSphString & m_sError;
+	virtual void ResetNodes () = 0;
 
-	CSphString sTmp = sNodes;
-	char * sCur = const_cast<char *>( sTmp.cstr() );
-	while ( *sCur )
+public:
+	ISphDescIterator ( CSphString & sError )
+		: m_sError ( sError )
+	{}
+
+	bool ProcessNodes ( const CSphString & sNodes )
 	{
-		// skip spaces
-		while ( *sCur && ( *sCur==';' || *sCur==',' || sphIsSpace ( *sCur ) )  )
-			++sCur;
-
-		const char * sAddrs = (char *)sCur;
-		while ( *sCur && !( *sCur==';' || *sCur==',' || sphIsSpace ( *sCur ) )  )
-			++sCur;
-
-		// replace delimiter with 0 for ParseListener and skip delimiter itself
-		if ( *sCur )
+		bool bOk = false;
+		int iRetry = 0;
+		const int iRetryMax = g_iNodeRetry;
+		while ( true )
 		{
-			*sCur = '\0';
-			sCur++;
+			bOk = SplitNodes ( sNodes );
+			iRetry++;
+
+			if ( !bOk && iRetry<iRetryMax )
+			{
+				m_sError = "";
+				ResetNodes();
+				// should wait and retry for DNS set
+				Threads::Coro::SleepMsec ( g_iAnyNodesTimeout );
+				continue;
+
+			} else
+				break;
 		}
 
-		if ( *sAddrs && !tIt.SetNode ( sAddrs ) )
-			return;
+		return bOk;
 	}
-}
+
+private:
+	bool SplitNodes ( const CSphString & sNodes )
+	{
+		if ( sNodes.IsEmpty () )
+		{
+			m_sError = "empty nodes list";
+			return false;
+		}
+
+		CSphString sTmp = sNodes;
+		char * sCur = const_cast<char *>( sTmp.cstr() );
+		while ( *sCur )
+		{
+			// skip spaces
+			while ( *sCur && ( *sCur==';' || *sCur==',' || sphIsSpace ( *sCur ) )  )
+				++sCur;
+
+			const char * sAddrs = (char *)sCur;
+			while ( *sCur && !( *sCur==';' || *sCur==',' || sphIsSpace ( *sCur ) )  )
+				++sCur;
+
+			// replace delimiter with 0 for ParseListener and skip delimiter itself
+			if ( *sCur )
+			{
+				*sCur = '\0';
+				sCur++;
+			}
+
+			if ( *sAddrs && !SetNode ( sAddrs ) )
+				return false;
+		}
+
+		return true;
+	}
+
+	virtual bool SetNode ( const char * sAddrs ) = 0;
+};
 
 CSphString GetAddr ( const ListenerDesc_t & tListen )
 {
@@ -3176,19 +3220,21 @@ CSphString GetAddr ( const ListenerDesc_t & tListen )
 }
 
 // get nodes functor to collect listener API with external address
-struct AgentDescIterator_t
+class AgentDescIterator_t : public ISphDescIterator
 {
 	VecAgentDesc_t & m_dNodes;
-	CSphString * m_pError;
 
-	explicit AgentDescIterator_t ( VecAgentDesc_t & dNodes, CSphString * pError )
-		: m_dNodes ( dNodes )
-		, m_pError ( pError )
+	void ResetNodes () override { m_dNodes.Reset(); }
+
+public:
+	AgentDescIterator_t ( VecAgentDesc_t & dNodes, CSphString & sError )
+		: ISphDescIterator ( sError )
+		, m_dNodes ( dNodes )
 	{}
 
-	bool SetNode ( const char * sListen )
+	bool SetNode ( const char * sListen ) override
 	{
-		ListenerDesc_t tListen = ParseListener ( sListen, m_pError );
+		ListenerDesc_t tListen = ParseListener ( sListen, &m_sError );
 
 		if ( tListen.m_eProto==Proto_e::UNKNOWN )
 			return false;
@@ -3216,16 +3262,10 @@ struct AgentDescIterator_t
 	}
 };
 
-static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes, CSphString & sError )
+static bool GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes, CSphString & sError )
 {
-	AgentDescIterator_t tIt ( dNodes, &sError );
-	GetNodes_T ( sNodes, tIt );
-}
-
-static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
-{
-	AgentDescIterator_t tIt ( dNodes, nullptr );
-	GetNodes_T ( sNodes, tIt );
+	AgentDescIterator_t tIt ( dNodes, sError );
+	return tIt.ProcessNodes ( sNodes );
 }
 
 static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq, int64_t iTimeoutMs )
@@ -3245,14 +3285,17 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	return pAgent;
 }
 
-static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
+static bool GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, CSphString & sError )
 {
 	VecAgentDesc_t dDesc;
-	GetNodes ( sNodes, dDesc );
+	if ( !GetNodes ( sNodes, dDesc, sError ) )
+		return false;
 
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, GetQueryTimeout() );
+
+	return true;
 }
 
 static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, int64_t iTimeout )
@@ -3263,21 +3306,22 @@ static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *>
 }
 
 // get nodes functor to collect listener with specific protocol
-class ListenerProtocolIterator_t
+class ListenerProtocolIterator_t : public ISphDescIterator
 {
 	Proto_e m_eProto;
-	CSphString * m_pError { nullptr };
-	SmallStringHash_T<int> m_hNodes;
+	sph::StringSet m_hNodes;
+
+	void ResetNodes () override { m_hNodes.Reset(); }
 
 public:
-	ListenerProtocolIterator_t ( Proto_e eProto, CSphString * pError )
-		: m_eProto ( eProto )
-		, m_pError ( pError )
+	ListenerProtocolIterator_t ( Proto_e eProto, CSphString & sError )
+		: ISphDescIterator ( sError )
+		, m_eProto ( eProto )
 	{}
 
-	bool SetNode ( const char * sListen )
+	bool SetNode ( const char * sListen ) override
 	{
-		ListenerDesc_t tListen = ParseListener ( sListen, m_pError );
+		ListenerDesc_t tListen = ParseListener ( sListen, &m_sError );
 		if ( tListen.m_eProto==Proto_e::UNKNOWN )
 			return false;
 
@@ -3288,12 +3332,12 @@ public:
 		CSphString sNode = GetAddr ( tListen );
 		sNode.SetSprintf ( "%s:%d", sNode.cstr(), tListen.m_iPort );
 
-		m_hNodes.Add ( 1, sNode );
+		m_hNodes.Add ( sNode );
 
 		return true;
 	}
 
-	CSphString GetNodes() const
+	CSphString DumpNodes() const
 	{
 		StringBuilder_c sNodes ( "," );
 		for ( const auto & sNode : m_hNodes )
@@ -3306,9 +3350,11 @@ public:
 // utility function to filter nodes list provided at string by specific protocol
 bool ClusterFilterNodes ( Str_t sSrcNodes, Proto_e eProto, CSphString & sDstNodes, CSphString & sError )
 {
-	ListenerProtocolIterator_t tIt ( eProto, &sError );
-	GetNodes_T ( sSrcNodes, tIt );
-	sDstNodes = tIt.GetNodes();
+	ListenerProtocolIterator_t tIt ( eProto, sError );
+	if ( !tIt.ProcessNodes ( sSrcNodes ) )
+		return false;
+
+	sDstNodes = tIt.DumpNodes();
 
 	return ( sError.IsEmpty() );
 }
@@ -3848,7 +3894,9 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 		PQRemoteData_t tCmd;
 		tCmd.m_sCluster = sCluster;
 		VecRefPtrs_t<AgentConn_t *> dNodes;
-		GetNodes ( sNodes, dNodes, tCmd );
+		if ( !GetNodes ( sNodes, dNodes, tCmd, sError ) )
+			return false;
+
 		PQRemoteDelete_c tReq;
 		if ( dNodes.GetLength() && !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
@@ -5323,7 +5371,8 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	if ( !sNodes.IsEmpty() )
 	{
 		VecAgentDesc_t dDesc;
-		GetNodes ( sNodes, dDesc );
+		if ( !GetNodes ( sNodes, dDesc, sError ) )
+			return false;
 
 		if ( dDesc.GetLength() && !NodesReplicateIndex ( sCluster, sIndex, dDesc, pServed, sError ) )
 			return false;
@@ -5451,8 +5500,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	const wsrep_gtid_t & tStateID, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	VecAgentDesc_t dDesc;
-	GetNodes ( sNode, dDesc );
-	if ( !dDesc.GetLength() )
+	if ( !GetNodes ( sNode, dDesc, sError ) || !dDesc.GetLength() )
 	{
 		sError.SetSprintf ( "%s invalid node", sNode.cstr() );
 		return false;
@@ -5612,8 +5660,7 @@ std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )
 bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, Proto_e eProto, CSphString & sError, CSphString & sNodes )
 {
 	VecAgentDesc_t dDesc;
-	GetNodes ( sClusterNodes, dDesc, sError );
-	if ( !dDesc.GetLength() || !sError.IsEmpty() )
+	if ( !GetNodes ( sClusterNodes, dDesc, sError ) || !dDesc.GetLength() || !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "%s invalid node, %s", sClusterNodes.cstr(), sError.cstr() );
 		return false;
@@ -5768,7 +5815,9 @@ bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpd
 	tReqData.m_bJoinUpdate = bJoinUpdate;
 
 	VecRefPtrs_t<AgentConn_t *> dNodes;
-	GetNodes ( sNodes, dNodes, tReqData );
+	if ( !GetNodes ( sNodes, dNodes, tReqData, sError ) )
+		return false;
+
 	PQRemoteClusterUpdateNodes_c tReq;
 	bool bRemoteOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 

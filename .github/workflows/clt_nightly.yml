@@ -23,6 +23,7 @@ jobs:
           {"image": "oraclelinux:9"},
           {"image": "amazonlinux:latest"}
         ]
+      run_args: -e TELEMETRY=0
       test_prefix: test/clt-tests/installation/rhel-release-
   clt_deb_release_installation:
     uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2

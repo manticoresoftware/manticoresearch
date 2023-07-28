@@ -442,6 +442,7 @@ jobs:
           { "image": "${{matrix.image}}"},
         ]
       test_prefix: test/clt-tests/mysqldump/
+      run_args: -e TELEMETRY=0
 
   clt_expected_errors_test:
     name: CLT test on expected errors in Searchd for Buddy
@@ -458,6 +459,7 @@ jobs:
           { "image": "${{matrix.image}}"},
         ]
       test_prefix: test/clt-tests/expected-errors/
+      run_args: -e TELEMETRY=0
 
   build_aarch64:
     name: Linux aarch64 build

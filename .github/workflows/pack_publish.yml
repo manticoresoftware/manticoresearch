@@ -267,6 +267,7 @@ jobs:
           {"image": "amazonlinux:latest"}
         ]
       test_prefix: test/clt-tests/installation/rhel-dev-
+      run_args: -e TELEMETRY=0
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
@@ -284,3 +285,4 @@ jobs:
           {"image": "debian:bookworm"}
         ]
       test_prefix: test/clt-tests/installation/deb-dev-
+      run_args: -e TELEMETRY=0

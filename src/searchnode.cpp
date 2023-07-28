@@ -549,23 +549,23 @@ private:
 	CSphFixedVector<uint64_t>		m_dWordIds;
 	CSphQueue<HitWithQpos_t, HitWithQpos_t > m_tQueue;
 
-	bool				AdvanceQwords();
-	RowID_t				Advance ( int iNode );
-	RowID_t				Advance ( int iNode, RowID_t tRowID );
-	bool				FitsFields ( const NodeInfo_t & tNode ) const;
-	DWORD				GetDocFieldsMask() const;
-	float				GetTFIDF() const;
+	FORCE_INLINE bool	AdvanceQwords();
+	FORCE_INLINE RowID_t Advance ( int iNode );
+	FORCE_INLINE RowID_t Advance ( int iNode, RowID_t tRowID );
+	FORCE_INLINE bool	FitsFields ( const NodeInfo_t & tNode ) const;
+	FORCE_INLINE DWORD	GetDocFieldsMask() const;
+	FORCE_INLINE float	GetTFIDF() const;
 	int					GetQword ( NodeInfo_t & tNode, ExtQwordsHash_t & hQwords );
-	void				PushNextHit ( int iNode );
-	void				MergeHitsN ( const StoredMultiHit_t & tStoredHit );
-	void				MergeHits2 ( const StoredMultiHit_t & tStoredHit );
-	void				MergeHits3 ( const StoredMultiHit_t & tStoredHit );
+	FORCE_INLINE void	PushNextHit ( int iNode );
+	FORCE_INLINE void	MergeHitsN ( const StoredMultiHit_t & tStoredHit );
+	FORCE_INLINE void	MergeHits2 ( const StoredMultiHit_t & tStoredHit );
+	FORCE_INLINE void	MergeHits3 ( const StoredMultiHit_t & tStoredHit );
 
 	void				InitHitMerge ( HitInfo_t & tHitInfo, int iNode, const StoredMultiHit_t & tStoredHit );
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight );
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 );
 	void				CopyHits ( RowID_t tRowID, HitInfo_t & tHitInfo, int iNode );
-	void				AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode );
+	FORCE_INLINE void	AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode );
 
 	static bool			IsHitLess ( const HitInfo_t & tLeft, const HitInfo_t & tRight ) { return tLeft.m_uHitpos<tRight.m_uHitpos || ( tLeft.m_uHitpos==tRight.m_uHitpos && tLeft.m_uQueryPos<=tRight.m_uQueryPos ); }
 };
@@ -2962,7 +2962,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::NodeInfo_t::UpdateWideFie
 }
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::NodeInfo_t::FitsFields() const
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::NodeInfo_t::FitsFields() const
 {
 	if ( !m_bHasWideFields )
 	{
@@ -3030,7 +3030,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline DWORD ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocFieldsMask() const
+DWORD ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocFieldsMask() const
 {
 	DWORD uMask = 0;
 	for ( const auto & i : m_dNodes )
@@ -3041,7 +3041,7 @@ inline DWORD ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocFieldsMask(
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline float ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetTFIDF() const
+float ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetTFIDF() const
 {
 	float fTFIDF = 0.0f;
 
@@ -3056,7 +3056,7 @@ inline float ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetTFIDF() const
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int iNode )
+RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int iNode )
 {
 	NodeInfo_t & tNode = m_dNodes[iNode];
 	do
@@ -3070,7 +3070,7 @@ inline RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int i
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int iNode, RowID_t tRowID )
+RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int iNode, RowID_t tRowID )
 {
 	NodeInfo_t & tNode = m_dNodes[iNode];
 	if ( tRowID==tNode.m_tRowID )
@@ -3100,7 +3100,7 @@ inline RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int i
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AdvanceQwords()
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AdvanceQwords()
 {
 	RowID_t tMaxRowID = m_dNodes[0].m_tRowID;
 	for ( int i=1; i < m_dNodes.GetLength(); i++ )
@@ -3273,7 +3273,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::InitHitMerge ( HitInfo_t 
 }
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode )
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode )
 {
 	if constexpr(TEST_FIELDS)
 	{
@@ -3337,7 +3337,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopyHits ( RowID_t tRowID
 }
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits2 ( const StoredMultiHit_t & tStoredHit )
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits2 ( const StoredMultiHit_t & tStoredHit )
 {
 	const int NUM_STREAMS = 2;
 	HitInfo_t dHits[NUM_STREAMS];
@@ -3354,7 +3354,7 @@ inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits2 ( const
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits3 ( const StoredMultiHit_t & tStoredHit )
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits3 ( const StoredMultiHit_t & tStoredHit )
 {
 	const int NUM_STREAMS = 3;
 	HitInfo_t dHits[NUM_STREAMS];
@@ -3370,7 +3370,7 @@ inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits3 ( const
 }
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PushNextHit ( int iNode )
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PushNextHit ( int iNode )
 {
 	NodeInfo_t & tNode = m_dNodes[iNode];
 	while ( !tNode.m_bHitsOver )
@@ -3387,7 +3387,7 @@ inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PushNextHit ( int 
 }
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-inline void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHitsN ( const StoredMultiHit_t & tStoredHit )
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHitsN ( const StoredMultiHit_t & tStoredHit )
 {
 	// setup hitlist reader
 	ARRAY_FOREACH ( i, m_dNodes )

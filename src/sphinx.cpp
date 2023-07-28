@@ -3083,16 +3083,10 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 	ARRAY_FOREACH ( i, dQueries )
 	{
 		auto & tQuery = dQueries[i];
-		if ( !tQuery.m_sQuery.IsEmpty() )
-		{
-			// check for fulltext+SI case; limit the number of threads
-			SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), -1, m_iDocinfo, 1 );
-			if ( !iThreadCap && tQuery.m_dFilters.GetLength() && HaveAvailableSI(tCtx) )
-				iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
-			bAllFast = false;
-			continue;
-		}
+		// limit the number of threads for anything with FT as it looks better in average (some queries are faster without thread cap)
+		if ( !tQuery.m_sQuery.IsEmpty() )
+			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
 			continue;

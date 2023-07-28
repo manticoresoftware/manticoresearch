@@ -241,6 +241,19 @@ For best performance, table components can be "mlocked" into memory. When Mantic
   --cap-add=IPC_LOCK --ulimit memlock=-1:-1
 ```
 
+## Running under non-root
+
+By default, the main Manticore process `searchd` is running under user `manticore` inside the container, but the script which runs on starting the container is run under your default docker user which in most cases is `root`. If that's not what you want you can use `docker ... --user manticore` or `user: manticore` in docker-compose.yaml to make everything run under `manticore`. Read below about possible volume permissions issue you can get and how to solve it.
+
+## Creating plain indexes on startup
+
+Manticore doesn't create newly added plain indexes on its own startup (you need to run indexer). If you want to create them on startup you can use `CREATE_PLAIN_INDEXES=1` environment variable. It will run `indexer --all` before Manticore start. It is useful if you don't use volumes and your indexes are easy to recreate.
+
+```bash
+docker run -e CREATE_PLAIN_INDEXES=1 --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -p 9308:9308 -d manticoresearch/manticore
+```
+
+
 ## Configuring Manticore Search with Docker
 
 If you want to run Manticore with a custom configuration that includes table definitions, you will need to mount the configuration to the instance:

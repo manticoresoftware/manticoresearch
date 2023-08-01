@@ -42,9 +42,27 @@
 * [Commit 89ee](https://github.com/manticoresoftware/manticoresearch/commit/89eeb1e) fixed remove of tmp files left after error of merge or optimize
 * [Commit c472](https://github.com/manticoresoftware/manticoresearch/commit/c472e5b) fixed crash at count distinct with multiple indexes
 * [Commit d77b](https://github.com/manticoresoftware/manticoresearch/commit/d77b832) fixed long wait of finish write operations (optimize, disk chunk save) at RT index at the DROP TABLE statement; added warning about non empty index directory after the DROP TABLE
+* [Commit 5b87](https://github.com/manticoresoftware/manticoresearch/commit/5b875a09) fixed seldom crash on timeout of master-agent on MacOS/FreeBSD.
+* [Commit 2b88](https://github.com/manticoresoftware/manticoresearch/commit/2b88781e) eliminated internal race leading to crashes when calling SNIPPETS() (github 910).
+* [Commit 0169](https://github.com/manticoresoftware/manticoresearch/commit/01697911) allow long strings (>255 chars) in text targeted to SNIPPET() function.
+* [Commit a06a](https://github.com/manticoresoftware/manticoresearch/commit/a06a5538) eliminated crash when master can't connect to agent on kqueue-driven systems (freebsd, macos, etc.)
+* [Commit b164](https://github.com/manticoresoftware/manticoresearch/commit/b1646140) connecting from master to agents on macos/bsd uses unified connect+query timeout instead of just connect.
+* [Commit 5e63](https://github.com/manticoresoftware/manticoresearch/commit/5e6350b8) indextool now works with instances which have 'distributed' and 'template' indexes in json config
+* [Commit 9c67](https://github.com/manticoresoftware/manticoresearch/commit/9c677426) fix broken sph file(s) caused by 'alter'
+* [Commit 4bc4](https://github.com/manticoresoftware/manticoresearch/commit/4bc476b9) FLUSH ATTRIBUTES no more hangs with threads=1
+* [Commit 6c0f](https://github.com/manticoresoftware/manticoresearch/commit/6c0f5b7a) fix embedded synonyms flag in pq
+* [Commit f77c](https://github.com/manticoresoftware/manticoresearch/commit/f77ce0e6) use extended stack for pq
+* [Commit 2884](https://github.com/manticoresoftware/manticoresearch/commit/2884519e) fix bigint checks over functions like 'date_format'
+* [Commit 55dd](https://github.com/manticoresoftware/manticoresearch/commit/55dd0db1) teach some funcs to use promoted ints
+* [Commit 598d](https://github.com/manticoresoftware/manticoresearch/commit/598d2b53) print all/any to log
+* [Commit cc23](https://github.com/manticoresoftware/manticoresearch/commit/cc231318) indextool: close file on finishing globalidf
+* [Commit 71d8](https://github.com/manticoresoftware/manticoresearch/commit/71d8bbe2) fix damage of morphology_skip_fields
+* [Commit 4714](https://github.com/manticoresoftware/manticoresearch/commit/47146bd4) indextool: restore --dumpdocids
+* [Commit c5a7](https://github.com/manticoresoftware/manticoresearch/commit/c5a75b28) Process commit failures for mysql proto
 
 ### Major new features
 * Query optimizer now works for fulltext queries
+* Streamed (limitless) `Select *`
 
 ### Minor changes
 * Fixed DocidIndex cost calculation
@@ -61,11 +79,19 @@
 * [Commit 052b](https://github.com/manticoresoftware/manticoresearch/commit/052bf89) fixed failure from parallel CREATE TABLE, only one CREATE TABLE statement allowed to work at the time
 * [Commit 052c](https://github.com/manticoresoftware/manticoresearch/commit/052c7c1) added @ symbol to be a part of the column name
 * [Commit c282](https://github.com/manticoresoftware/manticoresearch/commit/c2823b9) added tags to HTTP PQ reply
-
+* [Commit 77f6](https://github.com/manticoresoftware/manticoresearch/commit/77f67220) disallow @ in table names
+* [Commit f3ae](https://github.com/manticoresoftware/manticoresearch/commit/f3ae8bea) display load metrics (like 'uptime' on linux)
+* [Commit 3c84](https://github.com/manticoresoftware/manticoresearch/commit/3c84091f) now you can use 'select' to make arbitrary calculations and displaying @@sysvars (before you could use only one(!) calculation). So, queries like `select user(), database(), @@version_comment, version(), 1+1 as a limit 10` will work and return all the columns. Optional 'limit' will always be ignored.
+* [Commit a073](https://github.com/manticoresoftware/manticoresearch/commit/a0735ffe) implement SELECT DATABASE()
+* [Commit 6aca](https://github.com/manticoresoftware/manticoresearch/commit/6aca32f0) implement CREATE DATABASE
+* [Commit f3d2](https://github.com/manticoresoftware/manticoresearch/commit/f3d248a6) different internal parsers now provide their internal mnemonic code in case of different errors. That helps to locate which exactly parser caused an error, and also hide non-important internal details.
+* [Commit 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604) mock and use ft-expression stack
+* [Commit d70b](https://github.com/manticoresoftware/manticoresearch/commit/d70b0d58) `thread_stack` now can be changed in runtime by mysql 'set' statement. Both, session-local and daemon-wide variants available. Current values available in 'show variables' output.
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
 * **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
+* [Commit d205](https://github.com/manticoresoftware/manticoresearch/commit/d205508e) set of values returned by 'show index status' changed and depends on what flavor of index is in game.
 
 # Next maintenance release
 

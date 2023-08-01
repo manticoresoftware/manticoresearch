@@ -1916,14 +1916,12 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
 
-std::atomic<long> CSphIndex::m_tIdGenerator {0};
-
 CSphIndex::CSphIndex ( CSphString sIndexName, CSphString sFileBase )
 	: IndexFileBase_c { sFileBase }
 	, m_tSchema { std::move ( sFileBase ) }
 	, m_sIndexName ( std::move ( sIndexName ) )
 {
-	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
+	m_iIndexId = GenerateIndexId();
 	m_tMutableSettings = MutableIndexSettings_c::GetDefaults();
 }
 
@@ -2463,7 +2461,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
 
 	if ( tCtx.m_uUpdateMask && m_bBinlog )
-		Binlog::CommitUpdateAttributes ( &m_iTID, GetName(), *tUpd.m_pUpdate );
+		Binlog::CommitUpdateAttributes ( &m_iTID, { GetName(), m_iIndexId }, *tUpd.m_pUpdate );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
@@ -2585,7 +2583,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 	}
 
 	if ( m_bBinlog )
-		Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
+		Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, false, false );
 
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;
@@ -8602,7 +8600,7 @@ void CSphIndex_VLN::Dealloc ()
 	if ( pSkipCache )
 		pSkipCache->DeleteAll(m_iIndexId);
 
-	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
+	m_iIndexId = GenerateIndexId();
 }
 
 

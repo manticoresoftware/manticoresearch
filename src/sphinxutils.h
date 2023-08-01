@@ -538,6 +538,9 @@ void		UidShortSetup ( int iServer, int iStarted );
 
 BYTE Pearson8 ( const BYTE * pBuf, int iLen );
 
+int64_t GenerateIndexId();
+void SetIndexId ( int64_t iId );
+
 #if _WIN32
 void		CheckWinInstall();
 CSphString	GetWinInstallDir();

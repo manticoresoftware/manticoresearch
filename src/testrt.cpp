@@ -630,7 +630,7 @@ int main ( int argc, char ** argv )
 
 	CSphConfigSection tRTConfig;
 	sphRTInit ( tRTConfig, true, nullptr );
-	Binlog::Configure ( tRTConfig, true, 0 );
+	Binlog::Configure ( tRTConfig, true, 0, false );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	Binlog::Replay ( dTemp );
 	auto pIndex = sphCreateIndexRT ( "testrt", DATAFLD "dump", tSchema, 32*1024*1024, false ).release();

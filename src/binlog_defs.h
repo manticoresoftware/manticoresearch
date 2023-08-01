@@ -16,7 +16,7 @@
 
 // up to 12: PQ_ADD_DELETE added
 // 13 : changed txn format; now stores total documents also
-constexpr unsigned int BINLOG_VERSION = 13;
+constexpr unsigned int BINLOG_VERSION = 14;
 
 namespace Binlog {
 

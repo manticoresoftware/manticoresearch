@@ -3513,3 +3513,15 @@ int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
 	return std::mktime ( &tTM );
 }
 
+static std::atomic<long> g_tIndexId { 0 };
+
+int64_t GenerateIndexId()
+{
+	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
+}
+
+void SetIndexId ( int64_t iId )
+{
+	g_tIndexId.store ( iId );
+}
+

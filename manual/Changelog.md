@@ -1,103 +1,100 @@
 # Changelog
 
 # Version X
-
-### Bugfixes
-* [Commit be6b](https://github.com/manticoresoftware/manticoresearch/commit/be6b2ea20b0cb720db645e63f208ca3d7be6c276) Fixed full path to external files was not being displayed correctly in SHOW CREATE TABLE
-* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) rt_attr_json column won't work with columnar storage
-* [gl #3287] Crash on possibly out of space disk
-* [gl 548] Fixed DocidIndex cost calculation
-* [gl 3361] Fixed index hints to support multiple attributes
-* [gl #3363] Updated export ranker output to match `packedfactors()`
-* [Commit 2196](https://github.com/manticoresoftware/manticoresearch/commit/21966fbf) fixed wildcards at query to not be affected by ignore_chars
-* [Commit 1990](https://github.com/manticoresoftware/manticoresearch/commit/1990e350) fixed crash of daemon at federated query with aggregate
-* [Commit 6fbc](https://github.com/manticoresoftware/manticoresearch/commit/6fbc4189) fixed json range filter to work with int64 values
-* [Commit 3e4d](https://github.com/manticoresoftware/manticoresearch/commit/3e4d145d) fixed percolate query to handle exact term modifier
-* [Commit 7d08](https://github.com/manticoresoftware/manticoresearch/commit/7d08d877) fixed wrong behavior when exceptions fold multiple lines at the stopwords
-* [Commit 4f4b](https://github.com/manticoresoftware/manticoresearch/commit/4f4ba25e) fixed wrong charset mapping for duplicates
-* [Commit 0bf1](https://github.com/manticoresoftware/manticoresearch/commit/0bf17d9e) fixed string functions upper and lower to work with multibyte string
-* [Commit 0297](https://github.com/manticoresoftware/manticoresearch/commit/02977de) fixed daemon crash on processing search with pseudo-sharding enabled and UDF with JSON argument
-* [Commit 8505](https://github.com/manticoresoftware/manticoresearch/commit/85057e7) fixed exact symbol can be escaped; fixed double exact expansion by expand_keyword option
-* [Commit e9bc](https://github.com/manticoresoftware/manticoresearch/commit/e9bc2f9) fixed HTTP error on processing bulk requests; fixed return error to client from net loop
-* [Commit c86d](https://github.com/manticoresoftware/manticoresearch/commit/c86d78c) fixed SphinxQL packet larger 16Mb to properly return to client
-* [Commit e90f](https://github.com/manticoresoftware/manticoresearch/commit/e90ff11) fixed daemon crash on query with packedfactors and large internal buffer
-* [Commit 6e1b](https://github.com/manticoresoftware/manticoresearch/commit/6e1b849) fixed daemon crash on invalid manticore.json config
-* [Commit 9916](https://github.com/manticoresoftware/manticoresearch/commit/9916043) fixed replication to not bind to localhost for host name with multiple IP
-* [Commit 18a0](https://github.com/manticoresoftware/manticoresearch/commit/18a04c1) fixed select list expression with alias could hides index attribute; fixed sum to count in int64 for integer
-* [Commit 2a00](https://github.com/manticoresoftware/manticoresearch/commit/2a005ea) added date_format select list expression that exposes strftime function
-* [Commit ec19](https://github.com/manticoresoftware/manticoresearch/commit/ec19c5b) fixed suggest for short words; added sentence option to show whole qsuggest sentence
-* [Commit 1d3f](https://github.com/manticoresoftware/manticoresearch/commit/1d3f0da) fixed duplicate documents at the result set for the query with not_terms_only_allowed option to RT index with killed documents
-* [Commit 122b](https://github.com/manticoresoftware/manticoresearch/commit/122bbf2) fixed error of alter with empty string for external files; fixed RT index external files left after alter of external files
-* [Commit bc04](https://github.com/manticoresoftware/manticoresearch/commit/bc04908) changed the response format of the /cli endpoint, added the /cli_json endpoint to work as the previous /cli
-* [Commit 23a6](https://github.com/manticoresoftware/manticoresearch/commit/23a6b8b) fixed memory consumption by daemon on save large PQ index
-* [Commit b5b5](https://github.com/manticoresoftware/manticoresearch/commit/b5b5438) fixed ngram token position inside phrase query with wordforms
-* [Commit c0b4](https://github.com/manticoresoftware/manticoresearch/commit/c0b47e6) added environment variable MANTICORE_BUDDY_TIMEOUT (default 3 seconds) to control how long daemon could wait for buddy message on buddy start
-* [Commit 6dd3](https://github.com/manticoresoftware/manticoresearch/commit/6dd3964) fixed bad bloom filter for JSON root object; fixed crash of daemon on filter by JSON field
-* [Commit cc59](https://github.com/manticoresoftware/manticoresearch/commit/cc59511) fixed error reply at daemon for query into distributed index with empty result set from the agent
-* [Commit 77cc](https://github.com/manticoresoftware/manticoresearch/commit/77ccd8f) added shared key for replication of replace statement to fix pre_commit error on replication replace from multiple master nodes
-* [Commit 052c](https://github.com/manticoresoftware/manticoresearch/commit/052c7c1) fixed document id substitution from the logstash
-* [Commit 1d44](https://github.com/manticoresoftware/manticoresearch/commit/1d44492) fixed collation to work for filter at HTTP search request
-* [Commit 844b](https://github.com/manticoresoftware/manticoresearch/commit/844b1ae) bypass check of max_packet_size for replication commands between nodes; added last cluster error to show status
-* [Commit ff87](https://github.com/manticoresoftware/manticoresearch/commit/ff87cc4) fixed string list in filter of SphinxQL query log
-* [Commit 89ee](https://github.com/manticoresoftware/manticoresearch/commit/89eeb1e) fixed remove of tmp files left after error of merge or optimize
-* [Commit c472](https://github.com/manticoresoftware/manticoresearch/commit/c472e5b) fixed crash at count distinct with multiple indexes
-* [Commit d77b](https://github.com/manticoresoftware/manticoresearch/commit/d77b832) fixed long wait of finish write operations (optimize, disk chunk save) at RT index at the DROP TABLE statement; added warning about non empty index directory after the DROP TABLE
-* [Commit 5b87](https://github.com/manticoresoftware/manticoresearch/commit/5b875a09) fixed seldom crash on timeout of master-agent on MacOS/FreeBSD.
-* [Commit 2b88](https://github.com/manticoresoftware/manticoresearch/commit/2b88781e) eliminated internal race leading to crashes when calling SNIPPETS() (github 910).
-* [Commit 0169](https://github.com/manticoresoftware/manticoresearch/commit/01697911) allow long strings (>255 chars) in text targeted to SNIPPET() function.
-* [Commit a06a](https://github.com/manticoresoftware/manticoresearch/commit/a06a5538) eliminated crash when master can't connect to agent on kqueue-driven systems (freebsd, macos, etc.)
-* [Commit b164](https://github.com/manticoresoftware/manticoresearch/commit/b1646140) connecting from master to agents on macos/bsd uses unified connect+query timeout instead of just connect.
-* [Commit 5e63](https://github.com/manticoresoftware/manticoresearch/commit/5e6350b8) indextool now works with instances which have 'distributed' and 'template' indexes in json config
-* [Commit 9c67](https://github.com/manticoresoftware/manticoresearch/commit/9c677426) fix broken sph file(s) caused by 'alter'
-* [Commit 4bc4](https://github.com/manticoresoftware/manticoresearch/commit/4bc476b9) FLUSH ATTRIBUTES no more hangs with threads=1
-* [Commit 6c0f](https://github.com/manticoresoftware/manticoresearch/commit/6c0f5b7a) fix embedded synonyms flag in pq
-* [Commit f77c](https://github.com/manticoresoftware/manticoresearch/commit/f77ce0e6) use extended stack for pq
-* [Commit 2884](https://github.com/manticoresoftware/manticoresearch/commit/2884519e) fix bigint checks over functions like 'date_format'
-* [Commit 55dd](https://github.com/manticoresoftware/manticoresearch/commit/55dd0db1) teach some funcs to use promoted ints
-* [Commit 598d](https://github.com/manticoresoftware/manticoresearch/commit/598d2b53) print all/any to log
-* [Commit cc23](https://github.com/manticoresoftware/manticoresearch/commit/cc231318) indextool: close file on finishing globalidf
-* [Commit 71d8](https://github.com/manticoresoftware/manticoresearch/commit/71d8bbe2) fix damage of morphology_skip_fields
-* [Commit 4714](https://github.com/manticoresoftware/manticoresearch/commit/47146bd4) indextool: restore --dumpdocids
-* [Commit c5a7](https://github.com/manticoresoftware/manticoresearch/commit/c5a75b28) Process commit failures for mysql proto
+Released: ?? Aug 2023
 
 ### Major new features
-* Query optimizer now works for fulltext queries
-* Streamed (limitless) `Select *`
+* The query optimizer has been enhanced to support full-text queries, significantly improving search efficiency and performance.
+* Integrations with:
+  - mysqldump - to [make logical backups](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) using `mysqldump`
+  - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore
+  - [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/) for easier development with Manticore
 
 ### Minor changes
-* Fixed DocidIndex cost calculation
-* Added warnings on invalid index hints
-* Queries using `count(*)` with a single filter now utilize precalculated data from secondary indexes (if available), resulting in significantly faster query times.
-* Added [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function.
-* String fields/attributes that are both `indexed` and `attribute` are now treated as a single field on `INSERT`, `DESC` and `ALTER`.
-* Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC`.
-* When executing `INSERT` queries and running out of disk space to write binlog entries, new `INSERT` queries will fail until there's enough free disk space available.
-* [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
-* The `/bulk` endpoint processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command.
-* [Commit 4972](https://github.com/manticoresoftware/manticoresearch/commit/49722ab) `/pq` HTTP endpoint is now an alias of the `/json/pq` HTTP endpoint.
-* [Commit c4fc](https://github.com/manticoresoftware/manticoresearch/commit/c4fc82d) added optional sort property for each bucket of aggs for HTTP interface
-* [Commit 052b](https://github.com/manticoresoftware/manticoresearch/commit/052bf89) fixed failure from parallel CREATE TABLE, only one CREATE TABLE statement allowed to work at the time
-* [Commit 052c](https://github.com/manticoresoftware/manticoresearch/commit/052c7c1) added @ symbol to be a part of the column name
-* [Commit c282](https://github.com/manticoresoftware/manticoresearch/commit/c2823b9) added tags to HTTP PQ reply
-* [Commit 77f6](https://github.com/manticoresoftware/manticoresearch/commit/77f67220) disallow @ in table names
-* [Commit f3ae](https://github.com/manticoresoftware/manticoresearch/commit/f3ae8bea) display load metrics (like 'uptime' on linux)
-* [Commit 3c84](https://github.com/manticoresoftware/manticoresearch/commit/3c84091f) now you can use 'select' to make arbitrary calculations and displaying @@sysvars (before you could use only one(!) calculation). So, queries like `select user(), database(), @@version_comment, version(), 1+1 as a limit 10` will work and return all the columns. Optional 'limit' will always be ignored.
-* [Commit a073](https://github.com/manticoresoftware/manticoresearch/commit/a0735ffe) implement SELECT DATABASE()
-* [Commit 6aca](https://github.com/manticoresoftware/manticoresearch/commit/6aca32f0) implement CREATE DATABASE
-* [Commit f3d2](https://github.com/manticoresoftware/manticoresearch/commit/f3d248a6) different internal parsers now provide their internal mnemonic code in case of different errors. That helps to locate which exactly parser caused an error, and also hide non-important internal details.
-* [Commit 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604) mock and use ft-expression stack
-* [Commit d70b](https://github.com/manticoresoftware/manticoresearch/commit/d70b0d58) `thread_stack` now can be changed in runtime by mysql 'set' statement. Both, session-local and daemon-wide variants available. Current values available in 'show variables' output.
+* [Commit e77d](https://github.com/manticoresoftware/manticoresearch/commit/e77dd72f5a04531c352fad0d7afcd2a1cbae2510): The DocidIndex cost calculation has been improved, enhancing overall performance.
+* Warnings have been implemented for invalid index hints, providing more transparency and allowing for error mitigation.
+* [Issue #696](https://github.com/manticoresoftware/manticoresearch/issues/696) "Percolate index does not search properly by exact phrase query when stemming enabled": The percolate query has been modified to handle an exact term modifier, improving search functionality.
+* When `count(*)` is used with a single filter, queries now leverage precalculated data from secondary indexes when available, substantially speeding up query times.
+* [Issue #1070](https://github.com/manticoresoftware/manticoresearch/issues/1070) "CBO hints don't support multiple attributes": Enabled index hints to handle multiple attributes.
+* The [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function has been added.
+* String fields/attributes marked as `indexed` and `attribute` are now regarded as a single field during `INSERT`, `DESC`, and `ALTER` operations.
+* Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC` operations.
+* If disk space is insufficient when executing `INSERT` queries, new `INSERT` queries will fail until enough disk space becomes available.
+* [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) "Improve error logging of JSON insert api failure - "unsupported value type"": The `/bulk` endpoint reports information regarding the number of processed and non-processed strings (documents) in case of an error.
+* [Issue #829](https://github.com/manticoresoftware/manticoresearch/issues/829) "DATE FORMATTING methods": added the `date_format()` select list expression, which exposes the `strftime()` function.
+* The `/bulk` endpoint now processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command.
+* [Buddy #153](https://github.com/manticoresoftware/manticoresearch-buddy/issues/153): The `/pq` HTTP endpoint now serves as an alias for the `/json/pq` HTTP endpoint.
+* [Issue #961](https://github.com/manticoresoftware/manticoresearch/issues/961) "Sorting buckets via HTTP JSON API": introduced an optional sort property for each bucket of aggregates in the HTTP interface.
+* [Issue #1301](https://github.com/manticoresoftware/manticoresearch/issues/1301) "buddy should not create table in parallel": Resolved an issue that was causing failures from parallel CREATE TABLE operations. Now, only one CREATE TABLE operation can run at a time.
+* [Issue #1303](https://github.com/manticoresoftware/manticoresearch/issues/1303) "add support of @ to column names": added support for using `@` in column names.
+* [Issue #1106](https://github.com/manticoresoftware/manticoresearch/issues/1106) "Add tags to http search query": Tags have been added to HTTP PQ replies.
+* [Commit bc04](https://github.com/manticoresoftware/manticoresearch/commit/bc04908): Modified the response format of the `/cli` endpoint, and added the `/cli_json` endpoint to function as the previous `/cli`.
+* [Commit 0bf1](https://github.com/manticoresoftware/manticoresearch/commit/0bf17d9e): We've ensured multi-byte compatibility for `upper()` and `lower()`.
+* [Commit f3ae](https://github.com/manticoresoftware/manticoresearch/commit/f3ae8bea): Load metrics, similar to 'uptime' on Linux, are now visible in the `SHOW STATUS` command.
+* [Commit 3c84](https://github.com/manticoresoftware/manticoresearch/commit/3c84091f): It's now possible to use 'select' for making arbitrary calculations and displaying `@@sysvars`. Unlike before, you are no longer limited to just one calculation. Therefore, queries like `select user(), database(), @@version_comment, version(), 1+1 as a limit 10` will return all the columns. Note that the optional 'limit' will always be ignored.
+* [Commit a073](https://github.com/manticoresoftware/manticoresearch/commit/a0735ffe): Added support for the `SELECT DATABASE()` command.
+* [Commit 6aca](https://github.com/manticoresoftware/manticoresearch/commit/6aca32f0): Implemented the `CREATE DATABASE` stub query.
+* [Commit f3d2](https://github.com/manticoresoftware/manticoresearch/commit/f3d248a6): Different internal parsers now provide their internal mnemonic code (e.g., `P01`) during various errors. This enhancement aids in identifying which parser caused an error and also obscures non-essential internal details.
+* [Commit 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604): Implementing mocked and utilizing of the full-text expression stack to prevent daemon crashes.
+* [Commit d70b](https://github.com/manticoresoftware/manticoresearch/commit/d70b0d58): The `thread_stack` can now be altered during runtime using the `SET` statement. Both session-local and daemon-wide variants are available. Current values can be accessed in the `show variables` output.
 
 ### Behaviour changes
-* **⚠️ BREAKING CHANGE** Document IDs are now treated as unsigned 64-bit integers on indexing and INSERT.
-* **⚠️ BREAKING CHANGE** Query optimizer hints now have a new syntax (e.g. /*+ SecondaryIndex(uid) */). Old syntax is no longer supported.
-* [Commit d205](https://github.com/manticoresoftware/manticoresearch/commit/d205508e) set of values returned by 'show index status' changed and depends on what flavor of index is in game.
+* **⚠️ BREAKING CHANGE**: Document IDs are now handled as unsigned 64-bit integers during indexing and INSERT operations.
+* **⚠️ BREAKING CHANGE**: The syntax for query optimizer hints has been updated. The new format is `/*+ SecondaryIndex(uid) */`. Please note that the old syntax is no longer supported.
+* **⚠️ BREAKING CHANGE**: [Issue #1160](https://github.com/manticoresoftware/manticoresearch/issues/1160): The usage of `@` in table names has been disallowed to prevent syntax conflicts.
 
-# Next maintenance release
 
 ### Bugfixes
-* [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e) fixed crash on replication of update with JSON and string attribute
-* [gl #3363] Updated export ranker output to match `packedfactors()`
+* [Issue #1310](https://github.com/manticoresoftware/manticoresearch/issues/1310) "wrong reference in "paths to external files should be absolute": Corrected the display of the full path to external files in `SHOW CREATE TABLE`.
+* [Issue #1052](https://github.com/manticoresoftware/manticoresearch/issues/1052) Fixed an issue where `rt_attr_json` column was incompatible with columnar storage.
+* [Commit 3be4](https://github.com/manticoresoftware/manticoresearch/commit/3be4503f752216b37b8cde8e47fd2d77bbce63ae) Resolved a crash issue potentially caused by disk space running out by properly handling write errors in binlog.
+* [Commit fac2](https://github.com/manticoresoftware/manticoresearch/commit/fac2d9687a20582765aaa89be9597804c4f845af) Updated the export ranker output to align with `packedfactors()`.
+* [Issue #1072](https://github.com/manticoresoftware/manticoresearch/issues/1072) "* is removed from search query by ignore_chars": Fixed this issue so wildcards in a query aren't impacted by `ignore_chars`.
+* [Issue #1050](https://github.com/manticoresoftware/manticoresearch/issues/1050) "count(*) in FEDERATED": Fixed a daemon crash occurring with a query through a `FEDERATED` engine with aggregate.
+* [Commit 6fbc](https://github.com/manticoresoftware/manticoresearch/commit/6fbc4189) Fixed the json range filter to support int64 values.
+* [Issue #864](https://github.com/manticoresoftware/manticoresearch/issues/864) "exceptions/stopwords conflict"
+* [Issue #589](https://github.com/manticoresoftware/manticoresearch/issues/589) "The charset definition seems to depend on the ordering of codes": Fixed incorrect charset mapping for duplicates.
+* [Issue #967](https://github.com/manticoresoftware/manticoresearch/issues/967) "Using JSON arguments in UDF functions leads to a crash": Fixed a daemon crash when processing a search with pseudo-sharding enabled and UDF with JSON argument.
+* [Issue #834](https://github.com/manticoresoftware/manticoresearch/issues/834) "Equals sign in search query breaks request": Ensured the exact symbol can be escaped and fixed double exact expansion by the `expand_keywords` option.
+* [Commit e9bc](https://github.com/manticoresoftware/manticoresearch/commit/e9bc2f9) Fixed an HTTP error when processing bulk requests and an issue where the error wasn't being returned to the client from the net loop.
+* [Issue #1309](https://github.com/manticoresoftware/manticoresearch/issues/1309) "reply to mysql client failed for data larger 16Mb": Fixed the issue of returning a SphinxQL packet larger than 16Mb to the client.
+* [Issue #1081](https://github.com/manticoresoftware/manticoresearch/issues/1081) "particular select on particular RT dataset leads to crash of searchd": Resolved daemon crash on a query with packedfactors and large internal buffer.
+* [Commit 6e1b](https://github.com/manticoresoftware/manticoresearch/commit/6e1b849) Rectified daemon crash caused by invalid `manticore.json` config.
+* [Issue #1308](https://github.com/manticoresoftware/manticoresearch/issues/1308) "Avoid binding to localhost in replication": Ensured replication doesn't bind to localhost for host names with multiple IPs.
+* [Issue #1307](https://github.com/manticoresoftware/manticoresearch/issues/1307) "SELECT statement sum(value) as value doesn't work properly": Fixed issue where select list expression with alias could hide index attribute; also fixed sum to count in int64 for integer.
+* [Issue #271](https://github.com/manticoresoftware/manticoresearch/issues/271) "Sometimes CALL SUGGEST does not suggest a correction of a single letter typo": Improved suggest for short words; added sentence option to show the entire `qsuggest` sentence.
+* [Issue #946](https://github.com/manticoresoftware/manticoresearch/issues/946) "Duplicate records during SELECT": Fixed the issue of duplicate documents in the result set for a query with `not_terms_only_allowed` option to RT index with killed documents.
+* [Issue #1095](https://github.com/manticoresoftware/manticoresearch/issues/1095) "With not_terms_only_allowed deleted documents are ignored"
+* [Issue #1306](https://github.com/manticoresoftware/manticoresearch/issues/1306) "Can't recreate RT table after altering its external file": Rectified an error of alter with empty string for external files; fixed RT index external files left after altering external files.
+* [Issue #1305](https://github.com/manticoresoftware/manticoresearch/issues/1305) "Int overflow when saving PQ meta": Mitigated excessive memory consumption by daemon on saving large PQ index.
+* [Issue #811](https://github.com/manticoresoftware/manticoresearch/issues/811) "Mapping multiple words in word forms interferes phrase search with CJK punctuations between keywords": Fixed ngram token position within phrase query with wordforms.
+* [Issue #1304](https://github.com/manticoresoftware/manticoresearch/issues/1304) "add env var for buddy start timeout": Added environment variable `MANTICORE_BUDDY_TIMEOUT` (default 3 seconds) to control the daemon's wait duration for a buddy message at startup.
+* [Commit 6dd3](https://github.com/manticoresoftware/manticoresearch/commit/6dd3964), [Helm #56] "fatal crash dump in Kubernetes cluster": Fixed a defective bloom filter for the JSON root object; fixed daemon crash due to filtering by a JSON field.
+* [Issue #1104](https://github.com/manticoresoftware/manticoresearch/issues/1104) "Count(*) is trying to be treated as schema set in remote tables": Resolved an issue where an error message was being sent by the daemon for queries into the distributed index when the agent returned an empty result set.
+* [Commit 77cc](https://github.com/manticoresoftware/manticoresearch/commit/77ccd8f): A shared key has been added for the replication of the replace statement to resolve a `pre_commit` error occurring when replace is replicated from multiple master nodes.
+* [Issue #1135](https://github.com/manticoresoftware/manticoresearch/issues/1135) "JSON string filtering case sensitivity": Corrected the collation to function correctly for filters used in HTTP search requests.
+* [Issue #1155](https://github.com/manticoresoftware/manticoresearch/issues/1155) "system remote commands via API should pass g_iMaxPacketSize": Made updates to bypass the `max_packet_size` check for replication commands between nodes. Additionally, the latest cluster error has been added to the status display.
+* [Commit ff87](https://github.com/manticoresoftware/manticoresearch/commit/ff87cc4): Fixed an issue with the string list in the filter of the SphinxQL query log.
+* [Issue #1302](https://github.com/manticoresoftware/manticoresearch/issues/1302) "tmp files left on failed optimize": Corrected an issue where temporary files were left behind after an error occurred during a merge or optimize process.
+* [Commit c472](https://github.com/manticoresoftware/manticoresearch/commit/c472e5b): Addressed a crash that was occurring with count distinct across multiple indexes.
+* [Issue #507](https://github.com/manticoresoftware/dev/issues/507) "Crash on DROP TABLE": resolved a problem causing extended wait times to finish write operations (optimize, disk chunk save) on an RT table when executing a DROP TABLE statement. Added a warning to notify when a table directory is not empty after executing a DROP TABLE command.
+* [Issue #910](https://github.com/manticoresoftware/manticoresearch/issues/910) "Manticore crash when calling call snippets() with libstemmer_fr and index_exact_words": Resolved internal conflicts causing crashes when `SNIPPETS()` was called.
+* [Issue #1311](https://github.com/manticoresoftware/manticoresearch/issues/1311) "debug build crashes on long strings in snippets": Now, long strings (>255 characters) are permitted in the text targeted by the `SNIPPET()` function.
+* [Issue #1312](https://github.com/manticoresoftware/manticoresearch/issues/1312) "spurious crash on use-after-delete in kqueue polling (master-agent)": Fixed crashes when the master cannot connect to the agent on kqueue-driven systems (FreeBSD, MacOS, etc.).
+* [Issue #1313](https://github.com/manticoresoftware/manticoresearch/issues/1313) "too long connect to itself": When connecting from the master to agents on MacOS/BSD, a unified connect+query timeout is now used instead of just connect.
+* [Issue #1075](https://github.com/manticoresoftware/manticoresearch/issues/1075) "indextool --check fails if there's a distributed table": indextool is now compatible with instances having 'distributed' and 'template' indexes in the json config.
+* [Commit 9c67](https://github.com/manticoresoftware/manticoresearch/commit/9c677426) `.sph` files could be corrupted `ALTER`. Fixed.
+* [Issue #1109](https://github.com/manticoresoftware/manticoresearch/issues/1109) "FLUSH ATTRIBUTES hangs with threads=1".
+* [Issue #1314](https://github.com/manticoresoftware/manticoresearch/issues/1314) "pq (json meta) with unreached embedded synonyms fails to load": Fixed the embedded synonyms flag in pq.
+* [Commit f77c](https://github.com/manticoresoftware/manticoresearch/commit/f77ce0e6) use of an extended stack for PQ.
+* [Commit 2884](https://github.com/manticoresoftware/manticoresearch/commit/2884519e) resolved issues with bigint checks over functions like 'date_format()'.
+* [Issue #1315](https://github.com/manticoresoftware/manticoresearch/issues/1315) "Allow some functions (sint, fibonacci, second, minute, hour, day, month, year, yearmonth, yearmonthday) to use implicitly promoted argument values".
+* [Issue #1411](https://github.com/manticoresoftware/manticoresearch/issues/1141) "query log in sphinxql does not preserve original queries for MVA's": Now, `all()/any()` is logged.
+* [Issue #1100](https://github.com/manticoresoftware/manticoresearch/issues/1100) "indextool --buildidf is not working": indextool now closes the file after finishing globalidf.
+* [Issue #1140](https://github.com/manticoresoftware/manticoresearch/issues/1140) "Match in a wrong field": Fixed the damage related with `morphology_skip_fields`.
+* [Issue #1099](https://github.com/manticoresoftware/manticoresearch/issues/1099) "indextool --dumpdocids is not working": Restored functionality of the `--dumpdocids` command.
+* [Commit d205](https://github.com/manticoresoftware/manticoresearch/commit/d205508e) The set of values returned by the `show index status` command has been modified and now varies depending on the type of index in use.
+* [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e): A bug causing a crash during the replication of updates with JSON and string attributes has been resolved.
 
 # Version 6.0.4
 Released: March 15 2023

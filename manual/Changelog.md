@@ -9,6 +9,8 @@ Released: ?? Aug 2023
   - mysqldump - to [make logical backups](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) using `mysqldump`
   - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore
   - [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/) for easier development with Manticore
+* Significantly improved count distinct performance by using hash tables + HyperLogLog
+* Enabled multithreaded execution of queries with secondary indexes (the number of threads is limited to the number of physical CPU cores)
 
 ### Minor changes
 * [Commit e77d](https://github.com/manticoresoftware/manticoresearch/commit/e77dd72f5a04531c352fad0d7afcd2a1cbae2510): The DocidIndex cost calculation has been improved, enhancing overall performance.
@@ -37,6 +39,19 @@ Released: ?? Aug 2023
 * [Commit f3d2](https://github.com/manticoresoftware/manticoresearch/commit/f3d248a6): Different internal parsers now provide their internal mnemonic code (e.g., `P01`) during various errors. This enhancement aids in identifying which parser caused an error and also obscures non-essential internal details.
 * [Commit 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604): Implementing mocked and utilizing of the full-text expression stack to prevent daemon crashes.
 * [Commit d70b](https://github.com/manticoresoftware/manticoresearch/commit/d70b0d58): The `thread_stack` can now be altered during runtime using the `SET` statement. Both session-local and daemon-wide variants are available. Current values can be accessed in the `show variables` output.
+* `pseudo_sharding` is now limited to the number of free threads, which significantly improves throughput.
+* The default attribute storage engine can now be specified via config.
+* [Commit 0f15](https://github.com/manticoresoftware/manticoresearch/commit/0f156329) "read read_buffer_hits/docs as size" : `CREATE TABLE` options `read_buffer_docs`/`read_buffer_hits` now support k/m/g syntax.
+* [Commit 0a82](https://github.com/manticoresoftware/manticoresearch/commit/0a82cd77) "removed redundant CheckReplaceEntry from implicit group sorter" : The CheckReplaceEntry call has been removed from the group sorter to speed up the calculation of aggregate functions.
+* [Commit ec8d](https://github.com/manticoresoftware/manticoresearch/commit/ec8d2fd2) "changed columnar iterator interface to single-call" : Columnar iterators now use a single `Get` call instead of two `AdvanceTo` + `Get` calls to retrieve a value.
+* [Commit 46ed](https://github.com/manticoresoftware/manticoresearch/commit/46edb089) "try to detect precalc sorters to avoid using CBO" : Sorters using precalculated data are now detected before using CBO to skip CBO calculations.
+* [Commit 8129](https://github.com/manticoresoftware/manticoresearch/commit/8129e403) "changed bitmap union selection logic": Better logic has been added for determining when to use bitmap iterator intersection and when to use a priority queue.
+* [Commit 2bb9](https://github.com/manticoresoftware/manticoresearch/commit/2bb92765) "added a fastpath for `count(*)` w/o filters" : Instead of walking the index for `count(*)` queries, a precalculated value is now returned.
+* [Commit 92d7](https://github.com/manticoresoftware/manticoresearch/commit/92d722ae) "added implicit groupby detection to CBO; changed default histogram size to 8k" : The CBO logic has been updated, and the default histogram resolution has been changed to 8k for better accuracy on attributes with randomly distributed values.
+* [Commit 979f](https://github.com/manticoresoftware/manticoresearch/commit/979fa27c) "use data ptrs clone/free funcs only in schemas with data ptr atts" : A fast code path has been added for match cloning code for matches that don't use string/mvas/json attributes.
+* [Commit f3cc](https://github.com/manticoresoftware/manticoresearch/commit/f3cc0971) "keep original attr/field order": `DESC` and `SHOW CREATE TABLE` field and attribute order now match that of `SELECT * FROM`.
+* [Commit d96e](https://github.com/manticoresoftware/manticoresearch/commit/d96ec6b9) "boost string filter cost in CBO": Code has been added to CBO to correctly estimate the complexity of executing filters over string attributes.
+* [Commit 9dc1](https://github.com/manticoresoftware/manticoresearch/commit/9dc12334) "always rebuild SI on `ALTER TABLE table REBUILD SECONDARY`": When `ALTER TABLE table REBUILD SECONDARY` is executed, secondary indexes are now always rebuilt, even if attributes were not updated.
 
 ### Behaviour changes
 * **⚠️ BREAKING CHANGE**: Document IDs are now handled as unsigned 64-bit integers during indexing and INSERT operations.
@@ -95,6 +110,18 @@ Released: ?? Aug 2023
 * [Issue #1099](https://github.com/manticoresoftware/manticoresearch/issues/1099) "indextool --dumpdocids is not working": Restored functionality of the `--dumpdocids` command.
 * [Commit d205](https://github.com/manticoresoftware/manticoresearch/commit/d205508e) The set of values returned by the `show index status` command has been modified and now varies depending on the type of index in use.
 * [Commit a062](https://github.com/manticoresoftware/manticoresearch/commit/a0626d7e): A bug causing a crash during the replication of updates with JSON and string attributes has been resolved.
+* [Commit 9513](https://github.com/manticoresoftware/manticoresearch/commit/9513aca5) "don't add iterator desc for precalc sorters" : Iterators are no longer shown in `SHOW META` when sorters use precalculated data.
+* [Commit f3b8](https://github.com/manticoresoftware/manticoresearch/commit/f3b80db8) "don't spawn iterators when using precalc sorters": Iterators are not spawned when using sorters that use precalculated data to avoid negative effects on performance.
+* [Commit b3e6](https://github.com/manticoresoftware/manticoresearch/commit/b3e63e5d) "modified stringbuilder to use 64-bit buffer size": The string builder now uses 64-bit integers to prevent crashes when working with large data.
+* [Commit 6bd9](https://github.com/manticoresoftware/manticoresearch/commit/6bd9f709) "remove filters when using precalc sorters; CBO tuning": Filters were not removed when using sorters that use precalculated data. Fixed.
+* [Issue #1057](https://github.com/manticoresoftware/manticoresearch/commit/04596ff0) "check for SSE 4.2 before loading MCL libs": MCL libraries are now not loaded on systems that don't support SSE 4.2.
+* [Commit a2a7](https://github.com/manticoresoftware/manticoresearch/commit/a2a70555) "updated SPH_EXTNODE_STACK_SIZE": The fulltext node stack size has been updated to prevent crashes on complex fulltext queries.
+* [Commit 2ebd](https://github.com/manticoresoftware/manticoresearch/commit/2ebd424d) "added support for columnar attrs in multi grouper; added faster fnv64; added specialized columnar multigrouper": Support for columnar attributes was missing in the code used for grouping by multiple attributes. Fixed.
+* [Issue #1126](https://github.com/manticoresoftware/manticoresearch/commit/6aa58d3d) "fixed a crash on spawning ColumnarScan iterators": Crashes that occurred when using multiple filters over columnar attributes have been fixed.
+* [Commit 6adb](https://github.com/manticoresoftware/manticoresearch/commit/6adb0934) "fixed a crash on intersect iterator hinting a stopped iterator": A crash that sometimes occurred when using multiple columnar scan iterators (or secondary index iterators) in a query has been fixed.
+* [Commit d242](https://github.com/manticoresoftware/manticoresearch/commit/d2425a94) "CBO improvements": Code has been added to CBO to better estimate multithreaded performance of secondary indexes when they are used in a full-text query.
+* [Commit 6d03](https://github.com/manticoresoftware/manticoresearch/commit/6d03566a) "better rowwise MT estimates in CBO": The CBO code has been updated to provide better estimates for queries using filters over row-wise attributes that are executed in multiple threads.
+* [Commit d073](https://github.com/manticoresoftware/manticoresearch/commit/d0730272) "updated CBO; fixed RT index thread distribution when pseudo_sharding is disabled": Queries over disk chunks of RT indexes could be executed in multiple threads even if pseudo_sharding was disabled. Fixed.
 
 # Version 6.0.4
 Released: March 15 2023

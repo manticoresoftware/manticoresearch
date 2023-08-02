@@ -135,7 +135,7 @@ Integer. Default is `3500`. This option sets the threshold below which counts re
 
 Accepted values range from `500` to `15500`. Values outside this range will be clamped.
 
-When this option is set to `0`, it enables a legacy algorithm that ensures exact counts. This algorithm collects `{group; value}` pairs, sorts them, and periodically eliminates duplicates. The result is precise counts within a plain index. However, this approach is not suitable for high-cardinality datasets due to its high memory consumption and slow query execution.
+When this option is set to `0`, it enables an algorithm that ensures exact counts. This algorithm collects `{group, value}` pairs, sorts them, and periodically eliminates duplicates. The result is precise counts within a plain table. However, this approach is not suitable for high-cardinality datasets due to its high memory consumption and slow query execution.
 
 When `distinct_precision_threshold` is set to a value greater than `0`, Manticore employs a different algorithm. It loads counts into a hash table and returns the size of the table. If the hash table becomes too large, its contents are moved into a `HyperLogLog` data structure. At this point, the counts become approximate because HyperLogLog is a probabilistic algorithm. This approach maintains a fixed maximum memory usage per group, but there is a tradeoff in count accuracy.
 

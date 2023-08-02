@@ -193,13 +193,13 @@ The expression name can be utilized in filtering or sorting.
 
 <!-- end -->
 
-By default, expression values are included in the `_source` array of the result set. If the source is selective (see [Source selection](../Searching/Search_results.md#Source-selection)), the expression name can be added to the `_source` parameter in the request.
+By default, expression values are included in the `_source` array of the result set. If the source is selective (see [Source selection](../Searching/Search_results.md#Source-selection)), the expression name can be added to the `_source` parameter in the request. Note, the names of the expressions must be in lowercase.
 
 ### expressions
 
 <!-- example expressions -->
 
-`expressions` is an alternative to `script_fields` with a simpler syntax. The example request adds two expressions and stores the results into `add_all` and `title_len` attributes.
+`expressions` is an alternative to `script_fields` with a simpler syntax. The example request adds two expressions and stores the results into `add_all` and `title_len` attributes. Note, the names of the expressions must be in lowercase.
 
 <!-- request expressions -->
 ```json

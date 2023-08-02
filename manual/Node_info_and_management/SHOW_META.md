@@ -5,49 +5,50 @@ SHOW META [ LIKE pattern ]
 ```
 
 <!-- example show meta -->
-`SHOW META` is an SQL statement that displays extra meta-information about the processed query, including query time and keyword statistics. The syntax is:
+`SHOW META` is an SQL statement that displays additional meta-information about the processed query, including the query time, keyword statistics, and information about the secondary indexes used. The syntax is:
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5;
-SHOW META;
+SELECT id, story_author FROM hn_small WHERE MATCH('one|two|three') and comment_ranking > 2 limit 5;
+show meta;
 ```
 
 <!-- response SQL -->
 
 ```sql
-+--------+--------------+
-| id     | story_author |
-+--------+--------------+
-| 300263 | throwaway37  |
-| 713503 | mahmud       |
-| 716804 | mahmud       |
-| 776906 | jimbokun     |
-| 753332 | foxhop       |
-+--------+--------------+
-5 rows in set (0.01 sec)
++---------+--------------+
+| id      | story_author |
++---------+--------------+
+|  151171 | anewkid      |
+|  302758 | bks          |
+|  805806 | drRoflol     |
+| 1099245 | tnorthcutt   |
+|  303252 | whiten       |
++---------+--------------+
+5 rows in set (0.00 sec)
 
-+----------------+--------+
-| Variable_name  | Value  |
-+----------------+--------+
-| total          | 5      |
-| total_found    | 266385 |
-| total_relation | eq     |
-| time           | 0.012  |
-| keyword[0]     | one    |
-| docs[0]        | 224387 |
-| hits[0]        | 310327 |
-| keyword[1]     | three  |
-| docs[1]        | 18181  |
-| hits[1]        | 21102  |
-| keyword[2]     | two    |
-| docs[2]        | 63251  |
-| hits[2]        | 75961  |
-+----------------+--------+
-13 rows in set (0.00 sec)
++----------------+---------------------------------------+
+| Variable_name  | Value                                 |
++----------------+---------------------------------------+
+| total          | 5                                     |
+| total_found    | 2308                                  |
+| total_relation | eq                                    |
+| time           | 0.001                                 |
+| keyword[0]     | one                                   |
+| docs[0]        | 224387                                |
+| hits[0]        | 310327                                |
+| keyword[1]     | three                                 |
+| docs[1]        | 18181                                 |
+| hits[1]        | 21102                                 |
+| keyword[2]     | two                                   |
+| docs[2]        | 63251                                 |
+| hits[2]        | 75961                                 |
+| index          | comment_ranking:SecondaryIndex (100%) |
++----------------+---------------------------------------+
+14 rows in set (0.00 sec)
 ```
 
 <!-- end -->

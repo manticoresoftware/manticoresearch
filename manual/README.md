@@ -6,7 +6,6 @@
     * [Debian and Ubuntu](Installation/Debian_and_Ubuntu.md)
     * [MacOS](Installation/MacOS.md)
     * [Windows](Installation/Windows.md)
-    * [Old Linuxes](Installation/Old_linuxes.md)
     * [Compiling from sources](Installation/Compiling_from_sources.md)
     * [Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [⚡ Quick start guide](Quick_start_guide.md)

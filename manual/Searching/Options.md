@@ -112,6 +112,8 @@ However, if the number of unique values of the groupby attribute is high, furthe
 
 Overall, setting `accurate_aggregation` to 1 will guarantee group count and aggregate accuracy in RT indexes and plain indexes with `pseudo_sharding`=1. The downside is that searches will run slower because they will be forced to run in a single thread.
 
+However, if we have an RT index and a plain index that contain the same data and run a query with `accurate_aggregation=1`, we may still get different results. This is because the daemon may choose different max_matches settings for the RT and plain index due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
+
 ### agent_query_timeout
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout).
 

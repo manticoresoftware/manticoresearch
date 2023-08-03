@@ -345,6 +345,9 @@ struct CommonFilterSettings_t
 		SphAttr_t		m_iMaxValue = LLONG_MAX;	///< range max
 		float			m_fMaxValue;	///< range max
 	};
+
+	bool				m_bHasEqualMin = true;	///< has filter "equal" component or pure greater/less (for min)
+	bool				m_bHasEqualMax = true;	///< has filter "equal" component or pure greater/less (for max)
 };
 
 
@@ -353,8 +356,6 @@ class CSphFilterSettings : public CommonFilterSettings_t
 public:
 	CSphString			m_sAttrName = "";	///< filtered attribute name
 	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
-	bool				m_bHasEqualMin = true;	///< has filter "equal" component or pure greater/less (for min)
-	bool				m_bHasEqualMax = true;	///< has filter "equal" component or pure greater/less (for max)
 	bool				m_bOpenLeft = false;
 	bool				m_bOpenRight = false;
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL

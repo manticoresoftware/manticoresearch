@@ -533,8 +533,15 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 	tEstimate.m_iTotal = tEstimate.m_iCount = GetNumValues();
 
 	CommonFilterSettings_t tFixedSettings = tFilter;
-	if ( TYPE==HISTOGRAM_STREAMED_FLOAT )
-		FixupFilterSettings ( tFilter, SPH_ATTR_FLOAT, tFixedSettings );
+	ESphAttr eAttrType;
+	switch ( TYPE )
+	{
+	case HISTOGRAM_STREAMED_UINT32:	eAttrType = SPH_ATTR_INTEGER; break;
+	case HISTOGRAM_STREAMED_FLOAT:	eAttrType = SPH_ATTR_FLOAT; break;
+	default:						eAttrType = SPH_ATTR_BIGINT; break;
+	}
+
+	FixupFilterSettings ( tFilter, eAttrType, tFixedSettings );
 
 	switch ( tFixedSettings.m_eType )
 	{
@@ -549,12 +556,12 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	case SPH_FILTER_RANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_iMinValue, (T)tFixedSettings.m_iMaxValue );
+		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFixedSettings.m_bHasEqualMin, tFixedSettings.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_iMinValue, (T)tFixedSettings.m_iMaxValue );
 		return true;
 
 	case SPH_FILTER_FLOATRANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_FLOAT );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
+		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFixedSettings.m_bHasEqualMin, tFixedSettings.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
 		return true;
 
 	case SPH_FILTER_STRING:
@@ -711,14 +718,9 @@ HistogramRset_t HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool 
 	{
 		tEstimate.m_iCount++;
 		if ( bOpenLeft )
-		{
 			tEstimate.m_iTotal += m_dBuckets[iStartBucket].m_iCount;
-		} else
-		{
-			int iMinCount = LerpCounter ( iStartBucket, tMin );
-			// substract from total range with tMin value and add more preceise counter
-			tEstimate.m_iTotal = tEstimate.m_iTotal - m_dBuckets[iStartBucket+1].m_iCount / 2 + iMinCount;
-		}
+		else
+			tEstimate.m_iTotal += LerpCounter ( iStartBucket, tMin );
 	}
 
 	T tDelta = m_tMaxValue - m_tMinValue;

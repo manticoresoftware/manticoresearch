@@ -141,6 +141,8 @@ select id, coeff from test1 where coeff&lt;-2.0 /*+ SecondaryIndex(coeff) */;
 select id, coeff from test1 where coeff&lt;-5.0 /*+ SecondaryIndex(coeff) */;
 select id, coeff from test1 where coeff&lt;-10.0 /*+ SecondaryIndex(coeff) */;
 
+select id, coeff from test1 where coeff>-10.0 and extra='' and id>0 /*+ SecondaryIndex(coeff) SecondaryIndex(extra) DocidIndex(id) */;
+show meta;
 </sphinxql>
 
 </queries>

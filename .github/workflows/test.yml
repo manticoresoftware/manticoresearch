@@ -5,7 +5,9 @@ run-name: 🔬 Test ${{ github.sha }}
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+      - manticore-*    
     paths-ignore:
       - 'manual/**'
   pull_request:

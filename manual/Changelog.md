@@ -1,7 +1,7 @@
 # Changelog
 
 # Version 6.2.0
-Released: August 4 2023
+Released: August 4th 2023
 
 ### Major changes
 * The query optimizer has been enhanced to support full-text queries, significantly improving search efficiency and performance.
@@ -15,6 +15,7 @@ Released: August 4 2023
 * Enabled multithreaded execution of queries containing secondary indexes, with the number of threads limited to the count of physical CPU cores. This should considerably improve the query execution speed.
 * `pseudo_sharding` has been adjusted to be limited to the number of free threads. This update considerably enhances the throughput performance.
 * Users now have the option to specify [the default attribute storage engine](../Server_settings/Searchd.md#engine) via the configuration settings, providing better customization to match specific workload requirements.
+* Support for [Manticore Columnar Library 2.2.0](https://github.com/manticoresoftware/columnar/) with numerous bug fixes and improvements in [Secondary indexes](../Server_settings/Searchd.md#secondary_indexes).
 
 ### Minor changes
 * [Buddy #153](https://github.com/manticoresoftware/manticoresearch-buddy/issues/153): The [/pq](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md?client=JSON#Adding-rules-to-a-percolate-table) HTTP endpoint now serves as an alias for the `/json/pq` HTTP endpoint.
@@ -64,6 +65,7 @@ Released: August 4 2023
 * ⚠️ [Issue #1057](https://github.com/manticoresoftware/manticoresearch/issues/1057): MCL libraries will no longer load on systems that don't support SSE 4.2.
 
 ### Bugfixes
+* [Commit 2a6e](https://github.com/manticoresoftware/manticoresearch/commit/2a6ea8f7) "Crash on DROP TABLE": resolved a problem causing extended wait times to finish write operations (optimize, disk chunk save) on an RT table when executing a DROP TABLE statement. Added a warning to notify when a table directory is not empty after executing a DROP TABLE command.
 * [Commit 2ebd](https://github.com/manticoresoftware/manticoresearch/commit/2ebd424d): Support for columnar attributes, which was missing in the code used for grouping by multiple attributes, has been added.
 * [Commit 3be4](https://github.com/manticoresoftware/manticoresearch/commit/3be4503f752216b37b8cde8e47fd2d77bbce63ae) Resolved a crash issue potentially caused by disk space running out by properly handling write errors in binlog.
 * [Commit 6adb](https://github.com/manticoresoftware/manticoresearch/commit/6adb0934): A crash that occasionally occurred when using multiple columnar scan iterators (or secondary index iterators) in a query has been fixed.
@@ -86,7 +88,6 @@ Released: August 4 2023
 * [Commit f77c](https://github.com/manticoresoftware/manticoresearch/commit/f77ce0e6) use of an extended stack for PQ.
 * [Commit fac2](https://github.com/manticoresoftware/manticoresearch/commit/fac2d9687a20582765aaa89be9597804c4f845af) Updated the export ranker output to align with [packedfactors()](../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
 * [Commit ff87](https://github.com/manticoresoftware/manticoresearch/commit/ff87cc4): Fixed an issue with the string list in the filter of the SphinxQL query log.
-* [Issue #507](https://github.com/manticoresoftware/dev/issues/507) "Crash on DROP TABLE": resolved a problem causing extended wait times to finish write operations (optimize, disk chunk save) on an RT table when executing a DROP TABLE statement. Added a warning to notify when a table directory is not empty after executing a DROP TABLE command.
 * [Issue #589](https://github.com/manticoresoftware/manticoresearch/issues/589) "The charset definition seems to depend on the ordering of codes": Fixed incorrect charset mapping for duplicates.
 * [Issue #811](https://github.com/manticoresoftware/manticoresearch/issues/811) "Mapping multiple words in word forms interferes phrase search with CJK punctuations between keywords": Fixed ngram token position within phrase query with wordforms.
 * [Issue #834](https://github.com/manticoresoftware/manticoresearch/issues/834) "Equals sign in search query breaks request": Ensured the exact symbol can be escaped and fixed double exact expansion by the `expand_keywords` option.
@@ -223,7 +224,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [Commit 6bca](https://github.com/manticoresoftware/manticoresearch/commit/6bca4848dc5c8396dbc1e057be4b9b2d579794e8) A better error instead of the confusing "Index header format is not json, will try it as binary...".
 * [Commit bef3](https://github.com/manticoresoftware/lemmatizer-uk/commit/bef3ff0386d3ee87ec57619782100972c1122e47) Ukirainian lemmatizer path has been changed.
 * [Commit 4ae7](https://github.com/manticoresoftware/manticoresearch/commit/4ae789595329a2951e194d1191ddb3121459a560) Secondary indexes statistics has been added to [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META).
-* [Commit 2e7c](https://github.com/manticoresoftware/manticoresearch/commit/2e7c585e) JSON interface can now be easily visualized using Swagger Editor https://manual.manticoresearch.com/dev/Openapi#OpenAPI-specification.
+* [Commit 2e7c](https://github.com/manticoresoftware/manticoresearch/commit/2e7c585e) JSON interface can now be easily visualized using Swagger Editor https://manual.manticoresearch.com/Openapi#OpenAPI-specification.
 * **⚠️ BREAKING CHANGE**: Replication protocol has been changed. If you are running a replication cluster, then when upgrading to Manticore 5 you need to:
   - stop all your nodes first cleanly
   - and then start the node which was stopped last with `--new-cluster` (run tool `manticore_new_cluster` in Linux).

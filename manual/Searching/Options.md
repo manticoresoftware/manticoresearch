@@ -110,7 +110,7 @@ When running a groupby query, it can be run in parallel on a plain index with se
 
 However, if the number of unique values of the groupby attribute is high, further increasing `max_matches` may not be a good strategy because it can lead to a loss in performance and higher memory usage. Setting `accurate_aggregation` to 1 forces groupby searches to run in a single thread, which fixes the accuracy issue. Note that running in a single thread is only enforced when `max_matches` cannot be set high enough; otherwise, searches with `accurate_aggregation=1` will still run in multiple threads.
 
-Overall, setting `accurate_aggregation` to 1 ensures group count and aggregate accuracy in RT tables and plain tables with `pseudo_sharding=1`. The drawback is that searches will run more slowly since they will be forced to operate in a single thread.
+Overall, setting `accurate_aggregation` to 1 ensures group count and aggregate accuracy in RT tables and plain tables with `pseudo_sharding=1`. The drawback is that searches will run slower since they will be forced to operate in a single thread.
 
 However, if we have an RT table and a plain table containing the same data, and we run a query with `accurate_aggregation=1`, we might still receive different results. This occurs because the daemon might choose different `max_matches` settings for the RT and plain index due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
 

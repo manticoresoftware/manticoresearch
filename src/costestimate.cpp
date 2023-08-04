@@ -89,7 +89,7 @@ class CostEstimate_c : public CostEstimate_i
 	friend float CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
 
 public:
-			CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
+			CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff );
 
 	float	CalcQueryCost() final;
 
@@ -109,6 +109,7 @@ private:
 
 	const CSphVector<SecondaryIndexInfo_t> &	m_dSIInfo;
 	const SelectIteratorCtx_t &					m_tCtx;
+	int											m_iCutoff = -1;
 
 	static float	Cost_Filter ( int64_t iDocs, float fComplexity )		{ return COST_FILTER*fComplexity*iDocs*SCALE; }
 	static float	Cost_BlockFilter ( int64_t iDocs, float fComplexity )	{ return Cost_Filter ( iDocs/DOCINFO_INDEX_FREQ, fComplexity ); }
@@ -138,9 +139,10 @@ private:
 };
 
 
-CostEstimate_c::CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+CostEstimate_c::CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff )
 	: m_dSIInfo ( dSIInfo )
 	, m_tCtx ( tCtx )
+	, m_iCutoff ( iCutoff )
 {}
 
 
@@ -162,10 +164,10 @@ bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64
 
 int64_t CostEstimate_c::ApplyCutoff ( int64_t iDocs ) const
 {
-	if ( m_tCtx.m_iCutoff<0 )
+	if ( m_iCutoff<0 )
 		return iDocs;
 
-	return Min ( iDocs, m_tCtx.m_iCutoff );
+	return Min ( iDocs, m_iCutoff );
 }
 
 
@@ -466,9 +468,9 @@ bool SelectIteratorCtx_t::IsEnabled_Analyzer ( const CSphFilterSettings & tFilte
 
 /////////////////////////////////////////////////////////////////////
 
-CostEstimate_i * CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+CostEstimate_i * CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff )
 {
-	return new CostEstimate_c ( dSIInfo, tCtx );
+	return new CostEstimate_c ( dSIInfo, tCtx, iCutoff );
 }
 
 

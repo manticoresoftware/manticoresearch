@@ -2,14 +2,13 @@ name: 📦 Pack and publish
 run-name: 📦 Pack and publish ${{ github.sha }}
 
 #on: workflow_call
-
 on:
- workflow_run:
-   workflows: [ 🔬 Test ]
-   types: [ completed ]
- pull_request:
-   branches: [ master ]
-   types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_run:
+    workflows: [ 🔬 Test ]
+    types: [ completed ]
+  pull_request:
+    branches: [ master ]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches:
       - manticore-*
@@ -20,7 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04

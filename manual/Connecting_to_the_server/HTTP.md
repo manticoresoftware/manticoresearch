@@ -242,6 +242,7 @@ POST /cli_json -d "desc test"
 "error":"",
 "warning":""
 }]
+```
 
 <!-- end -->
 

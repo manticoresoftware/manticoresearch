@@ -1504,8 +1504,9 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 		{
 			if ( !tSettings.m_bOpenLeft && tFixedSettings.m_iMinValue < 0 )
 			{
-				tFixedSettings.m_bHasEqualMin = true;
-				tFixedSettings.m_iMinValue = 0;
+				tFixedSettings.m_bOpenLeft = true;
+				tFixedSettings.m_bHasEqualMin = false;
+				tFixedSettings.m_iMinValue = INT64_MIN;
 			}
 
 			if ( !tSettings.m_bOpenRight && tFixedSettings.m_iMaxValue < 0 )

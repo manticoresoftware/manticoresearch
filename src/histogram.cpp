@@ -532,7 +532,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	tEstimate.m_iTotal = tEstimate.m_iCount = GetNumValues();
 
-	CommonFilterSettings_t tFixedSettings = tFilter;
+	CommonFilterSettings_t tFS = tFilter;
 	ESphAttr eAttrType;
 	switch ( TYPE )
 	{
@@ -541,9 +541,9 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 	default:						eAttrType = SPH_ATTR_BIGINT; break;
 	}
 
-	FixupFilterSettings ( tFilter, eAttrType, tFixedSettings );
+	FixupFilterSettings ( tFilter, eAttrType, tFS );
 
-	switch ( tFixedSettings.m_eType )
+	switch ( tFS.m_eType )
 	{
 	case SPH_FILTER_VALUES:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
@@ -556,12 +556,12 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	case SPH_FILTER_RANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFixedSettings.m_bHasEqualMin, tFixedSettings.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_iMinValue, (T)tFixedSettings.m_iMaxValue );
+		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_iMinValue, (T)tFS.m_iMaxValue );
 		return true;
 
 	case SPH_FILTER_FLOATRANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_FLOAT );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFixedSettings.m_bHasEqualMin, tFixedSettings.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
+		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_fMinValue, (T)tFS.m_fMaxValue );
 		return true;
 
 	case SPH_FILTER_STRING:

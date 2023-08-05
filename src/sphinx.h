@@ -1259,8 +1259,6 @@ public:
 	int							m_iExpansionLimit = 0;
 
 protected:
-	static std::atomic<long>	m_tIdGenerator;
-
 	int64_t						m_iIndexId;				///< internal (per daemon) unique index id, introduced for caching
 
 	CSphSchema					m_tSchema;

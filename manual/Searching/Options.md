@@ -110,7 +110,9 @@ When running a groupby query, it can be run in parallel on a plain index with se
 
 However, if the number of unique values of the groupby attribute is high, further increasing `max_matches` may not be a good strategy because it can lead to a loss in performance and higher memory usage. Setting `accurate_aggregation` to 1 forces groupby searches to run in a single thread, which fixes the accuracy issue. Note that running in a single thread is only enforced when `max_matches` cannot be set high enough; otherwise, searches with `accurate_aggregation=1` will still run in multiple threads.
 
-Overall, setting `accurate_aggregation` to 1 will guarantee group count and aggregate accuracy in RT indexes and plain indexes with `pseudo_sharding`=1. The downside is that searches will run slower because they will be forced to run in a single thread.
+Overall, setting `accurate_aggregation` to 1 ensures group count and aggregate accuracy in RT tables and plain tables with `pseudo_sharding=1`. The drawback is that searches will run slower since they will be forced to operate in a single thread.
+
+However, if we have an RT table and a plain table containing the same data, and we run a query with `accurate_aggregation=1`, we might still receive different results. This occurs because the daemon might choose different `max_matches` settings for the RT and plain index due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
 
 ### agent_query_timeout
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout).
@@ -135,7 +137,7 @@ Integer. Default is `3500`. This option sets the threshold below which counts re
 
 Accepted values range from `500` to `15500`. Values outside this range will be clamped.
 
-When this option is set to `0`, it enables a legacy algorithm that ensures exact counts. This algorithm collects `{group; value}` pairs, sorts them, and periodically eliminates duplicates. The result is precise counts within a plain index. However, this approach is not suitable for high-cardinality datasets due to its high memory consumption and slow query execution.
+When this option is set to 0, it enables an algorithm that ensures exact counts. This algorithm collects `{group, value}` pairs, sorts them, and periodically eliminates duplicates. The result is precise counts within a plain table. However, this approach is not suitable for high-cardinality datasets due to its high memory consumption and slow query execution.
 
 When `distinct_precision_threshold` is set to a value greater than `0`, Manticore employs a different algorithm. It loads counts into a hash table and returns the size of the table. If the hash table becomes too large, its contents are moved into a `HyperLogLog` data structure. At this point, the counts become approximate because HyperLogLog is a probabilistic algorithm. This approach maintains a fixed maximum memory usage per group, but there is a tradeoff in count accuracy.
 

@@ -50,7 +50,7 @@ namespace Binlog {
 	}
 
 	void Init ( const CSphConfigSection & hSearchd, bool bTestMode );
-	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags );
+	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags, bool bConfigless );
 	void Deinit ();
 	bool IsActive();
 	bool MockDisabled ( bool bNewVal );
@@ -59,16 +59,18 @@ namespace Binlog {
 	void Flush();
 	int64_t NextFlushTimestamp();
 
+	using IndexNameUid_t = std::pair<const char *, int64_t>;
+
 	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
-	bool Commit ( Blop_e eOp, int64_t * pTID, const char * sIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
+	bool Commit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
 
 	/// replay stored binlog
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
 
 	// dedicated for Commit BLOP_UPDATE_ATTRS
-	void CommitUpdateAttributes ( int64_t * pTID, const char * szIndexName, const CSphAttrUpdate & tUpd );
+	void CommitUpdateAttributes ( int64_t * pTID, IndexNameUid_t tIndexName, const CSphAttrUpdate & tUpd );
 
-	void NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
+	void NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave );
 
 	CSphString GetPath();
 }

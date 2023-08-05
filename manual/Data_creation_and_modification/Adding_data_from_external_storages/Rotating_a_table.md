@@ -19,21 +19,21 @@ There are also two specialized statements that can be used to perform rotations 
 RELOAD TABLE tbl [ FROM '/path/to/table_files' [ OPTION switchover=1 ] ];
 ```
 
-The `RELOAD TABLE` command allows you to rotate tables using SQL.
+The `RELOAD TABLE` command enables table rotation via SQL.
 
-It operates in three modes. The first mode, which operates without specifying a path, prompts the Manticore server to check for new table files in the directory specified by the [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files should be named as `tbl.new.sp?`.
+This command functions in three modes. In the first mode, without specifying a path, the Manticore server checks for new table files in the directory indicated by the [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). New table files must be named as `tbl.new.sp?`.
 
-If you additionally specify a path, the server will look for the table files in the specified directory, move them to the table [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), rename them from `tbl.sp?` to `tbl.new.sp?`, and rotate them.
+If you specify a path, the server searches for table files in that directory, relocates them to the table [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), renames them from `tbl.sp?` to `tbl.new.sp?`, and rotates them.
 
-The third mode, governed by `OPTION switchover=1`, will actually switch the index to the new path. In this case, the daemon will attempt to load the table directly from the newly provided path, without moving the files. On successful loading, this new index will replace the previous one.
+The third mode, activated by `OPTION switchover=1`, switches the index to the new path. Here, the daemon tries to load the table directly from the new path without moving the files. If loading is successful, this new index supersedes the old one.
 
-Additionally, the daemon will write a special link file (named `tbl.link`) to the directory specified in [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path). This ensures that such redirection remains persistent.
+Also, the daemon writes a unique link file (`tbl.link`) in the directory specified by [path](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#path), maintaining persistent redirection.
 
-If you switch such a redirected index back to the path specified in the config, the daemon will recognize this and remove the link file.
+If you revert a redirected index to the path specified in the configuration, the daemon will detect this and delete the link file.
 
-Once redirected, the daemon will read the table from the new linked path. Upon rotation, it will check for new versions of a table by the newly redirected path. Note that the daemon checks the config for generic errors, such as duplicate paths among different tables. However, it will not recognize if several tables point to the same path via redirection. In standard workflows, tables are locked with the `.spl` file, but if you also switch off the locking, you may run into issues. In case of an error (for instance, if such a path is unavailable for any reason), you should manually fix (or simply remove) the link file.
+Once redirected, the daemon retrieves the table from the newly linked path. When rotating, it looks for new table versions at the newly redirected path. Bear in mind, the daemon checks the configuration for common errors, like duplicate paths across different tables. However, it won't identify if multiple tables point to the same path via redirection. Under normal operations, tables are locked with the `.spl` file, but disabling the lock may cause problems. If there's an error (e.g., the path is inaccessible for any reason), you should manually correct (or simply delete) the link file.
 
-`indextool` also adheres to the link file, but other tools (`indexer`, `index_converter`, etc.) don't recognize the link file and always use the path provided in the configuration file without any redirection. Thus, you can check the index with `indextool`, and it will read from the new location. However, more complex scenarios involving merging and the like will not read any link file.
+`indextool` follows the link file, but other tools (`indexer`, `index_converter`, etc.) do not recognize the link file and consistently use the path defined in the configuration file, ignoring any redirection. Thus, you can inspect the index with `indextool`, and it will read from the new location. However, more complex operations like merging will not acknowledge any link file.
 
 ```sql
 mysql> RELOAD TABLE plain_table;

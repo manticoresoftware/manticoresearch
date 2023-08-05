@@ -143,7 +143,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 9;				///< META in json format
+	static const DWORD				META_VERSION = 10;				///< META in json format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -2094,7 +2094,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
 		CSphString sError;
-		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, GetName(), true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
+		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, { GetName(), m_iIndexId }, true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
@@ -2767,6 +2767,9 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
+	auto tIndexId = tBson.ChildByName ( "index_id" );
+	if ( !IsNullNode ( tIndexId ) )
+		m_iIndexId = Int ( tIndexId );
 
 	// queries
 	auto tQueriesNode = tBson.ChildByName ( "pqs" );
@@ -2905,6 +2908,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	sNewMeta.NamedVal ( "tid", m_iTID );
+	// meta v.10
+	sNewMeta.NamedVal ( "index_id", m_iIndexId );
 
 	{
 		sNewMeta.Named ( "pqs" );
@@ -2935,7 +2940,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( GetName(), m_iTID, bShutdown );
+	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, bShutdown, false );
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 }
@@ -3044,7 +3049,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
 {
 	CSphString sError;
-	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, GetName(), false, sError, [&tSetup] ( Writer_i & tWriter ) {
+	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, { GetName(), m_iIndexId }, false, sError, [&tSetup] ( Writer_i & tWriter ) {
 		// reconfigure data
 		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
 		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );

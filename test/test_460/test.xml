@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT crash on drop then create table (part 2)</name>
+
+<requires>
+	<watchdog/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path/>
+	binlog_path = <data_path/>
+}
+</config>
+
+<queries>
+
+<sphinxql>
+CREATE TABLE t (id bigint,s string attribute);
+CREATE TABLE t1 (id bigint,s string attribute);
+insert into t (id, s) values (1, 't');
+insert into t (id, s) values (2, 't');
+insert into t1 (id, s) values (1, 't');
+flush ramchunk t;
+drop table t;
+CREATE TABLE t (id bigint,s string attribute);
+insert into t (id, s) values (10, 't');
+</sphinxql>
+
+<!-- regression binlog failed to replay after create - drop - create table -->
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+select * from t order by id asc;
+select * from t1 order by id asc;
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+<sphinxql>
+select * from t order by id asc;
+select * from t1 order by id asc;
+
+<!-- clean up-->
+drop table t;
+drop table t1;
+</sphinxql>    
+
+</queries>
+
+</test>

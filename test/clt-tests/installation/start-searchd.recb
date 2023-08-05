@@ -14,6 +14,6 @@ listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
 ––– input –––
-tail -n 100 -f /var/log/manticore/searchd.log | grep -qm1 'started v' && echo "Buddy started!"
+timeout 10 tail -n 100 -f /var/log/manticore/searchd.log | grep -qm1 '\[BUDDY\] started' && echo 'Buddy started!' || echo 'Timeout or failed!'
 ––– output –––
 Buddy started!

@@ -4202,7 +4202,7 @@ private:
 			return WriteResult_e::VERIFY_FAILED;
 		}
 
-		// writer writes whole file from the beggining - data will be verified from writer hash
+		// writer writes whole file from the beginning - data will be verified from writer hash
 		if ( m_pWriter && !m_bFileRestarted )
 		{
 			bool bVerifyOk = VerifyHashWriter ( sError );

@@ -688,14 +688,14 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::STRICT_:						tQuery.m_bStrict = iValue!=0; break;
 	case Option_e::SYNC: 						tQuery.m_bSync = iValue!=0; break;
 	case Option_e::EXPAND_KEYWORDS:				tQuery.m_eExpandKeywords = ( iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED ); break;
-	case Option_e::THREADS:						tQuery.m_iCouncurrency = (int)iValue; break;
+	case Option_e::THREADS:						tQuery.m_iConcurrency = (int)iValue; break;
 	case Option_e::NOT_ONLY_ALLOWED:			tQuery.m_bNotOnlyAllowed = iValue!=0; break;
 	case Option_e::RAND_SEED:					tQuery.m_iRandSeed = int64_t(DWORD(iValue)); break;
 	case Option_e::LOW_PRIORITY:				tQuery.m_bLowPriority = iValue!=0; break;
 	case Option_e::ACCURATE_AGG:				tQuery.m_bAccurateAggregation = iValue!=0; tQuery.m_bExplicitAccurateAggregation = true; break;
 	case Option_e::MAXMATCH_THRESH:				tQuery.m_iMaxMatchThresh = iValue; break;
 	case Option_e::DISTINCT_THRESH:				tQuery.m_iDistinctThresh = iValue; tQuery.m_bExplicitDistinctThresh = true; break;
-	case Option_e::THREADS_EX:					tQuery.m_iCouncurrency = (int)iValue; break;
+	case Option_e::THREADS_EX:					tQuery.m_iConcurrency = (int)iValue; break;
 	default:
 		return AddOption_e::NOT_FOUND;
 	}

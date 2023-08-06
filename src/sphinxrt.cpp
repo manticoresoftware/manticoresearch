@@ -6838,7 +6838,7 @@ static bool CalcDiskChunkSplits ( IntVec_t & dThreads, int iJobs, const CSphQuer
 		assert ( tMetric.first>=0 );
 		auto & tSplitData = dSplitData[i];
 		tSplitData.m_iMetric = tMetric.first;
-		tSplitData.m_iThreadCap = tMetric.second;
+		tSplitData.m_iThreadCap = tQuery.m_iConcurrency ? 0 : tMetric.second;	// ignore thread cap if concurrency is explicitly specified
 	}
 
 	// we have more free threads than disk chunks; makes sense to apply pseudo_sharding

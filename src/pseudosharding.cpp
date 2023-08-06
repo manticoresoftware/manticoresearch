@@ -50,8 +50,8 @@ void DistributeThreadsOverIndexes ( IntVec_t & dThreads, const CSphVector<SplitD
 		else
 			iNonCappedThreads += dThreads[i];
 
-	iThreadsLeft = iConcurrency-iCappedThreads;
-	assert ( iThreadsLeft>=0 );
+	// might get negative due to rounding
+	iThreadsLeft = Max ( iConcurrency-iCappedThreads, 0 );
 	ARRAY_FOREACH ( i, dSplitData )
 		if ( dSplitData[i].m_iThreadCap < 1 )
 			dThreads[i] = Max ( (int)round ( iThreadsLeft * dThreads[i]/iNonCappedThreads ), 1 );

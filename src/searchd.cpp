@@ -5956,7 +5956,9 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 			assert ( tMetric.first>=0 );
 
 			tSplitData.m_iMetric = tMetric.first;
-			tSplitData.m_iThreadCap = tMetric.second;
+
+			bool bExplicitConcurrency = m_dNQueries.any_of ( []( auto & tQuery ){ return tQuery.m_iConcurrency>0; } );		
+			tSplitData.m_iThreadCap = bExplicitConcurrency ? 0 : tMetric.second;	// ignore thread cap if concurrency is explicitly specified
 		}
 		else
 		{
@@ -6155,7 +6157,7 @@ void SearchHandler_c::RunLocalSearches ()
 
 	// the context
 	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t, Threads::ECONTEXT::UNORDERED> dCtx { m_tHook, pMainExtra, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
-	auto pDispatcher = Dispatcher::Make ( iNumLocals, m_dNQueries.First().m_iCouncurrency, tDispatch, dCtx.IsSingle() );
+	auto pDispatcher = Dispatcher::Make ( iNumLocals, m_dNQueries.First().m_iConcurrency, tDispatch, dCtx.IsSingle() );
 	dCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	bool bSingle = pDispatcher->GetConcurrency()==1;
@@ -16730,7 +16732,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				tStmt.m_tQuery.m_bExplicitMaxMatches = true;
 			}
 
-			tStmt.m_tQuery.m_iCouncurrency = 1;
+			tStmt.m_tQuery.m_iConcurrency = 1;
 		}
 	}
 

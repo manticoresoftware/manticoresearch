@@ -1332,6 +1332,7 @@ private:
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 
 	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
+	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 
 	template <bool ROWID_LIMITS>
 	bool						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
@@ -1386,7 +1387,8 @@ private:
 
 	RowidIterator_i *			CreateColumnarAnalyzerOrPrefilter ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema, CSphString & sWarning ) const;
 
-	bool						SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	template<typename RUN>
+	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
@@ -3079,16 +3081,10 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 	ARRAY_FOREACH ( i, dQueries )
 	{
 		auto & tQuery = dQueries[i];
-		if ( !tQuery.m_sQuery.IsEmpty() )
-		{
-			// check for fulltext+SI case; limit the number of threads
-			SelectIteratorCtx_t tCtx ( tQuery, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), -1, m_iDocinfo, 1 );
-			if ( !iThreadCap && tQuery.m_dFilters.GetLength() && HaveAvailableSI(tCtx) )
-				iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
-			bAllFast = false;
-			continue;
-		}
+		// limit the number of threads for anything with FT as it looks better in average (some queries are faster without thread cap)
+		if ( !tQuery.m_sQuery.IsEmpty() )
+			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
 			continue;
@@ -10687,7 +10683,8 @@ static void SetupSplitFilter ( CSphFilterSettings & tFilter, int iPart, int iTot
 }
 
 // basically the same code as QueryDiskChunks in an RT index
-static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, CSphQueryResultMeta & tResult, VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, QueryProfile_c * pProfiler, const SmallStringHash_T<int64_t> * pLocalDocs, int64_t iTotalDocs, const char * szIndexName, int iSplit, int64_t tmMaxTimer )
+template<typename RUN>
+static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResultMeta & tResult, VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, QueryProfile_c * pProfiler, const SmallStringHash_T<int64_t> * pLocalDocs, int64_t iTotalDocs, const char * szIndexName, int iSplit, int64_t tmMaxTimer )
 {
 	assert ( !dSorters.IsEmpty () );
 
@@ -10757,7 +10754,8 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 
 			CSphQuery tQueryWithExtraFilter = tQuery;
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iJob, iJobs );
-			bInterrupt.store (!pIndex->MultiQuery ( tChunkResult, tQueryWithExtraFilter, dLocalSorters, tMultiArgs ), std::memory_order_relaxed);
+			bool bRes = tRun ( tChunkResult, tQueryWithExtraFilter, dLocalSorters, tMultiArgs );
+			bInterrupt.store ( !bRes, std::memory_order_relaxed );
 
 			if ( !iJob )
 				tThMeta.MergeWordStats ( tChunkMeta );
@@ -10799,8 +10797,8 @@ static bool RunSplitQuery ( const CSphIndex * pIndex, const CSphQuery & tQuery, 
 	return !CheckInterrupt();
 }
 
-
-bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
+template<typename RUN>
+bool CSphIndex_VLN::SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
@@ -10811,7 +10809,7 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iThreads ), 1 );
 	int64_t iTotalDocs = tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments;
-	bool bOk = RunSplitQuery ( this, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, GetName(), iSplit, tmMaxTimer );
+	bool bOk = RunSplitQuery ( tRun, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, GetName(), iSplit, tmMaxTimer );
 	if ( !bOk )
 		return false;
 
@@ -10822,6 +10820,44 @@ bool CSphIndex_VLN::SplitQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
 
 	return true;
+}
+
+
+bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
+{
+	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
+
+		// we could reuse tParsed as-is, but marking common subtrees modifies the tree
+		// so for now clone the tree before using
+		const XQQuery_t * pTree = &tParsed;
+		std::unique_ptr<XQQuery_t> pClonedTree;
+		if ( bCloneDict )
+		{
+			pClonedTree = std::unique_ptr<XQQuery_t> ( CloneXQQuery(tParsed) );
+			pTree = pClonedTree.get();
+		}
+
+		// flag common subtrees
+		int iCommonSubtrees = 0;
+		if ( m_iMaxCachedDocs && m_iMaxCachedHits )
+			iCommonSubtrees = sphMarkCommonSubtrees ( 1, pTree );
+
+		CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+
+		DictRefPtr_c pClonedDict;
+		if ( bCloneDict )
+		{
+			pClonedDict = GetStatelessDict ( m_pDict );
+			SetupStarDict ( pClonedDict );
+			SetupExactDict ( pClonedDict );
+		}
+
+		bool bResult = ParsedMultiQuery ( tQuery, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
+
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tResult.m_pMeta->m_pProfile, tArgs.m_bModifySorterSchemas );
+
+		return bResult;
+		});
 }
 
 /// one regular query vs many sorters (like facets, or similar for common-tree optimization)
@@ -10835,9 +10871,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
-
-	if ( tArgs.m_iThreads>1 )
-		return SplitQuery ( tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
 	MEMORY ( MEM_DISK_QUERY );
 
@@ -10855,7 +10888,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// fast path for scans
 	if ( pQueryParser->IsFullscan ( tQuery ) )
+	{
+		if ( tArgs.m_iThreads>1 )
+			return SplitQuery (
+				[this, &tmMaxTimer]
+				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
+				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
+				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
+
 		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+	}
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
 
@@ -10883,7 +10925,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// check again for fullscan
 	if ( pQueryParser->IsFullscan ( tParsed ) )
+	{
+		if ( tArgs.m_iThreads>1 )
+			return SplitQuery (
+				[this, &tmMaxTimer]
+				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
+				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
+				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
+
 		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+	}
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		tMeta.m_sWarning = tParsed.m_sParseWarning;
@@ -10908,28 +10959,22 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, tMeta, &tPayloads, tQuery.m_uDebugFlags );
 	if ( !pPrefixed )
 		return false;
-	tParsed.m_pRoot = pPrefixed;
 
-	auto iStackNeed = ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );
+	tParsed.m_pRoot = pPrefixed;
+	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
+
+	int iStackNeed = ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );
 	if ( !iStackNeed  )
 		return false;
 
-	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
+	if ( tArgs.m_iThreads>1 )
+		return SplitQuery (
+			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
+			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
+			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
+			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
-	// flag common subtrees
-	int iCommonSubtrees = 0;
-	if ( m_iMaxCachedDocs && m_iMaxCachedHits )
-		iCommonSubtrees = sphMarkCommonSubtrees ( 1, &tParsed );
-
-	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
-
-	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( tQuery, tResult, dSorters, tParsed, std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
-
-	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
-
-	return bResult;
-	});
+	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
 }
 
 
@@ -11184,6 +11229,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
+	tCtx.m_iIndexTotalDocs = m_iDocinfo;
 
 	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
 		return false;

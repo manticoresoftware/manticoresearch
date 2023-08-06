@@ -179,6 +179,7 @@ public:
 	QueryProfile_c *						m_pProfile = nullptr;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
+	int64_t									m_iIndexTotalDocs = 0;
 
 public:
 	explicit CSphQueryContext ( const CSphQuery & q );
@@ -362,7 +363,7 @@ public:
 
 /// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
 template < typename T, typename U >
-int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
+FORCE_INLINE int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
 {
 	// empty vector
 	if ( !dVec.GetLength() )

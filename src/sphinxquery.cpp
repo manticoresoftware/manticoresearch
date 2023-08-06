@@ -979,6 +979,7 @@ XQNode_t * XQNode_t::Clone ()
 	pRet->m_dWords = m_dWords;
 	pRet->m_iOpArg = m_iOpArg;
 	pRet->m_iAtomPos = m_iAtomPos;
+	pRet->m_iUser = m_iUser;
 	pRet->m_bVirtuallyPlain = m_bVirtuallyPlain;
 	pRet->m_bNotWeighted = m_bNotWeighted;
 	pRet->m_bPercentOp = m_bPercentOp;
@@ -2577,6 +2578,19 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 
 	return iOrder;
 }
+
+
+XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery )
+{
+	XQQuery_t * pQuery = new XQQuery_t;
+	pQuery->m_dZones		= tQuery.m_dZones;
+	pQuery->m_bNeedSZlist	= tQuery.m_bNeedSZlist;
+	pQuery->m_bSingleWord	= tQuery.m_bSingleWord;
+	pQuery->m_bEmpty		= tQuery.m_bEmpty;
+	pQuery->m_pRoot			= tQuery.m_pRoot ? tQuery.m_pRoot->Clone() : nullptr;
+	return pQuery;
+}
+
 
 bool XqTreeComparator_t::IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNode2 )
 {

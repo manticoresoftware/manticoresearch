@@ -2,14 +2,16 @@ name: 📦 Pack and publish
 run-name: 📦 Pack and publish ${{ github.sha }}
 
 #on: workflow_call
-
 on:
- workflow_run:
-   workflows: [ 🔬 Test ]
-   types: [ completed ]
- pull_request:
-   branches: [ master ]
-   types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_run:
+    workflows: [ 🔬 Test ]
+    types: [ completed ]
+  pull_request:
+    branches: [ master ]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches:
+      - manticore-*
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -17,13 +19,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
     if: |
       (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
       - run: echo "All set to build packages"
 
@@ -115,7 +116,7 @@ jobs:
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
     if: |
       (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
       - run: echo "Ready to publish"
 

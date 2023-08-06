@@ -58,6 +58,7 @@ using ExtQwordsHash_t = CSphOrderedHash<ExtQword_t, CSphString, QwordsHash_fn, 2
 
 struct ExtHit_t;
 struct ExtDoc_t;
+struct RowIdBoundaries_t;
 
 /// generic match streamer
 class ExtNode_i
@@ -65,10 +66,10 @@ class ExtNode_i
 public:
 	virtual						~ExtNode_i () {}
 
-	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
-	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25 );
+	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
+	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25, bool bRowidLimits );
 
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual void				HintRowID ( RowID_t tRowID ) = 0;
@@ -86,14 +87,13 @@ public:
 	virtual int					GetAtomPos() const = 0;
 	virtual void				SetCollectHits() {}				// call this if ranker needs hits
 	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;
+	virtual void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) = 0;
 
 	virtual void				DebugDump ( int iLevel ) = 0;
 };
 
-struct RowIdBoundaries_t;
 class RowidIterator_i;
-std::unique_ptr<ExtNode_i> CreateRowIdFilterNode ( ExtNode_i * pNode, const RowIdBoundaries_t & tBoundaries, bool bClearOnReset );
-std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator, bool bClearOnReset );
+std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator );
 
 class NodeCacheContainer_c;
 

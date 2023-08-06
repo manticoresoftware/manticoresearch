@@ -5,7 +5,9 @@ run-name: 🔬 Test ${{ github.sha }}
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+      - manticore-*
     paths-ignore:
       - 'manual/**'
   pull_request:
@@ -24,7 +26,7 @@ jobs:
   win_bundle:
     name: Windows supplementary files preparation
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     runs-on: ubuntu-22.04
     steps:
@@ -53,7 +55,7 @@ jobs:
   build_linux_debug:
     name: Linux debug build
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
@@ -62,7 +64,7 @@ jobs:
   test_linux_debug:
     name: Linux debug mode tests
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: build_linux_debug
     uses: ./.github/workflows/test_template.yml
@@ -112,7 +114,7 @@ jobs:
   debug_tests_report:
     name: Debug mode tests summary and report
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: test_linux_debug
     runs-on: ubuntu-22.04
@@ -205,14 +207,14 @@ jobs:
   build_linux_release:
     name: Linux release build
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
 
   test_linux_release:
     name: Linux release mode tests
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: build_linux_release
     uses: ./.github/workflows/test_template.yml
@@ -262,7 +264,7 @@ jobs:
   release_tests_report:
     name: Release mode tests summary and report
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: test_linux_release
     runs-on: ubuntu-22.04
@@ -355,7 +357,7 @@ jobs:
   pack_jammy:
     name: Jammy x86_64 package
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
@@ -372,7 +374,7 @@ jobs:
   build_test_kit_docker:
     name: Test Kit docker image
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: pack_jammy
     runs-on: ubuntu-22.04
@@ -464,7 +466,7 @@ jobs:
   build_aarch64:
     name: Linux aarch64 build
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
@@ -475,7 +477,7 @@ jobs:
   build_freebsd:
     name: FreeBSD x86_64 build
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
@@ -487,7 +489,7 @@ jobs:
   build_windows:
     name: Windows x64 build
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
@@ -502,7 +504,7 @@ jobs:
   test_windows:
     name: Windows tests
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: [build_windows, win_bundle]
     uses: ./.github/workflows/win_test_template.yml
@@ -528,7 +530,7 @@ jobs:
   windows_tests_report:
     name: Windows tests summary and report
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: test_windows
     runs-on: ubuntu-22.04

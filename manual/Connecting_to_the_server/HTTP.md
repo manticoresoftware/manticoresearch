@@ -185,71 +185,9 @@ POST /sql?mode=raw -d "query=desc%20test"
 <!-- end -->
 
 <!-- example SQL_over_HTTP_4 -->
-### /cli_json
-While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli_json` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli_json?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is the same as in the `/sql?mode=raw`.
-
-<!-- request HTTP -->
-
-```bash
-POST /cli_json -d "select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
-```
-
-<!-- response HTTP -->
-
-```json
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "a": {
-          "type": "long"
-        }
-      },
-      {
-        "packedfactors()": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 1,
-        "a": 3,
-        "packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
-      },
-      {
-        "id": 2,
-        "a": 3,
-        "packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
-      },
-      {
-        "id": 8,
-        "a": 3,
-        "packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
-      }
-    ],
-    "total": 3,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
-<!-- request Browser -->
-
-![using /cli in browser](cli_browser.png)
-
-<!-- end -->
-
-<!-- example SQL_over_HTTP_cli -->
-
 ### /cli
-The `/cli` endpoint provides the same functionality as `/cli_json` , but returns the response in a tabular format, similar to the one returned by  MySQL console.
+While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is tabular, similar to the one returned by  MySQL console.
+
 
 <!-- request HTTP -->
 
@@ -269,6 +207,43 @@ POST /cli -d "desc test"
 +-------+--------+----------------+
 3 rows in set (0.001 sec)
 ```
+
+
+<!-- request Browser -->
+
+![using /cli in browser](cli_browser.png)
+
+<!-- end -->
+
+<!-- example SQL_over_HTTP_cli_json -->
+
+### /cli_json
+
+The `/cli_json` endpoint provides the same functionality as `/cli` , but returns the response in JSON format. 
+
+
+<!-- request HTTP -->
+
+```bash
+POST /cli_json -d "desc test"
+```
+
+<!-- response HTTP -->
+
+```json
+[{
+"columns":[{"Field":{"type":"string"}},{"Type":{"type":"string"}},{"Properties":{"type":"string"}}],
+"data":[
+{"Field":"id","Type":"bigint","Properties":""},
+{"Field":"body","Type":"text","Properties":"indexed stored"},
+{"Field":"title","Type":"string","Properties":""}
+],
+"total":3,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 

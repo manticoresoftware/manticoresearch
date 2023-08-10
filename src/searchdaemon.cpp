@@ -677,11 +677,11 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pF
 	if ( iResult!=0 || !pResult )
 	{
 		if ( pFatal )
-			pFatal->SetSprintf ( "no AF_INET address found for: %s", sHost );
+			pFatal->SetSprintf ( "no AF_INET address found for: %s, error %d: %s", sHost, iResult, gai_strerror(iResult) );
 		else if ( bFatal )
-			sphFatal( "no AF_INET address found for: %s", sHost );
+			sphFatal( "no AF_INET address found for: %s, error %d: %s", sHost, iResult, gai_strerror(iResult) );
 		else
-			sphLogDebugv( "no AF_INET address found for: %s", sHost );
+			sphLogDebugv( "no AF_INET address found for: %s, error %d: %s", sHost, iResult, gai_strerror(iResult) );
 		return 0;
 	}
 

@@ -2268,13 +2268,15 @@ class SphinxConfig
                     '/error when sending data: WSA error 10057/', // windows
                     '/connect and query timed out/', // also windows
                     '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
-                    '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end'
+                    '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end',
+                    '/(.* error: no AF_INET address found for:.*, error)(.*)/'
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "\$end",
+                    "$1: substituted"
                 ], $s );
 		return $s;
 	}

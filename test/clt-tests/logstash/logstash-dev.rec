@@ -82,7 +82,7 @@ curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sor
 ––– output –––
 [{"Field":"@timestamp","Type":"text","Properties":"indexed stored"},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_2"\n  allow_older_versions: true\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_2"\n  pattern: "testlog_2"\n' > filebeat.yml
+printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_2"\n  allow_older_versions: true\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_2"\n  pattern: "testlog_2"\n\nseccomp:\n  default_action: allow\n  syscalls:\n  - action: allow\n    names:\n    - rseq' > filebeat.yml
 ––– output –––
 ––– input –––
 nohup filebeat -c filebeat.yml -e -strict.perms=false 2>/dev/null &

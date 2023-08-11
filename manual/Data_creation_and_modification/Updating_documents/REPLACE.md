@@ -225,6 +225,8 @@ REPLACE INTO table [(column1, column2, ...)]
 
 To use the HTTP JSON interface with `REPLACE`, use the `/replace` endpoint. There's also a synonym endpoint, `/index`.
 
+## Bulk replace
+
 <!-- example bulk_replace -->
 
 You can replace multiple documents at once. Check [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) for more information.

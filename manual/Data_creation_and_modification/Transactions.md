@@ -43,7 +43,7 @@ The `ROLLBACK` statement rolls back the current transaction, canceling all its c
 
 ## Transactions in /bulk
 
-When using the [/bulk JSON endpoint](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents), you can force a batch of documents to be committed by adding an empty line after them.
+When using one of the `/bulk` JSON endpoints ( [bulk insert](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents), [bulk replace](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=JSON#Bulk-replace), [bulk delete](../Data_creation_and_modification/Deleting_documents.md?client=JSON#Bulk-deletion) ), you can force a batch of documents to be committed by adding an empty line after them.
 
 ## Examples
 

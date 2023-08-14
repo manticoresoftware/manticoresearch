@@ -220,7 +220,7 @@ public:
 	bool CommitTOI ( ServedClone_c* pDesc, CSphString& sError );
 
 	// update with Total Order Isolation
-	bool Update ( bool bCluster, CSphString & sError );
+	bool Update ( CSphString & sError );
 
 private:
 	RtAccum_t & m_tAcc;
@@ -1256,7 +1256,7 @@ static bool Replicate ( int iKeysCount, const wsrep_key_t * pKeys, const wsrep_b
 			if ( !bUpdate )
 				bOk = tMonitor.Commit( sError );
 			else
-				bOk = tMonitor.Update( true, sError );
+				bOk = tMonitor.Update( sError );
 
 			if ( !bOk )
 				pProvider->abort_pre_commit ( pProvider, WSREP_SEQNO_UNDEFINED, tHnd.trx_id );
@@ -1740,7 +1740,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		int iUpd = -1;
 		CSphString sWarning;
 		CommitMonitor_c tCommit ( tAcc, &sWarning, &iUpd );
-		bool bOk = tCommit.Update ( true, sError );
+		bool bOk = tCommit.Update ( sError );
 		if ( !bOk )
 			sphWarning ( "%s", sError.cstr() );
 		if ( !sWarning.IsEmpty() )
@@ -1789,7 +1789,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	if ( !IsClusterCommand ( tAcc ) )
 	{
 		if ( IsUpdateCommand ( tAcc ) )
-			return tMonitor.Update ( false, sError );
+			return tMonitor.Update ( sError );
 		else
 			return tMonitor.Commit ( sError );
 	}
@@ -2130,7 +2130,7 @@ static bool DoUpdate ( AttrUpdateArgs & tUpd, const cServedIndexRefPtr_c& pDesc,
 	return ( tUpd.m_pError->IsEmpty() );
 }
 
-bool CommitMonitor_c::Update ( bool bCluster, CSphString & sError )
+bool CommitMonitor_c::Update ( CSphString & sError )
 {
 	if ( m_tAcc.m_dCmd.IsEmpty() )
 	{

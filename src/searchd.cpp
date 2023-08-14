@@ -11061,6 +11061,9 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	tOut.Ok ( iDeleted );
 }
 
+static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
+static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
+
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
@@ -11069,15 +11072,10 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
 	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
-	bool bCommit = pSession->m_bAutoCommit && !pSession->m_bInTransaction;
-	auto& sWarning = pSession->m_tLastMeta.m_sWarning;
-	auto& tAcc = pSession->m_tAcc;
-	auto& dLastIds = pSession->m_dLastIds;
 	StatCountCommand ( bReplace ? SEARCHD_COMMAND_REPLACE : SEARCHD_COMMAND_INSERT );
 
 	MEMORY ( MEM_SQL_INSERT );
 
-	CSphString sError;
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
@@ -11086,6 +11084,24 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	}
 
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+
+	// with index RLocked at the 
+	if ( !AddDocument ( tStmt, pServed, tOut ) )
+		return;
+
+	// index lock after replication takes place
+	CommitAcc ( tStmt, pServed, tOut );
+}
+
+static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
+{
+	auto * pSession = session::GetClientSession();
+	auto & tAcc = pSession->m_tAcc;
+	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
+	auto & dLastIds = pSession->m_dLastIds;
+
+	CSphString sError;
+	auto & sWarning = pSession->m_tLastMeta.m_sWarning;
 
 	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
 
@@ -11113,36 +11129,40 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	if ( !tStmt.m_dInsertSchema.GetLength()	&& iSchemaSz!=tStmt.m_iSchemaSz )
 	{
 		tOut.Error ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
-		return;
+		return false;
 	}
 
 	if ( ( iGot % iExp )!=0 )
 	{
 		tOut.Error ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
-		return;
+		return false;
 	}
 
 	if ( !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 	{
-		tOut.Error ( "%s", sError.cstr() );
-		return;
+		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		return false;
 	}
 
 	if ( !sError.IsEmpty() )
 	{
-		tOut.Error ( "%s", sError.cstr() );
-		return;
+		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		return false;
 	}
 
 	CSphVector<int> dAttrSchema ( tSchema.GetAttrsCount() );
 	CSphVector<int> dFieldSchema ( tSchema.GetFieldsCount() );
 	CSphVector<bool> dFieldAttrs ( tSchema.GetFieldsCount() );
 	if ( !CreateAttrMaps ( dAttrSchema, dFieldSchema, dFieldAttrs, tSchema, tStmt.m_dInsertSchema, tOut ) )
-		return;
+		return false;
 
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
-		return tOut.Error ( "%s", sError.cstr() );
+	{
+		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		return false;
+	}
+
 
 	CSphVector<int64_t> dIds;
 	dIds.Reserve ( tStmt.m_iRowsAffected );
@@ -11215,17 +11235,33 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	if ( !sError.IsEmpty() )
 	{
 		pIndex->RollBack ( pAccum ); // clean up collected data
-		tOut.Error ( "%s", sError.cstr() );
-		return;
+		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		return false;
 	}
 
 	dLastIds.SwapData ( dIds );
+	return true;
+}
+
+static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
+{
+	auto * pSession = session::GetClientSession();
+
+	CSphString sError;
+	auto & sWarning = pSession->m_tLastMeta.m_sWarning;
+
+	bool bCommit = ( pSession->m_bAutoCommit && !pSession->m_bInTransaction );
+	auto & dLastIds = pSession->m_dLastIds;
 
 	// no errors so far
 	if ( bCommit )
 	{
+		RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
+		assert ( pSession->m_tAcc.GetAcc ( RIdx_T<RtIndex_i *>(pServed), sError )==pAccum );
+
 		if ( !HandleCmdReplicate ( *pAccum, sError ) )
 		{
+			RIdx_T<RtIndex_i *> pIndex { pServed };
 			pIndex->RollBack ( pAccum ); // clean up collected data
 			tOut.Error ( "%s", sError.cstr() );
 			return;
@@ -12901,14 +12937,13 @@ DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& p
 	return tCollector;
 }
 
-template<typename RWLOCKED>
-void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, RWLOCKED& rwLocked )
+static void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, CSphIndex * pIndex )
 {
 	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
 	while ( tCollector.GetValuesChunk ( pUpdate->m_dDocids, tArgs.m_pQuery->m_iMaxMatches ) )
 	{
 		int iChanged = 0;
-		Verify ( HandleUpdateAPI ( tArgs, rwLocked, iChanged ) ); // fixme! handle this
+		Verify ( HandleUpdateAPI ( tArgs, pIndex, iChanged ) ); // fixme! handle this
 		tArgs.m_iAffected += iChanged;
 	}
 }

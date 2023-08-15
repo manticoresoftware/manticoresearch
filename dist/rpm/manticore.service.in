@@ -21,7 +21,7 @@ LimitNOFILE=65536
 LimitCORE=infinity
 LimitMEMLOCK=infinity
 Restart=on-failure
-TimeoutStartSec=infinity
+TimeoutStartSec=0
 PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/searchd.pid
 
 [Install]

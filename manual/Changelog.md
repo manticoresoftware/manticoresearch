@@ -53,7 +53,7 @@ Released: August 4th 2023
 * Field and attribute order is now consistent between `SHOW CREATE TABLE` and `DESC` operations.
 * If disk space is insufficient when executing `INSERT` queries, new `INSERT` queries will fail until enough disk space becomes available.
 * The [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) type conversion function has been added.
-* The `/bulk` endpoint now processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command. More info [here](../Data_creation_and_modification/Transactions.md#Transactions-in-/bulk).
+* The `/bulk` endpoint now processes empty lines as a [commit](../Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) command. More info [here](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents).
 * Warnings have been implemented for [invalid index hints](../Searching/Options.md#Query-optimizer-hints), providing more transparency and allowing for error mitigation.
 * When `count(*)` is used with a single filter, queries now leverage precalculated data from secondary indexes when available, substantially speeding up query times.
 
@@ -63,6 +63,7 @@ Released: August 4th 2023
 * ⚠️ [Issue #1160](https://github.com/manticoresoftware/manticoresearch/issues/1160): The usage of `@` in table names has been disallowed to prevent syntax conflicts.
 * ⚠️ String fields/attributes marked as `indexed` and `attribute` are now regarded as a single field during `INSERT`, `DESC`, and `ALTER` operations.
 * ⚠️ [Issue #1057](https://github.com/manticoresoftware/manticoresearch/issues/1057): MCL libraries will no longer load on systems that don't support SSE 4.2.
+* ⚠️ [Issue #1143](https://github.com/manticoresoftware/manticoresearch/issues/1143): [agent_query_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout) was broken. Fixed and is now effective.
 
 ### Bugfixes
 * [Commit 2a6e](https://github.com/manticoresoftware/manticoresearch/commit/2a6ea8f7) "Crash on DROP TABLE": resolved a problem causing extended wait times to finish write operations (optimize, disk chunk save) on an RT table when executing a DROP TABLE statement. Added a warning to notify when a table directory is not empty after executing a DROP TABLE command.

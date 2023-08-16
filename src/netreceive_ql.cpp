@@ -1059,11 +1059,10 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			// inlined AsyncReadMySQLPacketHeader
 			if ( !pIn->ReadFrom ( iPacketLen+4 ))
 			{
-				auto iErr = sphSockPeekErrno ();
 				// if there was eof, we're done from
 				// comment from the SyncSockRead
 				// while we wait the start of the packet - is ok to quit but right way is to send MYSQL_COM_QUERY
-				bool bNotError = ( iErr==ECONNRESET && !iPacketLen );
+				bool bNotError = ( !iPacketLen );
 				sError.SetSprintf ( "bailing on failed MySQL header, %s", ( pIn->GetError() ? pIn->GetErrorMessage().cstr() : sphSockError() ) );
 				// still want to log this even into logdebugv along with all other net events
 				LogNetError ( sError.cstr(), bNotError );

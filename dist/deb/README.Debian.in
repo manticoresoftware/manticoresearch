@@ -1,8 +1,94 @@
-Manticore
-------------
+# Manticore
 
-searchd will start automatically however the default configuration does not supply
-any indexes. Therefore, searchd will not continue running. You have to edit
-@CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf to get any meaningful mode of operation.
+Manticore Search is a multi-storage database specifically designed for search, with robust full-text search capabilities.
 
-Documentation is available in @CMAKE_INSTALL_FULL_DOCDIR@.
+As an open-source database (available on GitHub), Manticore Search was created in 2017 as a continuation of Sphinx Search engine. Our development team took all the best features of Sphinx and significantly improved its functionality, fixing hundreds of bugs along the way (as detailed in our Changelog). With nearly complete code rewrites, Manticore Search is now a modern, fast, and light-weight database with full features and exceptional full-text search capabilities.
+
+## Manticore's key features are:
+#### Powerful and fast full-text searching that works well for small and large datasets
+
+  * Over 20 full-text operators and over 20 ranking factors
+  * Custom ranking
+  * Stemming
+  * Lemmatization
+  * Stopwords
+  * Synonyms
+  * Wordforms
+  * Advanced tokenization at character and word level
+  * Proper Chinese segmentation
+  * Text highlighting
+
+#### Multithreading
+Manticore Search utilizes a smart query parallelization to lower response time and fully utilize all CPU cores when needed.
+
+#### Cost-based query optimizer
+The cost-based query optimizer uses statistical data about the indexed data to evaluate the relative costs of different execution plans for a given query. This allows the optimizer to determine the most efficient plan for retrieving the desired results, taking into account factors such as the size of the indexed data, the complexity of the query, and the available resources.
+
+#### Storage options
+Manticore offers both row-wise and column-oriented storage options to accommodate datasets of various sizes. The traditional and default row-wise storage option is available for datasets of all sizes - small, medium, and large, while the columnar storage option is provided through the Manticore Columnar Library for even larger datasets. The key difference between these storage options is that row-wise storage requires all attributes (excluding full-text fields) to be kept in RAM for optimal performance, while columnar storage does not, thus offering lower RAM consumption, but with a potential for slightly slower performance (as demonstrated by the statistics on https://db-benchmarks.com/).
+
+#### Automatic secondary indexes
+Manticore Columnar Library uses Piecewise Geometric Model index, which exploits a learned mapping between the indexed keys and their location in memory. The succinctness of this mapping, coupled with a peculiar recursive construction algorithm, makes the PGM-index a data structure that dominates traditional indexes by orders of magnitude in space while still offering the best query and update time performance. Secondary indexes are ON by default for all numeric fields.
+
+#### SQL-first
+Manticore's native syntax is SQL and it supports SQL over HTTP and MySQL protocol, allowing for connection through popular mysql clients in any programming language.
+
+#### JSON over HTTP
+For a more programmatic approach to managing data and schemas, Manticore provides HTTP JSON protocol, similar to that of Elasticsearch.
+
+#### Elasticsearch-compatible writes
+You can execute Elasticsearch-compatible insert and replace JSON queries which enables using Manticore with tools like Logstash (version < 7.13), Filebeat and other tools from the Beats family.
+
+#### Declarative and imperative schema management
+Easily create, update, and delete tables online or through a configuration file.
+
+#### The benefits of C++ and the convenience of PHP
+The Manticore Search daemon is developed in C++, offering fast start times and efficient memory utilization. The utilization of low-level optimizations further boosts performance. Another crucial component, called Manticore Buddy, is written in PHP and is utilized for high-level functionality that does not require lightning-fast response times or extremely high processing power. Although contributing to the C++ code may pose a challenge, adding a new SQL/JSON command using Manticore Buddy should be a straightforward process.
+
+#### Real-Time inserts
+Newly added or updated documents can be immediately read.
+
+#### Interactive courses for easy learning
+We offer free interactive courses to make learning effortless.
+
+#### Transactions
+While Manticore is not fully ACID-compliant, it supports isolated transactions for atomic changes and binary logging for safe writes.
+
+#### Built-In replication and load balancing
+Data can be distributed across servers and data centers with any Manticore Search node acting as both a load balancer and a data node. Manticore implements virtually synchronous multi-master replication using the Galera library, ensuring data consistency across all nodes, preventing data loss, and providing exceptional replication performance.
+
+#### Built-in backup capabilities
+Manticore is equipped with an external tool manticore-backup, and the BACKUP SQL command to simplify the process of backing up and restoring your data. Alternatively, you can use mysqldump to make logical backups.
+
+#### Out-of-the-box data sync
+The `indexer` tool and comprehensive configuration syntax of Manticore make it easy to sync data from sources like MySQL, PostgreSQL, ODBC-compatible databases, XML, and CSV.
+
+#### Integration options
+You can integrate Manticore Search with a MySQL/MariaDB server using the FEDERATED engine or via ProxySQL.
+
+You can use Apache Superset and Grafana to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as HeidiSQL and DBForge.
+
+#### Stream filtering made easy
+Manticore offers a special table type, the "percolate" table, which allows you to search queries instead of data, making it an efficient tool for filtering full-text data streams. Simply store your queries in the table, process your data stream by sending each batch of documents to Manticore Search, and receive only the results that match your stored queries.
+
+# Possible applications:
+Manticore has a variety of use cases, including:
+
+  * Full-text search
+    * With small data volumes, enjoy the benefits of powerful full-text search syntax and low memory consumption (as low as 7-8 MB).
+    * With large data, benefit from Manticore's high availability and ability to handle massive tables.
+  * OLAP: Use Manticore Search and the Manticore Columnar Library to analyze terabytes of data on a single or multiple servers.
+  * Faceted search
+  * Geo-spatial search
+  * Spell correction
+  * Autocomplete
+  * Data stream filtering
+
+# Requirements
+
+* Architecture: arm64 or x86_64
+* OS: Debian-based (e.g. Debian, Ubuntu, Mint), RHEL-based (e.g. RHEL, CentOS, Alma, Oracle Linux, Amazon Linux), Windows, or MacOS.
+* Manticore Columnar Library, which provides columnar storage and secondary indexes, requires a CPU with SSE >= 4.2.
+* No specific disk space or RAM requirements are needed. An empty Manticore Search instance only uses around 40MB of RSS RAM.
+
+

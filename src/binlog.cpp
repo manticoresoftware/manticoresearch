@@ -185,6 +185,7 @@ private:
 	int		ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const;
 	bool	IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const;
 	bool	IsIndexMatched ( const BinlogIndexInfo_t & tIndex ) const;
+	void	RemoveAbondonedLog();
 };
 
 static Binlog_c *		g_pRtBinlog				= nullptr;
@@ -391,12 +392,36 @@ Binlog_c::~Binlog_c ()
 {
 	if ( !m_bDisabled )
 	{
+		bool bEmptyLastLog = false;
+		if ( m_dLogFiles.GetLength() && m_tWriter.IsOpen() )
+			bEmptyLastLog = m_dLogFiles.Last().m_dIndexInfos.IsEmpty();
+
 		// could be already closed and meta saved on shutdown
 		if ( m_tWriter.IsOpen() )
 			DoCacheWrite();
 		m_tWriter.CloseFile();
+		// should remove last binlog if no tnx was writen
+		if ( bEmptyLastLog )
+			RemoveAbondonedLog();
 		LockFile ( false );
 	}
+}
+
+void Binlog_c::RemoveAbondonedLog()
+{
+	assert ( m_dLogFiles.GetLength() && m_dLogFiles.Last().m_dIndexInfos.IsEmpty() );
+	// do unlink
+	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), m_dLogFiles.Last().m_iExt );
+	if ( ::unlink ( sLog.cstr() ) )
+		sphWarning ( "binlog: failed to unlink abandoned %s: %s", sLog.cstr(), strerrorm(errno) );
+
+	// we need to reset it, otherwise there might be leftover data after last Remove()
+	m_dLogFiles.Last() = BinlogFileDesc_t();
+	// quit tracking it
+	m_dLogFiles.Pop();
+
+	// if we unlinked any logs, we need to save meta, too
+	SaveMeta ();
 }
 
 bool Binlog_c::IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const

@@ -548,7 +548,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 	case SPH_FILTER_VALUES:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
 
-		if ( tFilter.m_bExclude )
+		if ( tFS.m_bExclude )
 			return false;
 
 		tEstimate = EstimateValues ( tFilter.GetValues() );
@@ -556,18 +556,18 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	case SPH_FILTER_RANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_iMinValue, (T)tFS.m_iMaxValue );
+		tEstimate = EstimateRangeFilter ( tFS.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_iMinValue, (T)tFS.m_iMaxValue );
 		return true;
 
 	case SPH_FILTER_FLOATRANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_FLOAT );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_fMinValue, (T)tFS.m_fMaxValue );
+		tEstimate = EstimateRangeFilter ( tFS.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_fMinValue, (T)tFS.m_fMaxValue );
 		return true;
 
 	case SPH_FILTER_STRING:
 	case SPH_FILTER_STRING_LIST:
 	{
-		if ( tFilter.m_bExclude )
+		if ( tFS.m_bExclude )
 			return false;
 
 		int iItemsCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );

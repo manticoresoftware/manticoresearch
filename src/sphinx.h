@@ -350,6 +350,7 @@ struct CommonFilterSettings_t
 	bool				m_bHasEqualMax = true;	///< has filter "equal" component or pure greater/less (for max)
 	bool				m_bOpenLeft = false;
 	bool				m_bOpenRight = false;
+	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
 };
 
 
@@ -357,7 +358,6 @@ class CSphFilterSettings : public CommonFilterSettings_t
 {
 public:
 	CSphString			m_sAttrName = "";	///< filtered attribute name
-	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL
 
 	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA and stringlist folding function

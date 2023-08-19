@@ -716,7 +716,7 @@ class ThreadPool_c final : public Worker_i
 
 	// support iteration over children for show threads and hazards
 	mutable RwLock_t m_dChildGuard;
-	CSphVector<Thd_t> m_dThreads GUARDED_BY ( m_dChildGuard );
+	CSphFixedVector<Thd_t> m_dThreads { 0 };
 
 	void Post ( Threads::details::SchedulerOperation_t* pOp, bool bVip = false ) // post to primary (vip) or secondary queue
 	{
@@ -773,7 +773,7 @@ public:
 		, m_tService ( iThreadCount==1 )
 	{
 		createWork ();
-		m_dThreads.Resize ( (int) iThreadCount );
+		m_dThreads.Reset ( (int) iThreadCount );
 		ARRAY_FOREACH ( i, m_dThreads )
 			Threads::CreateQ ( &m_dThreads[i].m_tThread, [this,i] { loop (i); }, false, m_szName, i );
 		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
@@ -790,7 +790,7 @@ public:
 	void DiscardOnFork () final
 	{
 		ScWL_t _ ( m_dChildGuard );
-		m_dThreads.Reset();
+		m_dThreads.Reset ( 0 );
 	}
 
 	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) final
@@ -869,7 +869,7 @@ public:
 			Threads::Join ( &dThread.m_tThread );
 		LOG ( DEBUG, TP ) << "thread pool stopped";
 		LOGINFO ( TPLIFE, TP ) << "thread pool stopped";
-		m_dThreads.Resize ( 0 );
+		m_dThreads.Reset ( 0 );
 	}
 };
 

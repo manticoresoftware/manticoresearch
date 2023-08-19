@@ -1165,7 +1165,7 @@ POST /bulk
       "update":
       {
         "_index":"products",
-        "updated":0
+        "updated":1
       }
     },
     {
@@ -1218,7 +1218,7 @@ Array(
         Array(
             [update] => Array(
                 [_index] => products
-                [updated] => 0
+                [updated] => 1
             )
         )   
         Array(
@@ -1263,7 +1263,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":5}}],"errors":false}
+{"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":3}}],"errors":false}
 
 ```
 
@@ -1280,7 +1280,7 @@ indexApi.bulk(body);
 <!-- response Java -->
 ```java
 class BulkResponse {
-    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    items: [{update={_index=products, _id=1, created=false, result=updated, status=200}}, {update={_index=products, _id=2, created=false, result=updated, status=200}}]
     error: null
     additionalProperties: {errors=false}
 }
@@ -1299,7 +1299,7 @@ indexApi.Bulk(body);
 <!-- response C# -->
 ```clike
 class BulkResponse {
-    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    items: [{update={_index=products, _id=1, created=false, result=updated, status=200}}, {update={_index=products, _id=2, created=false, result=updated, status=200}}]
     error: null
     additionalProperties: {errors=false}
 }

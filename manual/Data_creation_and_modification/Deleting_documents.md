@@ -7,6 +7,8 @@ Deleting documents is only supported for the following table types:
 
 You can delete existing documents from a table based on either their ID or certain conditions.
 
+Also, [bulk deletion](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) is available to delete multiple documents.
+
 <!-- example delete 1 -->
 Deletion of documents can be accomplished via both SQL and HTTP interfaces.
 
@@ -518,8 +520,8 @@ You can also perform multiple delete operations in a single call using the `/bul
 ```json
 POST /bulk
 
-{ "update" : { "delete" : "products", "id" : 1 } }
-{ "update" : { "delete" : "products", "id" : 2, "query": { "equals": { "price" : 20 } } } }
+{ "delete" : { "index" : "products", "id" : 1 } }
+{ "delete" : { "index" : "products", "query": { "equals": { "price" : 20 } } } }
 ```
 
 <!-- response JSON -->
@@ -544,6 +546,136 @@ POST /bulk
    "errors":false
 }
 ```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+
+$client->bulk([
+    ['delete' => [
+            'index' => 'products',
+            'id' => 1
+        ]
+    ],
+    ['delete'=>[
+            'index' => 'products',
+            'query' => [
+                'equals' => ['price' => 20]
+            ]
+        ]
+    ]
+]);
+```
+
+<!-- response PHP -->
+
+```php
+Array(
+    [items] => Array
+        (
+            [0] => Array
+                (
+                    [bulk] => Array
+                        (
+                            [_index] => test
+                            [_id] => 0
+                            [created] => 0
+                            [deleted] => 2
+                            [updated] => 0
+                            [result] => created
+                            [status] => 201
+                        )
+
+                )
+
+        )
+
+    [current_line] => 3
+    [skipped_lines] => 0
+    [errors] => 
+    [error] => 
+)
+
+```
+
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+docs = [ \
+            { "delete" : { "index" : "products", "id": 1 } }, \
+            { "delete" : { "index" : "products", "query": { "equals": { "price": 20 } } } } ]
+indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+<!-- response Python -->
+```python
+{
+    'error': None,
+    'items': [{u'delete': {u'_index': u'products', u'deleted': 2}}]
+}
+
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+docs = [
+            { "delete" : { "index" : "products", "id": 1 } },
+            { "delete" : { "index" : "products", "query": { "equals": { "price": 20 } } } } ];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
+<!-- response javascript -->
+```javascript
+{"items":[{"delete":{"_index":"products","deleted":2}}],"errors":false}
+
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+String   body = "{ "delete" : { "index" : "products", "id": 1 } } "+"\n"+
+    "{ "delete" : { "index" : "products", "query": { "equals": { "price": 20 } } } }"+"\n";         
+indexApi.bulk(body);
+```
+
+<!-- response Java -->
+```java
+class BulkResponse {
+    items: [{delete={_index=products, _id=0, created=false, deleted=2, result=created, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+``` clike
+string   body = "{ "delete" : { "index" : "products", "id": 1 } } "+"\n"+
+    "{ "delete" : { "index" : "products", "query": { "equals": { "price": 20 } } } }"+"\n";         
+indexApi.Bulk(body);
+```
+
+<!-- response C# -->
+```clike
+class BulkResponse {
+    items: [{replace={_index=products, _id=0, created=false, deleted=2, result=created, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
 
 <!-- end -->
 <!-- proofread -->

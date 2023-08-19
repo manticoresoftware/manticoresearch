@@ -414,21 +414,21 @@ jobs:
           name: docker_test_kit_image
           path: docker/manticore_test_kit.img
 
-#  clt_logstash_test:
-#    name: CLT test on Logstash and Filebeat
-#    needs: build_test_kit_docker
-#    strategy:
-#      matrix:
-#        image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-#
-#    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-#    with:
-#      version: v2
-#      docker_images: |
-#        [
-#          { "image": "${{matrix.image}}"},
-#        ]
-#      test_prefix: test/clt-tests/logstash/logstash-
+  clt_logstash_test:
+    name: CLT test on Logstash and Filebeat
+    needs: build_test_kit_docker
+    strategy:
+      matrix:
+        image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
+
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
+    with:
+      version: v2
+      docker_images: |
+        [
+          { "image": "${{matrix.image}}"},
+        ]
+      test_prefix: test/clt-tests/logstash/logstash-
 
   clt_mysqldump_test:
     name: CLT test on mysqldump features

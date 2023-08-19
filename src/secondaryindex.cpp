@@ -744,6 +744,8 @@ static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo,
 		// this belongs in the CBO, but for now let's just remove the option to evaluate FILTER if ANALYZER is present
 		// as ANALYZERs are always faster than FILTERs
 		dSIInfo[i].m_dCapabilities.RemoveValue ( SecondaryIndexType_e::FILTER );
+		if ( dSIInfo[i].m_eType==SecondaryIndexType_e::FILTER )
+			dSIInfo[i].m_eType = SecondaryIndexType_e::ANALYZER;
 	}
 }
 
@@ -1002,10 +1004,6 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	CSphVector<int> dBest ( dSIInfo.GetLength() );
 	dCapabilities.ZeroVec();
 	dBest.ZeroVec();
-
-	// if we don't have any options, no need to do cost calculation
-	if ( dSIInfo.all_of ( []( const auto & tSIInfo ){ return tSIInfo.m_dCapabilities.GetLength()==1; } ) )
-		return dSIInfo;
 
 	const int MAX_TRIES = 1024;
 	for ( int iTry = 0; iTry < MAX_TRIES; iTry++ )

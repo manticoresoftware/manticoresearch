@@ -151,6 +151,7 @@ private:
 	bool					m_bDisabled = true;
 	bool					m_bConfigless = false;
 	DWORD					m_uReplayFlags = 0;
+	bool					m_bWrongVersion = false;
 
 	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M
 
@@ -169,7 +170,7 @@ private:
 	bool					ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tReader ) const;
 	bool					ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const;
 	bool					ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
-	bool					ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const;
+	bool					ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const;
 	bool 					IsBinlogWritable ( int64_t * pTID = nullptr );
 
 	static bool	CheckCrc ( const char * sOp, const CSphString & sIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) ;
@@ -184,6 +185,7 @@ private:
 	int		ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const;
 	bool	IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const;
 	bool	IsIndexMatched ( const BinlogIndexInfo_t & tIndex ) const;
+	void	RemoveAbondonedLog();
 };
 
 static Binlog_c *		g_pRtBinlog				= nullptr;
@@ -390,12 +392,36 @@ Binlog_c::~Binlog_c ()
 {
 	if ( !m_bDisabled )
 	{
+		bool bEmptyLastLog = false;
+		if ( m_dLogFiles.GetLength() && m_tWriter.IsOpen() )
+			bEmptyLastLog = m_dLogFiles.Last().m_dIndexInfos.IsEmpty();
+
 		// could be already closed and meta saved on shutdown
 		if ( m_tWriter.IsOpen() )
 			DoCacheWrite();
 		m_tWriter.CloseFile();
+		// should remove last binlog if no tnx was writen
+		if ( bEmptyLastLog )
+			RemoveAbondonedLog();
 		LockFile ( false );
 	}
+}
+
+void Binlog_c::RemoveAbondonedLog()
+{
+	assert ( m_dLogFiles.GetLength() && m_dLogFiles.Last().m_dIndexInfos.IsEmpty() );
+	// do unlink
+	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), m_dLogFiles.Last().m_iExt );
+	if ( ::unlink ( sLog.cstr() ) )
+		sphWarning ( "binlog: failed to unlink abandoned %s: %s", sLog.cstr(), strerrorm(errno) );
+
+	// we need to reset it, otherwise there might be leftover data after last Remove()
+	m_dLogFiles.Last() = BinlogFileDesc_t();
+	// quit tracking it
+	m_dLogFiles.Pop();
+
+	// if we unlinked any logs, we need to save meta, too
+	SaveMeta ();
 }
 
 bool Binlog_c::IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const
@@ -663,11 +689,10 @@ void Binlog_c::LoadMeta ()
 		return;
 
 	// ok, so there is actual recovery data
-	// let's require that exact version and bitness, then
-	if ( uVersion!=BINLOG_VERSION )
-		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
-			sMeta.cstr(), uVersion, BINLOG_VERSION );
+	// could be wrong version of the empty binlog
+	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
 
+	// let's require that bitness
 	if ( !bLoaded64bit )
 		sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
 
@@ -878,11 +903,11 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	}
 
 	DWORD uVersion = tReader.GetDword();
-	if ( uVersion!=BINLOG_VERSION || tReader.GetErrorFlag() )
-	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", sLog.cstr(), uVersion, BINLOG_VERSION );
-		return -1;
-	}
+	if ( tReader.GetErrorFlag() )
+		sphWarning ( "binlog: log io error at pos=" INT64_FMT ": %s", tReader.GetPos(), sError.cstr() );
+
+	// could replay empty binlog of the old version
+	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
 
 	/////////////
 	// do replay
@@ -920,6 +945,12 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 			bReplayOK = false;
 			break;
 		}
+		if ( m_bWrongVersion && uOp!=ADD_CACHE )
+		{
+			Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", sLog.cstr(), uVersion, BINLOG_VERSION );
+			bReplayOK = false;
+			break;
+		}
 
 		// FIXME! blop might be OK but skipped (eg. index that is no longer)
 		switch ( uOp )
@@ -936,7 +967,7 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 					break;
 				}
 				bHaveCacheOp = true;
-				bReplayOK = ReplayCacheAdd ( iBinlog, tReader );
+				bReplayOK = ReplayCacheAdd ( iBinlog, uVersion, tReader );
 				break;
 
 			case UPDATE_ATTRS:
@@ -1056,7 +1087,7 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	return true;
 }
 
-bool Binlog_c::ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const
+bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const
 {
 	const int64_t iTxnPos = tReader.GetPos();
 	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
@@ -1064,6 +1095,11 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const
 	// load data
 	CSphVector<BinlogIndexInfo_t> dCache;
 	dCache.Resize ( (int) tReader.UnzipOffset() ); // FIXME! sanity check
+	if ( m_bWrongVersion && dCache.GetLength() )
+	{
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", tReader.GetFilename().cstr(), uVersion, BINLOG_VERSION );
+		return false;
+	}
 	ARRAY_FOREACH ( i, dCache )
 	{
 		dCache[i].m_sName = tReader.GetString();

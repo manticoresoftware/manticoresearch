@@ -134,7 +134,7 @@ private:
 	float	CalcMTCostSI ( float fCost ) const	{ return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads ); }
 
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
-	bool	NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const;
+	bool	NeedBitmapUnion ( int iNumIterators ) const;
 	uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const;
 	int64_t	ApplyCutoff ( int64_t iDocs ) const;
 
@@ -152,19 +152,11 @@ CostEstimate_c::CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInf
 {}
 
 
-bool CostEstimate_c::NeedBitmapUnion ( const CSphFilterSettings & tFilter, int64_t iRsetSize ) const
+bool CostEstimate_c::NeedBitmapUnion ( int iNumIterators ) const
 {
 	// this needs to be in sync with iterator construction code
 	const int BITMAP_ITERATOR_THRESH = 8;
-	if ( tFilter.m_eType==SPH_FILTER_RANGE )
-	{
-		if ( tFilter.m_bOpenRight || tFilter.m_bOpenLeft )
-			return true;
-		else
-			return ( tFilter.m_iMaxValue-tFilter.m_iMinValue+1 ) >= BITMAP_ITERATOR_THRESH;
-	}
-
-	return tFilter.m_eType==SPH_FILTER_FLOATRANGE;
+	return iNumIterators>BITMAP_ITERATOR_THRESH;
 }
 
 
@@ -278,20 +270,19 @@ float CostEstimate_c::CalcIndexCost ( const SecondaryIndexInfo_t & tIndex, const
 	float fCost = 0.0f;
 	int64_t iDocs = ApplyCutoff ( tIndex.m_iRsetEstimate );
 	uint32_t uNumIterators = tIndex.m_uNumSIIterators;
-	if ( uNumIterators )
-	{
-		int64_t iDocsToRead = int64_t(iDocs*fDocsLeft);
-		if ( uNumIterators>1 && !NeedBitmapUnion ( tFilter, iDocs ) )
-			fCost += Cost_IndexUnionQueue(iDocsToRead);
+	if ( !uNumIterators )
+		return 0.0f;
 
-		if ( uNumIterators==1 )
-			fCost += Cost_IndexReadSingle(iDocsToRead);
-		else
-			fCost += Cost_IndexReadBitmap(iDocs); // read all docs, not only the ones left
+	int64_t iDocsToRead = int64_t(iDocs*fDocsLeft);
+	if ( uNumIterators>1 && !NeedBitmapUnion(uNumIterators) )
+		fCost += Cost_IndexUnionQueue(iDocsToRead);
 
-		fCost += Cost_IndexIteratorInit(uNumIterators);
-	}
+	if ( uNumIterators==1 )
+		fCost += Cost_IndexReadSingle(iDocsToRead);
+	else
+		fCost += Cost_IndexReadBitmap(iDocs); // read all docs (when constructing the bitmap), not only the ones left
 
+	fCost += Cost_IndexIteratorInit(uNumIterators);
 	return fCost;
 }
 

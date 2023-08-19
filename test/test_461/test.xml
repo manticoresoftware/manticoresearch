@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>secondary vs rt</name>
+
+<requires>
+	<force-rt/>
+	<secondary/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+    secondary_indexes = 1
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table test1 ( title text, tag integer, flag integer, extra string, coeff float );
+	insert into test1 (id,title, tag, flag,extra,coeff) values
+	(1,'abc', 1, 1,'', 0.0 ),
+	(2,'abc', 1, 1,'', -1.0 ),
+	(3,'abc', 2, 0,'', -10.0 ),
+	(4,'abc', 1, 1,'1', 10.0 ),
+	(5,'abc', 2, 0,'1', -100.0 );
+	flush ramchunk test1;
+	select * from test1;
+
+	select * from test1 where extra='' order by id desc /*+ NO_SecondaryIndex(extra) */;
+	select * from test1 where extra='' order by id desc /*+ SecondaryIndex(extra) */;
+	select * from test1 where extra!='' order by id desc /*+ NO_SecondaryIndex(extra) */;
+	select * from test1 where extra!='' order by id desc /*+ SecondaryIndex(extra) */;
+
+	select count(*) from test1 where tag=1;
+	select count(*) from test1 where tag!=1;
+	select count(*) from test1;
+
+	select id, coeff from test1 where coeff&lt;0.0 /*+ SecondaryIndex(coeff) */;
+	select id, coeff from test1 where coeff&lt;-2.0 /*+ SecondaryIndex(coeff) */;
+	select id, coeff from test1 where coeff&lt;-5.0 /*+ SecondaryIndex(coeff) */;
+	select id, coeff from test1 where coeff&lt;-10.0 /*+ SecondaryIndex(coeff) */;
+
+	select id, coeff from test1 where coeff>-10.0 and extra='' and id>0 /*+ SecondaryIndex(coeff) SecondaryIndex(extra) DocidIndex(id) */;
+	show meta;
+
+	drop table test1;
+</sphinxql>
+</queries>
+
+</test>

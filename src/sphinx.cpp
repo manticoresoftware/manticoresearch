@@ -8038,7 +8038,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, ISphRanker * p
 
 		tSelectIteratorCtx.m_iTotalDocs = tEstimate.m_iDocs;
 		tSelectIteratorCtx.m_bFromIterator = true;
-		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfoFilters, tSelectIteratorCtx ) );
+		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfoFilters, tSelectIteratorCtx, tSelectIteratorCtx.m_iCutoff ) );
 		fCostOfFilters = pCostEstimate->CalcQueryCost();
 	}
 

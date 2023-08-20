@@ -65,7 +65,7 @@ struct SelectIteratorCtx_t
 };
 
 struct NodeEstimate_t;
-CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
+CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff );
 float				CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
 
 #endif // _costestimate_

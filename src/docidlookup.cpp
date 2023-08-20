@@ -41,8 +41,9 @@ protected:
 	RowID_t		m_tRowID = 0;
 	RowID_t		m_tMinRowID = INVALID_ROWID;
 	RowID_t		m_tMaxRowID = INVALID_ROWID;
+	bool		m_bFirstTime = true;
 
-	void		Add ( RowID_t tRowID );
+	FORCE_INLINE void Add ( RowID_t tRowID );
 	bool		Finalize();
 	bool		ReturnRowIdChunk ( RowIdBlock_t & dRowIdBlock );
 };
@@ -60,7 +61,7 @@ CachedIterator_T<false>::CachedIterator_T ( int64_t iRsetEstimate, DWORD uTotalD
 }
 
 template <>
-bool CachedIterator_T<true>::HintRowID  ( RowID_t tRowID )
+bool CachedIterator_T<true>::HintRowID ( RowID_t tRowID )
 {
 	if ( tRowID<m_tRowID )
 		return true;
@@ -78,7 +79,7 @@ bool CachedIterator_T<true>::HintRowID  ( RowID_t tRowID )
 }
 
 template <>
-bool CachedIterator_T<false>::HintRowID  ( RowID_t tRowID )
+bool CachedIterator_T<false>::HintRowID ( RowID_t tRowID )
 {
 	RowID_t * pRowID = m_dRowIDs.Begin() + m_iId;
 	RowID_t * pRowIdMax = m_dRowIDs.End();
@@ -185,6 +186,7 @@ public:
 						RowidIterator_LookupValues_T ( const VecTraits_T<DocID_t>& tValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries = nullptr );
 
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
+	bool				HintRowID ( RowID_t tRowID ) override;
 	int64_t				GetNumProcessed() const override { return m_iProcessed; }
 	void				AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { "id", "DocidIndex" } ); }
 
@@ -193,9 +195,9 @@ private:
 	int64_t				m_iProcessed {0};
 	LookupReaderIterator_c m_tLookupReader;
 	DocidListReader_c	m_tFilterReader;
-	bool				m_bFirstTime = true;
 
 	bool				Fill();
+	FORCE_INLINE bool	FillIfFirstTime();
 };
 
 template <bool ROWID_LIMITS, bool BITMAP>
@@ -211,14 +213,19 @@ RowidIterator_LookupValues_T<ROWID_LIMITS, BITMAP>::RowidIterator_LookupValues_T
 template <bool ROWID_LIMITS, bool BITMAP>
 bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
-	if ( m_bFirstTime )
-	{
-		m_bFirstTime = false;
-		if ( !Fill() )
-			return false;
-	}
+	if ( !FillIfFirstTime() )
+		return false;
 
 	return BASE::ReturnRowIdChunk(dRowIdBlock);
+}
+
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::HintRowID ( RowID_t tRowID )
+{
+	if ( !FillIfFirstTime() )
+		return false;
+
+	return BASE::HintRowID(tRowID);
 }
 
 template <bool ROWID_LIMITS, bool BITMAP>
@@ -263,6 +270,16 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 	}
 
 	return BASE::Finalize();
+}
+
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::FillIfFirstTime()
+{
+	if ( !BASE::m_bFirstTime )
+		return true;
+
+	BASE::m_bFirstTime = false;
+	return Fill();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -413,18 +430,19 @@ public:
 						RowidIterator_LookupRange_T ( std::shared_ptr<LookupReaderIterator_c> & pReader, DocIdCheck_i * pCheck1, DocIdCheck_i * pCheck2, int64_t iRsetEstimate, DWORD uTotalDocs, const RowIdBoundaries_t * pBoundaries = nullptr );
 
 	bool				GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
+	bool				HintRowID ( RowID_t tRowID ) override;
 	int64_t				GetNumProcessed() const override { return m_iProcessed; }
 	void				AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { "id", "DocidIndex" } ); }
 
 protected:
 	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
-	bool				m_bFirstTime = true;
 	std::shared_ptr<LookupReaderIterator_c> m_pReader;
 	std::unique_ptr<DocIdCheck_i> m_pCheck1;
 	std::unique_ptr<DocIdCheck_i> m_pCheck2;
 
 	virtual bool		Fill();
+	FORCE_INLINE bool	FillIfFirstTime();
 };
 
 template <bool ROWID_LIMITS, bool BITMAP>
@@ -441,20 +459,19 @@ RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::RowidIterator_LookupRange_T ( 
 template <bool ROWID_LIMITS, bool BITMAP>
 bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
-	if ( m_bFirstTime )
-	{
-		if ( m_pCheck1 )
-			m_pCheck1->Init();
-
-		if ( m_pCheck2 )
-			m_pCheck2->Init();
-
-		m_bFirstTime = false;
-		if ( !Fill() )
-			return false;
-	}
+	if ( !FillIfFirstTime() )
+		return false;
 
 	return BASE::ReturnRowIdChunk(dRowIdBlock);
+}
+
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::HintRowID ( RowID_t tRowID )
+{
+	if ( !FillIfFirstTime() )
+		return false;
+
+	return BASE::HintRowID(tRowID);
 }
 
 template <bool ROWID_LIMITS, bool BITMAP>
@@ -496,6 +513,22 @@ bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::Fill()
 	}
 
 	return BASE::Finalize();
+}
+
+template <bool ROWID_LIMITS, bool BITMAP>
+bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::FillIfFirstTime()
+{
+	if ( !BASE::m_bFirstTime )
+		return true;
+
+	if ( m_pCheck1 )
+		m_pCheck1->Init();
+
+	if ( m_pCheck2 )
+		m_pCheck2->Init();
+
+	BASE::m_bFirstTime = false;
+	return Fill();
 }
 
 //////////////////////////////////////////////////////////////////////////

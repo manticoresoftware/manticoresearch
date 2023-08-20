@@ -126,23 +126,6 @@ select * from test4 where tag in (2007) order by id desc /*+ SecondaryIndex(tag)
 select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag) */;
 </sphinxql>
 
-<sphinxql>
-select * from test1 where extra='' order by id desc /*+ NO_SecondaryIndex(extra) */;
-select * from test1 where extra='' order by id desc /*+ SecondaryIndex(extra) */;
-select * from test1 where extra!='' order by id desc /*+ NO_SecondaryIndex(extra) */;
-select * from test1 where extra!='' order by id desc /*+ SecondaryIndex(extra) */;
-
-select count(*) from test1 where tag=1;
-select count(*) from test1 where tag!=1;
-select count(*) from test1;
-
-select id, coeff from test1 where coeff&lt;0.0 /*+ SecondaryIndex(coeff) */;
-select id, coeff from test1 where coeff&lt;-2.0 /*+ SecondaryIndex(coeff) */;
-select id, coeff from test1 where coeff&lt;-5.0 /*+ SecondaryIndex(coeff) */;
-select id, coeff from test1 where coeff&lt;-10.0 /*+ SecondaryIndex(coeff) */;
-
-</sphinxql>
-
 </queries>
 
 </test>

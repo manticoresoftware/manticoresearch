@@ -1497,21 +1497,43 @@ bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSet
 
 void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrType, CommonFilterSettings_t & tFixedSettings )
 {
-	// fixup "fltcol=intval" conditions
-	if ( eAttrType!=SPH_ATTR_FLOAT )
-		return;
-
-	if ( tSettings.m_eType==SPH_FILTER_VALUES && tSettings.GetNumValues()==1 )
+	switch ( eAttrType )
 	{
-		tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
-		tFixedSettings.m_fMinValue = tFixedSettings.m_fMaxValue = (float)tSettings.GetValues()[0];
-	}
+	case SPH_ATTR_INTEGER: 	// fixup negative values vs unsigned data
+		if ( tSettings.m_eType==SPH_FILTER_RANGE )
+		{
+			if ( !tSettings.m_bOpenLeft && tFixedSettings.m_iMinValue < 0 )
+			{
+				tFixedSettings.m_bOpenLeft = true;
+				tFixedSettings.m_bHasEqualMin = false;
+				tFixedSettings.m_iMinValue = INT64_MIN;
+			}
 
-	if ( tSettings.m_eType==SPH_FILTER_RANGE )
-	{
-		tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
-		tFixedSettings.m_fMinValue = (float)tSettings.m_iMinValue;
-		tFixedSettings.m_fMaxValue = (float)tSettings.m_iMaxValue;
+			if ( !tSettings.m_bOpenRight && tFixedSettings.m_iMaxValue < 0 )
+			{
+				tFixedSettings.m_bHasEqualMax = true;
+				tFixedSettings.m_iMaxValue = 0;
+			}
+		}
+		break;
+
+	case SPH_ATTR_FLOAT:	// fixup "fltcol=intval" conditions
+		if ( tSettings.m_eType==SPH_FILTER_VALUES && tSettings.GetNumValues()==1 )
+		{
+			tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
+			tFixedSettings.m_fMinValue = tFixedSettings.m_fMaxValue = (float)tSettings.GetValues()[0];
+		}
+
+		if ( tSettings.m_eType==SPH_FILTER_RANGE )
+		{
+			tFixedSettings.m_eType = SPH_FILTER_FLOATRANGE;
+			tFixedSettings.m_fMinValue = (float)tSettings.m_iMinValue;
+			tFixedSettings.m_fMaxValue = (float)tSettings.m_iMaxValue;
+		}
+		break;
+
+	default:
+		break;
 	}
 }
 

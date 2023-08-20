@@ -241,8 +241,9 @@ float CostEstimate_c::CalcAnalyzerCost ( const SecondaryIndexInfo_t & tIndex, co
 
 	int64_t iDocsToFilter = int64_t ( (float)ApplyCutoff ( tIndex.m_iRsetEstimate ) * m_tCtx.m_iTotalDocs / ( tIndex.m_iRsetEstimate + 1 ) );
 
-	iDocsBeforeFilter = int64_t(iDocsBeforeFilter*fDocsLeft);
-	iDocsToFilter = int64_t(iDocsToFilter*fDocsLeft);
+	const int64_t READ_BLOCK_SIZE = 1024;
+	iDocsBeforeFilter = Max ( int64_t(iDocsBeforeFilter*fDocsLeft), READ_BLOCK_SIZE );
+	iDocsToFilter = Max ( int64_t(iDocsToFilter*fDocsLeft), READ_BLOCK_SIZE );
 
 	if ( tIndex.m_iPartialColumnarMinMax==-1 ) // no minmax? scan whole index
 		return Cost_ColumnarFilter ( iDocsToFilter, fTotalCoeff );
@@ -273,8 +274,9 @@ float CostEstimate_c::CalcIndexCost ( const SecondaryIndexInfo_t & tIndex, const
 	if ( !uNumIterators )
 		return 0.0f;
 
-	int64_t iDocsToRead = int64_t(iDocs*fDocsLeft);
-	if ( uNumIterators>1 && !NeedBitmapUnion(uNumIterators) )
+	const int64_t READ_BLOCK_SIZE = 1024;
+	int64_t iDocsToRead = Max ( int64_t(iDocs*fDocsLeft), READ_BLOCK_SIZE );
+	if ( !NeedBitmapUnion(uNumIterators) )
 		fCost += Cost_IndexUnionQueue(iDocsToRead);
 
 	if ( uNumIterators==1 )
@@ -296,10 +298,10 @@ void CostEstimate_c::SortIndexes()
 	m_dSorted.Sort ( Lesser ( [this] ( int iA, int iB )
 		{
 			if ( m_dSIInfo[iA].m_eType==SecondaryIndexType_e::FILTER && m_dSIInfo[iB].m_eType!=SecondaryIndexType_e::FILTER )
-				return true;
+				return false;
 
 			if ( m_dSIInfo[iA].m_eType!=SecondaryIndexType_e::FILTER && m_dSIInfo[iB].m_eType==SecondaryIndexType_e::FILTER )
-				return false;
+				return true;
 
 			return m_dSIInfo[iA].m_iRsetEstimate < m_dSIInfo[iB].m_iRsetEstimate;
 		} ) );

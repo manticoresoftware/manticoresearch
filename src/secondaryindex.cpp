@@ -1011,9 +1011,8 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 		for ( int i = 0; i < dCapabilities.GetLength(); i++ )
 			dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities.GetLength() ? dSIInfo[i].m_dCapabilities[dCapabilities[i]] : SecondaryIndexType_e::NONE;
 
-		// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan
-		int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::ANALYZER; } );
-		int iCutoff = iNumIterators > 1 ? -1 : tCtx.m_iCutoff;
+		// don't use cutoff if we have more than one filter
+		int iCutoff = dSIInfo.GetLength() > 1 ? -1 : tCtx.m_iCutoff;
 		
 		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfo, tCtx, iCutoff ) );
 		float fCost = pCostEstimate->CalcQueryCost();

@@ -44,6 +44,8 @@ executor_dev_path=
 # Read deps.txt line by line
 while read -r line
 do
+  echo "Processing dependency: $line"
+
 	# Break if the line contains "---"
 	if [[ $line == "---" ]]; then
 		break
@@ -88,11 +90,13 @@ do
 	# Search each downloaded file and find the line with the specific package, version, date, and commit
 	for index in "${!repo_urls[@]}"; do
 		if [ "$package" = 'manticore-executor' ]; then
+      echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
 			wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
 			tar -xzf 'manticore-executor-dev.tar.gz'
 			executor_dev_path=$(realpath "manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev/manticore-executor")
 
 			pwd
+      echo "Wgetting from https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64/manticore-extra_${version}-${date}-${commit}_all.deb"
 			wget -q -O '../build/manticore-extra.deb' \
 				"https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64/manticore-extra_${version}-${date}-${commit}_all.deb"
 			continue
@@ -102,6 +106,7 @@ do
 		while read file_url
 		do
 			file_name=$(basename "$file_url" "?ci=1")
+      echo "Wgetting from $file_url"
 			wget -q -O "$file_name" "$file_url"
 		done
 	done
@@ -146,4 +151,3 @@ for img in "${images[@]}"; do
 	  && echo "❗ Pushed the image to $img" \
 	  || echo "❗ Couldn't push the image to $img"
 done
-

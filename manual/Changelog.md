@@ -1,7 +1,9 @@
 # Changelog
 
 # Version 6.2.12
-Released: August 22nd 2023
+Released: August 23rd 2023
+
+Version 6.2.12 continues the 6.2 series and addresses issues discovered after the release of 6.2.0.
 
 ### Bugfixes
 * ❗[Issue #1351](https://github.com/manticoresoftware/manticoresearch/issues/1351) "Manticore 6.2.0 doesn't start via systemctl on Centos 7": Modified `TimeoutStartSec` from `infinity` to `0` for better compatibility with Centos 7.

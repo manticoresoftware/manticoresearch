@@ -156,7 +156,7 @@ Released: March 15 2023
 
 ### New features
 * Improved integration with Logstash, Beats etc. including:
-  - Support for Logstash versions >= 7.13.
+  - Support for Logstash versions >= 7.13, Filebeat versions >= 7.10.
   - Auto-schema support.
   - Added handling of bulk requests in Elasticsearch-like format.
 * [Buddy commit ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) Log Buddy version on Manticore start.

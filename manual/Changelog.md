@@ -82,6 +82,7 @@ Released: August 4th 2023
 * When `count(*)` is used with a single filter, queries now leverage precalculated data from secondary indexes when available, substantially speeding up query times.
 
 ### ⚠️ Breaking changes
+* ⚠️ Tables created or modified in version 6.2.0 cannot be read by older versions.
 * ⚠️ Document IDs are now handled as unsigned 64-bit integers during indexing and INSERT operations.
 * ⚠️ The syntax for query optimizer hints has been updated. The new format is `/*+ SecondaryIndex(uid) */`. Please note that the old syntax is no longer supported.
 * ⚠️ [Issue #1160](https://github.com/manticoresoftware/manticoresearch/issues/1160): The usage of `@` in table names has been disallowed to prevent syntax conflicts.

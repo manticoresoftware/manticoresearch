@@ -1520,8 +1520,9 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 				iStartPos = tReader.UnzipInt();
 
 			DWORD uLength = tReader.UnzipInt();
-			m_dJoinedField.Resize(uLength);
+			m_dJoinedField.Resize(uLength+1);
 			tReader.GetBytes ( m_dJoinedField.Begin(), uLength );
+			m_dJoinedField[uLength] = '\0';
 
 			// lets skip joined document totally if there was no such document ID returned by main query
 			const IDPair_t * pIdPair = m_dAllIds.BinarySearch ( bind ( &IDPair_t::m_tDocID ), tDocId );

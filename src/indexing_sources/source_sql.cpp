@@ -212,7 +212,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	bool bRes = SqlQuery ( sRes );
 
 	if ( !bRes )
-		sError.SetSprintf ( "sql_range_query: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
+		sError.SetSprintf ( "sql_query_range: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
 
 	SafeDeleteArray ( sRes );
 	return bRes;

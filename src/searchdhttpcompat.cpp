@@ -2915,11 +2915,25 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 		}
 	}
 
-	nljson tTbl = nljson::parse ( GetBody().first );
+	if ( IsEmpty ( GetBody() ) )
+	{
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	nljson tTbl = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tTbl.is_discarded() )
+	{
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
 
 	// direct create index path (wo template)
 	if ( !tTbl.contains( "mappings" ) )
+	{
+		ReportError ( "request body mappings is required", "parse_exception", SPH_HTTP_STATUS_400 );
 		return false;
+	}
 
 	// need to delete table loaded by manticore but without meta at json file
 	DropTable ( sName );

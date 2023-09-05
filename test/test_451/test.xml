@@ -115,6 +115,11 @@ index dist5
     select * from dist3;
     select * from dist4;
     select * from dist5;
+
+	desc test1;
+	desc test2;
+	select title as title2, title from test1;
+	select title as title2, title from test2;
 </sphinxql></queries>
 
 </test>

@@ -124,9 +124,9 @@ SqlStmt_t::SqlStmt_t()
 	m_tQuery.m_eSort = SPH_SORT_EXTENDED;
 	m_tQuery.m_sSortBy = "@weight desc"; // default order
 	m_tQuery.m_sOrderBy = "@weight desc";
-	m_tQuery.m_iAgentQueryTimeoutMs = g_iAgentQueryTimeoutMs;
-	m_tQuery.m_iRetryCount = -1;
-	m_tQuery.m_iRetryDelay = -1;
+	m_tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
+	m_tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
+	m_tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
 }
 
 SqlStmt_t::~SqlStmt_t() = default;

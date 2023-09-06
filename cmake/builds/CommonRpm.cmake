@@ -128,6 +128,11 @@ set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )
 # common
 set ( CPACK_RPM_COMMON_POST_INSTALL_SCRIPT_FILE "${dircommon}/manticore.post" )
 
+# tools
+set ( CPACK_RPM_TOOLS_BUILDREQUIRES "systemd-units" )
+set ( CPACK_RPM_TOOLS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.postun" )
+set ( CPACK_RPM_TOOLS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.preun" )
+
 # now get system paths. These variables are used in configure substitutions below
 set ( CMAKE_INSTALL_LIB "lib" )
 GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_LIB CMAKE_INSTALL_LIB LIBDIR )

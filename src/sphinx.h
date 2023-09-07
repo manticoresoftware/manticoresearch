@@ -460,6 +460,8 @@ struct IndexHint_t
 };
 
 const int DEFAULT_MAX_MATCHES = 1000;
+const int DEFAULT_QUERY_TIMEOUT = 0;
+const int DEFAULT_QUERY_RETRY = -1;
 
 /// search query. Pure struct, no member functions
 struct CSphQuery
@@ -514,9 +516,9 @@ struct CSphQuery
 
 	int				m_iCutoff = -1;			///< matches count threshold to stop searching at (<=0 means to search until all matches are found)
 
-	int				m_iRetryCount = -1;		///< retry count, for distributed queries. (-1 means 'use default')
-	int				m_iRetryDelay = -1;		///< retry delay, for distributed queries. (-1 means 'use default')
-	int				m_iAgentQueryTimeoutMs = 0;	///< agent query timeout override, for distributed queries
+	int				m_iRetryCount = DEFAULT_QUERY_RETRY;			///< retry count, for distributed queries. (-1 means 'use default')
+	int				m_iRetryDelay = DEFAULT_QUERY_RETRY;			///< retry delay, for distributed queries. (-1 means 'use default')
+	int				m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;	///< agent query timeout override, for distributed queries
 
 	bool			m_bGeoAnchor = false;	///< do we have an anchor
 	CSphString		m_sGeoLatAttr;			///< latitude attr name

@@ -406,7 +406,7 @@ jobs:
       - name: Building docker
         id: build
         run: |
-          echo $GHCR_USER
+          echo User: $GHCR_USER ${{ secrets.GHCR_USER }}
           echo $GHCR_PASSWORD | docker login -u$GHCR_USER --password-stdin ghcr.io
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
           echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT

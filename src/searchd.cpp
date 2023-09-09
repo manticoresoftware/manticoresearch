@@ -20357,6 +20357,14 @@ static void CheckSSL ()
 }
 
 
+static void CacheCPUInfo()
+{
+	// these funcs do caching inside
+	GetNumLogicalCPUs();
+	GetNumPhysicalCPUs();
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -20791,6 +20799,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		Ping::Start();
 
 	ScheduleMallocTrim();
+
+	CacheCPUInfo();
 
 	DetermineNodeItemStackSize();
 	DetermineFilterItemStackSize();

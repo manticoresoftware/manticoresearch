@@ -2440,9 +2440,9 @@ static void AddDocids ( CSphVector<CSphQueryItem> & dItems )
 bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery & tQuery, WORD uVer, WORD uMasterVer )
 {
 	// daemon-level defaults
-	tQuery.m_iRetryCount = -1;
-	tQuery.m_iRetryDelay = -1;
-	tQuery.m_iAgentQueryTimeoutMs = g_iAgentQueryTimeoutMs;
+	tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
+	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
+	tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
 
 	// v.1.27+ flags come first
 	DWORD uFlags = 0;
@@ -2923,7 +2923,7 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 			tBuf.Appendf ( "ranker=%s(\'%s\')", sRanker, tQuery.m_sRankerExpr.scstr() );
 	}
 
-	if ( tQuery.m_iAgentQueryTimeoutMs!=g_iAgentQueryTimeoutMs )
+	if ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT )
 		tBuf.Appendf ( "agent_query_timeout=%d", tQuery.m_iAgentQueryTimeoutMs );
 
 	if ( tQuery.m_iCutoff!=g_tDefaultQuery.m_iCutoff )
@@ -2963,10 +2963,10 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 	if ( tQuery.m_iMaxPredictedMsec!=g_tDefaultQuery.m_iMaxPredictedMsec )
 		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
 
-	if ( tQuery.m_iRetryCount!=-1 )
+	if ( tQuery.m_iRetryCount!=DEFAULT_QUERY_RETRY )
 		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
 
-	if ( tQuery.m_iRetryDelay!=-1 )
+	if ( tQuery.m_iRetryDelay!=DEFAULT_QUERY_RETRY )
 		tBuf.Appendf ( "retry_delay=%d", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iRandSeed!=g_tDefaultQuery.m_iRandSeed )
@@ -5331,7 +5331,7 @@ private:
 	bool							AcquireInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
-	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, int iAgentQueryTimeoutMs ); // fixme!
+	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
@@ -6944,7 +6944,7 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 }
 
 // returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
-bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, int iAgentQueryTimeoutMs )
+bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
 	const CSphQuery & tQuery = m_dNQueries.First ();
 
@@ -7000,7 +7000,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				pConn->m_iStoreTag = iOrderTag++;
 				pConn->m_iWeight = iWeight;
 				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-				pConn->m_iMyQueryTimeoutMs = iAgentQueryTimeoutMs ? iAgentQueryTimeoutMs : pDist->m_iAgentQueryTimeoutMs;
+				pConn->m_iMyQueryTimeoutMs = ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT ? tQuery.m_iAgentQueryTimeoutMs : pDist->m_iAgentQueryTimeoutMs );
 				dRemotes.Add ( pConn );
 			}
 
@@ -7115,7 +7115,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dNAggrResults.for_each ( [this] ( auto& r ) { r.m_sError = (CSphString) m_sError; } );
 	});
 
-	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent, tFirst.m_iAgentQueryTimeoutMs ) )
+	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent ) )
 	{
 		// process query to meta, as myindex.status, etc.
 		if ( !tFirst.m_dStringSubkeys.IsEmpty () )

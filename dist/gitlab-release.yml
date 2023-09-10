@@ -64,7 +64,7 @@ variables:
   stage: repoupload
   interruptible: true
   tags:
-    - dev-host
+    - repo
   rules:
     - if: $CI_MERGE_REQUEST_ID
       when: manual

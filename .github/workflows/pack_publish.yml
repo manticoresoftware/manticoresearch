@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: djklim87/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -138,6 +138,7 @@ jobs:
           artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: deb
           delimiter: "-"
+          remote_server: root@95.216.221.24
 
   publish_rhel:
     needs: publish
@@ -149,7 +150,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: djklim87/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -157,6 +158,7 @@ jobs:
           artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: rpm
           delimiter: "_"
+          remote_server: root@95.216.221.24
 
   publish_macos:
     name: Publishing MacOS
@@ -167,7 +169,7 @@ jobs:
         arch: [x86_64, arm64]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: djklim87/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: macos
@@ -175,13 +177,14 @@ jobs:
           artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
           type: arc
           delimiter: "-"
+          remote_server: root@95.216.221.24
 
   publish_windows:
     name: Publishing Windows packages to repo.manticoresearch.com
     needs: publish
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: djklim87/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: windows
@@ -189,6 +192,7 @@ jobs:
           artifact: build_windows_RelWithDebInfo_x64
           type: arc
           delimiter: "-"
+          remote_server: root@95.216.221.24
 
   build_nsis:
     name: Making and publishing Windows NSIS installer
@@ -224,7 +228,7 @@ jobs:
     needs: build_nsis
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: djklim87/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr:

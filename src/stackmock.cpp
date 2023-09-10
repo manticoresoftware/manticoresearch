@@ -405,12 +405,15 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> FilterCreationMeasureStack_c::
 ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> FullTextStackSize_c::MockMeasure()
 {
 	FullTextStackSize_c tCreateMeter;
-	auto x = tCreateMeter.MockMeasureStack ( 64 );
+	const int START = 128;
+	const int STEP = 64;
+	auto x = tCreateMeter.MockMeasureStack ( START );
 	for ( auto i=0; i<10; ++i )
 	{
 		if ( x.first )
 			return x;
-		x = tCreateMeter.MockMeasureStack ( 128 + 64 * i );
+
+		x = tCreateMeter.MockMeasureStack ( START + STEP * i );
 	}
 	return x;
 }

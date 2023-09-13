@@ -107,7 +107,7 @@ do
 		do
 			file_name=$(basename "$file_url" "?ci=1")
       echo "Wgetting from $file_url"
-			wget -q -O "$file_name" "$file_url"
+			wget -q -O "../build/$file_name" "$file_url"
 		done
 	done
 

@@ -1,5 +1,5 @@
-name: CLT nightly tests
-run-name: CLT nightly tests ${{ github.sha }}
+name: CLT latest release installation tests
+run-name: CLT latest release installation tests ${{ github.sha }}
 
 on:
   schedule:

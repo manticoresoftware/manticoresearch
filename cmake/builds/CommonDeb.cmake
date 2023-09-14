@@ -133,9 +133,9 @@ configure_file ( "dist/deb/manticore.default.in" "${dirserver}/manticore" @ONLY 
 configure_file ( "dist/deb/manticore.init.in" "${dirserver}/manticore.init" @ONLY )
 configure_file ( "dist/deb/manticore.service.in" "${dirserver}/manticore.service" @ONLY )
 
-configure_file ( ${SCR}/manticore-indexer.service.in "${dirtools}/manticore-indexer.service" @ONLY )
-configure_file ( ${SCR}/manticore-indexer@.service.in "${dirtools}/manticore-indexer@.service" @ONLY )
-configure_file ( ${SCR}/manticore-indexer_global.default.in "${dirtools}/manticore-indexer_global" @ONLY )
+configure_file ( "dist/deb/manticore-indexer.service.in" "${dirtools}/manticore-indexer.service" @ONLY )
+configure_file ( "dist/deb/manticore-indexer@.service.in" "${dirtools}/manticore-indexer@.service" @ONLY )
+configure_file ( "dist/deb//manticore-indexer_global.default.in" "${dirtools}/manticore-indexer_global" @ONLY )
 
 configure_file ( "dist/deb/README.Debian.in" "${MANTICORE_BINARY_DIR}/README.Debian" @ONLY )
 configure_file ( "dist/deb/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )

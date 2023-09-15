@@ -2626,7 +2626,7 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
-	auto pBuilder = CreateColumnarBuilder ( tNewSchema, m_tSettings, GetTmpFilename ( SPH_EXT_SPC ), sError );
+	auto pBuilder = CreateColumnarBuilder ( tNewSchema, GetTmpFilename ( SPH_EXT_SPC ), sError );
 	if ( !pBuilder )
 		return false;
 
@@ -5214,7 +5214,7 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 		if ( m_tSchema.GetAttr(i).IsColumnar() )
 			tColumnarsAttrs.BitSet(i);
 
-	pBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, GetTmpFilename ( SPH_EXT_SPC ), m_sLastError );
+	pBuilder = CreateColumnarBuilder ( m_tSchema, GetTmpFilename ( SPH_EXT_SPC ), m_sLastError );
 	return !!pBuilder;
 }
 

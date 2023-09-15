@@ -777,10 +777,6 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 		m_dColumnarStringsNoHash.Uniq();
 	}
 
-	m_sCompressionUINT32 = hIndex.GetStr ( "columnar_compression_uint32", m_sCompressionUINT32.c_str() ).cstr();
-	m_sCompressionUINT64 = hIndex.GetStr ( "columnar_compression_int64", m_sCompressionUINT64.c_str() ).cstr();
-	m_iSubblockSize = hIndex.GetInt ( "columnar_subblock", m_iSubblockSize );
-
 	return true;
 }
 

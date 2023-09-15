@@ -17,7 +17,7 @@
 #include "schema/schema.h"
 
 using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
-using CreateBuilder_fn =		columnar::Builder_i * (*) ( const columnar::Settings_t & tSettings, const common::Schema_t & tSchema, const std::string & sFile, std::string & sError );
+using CreateBuilder_fn =		columnar::Builder_i * (*) ( const common::Schema_t & tSchema, const std::string & sFile, std::string & sError );
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
@@ -70,7 +70,7 @@ std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphSt
 }
 
 
-std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & tSchema, const columnar::Settings_t & tSettings, const CSphString & sFilename, CSphString & sError )
+std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & tSchema, const CSphString & sFilename, CSphString & sError )
 {
 	if ( !IsColumnarLibLoaded() )
 	{
@@ -102,7 +102,7 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		return nullptr;
 
 	assert ( g_fnCreateColumnarBuilder );
-	std::unique_ptr<columnar::Builder_i> pBuilder { g_fnCreateColumnarBuilder ( tSettings, tColumnarSchema, sFilename.cstr(), sErrorSTL ) };
+	std::unique_ptr<columnar::Builder_i> pBuilder { g_fnCreateColumnarBuilder ( tColumnarSchema, sFilename.cstr(), sErrorSTL ) };
 	if ( !pBuilder )
 		sError = sErrorSTL.c_str();
 

@@ -3280,7 +3280,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	std::unique_ptr<columnar::Builder_i> pColumnarBuilder;
 	if ( m_tSchema.HasColumnarAttrs() )
 	{
-		pColumnarBuilder = CreateColumnarBuilder ( m_tSchema, m_tSettings, sSPC, sError );
+		pColumnarBuilder = CreateColumnarBuilder ( m_tSchema, sSPC, sError );
 		if ( !pColumnarBuilder )
 			return false;
 	}

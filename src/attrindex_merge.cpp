@@ -99,7 +99,7 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( pDstIndex->GetMatchSchema().HasColumnarAttrs() )
 	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), pDstIndex->GetSettings(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_sError );
+		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_sError );
 		if ( !m_pColumnarBuilder )
 			return false;
 	}

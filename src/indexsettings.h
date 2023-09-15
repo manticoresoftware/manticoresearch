@@ -241,7 +241,7 @@ enum ESphBigram : BYTE
 };
 
 
-class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t, public columnar::Settings_t
+class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;

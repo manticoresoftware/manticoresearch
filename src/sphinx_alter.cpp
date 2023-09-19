@@ -83,7 +83,13 @@ void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphSt
 	tInfo.m_eEngine				= tCtx.m_eEngine;
 	tInfo.m_tLocator.m_iBitCount = tCtx.m_iBits;
 
-	if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
+	auto iIdxExisting = tSchema.GetAttrIndex ( tCtx.m_sName.cstr() );
+	if ( iIdxExisting >= 0 )
+	{
+		bRebuild = true;
+		tSchema.RemoveAttr ( tCtx.m_sName.cstr(), false );
+		tSchema.InsertAttr ( iIdxExisting, tInfo, false );
+	} else if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
 	{
 		bRebuild = true;
 		tSchema.InsertAttr ( tSchema.GetAttrId_FirstFieldLen(), tInfo, false );
@@ -202,9 +208,11 @@ AddRemoveCtx_c::AddRemoveCtx_c ( const CSphSchema & tOldSchema, const CSphSchema
 
 bool AddRemoveCtx_c::AddRowwiseAttr()
 {
-	bool bHasFieldLen = ( m_tNewSchema.GetAttrId_FirstFieldLen()!=-1 );
+	bool bKeepVal = m_tOldSchema.GetAttrIndex ( m_sAttrName.cstr() ) >= 0;
+	bool bNeedRemap = bKeepVal || m_bHadBlobs != m_bHaveBlobs || m_tNewSchema.GetAttrId_FirstFieldLen() != -1;
+
 	CSphVector<int> dAttrMap;
-	if ( m_bHadBlobs!=m_bHaveBlobs || bHasFieldLen )
+	if ( bNeedRemap )
 		CreateAttrMap ( dAttrMap, m_tOldSchema, m_tNewSchema, -1 );
 
 	const CSphColumnInfo * pNewAttr = m_tNewSchema.GetAttr ( m_sAttrName.cstr() );
@@ -215,12 +223,12 @@ bool AddRemoveCtx_c::AddRowwiseAttr()
 
 	for ( RowID_t tRowID = 0; tRowID<m_uNumRows; tRowID++ )
 	{
-		if ( m_bHadBlobs==m_bHaveBlobs && !bHasFieldLen )
-			pNextDocinfo = CopyRow ( m_pDocinfo, m_dAttrRow.Begin(), m_iOldStride );
-		else
+		if ( bNeedRemap )
 			pNextDocinfo = CopyRowAttrByAttr ( m_pDocinfo, m_dAttrRow.Begin(), m_tOldSchema, m_tNewSchema, dAttrMap, m_iOldStride );
+		else
+			pNextDocinfo = CopyRow ( m_pDocinfo, m_dAttrRow.Begin(), m_iOldStride );
 
-		if ( !pNewAttr->m_tLocator.IsBlobAttr() )
+		if ( !bKeepVal && !pNewAttr->m_tLocator.IsBlobAttr() )
 			sphSetRowAttr ( m_dAttrRow.Begin(), pNewAttr->m_tLocator, 0 );
 
 		if ( bBlob && !m_tMinMaxer.Alter_IsMinMax ( m_pDocinfo, m_iOldStride ) )

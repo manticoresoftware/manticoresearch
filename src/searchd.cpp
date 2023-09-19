@@ -15878,13 +15878,19 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
 
-	bool bHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
+	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
 	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
 
-	if ( !bIndexed && bHasAttr )
+	if ( !bIndexed && pHasAttr )
 	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
-		return;
+		if ( pHasAttr->m_eAttrType != SPH_ATTR_INTEGER
+			 || pHasAttr->m_eEngine != AttrEngine_e::DEFAULT
+			 || tStmt.m_eAlterColType != SPH_ATTR_BIGINT
+			 || tStmt.m_eEngine != AttrEngine_e::DEFAULT)
+		{
+			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
+			return;
+		}
 	}
 
 	if ( bIndexed && bHasField )

@@ -15327,6 +15327,7 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 		case SPH_LOG_WARNING:				return "warning";
 		case SPH_LOG_INFO:					return "info";
 		case SPH_LOG_DEBUG:					return "debug";
+		case SPH_LOG_RPL_DEBUG:				return "replication";
 		case SPH_LOG_VERBOSE_DEBUG:			return "debugv";
 		case SPH_LOG_VERY_VERBOSE_DEBUG:	return "debugvv";
 		default:							return "unknown";

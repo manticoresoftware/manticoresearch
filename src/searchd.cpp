@@ -1815,6 +1815,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendInt ( 0 );
 	tOut.SendInt ( 0 );
 	tOut.SendInt ( q.m_bHasOuter );
+	// v.1.36
+	tOut.SendInt ( q.m_iExpansionLimit );
 
 	// master-agent extensions
 	tOut.SendDword ( q.m_eCollation ); // v.1
@@ -2605,6 +2607,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_iOuterLimit = tReq.GetDword();
 		tQuery.m_bHasOuter = ( tReq.GetInt()!=0 );
 	}
+	if ( uVer>=0x124 )
+		tQuery.m_iExpansionLimit = tReq.GetInt();
 
 	// extension v.1
 	tQuery.m_eCollation = GlobalCollation ();
@@ -2993,6 +2997,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		tBuf.Appendf ( "expand_keywords=%d", ( tQuery.m_eExpandKeywords==QUERY_OPT_ENABLED ? 1 : 0 ) );
 	if ( tQuery.m_eExpandKeywords==QUERY_OPT_MORPH_NONE )
 		tBuf.Appendf ( "morphology=none" );
+	if ( tQuery.m_iExpansionLimit!=DEFAULT_QUERY_EXPANSION_LIMIT )
+		tBuf.Appendf ( "expansion_limit=%d", tQuery.m_iExpansionLimit );
 }
 
 

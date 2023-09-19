@@ -407,4 +407,6 @@ bool	IsAllowOnlyNot();
 
 CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
+int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  );
+
 #endif // _sphinxquery_

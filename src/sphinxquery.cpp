@@ -4494,3 +4494,7 @@ std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser()
 	return std::make_unique<QueryParserPlain_c>();
 }
 
+int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
+{
+	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
+}

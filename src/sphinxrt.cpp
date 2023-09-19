@@ -7038,7 +7038,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 		tExpCtx.m_pResult = &tMeta;
 		tExpCtx.m_iMinPrefixLen = tSettings.GetMinPrefixLen ( bKeywordDict );
 		tExpCtx.m_iMinInfixLen = tSettings.m_iMinInfixLen;
-		tExpCtx.m_iExpansionLimit = iExpansionLimit;
+		tExpCtx.m_iExpansionLimit = GetExpansionLimit ( tQuery.m_iExpansionLimit, iExpansionLimit );
 		tExpCtx.m_bHasExactForms = ( pDict->HasMorphology () || tSettings.m_bIndexExactWords );
 		tExpCtx.m_bMergeSingles = ( tQuery.m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0;
 		tExpCtx.m_pPayloads = pPayloads;

@@ -462,6 +462,7 @@ struct IndexHint_t
 const int DEFAULT_MAX_MATCHES = 1000;
 const int DEFAULT_QUERY_TIMEOUT = 0;
 const int DEFAULT_QUERY_RETRY = -1;
+const int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
 
 /// search query. Pure struct, no member functions
 struct CSphQuery
@@ -494,6 +495,7 @@ struct CSphQuery
 	bool			m_bLowPriority = false;		///< set low thread priority for this query
 	DWORD			m_uDebugFlags = 0;
 	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion
+	int				m_iExpansionLimit = DEFAULT_QUERY_EXPANSION_LIMIT;	///< whether to limit wildcard expansion, default use index settings
 
 	bool			m_bAccurateAggregation = false;			///< setting via options
 	bool			m_bExplicitAccurateAggregation = false; ///< whether anything was set via options

@@ -31,7 +31,7 @@ To create a cluster, you can typically use the command [create cluster](../../Cr
 
 This option specifies the name of the cluster. It should be unique among all the clusters in the system.
 
-> **Note:** The maximum length of join hostname is **253** characters. In case you exceed this limit searchd returns an SQL error
+> **Note:** The maximum allowable hostname length for the `JOIN` command is **253** characters. If you exceed this limit, searchd will generate an error.
 
 ### path
 

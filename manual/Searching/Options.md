@@ -271,6 +271,8 @@ Quoted, colon-separated string of `library name:plugin name:optional string of s
 ```sql
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
+### expansion_limit
+Restricts the maximum number of expanded keywords for a single wildcard, with a default value of 0 indicating no limit. For additional details, refer to [expansion_limit](../Server_settings/Searchd.md#expansion_limit).
 
 ## Query optimizer hints
 

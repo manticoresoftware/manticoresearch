@@ -31,6 +31,8 @@ To create a cluster, you can typically use the command [create cluster](../../Cr
 
 This option specifies the name of the cluster. It should be unique among all the clusters in the system.
 
+> **Note:** The maximum allowable hostname length for the `JOIN` command is **253** characters. If you exceed this limit, searchd will generate an error.
+
 ### path
 
 The path option specifies the data directory for [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming tables from other nodes. This value should be unique among all the clusters in the system and should be specified as a relative path to the [data_dir](../../Server_settings/Searchd.md#data_dir). directory. By default, it is set to the value of [data_dir](../../Server_settings/Searchd.md#data_dir).

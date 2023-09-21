@@ -359,10 +359,11 @@ class CSphFilterSettings : public CommonFilterSettings_t
 public:
 	CSphString			m_sAttrName = "";	///< filtered attribute name
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL
+	bool				m_bOptional = false;
 
 	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA and stringlist folding function
-	CSphVector<SphAttr_t>	m_dValues;	///< integer values set
-	StrVec_t				m_dStrings;	///< string values
+	CSphVector<SphAttr_t> m_dValues;	///< integer values set
+	StrVec_t			m_dStrings;	///< string values
 
 public:
 						CSphFilterSettings () = default;

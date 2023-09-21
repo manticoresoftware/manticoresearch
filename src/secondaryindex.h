@@ -40,7 +40,6 @@ struct RowIdBoundaries_t;
 
 RowidIterator_i *	CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators, const RowIdBoundaries_t * pBoundaries );
 RowidIterator_i *	CreateIteratorWrapper ( common::BlockIterator_i * pIterator, const RowIdBoundaries_t * pBoundaries );
-RowidIterator_i *	CreateIteratorIntersect ( std::vector<common::BlockIterator_i *> & dIterators, const RowIdBoundaries_t * pBoundaries );
 
 const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds );
 bool				ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock );
@@ -54,7 +53,9 @@ namespace SI
 	class Builder_i;
 }
 
-CSphVector<RowidIterator_i *> CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
+using RowIteratorsWithEstimates_t = CSphVector<std::pair<RowidIterator_i *,int64_t>>;
+
+RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
 
 std::unique_ptr<SI::Builder_i>	CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, CSphString & sError );
 std::unique_ptr<SI::Builder_i>	CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError );

@@ -11,6 +11,7 @@
 #include "jsonqueryfilter.h"
 
 #include "sphinxint.h"
+#include "geodist.h"
 #include <time.h>
 
 static const char * g_szFilter = "_@filter_";
@@ -217,7 +218,7 @@ bool GeoDistInfo_c::ParseDistance ( const JsonObj_c & tDistance, CSphString & sE
 	m_fDistance = (float)atof ( sNumber.cstr() );
 
 	float fCoeff = 1.0f;	
-	if ( !sphGeoDistanceUnit ( sUnit.cstr(), fCoeff ) )
+	if ( !GeoDistanceUnit ( sUnit.cstr(), fCoeff ) )
 	{
 		sError.SetSprintf ( "unknown distance unit: %s", sUnit.cstr() );
 		return false;

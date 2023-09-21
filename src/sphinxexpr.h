@@ -86,6 +86,7 @@ enum ESphExprCommand
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_UPDATE_DEPENDENT_COLS,
+	SPH_EXPR_GET_GEODIST_SETTINGS,
 	SPH_EXPR_GET_UDF,
 	SPH_EXPR_GET_STATEFUL_UDF,
 	SPH_EXPR_SET_COLUMNAR,
@@ -336,29 +337,6 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphSt
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
-
-//////////////////////////////////////////////////////////////////////////
-
-/// init tables used by our geodistance functions
-void GeodistInit();
-
-/// haversine sphere distance, radians
-float GeodistSphereRad ( float lat1, float lon1, float lat2, float lon2 );
-
-/// haversine sphere distance, degrees
-float GeodistSphereDeg ( float lat1, float lon1, float lat2, float lon2 );
-
-/// flat ellipsoid distance, degrees
-float GeodistFlatDeg ( float fLat1, float fLon1, float fLat2, float fLon2 );
-
-/// adaptive flat/haversine distance, degrees
-float GeodistAdaptiveDeg ( float lat1, float lon1, float lat2, float lon2 );
-
-/// adaptive flat/haversine distance, radians
-float GeodistAdaptiveRad ( float lat1, float lon1, float lat2, float lon2 );
-
-/// get geodist conversion coeff
-bool sphGeoDistanceUnit ( const char * szUnit, float & fCoeff );
 
 /// provide mysql version string
 namespace sphinxexpr {

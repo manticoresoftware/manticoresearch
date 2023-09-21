@@ -934,23 +934,6 @@ std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAtt
 }
 
 
-int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer )
-{
-	if ( !pHistogramContainer )
-		return INT64_MAX;
-
-	Histogram_i * pHistogram = pHistogramContainer->Get ( tSettings.m_sAttrName );
-	if ( !pHistogram || pHistogram->IsOutdated() )
-		return INT64_MAX;
-
-	HistogramRset_t tEstimate;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
-		return INT64_MAX;
-
-	return tEstimate.m_iTotal;
-}
-
-
 void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema )
 {
 	int iColumnar = 0;

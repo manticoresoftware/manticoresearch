@@ -78,7 +78,6 @@ private:
 
 std::unique_ptr<Histogram_i>	CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
 void			CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema );
-int64_t			EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer );
 
 struct HistogramSource_t
 {

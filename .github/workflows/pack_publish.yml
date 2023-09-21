@@ -7,7 +7,7 @@ on:
    workflows: [ 🔬 Test ]
    types: [ completed ]
  pull_request:
-   branches: [ master ]
+   branches: [ d3e1518d3_branch ]
    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)

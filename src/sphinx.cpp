@@ -2064,7 +2064,7 @@ static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
 }
 
 
-static bool DetectPrecalcSorters ( const CSphQuery & tQuery, bool bHasSI )
+static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & tIndexSchema, bool bHasSI )
 {
 	if ( tQuery.m_dItems.any_of ( []( auto & tItem ){ return tItem.m_eAggrFunc!=SPH_AGGR_NONE; } ) )
 		return false;
@@ -2084,7 +2084,10 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, bool bHasSI )
 
 		// check for count(*) precalc w/one filter
 		if ( !bDistinct && tQuery.m_dFilters.GetLength()==1 )
-			return true;
+		{
+			if ( tIndexSchema.GetAttr ( tQuery.m_dFilters[0].m_sAttrName.cstr() ) )
+				return true;
+		}
 	}
 
 	// check for count(*) w/o filters
@@ -2105,7 +2108,7 @@ bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQu
 		if ( DetectNonClonableSorters(tQuery) )
 			return true;
 
-		if ( DetectPrecalcSorters ( tQuery, bHasSI ) )
+		if ( DetectPrecalcSorters ( tQuery, m_tSchema, bHasSI ) )
 			return true;
 
 		// at this point we are trying to decide how many threads this index gets

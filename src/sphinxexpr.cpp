@@ -8054,24 +8054,27 @@ private:
 };
 
 /// geodist() - expr point, constant anchor
-class Expr_GeodistConst_c: public ISphExpr
+class Expr_GeodistConst_c: public ISphExpr, public GeoDistSettings_t
 {
 public:
-	Expr_GeodistConst_c ( Geofunc_fn pFunc, float fOut, ISphExpr * pLat, ISphExpr * pLon, float fAnchorLat, float fAnchorLon )
-		: m_pFunc ( pFunc )
-		, m_fOut ( fOut )
-		, m_pLat ( pLat )
+	Expr_GeodistConst_c ( Geofunc_fn pFunc, float fOut, ISphExpr * pLat, ISphExpr * pLon, float fAnchorLat, float fAnchorLon, int iLat, int iLon )
+		: m_pLat ( pLat )
 		, m_pLon ( pLon )
-		, m_fAnchorLat ( fAnchorLat )
-		, m_fAnchorLon ( fAnchorLon )
 	{
 		SafeAddRef ( pLat );
 		SafeAddRef ( pLon );
+
+		m_pFunc = pFunc;
+		m_fScale = fOut;
+		m_fAnchorLat = fAnchorLat;
+		m_fAnchorLon = fAnchorLon;
+		m_iAttrLat = iLat;
+		m_iAttrLon = iLon;
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final
 	{
-		return m_fOut*m_pFunc ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
+		return m_fScale*m_pFunc ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
 	}
 
 	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final
@@ -8084,6 +8087,14 @@ public:
 	{
 		m_pLat->Command ( eCmd, pArg );
 		m_pLon->Command ( eCmd, pArg );
+
+		if ( eCmd==SPH_EXPR_GET_GEODIST_SETTINGS )
+		{
+			auto pSettings = (std::pair<GeoDistSettings_t *, bool>*)pArg;
+			assert ( pSettings );
+			pSettings->first = this;
+			pSettings->second = true;
+		}
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -8091,7 +8102,7 @@ public:
 		EXPR_CLASS_NAME("Expr_GeodistConst_c");
 		CALC_POD_HASH(m_fAnchorLat);
 		CALC_POD_HASH(m_fAnchorLon);
-		CALC_POD_HASH(m_fOut);
+		CALC_POD_HASH(m_fScale);
 		CALC_POD_HASH(m_pFunc);
 		CALC_CHILD_HASH(m_pLat);
 		CALC_CHILD_HASH(m_pLon);
@@ -8104,21 +8115,15 @@ public:
 	}
 
 private:
-	Geofunc_fn	m_pFunc;
-	float		m_fOut;
 	CSphRefcountedPtr<ISphExpr>	m_pLat;
 	CSphRefcountedPtr<ISphExpr>	m_pLon;
-	float		m_fAnchorLat;
-	float		m_fAnchorLon;
 
 	Expr_GeodistConst_c ( const Expr_GeodistConst_c& rhs )
-		: m_pFunc ( rhs.m_pFunc )
-		, m_fOut ( rhs.m_fOut )
-		, m_pLat ( SafeClone (rhs.m_pLat) )
+		: m_pLat ( SafeClone (rhs.m_pLat) )
 		, m_pLon ( SafeClone (rhs.m_pLon) )
-		, m_fAnchorLat ( rhs.m_fAnchorLat )
-		, m_fAnchorLon ( rhs.m_fAnchorLon )
-	{}
+	{
+		*((GeoDistSettings_t*)this) = rhs;
+	}
 };
 
 /// geodist() - expr point, expr anchor
@@ -8625,7 +8630,8 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 			// expr point
 			return new Expr_GeodistConst_c ( GetGeodistFn ( eMethod, bDeg ), fOut,
 				pAttr0, pAttr1,
-				FloatVal ( &m_dNodes[dArgs[2]] ), FloatVal ( &m_dNodes[dArgs[3]] ) );
+				FloatVal ( &m_dNodes[dArgs[2]] ), FloatVal ( &m_dNodes[dArgs[3]] ),
+				m_dNodes[dArgs[0]].m_iLocator, m_dNodes[dArgs[1]].m_iLocator );
 		}
 	}
 

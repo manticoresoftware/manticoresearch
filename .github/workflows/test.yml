@@ -422,7 +422,7 @@ jobs:
     strategy:
       matrix:
         image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-    uses: sanikolaev/clt/.github/workflows/clt-template.yml@main
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@main
     with:
       version: v2
       docker_images: |
@@ -437,7 +437,7 @@ jobs:
     strategy:
       matrix:
        image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-    uses: sanikolaev/clt/.github/workflows/clt-template.yml@main
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@main
     with:
       version: v2
       docker_images: |
@@ -453,7 +453,7 @@ jobs:
     strategy:
       matrix:
         image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-    uses: sanikolaev/clt/.github/workflows/clt-template.yml@main
+    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@main
     with:
       version: v2
       docker_images: |

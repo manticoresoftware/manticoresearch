@@ -403,11 +403,13 @@ jobs:
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       # TODO: remove tmp
-      - name: Building docker
-        id: build
-        run: |
-          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
-          echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+#      - name: Building docker
+#        id: build
+#        run: |
+#          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
+#          echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+      - name: Prepare output
+        run: echo "build_image=test-kit-img" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@main
         with:
@@ -421,7 +423,7 @@ jobs:
       matrix:
         image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
 
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
+    uses: sanikolaev/clt/.github/workflows/clt-template.yml@v2
     with:
       version: v2
       docker_images: |
@@ -436,7 +438,7 @@ jobs:
     strategy:
       matrix:
        image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
+    uses: sanikolaev/clt/.github/workflows/clt-template.yml@v2
     with:
       version: v2
       docker_images: |
@@ -453,7 +455,7 @@ jobs:
       matrix:
         image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
 
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
+    uses: sanikolaev/clt/.github/workflows/clt-template.yml@v2
     with:
       version: v2
       docker_images: |

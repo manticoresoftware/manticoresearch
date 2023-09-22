@@ -149,9 +149,9 @@ docker import manticore_test_kit.img $img_url
 docker tag $img_url $img_url_latest
 # pusing to ghcr.io
 
-images=("$img_url" "$img_url_latest")
-for img in "${images[@]}"; do
-	docker push $img \
-	  && echo "❗ Pushed the image to $img" \
-	  || echo "❗ Couldn't push the image to $img"
-done
+#images=("$img_url" "$img_url_latest")
+#for img in "${images[@]}"; do
+#	docker push $img \
+#	  && echo "❗ Pushed the image to $img" \
+#	  || echo "❗ Couldn't push the image to $img"
+#done

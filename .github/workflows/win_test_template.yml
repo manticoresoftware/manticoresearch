@@ -18,12 +18,12 @@ on:
 jobs:
   test_windows:
     name: ${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-    runs-on: windows-2019
+    runs-on: windows-2022
     env:
       CACHEB: "../cache"
       LIBS_BUNDLE: "../bundle"
       BOOST_ROOT: "../boost_1_75_0"
-      CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
+      CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: ${{ inputs.CTEST_START }}
       CTEST_END: ${{ inputs.CTEST_END }}
@@ -69,7 +69,7 @@ jobs:
           C:\mysql\bin\mysqld.exe --initialize-insecure
           C:\mysql\bin\mysqld.exe --install mysql
           net start mysql
-          mysql -e "create user 'test'@'localhost'; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
+          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
       - name: Setup PHP and mysqli
         uses: shivammathur/setup-php@v2
         with:
@@ -78,6 +78,7 @@ jobs:
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        # Add -VV to ctest to display extra debug info
         run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status

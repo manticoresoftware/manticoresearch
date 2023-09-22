@@ -81,6 +81,7 @@ struct CreateFilterContext_t
 	CSphVector<UservarIntSet_c>	m_dUserVals;
 
 	const HistogramContainer_c * m_pHistograms = nullptr;
+	const SI::Index_i *			m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
@@ -299,6 +300,8 @@ struct RowIdBoundaries_t
 
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
-bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
+bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
+bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError );
+int64_t	EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx );
 
 #endif // _sphinxfilter_

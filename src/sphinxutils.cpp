@@ -918,9 +918,9 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_no_fast_fetch", 0, nullptr },
 	{ "rowwise_attrs",			0, nullptr },
 	{ "columnar_strings_no_hash", 0, nullptr },
-	{ "columnar_compression_uint32", 0, nullptr },
-	{ "columnar_compression_int64", 0, nullptr },
-	{ "columnar_subblock",		0, nullptr },
+	{ "columnar_compression_uint32", KEY_REMOVED, nullptr },
+	{ "columnar_compression_int64", KEY_REMOVED, nullptr },
+	{ "columnar_subblock",		KEY_REMOVED, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
 	{ "engine_default",			0, nullptr },
 	{ nullptr,					0, nullptr }

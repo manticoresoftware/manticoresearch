@@ -47,7 +47,7 @@ mysql> RELOAD TABLE plain_table FROM '/home/mighty/new/place/for/table/table_fil
 RELOAD TABLES;
 ```
 
-This command functions similarly to the HUP system signal, triggering a rotation of tables. Nevertheless, it doesn't exactly mirror the typical HUP signal (which can come from a `kill -HUP` command or `indexer --rotate`). This command actively searches for any tables needing rotation and is capable of re-reading the configuration. Suppose you launch Manticore in plain mode with a config file that points to a nonexistent plain table. If you then attempt to `indexer --rotate` the table, the constructed table won't communicate with the server until you execute `RELOAD TABLES` or restart the server.
+This command functions similarly to the HUP system signal, triggering a rotation of tables. Nevertheless, it doesn't exactly mirror the typical HUP signal (which can come from a `kill -HUP` command or `indexer --rotate`). This command actively searches for any tables needing rotation and is capable of re-reading the configuration. Suppose you launch Manticore in plain mode with a config file that points to a nonexistent plain table. If you then attempt to `indexer --rotate` the table, the new table won't be recognized by the server until you execute `RELOAD TABLES` or restart the server.
 
 Depending on the value of the [seamless_rotate](../../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled, and clients will receive temporary errors.
 
@@ -60,7 +60,7 @@ Query OK, 0 rows affected (0.01 sec)
 
 The rotate assumes old table version is discarded and new table version is loaded and replaces the existing one. During this swapping, the server needs to also serve incoming queries made on the table that is going to be updated. To avoid stalls of the queries, the server implements a seamless rotate of the table by default, as described below.
 
-Tables may contain data that needs to be precached in RAM. At the moment, `.spa`, `.spb`, `.spi` and `.spm` iles are fully precached (they contain attribute data, blob attribute data, keyword table, and killed row map, respectively). Without seamless rotate, rotating a table tries to use as little RAM as possible and works as follows:
+Tables may contain data that needs to be precached in RAM. At the moment, `.spa`, `.spb`, `.spi` and `.spm` files are fully precached (they contain attribute data, blob attribute data, keyword table, and killed row map, respectively). Without seamless rotate, rotating a table tries to use as little RAM as possible and works as follows:
 
 1. New queries are temporarily rejected (with "retry" error code).
 2. `searchd` waits for all currently running queries to finish.

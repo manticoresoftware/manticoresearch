@@ -169,7 +169,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x123, // 1.35
+	VER_COMMAND_SEARCH		= 0x124, // 1.36
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x101,

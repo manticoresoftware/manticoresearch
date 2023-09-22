@@ -47,7 +47,9 @@ namespace SI
 struct SelectIteratorCtx_t
 {
 	const CSphQuery &						m_tQuery;
-	const ISphSchema &						m_tSchema;
+	const CSphVector<CSphFilterSettings> &	m_dFilters;
+	const ISphSchema &						m_tIndexSchema;
+	const ISphSchema &						m_tSorterSchema;
 	const HistogramContainer_c *			m_pHistograms = nullptr;
 	columnar::Columnar_i *					m_pColumnar = nullptr;
 	SI::Index_i *							m_pSI = nullptr;
@@ -57,7 +59,7 @@ struct SelectIteratorCtx_t
 	bool									m_bCalcPushCost = true;
 	bool									m_bFromIterator = false;
 
-			SelectIteratorCtx_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
+			SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
 
 	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
 	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;

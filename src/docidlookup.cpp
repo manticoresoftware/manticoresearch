@@ -727,12 +727,12 @@ static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilt
 #undef DECL_CREATERANGE
 
 
-CSphVector<RowidIterator_i *> CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs )
+RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs )
 {
 	RowIdBoundaries_t tBoundaries;
 	const CSphFilterSettings * pRowIdFilter = GetRowIdFilter ( dFilters, uTotalDocs, tBoundaries );
 
-	CSphVector<RowidIterator_i *> dIterators;
+	RowIteratorsWithEstimates_t dIterators;
 
 	ARRAY_FOREACH ( i, dSIInfo )
 	{
@@ -743,7 +743,7 @@ CSphVector<RowidIterator_i *> CreateLookupIterator ( CSphVector<SecondaryIndexIn
 		RowidIterator_i * pIterator = CreateLookupIterator ( dFilters[i], tSIInfo.m_iRsetEstimate, uTotalDocs, pDocidLookup, pRowIdFilter ? &tBoundaries : nullptr );
 		if ( pIterator )
 		{
-			dIterators.Add ( pIterator );
+			dIterators.Add ( { pIterator, tSIInfo.m_iRsetEstimate } );
 			tSIInfo.m_bCreated = true;
 		}
 	}

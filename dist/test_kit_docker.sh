@@ -107,7 +107,7 @@ do
 		do
 			file_name=$(basename "$file_url" "?ci=1")
       echo "Wgetting from $file_url"
-			wget -q -O "$file_name" "$file_url"
+			wget -q -O "../build/$file_name" "$file_url"
 		done
 	done
 
@@ -130,6 +130,10 @@ docker cp manticore.conf manticore-test-kit:/etc/manticoresearch/manticore.conf
 
 docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
 docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
+
+# Let's list what's in the /build/ inside the container for debug purposes
+docker exec manticore-test-kit bash -c \
+  'ls -la /build/'
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
 	'apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'

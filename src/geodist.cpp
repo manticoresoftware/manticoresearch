@@ -297,7 +297,7 @@ bool GeodistGetSphereBBox ( Geofunc_fn fnFunc, float fLat, float fLon, float fDi
 
 	// about 100m
 	const double EPS = 1.570795e-5;
-	if ( abs ( fLatRad - PI/2.0 ) <= EPS || abs ( fLatRad + PI/2.0 ) <= EPS )
+	if ( fabs ( fLatRad - PI/2.0 ) <= EPS || fabs ( fLatRad + PI/2.0 ) <= EPS )
 		return false;
 
 	double fDeltaLon = fAngularDist / cos(fLatRad);

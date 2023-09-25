@@ -1,0 +1,3 @@
+[submodule ".github/workflows/clt-test"]
+	path = .github/workflows/clt-test
+	url = https://github.com/manticoresoftware/clt-test

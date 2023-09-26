@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: manticoresoftware/clt-action@main
         with:
-          artifact: manticore_test_kit.img
+          artifact: docker_test_kit_image
           image: test-kit:img
           version: v2
           test_prefix: test/clt-tests/logstash/logstash-
@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: manticoresoftware/clt-action@main
         with:
-          artifact: manticore_test_kit.img
+          artifact: docker_test_kit_image
           image: test-kit:img
           version: v2
           test_prefix: test/clt-tests/mysqldump/
@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: manticoresoftware/clt-action@main
         with:
-          artifact: manticore_test_kit.img
+          artifact: docker_test_kit_image
           image: test-kit:img
           version: v2
           test_prefix: test/clt-tests/expected-errors/

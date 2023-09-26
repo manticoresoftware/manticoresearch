@@ -116,8 +116,11 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
     if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      (github.repository == 'manticoresoftware/manticoresearch') 
+      && (
+        (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
+        || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      )
     steps:
       - run: echo "Ready to publish"
 

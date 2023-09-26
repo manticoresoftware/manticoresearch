@@ -145,10 +145,8 @@ img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-$BUILD_COMMIT"
 img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest"
 
 # exporting the image, it also squashes all the layers into one
-echo "docker export"
 docker export manticore-test-kit > ../manticore_test_kit.img
-echo "docker import"
-docker import manticore_test_kit.img $img_url
+docker import ../manticore_test_kit.img $img_url
 docker tag $img_url $img_url_latest
 # pusing to ghcr.io
 

@@ -25,7 +25,8 @@ jobs:
     runs-on: ubuntu-22.04
     if: |
       (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master')
+      || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-')) )
     steps:
       - run: echo "All set to build packages"
 

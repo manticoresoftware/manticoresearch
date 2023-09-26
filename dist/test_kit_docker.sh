@@ -148,12 +148,14 @@ ls -la ..
 # exporting the image, it also squashes all the layers into one
 echo "docker export"
 docker export manticore-test-kit > ../manticore_test_kit.img
-echo "docker import"
+echo "docker import $img_url"
 docker import ../manticore_test_kit.img $img_url
+echo "docker tag"
 docker tag $img_url $img_url_latest
 # pusing to ghcr.io
 
 images=("$img_url" "$img_url_latest")
+echo $images
 [ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
 	docker push $img \
 	  && echo "❗ Pushed the image to $img" \

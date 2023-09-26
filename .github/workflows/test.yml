@@ -40,12 +40,12 @@ jobs:
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Download built x86_64 Ubuntu Jammy packages
-        uses: manticoresoftware/download_artifact_with_retries@main
-        continue-on-error: true
-        with:
-          name: build_jammy_RelWithDebInfo_x86_64
-          path: .
+      # - name: Download built x86_64 Ubuntu Jammy packages
+      #   uses: manticoresoftware/download_artifact_with_retries@main
+      #   continue-on-error: true
+      #   with:
+      #     name: build_jammy_RelWithDebInfo_x86_64
+      #     path: .
       # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
       - run: |
           wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip

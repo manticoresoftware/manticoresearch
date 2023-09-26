@@ -75,7 +75,7 @@ jobs:
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          version: v2
+          version: v3
           test_prefix: test/clt-tests/logstash/logstash-
 
   clt_mysqldump_test:
@@ -87,7 +87,7 @@ jobs:
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          version: v2
+          version: v3
           test_prefix: test/clt-tests/mysqldump/
           run_args: -e TELEMETRY=0
 
@@ -100,6 +100,6 @@ jobs:
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          version: v2
+          version: v3
           test_prefix: test/clt-tests/expected-errors/
           run_args: -e TELEMETRY=0

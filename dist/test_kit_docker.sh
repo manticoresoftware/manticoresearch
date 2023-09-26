@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-echo $GHCR_PASSWORD | docker login -u$GHCR_USER --password-stdin ghcr.io
+
+[ ! -z "$GHCR_USER" ] && echo $GHCR_PASSWORD | docker login -u$GHCR_USER --password-stdin ghcr.io
 
 if ! (docker info | grep Username) > /dev/null 2>&1; then
   echo "Can't authorise to GHCR docker registry"
@@ -144,14 +145,14 @@ img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-$BUILD_COMMIT"
 img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest"
 
 # exporting the image, it also squashes all the layers into one
-docker export manticore-test-kit > manticore_test_kit.img
-docker import manticore_test_kit.img $img_url
+docker export manticore-test-kit > ../manticore_test_kit.img
+docker import ../manticore_test_kit.img $img_url
 docker tag $img_url $img_url_latest
-# pusing to ghcr.io
 
+# pusing to ghcr.io
 images=("$img_url" "$img_url_latest")
-for img in "${images[@]}"; do
+[ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
 	docker push $img \
 	  && echo "❗ Pushed the image to $img" \
 	  || echo "❗ Couldn't push the image to $img"
-done
+done || echo "Skipped pushing to repo, because GHCR_USER is not set"

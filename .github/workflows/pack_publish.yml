@@ -24,8 +24,35 @@ jobs:
     name: OK to pack?
     runs-on: ubuntu-22.04
     if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'pack') || contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      (
+        github.event_name == 'pull_request'
+        &&
+        (
+          contains(
+            github.event.pull_request.labels.*.name, 'pack'
+          ) 
+          ||
+          contains(
+            github.event.pull_request.labels.*.name, 'publish'
+          )
+        )
+      )
+      ||
+      (
+        github.event_name == 'workflow_run'
+        &&
+        github.event.workflow_run.conclusion == 'success'
+        &&
+        github.ref == 'refs/heads/master'
+      )
+      ||
+      (
+        github.event_name == 'push'
+        &&
+        startsWith(
+          github.ref, 'refs/heads/manticore-'
+        )
+      )
     steps:
       - run: echo "All set to build packages"
 
@@ -116,8 +143,11 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
     if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      (github.repository == 'manticoresoftware/manticoresearch')
+      && (
+        (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
+        || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      )
     steps:
       - run: echo "Ready to publish"
 
@@ -256,35 +286,32 @@ jobs:
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
     needs: publish_rhel
-    with:
-      version: v2
-      docker_images: |
-        [
-          {"image": "centos:7"},
-          {"image": "almalinux:8"},
-          {"image": "almalinux:9"},
-          {"image": "oraclelinux:9"},
-          {"image": "amazonlinux:latest"}
-        ]
-      test_prefix: test/clt-tests/installation/rhel-dev-
-      run_args: -e TELEMETRY=0
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@v1
+        with:
+          image: ${{ matrix.image }}
+          version: v3
+          test_prefix: test/clt-tests/installation/rhel-dev-
+          run_args: -e TELEMETRY=0
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
     needs: publish_debian_ubuntu
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-    with:
-      version: v2
-      docker_images: |
-        [
-          {"image": "ubuntu:bionic"},
-          {"image": "ubuntu:focal"},
-          {"image": "ubuntu:jammy"},
-          {"image": "debian:buster"},
-          {"image": "debian:bullseye"},
-          {"image": "debian:bookworm"}
-        ]
-      test_prefix: test/clt-tests/installation/deb-dev-
-      run_args: -e TELEMETRY=0
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@v1
+        with:
+          image: ${{ matrix.image }}
+          version: v3
+          test_prefix: test/clt-tests/installation/deb-dev-
+          run_args: -e TELEMETRY=0

@@ -64,7 +64,7 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@main
         with:
           name: docker_test_kit_image
-          path: docker/manticore_test_kit.img
+          path: manticore_test_kit.img
 
   clt_logstash_test:
     name: CLT test on Logstash and Filebeat

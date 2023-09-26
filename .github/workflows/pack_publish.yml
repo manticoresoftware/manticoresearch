@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
     if: |
-      (github.repository == 'manticoresoftware/manticoresearch') 
+      (github.repository == 'manticoresoftware/manticoresearch')
       && (
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
@@ -263,7 +263,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [centos:7, almalinux:8, almalinux:9, oraclelinux:9, amazonlinux:latest]
+        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt-action@v1
@@ -279,7 +279,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ubuntu:bionic, ubuntu:focal, ubuntu:jammy, debian:buster, debian:bullseye, debian:bookworm]
+        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt-action@v1

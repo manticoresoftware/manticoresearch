@@ -88,6 +88,7 @@ jobs:
   clt_logstash_test:
     name: CLT test on Logstash and Filebeat
     needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt-action@main
         with:
@@ -99,6 +100,7 @@ jobs:
   clt_mysqldump_test:
     name: CLT test on mysqldump features
     needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt-action@main
         with:
@@ -111,6 +113,7 @@ jobs:
   clt_expected_errors_test:
     name: CLT test on expected errors in Searchd for Buddy
     needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt-action@main
         with:

@@ -371,85 +371,85 @@ jobs:
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
 
-    build_test_kit_docker:
-      name: Test Kit docker image
-      if: |
-        (github.event_name == 'push')
-        || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
-      needs: pack_jammy
-      runs-on: ubuntu-22.04
-      env:
-        GHCR_USER: ${{ secrets.GHCR_USER }}
-        GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-      outputs:
-        out-build: ${{ steps.build.outputs.build_image }}
-      steps:
-        - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-          uses: actions/checkout@v3
-          with:
-            token: ${{ secrets.GITHUB_TOKEN }}
-        - name: Download built x86_64 Ubuntu Jammy packages
-          uses: manticoresoftware/download_artifact_with_retries@main
-          continue-on-error: true
-          with:
-            name: build_jammy_RelWithDebInfo_x86_64
-            path: .
-        # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
-        # - run: |
-        #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
-        #     unzip build_jammy_RelWithDebInfo_x86_64.zip
-        #     tar -xvf artifact.tar
-        - name: Calculate short commit hash
-          id: sha
-          run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-        - name: Building docker
-          id: build
-          run: |
-            BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
-            echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
-        - name: Upload docker image artifact
-          uses: manticoresoftware/upload_artifact_with_retries@main
-          with:
-            name: manticore_test_kit.img
-            path: manticore_test_kit.img
+  build_test_kit_docker:
+    name: Test Kit docker image
+    if: |
+      (github.event_name == 'push')
+      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
+    needs: pack_jammy
+    runs-on: ubuntu-22.04
+    env:
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    outputs:
+      out-build: ${{ steps.build.outputs.build_image }}
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download built x86_64 Ubuntu Jammy packages
+        uses: manticoresoftware/download_artifact_with_retries@main
+        continue-on-error: true
+        with:
+          name: build_jammy_RelWithDebInfo_x86_64
+          path: .
+      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
+      # - run: |
+      #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
+      #     unzip build_jammy_RelWithDebInfo_x86_64.zip
+      #     tar -xvf artifact.tar
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Building docker
+        id: build
+        run: |
+          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
+          echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+      - name: Upload docker image artifact
+        uses: manticoresoftware/upload_artifact_with_retries@main
+        with:
+          name: manticore_test_kit.img
+          path: manticore_test_kit.img
 
-    clt_logstash_test:
-      name: CLT test on Logstash and Filebeat
-      needs: build_test_kit_docker
-      runs-on: ubuntu-22.04
-      steps:
-        - uses: manticoresoftware/clt-action@main
-          with:
-            artifact: manticore_test_kit.img
-            image: test-kit:img
-            version: v3
-            test_prefix: test/clt-tests/logstash/logstash-
+  clt_logstash_test:
+    name: CLT test on Logstash and Filebeat
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@main
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          version: v3
+          test_prefix: test/clt-tests/logstash/logstash-
 
-    clt_mysqldump_test:
-      name: CLT test on mysqldump features
-      needs: build_test_kit_docker
-      runs-on: ubuntu-22.04
-      steps:
-        - uses: manticoresoftware/clt-action@main
-          with:
-            artifact: manticore_test_kit.img
-            image: test-kit:img
-            version: v3
-            test_prefix: test/clt-tests/mysqldump/
-            run_args: -e TELEMETRY=0
+  clt_mysqldump_test:
+    name: CLT test on mysqldump features
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@main
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          version: v3
+          test_prefix: test/clt-tests/mysqldump/
+          run_args: -e TELEMETRY=0
 
-    clt_expected_errors_test:
-      name: CLT test on expected errors in Searchd for Buddy
-      needs: build_test_kit_docker
-      runs-on: ubuntu-22.04
-      steps:
-        - uses: manticoresoftware/clt-action@main
-          with:
-            artifact: manticore_test_kit.img
-            image: test-kit:img
-            version: v3
-            test_prefix: test/clt-tests/expected-errors/
-            run_args: -e TELEMETRY=0
+  clt_expected_errors_test:
+    name: CLT test on expected errors in Searchd for Buddy
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@main
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          version: v3
+          test_prefix: test/clt-tests/expected-errors/
+          run_args: -e TELEMETRY=0
 
   build_aarch64:
     name: Linux aarch64 build

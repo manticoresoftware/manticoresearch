@@ -146,19 +146,14 @@ img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest"
 
 ls -la ..
 # exporting the image, it also squashes all the layers into one
-echo "docker export"
 docker export manticore-test-kit > ../manticore_test_kit.img
-echo "docker import $img_url"
 docker import ../manticore_test_kit.img $img_url
-echo "docker tag $img_url $img_url_latest"
 docker tag $img_url $img_url_latest
-# pusing to ghcr.io
 
+# pusing to ghcr.io
 images=("$img_url" "$img_url_latest")
-echo "images: $images"
 [ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
-  echo "docker push $img"
 	docker push $img \
 	  && echo "❗ Pushed the image to $img" \
 	  || echo "❗ Couldn't push the image to $img"
-done
+done || echo "Skipped pushing to repo, because GHCR_USER is not set"

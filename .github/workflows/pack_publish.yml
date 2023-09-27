@@ -30,7 +30,7 @@ jobs:
         (
           contains(
             github.event.pull_request.labels.*.name, 'pack'
-          ) 
+          )
           ||
           contains(
             github.event.pull_request.labels.*.name, 'publish'
@@ -232,8 +232,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialization
         # without adding the safe.directory the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
@@ -276,8 +274,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -293,7 +289,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v1
+      - uses: manticoresoftware/clt-action@v2
         with:
           image: ${{ matrix.image }}
           version: v3
@@ -309,7 +305,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v1
+      - uses: manticoresoftware/clt-action@v2
         with:
           image: ${{ matrix.image }}
           version: v3

@@ -121,8 +121,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts 1_100
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true
@@ -271,8 +269,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts 1_100
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true
@@ -386,8 +382,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true
@@ -418,7 +412,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v1
+      - uses: manticoresoftware/clt-action@v2
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -430,7 +424,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v1
+      - uses: manticoresoftware/clt-action@v2
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -443,7 +437,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v1
+      - uses: manticoresoftware/clt-action@v2
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -527,8 +521,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts 1_400
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true

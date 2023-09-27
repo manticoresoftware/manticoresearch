@@ -195,7 +195,7 @@ $client->search([
 searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -414,7 +414,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -501,7 +501,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text indexed)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -593,7 +593,7 @@ $index->setName('products')->search('@title')->get();
 searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -666,7 +666,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, keys string)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -756,7 +756,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products ( title string attribute indexed )')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -847,7 +847,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price int)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -935,7 +935,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1025,7 +1025,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price bigint )')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1115,7 +1115,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, sold bool )')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1205,7 +1205,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, date timestamp)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1296,7 +1296,7 @@ utilsApi.sql('CREATE TABLE products(title text, coeff float)')
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1384,7 +1384,7 @@ searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"ep
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1466,7 +1466,7 @@ $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1552,7 +1552,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, data json)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1640,7 +1640,7 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1728,7 +1728,7 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1819,7 +1819,7 @@ $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->ge
 searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1905,7 +1905,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1996,7 +1996,7 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -2078,7 +2078,7 @@ $index->setName('products')->search('')->sort('product_codes','asc','min')->get(
 searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -2313,7 +2313,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
  'took': 29}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -2444,7 +2444,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, values multi64))')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

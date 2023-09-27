@@ -130,7 +130,7 @@ utilsApi.sql('SHOW STATUS')
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

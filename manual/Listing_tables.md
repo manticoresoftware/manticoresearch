@@ -78,7 +78,7 @@ utilsApi.sql('SHOW TABLES')
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -181,7 +181,7 @@ res = await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

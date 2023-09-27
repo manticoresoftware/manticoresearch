@@ -60,7 +60,7 @@ jobs:
           cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
           cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
       - name: Setup Flex and Bison
-        run: choco install winflexbison
+        run: Choco-Install -PackageName winflexbison
       - name: Run mysql
         run: |
           mkdir C:\mysql\data

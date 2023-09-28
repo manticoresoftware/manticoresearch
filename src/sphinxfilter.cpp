@@ -19,6 +19,8 @@
 #include "coroutine.h"
 #include "stackmock.h"
 #include "conversion.h"
+#include "geodist.h"
+#include "secondarylib.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -1538,6 +1540,111 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 }
 
 
+static bool CanAddGeodist ( const CSphColumnInfo & tAttr, const CreateFilterContext_t & tCtx )
+{
+	// add filters only if they are columnar or they have enabled SI
+	if ( tAttr.m_pExpr && !tAttr.IsColumnarExpr() )
+		return false;
+
+	if ( tAttr.IsColumnar() || tAttr.IsColumnarExpr() )
+		return true;
+
+	return tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( tAttr.m_sName.cstr() );
+}
+
+
+static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const CSphFilterSettings & tFilter, CSphVector<CSphFilterSettings> & dModified )
+{
+	const CSphColumnInfo * pFilterColumn = tCtx.m_pSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
+	if ( !pFilterColumn || !pFilterColumn->m_pExpr.Ptr() )
+		return;
+
+	if ( tFilter.m_bOpenRight )
+		return;
+
+	std::pair<GeoDistSettings_t *, bool> tSettingsPair { nullptr, false };
+	pFilterColumn->m_pExpr->Command ( SPH_EXPR_GET_GEODIST_SETTINGS, &tSettingsPair );
+	if ( !tSettingsPair.second )
+		return;
+
+	assert ( tSettingsPair.first );
+	const GeoDistSettings_t & tSettings = *tSettingsPair.first;
+
+	const CSphColumnInfo & tLat = tCtx.m_pSchema->GetAttr ( tSettings.m_iAttrLat );
+	const CSphColumnInfo & tLon = tCtx.m_pSchema->GetAttr ( tSettings.m_iAttrLon );
+	if ( tLat.m_eAttrType!=SPH_ATTR_FLOAT || tLon.m_eAttrType!=SPH_ATTR_FLOAT )
+		return;
+
+	CSphFilterSettings tFilterLat;
+	tFilterLat.m_eType = SPH_FILTER_FLOATRANGE;
+	tFilterLat.m_sAttrName = tLat.m_sName;
+	tFilterLat.m_bHasEqualMin = tFilter.m_bHasEqualMax;
+	tFilterLat.m_bHasEqualMax = tFilter.m_bHasEqualMax;
+	tFilterLat.m_bOptional = true;
+
+	CSphFilterSettings tFilterLon;
+	tFilterLon.m_eType = SPH_FILTER_FLOATRANGE;
+	tFilterLon.m_sAttrName = tLon.m_sName;
+	tFilterLon.m_bHasEqualMin = tFilter.m_bHasEqualMax;
+	tFilterLon.m_bHasEqualMax = tFilter.m_bHasEqualMax;
+	tFilterLon.m_bOptional = true;
+
+	float fDist = tFilter.m_fMaxValue / tSettings.m_fScale;
+
+	if ( !GeodistGetSphereBBox ( tSettings.m_pFunc, tSettings.m_fAnchorLat, tSettings.m_fAnchorLon, fDist, tFilterLat.m_fMinValue, tFilterLat.m_fMaxValue, tFilterLon.m_fMinValue, tFilterLon.m_fMaxValue ) )
+		return;
+
+	if ( CanAddGeodist ( tLat, tCtx ) )
+		dModified.Add ( tFilterLat );
+
+	if ( CanAddGeodist ( tLon, tCtx ) )
+		dModified.Add ( tFilterLon );
+}
+
+
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError )
+{
+	assert(tCtx.m_pFilters);
+	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
+
+	dModified.Resize ( dFilters.GetLength() );
+
+	ARRAY_FOREACH ( i, dFilters )
+	{
+		dModified[i] = dFilters[i];
+		if ( !FixupFilterSettings ( dFilters[i], dModified[i], tCtx, dFilters[i].m_sAttrName, sError ) )
+			return false;
+	}
+
+	// FIXME: no further transformations if we have a filter tree
+	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
+		return true;
+
+	int iNumModified = dModified.GetLength();
+	for ( int i = 0; i < iNumModified; i++ )
+		TryToAddGeodistFilters ( tCtx, dModified[i], dModified );
+
+	return true;
+}
+
+
+int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx )
+{
+	if ( !tCtx.m_pHistograms )
+		return tCtx.m_iTotalDocs;
+
+	Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tSettings.m_sAttrName );
+	if ( !pHistogram || pHistogram->IsOutdated() )
+		return tCtx.m_iTotalDocs;
+
+	HistogramRset_t tEstimate;
+	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
+		return tCtx.m_iTotalDocs;
+
+	return tEstimate.m_iTotal;
+}
+
+
 static bool ValuesAreSame ( const CSphVector<SphAttr_t> & dLeft, const CSphVector<SphAttr_t> & dRight )
 {
 	if ( dLeft.GetLength()!=dRight.GetLength() )
@@ -2094,7 +2201,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 
 		// no need to calculate if we only have one filter
 		if ( !bSingleFilter )
-			pFilterInfo->m_iSelectivity = EstimateFilterSelectivity ( *pFilterSettings, tCtx.m_pHistograms );
+			pFilterInfo->m_iSelectivity = EstimateFilterSelectivity ( *pFilterSettings, tCtx );
 	}
 
 	// sort by selectivity, preserve order if equal

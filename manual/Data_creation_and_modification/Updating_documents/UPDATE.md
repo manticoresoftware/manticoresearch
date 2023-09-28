@@ -85,7 +85,7 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}})
 {'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -242,7 +242,7 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 {'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -426,7 +426,7 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -598,7 +598,7 @@ indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['o
 {'id': 100, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -763,7 +763,7 @@ indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"e
 
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -909,7 +909,7 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -1251,7 +1251,7 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -1370,7 +1370,7 @@ $index->create($params);
 utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

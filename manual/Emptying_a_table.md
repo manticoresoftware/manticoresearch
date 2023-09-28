@@ -77,7 +77,7 @@ utilsApi.sql('TRUNCATE TABLE products')
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -191,7 +191,7 @@ utilsApi.sql('TRUNCATE TABLE products WITH RECONFIGURE')
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

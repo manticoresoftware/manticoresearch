@@ -52,7 +52,7 @@ utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -135,7 +135,7 @@ utilsApi.sql('ALTER CLUSTER posts DROP weekly_index')
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

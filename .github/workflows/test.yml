@@ -121,8 +121,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts 1_100
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true
@@ -271,8 +269,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts 1_100
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true
@@ -386,8 +382,6 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true
@@ -402,7 +396,6 @@ jobs:
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      # TODO: remove tmp
       - name: Building docker
         id: build
         run: |
@@ -411,57 +404,46 @@ jobs:
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@main
         with:
-          name: docker_test_kit_image
-          path: docker/manticore_test_kit.img
+          name: manticore_test_kit.img
+          path: manticore_test_kit.img
 
   clt_logstash_test:
     name: CLT test on Logstash and Filebeat
     needs: build_test_kit_docker
-    strategy:
-      matrix:
-        image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-    with:
-      version: v2
-      docker_images: |
-        [
-          { "image": "${{matrix.image}}"},
-        ]
-      test_prefix: test/clt-tests/logstash/logstash-
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@v2
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          version: v3
+          test_prefix: test/clt-tests/logstash/logstash-
 
   clt_mysqldump_test:
     name: CLT test on mysqldump features
     needs: build_test_kit_docker
-    strategy:
-      matrix:
-       image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-    with:
-      version: v2
-      docker_images: |
-        [
-          { "image": "${{matrix.image}}"},
-        ]
-      test_prefix: test/clt-tests/mysqldump/
-      run_args: -e TELEMETRY=0
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@v2
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          version: v3
+          test_prefix: test/clt-tests/mysqldump/
+          run_args: -e TELEMETRY=0
 
   clt_expected_errors_test:
     name: CLT test on expected errors in Searchd for Buddy
     needs: build_test_kit_docker
-    strategy:
-      matrix:
-        image: ["${{ needs.build_test_kit_docker.outputs.out-build }}"]
-
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-    with:
-      version: v2
-      docker_images: |
-        [
-          { "image": "${{matrix.image}}"},
-        ]
-      test_prefix: test/clt-tests/expected-errors/
-      run_args: -e TELEMETRY=0
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt-action@v2
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          version: v3
+          test_prefix: test/clt-tests/expected-errors/
+          run_args: -e TELEMETRY=0
 
   build_aarch64:
     name: Linux aarch64 build
@@ -539,8 +521,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts 1_400
         uses: manticoresoftware/download_artifact_with_retries@main
         continue-on-error: true

@@ -1,19 +1,12 @@
 <!--
-Make sure you have read the Contributing guide (see file CONTRIBUTING.md in the root) before you submit a pull request.
+Before submitting a pull request, please ensure you've read the Contributing guide located at CONTRIBUTING.md in the root directory.
 -->
 
-**Type of change:**
+**Type of Change (select one):**
+- Bug fix 
+- New feature
+- Documentation update
 
-- [ ] Bug fix 
-- [ ] New feature
-- [ ] Documentation update
+**Description of the Change:**
 
-
-**Description of the change:**
-
-**Related PRs:**
-
-**Steps to test or reproduce:**
-
-**Possible drawbacks:**
-
+**Related Issue (provide the link):**

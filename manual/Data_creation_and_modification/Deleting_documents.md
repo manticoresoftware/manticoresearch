@@ -155,7 +155,7 @@ indexApi.delete({"index" : "products", "query": { "match": { "*": "dummy" }}})
 ```
 <!-- intro -->
 
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -305,7 +305,7 @@ indexApi.delete({"index" : "products", "id" : 1})
 ```
 <!-- intro -->
 
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -450,7 +450,7 @@ indexApi.delete({"cluster":"cluster","index" : "products", "id" : 100})
 ```
 <!-- intro -->
 
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -622,7 +622,7 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript

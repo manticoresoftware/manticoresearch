@@ -54,8 +54,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tests container entrypoint
         run: bash /entry_point.sh &

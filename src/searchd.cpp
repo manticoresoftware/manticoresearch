@@ -53,6 +53,7 @@
 #include "netfetch.h"
 #include "queryfilter.h"
 #include "pseudosharding.h"
+#include "geodist.h"
 
 // services
 #include "taskping.h"

@@ -329,7 +329,7 @@ utilsApi.sql('SHOW THREADS')
 }
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -977,7 +977,7 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
 }
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

@@ -7725,7 +7725,7 @@ static const char * g_dSqlStmts[] =
 	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
 	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
 	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
-	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
+	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
 	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
@@ -15870,7 +15870,7 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 }
 
 
-static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError )
+static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError, bool bModify )
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
@@ -15879,12 +15879,25 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
 
-	bool bHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
+	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
 	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
 
-	if ( !bIndexed && bHasAttr )
+	if ( !bIndexed && pHasAttr )
 	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
+		if ( !bModify
+			 || pHasAttr->m_eAttrType != SPH_ATTR_INTEGER
+			 || pHasAttr->m_eEngine != AttrEngine_e::DEFAULT
+			 || tStmt.m_eAlterColType != SPH_ATTR_BIGINT
+			 || tStmt.m_eEngine != AttrEngine_e::DEFAULT)
+		{
+			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
+			return;
+		}
+	}
+
+	if ( !pHasAttr && bModify )
+	{
+		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
 		return;
 	}
 
@@ -15959,7 +15972,8 @@ enum class Alter_e
 {
 	AddColumn,
 	DropColumn,
-	RebuildSI
+	ModifyColumn,
+	RebuildSI,
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -16015,8 +16029,8 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 		CSphString sAddError;
 
-		if ( eAction==Alter_e::AddColumn )
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError );
+		if ( eAction==Alter_e::AddColumn || eAction == Alter_e::ModifyColumn )
+			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError, eAction == Alter_e::ModifyColumn );
 		else if ( eAction==Alter_e::DropColumn )
 			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAddError );
 		else if ( eAction==Alter_e::RebuildSI )
@@ -17052,6 +17066,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_ADD:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn );
+		return true;
+
+	case STMT_ALTER_MODIFY:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ModifyColumn );
 		return true;
 
 	case STMT_ALTER_DROP:

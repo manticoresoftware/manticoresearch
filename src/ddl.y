@@ -53,6 +53,7 @@
 %token	TOK_LIKE
 %token	TOK_MULTI
 %token	TOK_MULTI64
+%token	TOK_MODIFY
 %token	TOK_NOT
 %token	TOK_PLUGIN
 %token	TOK_REBUILD
@@ -90,14 +91,15 @@ statement:
 	| import_table
 	;
 
-ident:
-	TOK_IDENT
-	| TOK_TABLEIDENT
-	| TOK_TYPE
-	;
-
 tablename:
 	TOK_TABLEIDENT
+	| TOK_MODIFY
+	;
+
+ident:
+	tablename
+	| TOK_IDENT
+	| TOK_TYPE
 	;
 
 text_or_string:
@@ -133,6 +135,14 @@ alter:
 			{
 			 	yyerror ( pParser, pParser->GetLastError() );
 	            YYERROR;
+			}
+		}
+	| TOK_ALTER TOK_TABLE tablename TOK_MODIFY TOK_COLUMN ident alter_col_type item_option_list
+		{
+			if ( !pParser->SetupAlterTable ( $3, $6, $7, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
 			}
 		}
 	| TOK_ALTER TOK_TABLE tablename TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list

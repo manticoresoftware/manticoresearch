@@ -412,11 +412,10 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v2
+      - uses: manticoresoftware/clt@0.1.1
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          version: v3
           test_prefix: test/clt-tests/logstash/logstash-
 
   clt_mysqldump_test:
@@ -424,11 +423,10 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v2
+      - uses: manticoresoftware/clt@0.1.1
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          version: v3
           test_prefix: test/clt-tests/mysqldump/
           run_args: -e TELEMETRY=0
 
@@ -437,11 +435,10 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt-action@v2
+      - uses: manticoresoftware/clt@0.1.1
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          version: v3
           test_prefix: test/clt-tests/expected-errors/
           run_args: -e TELEMETRY=0
 

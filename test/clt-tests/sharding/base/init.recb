@@ -1,0 +1,24 @@
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y git > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+git clone -b fix/sharding -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
+––– output –––
+0
+––– input –––
+cd /workdir; echo $?
+––– output –––
+0
+––– input –––
+COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
+––– output –––
+0
+––– input –––
+cd /.clt; echo $?
+––– output –––
+0

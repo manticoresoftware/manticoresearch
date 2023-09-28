@@ -86,3 +86,8 @@
 # misc
 /cache
 /local_*_src.txt
+/test/clt-tests/**/*.rep
+/test/clt-tests/**/*.cmp
+/clt
+/test/clt-tests/**/*.deb
+/test/clt-tests/*repo.noarch.deb.*

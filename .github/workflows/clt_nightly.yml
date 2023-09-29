@@ -12,30 +12,28 @@ concurrency:
 
 jobs:
   clt_rhel_release_installation:
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-    with:
-      version: v2
-      docker_images: |
-        [
-          {"image": "centos:7"},
-          {"image": "almalinux:8"},
-          {"image": "almalinux:9"},
-          {"image": "oraclelinux:9"},
-          {"image": "amazonlinux:latest"}
-        ]
-      run_args: -e TELEMETRY=0
-      test_prefix: test/clt-tests/installation/rhel-release-
+    name: Testing DEB release packages installation
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.1
+        with:
+          image: ${{ matrix.image }}
+          test_prefix: test/clt-tests/installation/rhel-release-
+          run_args: -e TELEMETRY=0
   clt_deb_release_installation:
-    uses: manticoresoftware/clt/.github/workflows/clt-template.yml@v2
-    with:
-      version: v2
-      docker_images: |
-        [
-          {"image": "ubuntu:bionic"},
-          {"image": "ubuntu:focal"},
-          {"image": "ubuntu:jammy"},
-          {"image": "debian:buster"},
-          {"image": "debian:bullseye"},
-          {"image": "debian:bookworm"}
-        ]
-      test_prefix: test/clt-tests/installation/deb-release-
+    name: Testing DEB release packages installation
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.1
+        with:
+          image: ${{ matrix.image }}
+          test_prefix: test/clt-tests/installation/deb-release-
+          run_args: -e TELEMETRY=0

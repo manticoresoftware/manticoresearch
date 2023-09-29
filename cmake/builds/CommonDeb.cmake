@@ -53,6 +53,7 @@ set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )
 set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
 set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
 set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
+set ( dirtools "${MANTICORE_BINARY_DIR}/config/tools" )
 
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON )
 
@@ -74,6 +75,7 @@ set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
 seta ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-backup (>= ${DEP_BACKUP_VERSION} ), manticore-backup(<< ${BACKUP_VERNUM_MAX} )" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONTROL_EXTRA "${dirtools}/conffiles" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_REPLACES "${breaks}" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_BREAKS "${breaks}" )
 
@@ -126,10 +128,15 @@ configure_config ( lib/manticore )
 # configure conffiles
 configure_file ( "dist/deb/conffiles-common.in" "${dircommon}/conffiles" @ONLY )
 configure_file ( "dist/deb/conffiles-server.in" "${dirserver}/conffiles" @ONLY )
+configure_file ( "dist/deb/conffiles-tools.in" "${dirtools}/conffiles" @ONLY )
 
 configure_file ( "dist/deb/manticore.default.in" "${dirserver}/manticore" @ONLY )
 configure_file ( "dist/deb/manticore.init.in" "${dirserver}/manticore.init" @ONLY )
 configure_file ( "dist/deb/manticore.service.in" "${dirserver}/manticore.service" @ONLY )
+
+configure_file ( "dist/deb/manticore-indexer.service.in" "${dirtools}/manticore-indexer.service" @ONLY )
+configure_file ( "dist/deb/manticore-indexer@.service.in" "${dirtools}/manticore-indexer@.service" @ONLY )
+configure_file ( "dist/deb/manticore-indexer_global.default.in" "${dirtools}/manticore-indexer_global" @ONLY )
 
 configure_file ( "dist/deb/README.Debian.in" "${MANTICORE_BINARY_DIR}/README.Debian" @ONLY )
 configure_file ( "dist/deb/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
@@ -156,6 +163,7 @@ install ( FILES "${dirserver}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}
 install ( FILES "${dirserver}/manticore.init" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
 		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server RENAME manticore )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT searchd RENAME manticore )
+install ( FILES ${dirtools}/manticore-indexer_global DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT tools )
 
 # stuff going to /var
 # CMAKE_INSTALL_LOCALSTATEDIR				var 					/var
@@ -165,6 +173,8 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COM
 # stuff that should go to /lib -> actually to /usr/lib
 # CMAKE_INSTALL_LIBDIR						usr/lib64 				/usr/lib64
 install ( FILES "${dirserver}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server )
+install ( FILES "${dirtools}/manticore-indexer.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT tools )
+install ( FILES "${dirtools}/manticore-indexer@.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT tools )
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin

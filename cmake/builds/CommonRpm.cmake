@@ -115,6 +115,7 @@ set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
 set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
 set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
+set ( dirtools "${MANTICORE_BINARY_DIR}/config/tools" )
 
 # server (service)
 set ( CPACK_RPM_SERVER_BUILDREQUIRES "systemd-units" )
@@ -125,6 +126,11 @@ set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )
 
 # common
 set ( CPACK_RPM_COMMON_POST_INSTALL_SCRIPT_FILE "${dircommon}/manticore.post" )
+
+# tools
+set ( CPACK_RPM_TOOLS_BUILDREQUIRES "systemd-units" )
+set ( CPACK_RPM_TOOLS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.postun" )
+set ( CPACK_RPM_TOOLS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.preun" )
 
 # now get system paths. These variables are used in configure substitutions below
 set ( CMAKE_INSTALL_LIB "lib" )
@@ -139,6 +145,9 @@ configure_file ( ${SCR}/manticore-core.post.in "${dircore}/manticore.post" @ONLY
 configure_file ( ${SCR}/manticore-server.post.in "${dirserver}/manticore.post" @ONLY )
 configure_file ( ${SCR}/manticore.tmpfiles.in "${MANTICORE_BINARY_DIR}/manticore.tmpfiles" @ONLY )
 configure_file ( ${SCR}/manticore.service.in "${dirserver}/manticore.service" @ONLY )
+configure_file ( ${SCR}/manticore-indexer.service.in "${dirtools}/manticore-indexer.service" @ONLY )
+configure_file ( ${SCR}/manticore-indexer@.service.in "${dirtools}/manticore-indexer@.service" @ONLY )
+configure_file ( ${SCR}/manticore-indexer_global.default.in "${dirtools}/manticore-indexer_global" @ONLY )
 
 # installation
 
@@ -146,6 +155,7 @@ configure_file ( ${SCR}/manticore.service.in "${dirserver}/manticore.service" @O
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT searchd RENAME manticore )
+install ( FILES ${dirtools}/manticore-indexer_global DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT tools )
 
 
 # stuff going to /var
@@ -161,6 +171,8 @@ install ( FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_I
 
 # stuff that should go to /lib -> actually to /usr/lib
 install ( FILES "${dirserver}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server )
+install ( FILES "${dirtools}/manticore-indexer.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT tools )
+install ( FILES "${dirtools}/manticore-indexer@.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT tools )
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin

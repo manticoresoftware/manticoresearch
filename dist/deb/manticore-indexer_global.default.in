@@ -1,0 +1,2 @@
+INDEXER_ARGS=--rotate --quiet
+INDEXER_CONFIG=@CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf

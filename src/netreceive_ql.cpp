@@ -328,6 +328,7 @@ class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 	GenericOutputBuffer_c & m_tOut;
 	ClientSession_c* m_pSession = nullptr;
 	size_t m_iTotalSent = 0;
+	bool m_bWasFlushed = false;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
 #endif
@@ -413,16 +414,12 @@ class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 
 	bool IsAutoCommit() const
 	{
-		if ( !m_pSession )
-			return true;
-		return session::IsAutoCommit ( m_pSession );
+		return !m_pSession || session::IsAutoCommit ( m_pSession );
 	}
 
 	bool IsInTrans () const
 	{
-		if ( !m_pSession )
-			return false;
-		return session::IsInTrans ( m_pSession );
+		return m_pSession != nullptr && session::IsInTrans ( m_pSession );
 	}
 
 public:
@@ -567,11 +564,14 @@ public:
 			pBuf += iSize;
 			iLeft -= iSize;
 			if ( m_tOut.GetSentCount() > MAX_PACKET_LEN )
+			{
 				if ( !m_tOut.Flush() )
 				{
 					m_bError = true;
 					return false;
 				}
+				m_bWasFlushed = true;
+			}
 		}
 		Resize(0);
 		return true;
@@ -625,6 +625,36 @@ public:
 	{
 		LazyVector_T<BYTE>::Add ( uVal );
 	}
+
+	[[nodiscard]] bool WasFlushed() const noexcept { return m_bWasFlushed; }
+
+	[[nodiscard]] std::pair<int, BYTE> GetCurrentPositionState() noexcept
+	{
+		// we track flushes just for current position (that is - flushing invalidates position)
+		m_bWasFlushed = false;
+		return { m_tOut.GetSentCount(), m_uPacketID };
+	};
+
+	void ResetToPositionState ( std::pair<int, BYTE> tPoint )
+	{
+		assert ( !m_bWasFlushed && "Can't rewind already flushed stream!");
+
+		// reset to initial state (as after ctr)
+		RowBuffer_i::Reset();
+		LazyVector_T<BYTE>::Reset();
+
+		m_pSession = session::GetClientSession();
+		m_iTotalSent = 0;
+		m_bWasFlushed = false;
+#ifndef NDEBUG
+		m_iColumns = 0; // used for head/data columns num sanitize check
+#endif
+
+		// rewind stream and packetID
+		assert ( !m_bError );
+		m_tOut.Rewind ( tPoint.first );
+		m_uPacketID = tPoint.second;
+	}
 };
 
 struct CLIENT
@@ -657,7 +687,7 @@ class HandshakeV10_c
 
 	Str_t m_sVersionString;
 	DWORD m_uConnID;
-	char m_sAuthData[AUTH_DATA_LEN];
+	std::array<char, AUTH_DATA_LEN> m_sAuthData {};
 	DWORD m_uCapabilities = CLIENT::CONNECT_WITH_DB
 						| CLIENT::PROTOCOL_41
 						| CLIENT::RESERVED2 // deprecated
@@ -684,12 +714,12 @@ public:
 		DWORD uRand = sphRand() | 0x01010101;
 		for ( ; i < AUTH_DATA_LEN - sizeof ( DWORD ); i += sizeof ( DWORD ) )
 		{
-			memcpy ( m_sAuthData + i, &uRand, sizeof ( DWORD ) );
+			memcpy ( m_sAuthData.data() + i, &uRand, sizeof ( DWORD ) );
 			uRand = sphRand() | 0x01010101;
 		}
 		if ( i < AUTH_DATA_LEN )
-			memcpy ( m_sAuthData + i, &uRand, AUTH_DATA_LEN - i );
-		memset ( m_sAuthData + AUTH_DATA_LEN - 1, 0, 1);
+			memcpy ( m_sAuthData.data() + i, &uRand, AUTH_DATA_LEN - i );
+		memset ( m_sAuthData.data() + AUTH_DATA_LEN - 1, 0, 1);
 		// version string (plus 0-terminator)
 		m_sVersionString = FromStr ( g_sMySQLVersion );
 		++m_sVersionString.second; // encount also z-terminator
@@ -739,7 +769,7 @@ public:
 		tOut.SendByte ( m_uVersion );
 		tOut.SendBytes ( m_sVersionString );
 		tOut.SendLSBDword ( m_uConnID );
-		tOut.SendBytes ( m_sAuthData, 8 );
+		tOut.SendBytes ( m_sAuthData.data(), 8 );
 		tOut.SendByte ( 0 );
 		tOut.SendLSBWord ( m_uCapabilities & 0xFFFF );
 		tOut.SendByte ( m_uCharSet );
@@ -747,7 +777,7 @@ public:
 		tOut.SendLSBWord ( m_uCapabilities >> 16 );
 		tOut.SendByte ( AUTH_DATA_LEN );
 		tOut.SendBytes ( dFiller, sizeof ( dFiller ) );
-		tOut.SendBytes ( m_sAuthData + 8, AUTH_DATA_LEN - 8 );
+		tOut.SendBytes ( &m_sAuthData[8], AUTH_DATA_LEN - 8 );
 		tOut.SendBytes ( m_sAuthPluginName );
 	}
 };
@@ -906,7 +936,20 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
 			tSess.SetTaskState ( TaskState_e::QUERY );
-			bKeepProfile = ProcessSqlQueryBuddy ( myinfo::UnsafeDescription(), uPacketID, tOut );
+
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
+			tSess.m_pSqlRowBuffer = &tRows;
+			auto tStoredPos = tRows.GetCurrentPositionState();
+			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
+			if ( tRows.IsError() && HasBuddy() )
+			{
+				if ( tRows.WasFlushed() )
+				{
+					sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
+					break;
+				}
+				ProcessSqlQueryBuddy ( myinfo::UnsafeDescription(), FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
+			}
 		}
 		break;
 

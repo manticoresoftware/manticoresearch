@@ -1,3 +1,4 @@
+
 <p align="center">
   <a href="https://manticoresearch.com" target="_blank" rel="noopener">
     <img src="https://manticoresearch.com/logo.png" width="50%" alt="Manticore Search Logo">

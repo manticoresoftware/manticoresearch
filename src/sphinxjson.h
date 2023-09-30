@@ -555,7 +555,7 @@ using CondNamedAction_f = std::function<bool ( CSphString&& sName, const NodeHan
 void ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction );
 
 // suitable for strings and vectors of pods as int, int64, double.
-std::pair<const char*, int> RawBlob ( const NodeHandle_t &tLocator );
+Str_t RawBlob ( const NodeHandle_t &tLocator );
 
 // many internals might be represented as vector
 template<typename BLOB> VecTraits_T<BLOB> Vector ( const NodeHandle_t &tLocator )

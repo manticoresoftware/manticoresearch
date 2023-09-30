@@ -1404,7 +1404,7 @@ bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
-bool				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
+void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonObj_c & tRoot );
@@ -1608,7 +1608,7 @@ public:
 		PutString ( (Str_t)sMsg );
 	}
 
-	void PutTimeAsString ( int64_t tmVal )
+	void PutTimeAsString ( int64_t tmVal, const char* szSuffix = nullptr )
 	{
 		if ( tmVal==-1 )
 		{
@@ -1616,7 +1616,10 @@ public:
 			return;
 		}
 		StringBuilder_c sTime;
-		sTime.Sprintf ("%t", tmVal);
+		if ( szSuffix )
+			sTime.Sprintf ("%t%s", tmVal, szSuffix);
+		else
+			sTime.Sprintf ( "%t", tmVal );
 		PutString ( sTime );
 	}
 
@@ -1725,6 +1728,12 @@ public:
 
 	virtual const CSphString & GetError() const { return m_sError; }
 	virtual bool IsError() const { return m_bError; }
+
+	void Reset()
+	{
+		m_bError = false;
+		m_sError = "";
+	}
 
 protected:
 	bool m_bError = false;

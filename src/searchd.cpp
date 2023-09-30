@@ -12500,29 +12500,29 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 15;
-	if ( !bAll )
-		iColCount -= 1;
-	if ( !g_bCpuStats )
-		iColCount -= 2;
+	int iColCount = 11;
+	if ( bAll )
+		iColCount += 1;
+	if ( g_bCpuStats )
+		iColCount += 1;
 
 	tOut.HeadBegin ( iColCount ); // 15 with chain
-	tOut.HeadColumn ( "Tid", MYSQL_COL_LONG );
+	tOut.HeadColumn ( "TID", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
-	tOut.HeadColumn ( "Host" );
+	tOut.HeadColumn ( "Connection from" );
 	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
-	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
-	tOut.HeadColumn ( "Work time" );
+//	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
+	tOut.HeadColumn ( "This/prev job time, s" );
 	if ( g_bCpuStats )
 	{
-		tOut.HeadColumn ( "Work time CPU" );
-		tOut.HeadColumn ( "Thd efficiency", MYSQL_COL_FLOAT);
+//		tOut.HeadColumn ( "Work time CPU" );
+		tOut.HeadColumn ( "CPU activity", MYSQL_COL_FLOAT);
 	}
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Last job took" );
-	tOut.HeadColumn ( "In idle" );
+	tOut.HeadColumn ( "Thread status" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Info" );
@@ -12543,33 +12543,42 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	{
 		if ( !bAll && dThd.m_eTaskState==TaskState_e::UNKNOWN )
 			continue;
-		tOut.PutNumAsString ( dThd.m_iThreadID );
-		tOut.PutString ( dThd.m_sThreadName );
-		tOut.PutString ( dThd.m_sProto );
-		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
-		tOut.PutString ( dThd.m_sClientName ); // Host
+		tOut.PutNumAsString ( dThd.m_iThreadID ); // TID
+		tOut.PutString ( dThd.m_sThreadName ); // Name
+		tOut.PutString ( dThd.m_sProto ); // Proto
+		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) ); // State
+		tOut.PutString ( dThd.m_sClientName ); // Connection from
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
 		int64_t tmNow = sphMicroTimer (); // short-term cache
-		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
-		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
+//		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
+//		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
+		// This/prev job time, s
+		if ( dThd.m_tmLastJobStartTimeUS < 0 )
+			tOut.PutString ( "-" ); // last job take
+		else if ( dThd.m_tmLastJobDoneTimeUS < 0 )
+			tOut.PutTimeAsString ( tmNow - dThd.m_tmLastJobStartTimeUS );
+		else
+			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS, " (prev)" );
+
+
 		if ( g_bCpuStats )
 		{
-			tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
-			tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // work CPU time %
+//			tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
+			tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // CPU activity
 		}
 		tOut.PutNumAsString ( dThd.m_iTotalJobsDone ); // jobs done
 		if ( dThd.m_tmLastJobStartTimeUS<0 )
 		{
 			tOut.PutString ( "-" ); // last job take
-			tOut.PutString ( "-" ); // idle for
+			tOut.PutString ( "idling" ); // idle for
 		} else if ( dThd.m_tmLastJobDoneTimeUS<0 )
 		{
 			tOut.PutTimeAsString ( tmNow-dThd.m_tmLastJobStartTimeUS ); // last job take
-			tOut.PutString ( "No (working)" ); // idle for
+			tOut.PutString ( "working" ); // idle for
 		} else
 		{
 			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS-dThd.m_tmLastJobStartTimeUS ); // last job take
-			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
+			tOut.PutString ( "idling" ); // notice, just 'idling' instead of 'idling for N seconds'. So, value of dThd.m_tmLastJobDoneTimeUS is never more displayed.
 		}
 
 		if ( bAll )
@@ -15128,8 +15137,12 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		std::function<CSphString ( void )> m_fnValue;
 	};
 
+	const bool bHasBuddy = HasBuddy();
+	const SysVar_t tDefaultStr { MYSQL_COL_STRING, nullptr, [] { return "<empty>"; } };
+	const SysVar_t tDefaultNum { MYSQL_COL_LONG, nullptr, [] { return "0"; } };
+
 	const SysVar_t dSysvars[] =
-	{	{ MYSQL_COL_STRING,	nullptr, [] {return "<empty>";}}, // stub
+	{	bHasBuddy ? tDefaultNum : tDefaultStr, // stub
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
 		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},

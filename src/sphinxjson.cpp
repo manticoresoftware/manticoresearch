@@ -2171,10 +2171,7 @@ CSphString bson::String ( const NodeHandle_t &tLocator, CSphString sDefault )
 	if ( tLocator.second!=JSON_STRING )
 		return sDefault;
 
-	auto dBlob = bson::RawBlob ( tLocator );
-	CSphString sResult;
-	sResult.SetBinary ( dBlob.first, dBlob.second );
-	return sResult;
+	return CSphString { bson::RawBlob ( tLocator ) };
 }
 
 Str_t bson::ToStr ( const NodeHandle_t & tLocator )
@@ -2435,7 +2432,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction )
 	}
 }
 
-std::pair<const char *, int> bson::RawBlob ( const NodeHandle_t &tLocator )
+Str_t bson::RawBlob ( const NodeHandle_t &tLocator )
 {
 	if ( ::IsPODBlob ( tLocator ) )
 	{

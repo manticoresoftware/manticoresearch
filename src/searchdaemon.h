@@ -1608,7 +1608,7 @@ public:
 		PutString ( (Str_t)sMsg );
 	}
 
-	void PutTimeAsString ( int64_t tmVal )
+	void PutTimeAsString ( int64_t tmVal, const char* szSuffix = nullptr )
 	{
 		if ( tmVal==-1 )
 		{
@@ -1616,7 +1616,10 @@ public:
 			return;
 		}
 		StringBuilder_c sTime;
-		sTime.Sprintf ("%t", tmVal);
+		if ( szSuffix )
+			sTime.Sprintf ("%t%s", tmVal, szSuffix);
+		else
+			sTime.Sprintf ( "%t", tmVal );
 		PutString ( sTime );
 	}
 

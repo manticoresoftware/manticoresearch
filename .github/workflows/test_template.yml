@@ -69,7 +69,7 @@ jobs:
         uses: manticoresoftware/download_artifact_with_retries@main
         with:
           name: build_bionic_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
-          path: build
+          path: .
 
       - name: List files
         run: find .

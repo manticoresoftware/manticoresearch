@@ -543,15 +543,54 @@ jobs:
       - name: Download artifact
         uses: manticoresoftware/download_artifact_with_retries@main
         with:
-          name: manticore_test_kit.img
-          path: .
-      - name: Calculate short commit hash
-        id: sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      - name: Pushing docker image to repo
-        id: test-kit-push
-        run: |
-          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/mysqldump/mysql/
+
+  clt_mysqldump_maria_test:
+    name: CLT test on mysqldump features for MariaDB
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/mysqldump/maria/
+
+  clt_expected_errors_test:
+    name: CLT test on expected errors in Searchd for Buddy
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/expected-errors/
+
+  clt_restarting_replication_nodes:
+    name: CLT test on replication node restart
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/replication/
+
+  clt_sharding_test:
+    name: CLT test on autosharding features
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/
+          run_args: -e TELEMETRY=0
 
   build_aarch64:
     if: needs.changes.outputs.source == 'true'

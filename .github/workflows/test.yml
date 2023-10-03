@@ -442,8 +442,8 @@ jobs:
           test_prefix: test/clt-tests/expected-errors/
           run_args: -e TELEMETRY=0
 
-  clt_sharding_test:
-    name: CLT test on autosharding features
+  clt_sharding_syntax_test:
+    name: CLT test syntax of autosharding
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
@@ -451,9 +451,56 @@ jobs:
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          test_prefix: test/clt-tests/sharding/
+          test_prefix: test/clt-tests/sharding/syntax/
           run_args: -e TELEMETRY=0
 
+  clt_sharding_replication_test:
+    name: CLT test replication of autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/replication/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_rebalancing_test:
+    name: CLT test rebalancing of autosharding 
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/rebalancing/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_data_test:
+    name: CLT test data handle in autosharding 
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/data/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_performance_test:
+    name: CLT test performance of autosharding 
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/performance/
+          run_args: -e TELEMETRY=0
   build_aarch64:
     name: Linux aarch64 build
     if: |

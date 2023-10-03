@@ -66,10 +66,10 @@ jobs:
           key: build_linux_x86_64
 
       - name: Download build artifacts
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         with:
           name: build_bionic_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
-          path: build
+          path: .
 
       - name: List files
         run: find .
@@ -97,7 +97,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v1
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/*log build/status*"

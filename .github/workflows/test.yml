@@ -122,61 +122,61 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download test report artifacts 1_100
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_1_100
           path: .
       - name: Download test report artifacts 101_200
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_101_200
           path: .
       - name: Download test report artifacts 201_330
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_201_330
           path: .
       - name: Download test report artifacts 331_400
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_331_400
           path: .
       - name: Download test report artifacts 401_500
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_401_500
           path: .
       - name: Download test report artifacts 501_600
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_501_600
           path: .
       - name: Download test report artifacts 601_700
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_601_700
           path: .
       - name: Download test report artifacts 701_800
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_701_800
           path: .
       - name: Download test report artifacts 801_870
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_801_870
           path: .
       - name: Download test report artifacts 871_and_on
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: debug_test_871_and_on
@@ -197,7 +197,7 @@ jobs:
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v1
         with:
           name: debug_test_resuls
           path: build
@@ -270,61 +270,61 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download test report artifacts 1_100
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_1_100
           path: .
       - name: Download test report artifacts 101_200
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_101_200
           path: .
       - name: Download test report artifacts 201_330
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_201_330
           path: .
       - name: Download test report artifacts 331_400
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_331_400
           path: .
       - name: Download test report artifacts 401_500
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_401_500
           path: .
       - name: Download test report artifacts 501_600
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_501_600
           path: .
       - name: Download test report artifacts 601_700
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_601_700
           path: .
       - name: Download test report artifacts 701_800
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_701_800
           path: .
       - name: Download test report artifacts 801_870
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_801_870
           path: .
       - name: Download test report artifacts 871_and_on
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: release_test_871_and_on
@@ -345,7 +345,7 @@ jobs:
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v1
         with:
           name: release_test_resuls
           path: build
@@ -383,7 +383,7 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download built x86_64 Ubuntu Jammy packages
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: build_jammy_RelWithDebInfo_x86_64
@@ -402,7 +402,7 @@ jobs:
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
           echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v1
         with:
           name: manticore_test_kit.img
           path: manticore_test_kit.img
@@ -519,19 +519,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Download test report artifacts 1_400
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: windows_test_1_400
           path: .
       - name: Download test report artifacts 401_650
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: windows_test_401_650
           path: .
       - name: Download test report artifacts 651_and_on
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
           name: windows_test_651_and_on
@@ -554,7 +554,7 @@ jobs:
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v1
         with:
           name: windows_test_resuls
           path: build

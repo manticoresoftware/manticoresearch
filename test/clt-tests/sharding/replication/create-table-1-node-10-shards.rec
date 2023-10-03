@@ -1,0 +1,38 @@
+––– block: ../base/init –––
+––– block: ../base/start-searchd-1 –––
+––– input –––
+mysql -h0 -P19306 -e "create table t(id bigint) shards=10 rf=1"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "show tables\G" | grep 'Index: t' | sort
+––– output –––
+Index: t
+Index: t_s0
+Index: t_s1
+Index: t_s2
+Index: t_s3
+Index: t_s4
+Index: t_s5
+Index: t_s6
+Index: t_s7
+Index: t_s8
+Index: t_s9
+––– input –––
+mysql -h0 -P19306 -e "show create table t\G" | grep 'Create Table'
+––– output –––
+Create Table: CREATE TABLE t type='distributed' local='t_s0' local='t_s1' local='t_s2' local='t_s3' local='t_s4' local='t_s5' local='t_s6' local='t_s7' local='t_s8' local='t_s9'
+––– input –––
+mysql -h0 -P19306 -e "create table a(id bigint) shards=4 rf=1"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "show tables\G" | grep 'Index: a' | sort
+––– output –––
+Index: a
+Index: a_s0
+Index: a_s1
+Index: a_s2
+Index: a_s3
+––– input –––
+mysql -h0 -P19306 -e "show create table a\G" | grep 'Create Table'
+––– output –––
+Create Table: CREATE TABLE a type='distributed' local='a_s0' local='a_s1' local='a_s2' local='a_s3'

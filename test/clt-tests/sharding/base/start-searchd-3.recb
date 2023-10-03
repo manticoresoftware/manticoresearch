@@ -2,7 +2,7 @@
 mkdir /var/{run,lib,log}/manticore-3
 ––– output –––
 ––– input –––
-searchd -c test/clt-tests/sharding/base/config/searchd-1.conf
+searchd -c test/clt-tests/sharding/base/config/searchd-3.conf
 ––– output –––
 Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -17,3 +17,6 @@ listening on all interfaces for sphinx and http(s), port=%{NUMBER}
 tail -n 100 -f /var/log/manticore-3/searchd.log | grep -qm1 'started v' && echo "Buddy started!"
 ––– output –––
 Buddy started!
+––– input –––
+mysql -h0 -P19306 -e "show tables"
+––– output –––

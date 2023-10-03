@@ -473,11 +473,23 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.17
+      - uses: manticoresoftware/clt@0.1.5
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
           test_prefix: test/clt-tests/expected-errors/
+
+  clt_sharding_test:
+    name: CLT test on autosharding features
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/
+          run_args: -e TELEMETRY=0
 
   build_aarch64:
     name: Linux aarch64 build

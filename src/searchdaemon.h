@@ -1448,6 +1448,8 @@ namespace session
 	VecTraits_T<int64_t> LastIds();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
+	void SetDeprecatedEOF ( bool bDeprecatedEOF );
+	bool GetDeprecatedEOF();
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
@@ -1581,7 +1583,10 @@ public:
 	virtual bool Commit() = 0;
 
 	// wrappers for popular packets
-	virtual void Eof ( bool bMoreResults=false, int iWarns=0 ) = 0;
+	virtual void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) = 0;
+	inline void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
+	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
+	inline void Eof () { return Eof ( false ); }
 
 	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 

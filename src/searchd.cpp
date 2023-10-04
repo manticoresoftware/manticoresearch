@@ -17256,6 +17256,16 @@ bool session::GetOptimizeById()
 	return GetClientSession()->m_bOptimizeById;
 }
 
+void session::SetDeprecatedEOF ( bool bDeprecatedEOF )
+{
+	GetClientSession()->m_bDeprecatedEOF = bDeprecatedEOF;
+}
+
+bool session::GetDeprecatedEOF()
+{
+	return GetClientSession()->m_bDeprecatedEOF;
+}
+
 bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )
 {
 	return GetClientSession()->Execute ( sQuery, tOut );

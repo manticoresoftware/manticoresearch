@@ -20,10 +20,17 @@
 extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
 extern CSphString g_sMySQLVersion;
+constexpr bool bSendOkInsteadofEOF = true; // _if_ client support - send OK packet instead of EOF (in mysql proto).
 
 namespace { // c++ way of 'static'
 
 /// proto details are here: https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_packets.html
+
+inline bool OmitEof() noexcept
+{
+	return bSendOkInsteadofEOF && session::GetDeprecatedEOF();
+}
+
 /////////////////////////////////////////////////////////////////////////////
 /// how many bytes this int will occupy in proto mysql
 template<typename INT>
@@ -326,27 +333,13 @@ inline WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 	return uStatus;
 }
 
-/// https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_eof_packet.html
-void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
-{
-	SQLPacketHeader_c tHdr { tOut, uPacketID };
-	tOut.SendByte ( 0xfe );
-
-	tOut.SendLSBWord ( iWarns < 0 ? 0 : ( iWarns > 65536 ? 65535 : iWarns ) );
-	tOut.SendLSBWord ( MysqlStatus ( bMoreResults, bAutoCommit, bIsInTrans ) );
-}
-
-
 /// https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_ok_packet.html
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * szMessage, bool bMoreResults, bool bAutoCommit, bool bIsInTrans, int64_t iLastID )
+void SendMysqlOkPacketBody ( ISphOutputBuffer& tOut, int iAffectedRows, int iWarns, const char* szMessage, bool bMoreResults, bool bAutoCommit, bool bIsInTrans, int64_t iLastID )
 {
-	SQLPacketHeader_c tHdr { tOut, uPacketID };
-	tOut.SendByte ( 0 ); // ok packet
-
 	MysqlSendInt ( tOut, iAffectedRows );
 	MysqlSendInt ( tOut, iLastID );
 
-	// order of WORDs is opposite to EOF packet above
+	// order of WORDs is opposite to EOF packet below
 	tOut.SendLSBWord ( MysqlStatus ( bMoreResults, bAutoCommit, bIsInTrans ) );
 	tOut.SendLSBWord ( iWarns < 0 ? 0 : ( iWarns > 65536 ? 65535 : iWarns ) );
 
@@ -358,11 +351,32 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 	tOut.SendBytes ( szMessage, iLen );
 }
 
+void SendMysqlOkPacket ( ISphOutputBuffer& tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char* szMessage, bool bMoreResults, bool bAutoCommit, bool bIsInTrans, int64_t iLastID )
+{
+	SQLPacketHeader_c tHdr { tOut, uPacketID };
+	tOut.SendByte ( 0 ); // ok packet
+	SendMysqlOkPacketBody ( tOut, iAffectedRows, iWarns, szMessage, bMoreResults, bAutoCommit, bIsInTrans, iLastID );
+}
 
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit, bool bIsInTrans )
+void SendMysqlOkPacket ( ISphOutputBuffer& tOut, BYTE uPacketID, bool bAutoCommit, bool bIsInTrans )
 {
 	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit, bIsInTrans, 0 );
 }
+
+/// https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_eof_packet.html
+void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans, const char* szMeta = nullptr )
+{
+	SQLPacketHeader_c tHdr { tOut, uPacketID };
+	tOut.SendByte ( 0xfe );
+
+	if ( OmitEof() )
+		return SendMysqlOkPacketBody ( tOut, 0, iWarns, szMeta, bMoreResults, bAutoCommit, bIsInTrans, 0 );
+
+	tOut.SendLSBWord ( iWarns < 0 ? 0 : ( iWarns > 65536 ? 65535 : iWarns ) );
+	tOut.SendLSBWord ( MysqlStatus ( bMoreResults, bAutoCommit, bIsInTrans ) );
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
@@ -609,10 +623,11 @@ public:
 	}
 
 	// wrappers for popular packets
-	void Eof ( bool bMoreResults, int iWarns ) override
+	void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) override
 	{
-		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, IsAutoCommit(), IsInTrans() );
+		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, IsAutoCommit(), IsInTrans(), szMeta );
 	}
+	using RowBuffer_i::Eof;
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
 	{
@@ -640,6 +655,7 @@ public:
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
 	{
+		if ( !OmitEof() )
 		Eof ( bMoreResults, iWarns );
 		Resize(0);
 		return true;
@@ -703,6 +719,7 @@ struct CLIENT
 	static constexpr DWORD PLUGIN_AUTH = ( 1UL << 19 );
 	static constexpr DWORD CONNECT_ATTRS = ( 1UL << 20 );
 	static constexpr DWORD PLUGIN_AUTH_LENENC_CLIENT_DATA = ( 1UL << 21 );
+	static constexpr DWORD DEPRECATE_EOF = ( 1UL << 24 );
 	static constexpr DWORD ZSTD_COMPRESSION_ALGORITHM = ( 1UL << 26 );
 };
 
@@ -724,7 +741,8 @@ class HandshakeV10_c
 //						| CLIENT::RESERVED
 						| CLIENT::MULTI_RESULTS
 						| CLIENT::PLUGIN_AUTH
-						| CLIENT::CONNECT_ATTRS;
+						| CLIENT::CONNECT_ATTRS
+						| ( bSendOkInsteadofEOF ? CLIENT::DEPRECATE_EOF : 0 );
 
 public:
 	explicit HandshakeV10_c( DWORD uConnID )
@@ -901,6 +919,11 @@ public:
 	[[nodiscard]] inline int WantZstdLev() const noexcept
 	{
 		return m_uCompressionLevel;
+	}
+
+	[[nodiscard]] inline bool DeprecateEOF() const noexcept
+	{
+		return ( m_uCapabilities & CLIENT::DEPRECATE_EOF ) != 0;
 	}
 };
 
@@ -1196,6 +1219,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			SendMysqlOkPacket ( *pOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
 			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;
+			session::SetDeprecatedEOF ( tResponse.DeprecateEOF() );
 
 			if ( bCanZstdCompression && tResponse.WantZstd() )
 			{

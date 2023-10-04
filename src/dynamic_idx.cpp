@@ -322,18 +322,19 @@ public:
 	}
 
 	// wrappers for popular packets
-	void Eof ( bool bMoreResults, int iWarns ) override
+	void Eof ( bool bMoreResults, int iWarns, const char* ) override
 	{
 		m_bHaveMoreMatches = false;
 		m_pMatch = nullptr; // that should stop any further feeding
 		Coro::Yield_ (); // generally not need as eof is usually the last stmt, but if not it is safe
 	}
+	using RowBuffer_i::Eof;
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
 	{
 		m_bError = true;
 		m_sError.SetSprintf ( "%s: %s", sStmt, sError );
-		Eof (false,0);
+		Eof ();
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
 	void Add ( BYTE ) override {}
@@ -465,12 +466,13 @@ public:
 	void PutMicrosec ( int64_t ) override {}
 	void PutNULL () override {}
 	bool Commit() override { return false;}
-	void Eof ( bool, int ) override {}
+	void Eof ( bool, int, const char* ) override {}
+	using RowBuffer_i::Eof;
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
 	{
 		m_bError = true;
 		m_sError.SetSprintf ( "%s:%s", sStmt, sError );
-		Eof ( false, 0 );
+		Eof ();
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
 	void Add ( BYTE ) override {}

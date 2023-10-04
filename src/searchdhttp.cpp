@@ -1411,7 +1411,7 @@ public:
 		return true;
 	}
 
-	void Eof ( bool bMoreResults , int iWarns ) override
+	void Eof ( bool bMoreResults, int iWarns, const char* ) override
 	{
 		m_dBuf.FinishBlock ( true ); // last doc, allow empty
 		m_dBuf.FinishBlock ( false ); // docs section

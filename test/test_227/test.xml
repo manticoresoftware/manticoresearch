@@ -19,7 +19,6 @@ searchd
 	max_filter_values 	= 500000
 	max_packet_size 	= 18M
 	max_threads_per_query	= 4
-	read_timeout			= 1
 }
 
 source src1
@@ -52,6 +51,7 @@ source src_i2
 	sql_query = SELECT id + 100, title, group_id as gid FROM test_table
 	sql_attr_uint	= gid
 }
+
 <agent0>
 index block1
 {
@@ -59,25 +59,6 @@ index block1
 	path			= <data_path/>/block1
 	min_word_len	= 1
 }
-</agent0>
-
-<agent1>
-index block2
-{
-	source			= src2
-	path			= <data_path/>/block2
-	min_word_len	= 1
-}
-
-index dist_agent_2
-{
-	source			= src1
-	path			= <data_path/>/dist_agent_2
-}
-
-</agent1>
-
-<agent0>
 index dist
 {
 	type					= distributed
@@ -120,7 +101,6 @@ index rt1
 {
 	type = rt
 	path			= <data_path/>/rt1
-	docinfo = extern
 	rt_mem_limit = 128M
     rt_field = title
     rt_field = content
@@ -132,6 +112,21 @@ index rt1
     rt_attr_multi = categories
 }
 </agent0>
+<agent1>
+index block2
+{
+	source			= src2
+	path			= <data_path/>/block2
+	min_word_len	= 1
+}
+
+index dist_agent_2
+{
+	source			= src1
+	path			= <data_path/>/dist_agent_2
+}
+
+</agent1>
 </config>
 
 <num_agents>2</num_agents>

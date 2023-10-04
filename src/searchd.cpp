@@ -13247,6 +13247,20 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 	dRows.Commit();
 }
 
+CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
+{
+	// --- 0 out of 1115 results in 115ms ---
+	// --- 20 out of >= 20 results in 5.123s ---
+
+	StringBuilder_c sMeta;
+	// since we have us precision, printing 0 will output '0us', which is not necessary true.
+	if ( tMeta.m_iQueryTime > 0 )
+		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, tMeta.m_iQueryTime * 1000 );
+	else
+		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
+	return (CSphString)sMeta;
+}
+
 
 void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
 {
@@ -13420,8 +13434,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	if ( bReturnZeroCount )
 		ReturnZeroCount ( tRes.m_tSchema, tAttrsToSend, tRes.m_dZeroCount, dRows );
 
+	CSphString sMeta = BuildMetaOneline ( tRes );
+
 	// eof packet
-	dRows.Eof ( bMoreResultsFollow, iWarns );
+	dRows.Eof ( bMoreResultsFollow, iWarns, sMeta.cstr() );
 }
 
 
@@ -17254,6 +17270,16 @@ void session::SetOptimizeById ( bool bOptimizeById )
 bool session::GetOptimizeById()
 {
 	return GetClientSession()->m_bOptimizeById;
+}
+
+void session::SetDeprecatedEOF ( bool bDeprecatedEOF )
+{
+	GetClientSession()->m_bDeprecatedEOF = bDeprecatedEOF;
+}
+
+bool session::GetDeprecatedEOF()
+{
+	return GetClientSession()->m_bDeprecatedEOF;
 }
 
 bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )

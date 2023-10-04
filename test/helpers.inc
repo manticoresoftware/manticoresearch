@@ -2269,14 +2269,17 @@ class SphinxConfig
                     '/connect and query timed out/', // also windows
                     '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
                     '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end',
-                    '/(.* error: no AF_INET address found for:.*, error)(.*)/'
+                    '/(.* error: no AF_INET address found for:.*, error)(.*)/',
+                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/'
+
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "\$end",
-                    "$1: substituted"
+                    "$1: substituted",
+                    "$1",
                 ], $s );
 		return $s;
 	}

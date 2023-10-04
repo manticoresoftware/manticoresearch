@@ -384,6 +384,18 @@ public:
 		WriteT<int> ( iOff, htonl ( iValue ) );
 	}
 
+	void WriteLSBDword ( int64_t iOff, DWORD v )
+	{
+#if USE_LITTLE_ENDIAN
+		WriteT<DWORD> ( iOff, v );
+#else
+		WriteT<BYTE> ( iOff, (BYTE)( v & 0xff ) );
+		WriteT<BYTE> ( iOff+1, (BYTE)( ( v >> 8 ) & 0xff ) );
+		WriteT<BYTE> ( iOff+2, (BYTE)( ( v >> 16 ) & 0xff ) );
+		WriteT<BYTE> ( iOff+3, (BYTE)( ( v >> 24 ) & 0xff ) );
+#endif
+	}
+
 	BYTE* ReservePlace ( int64_t iPlace )
 	{
 		auto pRes = m_dBuf.AddN ( (int)iPlace );

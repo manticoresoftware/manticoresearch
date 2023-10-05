@@ -479,6 +479,18 @@ jobs:
           image: test-kit:img
           test_prefix: test/clt-tests/expected-errors/
 
+  clt_sharding_cluster_test:
+    name: CLT test cluster logic of the manticoresearch
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/cluster/
+          run_args: -e TELEMETRY=0
+
   clt_sharding_syntax_test:
     name: CLT test syntax of autosharding
     needs: build_test_kit_docker
@@ -504,7 +516,7 @@ jobs:
           run_args: -e TELEMETRY=0
 
   clt_sharding_rebalancing_test:
-    name: CLT test rebalancing of autosharding 
+    name: CLT test rebalancing of autosharding
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
@@ -516,7 +528,7 @@ jobs:
           run_args: -e TELEMETRY=0
 
   clt_sharding_data_test:
-    name: CLT test data handle in autosharding 
+    name: CLT test data handle in autosharding
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
@@ -528,7 +540,7 @@ jobs:
           run_args: -e TELEMETRY=0
 
   clt_sharding_performance_test:
-    name: CLT test performance of autosharding 
+    name: CLT test performance of autosharding
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:

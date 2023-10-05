@@ -1,4 +1,7 @@
 ––– input –––
+set -b
+––– output –––
+––– input –––
 apt-get update -y > /dev/null; echo $?
 ––– output –––
 0

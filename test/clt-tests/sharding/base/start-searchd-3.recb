@@ -1,5 +1,5 @@
 ––– input –––
-mkdir /var/{run,lib,log}/manticore-3
+mkdir -p /var/{run,lib,log}/manticore-3/{a,b,c,d,e}
 ––– output –––
 ––– input –––
 searchd -c test/clt-tests/sharding/base/config/searchd-3.conf

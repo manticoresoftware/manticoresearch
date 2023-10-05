@@ -412,7 +412,7 @@ utilsApi.sql('SHOW AGENT STATUS')
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -685,7 +685,7 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -845,7 +845,7 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1033,7 +1033,7 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

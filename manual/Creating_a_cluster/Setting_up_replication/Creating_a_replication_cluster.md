@@ -70,7 +70,7 @@ utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'c
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

@@ -747,6 +747,25 @@ static void MarkAvailableOptional ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, 
 }
 
 
+static void RemoveOptionalColumnar ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	// if we have a columnar attribute and it's capabilities are limited to only "filter" and "none"
+	// then we disabled columnarscan and secondaryindex via index hints
+	// such filters need to be removed
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+	{
+		auto & tSIInfo = dSIInfo[i];
+		auto & tFilter = tCtx.m_dFilters[i];
+
+		if ( tSIInfo.m_dCapabilities.GetLength()==2 && tSIInfo.m_dCapabilities[0]==SecondaryIndexType_e::FILTER && tSIInfo.m_dCapabilities[1]==SecondaryIndexType_e::NONE && tCtx.IsEnabled_Analyzer(tFilter) )
+		{
+			tSIInfo.m_dCapabilities.RemoveFast(0);
+			tSIInfo.m_eType = SecondaryIndexType_e::NONE;
+		}
+	}
+}
+
+
 static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
 {
 	for ( auto & i : dSIInfo )
@@ -993,6 +1012,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	MarkAvailableSI ( dSIInfo, tCtx );
 	MarkAvailableAnalyzers ( dSIInfo, tCtx );
 	MarkAvailableOptional ( dSIInfo, tCtx );
+	RemoveOptionalColumnar ( dSIInfo, tCtx );
 	ForceSI(dSIInfo);
 	DisableRowidFilters ( dSIInfo, tCtx );
 	FetchPartialColumnarMinMax ( dSIInfo, tCtx );

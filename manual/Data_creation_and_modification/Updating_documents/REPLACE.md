@@ -146,7 +146,7 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
 ```
 <!-- intro -->
 
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript

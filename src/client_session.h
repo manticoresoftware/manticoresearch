@@ -39,6 +39,7 @@ public:
 	QueryProfile_c m_tProfile;
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
+	bool m_bDeprecatedEOF = false;
 
 public:
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );

@@ -286,8 +286,9 @@ bool GeodistGetSphereBBox ( Geofunc_fn fnFunc, float fLat, float fLon, float fDi
 	if ( bAdaptive )
 		fRadius = ADAPTIVE_EARTH_RADIUS;
 
-	const double CORRECTION = 1.003;
-	double fAngularDist = (double)fDist / fRadius*CORRECTION;
+	const double CORRECTION_LAT = 1.003;
+	const double CORRECTION_LON = 1.10;
+	double fAngularDist = (double)fDist / fRadius*CORRECTION_LAT;
 	fLatMin = fLatRad - fAngularDist;
 	fLatMax = fLatRad + fAngularDist;
 
@@ -297,10 +298,10 @@ bool GeodistGetSphereBBox ( Geofunc_fn fnFunc, float fLat, float fLon, float fDi
 
 	// about 100m
 	const double EPS = 1.570795e-5;
-	if ( abs ( fLatRad - PI/2.0 ) <= EPS || abs ( fLatRad + PI/2.0 ) <= EPS )
+	if ( fabs ( fLatRad - PI/2.0 ) <= EPS || fabs ( fLatRad + PI/2.0 ) <= EPS )
 		return false;
 
-	double fDeltaLon = fAngularDist / cos(fLatRad);
+	double fDeltaLon = fAngularDist / cos(fLatRad) * CORRECTION_LON;
 	fLonMin = float(fLonRad - fDeltaLon);
 	fLonMax = float(fLonRad + fDeltaLon);
 

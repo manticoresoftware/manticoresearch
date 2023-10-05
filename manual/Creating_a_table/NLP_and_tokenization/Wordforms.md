@@ -92,7 +92,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) wordforms = \'/var/lib/manticore/wordforms.txt\' wordforms = \'/var/lib/manticore/alternateforms.txt\' wordforms = \'/var/lib/manticore/dict*.txt\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

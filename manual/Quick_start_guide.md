@@ -729,7 +729,7 @@ indexApi = api = manticoresearch.IndexApi(client)
 indexApi.update({"index" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -841,7 +841,7 @@ indexApi.delete({"index" : "products", "query": {"range":{"price":{"lte":10}}}})
 
 <!-- intro -->
 
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript

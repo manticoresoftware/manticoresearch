@@ -88,7 +88,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = \'/usr/local/manticore/data/exceptions.txt\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

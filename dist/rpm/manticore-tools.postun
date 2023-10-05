@@ -1,0 +1,2 @@
+%systemd_postun manticore-indexer.service
+%systemd_postun manticore-indexer@.service

@@ -47,7 +47,7 @@ utilsApi.sql('ALTER CLUSTER posts UPDATE nodes')
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

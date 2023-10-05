@@ -7725,7 +7725,7 @@ static const char * g_dSqlStmts[] =
 	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
 	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
 	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
-	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
+	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
 	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
@@ -12500,29 +12500,29 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 15;
-	if ( !bAll )
-		iColCount -= 1;
-	if ( !g_bCpuStats )
-		iColCount -= 2;
+	int iColCount = 11;
+	if ( bAll )
+		iColCount += 1;
+	if ( g_bCpuStats )
+		iColCount += 1;
 
 	tOut.HeadBegin ( iColCount ); // 15 with chain
-	tOut.HeadColumn ( "Tid", MYSQL_COL_LONG );
+	tOut.HeadColumn ( "TID", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
-	tOut.HeadColumn ( "Host" );
+	tOut.HeadColumn ( "Connection from" );
 	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
-	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
-	tOut.HeadColumn ( "Work time" );
+//	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
+	tOut.HeadColumn ( "This/prev job time, s" );
 	if ( g_bCpuStats )
 	{
-		tOut.HeadColumn ( "Work time CPU" );
-		tOut.HeadColumn ( "Thd efficiency", MYSQL_COL_FLOAT);
+//		tOut.HeadColumn ( "Work time CPU" );
+		tOut.HeadColumn ( "CPU activity", MYSQL_COL_FLOAT);
 	}
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Last job took" );
-	tOut.HeadColumn ( "In idle" );
+	tOut.HeadColumn ( "Thread status" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Info" );
@@ -12543,33 +12543,42 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	{
 		if ( !bAll && dThd.m_eTaskState==TaskState_e::UNKNOWN )
 			continue;
-		tOut.PutNumAsString ( dThd.m_iThreadID );
-		tOut.PutString ( dThd.m_sThreadName );
-		tOut.PutString ( dThd.m_sProto );
-		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
-		tOut.PutString ( dThd.m_sClientName ); // Host
+		tOut.PutNumAsString ( dThd.m_iThreadID ); // TID
+		tOut.PutString ( dThd.m_sThreadName ); // Name
+		tOut.PutString ( dThd.m_sProto ); // Proto
+		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) ); // State
+		tOut.PutString ( dThd.m_sClientName ); // Connection from
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
 		int64_t tmNow = sphMicroTimer (); // short-term cache
-		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
-		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
+//		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
+//		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
+		// This/prev job time, s
+		if ( dThd.m_tmLastJobStartTimeUS < 0 )
+			tOut.PutString ( "-" ); // last job take
+		else if ( dThd.m_tmLastJobDoneTimeUS < 0 )
+			tOut.PutTimeAsString ( tmNow - dThd.m_tmLastJobStartTimeUS );
+		else
+			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS, " (prev)" );
+
+
 		if ( g_bCpuStats )
 		{
-			tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
-			tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // work CPU time %
+//			tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
+			tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // CPU activity
 		}
 		tOut.PutNumAsString ( dThd.m_iTotalJobsDone ); // jobs done
 		if ( dThd.m_tmLastJobStartTimeUS<0 )
 		{
 			tOut.PutString ( "-" ); // last job take
-			tOut.PutString ( "-" ); // idle for
+			tOut.PutString ( "idling" ); // idle for
 		} else if ( dThd.m_tmLastJobDoneTimeUS<0 )
 		{
 			tOut.PutTimeAsString ( tmNow-dThd.m_tmLastJobStartTimeUS ); // last job take
-			tOut.PutString ( "No (working)" ); // idle for
+			tOut.PutString ( "working" ); // idle for
 		} else
 		{
 			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS-dThd.m_tmLastJobStartTimeUS ); // last job take
-			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
+			tOut.PutString ( "idling" ); // notice, just 'idling' instead of 'idling for N seconds'. So, value of dThd.m_tmLastJobDoneTimeUS is never more displayed.
 		}
 
 		if ( bAll )
@@ -13238,6 +13247,20 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 	dRows.Commit();
 }
 
+CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
+{
+	// --- 0 out of 1115 results in 115ms ---
+	// --- 20 out of >= 20 results in 5.123s ---
+
+	StringBuilder_c sMeta;
+	// since we have us precision, printing 0 will output '0us', which is not necessary true.
+	if ( tMeta.m_iQueryTime > 0 )
+		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, tMeta.m_iQueryTime * 1000 );
+	else
+		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
+	return (CSphString)sMeta;
+}
+
 
 void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
 {
@@ -13411,8 +13434,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	if ( bReturnZeroCount )
 		ReturnZeroCount ( tRes.m_tSchema, tAttrsToSend, tRes.m_dZeroCount, dRows );
 
+	CSphString sMeta = BuildMetaOneline ( tRes );
+
 	// eof packet
-	dRows.Eof ( bMoreResultsFollow, iWarns );
+	dRows.Eof ( bMoreResultsFollow, iWarns, sMeta.cstr() );
 }
 
 
@@ -15128,8 +15153,12 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		std::function<CSphString ( void )> m_fnValue;
 	};
 
+	const bool bHasBuddy = HasBuddy();
+	const SysVar_t tDefaultStr { MYSQL_COL_STRING, nullptr, [] { return "<empty>"; } };
+	const SysVar_t tDefaultNum { MYSQL_COL_LONG, nullptr, [] { return "0"; } };
+
 	const SysVar_t dSysvars[] =
-	{	{ MYSQL_COL_STRING,	nullptr, [] {return "<empty>";}}, // stub
+	{	bHasBuddy ? tDefaultNum : tDefaultStr, // stub
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
 		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},
@@ -15870,7 +15899,7 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 }
 
 
-static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError )
+static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError, bool bModify )
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
@@ -15879,12 +15908,25 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
 	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
 
-	bool bHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
+	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
 	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
 
-	if ( !bIndexed && bHasAttr )
+	if ( !bIndexed && pHasAttr )
 	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
+		if ( !bModify
+			 || pHasAttr->m_eAttrType != SPH_ATTR_INTEGER
+			 || pHasAttr->m_eEngine != AttrEngine_e::DEFAULT
+			 || tStmt.m_eAlterColType != SPH_ATTR_BIGINT
+			 || tStmt.m_eEngine != AttrEngine_e::DEFAULT)
+		{
+			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
+			return;
+		}
+	}
+
+	if ( !pHasAttr && bModify )
+	{
+		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
 		return;
 	}
 
@@ -15959,7 +16001,8 @@ enum class Alter_e
 {
 	AddColumn,
 	DropColumn,
-	RebuildSI
+	ModifyColumn,
+	RebuildSI,
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -16015,8 +16058,8 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 		CSphString sAddError;
 
-		if ( eAction==Alter_e::AddColumn )
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError );
+		if ( eAction==Alter_e::AddColumn || eAction == Alter_e::ModifyColumn )
+			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError, eAction == Alter_e::ModifyColumn );
 		else if ( eAction==Alter_e::DropColumn )
 			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAddError );
 		else if ( eAction==Alter_e::RebuildSI )
@@ -17054,6 +17097,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn );
 		return true;
 
+	case STMT_ALTER_MODIFY:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ModifyColumn );
+		return true;
+
 	case STMT_ALTER_DROP:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::DropColumn );
 		return true;
@@ -17223,6 +17270,16 @@ void session::SetOptimizeById ( bool bOptimizeById )
 bool session::GetOptimizeById()
 {
 	return GetClientSession()->m_bOptimizeById;
+}
+
+void session::SetDeprecatedEOF ( bool bDeprecatedEOF )
+{
+	GetClientSession()->m_bDeprecatedEOF = bDeprecatedEOF;
+}
+
+bool session::GetDeprecatedEOF()
+{
+	return GetClientSession()->m_bDeprecatedEOF;
 }
 
 bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )

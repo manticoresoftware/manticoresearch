@@ -88,7 +88,7 @@ Array(
 utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

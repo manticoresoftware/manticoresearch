@@ -384,6 +384,18 @@ public:
 		WriteT<int> ( iOff, htonl ( iValue ) );
 	}
 
+	void WriteLSBDword ( int64_t iOff, DWORD v )
+	{
+#if USE_LITTLE_ENDIAN
+		WriteT<DWORD> ( iOff, v );
+#else
+		WriteT<BYTE> ( iOff, (BYTE)( v & 0xff ) );
+		WriteT<BYTE> ( iOff+1, (BYTE)( ( v >> 8 ) & 0xff ) );
+		WriteT<BYTE> ( iOff+2, (BYTE)( ( v >> 16 ) & 0xff ) );
+		WriteT<BYTE> ( iOff+3, (BYTE)( ( v >> 24 ) & 0xff ) );
+#endif
+	}
+
 	BYTE* ReservePlace ( int64_t iPlace )
 	{
 		auto pRes = m_dBuf.AddN ( (int)iPlace );
@@ -1404,7 +1416,7 @@ bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
 
-bool				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
+void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonObj_c & tRoot );
@@ -1436,6 +1448,8 @@ namespace session
 	VecTraits_T<int64_t> LastIds();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
+	void SetDeprecatedEOF ( bool bDeprecatedEOF );
+	bool GetDeprecatedEOF();
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
@@ -1569,7 +1583,10 @@ public:
 	virtual bool Commit() = 0;
 
 	// wrappers for popular packets
-	virtual void Eof ( bool bMoreResults=false, int iWarns=0 ) = 0;
+	virtual void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) = 0;
+	inline void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
+	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
+	inline void Eof () { return Eof ( false ); }
 
 	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 
@@ -1608,7 +1625,7 @@ public:
 		PutString ( (Str_t)sMsg );
 	}
 
-	void PutTimeAsString ( int64_t tmVal )
+	void PutTimeAsString ( int64_t tmVal, const char* szSuffix = nullptr )
 	{
 		if ( tmVal==-1 )
 		{
@@ -1616,7 +1633,10 @@ public:
 			return;
 		}
 		StringBuilder_c sTime;
-		sTime.Sprintf ("%t", tmVal);
+		if ( szSuffix )
+			sTime.Sprintf ("%t%s", tmVal, szSuffix);
+		else
+			sTime.Sprintf ( "%t", tmVal );
 		PutString ( sTime );
 	}
 
@@ -1725,6 +1745,12 @@ public:
 
 	virtual const CSphString & GetError() const { return m_sError; }
 	virtual bool IsError() const { return m_bError; }
+
+	void Reset()
+	{
+		m_bError = false;
+		m_sError = "";
+	}
 
 protected:
 	bool m_bError = false;

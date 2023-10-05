@@ -1172,7 +1172,7 @@ ReplicationCluster_t::~ReplicationCluster_t()
 	HeartBeat();
 
 	wsrep_unload ( m_pProvider );
-	sphLogDebugRpl ( "cluster '%s' finished, cluster deleted, lib %p unloaded", m_sName.scstr(), m_pProvider );
+	sphLogDebugRpl ( "cluster '%s' finished, cluster deleted", m_sName.scstr() );
 }
 
 // check return code from Galera calls
@@ -2459,6 +2459,49 @@ static bool NewClusterForce ( const CSphString & sPath, CSphString & sError )
 	return true;
 }
 
+static bool CheckClusterNew ( const CSphString & sPath, CSphString & sError )
+{
+	CSphString sClusterState;
+	sClusterState.SetSprintf ( "%s/grastate.dat", sPath.cstr() );
+	const char sPattern[] = "safe_to_bootstrap";
+	const int iPatternLen = sizeof(sPattern)-1;
+
+	// cluster starts well without grastate.dat file
+	if ( !sphIsReadable ( sClusterState ) )
+		return true;
+
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( sClusterState, sError ) )
+		return false;
+
+	CSphFixedVector<char> dBuf { 2048 };
+	SphOffset_t iStateSize = tReader.GetFilesize();
+	while ( tReader.GetPos()<iStateSize )
+	{
+		int iLineLen = tReader.GetLine ( dBuf.Begin(), (int)dBuf.GetLengthBytes() );
+		// check value of safe_to_bootstrap
+		if ( iLineLen<iPatternLen )
+			continue;
+
+		if ( strncmp ( sPattern, dBuf.Begin(), iPatternLen )!=0 )
+			continue;
+
+		int iVal = strtol ( dBuf.Begin()+iPatternLen+1, nullptr, 10 );
+		
+		if ( iVal!=1 )
+		{
+			sError.SetSprintf ( "can not start cluster without 'safe_to_bootstrap: 1' at the '%s', got '%s', use '--new-cluster-force' to bootstrap this node and bypassing cluster restart protection", sClusterState.cstr(), dBuf.Begin() );
+			return false;
+		} else
+		{
+			return true;
+		}
+	}
+
+	// can start cluster without any safe_to_bootstrap flag
+	return	true;
+}
+
 static const char * g_sLibFiles[] = { "grastate.dat", "galera.cache" };
 
 // clean up Galera files at cluster path to start new and fresh cluster again
@@ -2614,6 +2657,8 @@ void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNe
 		// global options
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
 
+		sphLogDebugRpl ( "starting cluster '%s' on daemon start, new %d, forced %d, nodes: %s", tDesc.m_sName.cstr(), (int)bNewCluster, (int)bForce, tDesc.m_sClusterNodes.scstr() );
+
 		// cluster nodes
 		if ( tArgs.m_bNewCluster || tDesc.m_sClusterNodes.IsEmpty() )
 		{
@@ -2657,7 +2702,13 @@ void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNe
 		CSphString sClusterPath = GetClusterPath ( pElem->m_sPath );
 
 		// set safe_to_bootstrap to 1 into grastate.dat file at cluster path
+		// or check that new-cluster matched to safe_to_bootstrap in grastate.dat
 		if ( bForce && !NewClusterForce ( sClusterPath, sError ) )
+		{
+			sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), pElem->m_sName.cstr() );
+			continue;
+
+		} else if ( tArgs.m_bNewCluster && !CheckClusterNew ( sClusterPath, sError ) )
 		{
 			sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), pElem->m_sName.cstr() );
 			continue;
@@ -2683,12 +2734,12 @@ void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNe
 
 		if ( !ReplicateClusterInit ( tArgs, sError ) )
 		{
-			sphLogFatal ( "'%s' cluster start error: %s, nodes '%s'", tDesc.m_sName.cstr(), sError.cstr(), tArgs.m_sNodes.cstr() );
+			sphLogFatal ( "'%s' cluster start error: %s, nodes '%s'", tDesc.m_sName.cstr(), sError.cstr(), tArgs.m_sNodes.scstr() );
 			DeleteClusterByName ( tDesc.m_sName );
 		} else
 		{
 			tClearIndexGuard.SkipCleanup();
-			sphLogDebugRpl ( "'%s' cluster started with %d tables, nodes '%s'", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength(), tArgs.m_sNodes.cstr() );
+			sphLogDebugRpl ( "'%s' cluster started with %d tables, nodes '%s'", tDesc.m_sName.cstr(), tDesc.m_dIndexes.GetLength(), tArgs.m_sNodes.scstr() );
 		}
 	}
 
@@ -2792,6 +2843,8 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	ReplicationClusterPtr_t & pElem = tArgs.m_pCluster;
 	if ( !CheckClusterStatement ( sCluster, dNames, dValues, true, sError, pElem ) )
 		return false;
+
+	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), pElem->m_sClusterNodes.scstr() );
 
 	if ( !ClusterGetNodes ( pElem->m_sClusterNodes, pElem->m_sName, "", Proto_e::REPLICATION, sError, tArgs.m_sNodes ) )
 	{
@@ -2897,6 +2950,8 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	tArgs.m_sListenAddr.SetSprintf ( "%s:%d", g_sListenReplicationIP.cstr(), tPort.Get() );
 	tArgs.m_iListenPort = tPort.Get();
 	pElem->m_tPort.Set ( tPort.Leak() );
+
+	sphLogDebugRpl ( "creating cluster '%s', nodes: %s", sCluster.cstr(), pElem->m_sClusterNodes.scstr() );
 
 	// global options
 	tArgs.m_bNewCluster = true;
@@ -3127,10 +3182,17 @@ struct VecAgentDesc_t : public ISphNoncopyable, public CSphVector<AgentDesc_t *>
 	}
 };
 
+static const int g_dRetryRegularWait[] = { g_iAnyNodesTimeout, g_iAnyNodesTimeout, g_iAnyNodesTimeout, 0 };
+
+static const int g_dRetryLongWait[] = { g_iNodeRetryWait, g_iNodeRetryWait*2, g_iNodeRetryWait*2, g_iNodeRetryWait*3, g_iNodeRetryWait*3, g_iNodeRetryWait*4, g_iNodeRetryWait*4, g_iNodeRetryWait*6, g_iNodeRetryWait*6, g_iNodeRetryWait*10, g_iNodeRetryWait*10, g_iNodeRetryWait*20, g_iNodeRetryWait*30, g_iNodeRetryWait*40, g_iNodeRetryWait*50, g_iNodeRetryWait*60, g_iNodeRetryWait*70, g_iNodeRetryWait*100, g_iNodeRetryWait*100, g_iNodeRetryWait*100, 0 };
+
 // get nodes of specific type from string
 class ISphDescIterator
 {
 public:
+	explicit ISphDescIterator ( bool bLongWait )
+		: m_bLongWait ( bLongWait )
+	{}
 
 	bool ProcessNodes ( const char * sNodes, CSphString & sError, CSphString & sWarning )
 	{
@@ -3140,18 +3202,28 @@ public:
 			return false;
 		}
 
-		for ( int iRetry=0; iRetry<g_iNodeRetry; iRetry++ )
+		int iRetry = 0;
+		int64_t tmStart = sphMicroTimer();
+
+		auto tItStart { m_bLongWait ? std::begin ( g_dRetryLongWait ) : std::begin ( g_dRetryRegularWait ) };
+		const auto tItEnd { m_bLongWait ? std::end ( g_dRetryLongWait ) : std::end ( g_dRetryRegularWait ) };
+
+		for ( ; tItStart!=tItEnd; tItStart++ )
 		{
 			if ( SplitNodes ( sNodes ) )
 				return true;
 
-			if ( iRetry+1>=g_iNodeRetry )
+			int iWaitMs = *tItStart;
+			iRetry++;
+
+			// 0 means the end of the wait 
+			if ( !iWaitMs )
 				break;
 
 			m_sError.Clear();
 			ResetNodes();
 			// should wait and retry for DNS set
-			Threads::Coro::SleepMsec ( g_iAnyNodesTimeout );
+			Threads::Coro::SleepMsec ( iWaitMs );
 		}
 
 		if ( IsValid() )
@@ -3160,6 +3232,7 @@ public:
 			return true;
 		} else
 		{
+			m_sError.Appendf ( "; in %d retries within %.3f sec", iRetry, ( sphMicroTimer() - tmStart )/1000000.0f );
 			sError = m_sError.cstr();
 			return false;
 		}
@@ -3207,6 +3280,7 @@ private:
 	virtual bool IsValid() const = 0;
 
 	StringBuilder_c m_sError { ";" };
+	bool m_bLongWait { false };
 };
 
 CSphString GetAddr ( const ListenerDesc_t & tListen )
@@ -3232,8 +3306,9 @@ class AgentDescIterator_t : public ISphDescIterator
 	bool IsValid() const override { return !m_dNodes.IsEmpty(); }
 
 public:
-	AgentDescIterator_t ( VecAgentDesc_t & dNodes )
-		: m_dNodes ( dNodes )
+	AgentDescIterator_t ( VecAgentDesc_t & dNodes, bool bLongWait )
+		: ISphDescIterator ( bLongWait )
+		, m_dNodes ( dNodes )
 	{}
 
 	bool SetNode ( const char * sListen, CSphString & sError ) override
@@ -3266,10 +3341,10 @@ public:
 	}
 };
 
-static bool GetNodes ( const char * sNodes, VecAgentDesc_t & dNodes, CSphString & sError )
+static bool GetNodes ( const char * sNodes, bool bLongWait, VecAgentDesc_t & dNodes, CSphString & sError )
 {
 	CSphString sWarning;
-	AgentDescIterator_t tIt ( dNodes );
+	AgentDescIterator_t tIt ( dNodes, bLongWait );
 	bool bOk = tIt.ProcessNodes ( sNodes, sError, sWarning );
 
 	if ( bOk && !sWarning.IsEmpty() )
@@ -3295,10 +3370,10 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	return pAgent;
 }
 
-static bool GetNodes ( const char * sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, CSphString & sError )
+static bool GetNodes ( const char * sNodes, bool bLongWait, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, CSphString & sError )
 {
 	VecAgentDesc_t dDesc;
-	if ( !GetNodes ( sNodes, dDesc, sError ) )
+	if ( !GetNodes ( sNodes, bLongWait, dDesc, sError ) )
 		return false;
 
 	dNodes.Resize ( dDesc.GetLength() );
@@ -3326,7 +3401,8 @@ class ListenerProtocolIterator_t : public ISphDescIterator
 
 public:
 	ListenerProtocolIterator_t ( Proto_e eProto )
-		: m_eProto ( eProto )
+		: ISphDescIterator ( false )
+		, m_eProto ( eProto )
 	{}
 
 	bool SetNode ( const char * sListen, CSphString & sError ) override
@@ -3909,7 +3985,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 		PQRemoteData_t tCmd;
 		tCmd.m_sCluster = sCluster;
 		VecRefPtrs_t<AgentConn_t *> dNodes;
-		if ( !GetNodes ( sNodes.cstr(), dNodes, tCmd, sError ) )
+		if ( !GetNodes ( sNodes.cstr(), false, dNodes, tCmd, sError ) )
 			return false;
 
 		PQRemoteDelete_c tReq;
@@ -5386,7 +5462,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	if ( !sNodes.IsEmpty() )
 	{
 		VecAgentDesc_t dDesc;
-		if ( !GetNodes ( sNodes.cstr(), dDesc, sError ) )
+		if ( !GetNodes ( sNodes.cstr(), false, dDesc, sError ) )
 			return false;
 
 		if ( dDesc.GetLength() && !NodesReplicateIndex ( sCluster, sIndex, dDesc, pServed, sError ) )
@@ -5515,7 +5591,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	const wsrep_gtid_t & tStateID, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	VecAgentDesc_t dDesc;
-	if ( !GetNodes ( sNode.cstr(), dDesc, sError ) || !dDesc.GetLength() )
+	if ( !GetNodes ( sNode.cstr(), true, dDesc, sError ) || !dDesc.GetLength() )
 	{
 		if ( sError.IsEmpty() )
 			sError.SetSprintf ( "%s invalid node", sNode.cstr() );
@@ -5678,7 +5754,7 @@ std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )
 bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, Proto_e eProto, CSphString & sError, CSphString & sNodes )
 {
 	VecAgentDesc_t dDesc;
-	if ( !GetNodes ( sClusterNodes.cstr(), dDesc, sError ) || !dDesc.GetLength() || !sError.IsEmpty() )
+	if ( !GetNodes ( sClusterNodes.cstr(), false, dDesc, sError ) || !dDesc.GetLength() || !sError.IsEmpty() )
 	{
 		if ( sError.IsEmpty() )
 			sError.SetSprintf ( "%s invalid node", sClusterNodes.cstr() );
@@ -5836,7 +5912,7 @@ bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpd
 	tReqData.m_bJoinUpdate = bJoinUpdate;
 
 	VecRefPtrs_t<AgentConn_t *> dNodes;
-	if ( !GetNodes ( sNodes.cstr(), dNodes, tReqData, sError ) )
+	if ( !GetNodes ( sNodes.cstr(), false, dNodes, tReqData, sError ) )
 		return false;
 
 	PQRemoteClusterUpdateNodes_c tReq;

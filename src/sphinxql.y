@@ -307,7 +307,7 @@ idxname:
 
 identidx:
 	 idxname
-	 | TOK_MANTICORE idxname
+	 | TOK_MANTICORE idxname {$$ = $2;}
 	;
 
 one_index:

@@ -1,0 +1,70 @@
+––– block: ../base/init –––
+––– block: ../base/start-searchd-1 –––
+––– block: ../base/start-searchd-2 –––
+––– block: ../base/start-searchd-3 –––
+––– input –––
+mysql -h0 -P19306 -e "create cluster a 'a' as path"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "create cluster b 'b' as path"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "create cluster c 'c' as path"
+––– output –––
+––– input –––
+mysql -h0 -P29306 -e "create cluster d 'd' as path"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "create table t1; create table t2; create table t3; create table t4;"
+––– output –––
+––– input –––
+mysql -h0 -P29306 -e "join cluster c at '127.0.0.1:19312' 'c' as path"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "join cluster d at '127.0.0.1:29312' 'd' as path" &
+––– output –––
+[1] %{NUMBER}
+––– input –––
+mysql -h0 -P29306 -e "join cluster a at '127.0.0.1:19312' 'a' as path" &
+––– output –––
+[2] %{NUMBER}
+––– input –––
+mysql -h0 -P39306 -e "join cluster b at '127.0.0.1:19312' 'b' as path" &
+––– output –––
+[3] %{NUMBER}
+––– input –––
+wait %1 && mysql -h0 -P19306 -e "alter cluster d add t4" &
+––– output –––
+[4] %{NUMBER}
+––– input –––
+mysql -h0 -P19306 -e "alter cluster c add t3" &
+––– output –––
+[5] %{NUMBER}
+––– input –––
+mysql -h0 -P19306 -e "alter cluster b add t2" &
+––– output –––
+[6] %{NUMBER}
+––– input –––
+mysql -h0 -P19306 -e "alter cluster a add t1" &
+––– output –––
+[7] %{NUMBER}
+––– input –––
+wait 1>/dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "#$i – $?"; done
+––– output –––
+#1 – 1
+#2 – 1
+#3 – 1
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show tables\G" | grep 'Index: t'; done | sort -V
+––– output –––
+Index: t1
+Index: t1
+Index: t2
+Index: t2
+Index: t3
+Index: t3
+Index: t4

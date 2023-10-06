@@ -547,7 +547,7 @@ static bool RequestSkipBuddy ( Str_t sSrcQuery, const CSphString & sURL )
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse )
 {
-	if ( !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) || RequestSkipBuddy ( sSrcQuery, hOptions["full_url"] ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) || RequestSkipBuddy ( sSrcQuery, hOptions["full_url"] ) )
 	{
 		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
 		{

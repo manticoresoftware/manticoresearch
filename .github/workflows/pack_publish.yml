@@ -169,7 +169,6 @@ jobs:
           artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: deb
           delimiter: "-"
-          remote_server: root@95.216.221.24
 
   publish_rhel:
     needs: publish
@@ -189,7 +188,6 @@ jobs:
           artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: rpm
           delimiter: "_"
-          remote_server: root@95.216.221.24
 
   publish_macos:
     name: Publishing MacOS
@@ -208,7 +206,6 @@ jobs:
           artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
           type: arc
           delimiter: "-"
-          remote_server: root@95.216.221.24
 
   publish_windows:
     name: Publishing Windows packages to repo.manticoresearch.com
@@ -223,7 +220,6 @@ jobs:
           artifact: build_windows_RelWithDebInfo_x64
           type: arc
           delimiter: "-"
-          remote_server: root@95.216.221.24
 
   build_nsis:
     name: Making and publishing Windows NSIS installer

@@ -2558,7 +2558,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( tQuery.m_sSelect.IsEmpty () )
 		tQuery.m_sSelect = "*";
 
-	// master sends items to agents since master.version=15
+	// master sends items to agents since master.version=15 
 	CSphString sError;
 	if ( uMasterVer<15 && !ParseSelectList ( sError, tQuery ) )
 	{
@@ -3480,7 +3480,7 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 		return iVer<0x123 ? SPH_ATTR_BIGINT : SPH_ATTR_UINT64;
 
 	default: return tCol.m_eAttrType;
-	}
+	} 
 }
 
 
@@ -3516,7 +3516,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 	bool bSendJsonField = bAgentMode && uMasterVer>=4;
 
 	const CSphAttrLocator & tLoc = tAttr.m_tLocator;
-
+	
 	switch ( tAttr.m_eAttrType )
 	{
 	case SPH_ATTR_UINT32SET_PTR:
@@ -3878,7 +3878,7 @@ bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQuer
 
 
 bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
-{
+{	
 	bool bHaveExprs = false;
 
 	for ( int i = 0, iAttrsCount = tSchema.GetAttrsCount (); i<iAttrsCount; ++i )
@@ -5943,7 +5943,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( iAvailableWorkers );
 
 	CSphVector<SplitData_t> dSplitData ( m_dLocal.GetLength() );
-
+	
 	int iEnabledIndexes = 0;
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
@@ -5964,7 +5964,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 
 			tSplitData.m_iMetric = tMetric.first;
 
-			bool bExplicitConcurrency = m_dNQueries.any_of ( []( auto & tQuery ){ return tQuery.m_iConcurrency>0; } );
+			bool bExplicitConcurrency = m_dNQueries.any_of ( []( auto & tQuery ){ return tQuery.m_iConcurrency>0; } );		
 			tSplitData.m_iThreadCap = bExplicitConcurrency ? 0 : tMetric.second;	// ignore thread cap if concurrency is explicitly specified
 		}
 		else
@@ -7739,7 +7739,7 @@ STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DES
 
 //////////////////////////////////////////////////////////////////////////
 
-class CSphMatchVariant
+class CSphMatchVariant 
 {
 public:
 	inline static SphAttr_t ToInt ( const SqlInsert_t & tVal )
@@ -11092,7 +11092,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
 
-	// with index RLocked at the
+	// with index RLocked at the 
 	if ( !AddDocument ( tStmt, pServed, tOut ) )
 		return;
 
@@ -11210,7 +11210,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 		{
 			int iQuerySchemaIdx = dFieldSchema[i];
 			if ( iQuerySchemaIdx < 0 )
-				tConverter.SetDefaultFieldValue(i);
+				tConverter.SetDefaultFieldValue(i);	
 			else
 				bOk = tConverter.SetFieldValue( i, tStmt.m_dInsertValues [ iQuerySchemaIdx + iRow * iExp ], iRow, iQuerySchemaIdx );
 		}
@@ -11574,7 +11574,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 			tSettings.m_bSortByDocs = ( tStmt.m_dCallOptValues[i].m_sVal=="docs" );
 			tSettings.m_bSortByHits = ( tStmt.m_dCallOptValues[i].m_sVal=="hits" );
 			bOptInt = false;
-
+						
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -15988,7 +15988,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 		tCtx.m_eType = pAttr->m_eAttrType;
 		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
-
+	
 	if ( pField )
 		pIdx->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
@@ -16104,7 +16104,7 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 		if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
 		{
 			sError.SetSprintf ( "failed to parse table '%s' settings, error: '%s'", szIndex, sError.cstr() );
-			return false;
+			return false;	
 		}
 
 		if ( pWarnings && !sWarning.IsEmpty() )
@@ -17351,7 +17351,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 	// parse request
 	CSphString sEndpoint = tReq.GetString ();
 	CSphString sCommand = tReq.GetString ();
-
+	
 	CSphVector<BYTE> dResult;
 	sphProcessHttpQueryNoResponce ( sEndpoint, sCommand, dResult );
 
@@ -19928,7 +19928,7 @@ static StringSetStatic_c g_hSearchdPathVars {
 , "plugin_dir"
 , "query_log"
 , "snippets_file_prefix"
-, "sphinxql_state"
+, "sphinxql_state" 
 , "ssl_ca"
 , "ssl_cert"
 , "ssl_key"
@@ -20005,7 +20005,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 	tOut.PutString ( "configuration_file" );
 	PutPath ( g_sConfigPath, g_sConfigFile, tOut );
 	tOut.Commit();
-	// pid
+	// pid 
 	tOut.PutString ( "worker_pid" );
 	tOut.PutNumAsString ( (int)getpid() );
 	tOut.Commit();
@@ -21056,7 +21056,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bNewCluster = false;
 		bNewClusterForce = false;
 	}
-
+	
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();

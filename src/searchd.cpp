@@ -12500,7 +12500,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 11;
+	int iColCount = 10;
 	if ( bAll )
 		iColCount += 1;
 	if ( g_bCpuStats )

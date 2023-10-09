@@ -144,6 +144,7 @@ docker exec manticore-test-kit bash -c \
 [[ $GITHUB_REF_NAME == "master" ]] && branch="" || branch="-$GITHUB_REF_NAME"
 img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-${BUILD_COMMIT}${branch}"
 img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest${branch}"
+echo "Going to push to $img_url and $img_url_latest if there's access to the registry"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img

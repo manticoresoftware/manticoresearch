@@ -15,7 +15,7 @@ cd docker
 cat > manticore.conf << EOF
 common {
 	plugin_dir = /usr/local/lib/manticore
-	lemmatizer_base = /usr/share/manticore/morph/
+	lemmatizer_base = /usr/share/manticore/
 }
 searchd {
 	listen = 9306:mysql41

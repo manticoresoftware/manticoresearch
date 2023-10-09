@@ -366,6 +366,7 @@ jobs:
         cmake --build . --target package
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
+      CTEST_CONFIGURATION_TYPE: "Debug"
 
   build_test_kit_docker:
     name: Test Kit docker image

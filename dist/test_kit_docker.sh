@@ -143,16 +143,20 @@ docker exec manticore-test-kit bash -c \
 
 [[ $GITHUB_REF_NAME == "master" ]] && branch="" || branch="-${GITHUB_REF_NAME////-}"
 img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-${BUILD_COMMIT}${branch}"
-img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest${branch}"
-echo "Going to push to $img_url and $img_url_latest if there's access to the registry"
+images=("$img_url")
+[[ $GITHUB_REF_NAME == "master" ]] \
+  && img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest" \
+  && images+=("$img_url_latest") \
+  || img_url_latest=""
+
+echo "Going to push to '$img_url' and '$img_url_latest' (if not empty) if there's access to the registry"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img
 docker import ../manticore_test_kit.img $img_url
-docker tag $img_url $img_url_latest
+[ ! -z "$img_url_latest" ] && docker tag $img_url $img_url_latest
 
 # pusing to ghcr.io
-images=("$img_url" "$img_url_latest")
 [ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
 	docker push $img \
 	  && echo "❗ Pushed the image to $img" \

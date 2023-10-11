@@ -5,7 +5,7 @@ Since certain characters function as operators in the query string, they must be
 The following characters should be escaped using a backslash (`\`):
 
 ```
-!    "    $    '    (    )    -    /    <    @    \    ^    |    ~
+!    "    $    '    (    )    -    /    <    @    \    ^    |    ~    =
 ```
 
 ## In MySQL command line client

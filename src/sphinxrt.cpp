@@ -8313,10 +8313,6 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	// safeguards
 	// we do not support some disk index features in RT just yet
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
-	const CSphIndexSettings & tSettings = pIndex->GetSettings();
-	if ( tSettings.m_iStopwordStep!=1 )
-		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk table (RT-side support not implemented yet)" );
-
 	bool bEmptyRT = m_tRtChunks.IsEmpty();
 	// ATTACH to exist index require these checks
 	if ( !bEmptyRT )

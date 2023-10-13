@@ -40,6 +40,22 @@ index rt_products
 	dict			= keywords
 }
 
+source srctest1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, jattr, mattr FROM test_table1
+
+	sql_attr_json = jattr
+    sql_attr_multi = uint mattr from field
+}
+
+index test1
+{
+	source				= srctest1
+	path				= <data_path/>/test1
+}
+
 </config>
 
 <db_create>
@@ -64,6 +80,29 @@ INSERT INTO test_table (best_seller, attributes_id, text) VALUES
 ( 4, 2, 'text4 text' );
 </db_insert>
 
+<db_create>
+CREATE TABLE test_table1
+(
+	id integer primary key not null,
+	text varchar(256),
+    jattr varchar(256),
+    mattr varchar(256)
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table1;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table1 (id, text, jattr, mattr) VALUES
+( 1, 'List of HP1', '{\"a\":[101, 102, 103, 103]}', '101, 102, 103, 103'),
+( 2, 'List of HP2', '{\"a\":[201, 202, 203, 203]}', '201, 202, 203, 203'),
+( 3, 'List of HP3', '{\"a\":[301, 302, 303, 303]}', '301, 302, 303, 303'),
+( 4, 'List of HP4', '{\"a\":[401, 402, 403, 403]}', '401, 402, 403, 403'),
+( 5, 'List of HP5', '{\"a\":[501, 502, 503, 503]}', '501, 502, 503, 503');
+</db_insert>
+
 <queries><sphinxql>
 INSERT INTO rt_products (id, best_seller, attributes_id, title) VALUES (1, 1, 1, 'text1 text'),(2, 2, 1, 'text2 text'), (3, 3, 2, 'text3 text'), (4, 4, 2, 'text4 text');
 select *, to_string(id) i from rt_products order by best_seller asc; select *, to_string(id) i from rt_products order by best_seller1 asc; select *, to_string(id) i from rt_products order by attributes_id asc;
@@ -78,7 +117,13 @@ select 1 i, interval(attributes_id, 2) p, count(*) c from products group by i; s
 select 1 i, interval(attributes_id, 2) p, count(*) c from products group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from products group by i;
 select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by p;
 select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by i;
-</sphinxql></queries>
+</sphinxql>
+
+<!-- regression crash at grouper and ranker on missmatched match popup from multiple values per match -->
+<sphinxql>select id, packedfactors() from test1 where match('list') group by jattr.a limit 100 option ranker=expr('1'), max_matches=2, threads=1</sphinxql>
+<sphinxql>select id, packedfactors() from test1 where match('list') group by mattr limit 100 option ranker=expr('1'), max_matches=2, threads=1</sphinxql>
+
+</queries>
 
 
 </test>

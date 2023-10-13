@@ -2079,6 +2079,7 @@ bool FactorPool_c::FlushEntry ( SphFactorHashEntry_t * pEntry )
 
 void FactorPool_c::Flush()
 {
+	[[maybe_unused]] int iUsed = 0;
 	ARRAY_FOREACH ( i, m_dHash )
 	{
 		SphFactorHashEntry_t * pEntry = m_dHash[i];
@@ -2086,12 +2087,20 @@ void FactorPool_c::Flush()
 		{
 			SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 			bool bHead = !pEntry->m_pPrev;
+
+#ifndef NDEBUG
+			if ( pEntry->m_iRefCount )
+				iUsed++;
+#endif
+
 			if ( FlushEntry(pEntry) && bHead )
 				m_dHash[i] = pNext;
 
 			pEntry = pNext;
 		}
 	}
+
+	assert ( !m_dHash.GetLength() || iUsed+MAX_BLOCK_DOCS<=m_dHash.GetLength() );
 }
 
 

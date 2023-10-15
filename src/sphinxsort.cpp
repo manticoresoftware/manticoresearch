@@ -7223,8 +7223,11 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 	if ( bDisableCutoff )
 		return -1;
 
-	// implicit cutoff when there's no sorting and no grouping 
-	if ( ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
+	// implicit cutoff when there's no sorting and no grouping
+	bool bNoSortScan = tQuery.m_sQuery.IsEmpty() && ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() );
+	bool bNoSortFT = !tQuery.m_sQuery.IsEmpty() && !strstr ( tQuery.m_sSortBy.scstr(), "weight" );
+
+	if ( ( bNoSortScan || bNoSortFT ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
 		return tQuery.m_iLimit+tQuery.m_iOffset;
 
 	return -1;

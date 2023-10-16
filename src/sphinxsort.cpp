@@ -3012,9 +3012,9 @@ public:
 		, m_hGroup2Match ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 	{}
 
-	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
+	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false, false, true, nullptr ); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "Not supported in grouping"); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool ) override			{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false ); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool ) override			{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false, false, true, nullptr ); }
 	ISphMatchSorter * Clone() const override								{ return this->template CloneSorterT<MYTYPE>(); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
@@ -3184,12 +3184,15 @@ protected:
 
 	/// add entry to the queue
 	template <bool GROUPED>
-	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool, SphAttr_t * pAttr=nullptr )
+	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, [[maybe_unused]] bool bNewSet, [[maybe_unused]] bool bTailFinalized, bool bClearNotify, SphAttr_t * pAttr )
 	{
 		if constexpr ( NOTIFICATIONS )
 		{
-			m_tJustPushed = RowTagged_t();
-			this->m_dJustPopped.Resize ( 0 );
+			if ( bClearNotify )
+			{
+				m_tJustPushed = RowTagged_t();
+				this->m_dJustPopped.Resize ( 0 );
+			}
 		}
 		auto & tLocCount = m_tLocCount;
 
@@ -3523,9 +3526,9 @@ public:
 	inline void SetGLimit ( int iGLimit )	{ m_iGLimit = Min ( iGLimit, m_iLimit ); }
 	int GetLength() override				{ return Min ( m_iUsed, m_iLimit );	}
 
-	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false ); }
+	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false, false, true, nullptr ); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
-	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet ); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet, false, true, nullptr ); }
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) override
@@ -3669,9 +3672,9 @@ public:
 			// have to set bNewSet to true
 			// as need to fallthrough at PushAlreadyHashed and update count and aggregates values for head match
 			// even uGroupKey match already exists
-			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, true, true );
+			dRhs.template PushEx<true> ( m_dData[iHead], uGroupKey, true, true, true, nullptr );
 			for ( int i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
-				dRhs.template PushEx<false> ( m_dData[i], uGroupKey, false, true );
+				dRhs.template PushEx<false> ( m_dData[i], uGroupKey, false, true, true, nullptr );
 
 			DeleteChain ( iHead, false );
 		}
@@ -3710,7 +3713,7 @@ protected:
 	 * It hold all calculated stuff from aggregates/group_concat until finalization.
 	 */
 	template <bool GROUPED>
-	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bNewSet, bool bTailFinalized=false )
+	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bNewSet, bool bTailFinalized, bool bClearNotify, [[maybe_unused]] SphAttr_t * pAttr )
 	{
 
 #ifndef NDEBUG
@@ -3721,8 +3724,11 @@ protected:
 
 		if constexpr ( NOTIFICATIONS )
 		{
-			m_tJustPushed = RowTagged_t();
-			this->m_dJustPopped.Resize ( 0 );
+			if ( bClearNotify )
+			{
+				m_tJustPushed = RowTagged_t();
+				this->m_dJustPopped.Resize ( 0 );
+			}
 		}
 
 		this->m_bFinalized = false;
@@ -4238,15 +4244,19 @@ public:
 		this->m_pGrouper->MultipleKeysFromMatch ( tMatch, m_dKeys );
 
 		bool bRes = false;
-		for ( auto i : m_dKeys )
-			bRes |= BASE::template PushEx<false> ( tMatch, i, false );
+		ARRAY_FOREACH ( i, m_dKeys )
+		{
+			SphGroupKey_t tKey = m_dKeys[i];
+			// need to clear notifications once per match - not for every pushed value
+			bRes |= BASE::template PushEx<false> ( tMatch, tKey, false, false, ( i==0 ), nullptr );
+		}
 
 		return bRes;
 	}
 
 	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override
 	{
-		return BASE::template PushEx<true> ( tEntry, tEntry.GetAttr ( BASE::m_tLocGroupby ), bNewSet );
+		return BASE::template PushEx<true> ( tEntry, tEntry.GetAttr ( BASE::m_tLocGroupby ), bNewSet, false, true, nullptr );
 	}
 
 private:
@@ -4308,7 +4318,7 @@ public:
 	bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override
 	{
 		// re-group it based on the group key
-		return BASE::template PushEx<true> ( tEntry, tEntry.GetAttr ( BASE::m_tLocGroupby ), bNewSet );
+		return BASE::template PushEx<true> ( tEntry, tEntry.GetAttr ( BASE::m_tLocGroupby ), bNewSet, false, true, nullptr );
 	}
 
 	ISphMatchSorter * Clone () const final
@@ -4324,10 +4334,13 @@ private:
 		auto iValue = (int64_t)uGroupKey;
 		CSphGrouper * pGrouper = this->m_pGrouper;
 		const BYTE * pBlobPool = ((CSphGrouperJsonField*)pGrouper)->GetBlobPool();
+		bool bClearNotify = true;
 
-		return PushJsonField ( iValue, pBlobPool, [this, &tMatch]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
+		return PushJsonField ( iValue, pBlobPool, [this, &tMatch, &bClearNotify]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
 			{
-				return BASE::template PushEx<false> ( tMatch, uMatchGroupKey, false, pAttr );
+				bool bPushed = BASE::template PushEx<false> ( tMatch, uMatchGroupKey, false, false, bClearNotify, pAttr );
+				bClearNotify = false; // need to clear notifications once per match - not for every pushed value
+				return bPushed;
 			}
 		);
 	}
@@ -7210,8 +7223,11 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 	if ( bDisableCutoff )
 		return -1;
 
-	// implicit cutoff when there's no sorting and no grouping 
-	if ( ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
+	// implicit cutoff when there's no sorting and no grouping
+	bool bNoSortScan = tQuery.m_sQuery.IsEmpty() && ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() );
+	bool bNoSortFT = !tQuery.m_sQuery.IsEmpty() && !strstr ( tQuery.m_sSortBy.scstr(), "weight" );
+
+	if ( ( bNoSortScan || bNoSortFT ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
 		return tQuery.m_iLimit+tQuery.m_iOffset;
 
 	return -1;

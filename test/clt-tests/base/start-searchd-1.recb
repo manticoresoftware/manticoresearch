@@ -1,0 +1,14 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+––– input –––
+searchd --cpustats
+––– output –––
+Manticore 6.2.13 #!/[A-Za-z0-9]{9}@[0-9]{6}/!# dev (columnar 2.2.5 #!/[A-Za-z0-9]{9}@[0-9]{6}/!#) (secondary 2.2.5 [A-Za-z0-9]{9}@[0-9]{6}/!#)
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+#!/[0-9]{2}:[0-9]{2}\.[0-9]{3}/!# [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (457 chars)...
+starting daemon version '6.2.13 #!/[A-Za-z0-9]{9}@[0-9]{6}/!# dev (columnar 2.2.5 #!/[A-Za-z0-9]{9}@[0-9]{6}/!#) (secondary 2.2.5 #!/[A-Za-z0-9]{9}@[0-9]{6}/!#)' ...
+listening on all interfaces for mysql, port=9306
+listening on UNIX socket /var/run/mysqld/mysqld.sock
+listening on all interfaces for sphinx and http(s), port=9312
+listening on all interfaces for sphinx and http(s), port=9308

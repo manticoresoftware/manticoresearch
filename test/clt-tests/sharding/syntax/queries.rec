@@ -1,0 +1,11 @@
+––– block: ../base/start-searchd-1 –––
+––– input –––
+––– input –––
+mysql -e "CREATE TABLE a\G;"
+––– output –––
+––– input –––
+SHOW TABLE
+––– output –––
+*************************** 1. row ***************************
+Index: a
+Type: rt

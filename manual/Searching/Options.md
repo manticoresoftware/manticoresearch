@@ -296,4 +296,13 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 
 <!-- end -->
 
+<!-- example comments -->
+When using a MySQL/MariaDB client, make sure to include the `--comments` flag to enable the hints in your queries.
+
+<!-- request mysql -->
+```bash
+mysql -P9306 -h0 --comments
+```
+<!-- end -->
+
 <!-- proofread -->

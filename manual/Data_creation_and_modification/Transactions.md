@@ -1,6 +1,6 @@
 # Transactions
 
-Manticore supports basic transactions for deleting and inserting data into real-time and percolate tables. Each change to a table is first saved in an internal changeset and then actually committed to the table. By default, each command is wrapped in an individual automatic transaction, making it transparent: you simply 'insert' something and can see the inserted result after it completes, without worrying about transactions. However, this behavior can be explicitly managed by starting and committing transactions manually.
+Manticore supports basic transactions for deleting and inserting data into real-time and percolate tables, except when attempting to write to a distributed table which includes a real-time or percolate table. Each change to a table is first saved in an internal changeset and then actually committed to the table. By default, each command is wrapped in an individual automatic transaction, making it transparent: you simply 'insert' something and can see the inserted result after it completes, without worrying about transactions. However, this behavior can be explicitly managed by starting and committing transactions manually.
 
 Transactions are supported for the following commands:
 * [INSERT](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)

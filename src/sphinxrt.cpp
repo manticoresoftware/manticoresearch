@@ -7066,6 +7066,9 @@ bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool b
 
 static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, int iMaxDynamicSize, int iIndexWeight, int iStride, int iCutoff, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphString & sWarning )
 {
+	if ( !iCutoff )
+		return true;
+
 	bool bRandomize = dSorters[0]->IsRandom();
 
 	SwitchProfile ( pProfiler, SPH_QSTATE_FULLSCAN );
@@ -7175,6 +7178,9 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 
 static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters )
 {
+	if ( !iCutoff )
+		return;
+
 	bool bRandomize = dSorters[0]->IsRandom();
 	// query matching
 	ARRAY_FOREACH ( iSeg, dRamChunks )
@@ -7311,9 +7317,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
 		// do searching
-		int iCutoff = tQuery.m_iCutoff;
-		if ( iCutoff<=0 )
-			iCutoff = -1;
+		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
 		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
 	}
 

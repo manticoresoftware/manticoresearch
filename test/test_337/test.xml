@@ -103,7 +103,7 @@ insert into test_table values
 <query endpoint="json/search">{ "index": "test3_nostored", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [] } } } }</query>
 
 <!-- highlighting via script_fields -->
-<query endpoint="json/search">{ "index":"test1", "query": { "query_string":"itself" }, "limit":1, "highlight":{ "fields": [ "title", "content" ] }, "script_fields":{ "title_h":{ "script":{ "inline":"highlight({},'title')" } } }, "_source":{"includes":["title", "content", "title_h" ] } }</query>
+<query endpoint="json/search">{ "index":"test1", "query": { "query_string":"itself" }, "limit":1, "cutoff":0, "highlight":{ "fields": [ "title", "content" ] }, "script_fields":{ "title_h":{ "script":{ "inline":"highlight({},'title')" } } }, "_source":{"includes":["title", "content", "title_h" ] } }</query>
 
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" }, "equals" : {"id":14 } }, "highlight": { "fields": { "title":{}, "content":{ "limit":50 } } } } }</query>
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" }, "equals" : {"id":14 } }, "highlight": { "fields": { "title":{}, "content":{ "limit":25 } } } } }</query>

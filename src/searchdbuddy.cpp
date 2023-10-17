@@ -441,13 +441,11 @@ bool HasBuddy()
 	return ( g_eBuddy==BuddyState_e::WORK );
 }
 
-static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQueryOrQuery )
+static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery )
 {
 	if ( !HasBuddy() )
 		return { false, {} };
 
-	Str_t sQuery = bHttp ? dEmptyStr : sPathQueryOrQuery;
-	Str_t sPathQuery = bHttp ? sPathQueryOrQuery : dEmptyStr;
 	JsonEscapedBuilder tBuddyQuery;
 	{
 		auto tRoot = tBuddyQuery.Object();
@@ -541,10 +539,15 @@ static const sph::StringSet g_dAllowedEndpoints = {
 	"/_license?human=false"
 };
 
-// we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
-bool ProcessHttpQueryBuddy ( HttpProcessResult_t& tRes, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse )
+static bool RequestSkipBuddy ( Str_t sSrcQuery, const CSphString & sURL )
 {
-	if ( !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) || !g_dAllowedEndpoints["full_url"] )
+	return ( IsEmpty ( sSrcQuery ) && !g_dAllowedEndpoints[sURL] );
+}
+
+// we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
+bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse )
+{
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) || RequestSkipBuddy ( sSrcQuery, hOptions["full_url"] ) )
 	{
 		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
 		{
@@ -559,7 +562,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t& tRes, OptionsHash_t & hOptions
 		return tRes.m_bOk;
 	}
 
-	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ) );
+	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
@@ -587,9 +590,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t& tRes, OptionsHash_t & hOptions
 	return true;
 }
 
-void ProcessSqlQueryBuddy ( Str_t sQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE& uPacketID, GenericOutputBuffer_c& tOut )
+void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE& uPacketID, GenericOutputBuffer_c& tOut )
 {
-	auto tReplyRaw = BuddyQuery ( false, tError, sQuery );
+	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
@@ -621,7 +624,7 @@ void ProcessSqlQueryBuddy ( Str_t sQuery, Str_t tError, std::pair<int, BYTE> tSa
 	tOut.Rewind ( tSavedPos.first );
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
-	ConvertJsonDataset ( tReplyParsed.m_tMessage, sQuery.first, *tBuddyRows );
+	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
 }
 
 #ifdef _WIN32

@@ -96,7 +96,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v1
         with:
           name: build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}
           path: ${{ inputs.artifact_list }}

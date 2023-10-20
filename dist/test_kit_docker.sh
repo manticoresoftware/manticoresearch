@@ -80,7 +80,7 @@ do
 			package="manticore-columnar-lib"
 			;;
 		executor)
-			package="manticore-executor"
+			package="manticore-executor|manticore-extra"
 			;;
 		*)
 			echo "Unknown package: $package"
@@ -90,20 +90,14 @@ do
 
 	# Search each downloaded file and find the line with the specific package, version, date, and commit
 	for index in "${!repo_urls[@]}"; do
-		if [ "$package" = 'manticore-executor' ]; then
+		if [ "$package" = 'manticore-executor|manticore-extra' ]; then
       echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
 			wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
 			tar -xzf 'manticore-executor-dev.tar.gz'
 			executor_dev_path=$(realpath "manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev/manticore-executor")
-
-			pwd
-      echo "Wgetting from https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64/manticore-extra_${version}-${date}-${commit}_all.deb"
-			wget -q -O '../build/manticore-extra.deb' \
-				"https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64/manticore-extra_${version}-${date}-${commit}_all.deb"
-			continue
 		fi
 
-		cat "/tmp/packages_${index}" | grep $package | grep $commit | grep ".deb" | awk -v repo_url="${repo_urls[$index]}" -F\" '{print repo_url""$2"?ci=1"}' |
+		cat "/tmp/packages_${index}" | egrep "$package" | grep $commit | grep ".deb" | awk -v repo_url="${repo_urls[$index]}" -F\" '{print repo_url""$2"?ci=1"}' |
 		while read file_url
 		do
 			file_name=$(basename "$file_url" "?ci=1")
@@ -137,7 +131,7 @@ docker exec manticore-test-kit bash -c \
   'ls -la /build/'
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	"apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
 docker exec manticore-test-kit bash -c \
 	"php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" && php -r \"if (hash_file('sha384', 'composer-setup.php') === 'e21205b207c3ff031906575712edab6f13eb0b361f2085f1f1237b7126d785e826a450292b6cfd1d64d92e6563bbde02') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;\" && php composer-setup.php && php -r \"unlink('composer-setup.php');\" && mv composer.phar /usr/bin/composer || true"
 

@@ -1,6 +1,7 @@
 ––– input –––
-sed -i 's/# buddy_path.*/buddy_path =/g' /etc/manticoresearch/manticore.conf
+apt -y remove 'manticore-buddy' > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 searchd
 ––– output –––

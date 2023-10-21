@@ -1,5 +1,5 @@
 ––– input –––
-apt -y remove 'manticore-buddy' > /dev/null; echo $?
+apt-get -y remove 'manticore-buddy' > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––

@@ -649,6 +649,25 @@ protected:
 	{
 		m_dIData.Resize(0);
 	}
+
+	int ResetDynamic ( int iMaxUsed )
+	{
+		for ( int i=0; i<iMaxUsed; i++ )
+			m_dData[i].ResetDynamic();
+
+		return -1;
+	}
+
+	int ResetDynamicFreeData ( int iMaxUsed )
+	{
+		for ( int i=0; i<iMaxUsed; i++ )
+		{
+			m_pSchema->FreeDataPtrs ( m_dData[i] );
+			m_dData[i].ResetDynamic();
+		}
+
+		return -1;
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -961,9 +980,7 @@ public:
 			++pTo;
 		}
 
-		for ( int i = 0; i<m_iMaxUsed; ++i )
-			m_dData[i].ResetDynamic ();
-		m_iMaxUsed = -1;
+		m_iMaxUsed = ResetDynamic ( m_iMaxUsed );
 
 		// clean up for the next work session
 		m_pWorst = nullptr;
@@ -2999,6 +3016,8 @@ protected:
 	using CSphMatchQueueTraits::Add;
 	using CSphMatchQueueTraits::Used;
 	using CSphMatchQueueTraits::ResetAfterFlatten;
+	using CSphMatchQueueTraits::ResetDynamic;
+	using CSphMatchQueueTraits::ResetDynamicFreeData;
 
 	using MatchSorter_c::m_iTotal;
 	using MatchSorter_c::m_tJustPushed;
@@ -3048,10 +3067,7 @@ public:
 			m_tUniq.Reset();
 
 		ResetAfterFlatten ();
-
-		for ( int i = 0; i<m_iMaxUsed; ++i )
-			m_dData[i].ResetDynamic ();
-		m_iMaxUsed = -1;
+		m_iMaxUsed = ResetDynamic ( m_iMaxUsed );
 
 		return int ( pTo-pBegin );
 	}
@@ -3111,13 +3127,7 @@ public:
 		dRhs.SetMerge(false);
 
 		// once we're done copying, cleanup
-		for ( int i = 0; i<m_iMaxUsed; ++i )
-		{
-			m_pSchema->FreeDataPtrs ( m_dData[i] );
-			m_dData[i].ResetDynamic();
-		}
-
-		m_iMaxUsed = -1;
+		m_iMaxUsed = ResetDynamicFreeData ( m_iMaxUsed );
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override
@@ -3140,6 +3150,26 @@ public:
 		// just evaluate in heap order
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
+
+		if constexpr ( DISTINCT )
+		{
+			// need to clean up matches NOT from m_dIData with current schema
+			// as after schema change data_ptr attributes will have garbage in ptr part for matches not processed by tProcessor
+			// and global sorters have differrent clean up code path that do not handle this garbage as usual sorters do
+			if ( this->m_dIData.GetLength()!=m_iMaxUsed )
+			{
+				for ( int i=0; i<m_iMaxUsed; i++ )
+				{
+					CSphMatch & tMatch = m_dData[i];
+					if ( !tMatch.m_pStatic ) // clean up match that was in m_dIData set
+						continue;
+
+					m_pSchema->FreeDataPtrs ( tMatch );
+					tMatch.ResetDynamic ();
+				}
+			}
+		}
+
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

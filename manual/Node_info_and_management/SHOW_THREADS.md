@@ -10,18 +10,15 @@ SHOW THREADS [ OPTION columns=width[,format=sphinxql][,format=all] ]
 
 The resulting table contains the following columns:
 
-* `Tid`: ID assigned to the thread by the kernel
+* `TID`: ID assigned to the thread by the kernel
 * `Name`: Thread name, also visible in `top`, `htop`, `ps`, and other Unix tools for monitoring thread statistics
 * `Proto`: Connection protocol; possible values include `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)
 * `State`: Thread state; possible values are `handshake`, `net_read`, `net_write`, `query`, `net_idle`
-* `Host`: Client's `ip:port`
+* `Connection from`: Client's `ip:port`
 * `ConnID`: Connection ID (starting from 0)
-* `Time`: Current job's duration (in seconds, with microsecond precision) or thread uptime when using `format=all` and the thread is idling
-* `Work time`: Thread uptime
-* `Work time CPU`: Effective CPU time (requires [`--cpustats`](../Starting_the_server/Manually.md#searchd-command-line-options))
+* `This/prev job time`: When the thread is busy - how long the current job has been running, in seconds when the thread is idling - previous job duration + suffix  (prev)
 * `Jobs done`: Number of jobs completed by this thread
-* `Last job took`: Duration of the last job
-* `In idle`: Whether the thread is currently idling or when it last idled
+* `Thread status`: Whether the stream is currently in standby mode or in run mode
 * `Info`: Information about the query, which may include multiple queries if the query targets a distributed table or a real-time table
 
 <!-- intro -->
@@ -36,35 +33,30 @@ SHOW THREADS;
 
 ```sql
 *************************** 1. row ***************************
-           Tid: 31797
-          Name: work_3
-         Proto: mysql
-         State: query
-          Host: 127.0.0.1:43388
-        ConnID: 4931
-          Time: 0.000903
-     Work time: 2s
- Work time CPU: 0us
-Thd efficiency: 0.00%
-     Jobs done: 2066
- Last job took: 930us
-       In idle: No (working)
-          Info: insert into t values(0,'abc'),(0,'def')
+                TID: 83
+               Name: work_1
+              Proto: mysql
+              State: query
+    Connection from: 172.17.0.1:43300
+             ConnID: 8
+ This/prev job time: 630us
+       CPU activity: 94.15%
+          Jobs done: 2490
+      Thread status: working
+               Info: SHOW THREADS 
 *************************** 2. row ***************************
-           Tid: 31799
-          Name: work_5
-         Proto: mysql
-         State: query
-          Host: 127.0.0.1:43390
-        ConnID: 4932
-          Time: 0.000042
-     Work time: 2s
- Work time CPU: 0us
-Thd efficiency: 0.00%
-     Jobs done: 2072
- Last job took: 66us
-       In idle: No (working)
-          Info: show threads
+                TID: 84
+               Name: work_2
+              Proto: mysql
+              State: query
+    Connection from: 172.17.0.1:43301
+             ConnID: 9
+ This/prev job time: 689us
+       CPU activity: 89.23%
+          Jobs done: 1830
+      Thread status: working
+               Info: show threads
+
 ```
 <!-- intro -->
 ##### JSON:
@@ -79,7 +71,7 @@ POST /cli -d "SHOW THREADS"
 {
   "columns": [
     {
-      "Tid": {
+      "TID": {
         "type": "string"
       }
     },
@@ -99,7 +91,7 @@ POST /cli -d "SHOW THREADS"
       }
     },
     {
-      "Host": {
+      "Connection from": {
         "type": "string"
       }
     },
@@ -109,22 +101,7 @@ POST /cli -d "SHOW THREADS"
       }
     },
     {
-      "Time": {
-        "type": "string"
-      }
-    },
-    {
-      "Work time": {
-        "type": "string"
-      }
-    },
-    {
-      "Work time CPU": {
-        "type": "string"
-      }
-    },
-    {
-      "Thd efficiency": {
+      "This/prev job time": {
         "type": "string"
       }
     },
@@ -134,12 +111,7 @@ POST /cli -d "SHOW THREADS"
       }
     },
     {
-      "Last job took": {
-        "type": "string"
-      }
-    },
-    {
-      "In idle": {
+      "Thread status": {
         "type": "string"
       }
     },
@@ -151,19 +123,15 @@ POST /cli -d "SHOW THREADS"
   ],
   "data": [
     {
-      "Tid": 6844,
-      "Name": "work_3",
+      "TID": 83,
+      "Name": "work_1",
       "Proto": "http",
       "State": "query",
-      "Host": "127.0.0.1:51752",
-      "ConnID": 91,
-      "Time": 3245,
-      "Work time": "2h",
-      "Work time CPU": "0us",
-      "Thd efficiency": "0.00%",
-      "Jobs done": 1073587960,
-      "Last job took": "16ms",
-      "In idle": "No (working)",
+      "Connection from": "172.17.0.1:41410",
+      "ConnID": 6,
+      "This/prev job time": "689us",
+      "Jobs done": 159,
+      "Thread status": "working",
       "Info": "show_threads"
     }
   ],
@@ -185,37 +153,31 @@ $client->nodes()->threads();
 ```php
 Array
 (
-    [31796] => Array
+    [83] => Array
         (
-            [Name] => work_2
+            [Name] => work_1
             [Proto] => mysql
             [State] => query
-            [Host] => 127.0.0.1:39320
-            [ConnID] => 2897
-            [Time] => 517
-            [Work time] => 1s
-            [Work time CPU] => 0us
-            [Thd efficiency] => 0.00%
-            [Jobs done] => 1228
-            [Last job took] => 526us
-            [In idle] => No (working)
+            [Connection from] => 172.17.0.1:43300
+            [ConnID] => 8
+            [This/prev job time] => 630us
+            [CPU activity] => 94.15%
+            [Jobs done] => 2490
+            [Thread status] => working
             [Info] => insert into t values(0,'abc'),(0,'def')
         )
 
-    [31798] => Array
+    [84] => Array
         (
-            [Name] => work_4
+            [Name] => work_2
             [Proto] => http
             [State] => query
-            [Host] => 127.0.0.1:37748
-            [ConnID] => 2898
-            [Time] => 38
-            [Work time] => 883ms
-            [Work time CPU] => 0us
-            [Thd efficiency] => 0.00%
-            [Jobs done] => 1237
-            [Last job took] => 76us
-            [In idle] => No (working)
+            [Connection from] => 172.17.0.1:43301
+            [ConnID] => 9
+            [This/prev job time] => 689us
+            [CPU activity] => 89.23%
+            [Jobs done] => 1830
+            [Thread status] => working
             [Info] => show_threads
         )
 
@@ -235,7 +197,7 @@ utilsApi.sql('SHOW THREADS')
 {
   u'columns': [
     {
-      u'Tid': {
+      u'TID': {
         u'type': u'string'
       }
     },
@@ -255,7 +217,8 @@ utilsApi.sql('SHOW THREADS')
       }
     },
     {
-      u'Host': {
+    {
+      u'Connection from': {
         u'type': u'string'
       }
     },
@@ -265,22 +228,12 @@ utilsApi.sql('SHOW THREADS')
       }
     },
     {
-      u'Time': {
+      u'This/prev job time': {
         u'type': u'string'
       }
     },
     {
-      u'Work time': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Work time CPU': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Thd efficiency': {
+      u'CPU activity': {
         u'type': u'string'
       }
     },
@@ -290,12 +243,7 @@ utilsApi.sql('SHOW THREADS')
       }
     },
     {
-      u'Last job took': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'In idle': {
+      u'Thread status': {
         u'type': u'string'
       }
     },
@@ -307,19 +255,16 @@ utilsApi.sql('SHOW THREADS')
   ],
   u'data': [
     {
-      u'Tid': 6844,
-      u'Name': u'work_3',
+      u'TID': 83,
+      u'Name': u'work_1',
       u'Proto': u'http',
       u'State': u'query',
-      u'Host': u'127.0.0.1:51752',
-      u'ConnID': 91,
-      u'Time': 3245,
-      u'Work time': u'2h',
-      u'Work time CPU': u'0us',
-      u'Thd efficiency': u'0.00%',
-      u'Jobs done': 1073587960,
-      u'Last job took': u'16ms',
-      u'In idle': u'No (working)',
+      u'Connection from': u'172.17.0.1:43300',
+      u'ConnID': 8,
+      u'This/prev job time': ;'630us' ,
+      u'CPU activity': u'94.15%',
+      u'Jobs done': u'2490',
+      u'Thread status': u'working',
       u'Info': u'show_threads'
     }
   ],
@@ -327,6 +272,7 @@ utilsApi.sql('SHOW THREADS')
   u'error': u'',
   u'warning': u''
 }
+
 ```
 <!-- intro -->
 ##### Javascript:
@@ -343,7 +289,7 @@ res = await utilsApi.sql('SHOW THREADS');
 {
   "columns": [
     {
-      "Tid": {
+      "TID": {
         "type": "string"
       }
     },
@@ -363,7 +309,7 @@ res = await utilsApi.sql('SHOW THREADS');
       }
     },
     {
-      "Host": {
+      "Connection from": {
         "type": "string"
       }
     },
@@ -373,22 +319,12 @@ res = await utilsApi.sql('SHOW THREADS');
       }
     },
     {
-      "Time": {
+      "This/prev job time": {
         "type": "string"
       }
     },
     {
-      "Work time": {
-        "type": "string"
-      }
-    },
-    {
-      "Work time CPU": {
-        "type": "string"
-      }
-    },
-    {
-      "Thd efficiency": {
+      "CPU activity": {
         "type": "string"
       }
     },
@@ -398,12 +334,7 @@ res = await utilsApi.sql('SHOW THREADS');
       }
     },
     {
-      "Last job took": {
-        "type": "string"
-      }
-    },
-    {
-      "In idle": {
+      "Thread status": {
         "type": "string"
       }
     },
@@ -415,19 +346,16 @@ res = await utilsApi.sql('SHOW THREADS');
   ],
   "data": [
     {
-      "Tid": 6844,
-      "Name": "work_3",
+      "TID": 82,
+      "Name": "work_0",
       "Proto": "http",
       "State": "query",
-      "Host": "127.0.0.1:51752",
-      "ConnID": 91,
-      "Time": 3245,
-      "Work time": "2h",
-      "Work time CPU": "0us",
-      "Thd efficiency": "0.00%",
-      "Jobs done": 1073587960,
-      "Last job took": "16ms",
-      "In idle": "No (working)",
+      "Connection from": "172.17.0.1:60550",
+      "ConnID": 163,
+      "This/prev job time": "105us",
+      "CPU activity": "44.68%",
+      "Jobs done": 849,
+      "Thread status": "working",
       "Info": "show_threads"
     }
   ],
@@ -435,6 +363,7 @@ res = await utilsApi.sql('SHOW THREADS');
   "error": "",
   "warning": ""
 }
+
 ```
 
 <!-- intro -->
@@ -452,7 +381,7 @@ utilsApi.sql("SHOW THREADS");
 {
   columns=[
     {
-      Tid={
+      TID={
         type=string
       }
     },
@@ -472,7 +401,7 @@ utilsApi.sql("SHOW THREADS");
       }
     },
     {
-      Host={
+      Connection from={
         type=string
       }
     },
@@ -482,22 +411,12 @@ utilsApi.sql("SHOW THREADS");
       }
     },
     {
-      Time={
+      This/prev job time={
         type=string
       }
     },
     {
-      Work time={
-        type=string
-      }
-    },
-    {
-      Work time CPU={
-        type=string
-      }
-    },
-    {
-      Thd efficiency={
+      CPU activity={
         type=string
       }
     },
@@ -507,12 +426,7 @@ utilsApi.sql("SHOW THREADS");
       }
     },
     {
-      Last job took={
-        type=string
-      }
-    },
-    {
-      In idle={
+      Thread status={
         type=string
       }
     },
@@ -524,19 +438,16 @@ utilsApi.sql("SHOW THREADS");
   ],
   data=[
     {
-      Tid=6844,
-      Name=work_3,
+      TID=82,
+      Name=work_0,
       Proto=http,
       State=query,
-      Host=127.0.0.1:51752,
-      ConnID=91,
-      Time=3245,
-      Work time=2h,
-      Work time CPU=0us,
-      Thd efficiency=0.00%,
-      Jobs done=1073587960,
-      Last job took=16ms,
-      In idle=No (working),
+      Connection from=172.17.0.1:60550,
+      ConnID=163,
+      This/prev job time=105us,
+      CPU activity=44.68%,
+      Jobs done=849,
+      Thread status=working,
       Info=show_threads
     }
   ],
@@ -561,7 +472,7 @@ utilsApi.Sql("SHOW THREADS");
 {
   columns=[
     {
-      Tid={
+      TID={
         type=string
       }
     },
@@ -581,7 +492,7 @@ utilsApi.Sql("SHOW THREADS");
       }
     },
     {
-      Host={
+      Connection from={
         type=string
       }
     },
@@ -591,22 +502,7 @@ utilsApi.Sql("SHOW THREADS");
       }
     },
     {
-      Time={
-        type=string
-      }
-    },
-    {
-      Work time={
-        type=string
-      }
-    },
-    {
-      Work time CPU={
-        type=string
-      }
-    },
-    {
-      Thd efficiency={
+      This/prev job time= {
         type=string
       }
     },
@@ -616,12 +512,7 @@ utilsApi.Sql("SHOW THREADS");
       }
     },
     {
-      Last job took={
-        type=string
-      }
-    },
-    {
-      In idle={
+      Thread status={
         type=string
       }
     },
@@ -633,19 +524,15 @@ utilsApi.Sql("SHOW THREADS");
   ],
   data=[
     {
-      Tid=6844,
-      Name=work_3,
+      TID=83,
+      Name=work_1,
       Proto=http,
       State=query,
-      Host=127.0.0.1:51752,
-      ConnID=91,
-      Time=3245,
-      Work time=2h,
-      Work time CPU=0us,
-      Thd efficiency=0.00%,
-      Jobs done=1073587960,
-      Last job took=16ms,
-      In idle=No (working),
+      Connection from=172.17.0.1:41410,
+      ConnID=6,
+      This/prev job time=689us,
+      Jobs done=159,
+      Thread status=working,
       Info=show_threads
     }
   ],
@@ -683,36 +570,31 @@ SHOW THREADS OPTION columns=30\G
 ```sql
 mysql> show threads option columns=30\G
 *************************** 1. row ***************************
-           Tid: 9156
-          Name: work_2
-         Proto: mysql
-         State: query
-          Host: 127.0.0.1:53298
-        ConnID: 20112
-          Time: 0.002291
-     Work time: 12s
- Work time CPU: 0us
-Thd efficiency: 0.00%
-     Jobs done: 8497
- Last job took: 2ms
-       In idle: No (working)
-          Info: insert into t values(0,'abc'),
+               TID: 82
+              Name: work_0
+             Proto: mysql
+             State: query
+   Connection from: 172.17.0.1:60550
+            ConnID: 163
+This/prev job time: 105us
+      CPU activity: 44.68%
+         Jobs done: 849
+     Thread status: working
+              Info: insert into t values(0,'abc'),
 *************************** 2. row ***************************
-           Tid: 9159
-          Name: work_5
-         Proto: mysql
-         State: query
-          Host: 127.0.0.1:57698
-        ConnID: 8196
-          Time: 0.000042
-     Work time: 11s
- Work time CPU: 0us
-Thd efficiency: 0.00%
-     Jobs done: 8547
- Last job took: 78us
-       In idle: No (working)
-          Info: show threads option columns=30
-2 rows in set (0.00 sec)
+               TID: 83
+              Name: work_1
+             Proto: mysql
+             State: query
+   Connection from: 172.17.0.1:60550
+            ConnID: 163
+This/prev job time: 75us
+      CPU activity: 52.20%
+         Jobs done: 23124
+    Thread status: working
+             Info: SHOW THREADS OPTION columns=30
+2 row in set (0.00 sec)
+
 ```
 <!-- intro -->
 ##### JSON:
@@ -727,7 +609,7 @@ POST /cli -d "SHOW THREADS OPTION columns=30"
 {
   "columns": [
     {
-      "Tid": {
+      "TID": {
         "type": "string"
       }
     },
@@ -747,7 +629,7 @@ POST /cli -d "SHOW THREADS OPTION columns=30"
       }
     },
     {
-      "Host": {
+      "Connection from": {
         "type": "string"
       }
     },
@@ -757,22 +639,12 @@ POST /cli -d "SHOW THREADS OPTION columns=30"
       }
     },
     {
-      "Time": {
+      "This/prev job time": {
         "type": "string"
       }
     },
     {
-      "Work time": {
-        "type": "string"
-      }
-    },
-    {
-      "Work time CPU": {
-        "type": "string"
-      }
-    },
-    {
-      "Thd efficiency": {
+      "CPU activity": {
         "type": "string"
       }
     },
@@ -782,12 +654,7 @@ POST /cli -d "SHOW THREADS OPTION columns=30"
       }
     },
     {
-      "Last job took": {
-        "type": "string"
-      }
-    },
-    {
-      "In idle": {
+      "Thread status": {
         "type": "string"
       }
     },
@@ -799,26 +666,26 @@ POST /cli -d "SHOW THREADS OPTION columns=30"
   ],
   "data": [
     {
-      "Tid": 6844,
-      "Name": "work_3",
+      "TID": 83,
+      "Name": "work_1",
       "Proto": "http",
       "State": "query",
-      "Host": "127.0.0.1:51752",
-      "ConnID": 91,
-      "Time": 3245,
-      "Work time": "2h",
-      "Work time CPU": "0us",
-      "Thd efficiency": "0.00%",
-      "Jobs done": 1073587960,
-      "Last job took": "16ms",
-      "In idle": "No (working)",
-      "Info": "show_threads"
+      "Connection from": "172.17.0.1:60550",
+      "ConnID": 163,
+      "This/prev job time": "75us",
+      "CPU activity": "52.20%",
+      "Jobs done": 23124,
+      "Thread status": "working",
+      "Info": "SHOW THREADS OPTION columns=30"
     }
   ],
   "total": 0,
   "error": "",
   "warning": ""
 }
+
+
+
 ```
 <!-- intro -->
 ##### PHP:
@@ -833,41 +700,36 @@ $client->nodes()->threads(['body'=>['columns'=>30]]);
 ```php
 Array
 (
-    [31795] => Array
-        (
-            [Name] => work_1
-            [Proto] => mysql
-            [State] => query
-            [Host] => 127.0.0.1:57676
-            [ConnID] => 12075
-            [Time] => 326
-            [Work time] => 3s
-            [Work time CPU] => 0us
-            [Thd efficiency] => 0.00%
-            [Jobs done] => 5092
-            [Last job took] => 335us
-            [In idle] => No (working)
-            [Info] => insert into t values(0,'abc'),
-        )
-
-    [31797] => Array
-        (
-            [Name] => work_3
-            [Proto] => http
-            [State] => query
-            [Host] => 127.0.0.1:56104
-            [ConnID] => 12076
-            [Time] => 33
-            [Work time] => 4s
-            [Work time CPU] => 0us
-            [Thd efficiency] => 0.00%
-            [Jobs done] => 5045
-            [Last job took] => 82us
-            [In idle] => No (working)
-            [Info] => show_threads
-        )
-
+     [82] => Array
+     (
+        [TID] => 82,
+        [Name] => work_0,
+        [Proto] => mysql,
+        [State] => query,
+        [Connection from] => 172.17.0.1:60550,
+        [ConnID] => 163,
+        [This/prev job time] => 105us,
+        [CPU activity] => 44.68%,
+        [Jobs done] => 849,
+        [Thread status] => working,
+        [Info] => SHOW THREADS OPTION columns=30
+    )
+    [83] => Array
+    (
+        [TID] => 83,
+        [Name] => work_1,
+        [Proto] => mysql,
+        [State] => query,
+        [Connection from] => 172.17.0.1:60550,
+        [ConnID] => 163,
+        [This/prev job time] => 75us,
+        [CPU activity] => 52.20%,
+        [Jobs done] => 23124,
+        [Thread status] => working,
+        [Info] => SHOW THREADS OPTION columns=30
+    )
 )
+
 ```
 <!-- intro -->
 ##### Python:
@@ -883,7 +745,7 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
 {
   u'columns': [
     {
-      u'Tid': {
+      u'TID': {
         u'type': u'string'
       }
     },
@@ -903,7 +765,7 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
       }
     },
     {
-      u'Host': {
+      u'Connection from': {
         u'type': u'string'
       }
     },
@@ -913,22 +775,12 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
       }
     },
     {
-      u'Time': {
+      u'This/prev job time': {
         u'type': u'string'
       }
     },
     {
-      u'Work time': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Work time CPU': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Thd efficiency': {
+      u'CPU activity': {
         u'type': u'string'
       }
     },
@@ -938,12 +790,7 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
       }
     },
     {
-      u'Last job took': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'In idle': {
+      u'Thread status': {
         u'type': u'string'
       }
     },
@@ -955,26 +802,25 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
   ],
   u'data': [
     {
-      u'Tid': 6844,
-      u'Name': u'work_3',
+      u'TID': 82,
+      u'Name': u'work_0',
       u'Proto': u'http',
       u'State': u'query',
-      u'Host': u'127.0.0.1:51752',
-      u'ConnID': 91,
-      u'Time': 3245,
-      u'Work time': u'2h',
-      u'Work time CPU': u'0us',
-      u'Thd efficiency': u'0.00%',
-      u'Jobs done': 1073587960,
-      u'Last job took': u'16ms',
-      u'In idle': u'No (working)',
-      u'Info': u'show_threads'
+      u'Connection from': u'172.17.0.1:60550',
+      u'ConnID': 163,
+      u'This/prev job time': u'105us',
+      u'CPU activity': u'44.68%',
+      u'Jobs done': 849,
+      u'Thread status': u'working',
+      u'Info': u'SHOW THREADS OPTION columns=30'
     }
+    
   ],
   u'total': 0,
   u'error': u'',
   u'warning': u''
 }
+
 ```
 <!-- intro -->
 ##### Javascript:
@@ -991,7 +837,7 @@ res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
 {
   "columns": [
     {
-      "Tid": {
+      "TID": {
         "type": "string"
       }
     },
@@ -1011,7 +857,7 @@ res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
       }
     },
     {
-      "Host": {
+      "Connection from": {
         "type": "string"
       }
     },
@@ -1021,22 +867,12 @@ res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
       }
     },
     {
-      "Time": {
+      "This/prev job time": {
         "type": "string"
       }
     },
     {
-      "Work time": {
-        "type": "string"
-      }
-    },
-    {
-      "Work time CPU": {
-        "type": "string"
-      }
-    },
-    {
-      "Thd efficiency": {
+      "CPU activity": {
         "type": "string"
       }
     },
@@ -1046,12 +882,7 @@ res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
       }
     },
     {
-      "Last job took": {
-        "type": "string"
-      }
-    },
-    {
-      "In idle": {
+      "Thread status": {
         "type": "string"
       }
     },
@@ -1063,20 +894,17 @@ res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
   ],
   "data": [
     {
-      "Tid": 6844,
+      "TID": 6844,
       "Name": "work_3",
       "Proto": "http",
       "State": "query",
-      "Host": "127.0.0.1:51752",
+      "Connection from": "127.0.0.1:51752",
       "ConnID": 91,
-      "Time": 3245,
-      "Work time": "2h",
-      "Work time CPU": "0us",
-      "Thd efficiency": "0.00%",
+      "This/prev job time": "2h",
+      "CPU activity": "0us",
       "Jobs done": 1073587960,
-      "Last job took": "16ms",
-      "In idle": "No (working)",
-      "Info": "show_threads"
+      "Thread status": "working",
+      "Info": "SHOW THREADS OPTION columns=30"
     }
   ],
   "total": 0,
@@ -1100,7 +928,7 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
 {
   columns=[
     {
-      Tid={
+      TID={
         type=string
       }
     },
@@ -1120,7 +948,7 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
       }
     },
     {
-      Host={
+      Connection from={
         type=string
       }
     },
@@ -1130,22 +958,12 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
       }
     },
     {
-      Time={
+      This/prev job time={
         type=string
       }
     },
     {
-      Work time={
-        type=string
-      }
-    },
-    {
-      Work time CPU={
-        type=string
-      }
-    },
-    {
-      Thd efficiency={
+      CPU activity={
         type=string
       }
     },
@@ -1155,12 +973,7 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
       }
     },
     {
-      Last job took={
-        type=string
-      }
-    },
-    {
-      In idle={
+      Thread status={
         type=string
       }
     },
@@ -1172,20 +985,17 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
   ],
   data=[
     {
-      Tid=6844,
-      Name=work_3,
+      TID:=82,
+      Name=work_0,
       Proto=http,
       State=query,
-      Host=127.0.0.1:51752,
-      ConnID=91,
-      Time=3245,
-      Work time=2h,
-      Work time CPU=0us,
-      Thd efficiency=0.00%,
-      Jobs done=1073587960,
-      Last job took=16ms,
-      In idle=No (working),
-      Info=show_threads
+      Connection from=172.17.0.1:60550,
+      ConnID=163,
+      This/prev job time=105us,
+      CPU activity=44.68%,
+      Jobs done=849,
+      Thread status=working,
+      Info=SHOW THREADS OPTION columns=30
     }
   ],
   total=0,
@@ -1209,7 +1019,7 @@ utilsApi.Sql("SHOW THREADS OPTION columns=30");
 {
   columns=[
     {
-      Tid={
+      TID={
         type=string
       }
     },
@@ -1229,7 +1039,7 @@ utilsApi.Sql("SHOW THREADS OPTION columns=30");
       }
     },
     {
-      Host={
+      Connection from={
         type=string
       }
     },
@@ -1239,22 +1049,12 @@ utilsApi.Sql("SHOW THREADS OPTION columns=30");
       }
     },
     {
-      Time={
+      This/prev job time={
         type=string
       }
     },
     {
-      Work time={
-        type=string
-      }
-    },
-    {
-      Work time CPU={
-        type=string
-      }
-    },
-    {
-      Thd efficiency={
+      CPU activity={
         type=string
       }
     },
@@ -1264,12 +1064,7 @@ utilsApi.Sql("SHOW THREADS OPTION columns=30");
       }
     },
     {
-      Last job took={
-        type=string
-      }
-    },
-    {
-      In idle={
+      Thread status={
         type=string
       }
     },
@@ -1281,26 +1076,24 @@ utilsApi.Sql("SHOW THREADS OPTION columns=30");
   ],
   data=[
     {
-      Tid=6844,
-      Name=work_3,
+      TID=82,
+      Name=work_0,
       Proto=http,
       State=query,
-      Host=127.0.0.1:51752,
-      ConnID=91,
-      Time=3245,
-      Work time=2h,
-      Work time CPU=0us,
-      Thd efficiency=0.00%,
-      Jobs done=1073587960,
-      Last job took=16ms,
-      In idle=No (working),
-      Info=show_threads
+      Connection from=172.17.0.1:60550,
+      ConnID=163,
+      This/prev job time=105us,
+      CPU activity=44.68%,
+      Jobs done=849,
+      Thread status=working,
+      Info=SHOW THREADS OPTION columns=30
     }
   ],
   total=0,
   error="",
   warning=""
 }
+
 ```
 
 <!-- end -->

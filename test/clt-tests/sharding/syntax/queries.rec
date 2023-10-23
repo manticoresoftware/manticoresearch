@@ -1,11 +1,19 @@
+––– block: ../base/init –––
 ––– block: ../base/start-searchd-1 –––
 ––– input –––
-––– input –––
-mysql -e "CREATE TABLE a\G;"
+mysql -h0 -P19306 -e "CREATE TABLE a"
 ––– output –––
 ––– input –––
-SHOW TABLE
+mysql -h0 -P19306 -e "SHOW TABLES\G"
 ––– output –––
 *************************** 1. row ***************************
 Index: a
 Type: rt
+––– input –––
+mysql -h0 -P19306 -e "сreate table b shards=10 rf=2"
+––– output –––
+dsadfds 
+––– input –––
+mysql -h0 -P19306 -e "create table c SHARDS=3 RF=2"
+––– output –––
+dsadfds

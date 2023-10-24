@@ -1,8 +1,5 @@
 ––– block: start-searchd –––
 ––– input –––
-CREATE TABLE test (id BIGINT, name TEXT, date TIMESTAMP);
-––– output –––
-––– input –––
 SELECT * FROM manticore.test;
 ––– output –––
 ––– input –––

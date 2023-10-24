@@ -92,6 +92,7 @@ mysql -h0 -P9306 -e "drop table t"
 ––– input –––
 mysql -h0 -P9306 < /tmp/all-databases.sql
 ––– output –––
+-- Warning: column statistics not supported by the server.
 ––– input –––
 mysql -h0 -P9306 -e 'show tables'
 ––– output –––

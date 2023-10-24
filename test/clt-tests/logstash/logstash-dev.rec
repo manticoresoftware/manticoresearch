@@ -72,13 +72,9 @@ listening on all interfaces for sphinx and http(s), port=9308
 printf 'input {\n    file {\n        path => ["/var/log/dpkg.log"]\n        start_position => "beginning"\n        sincedb_path => "/dev/null"\n        mode => "read"\n        exit_after_read => "true"\n        file_completed_action => "log"\n        file_completed_log_path => "/dev/null"\n    }\n}\n\noutput {\n    elasticsearch {\n        index => "testlog_1"\n        hosts => ["http://localhost:9308"]\n        ilm_enabled => false\n        manage_template => false\n    }\n}\n' > logstash.conf
 ––– output –––
 ––– input –––
-logstash -f logstash.conf 2>/dev/null 1>/var/log/logstash.log &
+timeout 60 logstash -f logstash.conf 2>/dev/null 1>/var/log/logstash.log; && echo 'Done' || echo 'Timeout or failed'
 ––– output –––
-[1] #!/[0-9]+/!#
-––– input –––
-wait 2>&1 >/dev/null
-––– output –––
-[1]+  Done                    logstash -f logstash.conf 2> /dev/null > /var/log/logstash.log
+Done
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––

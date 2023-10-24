@@ -1,7 +1,7 @@
-buddy 1.1.3 23101807 b79c26e
+buddy 2.0.1 23102407 3609149
 backup 1.0.7 23072811 9789508
 mcl 2.2.5 230928 b8be4eb
-executor 0.7.3 23071404 78f52a3
+executor 1.0.3 23102011 a845549
 executor-win 0.3.5 221125 a40554c
 ---
 ! Do not change the separator that splits this desc from the data

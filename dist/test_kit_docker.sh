@@ -12,24 +12,24 @@ fi
 git clone https://github.com/manticoresoftware/docker.git docker
 cd docker
 
-cat > manticore.conf << EOF
-common {
-	plugin_dir = /usr/local/lib/manticore
-	lemmatizer_base = /usr/share/manticore/morph/
-}
-searchd {
-	listen = 9306:mysql41
-	listen = /var/run/mysqld/mysqld.sock:mysql41
-	listen = 9312
-	listen = 9308:http
-	log = /var/log/manticore/searchd.log
-	query_log = /var/log/manticore/query.log
-	pid_file = /var/run/manticore/searchd.pid
-	data_dir = /var/lib/manticore
-	query_log_format = sphinxql
-	# buddy_path = manticore-executor-dev /workdir/src/main.php
-}
-EOF
+# cat > manticore.conf << EOF
+# common {
+# 	plugin_dir = /usr/local/lib/manticore
+# 	lemmatizer_base = /usr/share/manticore/
+# }
+# searchd {
+# 	listen = 9306:mysql41
+# 	listen = /var/run/mysqld/mysqld.sock:mysql41
+# 	listen = 9312
+# 	listen = 9308:http
+# 	log = /var/log/manticore/searchd.log
+# 	query_log = /var/log/manticore/query.log
+# 	pid_file = /var/run/manticore/searchd.pid
+# 	data_dir = /var/lib/manticore
+# 	query_log_format = sphinxql
+# 	# buddy_path = manticore-executor-dev /workdir/src/main.php
+# }
+# EOF
 
 repo_urls=("https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-amd64/"
 		   "https://repo.manticoresearch.com/repository/manticoresearch_jammy/dists/jammy/main/binary-amd64/")
@@ -120,9 +120,6 @@ docker create \
 	-f /dev/null
 docker start manticore-test-kit
 
-# Add modified config to it
-docker cp manticore.conf manticore-test-kit:/etc/manticoresearch/manticore.conf
-
 docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
 docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
 
@@ -135,16 +132,21 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	"php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" && php -r \"if (hash_file('sha384', 'composer-setup.php') === 'e21205b207c3ff031906575712edab6f13eb0b361f2085f1f1237b7126d785e826a450292b6cfd1d64d92e6563bbde02') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;\" && php composer-setup.php && php -r \"unlink('composer-setup.php');\" && mv composer.phar /usr/bin/composer || true"
 
-img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-$BUILD_COMMIT"
-img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest"
+img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-${BUILD_COMMIT}"
+images=("$img_url")
+[[ $GITHUB_REF_NAME == "master" ]] \
+  && img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest" \
+  && images+=("$img_url_latest") \
+  || img_url_latest=""
+
+echo "Going to push to '$img_url' and '$img_url_latest' (if not empty) if there's access to the registry"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img
 docker import ../manticore_test_kit.img $img_url
-docker tag $img_url $img_url_latest
+[ ! -z "$img_url_latest" ] && docker tag $img_url $img_url_latest
 
 # pusing to ghcr.io
-images=("$img_url" "$img_url_latest")
 [ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
 	docker push $img \
 	  && echo "❗ Pushed the image to $img" \

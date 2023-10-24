@@ -11,7 +11,3 @@ starting daemon version '%{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{
 [#!/listening on UNIX socket /var/run/mysqld/mysqld.sock/!#]
 [#!/listening on .* for sphinx and http\(s\).*/!#]
 [#!/listening on .* for sphinx and http\(s\).*/!#]
-––– input –––
-tail -n 100 -f /var/log/manticore/searchd.log | grep -qm1 'started v' && echo "Buddy started!"
-––– output –––
-Buddy started!

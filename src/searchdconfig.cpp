@@ -62,7 +62,7 @@ const CSphVector<ClusterDesc_t> & GetClustersInt()
 }
 
 
-void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
+void ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !IsConfigless() )
 		return;
@@ -82,6 +82,14 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
 		}
 
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
+	}
+
+	if ( fnPathFix && hSearchd.Exists ( szBinlogKey ) )
+	{
+		CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
+		fnPathFix ( sBinlogPath );
+		hSearchd.Delete ( szBinlogKey );
+		hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
 	}
 }
 

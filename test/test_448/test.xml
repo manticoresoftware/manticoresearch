@@ -74,6 +74,33 @@ searchd
 	drop table a2b;
 	drop table distr;
 </sphinxql>
+
+<!-- regression crash at global sorters on clean up of data attributes -->
+<sphinxql>
+create table t1 ( title text, tag integer );
+insert into t1 (id, tag, title ) values
+( 90, 1355011, 'a90'),
+( 92, 1355011, 'a92'),
+( 94, 1355011, 'a94'),
+( 96, 1355011, 'a96'),
+( 98, 1355011, 'a98');
+
+create table t2 ( title text, tag integer );
+insert into t2 (id, tag, title ) values
+( 1, 1354935, 'b1' );
+
+FLUSH RAMCHUNK t1;
+FLUSH RAMCHUNK t2;
+
+SELECT *, COUNT(DISTINCT id) from t1, t2 GROUP BY id limit 1 option threads=1, max_matches=1;
+SELECT *, COUNT(DISTINCT id) from t1, t2 GROUP BY id limit 1 option threads=1, max_matches=2;
+SELECT *, COUNT(DISTINCT id) from t1, t2 GROUP BY id limit 2 option threads=1, max_matches=2;
+SELECT *, COUNT(*) from t1, t2 GROUP BY id limit 2 option threads=1, max_matches=2;
+
+drop table t1;
+drop table t2;
+</sphinxql>
+
 </queries>
 
 </test>

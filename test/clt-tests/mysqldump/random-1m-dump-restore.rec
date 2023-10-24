@@ -86,6 +86,7 @@ mysql -h0 -P9306 -e "select * from t where a = 18530 order by id asc limit 20"
 ––– input –––
 mysqldump -h0 -P9306 Manticore > /tmp/all-databases.sql
 ––– output –––
+-- Warning: column statistics not supported by the server.
 ––– input –––
 mysql -h0 -P9306 -e "drop table t"
 ––– output –––

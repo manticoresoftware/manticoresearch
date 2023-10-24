@@ -120,9 +120,6 @@ docker create \
 	-f /dev/null
 docker start manticore-test-kit
 
-# Add modified config to it
-#docker cp manticore.conf manticore-test-kit:/etc/manticoresearch/manticore.conf
-
 docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
 docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
 

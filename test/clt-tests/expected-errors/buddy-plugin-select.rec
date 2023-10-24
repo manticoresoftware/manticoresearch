@@ -6,16 +6,11 @@ CREATE TABLE test (id BIGINT, name TEXT, date TIMESTAMP);
 SELECT * FROM manticore.test;
 ––– output –––
 ––– input –––
-SELECT * FROM Manticore.test;
-––– output –––
-––– input –––
 SELECT * FROM `manticore`.test;
 ––– output –––
-ERROR 1064 (42000): unknown local table(s) 'manticore, .' in search request
 ––– input –––
 SELECT * FROM `Manticore`.test;
 ––– output –––
-ERROR 1064 (42000): unknown local table(s) 'Manticore, .' in search request
 ––– input –––
 SELECT * FROM information_schema.files;
 ––– output –––

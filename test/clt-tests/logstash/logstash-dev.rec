@@ -72,7 +72,7 @@ listening on all interfaces for sphinx and http(s), port=9308
 printf 'input {\n    file {\n        path => ["/var/log/dpkg.log"]\n        start_position => "beginning"\n        sincedb_path => "/dev/null"\n        mode => "read"\n        exit_after_read => "true"\n        file_completed_action => "log"\n        file_completed_log_path => "/dev/null"\n    }\n}\n\noutput {\n    elasticsearch {\n        index => "testlog_1"\n        hosts => ["http://localhost:9308"]\n        ilm_enabled => false\n        manage_template => false\n    }\n}\n' > logstash.conf
 ––– output –––
 ––– input –––
-timeout 60 logstash -f logstash.conf 2>/dev/null 1>/var/log/logstash.log; && echo 'Done' || echo 'Timeout or failed'
+timeout 60 logstash -f logstash.conf 2>/dev/null 1>/var/log/logstash.log && echo 'Done' || echo 'Timeout or failed'
 ––– output –––
 Done
 ––– input –––

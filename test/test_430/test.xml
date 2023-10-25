@@ -72,6 +72,14 @@ index pq1
 	rt_field 		= title
 	rt_attr_uint	= gid
 }
+
+index test_col3
+{
+	source 			= test
+	path			= <data_path/>/test_col3
+
+	columnar_attrs 	= price, brand_id, title, brand_name, property, categories
+}
 </config>
 
 <db_create>
@@ -185,6 +193,10 @@ show meta;
 select groupby(), count(*) from META:all group by price,brand_id;
 
 select groupby(), count(*) from META:all group by coeff;
+
+<!-- regression crash on using columnar attribute at the expr ranker -->
+select id, weight() as w, title from test_col3 where match('ten') order by w desc, id desc option ranker=expr('sum(in(categories,11,12))');
+
 </sphinxql></queries>
 
 </test>

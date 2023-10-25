@@ -95,7 +95,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v1
+        uses: manticoresoftware/upload_artifact_with_retries@v2
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status*"

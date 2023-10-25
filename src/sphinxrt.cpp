@@ -7215,6 +7215,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 			pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
 
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
+		pRanker->ExtraData ( EXTRA_SET_COLUMNAR, (void**)&pColumnar );
 
 		CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 		while (true)

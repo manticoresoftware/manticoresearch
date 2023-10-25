@@ -5,7 +5,6 @@
 
 <requires>
 <columnar/>
-<non-rt/>
 </requires>
 
 <config>
@@ -79,6 +78,14 @@ index test_col3
 	path			= <data_path/>/test_col3
 
 	columnar_attrs 	= price, brand_id, title, brand_name, property, categories
+}
+
+index test_col_rt
+{
+	type			= rt
+	path			= <data_path/>/test_col_rt
+	rt_field 		= title
+	rt_attr_uint	= gid
 }
 </config>
 
@@ -194,8 +201,13 @@ select groupby(), count(*) from META:all group by price,brand_id;
 
 select groupby(), count(*) from META:all group by coeff;
 
-<!-- regression crash on using columnar attribute at the expr ranker -->
+<!-- regression crash on using columnar attribute at the expr ranker from plain index-->
 select id, weight() as w, title from test_col3 where match('ten') order by w desc, id desc option ranker=expr('sum(in(categories,11,12))');
+<!-- regression crash on using columnar attribute at the expr ranker from RT index-->
+INSERT INTO test_col_rt(id, gid, title) VALUES (1,177,'def');
+INSERT INTO test_col_rt(id, gid, title) VALUES (2,17,'def');
+INSERT INTO test_col_rt(id, gid, title) VALUES (3,1,'def');
+SELECT id, weight() as w FROM test_col_rt WHERE MATCH('def') order by w desc, id desc OPTION ranker=expr('sum(gid)');
 
 </sphinxql></queries>
 

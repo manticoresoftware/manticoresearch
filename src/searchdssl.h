@@ -20,7 +20,7 @@
 #if WITH_SSL
 	// set SSL key, certificate and ca-certificate to be used in SSL, if required.
 	// does NOT anyway initialize SSL library or call any of it's funcitons.
-	void SetServerSSLKeys ( CSphVariant * pSslCert, CSphVariant * pSslKey, CSphVariant * pSslCa );
+	void SetServerSSLKeys ( const CSphString & sSslCert,  const CSphString & sSslKey,  const CSphString & sSslCa );
 
 	// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
 	// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
@@ -32,7 +32,7 @@
 
 #else
 	// these stubs work together with NOT including searchdsll.cpp into the final build
-	inline void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
+	inline void SetServerSSLKeys ( const CSphString &,  const CSphString &,  const CSphString & ) {}
 	inline bool CheckWeCanUseSSL ( CSphString * pError=nullptr )
 	{
 		if ( pError )

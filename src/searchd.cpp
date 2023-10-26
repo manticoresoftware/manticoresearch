@@ -208,6 +208,7 @@ static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static bool				g_bCwdChanged = false;
 static int				g_iDumpDocs = 1000000000;
 
 // for CLang thread-safety analysis
@@ -219,6 +220,7 @@ ThreadRole HandlerThread; // thread which serves clients
 static CSphString		g_sConfigFile;
 static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
 static CSphString		g_sConfigPath; // for resolve paths to absolute
+static CSphString		g_sExePath;
 
 static auto&			g_bSeamlessRotate	= sphGetSeamlessRotate ();
 
@@ -19894,6 +19896,7 @@ static void CheckSetCwd () REQUIRES ( MainThread )
 
 	sphLogDebug ( "current working directory changed to '%s'", sDataDir.cstr() );
 	DirMustWritable ( sDataDir );
+	g_bCwdChanged = true;
 }
 
 static void PutPath ( const CSphString & sCwd, const CSphString & sVar, RowBuffer_i & tOut )
@@ -20148,6 +20151,21 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 		fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
+// if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
+static void FixPathAbsolute ( CSphString & sPath )
+{
+	if ( !g_bCwdChanged )
+		return;
+
+	if ( sPath.IsEmpty() || IsPathAbsolute ( sPath ) )
+		return;
+
+	assert ( !g_sExePath.IsEmpty() );
+	CSphString sFullPath;
+	sFullPath.SetSprintf ( "%s/%s", g_sExePath.cstr(), sPath.cstr() );
+
+	sPath = sphNormalizePath ( sFullPath );
+}
 
 void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
@@ -20178,6 +20196,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 	}
 	if ( !g_bLogSyslog )
 	{
+		FixPathAbsolute ( sLog );
 		g_iLogFile = open ( sLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( g_iLogFile<0 )
 		{
@@ -20242,6 +20261,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
 	CSphString sPidFile = v->cstr();
+	FixPathAbsolute ( sPidFile );
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
 		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
@@ -20684,9 +20704,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphFatal ( "%s", sError.cstr() );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+	g_sExePath = sphGetCwd();
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();
-	sphConfigureCommon ( hConf ); // this also inits plugins now
+	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
@@ -20719,6 +20740,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptPIDFile )
 	{
 		g_sPidFile = hSearchdpre["pid_file"].cstr();
+		FixPathAbsolute ( g_sPidFile );
 
 		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
@@ -20773,6 +20795,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				g_bQuerySyslog = true;
 			else
 			{
+				FixPathAbsolute ( sQueryLog );
 				g_iQueryLogFile = open ( sQueryLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
 					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );
@@ -20805,7 +20828,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 
 	// init before workpool, as last checks binlog
-	ModifyDaemonPaths ( hSearchd );
+	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );
 	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 
 	// after next line executed we're in mt env, need to take rwlock accessing config.
@@ -20851,7 +20874,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
-	SetServerSSLKeys ( hSearchd ( "ssl_cert" ), hSearchd ( "ssl_key" ), hSearchd ( "ssl_ca" ) );
+	CSphString sSslCert ( hSearchd.GetStr ( "ssl_cert" ) );
+	CSphString sSslKey ( hSearchd.GetStr ( "ssl_key" ) );
+	CSphString sSslCa ( hSearchd.GetStr ( "ssl_ca" ) );
+	FixPathAbsolute ( sSslCert );
+	FixPathAbsolute ( sSslKey );
+	FixPathAbsolute ( sSslCa );
+	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
 	CheckSSL();
 
 	// set up ping service (if necessary) before loading indexes
@@ -20904,7 +20933,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();
 	else
-		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
+		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
+	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
 	{
 		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
@@ -21068,7 +21098,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		CSphString sSQLStateDefault;
 		if ( IsConfigless() )
 			sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
-		if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
+		CSphString sSQLStatePath { hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ) };
+		FixPathAbsolute ( sSQLStatePath );
+		if ( !InitSphinxqlState ( sSQLStatePath, sError ))
 			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 	}
 

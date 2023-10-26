@@ -423,8 +423,10 @@ const char * DoBacktrace ( int iDepth=0, int iSkip=0 );
 
 void sphCheckDuplicatePaths ( const CSphConfig & hConf );
 
+using FixPathAbsolute_fn = std::function<void ( CSphString & sPath )>;
+
 /// set globals from the common config section
-void sphConfigureCommon ( const CSphConfig & hConf );
+void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix = nullptr );
 
 /// my own is chinese
 bool sphIsChineseCode ( int iCode );

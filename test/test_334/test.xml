@@ -452,5 +452,42 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- facets with sort per aggregate -->
 <query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_desc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"desc"}}, {"tag":{"order":"desc"}}] }, "gr_asc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"asc"}}]}} }</query>
 
+<!-- crash on cleanup parsed query after parse error -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "_all": "abc"
+          }
+        },
+        {
+          "bool": {
+            "should": [
+              {
+                "match": {
+                  "title": "title smth",
+                  "operator": "and"
+                }
+              },
+              {
+                "match": {
+                  "title": "title2 smth",
+                  "operator": "and"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+</query>
+
+
 </queries>
 </test>

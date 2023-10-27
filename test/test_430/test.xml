@@ -87,6 +87,25 @@ index test_col_rt
 	rt_field 		= title
 	rt_attr_uint	= gid
 }
+
+source cv2_src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from cv2_table
+
+	sql_attr_bigint     = lastupdateddate
+	sql_attr_bigint   = participantidnumber
+}
+
+index cv2
+{
+	source			= cv2_src
+	path			= <data_path/>/cv2
+    
+    columnar_attrs 	= lastupdateddate, participantidnumber
+}
+
 </config>
 
 <db_create>
@@ -104,6 +123,17 @@ CREATE TABLE `test_table` (
 </db_create>
 
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+<db_create>
+CREATE TABLE `cv2_table` (
+  `id` BIGINT,
+  `lastupdateddate` BIGINT,
+  `participantidnumber` BIGINT,
+  `title` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS cv2_table;</db_drop>
 
 <db_insert>insert into test_table (id,price,brand_id,title,brand_name,property,categories,j,coeff) values
 (1001,529,9,'Product Five Two','Brand Nine','Four','(13,14)','{x:[13,14],a:["a13","a14"]}',1.0),
@@ -126,6 +156,17 @@ CREATE TABLE `test_table` (
 (1018,413,3,'Product Eight Five','Brand Three','Four','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}',2.0),
 (1019,78,4,'Product Six Five','Brand Four','Two','(12)','{x:[12],a:["a12"]}',1.0),
 (1020,169,4,'','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}',5.0)
+</db_insert>
+
+<db_insert>
+INSERT into cv2_table (id, lastupdateddate, participantidnumber, title) VALUES
+( 939103038699371100, 638303733310000000,    3103361803078791, 'test 111'),
+( 939103038812502700, 637225409440000000,    2819971314790373, 'test 112'),
+( 939103038863191800, 637357650140000000,    3133095206786486, 'test 113'),
+( 939111571035217800, 637342034440000000,    2293292127465736, 'test 114'),
+( 939111922602476300, 637873375670000000,    6374292122644105, 'test 115'),
+( 939111922602495900, 637825292730000000,    4912274065518156, 'test 116'),
+( 939111922754127400, 638325039600000000,    3097824493646948, 'test 117')
 </db_insert>
 
 <metaindex name='META:all'>
@@ -208,6 +249,9 @@ INSERT INTO test_col_rt(id, gid, title) VALUES (1,177,'def');
 INSERT INTO test_col_rt(id, gid, title) VALUES (2,17,'def');
 INSERT INTO test_col_rt(id, gid, title) VALUES (3,1,'def');
 SELECT id, weight() as w FROM test_col_rt WHERE MATCH('def') order by w desc, id desc OPTION ranker=expr('sum(gid)');
+
+<!-- regression crash on using columnar attribute at the grouper aggregate then having -->
+SELECT id, max(lastupdateddate) as maxdate FROM cv2 GROUP BY participantidnumber HAVING maxdate &lt; 638303733310000000 ORDER BY id asc;
 
 </sphinxql></queries>
 

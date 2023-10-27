@@ -1383,7 +1383,10 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	// spawn special filter even if we have an expression in the column
 	// because the filter is (usually) faster
 	if ( tCol.IsColumnarExpr() && tCol.m_eStage>SPH_EVAL_PREFILTER )
-		return true;
+	{
+		// columnar expression for aggregate should be filtered by plain filter
+		return ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
+	}
 
 	// we had a columnar expression in the select list that we wanted to evaluate at the final stage
 	// we replaced it with a stored expression

@@ -1577,8 +1577,8 @@ void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 		{
 			auto * pAgent = new AgentConn_t;
 			pAgent->m_tDesc.CloneFrom ( dHost );
-			pAgent->m_iMyQueryTimeoutMs = m_iAgentQueryTimeoutMs;
-			pAgent->m_iMyConnectTimeoutMs = m_iAgentConnectTimeoutMs;
+			pAgent->m_iMyQueryTimeoutMs = GetAgentConnectTimeoutMs();
+			pAgent->m_iMyConnectTimeoutMs = GetAgentQueryTimeoutMs();
 			dTarget.Add ( pAgent );
 		}
 }
@@ -1591,6 +1591,27 @@ DistributedIndex_t::~DistributedIndex_t ()
 	m_dAgents.Reset();
 	MultiAgentDesc_c::CleanupOrphaned ();
 };
+
+int DistributedIndex_t::GetAgentConnectTimeoutMs ( bool bRaw ) const
+{
+	return ( ( m_iAgentConnectTimeoutMs || bRaw ) ? m_iAgentConnectTimeoutMs : g_iAgentConnectTimeoutMs );
+}
+
+int DistributedIndex_t::GetAgentQueryTimeoutMs ( bool bRaw ) const
+{
+	return ( ( m_iAgentQueryTimeoutMs || bRaw ) ? m_iAgentQueryTimeoutMs : g_iAgentQueryTimeoutMs );
+}
+
+void DistributedIndex_t::SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs )
+{
+	m_iAgentConnectTimeoutMs = iAgentConnectTimeoutMs;
+}
+
+void DistributedIndex_t::SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs )
+{
+	m_iAgentQueryTimeoutMs = iAgentQueryTimeoutMs;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
@@ -7008,8 +7029,8 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				pConn->SetMultiAgent ( pAgent );
 				pConn->m_iStoreTag = iOrderTag++;
 				pConn->m_iWeight = iWeight;
-				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-				pConn->m_iMyQueryTimeoutMs = ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT ? tQuery.m_iAgentQueryTimeoutMs : pDist->m_iAgentQueryTimeoutMs );
+				pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+				pConn->m_iMyQueryTimeoutMs = ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT ? tQuery.m_iAgentQueryTimeoutMs : pDist->GetAgentQueryTimeoutMs() );
 				dRemotes.Add ( pConn );
 			}
 
@@ -8009,8 +8030,8 @@ static VecRefPtrsAgentConn_t GetDistrAgents ( const cDistributedIndexRefPtr_t& p
 	{
 		auto * pConn = new AgentConn_t;
 		pConn->SetMultiAgent ( pAgent );
-		pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-		pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+		pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+		pConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 		tRemotes.Add ( pConn );
 	}
 	return tRemotes;
@@ -10286,8 +10307,8 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		{
 			auto * pConn = new AgentConn_t;
 			pConn->SetMultiAgent ( pAgent );
-			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+			pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+			pConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 			dAgents.Add ( pConn );
 		}
 
@@ -18264,7 +18285,7 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		if ( hIndex["agent_connect_timeout"].intval()<=0 )
 			sphWarning ( "table '%s': agent_connect_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentConnectTimeoutMs = hIndex.GetMsTimeMs ( "agent_connect_timeout" );
+			tIdx.SetAgentConnectTimeoutMs ( hIndex.GetMsTimeMs ( "agent_connect_timeout" ) );
 	}
 
 	tIdx.m_bDivideRemoteRanges = hIndex.GetInt ( "divide_remote_ranges", 0 )!=0;
@@ -18274,7 +18295,7 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		if ( hIndex["agent_query_timeout"].intval()<=0 )
 			sphWarning ( "table '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout");
+			tIdx.SetAgentQueryTimeoutMs ( hIndex.GetMsTimeMs ( "agent_query_timeout") );
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );

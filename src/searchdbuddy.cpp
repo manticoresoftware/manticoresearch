@@ -676,11 +676,11 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 }
 
 #ifdef _WIN32
-static CSphString g_sDefaultBuddyName ( "manticore-buddy\\src\\main.php" );
+static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
 #else
 static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
 #endif
-static CSphString g_sDefaultBuddyExecName ( "manticore-executor.exe" );
+static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore:1.0.5" );
 
 static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
 {
@@ -703,10 +703,10 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf ( "%smanticore-executor\\%s", sPathToDaemon.cstr(), g_sDefaultBuddyExecName.cstr() );
+	sExecPath.SetSprintf ( "docker run %s -v '%s/%s:/buddy' -w /buddy /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr(), GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr());
 	if ( !sphFileExists ( sExecPath.cstr() ) )
 	{
-		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyExecName.cstr(), sExecPath.cstr() );
+		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyDockerImage.cstr(), sExecPath.cstr() );
 		return CSphString();
 	}
 #endif

@@ -120,10 +120,21 @@ Section "Manticore Search"
 SectionEnd
 
 Section "Manticore Executor"
-  File "executor_src.txt"
-  Push "executor.zip"
-  Push "executor_src.txt"
-  Call unpackInstall
+	; Check if Docker is installed and working
+	nsExec::ExecToStack 'docker --version'
+	Pop $0
+	StrCmp $0 "0" +3
+		MessageBox MB_OK "Docker is not installed or not working correctly. Please ensure Docker is installed and try again."
+		Abort
+	Pop $1 ; ignore second output from exec
+
+	; Pull Docker image from the URL in executor_src.txt
+	FileRead $INSTDIR\executor_src.txt $R0
+	nsExec::ExecToStack 'docker pull $R0'
+	Pop $0
+	StrCmp $0 "0" +3
+		MessageBox MB_OK "Failed to pull Docker image from: $R0"
+		Abort
 
   File "buddy_src.txt"
   Push "buddy.zip"

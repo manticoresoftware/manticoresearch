@@ -7215,6 +7215,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 			pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
 
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
+		pRanker->ExtraData ( EXTRA_SET_COLUMNAR, (void**)&pColumnar );
 
 		CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 		while (true)
@@ -8317,10 +8318,6 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex* pIndex, bool bTruncate, bool & bFat
 	// safeguards
 	// we do not support some disk index features in RT just yet
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
-	const CSphIndexSettings & tSettings = pIndex->GetSettings();
-	if ( tSettings.m_iStopwordStep!=1 )
-		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk table (RT-side support not implemented yet)" );
-
 	bool bEmptyRT = m_tRtChunks.IsEmpty();
 	// ATTACH to exist index require these checks
 	if ( !bEmptyRT )

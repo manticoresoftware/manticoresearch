@@ -231,7 +231,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	QueryTreeBuilder_c tBuilder ( pQuery, std::move ( pQueryTokenizerQL ), tSettings );
 	tBuilder.Setup ( pSchema, pQueryTokenizerJson->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
 
-	tParsed.m_pRoot = ConstructNode ( tRoot[0], tBuilder );
+	XQNode_t * pRoot = ConstructNode ( tRoot[0], tBuilder );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
@@ -239,13 +239,14 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	}
 
 	XQLimitSpec_t tLimitSpec;
-	tParsed.m_pRoot = tBuilder.FixupTree ( tParsed.m_pRoot, tLimitSpec, IsAllowOnlyNot() );
+	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, IsAllowOnlyNot() );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
 		return false;
 	}
 
+	tParsed.m_pRoot = pRoot;
 	return true;
 }
 

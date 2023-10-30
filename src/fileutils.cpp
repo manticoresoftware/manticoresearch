@@ -530,8 +530,8 @@ CSphString sphNormalizePath( const CSphString & sOrigPath )
 
 CSphString sphGetCwd()
 {
-	CSphVector<char> sBuf (65536);
-	return getcwd( sBuf.begin(), sBuf.GetLength());
+	CSphFixedVector<char> sBuf ( 65536 );
+	return getcwd ( sBuf.begin(), sBuf.GetLength() );
 }
 
 

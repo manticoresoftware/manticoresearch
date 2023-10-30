@@ -377,6 +377,7 @@ jobs:
     env:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      REPO_OWNER: ${{ github.repository_owner }}
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
@@ -400,7 +401,7 @@ jobs:
         id: build
         run: |
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
-          echo "build_image=ghcr.io/manticoresoftware/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@v1
         with:

@@ -1,6 +1,6 @@
 * [☝ Introduction](Introduction.md)
 * [❗ Read this first](Read_this_first.md)
-* [✔ Installation](Installation/Installation.md)
+* [1️⃣ Installation](Installation/Installation.md)
     * [• Docker](Installation/Docker.md)
     * [• RedHat and Centos](Installation/RHEL_and_Centos.md)
     * [• Debian and Ubuntu](Installation/Debian_and_Ubuntu.md)
@@ -9,13 +9,13 @@
     * [• Compiling from sources](Installation/Compiling_from_sources.md)
     * [• Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [🔰 Quick start guide](Quick_start_guide.md)
-* [✔ Starting the server](Starting_the_server.md)
+* [2️⃣ Starting the server](Starting_the_server.md)
     * [• In Linux](Starting_the_server/Linux.md)
     * [• Manually](Starting_the_server/Manually.md)
     * [• In Docker](Starting_the_server/Docker.md)
     * [• In Windows](Starting_the_server/Windows.md)
     * [• In MacOS](Starting_the_server/MacOS.md)
-* [⪢ Creating a table](Creating_a_table.md)
+* [3️⃣ Creating a table](Creating_a_table.md)
     * [• Data types](Creating_a_table/Data_types.md)
         * [• Row-wise and columnar attribute storages](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
     * [Creating a local table](Creating_a_table/Local_tables.md)
@@ -55,7 +55,7 @@
         * [Replication cluster status](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [Restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
         * [Cluster recovery](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
-* [✔ Connecting to the server](Connecting_to_the_server.md)
+* [4️⃣ Connecting to the server](Connecting_to_the_server.md)
     * [MySQL protocol](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)
     * [SQL over HTTP](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
@@ -80,13 +80,13 @@
             * [• Attaching a plain table to RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
             * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)        
         * [• Rotating a table](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
-    * [✔ Updating documents]
+    * [⪢ Updating documents]
         * [• REPLACE vs UPDATE](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)
         * [• REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md)
         * [• UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md)
     * [• Deleting documents](Data_creation_and_modification/Deleting_documents.md)
     * [• Transactions](Data_creation_and_modification/Transactions.md)
-* [✔ Searching]
+* [5️⃣ Searching]
     * [• Intro](Searching/Intro.md)
     * [⪢ Full-text matching]
         * [• Basic usage](Searching/Full_text_matching/Basic_usage.md)

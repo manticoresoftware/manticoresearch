@@ -10,5 +10,5 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 starting daemon version '%{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})' ...
 listening on all interfaces for mysql, port=%{NUMBER}
 listening on UNIX socket %{PATH}
-listening on %{IPADDR}:%{NUMBER} for sphinx and http(s), port=%{NUMBER}
+listening on %{IPADDR}:%{NUMBER} for sphinx and http(s)
 listening on all interfaces for sphinx and http(s), port=%{NUMBER}

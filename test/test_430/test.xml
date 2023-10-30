@@ -225,7 +225,7 @@ select id,price from META:all where price=101;
 
 select avg(price) from test_dist;
 
-select brand_id from test_col where price&gt;500;
+select brand_id from test_col where price&gt;500 /*+ ColumnarScan(price) */;
 show meta;
 select brand_id from test_col where price&gt;500 /*+ NO_ColumnarScan(price) */;
 show meta;
@@ -233,14 +233,14 @@ show meta;
 select title from META:all where match('two') and property='Ten';
 show meta;
 
-select brand_id from test_col where price&gt;500 and brand_id&gt;5;
+select brand_id from test_col where price&gt;500 and brand_id&gt;5 /*+ ColumnarScan(price,brand_id) */;
 show meta;
 select brand_id from test_col where price&gt;500 and brand_id&gt;5 /*+ NO_ColumnarScan(price,brand_id) */;
 show meta;
 
 select groupby(), count(*) from META:all group by price,brand_id;
 
-select groupby(), count(*) from META:all group by coeff;
+select groupby(), count(*), coeff from META:all group by coeff;
 
 <!-- regression crash on using columnar attribute at the expr ranker from plain index-->
 select id, weight() as w, title from test_col3 where match('ten') order by w desc, id desc option ranker=expr('sum(in(categories,11,12))');

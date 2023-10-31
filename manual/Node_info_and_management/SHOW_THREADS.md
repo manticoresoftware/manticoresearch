@@ -407,12 +407,12 @@ utilsApi.Sql("SHOW THREADS");
 
 <!-- end -->
 
-<!-- example SHOW THREADS WIDTH -->
-
 The `Info` column displays:
 
 * Raw text of queries executed via the Manticore SQL interface
 * Full text syntax, comments, and data size for queries run through the internal Manticore binary protocol (e.g., from a remote Manticore instance)
+
+<!-- example SHOW THREADS WIDTH -->
 
 You can limit the maximum width of the `Info` column by specifying the `columns=N` option.
 

@@ -66,80 +66,16 @@ SHOW THREADS;
 ```http
 POST /cli -d "SHOW THREADS"
 ```
+
 <!-- response JSON -->
-```json
-{
-  "columns": [
-    {
-      "TID": {
-        "type": "string"
-      }
-    },
-    {
-      "Name": {
-        "type": "string"
-      }
-    },
-    {
-      "Proto": {
-        "type": "string"
-      }
-    },
-    {
-      "State": {
-        "type": "string"
-      }
-    },
-    {
-      "Connection from": {
-        "type": "string"
-      }
-    },
-    {
-      "ConnID": {
-        "type": "string"
-      }
-    },
-    {
-      "This/prev job time": {
-        "type": "string"
-      }
-    },
-    {
-      "Jobs done": {
-        "type": "string"
-      }
-    },
-    {
-      "Thread status": {
-        "type": "string"
-      }
-    },
-    {
-      "Info": {
-        "type": "string"
-      }
-    }
-  ],
-  "data": [
-    {
-      "TID": 83,
-      "Name": "work_1",
-      "Proto": "http",
-      "State": "query",
-      "Connection from": "172.17.0.1:41410",
-      "ConnID": 6,
-      "This/prev job time": "689us",
-      "Jobs done": 159,
-      "Thread status": "working",
-      "Info": "show_threads"
-    }
-  ],
-  "total": 0,
-  "error": "",
-  "warning": ""
-}
 ```
++--------+---------+-------+-------+-----------------+--------+-----------------------+-----------+---------------+--------------+
+| TID    | Name    | Proto | State | Connection from | ConnID | This/prev job time, s | Jobs done | Thread status | Info         |
++--------+---------+-------+-------+-----------------+--------+-----------------------+-----------+---------------+--------------+
+| 501494 | work_23 | http  | query | 127.0.0.1:41300 | 1473   | 249us                 | 1681      | working       | show_threads |
++--------+---------+-------+-------+-----------------+--------+-----------------------+-----------+---------------+--------------+
+```
+
 <!-- intro -->
 ##### PHP:
 

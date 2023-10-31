@@ -1,0 +1,13 @@
+––– block: ../base/start-searchd-2 –––
+––– input –––
+php ../helpers/issue-1335/dump.php 10000 30 770000
+––– output –––
+*************************** 1. row ***************************
+––– input –––
+mysql -e "SHOW TABLES;SELECT * FROM test;"
+––– output –––
+esrgsg
+––– input –––
+timeout 10 mysql -e "select * from test where MATCH('@street walnut blvd') and country='US';"
+––– output –––
+evdvdrv 

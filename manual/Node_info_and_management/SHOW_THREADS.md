@@ -82,7 +82,7 @@ POST /cli -d "SHOW THREADS"
 <!-- request PHP -->
 
 ```php
-$client->nodes()->threads();
+print_r($client->nodes()->threads());
 ```
 
 <!-- response PHP -->
@@ -112,90 +112,12 @@ Array
 <!-- request Python -->
 
 ```python
-utilsApi.sql('SHOW THREADS')
+print(utilsApi.sql('SHOW THREADS'))
 ```
 <!-- response Python -->
 
 ```python
-{
-  u'columns': [
-    {
-      u'TID': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Name': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Proto': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'State': {
-        u'type': u'string'
-      }
-    },
-    {
-    {
-      u'Connection from': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'ConnID': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'This/prev job time': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'CPU activity': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Jobs done': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Thread status': {
-        u'type': u'string'
-      }
-    },
-    {
-      u'Info': {
-        u'type': u'string'
-      }
-    }
-  ],
-  u'data': [
-    {
-      u'TID': 83,
-      u'Name': u'work_1',
-      u'Proto': u'http',
-      u'State': u'query',
-      u'Connection from': u'172.17.0.1:43300',
-      u'ConnID': 8,
-      u'This/prev job time': ;'630us' ,
-      u'CPU activity': u'94.15%',
-      u'Jobs done': u'2490',
-      u'Thread status': u'working',
-      u'Info': u'show_threads'
-    }
-  ],
-  u'total': 0,
-  u'error': u'',
-  u'warning': u''
-}
-
+[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
 ```
 <!-- intro -->
 ##### Javascript:

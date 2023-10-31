@@ -89,30 +89,17 @@ $client->nodes()->threads();
 ```php
 Array
 (
-    [83] => Array
+    [0] => Array
         (
-            [Name] => work_1
-            [Proto] => mysql
-            [State] => query
-            [Connection from] => 172.17.0.1:43300
-            [ConnID] => 8
-            [This/prev job time] => 630us
-            [CPU activity] => 94.15%
-            [Jobs done] => 2490
-            [Thread status] => working
-            [Info] => insert into t values(0,'abc'),(0,'def')
-        )
-
-    [84] => Array
-        (
-            [Name] => work_2
+            [TID] => 506960
+            [Name] => work_8
             [Proto] => http
             [State] => query
-            [Connection from] => 172.17.0.1:43301
-            [ConnID] => 9
-            [This/prev job time] => 689us
-            [CPU activity] => 89.23%
-            [Jobs done] => 1830
+            [Connection from] => 127.0.0.1:38072
+            [ConnID] => 17
+            [This/prev job time, s] => 231us
+            [CPU activity] => 93.54%
+            [Jobs done] => 8
             [Thread status] => working
             [Info] => show_threads
         )

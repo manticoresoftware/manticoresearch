@@ -145,7 +145,7 @@ async function showThreads() {
 showThreads();
 ```
 
-<!-- response Javascript -->
+<!-- response javascript -->
 
 ```javascript
 [

@@ -16,7 +16,7 @@ The resulting table contains the following columns:
 * `State`: Thread state; possible values are `handshake`, `net_read`, `net_write`, `query`, `net_idle`
 * `Connection from`: Client's `ip:port`
 * `ConnID`: Connection ID (starting from 0)
-* `This/prev job time`: When the thread is busy - how long the current job has been running, in seconds when the thread is idling - previous job duration + suffix  (prev)
+* `This/prev job time`: When the thread is busy - how long the current job has been running; when the thread is idling - previous job duration + suffix `prev`
 * `Jobs done`: Number of jobs completed by this thread
 * `Thread status`: Whether the stream is currently in standby mode or in run mode
 * `Info`: Information about the query, which may include multiple queries if the query targets a distributed table or a real-time table

@@ -82,6 +82,9 @@ POST /cli -d "SHOW THREADS"
 <!-- request PHP -->
 
 ```php
+require_once __DIR__ . '/vendor/autoload.php';
+$config = ['host'=>'127.0.0.1','port'=>9308];
+$client = new \Manticoresearch\Client($config);
 print_r($client->nodes()->threads());
 ```
 
@@ -112,6 +115,12 @@ Array
 <!-- request Python -->
 
 ```python
+import manticoresearch
+config = manticoresearch.Configuration(
+            host = "http://127.0.0.1:9308"
+            )
+client = manticoresearch.ApiClient(config)
+utilsApi = manticoresearch.UtilsApi(client)
 print(utilsApi.sql('SHOW THREADS'))
 ```
 <!-- response Python -->
@@ -125,90 +134,99 @@ print(utilsApi.sql('SHOW THREADS'))
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('SHOW THREADS');
+var Manticoresearch = require('manticoresearch');
+
+var utilsApi = new Manticoresearch.UtilsApi();
+async function showThreads() {
+    res = await utilsApi.sql('SHOW THREADS');
+    console.log(JSON.stringify(res, null, 4));
+}
+
+showThreads();
 ```
 
 <!-- response Javascript -->
 
 ```javascript
-{
-  "columns": [
+[
     {
-      "TID": {
-        "type": "string"
-      }
-    },
-    {
-      "Name": {
-        "type": "string"
-      }
-    },
-    {
-      "Proto": {
-        "type": "string"
-      }
-    },
-    {
-      "State": {
-        "type": "string"
-      }
-    },
-    {
-      "Connection from": {
-        "type": "string"
-      }
-    },
-    {
-      "ConnID": {
-        "type": "string"
-      }
-    },
-    {
-      "This/prev job time": {
-        "type": "string"
-      }
-    },
-    {
-      "CPU activity": {
-        "type": "string"
-      }
-    },
-    {
-      "Jobs done": {
-        "type": "string"
-      }
-    },
-    {
-      "Thread status": {
-        "type": "string"
-      }
-    },
-    {
-      "Info": {
-        "type": "string"
-      }
+        "columns": [
+            {
+                "TID": {
+                    "type": "long"
+                }
+            },
+            {
+                "Name": {
+                    "type": "string"
+                }
+            },
+            {
+                "Proto": {
+                    "type": "string"
+                }
+            },
+            {
+                "State": {
+                    "type": "string"
+                }
+            },
+            {
+                "Connection from": {
+                    "type": "string"
+                }
+            },
+            {
+                "ConnID": {
+                    "type": "long long"
+                }
+            },
+            {
+                "This/prev job time, s": {
+                    "type": "string"
+                }
+            },
+            {
+                "CPU activity": {
+                    "type": "float"
+                }
+            },
+            {
+                "Jobs done": {
+                    "type": "long"
+                }
+            },
+            {
+                "Thread status": {
+                    "type": "string"
+                }
+            },
+            {
+                "Info": {
+                    "type": "string"
+                }
+            }
+        ],
+        "data": [
+            {
+                "TID": 506964,
+                "Name": "work_12",
+                "Proto": "http",
+                "State": "query",
+                "Connection from": "127.0.0.1:36656",
+                "ConnID": 2884,
+                "This/prev job time, s": "236us",
+                "CPU activity": "91.73%",
+                "Jobs done": 3328,
+                "Thread status": "working",
+                "Info": "show_threads"
+            }
+        ],
+        "total": 1,
+        "error": "",
+        "warning": ""
     }
-  ],
-  "data": [
-    {
-      "TID": 82,
-      "Name": "work_0",
-      "Proto": "http",
-      "State": "query",
-      "Connection from": "172.17.0.1:60550",
-      "ConnID": 163,
-      "This/prev job time": "105us",
-      "CPU activity": "44.68%",
-      "Jobs done": 849,
-      "Thread status": "working",
-      "Info": "show_threads"
-    }
-  ],
-  "total": 0,
-  "error": "",
-  "warning": ""
-}
-
+]
 ```
 
 <!-- intro -->

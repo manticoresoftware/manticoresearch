@@ -18,7 +18,7 @@ The resulting table contains the following columns:
 * `ConnID`: Connection ID (starting from 0)
 * `This/prev job time`: When the thread is busy - how long the current job has been running; when the thread is idling - previous job duration + suffix `prev`
 * `Jobs done`: Number of jobs completed by this thread
-* `Thread status`: Whether the stream is currently in standby mode or in run mode
+* `Thread status`: `idling` or `working`
 * `Info`: Information about the query, which may include multiple queries if the query targets a distributed table or a real-time table
 
 <!-- intro -->

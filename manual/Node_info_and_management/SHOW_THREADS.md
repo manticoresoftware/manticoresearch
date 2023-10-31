@@ -11,7 +11,7 @@ SHOW THREADS [ OPTION columns=width[,format=sphinxql][,format=all] ]
 The resulting table contains the following columns:
 
 * `TID`: ID assigned to the thread by the kernel
-* `Name`: Thread name, also visible in `top`, `htop`, `ps`, and other Unix tools for monitoring thread statistics
+* `Name`: Thread name, also visible in `top`, `htop`, `ps`, and other process-viewing tools
 * `Proto`: Connection protocol; possible values include `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)
 * `State`: Thread state; possible values are `handshake`, `net_read`, `net_write`, `query`, `net_idle`
 * `Connection from`: Client's `ip:port`

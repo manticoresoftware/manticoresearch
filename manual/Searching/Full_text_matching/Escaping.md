@@ -29,6 +29,14 @@ To use a backslash as a character, you must escape both the backslash as a chara
 SELECT * FROM your_index WHERE MATCH('\\\\ABC');
 ```
 
+When you are working with JSON data in Manticore Search and need to include a double quote (`"`) within a JSON string, it's important to handle it with proper escaping. In JSON, a double quote within a string is escaped using a backslash (`\`). However, when inserting the JSON data through an SQL query, Manticore Search interprets the backslash (`\`) as an escape character within strings.
+
+To ensure the double quote is correctly inserted into the JSON data, you need to escape the backslash itself. This results in using two backslashes (`\\`) before the double quote. For example:
+
+```sql
+insert into tbl(j) values('{"a": "\\"abc\\""}');
+```
+
 ## Using MySQL drivers
 
 MySQL drivers provide escaping functions (e.g., `mysqli_real_escape_string` in PHP or `conn.escape_string` in Python), but they only escape specific characters.

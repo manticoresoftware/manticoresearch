@@ -1,5 +1,9 @@
 ––– block: ../base/start-searchd-2 –––
 ––– input –––
+pwd
+––– output –––
+#!/.*/!#
+––– input –––
 php ../helpers/issue-1335/dump.php 10000 30 770000
 ––– output –––
 *************************** 1. row ***************************

@@ -60,6 +60,11 @@
 
 #include "secondarylib.h"
 
+#if WITH_RE2
+#include <string>
+#include <re2/re2.h>
+#endif
+
 using namespace Threads;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1341,6 +1346,7 @@ private:
 
 	void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
 	void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
+	void						ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const final;
 	void						GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const final;
 
 	void						SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const final;
@@ -6228,7 +6234,7 @@ struct RtExpandedTraits_fn
 };
 
 
-struct DictEntryRtPayload_t
+struct DictEntryRtPayload_t : public DictTerm2Expanded_i
 {
 	DictEntryRtPayload_t ( bool bPayload, int iSegments )
 	{
@@ -6347,7 +6353,7 @@ struct DictEntryRtPayload_t
 						bind ( &RtExpandedPayload_t::m_uDoclistOff ) );
 			}
 
-			auto * pPayload = new RtSubstringPayload_t ( m_dSeg.GetLength(), iPayloads );
+			std::unique_ptr<RtSubstringPayload_t> pPayload ( new RtSubstringPayload_t ( m_dSeg.GetLength(), iPayloads ) );
 
 			Slice_t * pDst = pPayload->m_dDoclist.Begin();
 			ARRAY_FOREACH ( i, m_dSeg )
@@ -6369,7 +6375,7 @@ struct DictEntryRtPayload_t
 			}
 			pPayload->m_iTotalDocs = iTotalDocs;
 			pPayload->m_iTotalHits = iTotalHits;
-			tArgs.m_pPayload = pPayload;
+			tArgs.m_pPayload = std::move ( pPayload );
 		}
 
 		tArgs.m_iTotalDocs = iTotalDocs;
@@ -6525,6 +6531,67 @@ void RtIndex_c::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	}
 
 	tDict2Payload.Convert ( tArgs );
+}
+
+#if WITH_RE2
+struct RtRegexMatch_t
+{
+	std::unique_ptr<RE2> m_pRe { nullptr };
+	std::unique_ptr<DictEntryRtPayload_t> m_pPayload { nullptr };
+};
+#endif
+
+void RtIndex_c::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const
+{
+	assert ( dTerms.GetLength() && dTerms.GetLength()==dConverters.GetLength() );
+
+#if WITH_RE2
+
+	const auto & dSegments = *(const RtSegVec_c*)tArgs.m_pIndexData.Ptr();
+
+	CSphFixedVector<RtRegexMatch_t> dRegex ( dTerms.GetLength() );
+	RE2::Options tOptions;
+	tOptions.set_encoding ( RE2::Options::Encoding::EncodingLatin1 );
+	ARRAY_FOREACH ( i, dRegex )
+	{
+		dRegex[i].m_pRe = std::make_unique<RE2> ( dTerms[i].first.cstr(), tOptions );
+		dRegex[i].m_pPayload = std::make_unique<DictEntryRtPayload_t> ( tArgs.m_bPayload, dSegments.GetLength() );
+		assert ( dRegex[i].m_pRe && dRegex[i].m_pPayload );
+	}
+
+	ARRAY_FOREACH ( iSeg, dSegments )
+	{
+		const RtSegment_t * pCurSeg = dSegments[iSeg];
+		RtWordReader_c tReader ( pCurSeg, true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+
+		while ( tReader.UnzipWord() )
+		{
+			const BYTE * pDictWord = tReader->m_sWord+1;
+
+			// stemmed terms should not match suffixes
+			if ( tArgs.m_bHasExactForms && *pDictWord!=MAGIC_WORD_HEAD_NONSTEMMED )
+				continue;
+
+			int iLen = tReader->m_sWord[0];
+			if ( *pDictWord<0x20 ) // anyway skip heading magic chars in the prefix, like NONSTEMMED maker
+			{
+				pDictWord++;
+				iLen--;
+			}
+
+			re2::StringPiece sDictToken ( (const char *)pDictWord, iLen );
+
+			ARRAY_FOREACH ( i, dRegex )
+			{
+				if ( RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
+					dRegex[i].m_pPayload->Add ( (const RtWord_t *)tReader, iSeg );
+			}
+		}
+	}
+
+	ARRAY_FOREACH ( i, dRegex )
+		dConverters[i] = std::move( dRegex[i].m_pPayload );
+#endif
 }
 
 void RtIndex_c::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const
@@ -7045,6 +7112,8 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 		tExpCtx.m_pIndexData = std::move ( pIndexData );
 
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx ); // here magics happens
+		if ( !ExpandRegex ( tExpCtx, tMeta.m_sError ) )
+			return 0;
 	}
 
 	return ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );

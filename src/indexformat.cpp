@@ -11,6 +11,10 @@
 //
 
 #include "indexformat.h"
+#if WITH_RE2
+#include <string>
+#include <re2/re2.h>
+#endif
 
 // let uDocs be DWORD here to prevent int overflow in case of hitless word (highest bit is 1)
 int DoclistHintUnpack ( DWORD uDocs, BYTE uHint )
@@ -147,7 +151,7 @@ struct DiskSubstringPayload_t : public ISphSubstringPayload
 
 //////////////////////////////////////////////////////////////////////////
 
-struct DictEntryDiskPayload_t
+struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 {
 	DictEntryDiskPayload_t ( bool bPayload, ESphHitless eHitless )
 	{
@@ -185,7 +189,7 @@ struct DictEntryDiskPayload_t
 		}
 	}
 
-	void Convert ( ISphWordlist::Args_t & tArgs )
+	void Convert ( ISphWordlist::Args_t & tArgs ) override
 	{
 		if ( !m_dWordExpand.GetLength() && !m_dWordPayload.GetLength() )
 			return;
@@ -216,7 +220,7 @@ struct DictEntryDiskPayload_t
 		{
 			LimitExpanded ( tArgs.m_iExpansionLimit, m_dWordPayload );
 
-			DiskSubstringPayload_t * pPayload = new DiskSubstringPayload_t ( m_dWordPayload.GetLength() );
+			std::unique_ptr<DiskSubstringPayload_t> pPayload ( new DiskSubstringPayload_t ( m_dWordPayload.GetLength() ) );
 			// sorting by ascending doc-list offset gives some (15%) speed-up too
 			sphSort ( m_dWordPayload.Begin(), m_dWordPayload.GetLength(), bind ( &DiskExpandedPayload_t::m_uDoclistOff ) );
 
@@ -233,7 +237,7 @@ struct DictEntryDiskPayload_t
 
 			pPayload->m_iTotalDocs = iTotalDocs;
 			pPayload->m_iTotalHits = iTotalHits;
-			tArgs.m_pPayload = pPayload;
+			tArgs.m_pPayload = std::move ( pPayload );
 		}
 		tArgs.m_iTotalDocs = iTotalDocs;
 		tArgs.m_iTotalHits = iTotalHits;
@@ -604,6 +608,70 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	tDict2Payload.Convert ( tArgs );
 }
 
+#if WITH_RE2
+struct RegexMatch_t
+{
+	std::unique_ptr<RE2> m_pRe { nullptr };
+	std::unique_ptr<DictEntryDiskPayload_t> m_pPayload { nullptr };
+};
+#endif
+
+void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const
+{
+	// dict must be of keywords type, and fully cached
+	// mmap()ed in the worst case, should we ever banish it to disk again
+	if ( m_tBuf.IsEmpty() || !m_dCheckpoints.GetLength() )
+		return;
+
+	assert ( dTerms.GetLength() && dTerms.GetLength()==dConverters.GetLength() );
+
+#if WITH_RE2
+
+	CSphFixedVector<RegexMatch_t> dRegex ( dTerms.GetLength() );
+	RE2::Options tOptions;
+	tOptions.set_encoding ( RE2::Options::Encoding::EncodingLatin1 );
+	ARRAY_FOREACH ( i, dRegex )
+	{
+		dRegex[i].m_pRe = std::make_unique<RE2> ( dTerms[i].first.cstr(), tOptions );
+		dRegex[i].m_pPayload = std::make_unique<DictEntryDiskPayload_t> ( tArgs.m_bPayload, tArgs.m_eHitless );
+		assert ( dRegex[i].m_pRe && dRegex[i].m_pPayload );
+	}
+
+	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+
+	// walk those checkpoints, check all their words
+	ARRAY_FOREACH ( i, m_dCheckpoints )
+	{
+		const auto & tCP = m_dCheckpoints[i];
+
+		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset, m_iSkiplistBlockSize );
+		while ( tDictReader.UnpackWord() )
+		{
+			if ( sphInterrupted () )
+				break;
+
+			// stemmed terms should not match suffixes
+			if ( tArgs.m_bHasExactForms && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+				continue;
+
+			int iLen = tDictReader.GetWordLen();
+			re2::StringPiece sDictToken ( (const char *)tDictReader.m_sKeyword+iSkipMagic, iLen );
+
+			ARRAY_FOREACH ( i, dRegex )
+			{
+				if ( RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
+					dRegex[i].m_pPayload->Add ( tDictReader, iLen );
+			}
+		}
+
+		if ( sphInterrupted () )
+			break;
+	}
+
+	ARRAY_FOREACH ( i, dRegex )
+		dConverters[i] = std::move( dRegex[i].m_pPayload );
+#endif
+}
 
 void CWordlist::SuffixGetChekpoints ( const SuggestResult_t & , const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const
 {

@@ -157,6 +157,23 @@ In addition, the following inline wildcard operators are supported:
 
 The inline operators require `dict=keywords` and infixing enabled.
 
+### REGEX operator
+
+```sql
+REGEX(/t.?e/)
+```
+
+Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) or suffix [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) and `dict=keywords` options to be set. Additionally, the daemon binary should be compiled with RE2 support.
+
+The search will attempt to find all expansions of the REGEX tokens, and each expansion is recorded as a matched hit. REGEX tokens can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX expression.
+
+Expressions should adhere to the RE2 syntax. The REGEX expression delimiter is the first symbol after the open bracket. In other words, all text between the open bracket followed by the delimiter and the delimiter and the closed bracket is considered as a RE2 expression.
+Please note that the terms stored in the dictionary undergo charset_table transformation, meaning that REGEX cannot match uppercase characters since the source case is lost.
+
+```sql
+REGEX(/.{3}t/)
+REGEX(/t.*\d*/)
+```
 
 ### Field-start and field-end modifier
 

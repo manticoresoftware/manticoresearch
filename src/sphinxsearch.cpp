@@ -4700,6 +4700,9 @@ CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<=SPH_QUERY_PARAGRAPH )
 		return szNodeNames [ pNode->GetOp()-SPH_QUERY_AND ];
 
+	if ( pNode->GetOp()==SPH_QUERY_REGEX )
+		return "REGEX";
+
 	CSphString sTmp;
 	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );
 	return sTmp; 

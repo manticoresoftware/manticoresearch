@@ -51,6 +51,18 @@ The exit codes for indexer are as follows:
 * 1: there was a problem while indexing (and if `--rotate` was specified, it was skipped) or an operation emitted a warning
 * 2: indexing went OK, but the `--rotate` attempt failed
 
+Also, you can run the indexer via a systemctl unit file:
+
+```shell
+systemctl start --no-block manticore-indexer
+```
+
+Or, in case you want to index a specific table:
+
+```shell
+systemctl start --no-block manticore-indexer@desired-table-name
+```
+
 ### Indexer command line arguments
 * `--config <file>` (`-c <file>` for short) tells `indexer` to use the given file as its configuration. Normally, it will look for `manticore.conf` in the installation directory (e.g. `/etc/manticoresearch/manticore.conf`), followed by the current directory you are in when calling `indexer` from the shell. This is most useful in shared environments where the binary files are installed in a global folder, e.g. `/usr/bin/`, but you want to provide users with the ability to make their own custom Manticore set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own `manticore.conf` files and pass them to `indexer` with this option. For example:
 
@@ -244,3 +256,40 @@ ignore_non_plain = 1
 
 `ignore_non_plain` allows you to completely ignore warnings about skipping non-plain tables. The default is 0 (not ignoring).
 <!-- proofread -->
+
+
+### Schedule indexer
+
+You have two approaches to schedule indexer running. First way - its crontab. You need to install cron and set commands.
+The second way its Using a Timer with a User-Defined Schedule:
+
+
+To create the timer unit files for your system, you should place them in the appropriate directory where systemd looks for such unit files. On most Linux distributions, this directory is typically /etc/systemd/system. Here's how to add the paths to the unit files for both the user-defined and predefined schedules:
+
+#### Predefined Schedule:
+
+1. Create a timer unit file for your custom schedule, as mentioned in the previous response.
+```shell
+cat << EOF > /etc/systemd/system/manticore-indexer@.timer
+[Unit]
+Description=Run ManticoreSearch's indexer by schedule
+
+[Timer]
+OnCalendar=minutely
+RandomizedDelaySec=5m
+Unit=manticore-indexer@%i.timer
+
+[Install]
+WantedBy=timers.target
+EOF
+```
+2. Edit the timer unit for your specific needs.
+3. Enable the timer:
+```shell
+systemctl enable manticore-indexer@idx1.timer
+```
+4. Start the timer:
+```shell
+systemctl start manticore-indexer@idx1.timer
+```
+5. Repeat steps 2-4 for any additional timers.

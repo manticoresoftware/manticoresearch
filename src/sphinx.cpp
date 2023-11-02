@@ -10320,7 +10320,7 @@ struct BinaryNode_t
 	int m_iHi;
 };
 
-static void BuildExpandedTree ( const XQKeyword_t & tRootWord, ISphWordlist::Args_t & dWordSrc, XQNode_t * pRoot )
+static void BuildExpandedTree ( const XQKeyword_t & tRootWord, const ISphWordlist::Args_t & dWordSrc, XQNode_t * pRoot )
 {
 	assert ( dWordSrc.m_dExpanded.GetLength() );
 	pRoot->m_dWords.Reset();
@@ -10375,6 +10375,7 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, ISphWordlist::Arg
 	}
 }
 
+static XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tArgs, XQNode_t * pNode );
 
 /// do wildcard expansion for keywords dictionary
 /// (including prefix and infix expansion)
@@ -10432,23 +10433,36 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// check the wildcards
 	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
+	const bool bRegex = ( pNode->GetOp()==SPH_QUERY_REGEX );
 
 	// no wildcards, or just wildcards? do not expand
-	if ( !sphHasExpandableWildcards ( sFull ) )
+	if ( !( bRegex || sphHasExpandableWildcards ( sFull ) ) )
 		return pNode;
 
-	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.IsEmpty() );
-	ISphWordlist::Args_t tWordlist ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+	// regex builds tree in batch mode
+	if ( bRegex )
+	{
+		tCtx.m_dRegexTerms.Add ( std::make_pair ( sFull, pNode ) );
+		return pNode;
+	}
 
-	if ( !sphExpandGetWords ( sFull, tCtx, tWordlist ) )
+	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.IsEmpty() );
+	ISphWordlist::Args_t tArgs ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+
+	if ( !sphExpandGetWords ( sFull, tCtx, tArgs ) )
 	{
 		tCtx.m_pResult->m_sWarning.SetSprintf ( "Query word length is less than min %s length. word: '%s' ", ( tCtx.m_iMinInfixLen>0 ? "infix" : "prefix" ), sFull );
 		return pNode;
 	}
 
+	return ExpandXQNode ( tCtx, tArgs, pNode );
+}
+
+XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tArgs, XQNode_t * pNode )
+{
 	// no real expansions?
 	// mark source word as expanded to prevent warning on terms mismatch in statistics
-	if ( !tWordlist.m_dExpanded.GetLength() && !tWordlist.m_pPayload )
+	if ( !tArgs.m_dExpanded.GetLength() && !tArgs.m_pPayload )
 	{
 		tCtx.m_pResult->AddStat ( pNode->m_dWords.Begin()->m_sWord, 0, 0 );
 		pNode->m_dWords.Begin()->m_bExpanded = true;
@@ -10457,19 +10471,18 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// copy the original word (iirc it might get overwritten),
 	const XQKeyword_t tRootWord = pNode->m_dWords[0];
-	tCtx.m_pResult->AddStat ( tRootWord.m_sWord, tWordlist.m_iTotalDocs, tWordlist.m_iTotalHits );
+	tCtx.m_pResult->AddStat ( tRootWord.m_sWord, tArgs.m_iTotalDocs, tArgs.m_iTotalHits );
 
 	// and build a binary tree of all the expansions
-	if ( tWordlist.m_dExpanded.GetLength() )
+	if ( tArgs.m_dExpanded.GetLength() )
 	{
-		BuildExpandedTree ( tRootWord, tWordlist, pNode );
+		BuildExpandedTree ( tRootWord, tArgs, pNode );
 	}
 
-	if ( tWordlist.m_pPayload )
+	if ( tArgs.m_pPayload )
 	{
-		ISphSubstringPayload * pPayload = tWordlist.m_pPayload;
-		tWordlist.m_pPayload = NULL;
-		tCtx.m_pPayloads->Add ( pPayload );
+		ISphSubstringPayload * pPayload = tArgs.m_pPayload.release();
+		tCtx.m_pPayloads->Add( pPayload );
 
 		if ( pNode->m_dWords.GetLength() )
 		{
@@ -10496,6 +10509,40 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	}
 
 	return pNode;
+}
+
+bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
+{
+	if ( !tCtx.m_dRegexTerms.GetLength() )
+		return true;
+
+	if ( tCtx.m_dRegexTerms.GetLength() )
+	{
+#if !WITH_RE2
+		sError.SetSprintf ( "REGEXP full-text operator used but no regexp support compiled" );
+		return false;
+#endif
+	}
+
+	CSphFixedVector<std::unique_ptr < DictTerm2Expanded_i > > dConverters ( tCtx.m_dRegexTerms.GetLength() );
+	ISphWordlist::Args_t tArgs ( true, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+
+	assert ( tCtx.m_pWordlist );
+	tCtx.m_pWordlist->ScanRegexWords ( tCtx.m_dRegexTerms, tArgs, dConverters );
+	assert ( !dConverters.GetLength() || ( tCtx.m_dRegexTerms.GetLength()==dConverters.GetLength() ) );
+
+	ARRAY_FOREACH ( i, dConverters )
+	{
+		if ( !dConverters[i] )
+			continue;
+
+		ISphWordlist::Args_t tArgs ( true, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+		dConverters[i]->Convert ( tArgs );
+
+		ExpandXQNode ( tCtx, tArgs, tCtx.m_dRegexTerms[i].second );
+	}
+
+	return true;
 }
 
 
@@ -10625,6 +10672,9 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta &
 	tCtx.m_eHitless = m_tSettings.m_eHitless;
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
+	if ( !ExpandRegex ( tCtx, tMeta.m_sError ) )
+		return nullptr;
+
 	pNode->Check ( true );
 
 	return pNode;
@@ -13128,13 +13178,6 @@ ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExac
 	m_iTotalHits = 0;
 }
 
-
-ISphWordlist::Args_t::~Args_t ()
-{
-	SafeDelete ( m_pPayload );
-}
-
-
 void ISphWordlist::Args_t::AddExpanded ( const BYTE * sName, int iLen, int iDocs, int iHits )
 {
 	SphExpanded_t & tExpanded = m_dExpanded.Add();
@@ -13154,134 +13197,6 @@ const char * ISphWordlist::Args_t::GetWordExpanded ( int iIndex ) const
 	assert ( m_dExpanded[iIndex].m_iNameOff<m_sBuf.GetLength() );
 	return (const char *)m_sBuf.Begin() + m_dExpanded[iIndex].m_iNameOff;
 }
-
-
-struct DiskExpandedEntry_t
-{
-	int		m_iNameOff;
-	int		m_iDocs;
-	int		m_iHits;
-};
-
-struct DiskExpandedPayload_t
-{
-	int			m_iDocs;
-	int			m_iHits;
-	uint64_t	m_uDoclistOff;
-	int			m_iDoclistHint;
-};
-
-
-struct DictEntryDiskPayload_t
-{
-	explicit DictEntryDiskPayload_t ( bool bPayload, ESphHitless eHitless )
-	{
-		m_bPayload = bPayload;
-		m_eHitless = eHitless;
-		if ( bPayload )
-			m_dWordPayload.Reserve ( 1000 );
-
-		m_dWordExpand.Reserve ( 1000 );
-		m_dWordBuf.Reserve ( 8096 );
-	}
-
-	void Add ( const DictEntry_t & tWord, int iWordLen )
-	{
-		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) ||
-			m_eHitless==SPH_HITLESS_ALL || ( m_eHitless==SPH_HITLESS_SOME && ( tWord.m_iDocs & HITLESS_DOC_FLAG )!=0 ) ) // FIXME!!! do we need hitless=some as payloads?
-		{
-			DiskExpandedEntry_t & tExpand = m_dWordExpand.Add();
-
-			int iOff = m_dWordBuf.GetLength();
-			tExpand.m_iNameOff = iOff;
-			tExpand.m_iDocs = tWord.m_iDocs;
-			tExpand.m_iHits = tWord.m_iHits;
-			m_dWordBuf.Resize ( iOff + iWordLen + 1 );
-			memcpy ( m_dWordBuf.Begin() + iOff + 1, tWord.m_sKeyword, iWordLen );
-			m_dWordBuf[iOff] = (BYTE)iWordLen;
-
-		} else
-		{
-			DiskExpandedPayload_t & tExpand = m_dWordPayload.Add();
-			tExpand.m_iDocs = tWord.m_iDocs;
-			tExpand.m_iHits = tWord.m_iHits;
-			tExpand.m_uDoclistOff = tWord.m_iDoclistOffset;
-			tExpand.m_iDoclistHint = tWord.m_iDoclistHint;
-		}
-	}
-
-	void Convert ( ISphWordlist::Args_t & tArgs )
-	{
-		if ( !m_dWordExpand.GetLength() && !m_dWordPayload.GetLength() )
-			return;
-
-		int iTotalDocs = 0;
-		int iTotalHits = 0;
-		if ( m_dWordExpand.GetLength() )
-		{
-			LimitExpanded ( tArgs.m_iExpansionLimit, m_dWordExpand );
-
-			const BYTE * sBase = m_dWordBuf.Begin();
-			ARRAY_FOREACH ( i, m_dWordExpand )
-			{
-				const DiskExpandedEntry_t & tCur = m_dWordExpand[i];
-				int iDocs = tCur.m_iDocs;
-
-				if ( m_eHitless==SPH_HITLESS_SOME )
-					iDocs = ( tCur.m_iDocs & HITLESS_DOC_MASK );
-
-				tArgs.AddExpanded ( sBase + tCur.m_iNameOff + 1, sBase[tCur.m_iNameOff], iDocs, tCur.m_iHits );
-
-				iTotalDocs += iDocs;
-				iTotalHits += tCur.m_iHits;
-			}
-		}
-
-		if ( m_dWordPayload.GetLength() )
-		{
-			LimitExpanded ( tArgs.m_iExpansionLimit, m_dWordPayload );
-
-			DiskSubstringPayload_t * pPayload = new DiskSubstringPayload_t ( m_dWordPayload.GetLength() );
-			// sorting by ascending doc-list offset gives some (15%) speed-up too
-			sphSort ( m_dWordPayload.Begin(), m_dWordPayload.GetLength(), bind ( &DiskExpandedPayload_t::m_uDoclistOff ) );
-
-			ARRAY_FOREACH ( i, m_dWordPayload )
-			{
-				const DiskExpandedPayload_t & tCur = m_dWordPayload[i];
-				assert ( m_eHitless==SPH_HITLESS_NONE || ( m_eHitless==SPH_HITLESS_SOME && ( tCur.m_iDocs & HITLESS_DOC_FLAG )==0 ) );
-
-				iTotalDocs += tCur.m_iDocs;
-				iTotalHits += tCur.m_iHits;
-				pPayload->m_dDoclist[i].m_uOff = tCur.m_uDoclistOff;
-				pPayload->m_dDoclist[i].m_iLen = tCur.m_iDoclistHint;
-			}
-
-			pPayload->m_iTotalDocs = iTotalDocs;
-			pPayload->m_iTotalHits = iTotalHits;
-			tArgs.m_pPayload = pPayload;
-		}
-		tArgs.m_iTotalDocs = iTotalDocs;
-		tArgs.m_iTotalHits = iTotalHits;
-	}
-
-	// sort expansions by frequency desc
-	// clip the less frequent ones if needed, as they are likely misspellings
-	template < typename T >
-	void LimitExpanded ( int iExpansionLimit, CSphVector<T> & dVec ) const
-	{
-		if ( !iExpansionLimit || dVec.GetLength()<=iExpansionLimit )
-			return;
-
-		sphSort ( dVec.Begin(), dVec.GetLength(), ExpandedOrderDesc_T<T>() );
-		dVec.Resize ( iExpansionLimit );
-	}
-
-	bool								m_bPayload;
-	ESphHitless							m_eHitless;
-	CSphVector<DiskExpandedEntry_t>		m_dWordExpand;
-	CSphVector<DiskExpandedPayload_t>	m_dWordPayload;
-	CSphVector<BYTE>					m_dWordBuf;
-};
 
 static bool operator < ( const InfixBlock_t & a, const char * b )
 {

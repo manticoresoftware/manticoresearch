@@ -58,6 +58,7 @@ enum XQOperator_e
 	SPH_QUERY_PARAGRAPH,
 	SPH_QUERY_NULL,
 	SPH_QUERY_SCAN,
+	SPH_QUERY_REGEX,
 
 	SPH_QUERY_TOTAL
 };
@@ -251,9 +252,9 @@ public:
 	{
 		assert ( bRoot || !IsEmpty() || m_eOp==SPH_QUERY_SCAN ); // empty leaves must be removed from the final tree; empty root is allowed
 		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_OR && m_eOp!=SPH_QUERY_PHRASE
-			&& m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM )); // words are only allowed in these node types
-		assert ( ( m_dWords.GetLength()==1 && ( m_eOp==SPH_QUERY_AND || m_eOp==SPH_QUERY_OR ) ) ||
-			m_dWords.GetLength()!=1 ); // 1-word leaves must be of AND | OR types
+			&& m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM && m_eOp!=SPH_QUERY_REGEX )); // words are only allowed in these node types
+		assert ( ( m_dWords.GetLength()==1 && ( m_eOp==SPH_QUERY_AND || m_eOp==SPH_QUERY_OR || m_eOp==SPH_QUERY_REGEX ) ) ||
+			m_dWords.GetLength()!=1 ); // 1-word leaves must be of AND | OR | REGEX types
 
 		ARRAY_FOREACH ( i, m_dChildren )
 		{

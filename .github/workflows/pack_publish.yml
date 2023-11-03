@@ -152,7 +152,7 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
 
   build_nsis:
-    name: Making and publishing Windows NSIS installer
+    name: Making Windows NSIS installer
     needs: pack_windows
     runs-on: ubuntu-22.04
     container:

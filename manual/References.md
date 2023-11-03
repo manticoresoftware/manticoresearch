@@ -213,11 +213,13 @@
 * [word^N](Searching/Full_text_matching/Operators.md#IDF-boost-modifier) - keyword IDF boost modifier
 * [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-operator) - NEAR, generalized proximity operator
 * [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-operator) - NOTNEAR, negative assertion operator
-* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
 * [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - PARAGRAPH operator
+* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
 * [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-limit-operator) - ZONE limit operator
 * [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) - ZONESPAN limit operator
 * [@@relaxed](Searching/Full_text_matching/Operators.md#Field-search-operator) - suppresses errors about missing fields
+* [t?st](Searching/Full_text_matching/Operators.md#Wildcard-operators) - wildcard operators
+* [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#REGEX-operator) - REGEX operator
 
 ## Functions
 ##### Mathematical

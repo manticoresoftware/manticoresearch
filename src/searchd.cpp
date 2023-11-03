@@ -12537,7 +12537,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "Connection from" );
 	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
 //	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
-	tOut.HeadColumn ( "This/prev job time, s" );
+	tOut.HeadColumn ( "This/prev job time" );
 	if ( g_bCpuStats )
 	{
 //		tOut.HeadColumn ( "Work time CPU" );
@@ -12574,7 +12574,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		int64_t tmNow = sphMicroTimer (); // short-term cache
 //		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
 //		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
-		// This/prev job time, s
+		// This/prev job time
 		if ( dThd.m_tmLastJobStartTimeUS < 0 )
 			tOut.PutString ( "-" ); // last job take
 		else if ( dThd.m_tmLastJobDoneTimeUS < 0 )

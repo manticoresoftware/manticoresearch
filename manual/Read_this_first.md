@@ -8,8 +8,8 @@ The manual is arranged to reflect the most likely way you would use Manticore:
 * essential things like adding documents and running searches
 * performance optimization tips, tricks and extending Manticore with the help of plugins and custom functions
 
-##### Do not skip ✔️
-Key sections of the manual are marked with ✔️ sign in the menu for your convenience since their corresponding functionality is most used. If you are new to Manticore **we highly recommend not skiping them**.
+##### Do not skip 1️⃣ 2️⃣ 3️⃣
+Key sections of the manual are marked with 1️⃣, 2️⃣, 3️⃣ etc. in the menu for your convenience since their corresponding functionality is most used. If you are new to Manticore **we highly recommend not skipping them**.
 
 ##### Quick start guide
 If you are looking for a quick understanding of how Manticore works in general [⚡ Quick start guide](Quick_start_guide.md) is a good place to start.

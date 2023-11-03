@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>REGEX filter and expression</name>
+<name>REGEX filter, expression and full-text operator</name>
 
 <requires><re2/></requires>
 
@@ -40,6 +40,7 @@ index rt1
 	rt_field		= title
 	rt_attr_string = title
 	rt_attr_json = j
+    min_prefix_len = 1
 	dict = keywords
 }
 
@@ -76,6 +77,20 @@ SELECT id, REGEX(to_string(j.price), '5]') as c, title, j FROM test_d WHERE c>0;
 SELECT id, title, j FROM rt1 WHERE REGEX(j.doc, 'is | of');
 SELECT id, title, j FROM test_d WHERE REGEX(j.doc, 'core of');
 SELECT id, title, j FROM test_d WHERE REGEX(title, 'test?');
+
+<!-- regex full text operator -->
+INSERT INTO rt1 (id, title) VALUES (5, 'do it tell blue'), (6, 'tests of the best');
+INSERT INTO rt1 (id, title) VALUES (7, 'done test redline'), (8, 'testing bloom');
+
+SELECT id, title FROM rt1 WHERE MATCH (' ( REGEX(/te.*/) it ) | ( REGEX(/t.?e/) ) ') ORDER BY id ASC;
+FLUSH RAMCHUNK rt1;
+
+INSERT INTO rt1 (id, title) VALUES (11, 'tost it'), (12, 'top the box');
+FLUSH RAMCHUNK rt1;
+INSERT INTO rt1 (id, title) VALUES (15, 'tost15 it'), (65, 'top16 the box');
+
+SELECT id, title FROM rt1 WHERE MATCH (' ( REGEX(/t.*\d*/) | REGEX(/.{3}t/) ) it ') ORDER BY id ASC;
+
 </sphinxql></queries>
 
 </test>

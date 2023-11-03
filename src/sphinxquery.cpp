@@ -799,6 +799,9 @@ public:
 
 protected:
 	bool			HandleFieldBlockStart ( const char * & pPtr ) override;
+
+private:
+	XQNode_t *		ParseRegex ( const char * pStart );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1137,6 +1140,36 @@ int XQParser_t::ParseZone ( const char * pZone )
 	return -1;
 }
 
+XQNode_t * XQParser_t::ParseRegex ( const char * sStart )
+{
+	assert ( sStart );
+	int iDel = *sStart++;
+	const char * sEnd = m_pTokenizer->GetBufferEnd ();
+	const char * sToken = sStart;
+
+	while ( sStart<sEnd )
+	{
+		const char * sNextDel = (const char *)memchr ( sStart, iDel, sEnd-sStart );
+		if ( !sNextDel )
+			break;
+
+		if ( sNextDel+1<sEnd && sNextDel[1]==')' )
+		{
+			// spawn token node
+			XQNode_t * pNode = AddKeyword ( nullptr, 0 );
+			pNode->SetOp ( XQOperator_e::SPH_QUERY_REGEX );
+			pNode->m_dWords[0].m_sWord.SetBinary ( sToken, sNextDel-sToken );
+			// skip the whole expression
+			m_pTokenizer->SetBufferPtr ( sNextDel+2 );
+			return pNode;
+		}
+		sStart = sNextDel+1;
+	}
+
+	// not a complete REGEX(/term/)
+	return nullptr;
+}
+
 
 bool XQParser_t::GetNumber ( const char * p, const char * sRestart )
 {
@@ -1376,6 +1409,20 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_tPendingToken.iZoneVec = iVec;
 			m_iAtomPos -= 1;
 			break;
+		}
+
+		// handle REGEX
+		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strncmp ( p, "REGEX(", 6 ) )
+		{
+			// we just lexed our REGEX token
+			XQNode_t * pRegex = ParseRegex ( p+6 );
+			if ( pRegex )
+			{
+				m_tPendingToken.pNode = pRegex;
+				m_iPendingType = TOK_REGEX;
+				m_iAtomPos -= 1;
+				break;
+			}
 		}
 
 		// count [ * ] at phrase node for qpos shift

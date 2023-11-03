@@ -265,7 +265,7 @@ jobs:
 
   publish_nsis:
     name: Publishing Windows NSIS installer
-    needs: build_nsis
+    needs: publish_windows
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main

@@ -129,7 +129,7 @@ Section "Manticore Executor"
 	Pop $1 ; ignore second output from exec
 
 	; Pull Docker image from the URL in executor_src.txt
-	FileRead $INSTDIR\executor_src.txt $R0
+	FileRead "$INSTDIR\executor_src.txt" $R0
 	nsExec::ExecToStack 'docker pull $R0'
 	Pop $0
 	StrCmp $0 "0" +3

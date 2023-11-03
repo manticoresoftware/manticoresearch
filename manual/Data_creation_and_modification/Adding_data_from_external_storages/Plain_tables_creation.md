@@ -51,17 +51,18 @@ The exit codes for indexer are as follows:
 * 1: there was a problem while indexing (and if `--rotate` was specified, it was skipped) or an operation emitted a warning
 * 2: indexing went OK, but the `--rotate` attempt failed
 
-Also, you can run the indexer via a systemctl unit file:
+Also, you can run `indexer` via a systemctl unit file:
 
 ```shell
 systemctl start --no-block manticore-indexer
 ```
 
-Or, in case you want to index a specific table:
+Or, in case you want to build a specific table:
 
 ```shell
 systemctl start --no-block manticore-indexer@desired-table-name
 ```
+Find more information about scheduling `indexer` via systemd below.
 
 ### Indexer command line arguments
 * `--config <file>` (`-c <file>` for short) tells `indexer` to use the given file as its configuration. Normally, it will look for `manticore.conf` in the installation directory (e.g. `/etc/manticoresearch/manticore.conf`), followed by the current directory you are in when calling `indexer` from the shell. This is most useful in shared environments where the binary files are installed in a global folder, e.g. `/usr/bin/`, but you want to provide users with the ability to make their own custom Manticore set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own `manticore.conf` files and pass them to `indexer` with this option. For example:

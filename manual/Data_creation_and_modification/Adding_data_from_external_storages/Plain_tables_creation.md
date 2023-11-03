@@ -265,16 +265,16 @@ You have two approaches to scheduling indexer runs. The first way is the classic
 	
 1. Create a timer unit file for your custom schedule:
 ```shell
-   cat << EOF > /etc/systemd/system/manticore-indexer@.timer
-   [Unit]
-   Description=Run ManticoreSearch's indexer on schedule
-   [Timer]
-   OnCalendar=minutely
-   RandomizedDelaySec=5m
-   Unit=manticore-indexer@%i.service
-   [Install]
-   WantedBy=timers.target
-   EOF
+cat << EOF > /etc/systemd/system/manticore-indexer@.timer
+[Unit]
+Description=Run ManticoreSearch's indexer on schedule
+[Timer]
+OnCalendar=minutely
+RandomizedDelaySec=5m
+Unit=manticore-indexer@%i.service
+[Install]
+WantedBy=timers.target
+EOF
 ```
 More on the `OnCalendar` syntax and examples can be found [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html#Calendar%20Events)
 

@@ -151,6 +151,33 @@ jobs:
       cache_key: pack_windows_x64
       artifact_list: "build/manticore*exe build/manticore*zip"
 
+  build_nsis:
+    name: Making and publishing Windows NSIS installer
+    needs: pack_windows
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/build_nsis:1.0.0
+    env:
+      CI_COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Initialization
+        # without adding the safe.directory the script fails to do git show ...
+        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+      - name: Make installer
+        # TODO: remove the hardcoded paths /builds/ below
+        run: |
+          mkdir -p /builds/manticoresearch/dev/build/
+          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
+        shell: bash
+      - run: mv /builds/manticoresearch/dev/build build
+      - name: Upload artifact
+        uses: manticoresoftware/upload_artifact_with_retries@main
+        with:
+          name: win_installer
+          path: build/manticore-*.exe
+
   # virtual job to simplify the CI
   # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
   publish:
@@ -235,33 +262,6 @@ jobs:
           artifact: build_windows_RelWithDebInfo_x64
           type: arc
           delimiter: "-"
-
-  build_nsis:
-    name: Making and publishing Windows NSIS installer
-    needs: publish_windows
-    runs-on: ubuntu-22.04
-    container:
-      image: manticoresearch/build_nsis:1.0.0
-    env:
-      CI_COMMIT_SHA: ${{ github.sha }}
-    steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
-      - name: Initialization
-        # without adding the safe.directory the script fails to do git show ...
-        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-      - name: Make installer
-        # TODO: remove the hardcoded paths /builds/ below
-        run: |
-          mkdir -p /builds/manticoresearch/dev/build/
-          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
-        shell: bash
-      - run: mv /builds/manticoresearch/dev/build build
-      - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v3
-        with:
-          name: win_installer
-          path: build/manticore-*.exe
 
   publish_nsis:
     name: Publishing Windows NSIS installer

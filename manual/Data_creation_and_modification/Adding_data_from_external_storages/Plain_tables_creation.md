@@ -276,7 +276,7 @@ Unit=manticore-indexer@%i.service
 WantedBy=timers.target
 EOF
 ```
-More on the `OnCalendar` syntax and examples can be found [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html#Calendar%20Events)
+More on the `OnCalendar` syntax and examples can be found [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html#Calendar%20Events).
 
 2. Edit the timer unit for your specific needs.
 3. Enable the timer:

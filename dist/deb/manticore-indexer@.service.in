@@ -14,7 +14,7 @@ Type=oneshot
 User=manticore
 Group=manticore
 
-ExecStart=/bin/sh -c '@CMAKE_INSTALL_FULL_BINDIR@/indexer --config $INDEXER_CONFIG $INDEXER_ARGS %i'
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/indexer --config $INDEXER_CONFIG $INDEXER_ARGS %i
 EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore-indexer_global
 EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore-indexer-%i
 KillMode=process

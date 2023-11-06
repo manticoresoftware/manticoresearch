@@ -267,7 +267,7 @@ There are two approaches to scheduling indexer runs. The first way is the classi
 ```shell
 cat << EOF > /etc/systemd/system/manticore-indexer@.timer
 [Unit]
-Description=Run ManticoreSearch's indexer on schedule
+Description=Run Manticore Search's indexer on schedule
 [Timer]
 OnCalendar=minutely
 RandomizedDelaySec=5m

@@ -261,7 +261,7 @@ ignore_non_plain = 1
 
 ### Schedule indexer via systemd
 
-You have two approaches to scheduling indexer runs. The first way is the classical method of using crontab. The second way is using a systemd timer with a user-defined schedule. To create the timer unit files, you should place them in the appropriate directory where systemd looks for such unit files. On most Linux distributions, this directory is typically `/etc/systemd/system`. Here's how to do it:
+There are two approaches to scheduling indexer runs. The first way is the classical method of using crontab. The second way is using a systemd timer with a user-defined schedule. To create the timer unit files, you should place them in the appropriate directory where systemd looks for such unit files. On most Linux distributions, this directory is typically `/etc/systemd/system`. Here's how to do it:
 	
 1. Create a timer unit file for your custom schedule:
 ```shell

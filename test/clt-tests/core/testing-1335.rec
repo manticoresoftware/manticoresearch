@@ -1,17 +1,94 @@
 ––– block: ../base/start-searchd-2 –––
 ––– input –––
-pwd
+php ./test/clt-tests/helpers/issue-1335/dump.php 10000 30 1000000
 ––– output –––
-#!/.*/!#
+finished inserting
+%{NUMBER} docs per sec
 ––– input –––
-php ../helpers/issue-1335/dump.php 10000 30 770000
+mysql -e "SELECT COUNT(*) FROM test\G;"
 ––– output –––
 *************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-mysql -e "SHOW TABLES;SELECT * FROM test;"
+timeout 10 mysql -e "select * from test where MATCH('@street walnut blvd') and country='US'\G;"
 ––– output –––
-esrgsg
-––– input –––
-timeout 10 mysql -e "select * from test where MATCH('@street walnut blvd') and country='US';"
-––– output –––
-evdvdrv 
+*************************** 1. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 2. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 3. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 4. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 5. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 6. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 7. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 8. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 9. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 10. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 11. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 12. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 13. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 14. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 15. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 16. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 17. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 18. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 19. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US
+*************************** 20. row ***************************
+id: %{NUMBER}
+street: %{NUMBER} Walnut Blvd
+country: US 

@@ -1,4 +1,3 @@
-––– block: start-searchd –––
 ––– input –––
 mysql -P9306 -h0 -e "create table pq(f text) type='percolate'"
 ––– output –––
@@ -15,9 +14,8 @@ mysql -P9306 -h0 -e "select * from pq"
 |    1 | @f abc |      |         |
 +------+--------+------+---------+
 ––– input –––
-mysqldump -h0 -P9306 manticore > /tmp/pq-dump.sql
+mysqldump -h0 -P9306 manticore 2>/dev/null 1> /tmp/pq-dump.sql
 ––– output –––
--- Warning: column statistics not supported by the server.
 ––– input –––
 mysql -P9306 -h0 -e 'drop table pq'
 ––– output –––

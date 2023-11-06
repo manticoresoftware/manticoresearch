@@ -163,12 +163,12 @@ The inline operators require `dict=keywords` and infixing enabled.
 REGEX(/t.?e/)
 ```
 
-Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) or suffix [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) and `dict=keywords` options to be set. Additionally, the daemon binary should be compiled with RE2 support.
+Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) or suffix [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) and [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords options to be set (which is a default).
 
-The search will attempt to find all expansions of the REGEX tokens, and each expansion is recorded as a matched hit. REGEX tokens can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX expression.
+Similarly to the [wildcard operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators), the REGEX operator attempts to find all tokens matching the provided pattern, and each expansion is recorded as a matched hit. Note, this can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX pattern.
 
-Expressions should adhere to the RE2 syntax. The REGEX expression delimiter is the first symbol after the open bracket. In other words, all text between the open bracket followed by the delimiter and the delimiter and the closed bracket is considered as a RE2 expression.
-Please note that the terms stored in the dictionary undergo charset_table transformation, meaning that REGEX cannot match uppercase characters since the source case is lost.
+The patterns should adhere to the [RE2 syntax](https://github.com/google/re2/wiki/Syntax). The REGEX expression delimiter is the first symbol after the open bracket. In other words, all text between the open bracket followed by the delimiter and the delimiter and the closed bracket is considered as a RE2 expression.
+Please note that the terms stored in the dictionary undergo `charset_table` transformation, meaning that for example, REGEX may not be able to match uppercase characters if all characters are lowercased according to the `charset_table` (which happens by default).
 
 ```sql
 REGEX(/.{3}t/)

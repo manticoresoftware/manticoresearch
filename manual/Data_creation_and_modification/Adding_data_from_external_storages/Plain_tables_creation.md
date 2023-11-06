@@ -60,7 +60,7 @@ systemctl start --no-block manticore-indexer
 Or, in case you want to build a specific table:
 
 ```shell
-systemctl start --no-block manticore-indexer@desired-table-name
+systemctl start --no-block manticore-indexer@specific-table-name
 ```
 Find more information about scheduling `indexer` via systemd below.
 

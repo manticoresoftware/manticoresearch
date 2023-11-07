@@ -9,7 +9,7 @@ if [ -z "$CI_COMMIT_SHA" ]; then
   exit 1
 fi
 
-NSIS_BUILD_DIR="/tmp/nsis_build"
+NSIS_BUILD_DIR=$(mktemp -d)
 
 cp dist/build_dockers/nsis/nsisscript.nsi $NSIS_BUILD_DIR
 

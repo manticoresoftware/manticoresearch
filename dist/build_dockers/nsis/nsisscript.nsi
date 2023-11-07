@@ -47,7 +47,7 @@ Function unpackInstall
 
 success1:
   Delete $INSTDIR\$R0
-  nsisunz::Unzip "$INSTDIR\$R1" "$INSTDIR"
+  ; nsisunz::Unzip "$INSTDIR\$R1" "$INSTDIR"
   Pop $0
   StrCmp $0 success success2
   DetailPrint "Error! Unable to unzip $R1!"
@@ -129,7 +129,17 @@ Section "Manticore Executor"
 	Pop $1 ; ignore second output from exec
 
 	; Pull Docker image from the URL in executor_src.txt
-	FileRead "$INSTDIR\executor_src.txt" $R0
+	; Var hFile
+	; Var R0
+	FileOpen $0 "executor_src.txt" r
+    FileRead $0 $R0
+	FileClose $0
+    nsExec::ExecToStack 'docker pull $R0'
+    Pop $0
+    StrCmp $0 "0" +3
+        MessageBox MB_OK "Failed to pull Docker image from: $R0"
+        Abort
+
 	nsExec::ExecToStack 'docker pull $R0'
 	Pop $0
 	StrCmp $0 "0" +3

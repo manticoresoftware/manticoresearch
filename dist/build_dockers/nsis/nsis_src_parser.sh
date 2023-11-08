@@ -17,6 +17,8 @@ CI_COMMIT_SHORT_SHA=${CI_COMMIT_SHA:0:9}
 
 MANTICORE_VERSION=$(cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d'"' -f2)
 MANTICORE_DATE=$(git log -1 --date=short --format=%cd)
+MANTICORE_DATE=${MANTICORE_DATE//-/}
+MANTICORE_DATE=${MANTICORE_DATE:2}
 
 IS_RELEASE_DIGIT=$(echo "$MANTICORE_VERSION" | cut -d. -f3)
 if [[ $((IS_RELEASE_DIGIT % 2)) -eq 0 ]]; then

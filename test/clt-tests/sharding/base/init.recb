@@ -18,10 +18,6 @@ cd /workdir; echo $?
 ––– output –––
 0
 ––– input –––
-git checkout 824731fd30d321400ba62272cc353fdc6493e3c7; echo $?
-––– output –––
-0
-––– input –––
 COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
 ––– output –––
 0

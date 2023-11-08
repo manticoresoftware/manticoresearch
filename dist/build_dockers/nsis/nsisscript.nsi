@@ -47,7 +47,7 @@ Function unpackInstall
 
 success1:
   Delete $INSTDIR\$R0
-  ; nsisunz::Unzip "$INSTDIR\$R1" "$INSTDIR"
+  nsisunz::Unzip "$INSTDIR\$R1" "$INSTDIR"
   Pop $0
   StrCmp $0 success success2
   DetailPrint "Error! Unable to unzip $R1!"

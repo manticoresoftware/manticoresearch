@@ -184,9 +184,13 @@ CSphString SphSprintfVa ( const char* sTemplate, va_list ap );
 CSphString SphSprintf ( const char* sTemplate, ... );
 
 /// commonly used
+void ToLower ( Str_t sVal );
+
 using StrVec_t = CSphVector<CSphString>;
 using StrtVec_t = CSphVector<Str_t>;
 
-void ToLower ( Str_t sVal );
+#include "fixedvector.h"
+using FixedStrVec_t = CSphFixedVector<CSphString>;
+using FixedStrtVec_t = CSphFixedVector<Str_t>;
 
 #include "string_impl.h"

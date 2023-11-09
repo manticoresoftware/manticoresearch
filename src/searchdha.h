@@ -231,8 +231,8 @@ struct HostDashboard_t : public ISphRefcountedMT
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
 	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
-	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
-	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
+	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock ) = sphMicroTimer();    // updated when we get an answer from the host
+	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = sphMicroTimer();    // updated when we send a query to a host
 	int64_t m_iErrorsARow GUARDED_BY ( m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
 	DWORD m_uPingTripUS = 0;		// round-trip in uS. We send ping with current time, on receive answer compare with current time and fix that difference
 

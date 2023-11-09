@@ -345,13 +345,9 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 }
 
 
-CSphString ConcatWarnings ( StrVec_t & dWarnings )
+CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim ) noexcept
 {
-	dWarnings.Uniq();
-
-	StringBuilder_c sRes ( "; " );
-	for ( const auto & i : dWarnings )
-		sRes << i;
-
-	return sRes.cstr();
+	StringBuilder_c tOut ( szDelim );
+	tVec.Apply ( [&tOut] ( const CSphString& sNode ) { tOut << sNode; } );
+	return { tOut };
 }

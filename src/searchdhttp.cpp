@@ -1031,7 +1031,7 @@ bool HttpHandler_c::CheckValid ( const ServedIndex_c* pServed, const CSphString&
 	}
 	if ( pServed->m_eType!=eType )
 	{
-		FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
+		FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetIndexTypeName ( eType ) );
 		return false;
 	}
 	return true;
@@ -1290,7 +1290,7 @@ protected:
 
 typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
 
-static const char * GetTypeName ( MysqlColumnType_e eType )
+static const char * GetMysqlTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
 	{
@@ -1304,7 +1304,7 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 	};
 }
 
-static MysqlColumnType_e GetTypeName ( const CSphString& sType )
+static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 {
 	if ( sType=="decimal")
 		return MYSQL_COL_DECIMAL;
@@ -1330,7 +1330,7 @@ static MysqlColumnType_e GetTypeName ( const CSphString& sType )
 
 JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eType )
 {
-	tOut.FixupSpacedAndAppendEscaped ( GetTypeName ( eType ) );
+	tOut.FixupSpacedAndAppendEscaped ( GetMysqlTypeName ( eType ) );
 	return tOut;
 }
 
@@ -1544,7 +1544,7 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 		{
 			assert ( tColumnNode.IsAssoc() ); // like {"id":{"type":"long long"}}
 			tColumnNode.ForEach( [&] ( CSphString&& sName, const NodeHandle_t& tNode ) {
-				auto eType = GetTypeName ( String ( Bson_c ( tNode ).ChildByName ( "type" ) ) );
+				auto eType = GetMysqlTypeByName ( String ( Bson_c ( tNode ).ChildByName ( "type" ) ) );
 				dSqlColumns.Add ( {sName,eType});
 			} );
 		}

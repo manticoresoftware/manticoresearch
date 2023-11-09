@@ -100,11 +100,11 @@
 #include "coroutine.h"
 #include "conversion.h"
 
-#define SPHINXAPI_PORT            9312
-#define SPHINXQL_PORT            9306
-#define SPH_ADDRESS_SIZE        sizeof("000.000.000.000")
-#define SPH_ADDRPORT_SIZE        sizeof("000.000.000.000:00000")
-#define NETOUTBUF                8192
+constexpr int SPHINXAPI_PORT	= 9312;
+constexpr int SPHINXQL_PORT		= 9306;
+constexpr int SPH_ADDRESS_SIZE	= sizeof("000.000.000.000");
+constexpr int SPH_ADDRPORT_SIZE	= sizeof("000.000.000.000:00000");
+constexpr int NETOUTBUF			= 8192;
 
 volatile bool& sphGetGotSighup() noexcept;
 volatile bool& sphGetGotSigusr1() noexcept;
@@ -223,7 +223,7 @@ private:
 
 public:
 	explicit CheckLike( const char* sPattern );
-	bool Match( const char* sValue );
+	bool Match( const char* sValue ) const noexcept;
 };
 
 using Generator_fn = std::function<CSphString ( void )>;
@@ -249,6 +249,7 @@ public:
 	// returns true, if single value matches
 	bool MatchAdd( const char* sValue );
 	bool MatchAddf ( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
+	bool Matchf ( const char* sTemplate, ... ) const noexcept __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 	// unconditionally add formatted
 	void Addf ( const char * sValueTmpl, ... );
@@ -260,7 +261,7 @@ public:
 	void MatchTupletFn ( const char * sKey, GeneratorS_fn && fnValuePrinter );
 };
 
-CSphString GetTypeName ( IndexType_e eType );
+const char* GetIndexTypeName ( IndexType_e eType );
 IndexType_e TypeOfIndexConfig ( const CSphString & sType );
 
 // forwards from searchd
@@ -726,43 +727,32 @@ struct ServedDesc_t : public ISphRefcountedMT
 	// mutable is one which can be insert/replace
 	static bool IsMutable ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return pServed->m_eType==IndexType_e::RT || pServed->m_eType==IndexType_e::PERCOLATE;
+		return pServed && ( pServed->m_eType == IndexType_e::RT || pServed->m_eType == IndexType_e::PERCOLATE );
 	}
 
 	// local is one stored locally on disk
 	static bool IsLocal ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return IsMutable ( pServed ) || pServed->m_eType==IndexType_e::PLAIN;
+		return pServed && ( IsMutable ( pServed ) || pServed->m_eType == IndexType_e::PLAIN );
 	}
 
 	// cluster is one which can deals with replication
 	static bool IsCluster ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return !pServed->m_sCluster.IsEmpty ();
+		return pServed && !pServed->m_sCluster.IsEmpty();
 	}
 
 	// CanSelect is one which supports select ... from (at least full-scan).
 	static bool IsSelectable ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return IsFT ( pServed ) || pServed->m_eType==IndexType_e::PERCOLATE;
+		return pServed  && ( IsFT ( pServed ) || pServed->m_eType == IndexType_e::PERCOLATE );
 	}
 
 	// FT is one which supports full-text searching
 	static bool IsFT ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return pServed->m_eType==IndexType_e::PLAIN
-			|| pServed->m_eType==IndexType_e::RT
-			|| pServed->m_eType==IndexType_e::DISTR; // fixme! distrs not necessary ft.
+		return pServed && ( pServed->m_eType == IndexType_e::PLAIN || pServed->m_eType == IndexType_e::RT || pServed->m_eType == IndexType_e::DISTR );
+		// fixme! distrs not necessary ft.
 	}
 };
 

@@ -7165,7 +7165,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// connect to remote agents and query them, if required
 	std::unique_ptr<SearchRequestBuilder_c> tReqBuilder;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { nullptr };
-	std::unique_ptr<ReplyParser_i> tParser;;
+	std::unique_ptr<ReplyParser_i> tParser;
 	if ( !dRemotes.IsEmpty() )
 	{
 		SwitchProfile(m_pProfile, SPH_QSTATE_DIST_CONNECT);
@@ -13759,13 +13759,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	tOut.Ok ( iAffected );
 }
-
-struct SessionVars_t
-{
-	bool			m_bAutoCommit = true;
-	bool			m_bInTransaction = false;
-	CSphVector<int64_t> m_dLastIds;
-};
 
 // fwd
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow );

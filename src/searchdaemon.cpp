@@ -103,7 +103,7 @@ CheckLike::CheckLike( const char* sPattern )
 	*d = '\0';
 }
 
-bool CheckLike::Match( const char* sValue )
+bool CheckLike::Match ( const char* sValue ) const noexcept
 {
 	return sValue && ( m_sPattern.IsEmpty() || sphWildcardMatch( sValue, m_sPattern.cstr()));
 }
@@ -178,6 +178,19 @@ bool VectorLike::MatchAddf ( const char* sTemplate, ... )
 	return MatchAdd( sValue.cstr());
 }
 
+bool VectorLike::Matchf ( const char* sTemplate, ... ) const noexcept
+{
+	assert ( m_dHeadNames.GetLength() >= 1 );
+	va_list ap;
+	CSphString sValue;
+
+	va_start ( ap, sTemplate );
+	sValue.SetSprintfVa ( sTemplate, ap );
+	va_end ( ap );
+
+	return Match ( sValue.cstr() );
+}
+
 void VectorLike::Addf ( const char * sValueTmpl, ... )
 {
 	va_list ap;
@@ -247,18 +260,17 @@ void VectorLike::FillTail ( int iHas )
 }
 
 
-static const char * g_dIndexTypeName[1 + ( int ) IndexType_e::ERROR_] = {
-	"plain",
-	"template",
-	"rt",
-	"percolate",
-	"distributed",
-	"invalid"
-};
-
-CSphString GetTypeName( IndexType_e eType )
+const char* GetIndexTypeName ( IndexType_e eType )
 {
-	return g_dIndexTypeName[( int ) eType];
+	switch ( eType )
+	{
+	case IndexType_e::PLAIN : return "plain";
+	case IndexType_e::TEMPLATE: return "template";
+	case IndexType_e::RT: return "rt";
+	case IndexType_e::PERCOLATE: return "percolate";
+	case IndexType_e::DISTR: return "distributed";
+	default: return "invalid";
+	}
 }
 
 IndexType_e TypeOfIndexConfig( const CSphString& sType )
@@ -692,23 +704,23 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pF
 	if ( pResult->ai_next )
 	{
 		const bool bLocalHost = IsLocalhost ( uAddr );
-		char sAddrBuf[SPH_ADDRESS_SIZE+1];
+		std::array<char, SPH_ADDRESS_SIZE + 1> sAddrBuf{};
 		StringBuilder_c sBuf( "; ip=", "ip=" );
 
 		while ( pResult )
 		{
 			auto * pAddr = ( struct sockaddr_in *)pResult->ai_addr;
 			DWORD uNextAddr = pAddr->sin_addr.s_addr;
-			sphFormatIP( sAddrBuf, sizeof( sAddrBuf ), uNextAddr );
-			sBuf += sAddrBuf; // can not use << as builder appends string buffer with tail '\0' and next chunks are invisible
+			sphFormatIP( sAddrBuf.data(), sAddrBuf.size(), uNextAddr );
+			sBuf += sAddrBuf.data(); // can not use << as builder appends string buffer with tail '\0' and next chunks are invisible
 			pResult = pResult->ai_next;
 
 			if ( bLocalHost && !IsLocalhost ( uNextAddr ) )
 				uAddr = uNextAddr;
 		}
 
-		sphFormatIP( sAddrBuf, sizeof( sAddrBuf ), uAddr );
-		sphWarning( "multiple addresses (%s) found for '%s', using first one (%s)", sBuf.cstr(), sHost, sAddrBuf );
+		sphFormatIP( sAddrBuf.data(), sAddrBuf.size(), uAddr );
+		sphWarning( "multiple addresses (%s) found for '%s', using first one (%s)", sBuf.cstr(), sHost, sAddrBuf.data() );
 	}
 
 	return uAddr;

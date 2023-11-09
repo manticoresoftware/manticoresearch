@@ -435,7 +435,7 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphSt
 void IndexDesc_t::Save ( JsonObj_c & tIndexes ) const
 {
 	JsonObj_c tIdx;
-	tIdx.AddStr ( "type", GetTypeName ( m_eType ) );
+	tIdx.AddStr ( "type", GetIndexTypeName ( m_eType ) );
 
 	if ( m_eType==IndexType_e::DISTR )
 		m_tDistr.Save(tIdx);
@@ -451,7 +451,7 @@ void IndexDesc_t::Save ( JsonObj_c & tIndexes ) const
 
 void IndexDesc_t::Save ( CSphConfigSection & hIndex ) const
 {
-	hIndex.Add ( CSphVariant ( GetTypeName ( m_eType ).cstr() ), "type" );
+	hIndex.Add ( CSphVariant ( GetIndexTypeName ( m_eType ) ), "type" );
 
 	if ( m_eType==IndexType_e::DISTR )
 		m_tDistr.Save (hIndex);

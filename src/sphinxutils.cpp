@@ -3185,11 +3185,11 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 
 #if HAVE_DLOPEN
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath )
+CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath, bool bGlobal )
 	: m_bReady ( false )
 	, m_pLibrary ( nullptr )
 {
-	m_pLibrary = dlopen ( sPath, RTLD_NOW | RTLD_GLOBAL );
+	m_pLibrary = dlopen ( sPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
 	if ( !m_pLibrary )
 		sphLogDebug ( "dlopen(%s) failed", sPath );
 	else

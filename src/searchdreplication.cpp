@@ -4643,7 +4643,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	if ( !pMerge )
 		return false;
 
-	CSphString sType = GetTypeName ( tCmd.m_eIndex );
+	CSphString sType = GetIndexTypeName ( tCmd.m_eIndex );
 	if ( tCmd.m_eIndex!=IndexType_e::PERCOLATE && tCmd.m_eIndex!=IndexType_e::RT )
 	{
 		sError.SetSprintf ( "unsupported type '%s' in table '%s'", sType.cstr(), tCmd.m_sIndex.cstr() );

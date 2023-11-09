@@ -128,7 +128,7 @@ public:
 
 	// arbitrary output all params according to their << implementations (inlined in compile time).
 	template<typename... Params>
-	StringBuilder_c &	Sprint ( const Params&... tParams );
+	StringBuilder_c& Sprint ( Params&&... tParams );
 
 	// comma manipulations
 	// start new comma block; return index of it (for future possible reference in FinishBlocks())
@@ -214,10 +214,10 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, timespan_t tVal );
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal );
 
 template<typename INT, int iPrec>
-StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal );
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec> tVal );
 
 template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
-StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill>&& tVal );
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill> tVal );
 
 // helpers
 inline void Grow ( StringBuilder_c& tBuilder, int iInc )
@@ -230,7 +230,11 @@ inline char* Tail ( StringBuilder_c& tBuilder )
 	return tBuilder.end();
 }
 
+CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim = "," ) noexcept;
 
-CSphString ConcatWarnings ( StrVec_t & dWarnings );
+inline CSphString ConcatWarnings ( const VecTraits_T<CSphString>& tVec ) noexcept
+{
+	return StrVec2Str ( tVec, "; " );
+}
 
 #include "stringbuilder_impl.h"

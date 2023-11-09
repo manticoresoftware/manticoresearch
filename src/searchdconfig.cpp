@@ -816,13 +816,13 @@ bool SaveConfigInt ( CSphString & sError )
 
 	ScopedCoroMutex_t tSaving ( g_tSaveInProgress );
 
-	if ( !ReplicationIsEnabled() && !IsConfigless() )
+	if ( !ReplicationEnabled() && !IsConfigless() )
 		return true;
 	
 	CSphVector<ClusterDesc_t> dClusters;
 
 	// save clusters and their indexes into JSON config on daemon shutdown
-	if ( ReplicationIsEnabled() )
+	if ( ReplicationEnabled() )
 		ReplicationCollectClusters ( dClusters );
 
 	CSphVector<IndexDesc_t> dIndexes;

@@ -422,7 +422,7 @@ static CSphString g_sListenReplicationIP;
 static FreePortList_c g_tPorts;
 
 
-bool ReplicationIsEnabled()
+bool ReplicationEnabled()
 {
 	return g_bReplicationEnabled;
 }

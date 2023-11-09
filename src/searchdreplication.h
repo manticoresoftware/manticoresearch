@@ -18,7 +18,7 @@
 #include "searchdsql.h"
 #include <optional>
 
-bool ReplicationIsEnabled();
+bool ReplicationEnabled();
 void ReplicationSetIncoming ( CSphString sIncoming );
 
 // collect all available into an array

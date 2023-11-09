@@ -1015,25 +1015,35 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 			{
 				tNewValue.m_iType = SqlInsert_t::CONST_INT;
 				tNewValue.SetValueInt ( tItem.IntVal() );
-			} else if ( tItem.IsArray() && !bCompat )
+			} else if ( tItem.IsArray() || tItem.IsObj() )
 			{
-				tNewValue.m_iType = SqlInsert_t::CONST_MVA;
-				tNewValue.m_pVals = new RefcountedVector_c<SphAttr_t>;
-
-				for ( const auto & tArrayItem : tItem )
-				{
-					if ( !tArrayItem.IsInt() )
-					{
-						sError = "MVA elements should be integers";
-						return false;
-					}
-
-					tNewValue.m_pVals->Add ( tArrayItem.IntVal() );
-				}
-			} else if ( tItem.IsObj() || ( bCompat && tItem.IsArray() ) )
-			{
-				tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+				// could be either object or array
+				// all fit to JSON attribute
+				// array of int fits MVA attribute
 				tNewValue.m_sVal = tItem.AsString();
+
+				bool bMVA = false;
+
+				if ( tItem.IsArray() )
+				{
+					tNewValue.m_iType = SqlInsert_t::CONST_MVA;
+					tNewValue.m_pVals = new RefcountedVector_c<SphAttr_t>;
+					for ( const auto & tArrayItem : tItem )
+					{
+						if ( !tArrayItem.IsInt() )
+							break;
+
+						tNewValue.m_pVals->Add ( tArrayItem.IntVal() );
+						bMVA = true;
+					}
+				}
+
+				if ( !bMVA )
+				{
+					tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+					tNewValue.m_pVals = nullptr;
+				}
+
 			} else
 			{
 				sError = "unsupported value type";

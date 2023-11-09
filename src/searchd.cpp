@@ -8697,7 +8697,7 @@ static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sClus
 	int iUpd = 0;
 	CSphString sError, sWarning;
 	RtAccum_t tAcc;
-	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sIndex, sCluster );
+	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplCmd_e::UPDATE_API, sIndex, sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = std::move(pUpd);
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -11015,7 +11015,7 @@ static bool InsertToPQ ( const SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t 
 	auto pStored = pQIndex->CreateQuery ( tArgs, sError );
 	if ( pStored )
 	{
-		auto * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sIndex, tStmt.m_sCluster );
+		auto * pCmd = pAccum->AddCommand ( ReplCmd_e::PQUERY_ADD, tStmt.m_sIndex, tStmt.m_sCluster );
 		dIds.Add ( pStored->m_iQUID );
 		pCmd->m_pStored = std::move ( pStored );
 	}
@@ -11231,7 +11231,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 			pIndex->AddDocument ( tConverter, bReplace, tStmt.m_sStringParam, sError, sWarning, pAccum );
 			dIds.Add ( tConverter.GetID() );
 
-			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, tStmt.m_sIndex, tStmt.m_sCluster );
+			pAccum->AddCommand ( ReplCmd_e::RT_TRX, tStmt.m_sIndex, tStmt.m_sCluster );
 		}
 
 		if ( !sError.IsEmpty() )
@@ -12918,7 +12918,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -13530,7 +13530,7 @@ static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand
 
 	const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 
-	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
+	auto pCmd = MakeReplicationCommand ( ReplCmd_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
 	if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 	{
 		pCmd->m_dDeleteQueries.Append ( pFilter->GetValues() );
@@ -13632,7 +13632,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 			return err();
 
 		assert ( pAccum );
-		pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sName, sCluster );
+		pAccum->AddCommand ( ReplCmd_e::RT_TRX, sName, sCluster );
 	}
 
 	int iAffected = 0;
@@ -15044,7 +15044,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
-	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
+	auto pCmd = MakeReplicationCommand ( ReplCmd_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
 	CSphString sError;
 	StrVec_t dWarnings;
 	const CSphString & sIndex = tStmt.m_sIndex;

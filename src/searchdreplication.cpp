@@ -1567,8 +1567,8 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 	while ( tReader.GetPos()<iLen )
 	{
-		auto eCommand = (ReplicationCommand_e)tReader.GetVal<WORD>();
-		if ( eCommand<ReplicationCommand_e::PQUERY_ADD || eCommand>ReplicationCommand_e::TOTAL )
+		auto eCommand = (ReplCmd_e)tReader.GetVal<WORD>();
+		if ( eCommand< ReplCmd_e::PQUERY_ADD || eCommand> ReplCmd_e::TOTAL )
 		{
 			sphWarning ( "bad replication command %d", (int)eCommand );
 			return false;
@@ -1597,7 +1597,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 		switch ( eCommand )
 		{
-		case ReplicationCommand_e::PQUERY_ADD:
+		case ReplCmd_e::PQUERY_ADD:
 		{
 			cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 			if ( !pServed )
@@ -1629,37 +1629,37 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		}
 		break;
 
-		case ReplicationCommand_e::PQUERY_DELETE:
+		case ReplCmd_e::PQUERY_DELETE:
 			LoadDeleteQuery ( pRequest, iRequestLen, pCmd->m_dDeleteQueries, pCmd->m_sDeleteTags );
 			RPL_TNX << "pq-delete, table '" << pCmd->m_sIndex.cstr() << "', queries " << pCmd->m_dDeleteQueries.GetLength() << ", tags " << pCmd->m_sDeleteTags.scstr();
 			break;
 
-		case ReplicationCommand_e::TRUNCATE:
+		case ReplCmd_e::TRUNCATE:
 			RPL_TNX << "pq-truncate, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
-		case ReplicationCommand_e::CLUSTER_ALTER_ADD:
+		case ReplCmd_e::CLUSTER_ALTER_ADD:
 			pCmd->m_bCheckIndex = false;
 			RPL_TNX << "pq-cluster-alter-add, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
-		case ReplicationCommand_e::CLUSTER_ALTER_DROP:
+		case ReplCmd_e::CLUSTER_ALTER_DROP:
 			RPL_TNX << "pq-cluster-alter-drop, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
-		case ReplicationCommand_e::RT_TRX:
+		case ReplCmd_e::RT_TRX:
 			tAcc.LoadRtTrx ( pRequest, iRequestLen, uVer );
 			RPL_TNX << "rt trx, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
-		case ReplicationCommand_e::UPDATE_API:
+		case ReplCmd_e::UPDATE_API:
 			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
 			LoadUpdate ( pRequest, iRequestLen, *pCmd->m_pUpdateAPI, pCmd->m_bBlobUpdate );
 			RPL_TNX << "update, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
-		case ReplicationCommand_e::UPDATE_QL:
-		case ReplicationCommand_e::UPDATE_JSON:
+		case ReplCmd_e::UPDATE_QL:
+		case ReplCmd_e::UPDATE_JSON:
 		{
 			// can not handle multiple updates - only one update at time
 			assert ( !tQuery.m_dFilters.GetLength() );
@@ -1669,7 +1669,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
 			pCmd->m_pUpdateCond = &tQuery;
-			RPL_TNX << "update " << ( eCommand==ReplicationCommand_e::UPDATE_QL ? "ql" : "json" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
+			RPL_TNX << "update " << ( eCommand== ReplCmd_e::UPDATE_QL ? "ql" : "json" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 		}
 
@@ -1705,10 +1705,10 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	const ReplicationCommand_t & tCmd = *tAcc.m_dCmd[0];
 
 	bool bCmdCluster = ( tAcc.m_dCmd.GetLength()==1 &&
-		( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_DROP ) );
+		( tCmd.m_eCommand== ReplCmd_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand== ReplCmd_e::CLUSTER_ALTER_DROP ) );
 	if ( bCmdCluster )
 	{
-		if ( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD && !CheckLocalIndex ( tCmd.m_sIndex, sError ) )
+		if ( tCmd.m_eCommand== ReplCmd_e::CLUSTER_ALTER_ADD && !CheckLocalIndex ( tCmd.m_sIndex, sError ) )
 		{
 			sphWarning ( "replication error %s, command %d", sError.cstr(), (int)tCmd.m_eCommand );
 			return false;
@@ -1717,7 +1717,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		CommitMonitor_c tCommit ( tAcc );
 
 		bool bOk = false;
-		if ( tCmd.m_eCommand==ReplicationCommand_e::CLUSTER_ALTER_ADD )
+		if ( tCmd.m_eCommand== ReplCmd_e::CLUSTER_ALTER_ADD )
 		{
 			HashedServedClone_c tMutableDesc { tCmd.m_sIndex, g_pLocalIndexes.get() };
 			if ( !ServedDesc_t::IsMutable ( tMutableDesc.Orig() ) )
@@ -1735,7 +1735,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	}
 
 	if ( tAcc.m_dCmd.GetLength()==1 &&
-		( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API || tCmd.m_eCommand==ReplicationCommand_e::UPDATE_QL || tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON ) )
+		( tCmd.m_eCommand== ReplCmd_e::UPDATE_API || tCmd.m_eCommand== ReplCmd_e::UPDATE_QL || tCmd.m_eCommand== ReplCmd_e::UPDATE_JSON ) )
 	{
 		int iUpd = -1;
 		CSphString sWarning;
@@ -1758,7 +1758,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	}
 
 	// special path with wlocked index for truncate
-	if ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE )
+	if ( tCmd.m_eCommand== ReplCmd_e::TRUNCATE )
 	{
 		RPL_TNX << "truncate-commit, table '" << tCmd.m_sIndex.cstr() << "'";
 		if ( !WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError ) )
@@ -1766,7 +1766,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		return true;
 	}
 
-	assert ( tCmd.m_eCommand!=ReplicationCommand_e::TRUNCATE );
+	assert ( tCmd.m_eCommand!= ReplCmd_e::TRUNCATE );
 	RPL_TNX << "commit, table '" << tCmd.m_sIndex.cstr() << "', uid " << ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ) << ", queries " << tCmd.m_dDeleteQueries.GetLength() << ", tags " << tCmd.m_sDeleteTags.scstr();
 
 	RIdx_T<RtIndex_i*> pIndex { pServed };
@@ -1822,7 +1822,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	if ( !CheckClasterState ( eClusterState, bPrimary, tCmdCluster.m_sCluster, sError ) )
 		return false;
 
-	if ( tCmdCluster.m_eCommand==ReplicationCommand_e::TRUNCATE && tCmdCluster.m_tReconfigure )
+	if ( tCmdCluster.m_eCommand== ReplCmd_e::TRUNCATE && tCmdCluster.m_tReconfigure )
 	{
 		sError.SetSprintf ( "RECONFIGURE is not supported for a cluster table" );
 		return false;
@@ -1835,7 +1835,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		return false;
 	}
 
-	bool bUpdate = ( tCmdCluster.m_eCommand==ReplicationCommand_e::UPDATE_API ||  tCmdCluster.m_eCommand==ReplicationCommand_e::UPDATE_QL || tCmdCluster.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
+	bool bUpdate = ( tCmdCluster.m_eCommand== ReplCmd_e::UPDATE_API ||  tCmdCluster.m_eCommand== ReplCmd_e::UPDATE_QL || tCmdCluster.m_eCommand== ReplCmd_e::UPDATE_JSON );
 	if ( bUpdate && !ValidateUpdate ( tCmdCluster, sError ) )
 		return false;
 
@@ -1872,14 +1872,14 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 
 		switch ( tCmd.m_eCommand )
 		{
-		case ReplicationCommand_e::PQUERY_ADD:
+		case ReplCmd_e::PQUERY_ADD:
 			assert ( tCmd.m_pStored );
 			SaveStoredQuery ( *tCmd.m_pStored, dBufQueries );
 
 			uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_iQUID, sizeof(tCmd.m_pStored->m_iQUID), uQueryHash );
 			break;
 
-		case ReplicationCommand_e::PQUERY_DELETE:
+		case ReplCmd_e::PQUERY_DELETE:
 			assert ( tCmd.m_dDeleteQueries.GetLength() || !tCmd.m_sDeleteTags.IsEmpty() );
 			SaveDeleteQuery ( tCmd.m_dDeleteQueries, tCmd.m_sDeleteTags.cstr(), dBufQueries );
 
@@ -1889,16 +1889,16 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			uQueryHash = sphFNV64cont ( tCmd.m_sDeleteTags.cstr(), uQueryHash );
 			break;
 
-		case ReplicationCommand_e::TRUNCATE:
+		case ReplCmd_e::TRUNCATE:
 			// FIXME!!! add reconfigure option here
 			break;
 
-		case ReplicationCommand_e::CLUSTER_ALTER_ADD:
-		case ReplicationCommand_e::CLUSTER_ALTER_DROP:
+		case ReplCmd_e::CLUSTER_ALTER_ADD:
+		case ReplCmd_e::CLUSTER_ALTER_DROP:
 			bTOI = true;
 			break;
 
-		case ReplicationCommand_e::RT_TRX:
+		case ReplCmd_e::RT_TRX:
 		{
 			MemoryWriter_c tWriter ( dBufQueries );
 			auto iStartPos = dBufQueries.GetLengthBytes();
@@ -1907,7 +1907,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		}
 		break;
 
-		case ReplicationCommand_e::UPDATE_API:
+		case ReplCmd_e::UPDATE_API:
 		{
 			assert ( tCmd.m_pUpdateAPI );
 			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
@@ -1919,8 +1919,8 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		}
 		break;
 
-		case ReplicationCommand_e::UPDATE_QL:
-		case ReplicationCommand_e::UPDATE_JSON:
+		case ReplCmd_e::UPDATE_QL:
+		case ReplCmd_e::UPDATE_JSON:
 		{
 			assert ( tCmd.m_pUpdateAPI );
 			assert ( tCmd.m_pUpdateCond );
@@ -1943,7 +1943,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		dBufKeys[iKey] = uQueryHash;
 		++iKey;
 
-		if ( tCmd.m_eCommand==ReplicationCommand_e::RT_TRX )
+		if ( tCmd.m_eCommand== ReplCmd_e::RT_TRX )
 		{
 			// store ids as keys
 			memcpy ( dBufKeys.Begin() + iKey, tAcc.m_dAccumKlist.Begin(), tAcc.m_dAccumKlist.GetLengthBytes() );
@@ -2013,7 +2013,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 	}
 
 	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];
-	bool bTruncate = tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE;
+	bool bTruncate = tCmd.m_eCommand== ReplCmd_e::TRUNCATE;
 	bool bOnlyTruncate = bTruncate && ( m_tAcc.m_dCmd.GetLength ()==1 );
 
 	// process with index from accum (no need to lock/unlock it)
@@ -2086,7 +2086,7 @@ bool CommitMonitor_c::CommitTOI ( ServedClone_c * pDesc, CSphString & sError ) E
 
 	switch ( tCmd.m_eCommand )
 	{
-	case ReplicationCommand_e::CLUSTER_ALTER_ADD:
+	case ReplCmd_e::CLUSTER_ALTER_ADD:
 		if ( pDesc->Orig()->m_sCluster!=pCluster->m_sName )
 			pDesc->FullCloneOnce()->m_sCluster = pCluster->m_sName;
 
@@ -2095,7 +2095,7 @@ bool CommitMonitor_c::CommitTOI ( ServedClone_c * pDesc, CSphString & sError ) E
 		pCluster->UpdateIndexHashes();
 		break;
 
-	case ReplicationCommand_e::CLUSTER_ALTER_DROP:
+	case ReplCmd_e::CLUSTER_ALTER_DROP:
 		if ( !SetIndexCluster ( tCmd.m_sIndex, CSphString(), &sError ) )
 			return false;
 
@@ -2157,9 +2157,9 @@ bool CommitMonitor_c::Update ( CSphString & sError )
 	tUpd.m_pWarning = m_pWarning;
 	tUpd.m_pQuery = tCmd.m_pUpdateCond;
 	tUpd.m_pIndexName = &tCmd.m_sIndex;
-	tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
+	tUpd.m_bJson = ( tCmd.m_eCommand== ReplCmd_e::UPDATE_JSON );
 
-	bool bUpdateAPI = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API );
+	bool bUpdateAPI = ( tCmd.m_eCommand== ReplCmd_e::UPDATE_API );
 	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
 
 	return DoUpdate ( tUpd, pServed, *m_pUpdated, bUpdateAPI, tCmd.m_bBlobUpdate );
@@ -3937,7 +3937,7 @@ void ReplicationCluster_t::UpdateIndexHashes()
 static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
 	RtAccum_t tAcc;
-	tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_DROP, sIndex, sCluster );
+	tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_DROP, sIndex, sCluster );
 	return HandleCmdReplicate ( tAcc, sError );
 }
 
@@ -5397,7 +5397,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
+	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
 	HashedServedClone_c tMutableDesc { sIndex, g_pLocalIndexes.get() };
 	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, &tMutableDesc );
@@ -5908,7 +5908,7 @@ bool IsClusterCommand ( const RtAccum_t & tAcc )
 bool IsUpdateCommand ( const RtAccum_t & tAcc )
 {
 	return ( tAcc.m_dCmd.GetLength() &&
-		( tAcc.m_dCmd[0]->m_eCommand==ReplicationCommand_e::UPDATE_API || tAcc.m_dCmd[0]->m_eCommand==ReplicationCommand_e::UPDATE_QL || tAcc.m_dCmd[0]->m_eCommand==ReplicationCommand_e::UPDATE_JSON ) );
+		( tAcc.m_dCmd[0]->m_eCommand== ReplCmd_e::UPDATE_API || tAcc.m_dCmd[0]->m_eCommand== ReplCmd_e::UPDATE_QL || tAcc.m_dCmd[0]->m_eCommand== ReplCmd_e::UPDATE_JSON ) );
 }
 
 void SendArray ( const VecTraits_T<CSphString> & dBuf, ISphOutputBuffer & tOut )

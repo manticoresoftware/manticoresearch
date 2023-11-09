@@ -2614,7 +2614,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 			auto& tAcc = pSession->m_tAcc;
 			auto* pAccum = tAcc.GetAcc( pIndex, m_sError );
 
-			ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
+			ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplCmd_e::PQUERY_ADD, sIndex );
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
 			pCmd->m_pStored = std::move ( pStored );
@@ -2657,7 +2657,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	auto& tAcc = pSession->m_tAcc;
 	auto* pAccum = tAcc.GetAcc ();
 
-	ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
+	ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplCmd_e::PQUERY_DELETE, sIndex );
 
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", m_sError, true );
 	if ( !m_sError.IsEmpty() )

@@ -2117,11 +2117,11 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 	{
 		switch ( pCmd->m_eCommand )
 		{
-		case ReplicationCommand_e::PQUERY_ADD:
+		case ReplCmd_e::PQUERY_ADD:
 			dNewQueries.Add ( pCmd->m_pStored.release() );
 			break;
 
-		case ReplicationCommand_e::PQUERY_DELETE:
+		case ReplCmd_e::PQUERY_DELETE:
 			if ( pCmd->m_dDeleteQueries.GetLength() )
 				dDeleteQueries.Append ( pCmd->m_dDeleteQueries );
 			else

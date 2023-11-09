@@ -18,7 +18,7 @@
 
 #include <memory>
 
-std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster )
+std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster )
 {
 	auto pCmd = std::make_unique<ReplicationCommand_t>();
 	pCmd->m_eCommand = eCommand;
@@ -27,10 +27,10 @@ std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationComman
 	return pCmd;
 }
 
-ReplicationCommand_t* RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster )
+ReplicationCommand_t* RtAccum_t::AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster )
 {
 	// all writes to RT index go as single command to serialize accumulator
-	if ( eCmd == ReplicationCommand_e::RT_TRX && !m_dCmd.IsEmpty() && m_dCmd.Last()->m_eCommand == ReplicationCommand_e::RT_TRX )
+	if ( eCmd == ReplCmd_e::RT_TRX && !m_dCmd.IsEmpty() && m_dCmd.Last()->m_eCommand == ReplCmd_e::RT_TRX )
 		return m_dCmd.Last().get();
 
 	m_dCmd.Add ( MakeReplicationCommand ( eCmd, std::move ( sIndex ), std::move ( sCluster ) ) );

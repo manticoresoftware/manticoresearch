@@ -506,6 +506,9 @@ namespace TlsMsg
 	// move error to given string, or leave it intact if no error
 	void MoveError( CSphString& sError );
 
+	// return error msg (if any) and reset buff
+	CSphString MoveToString();
+
 	// true if some error was reported.
 	bool HasErr();
 
@@ -521,6 +524,12 @@ namespace TlsMsg
 		operator CSphString&() { return m_sPrevError;}
 	};
 }
+
+/// link given var to be reported at scope exit
+#define TLS_MSG_CATCH( STR ) AT_SCOPE_EXIT ( [&STR] {if ( !STR.IsEmpty() ) TlsMsg::Err(STR); } )
+
+/// declare str var and link it to be reported
+#define TLS_MSG_STRING( STR ) CSphString STR; TLS_MSG_CATCH ( STR )
 
 // extract basename from path
 const char * GetBaseName ( const CSphString & sFullPath );

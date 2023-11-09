@@ -3386,7 +3386,7 @@ public:
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
-		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTERPQ, VER_COMMAND_CLUSTERPQ );
+		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER );
 		tOut.SendWord ( m_eCmd );
 		BuildCommand ( tAgent, tOut );
 	}
@@ -3736,7 +3736,7 @@ static void ReportClusterError ( const CSphString & sCluster, const CSphString &
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
 void HandleCommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
 {
-	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTERPQ, tOut ) )
+	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
 		return;
 
 	PQRemoteCommand_e eClusterCmd = (PQRemoteCommand_e)tBuf.GetWord();

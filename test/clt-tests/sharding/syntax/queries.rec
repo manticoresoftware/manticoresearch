@@ -10,14 +10,14 @@ mysql -h0 -P19306 -e "SHOW TABLES\G"
 Index: a
 Type: rt
 ––– input –––
-mysql -h0 -P19306 -e "create table t(id bigint) shards=10 rf=1"
+mysql -h0 -P19306 -e "create table h random=5"
 ––– output –––
-dsadfds 
+ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
-mysql -h0 -P19306 -e "create table c SHARDS=3 RF=1"
+mysql -h0 -P19306 -e "create table t(id bigint) shards=a rf=b"
 ––– output –––
-dsadfds
+ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
-mysql -h0 -P19306 -e "show tables\G" | grep 'Index: t' | sort
+mysql -h0 -P19306 -e "create table c:a SHARDS=10 RF=x2"
 ––– output –––
-adfgsg
+ERROR 1064 (42000) at line 1: Failed to parse query

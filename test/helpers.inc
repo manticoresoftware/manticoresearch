@@ -4160,10 +4160,8 @@ class SphinxConfig
 			}
 		}
 
-		if ( $sd_split_logs )
-		    fwrite ( $fp, "\tlog			= {$this->_sd_log}\n" );
-		else
-            fwrite ( $fp, "\tlog			= $sd_log\n" );
+		$searchdlog = $sd_split_logs ? testdir($this->_sd_log) : $sd_log;
+		fwrite ( $fp, "\tlog			= $searchdlog\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tnetwork_timeout= $sd_network_timeout\n" );
 		fwrite ( $fp, "\tmax_connections	= $sd_max_children\n" );
@@ -4680,7 +4678,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$error_agent = "error_".$agent_id.".txt";
-				$config->SetAgent ( $agents [$i], 0 );
+				$config->SetAgent ( $agents [$i], $i );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;

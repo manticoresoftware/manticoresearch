@@ -267,6 +267,7 @@ IndexType_e TypeOfIndexConfig ( const CSphString & sType );
 // forwards from searchd
 bool CheckPort( int iPort, CSphString * pFatal=nullptr );
 ListenerDesc_t ParseListener ( const char * sSpec, CSphString * pFatal=nullptr );
+ListenerDesc_t ParseResolveListener ( const char* sSpec, bool bResolve = true, CSphString* pFatal = nullptr );
 
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK SOCKET WRAPPERS

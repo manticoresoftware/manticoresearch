@@ -1,3 +1,10 @@
+
+ ***
+ This file is intentionally damaged by this plain-text insertion in order to NOT be used as real c/c++ header.
+ That is used only as reference documentation and NOT included anywhere in Manticore sources.
+ (It is safe to delete whole folder 'wsrep_documentation')
+ ***
+
 /* Copyright (C) 2009-2013 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify

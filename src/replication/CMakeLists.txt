@@ -1,19 +1,7 @@
 cmake_minimum_required ( VERSION 3.20 )
 
-ADD_LIBRARY ( wsrepcxx STATIC wsrep_cxx.cpp wsrep_cxx.h )
-add_library ( manticore::wsrepcxx ALIAS wsrepcxx )
-target_compile_definitions ( wsrepcxx PUBLIC HAVE_WSREP )
-target_include_directories ( wsrepcxx PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
-target_link_libraries ( wsrepcxx PRIVATE lextra )
-
-# fool protect: galera should be built with the same wsrep version.
-# It that is not true, here on linking with galera_wsrep we'll have config-time error
-FILE ( STRINGS "wsrep_cxx.cpp" _wsrep LIMIT_COUNT 1 REGEX "INTERFACE_VERSION" )
-STRING ( REGEX MATCH "[0-9]+" INTERFACE_VERSION "${_wsrep}" )
-set_target_properties ( wsrepcxx PROPERTIES WSREP_API_VERSION ${INTERFACE_VERSION} )
-#target_link_libraries ( wsrepcxx PRIVATE galera::galera_wsrep )
-
-ADD_LIBRARY ( repli_stuff STATIC api_command_cluster.h api_command_cluster.cpp
+ADD_LIBRARY ( repli_stuff STATIC wsrep_cxx.cpp wsrep_cxx.h
+		api_command_cluster.h api_command_cluster.cpp
 		cluster_delete.h cluster_delete.cpp
 		cluster_file_reserve.h cluster_file_reserve.cpp
 		cluster_file_send.h cluster_file_send.cpp
@@ -33,6 +21,13 @@ ADD_LIBRARY ( repli_stuff STATIC api_command_cluster.h api_command_cluster.cpp
 		cluster_commands.h
 		recv_state.h recv_state.cpp
 )
-target_link_libraries ( repli_stuff PRIVATE wsrepcxx )
+
 target_include_directories ( repli_stuff PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( repli_stuff PRIVATE lextra )
+
+# fool protect: galera should be built with the same wsrep version.
+# It that is not true, here on linking with galera_wsrep we'll have config-time error
+FILE ( STRINGS "wsrep_cxx.cpp" _wsrep LIMIT_COUNT 1 REGEX "INTERFACE_VERSION" )
+STRING ( REGEX MATCH "[0-9]+" INTERFACE_VERSION "${_wsrep}" )
+set_target_properties ( repli_stuff PROPERTIES WSREP_API_VERSION ${INTERFACE_VERSION} )
+#target_link_libraries ( repli_stuff PRIVATE galera::galera_wsrep )

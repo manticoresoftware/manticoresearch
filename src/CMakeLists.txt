@@ -224,7 +224,7 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
-		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp)
+		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp)
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
@@ -320,15 +320,9 @@ if (WITH_SSL)
 endif (WITH_SSL)
 
 # support for replication
-add_library ( searchd_replication searchdreplication.cpp )
-target_link_libraries ( searchd_replication PUBLIC lextra )
-if (WITH_GALERA)
-	add_subdirectory ( replication )
-	target_link_libraries ( searchd_replication PRIVATE manticore::wsrepcxx )
-	target_link_libraries ( searchd_replication PRIVATE repli_stuff )
-	install_galera ( "${CMAKE_INSTALL_DATADIR}/manticore/modules" )
-endif ()
-target_link_libraries ( lsearchd PUBLIC searchd_replication )
+add_subdirectory ( replication )
+#	install_galera ( "${CMAKE_INSTALL_DATADIR}/manticore/modules" )
+target_link_libraries ( lsearchd PUBLIC repli_stuff)
 
 trace ( lextra )
 trace ( lsearchd )

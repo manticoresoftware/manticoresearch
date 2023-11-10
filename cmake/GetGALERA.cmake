@@ -18,11 +18,11 @@ add_feature_info ( Galera WITH_GALERA "replication of indexes" )
 
 # that will read galera location from the target and install it to final destination
 include ( printers ) # for diag
-function ( install_galera DEST )
-	get_target_property ( GALERA_MODULE galera::galera LOCATION )
-	diag ( GALERA_MODULE )
-	install ( PROGRAMS ${GALERA_MODULE} DESTINATION "${DEST}" COMPONENT searchd )
-endfunction ()
+#function ( install_galera DEST )
+#	get_target_property ( GALERA_MODULE galera::galera LOCATION )
+#	diag ( GALERA_MODULE )
+#	install ( PROGRAMS ${GALERA_MODULE} DESTINATION "${DEST}" COMPONENT searchd )
+#endfunction ()
 
 function ( cache_galera_module_name )
 	get_target_property ( GALERA_MODULE galera::galera LOCATION )
@@ -44,7 +44,6 @@ endif ()
 
 # not found. Populate and build cache package for now and future usage.
 select_nearest_url ( GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB} )
-set ( WSREP_PATH "${MANTICORE_SOURCE_DIR}/src/replication" ) # WSREP_PATH provides path to galera-imported for build
 get_build ( GALERA_BUILD galera )
 configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-imported.cmake.in galera-build/CMakeLists.txt ) # consumes GALERA_PLACE, GALERA_SRC_MD5, WSREP_PATH, GALERA_BUILD, GALERA_REV
 execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )

@@ -1,5 +1,5 @@
 backup 1.1.11 23110707 89f0bd2
-buddy 2.0.5 23110911 e76ba9a
+buddy 2.0.7 23111008 7ed2b95
 mcl 2.2.5 230928 b8be4eb
 executor 1.0.7 23110304 176eef7
 executor-win 0.3.5 221125 a40554c

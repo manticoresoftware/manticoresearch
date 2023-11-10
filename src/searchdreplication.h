@@ -25,33 +25,33 @@ void ReplicationSetIncoming ( CSphString sIncoming );
 void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters );
 
 // set Galera option for cluster
-bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError );
+bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal );
 
 // single point there all commands passed these might be replicated, even if no cluster
-bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError );
-bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int & iDeletedCount );
-bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sWarning, int & iUpdated );
+bool HandleCmdReplicate ( RtAccum_t & tAcc );
+bool HandleCmdReplicateDelete ( RtAccum_t & tAcc, int & iDeletedCount );
+bool HandleCmdReplicateUpdate ( RtAccum_t & tAcc, CSphString & sWarning, int & iUpdated );
 
 // delete all clusters on daemon shutdown
-void ReplicateClustersDelete();
+void ReplicationServiceShutdown();
 
 // start clusters on daemon start
-void ReplicationStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce );
+void ReplicationServiceStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce );
 
 // cluster joins to existed nodes
-bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes, CSphString & sError );
+bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes );
 
 // cluster creates master node
-bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
+bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues );
 
 // cluster deletes
-bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
+bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString& sError );
 
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
-void HandleCommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
+void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
 
 // cluster ALTER statement
-bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning );
+bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError );
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, bool bRemoteError, CSphString & sError );
@@ -60,11 +60,12 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 void ReplicateClustersStatus ( VectorLike & dStatus );
 
 // validate that SphinxQL statement could be run for this cluster:index
-bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP, CSphString & sError );
+bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP );
+
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 
 // set cluster name into index desc for fast rejects
-bool SetIndexCluster ( const CSphString& sIndex, const CSphString& sCluster, CSphString * pError=nullptr );
+bool AssignClusterToIndex ( const CSphString& sIndex, const CSphString& sCluster, CSphString * pError= nullptr );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );

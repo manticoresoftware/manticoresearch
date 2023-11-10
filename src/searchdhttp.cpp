@@ -2619,7 +2619,8 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 			iID = pStored->m_iQUID;
 			pCmd->m_pStored = std::move ( pStored );
 
-			bOk = HandleCmdReplicate ( *pAccum, m_sError );
+			bOk = HandleCmdReplicate ( *pAccum );
+			TlsMsg::MoveError ( m_sError );
 		}
 	}
 
@@ -2690,7 +2691,8 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	bool bOk = HandleCmdReplicate ( *pAccum, m_sError, iDeleted );
+	bool bOk = HandleCmdReplicateDelete ( *pAccum, iDeleted );
+	TlsMsg::MoveError ( m_sError );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 

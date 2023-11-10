@@ -52,6 +52,7 @@ T GetVal( MemoryReader_c& tReader );
 // first DWORD is len, then follows data
 template<typename VECTOR>
 void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn );
+void GetArray ( CSphVector<CSphString>& dBuf, MemoryReader_c& tIn );
 
 class MemoryWriter_c : public Writer_i
 {
@@ -82,6 +83,7 @@ void PutVal ( MemoryWriter_c& tWriter, T tVal );
 
 // put DWORD size, then elems
 template<typename T>
+void SaveArray ( const VecTraits_T<T>& dBuf, MemoryWriter_c& tOut );
 void SaveArray ( const VecTraits_T<CSphString>& dBuf, MemoryWriter_c& tOut );
 
 // fixme: get rid of this

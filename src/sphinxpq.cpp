@@ -3733,9 +3733,9 @@ void LoadStoredQueryJson ( StoredQueryDesc_t & tQuery, const bson::Bson_c & tNod
 	}
 }
 
-void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery )
+void LoadStoredQuery ( ByteBlob_t tData, StoredQueryDesc_t& tQuery )
 {
-	MemoryReader_c tReader ( pData, iLen );
+	MemoryReader_c tReader { tData };
 	LoadStoredQuery ( PQ_META_VERSION_MAX, tQuery, tReader );
 }
 
@@ -3765,9 +3765,9 @@ void LoadDeleteQuery_T ( CSphVector<int64_t> & dQueries, CSphString & sTags, REA
 	sTags = tReader.GetString();
 }
 
-void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags )
+void LoadDeleteQuery ( ByteBlob_t tData, CSphVector<int64_t> & dQueries, CSphString & sTags )
 {
-	MemoryReader_c tReader ( pData, iLen );
+	MemoryReader_c tReader ( tData );
 	LoadDeleteQuery_T ( dQueries, sTags, tReader );
 }
 

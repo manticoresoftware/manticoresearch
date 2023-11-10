@@ -125,7 +125,7 @@ public:
 	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
 	ReplicationCommand_t * AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
-	void			LoadRtTrx ( const BYTE * pData, int iLen, DWORD uVer );
+	void			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer );
 	void			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
 
 	const BYTE *	GetPackedKeywords() const;

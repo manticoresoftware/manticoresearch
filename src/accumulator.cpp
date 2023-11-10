@@ -509,9 +509,9 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID = 0;
 }
 
-void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen, DWORD uVer )
+void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 {
-	MemoryReader_c tReader ( pData, iLen );
+	MemoryReader_c tReader ( tTrx );
 	m_bReplace = !!tReader.GetVal<BYTE>();
 	tReader.GetVal ( m_uAccumDocs );
 	if ( uVer>=0x106 )

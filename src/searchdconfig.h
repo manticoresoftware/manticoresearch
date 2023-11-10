@@ -30,27 +30,21 @@ struct ClusterOptions_t
 {
 	SmallStringHash_T<CSphString> m_hOptions;
 
-	void			Parse ( const CSphString & sOptions );
-	CSphString		AsStr ( bool bSave ) const;
+	void						Parse ( const CSphString & sOptions );
+	[[nodiscard]] CSphString	AsStr () const;
 };
 
-
-class JsonObj_c;
-
 // cluster data that gets stored and loaded
-class ClusterDesc_t
+struct ClusterDesc_t
 {
-public:
-	ClusterDesc_t() = default;
-	virtual ~ClusterDesc_t() {}
 	CSphString				m_sName;			// cluster name
 	CSphString				m_sPath;			// path relative to data_dir
-	CSphVector<CSphString>	m_dIndexes;			// list of index name in cluster
-	CSphString				m_sClusterNodes;	// string list of comma separated nodes (node - address:API_port)
+	sph::StringSet			m_hIndexes;			// list of index name in cluster
+	StrVec_t				m_dClusterNodes;	// string list of nodes (node - address:API_port)
 	ClusterOptions_t		m_tOptions;			// options for Galera
 
-	bool					Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError );
-	void					Save ( JsonObj_c & tClusters ) const;
+	bool					Parse ( const bson::Bson_c & tBson, const CSphString& sName, CSphString & sWarning );
+	void					Save ( JsonEscapedBuilder& tOut ) const;
 };
 
 
@@ -72,8 +66,8 @@ struct IndexDescDistr_t
 	bool			m_bDivideRemoteRanges = false;
 	CSphString		m_sHaStrategy;
 
-	bool			Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError );
-	void			Save ( JsonObj_c & tIndexes ) const;
+	bool			Parse ( const bson::Bson_c & tBson, CSphString & sWarning );
+	void 			Save ( JsonEscapedBuilder& tOut ) const;
 	void			Save ( CSphConfigSection & hIndex ) const;
 };
 
@@ -86,8 +80,8 @@ struct IndexDesc_t
 
 	IndexDescDistr_t m_tDistr;
 
-	bool		Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError );
-	void		Save ( JsonObj_c & tIndexes ) const;
+	bool		Parse ( const bson::Bson_c & tBson, const CSphString& sName, CSphString & sWarning );
+	void		Save ( JsonEscapedBuilder& tOut ) const;
 	void		Save ( CSphConfigSection & hIndex ) const;
 };
 
@@ -103,6 +97,10 @@ std::unique_ptr<FilenameBuilder_i> CreateFilenameBuilder ( const char * szIndex 
 
 void		ModifyDaemonPaths ( CSphConfigSection & hSearchd );
 CSphString	GetDataDirInt();
+
+// create string by join global data_dir and given path
+CSphString	GetDatadirPath ( const CSphString& sPath );
+
 bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();
 

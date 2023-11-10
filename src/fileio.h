@@ -179,6 +179,12 @@ public:
 	virtual void	ZipInt ( DWORD uValue ) = 0;
 	virtual void	ZipOffset ( uint64_t uValue ) = 0;
 	virtual			~Writer_i() = default;
+
+	template<typename BYTES_PAIR>
+	void PutBlob ( BYTES_PAIR tData )
+	{
+		PutBytes ( (const void *)tData.first, (int64_t)tData.second );
+	}
 };
 
 

@@ -1921,7 +1921,7 @@ static void SaveInsertDeleteQueries_T ( const VecTraits_T<QUERY> & dNewQueries, 
 
 	tWriter.ZipInt ( dNewQueries.GetLength() );
 	for ( StoredQuery_i* pQuery : dNewQueries )
-		SaveStoredQuery ( *pQuery, tWriter );
+		SaveStoredQueryImpl ( *pQuery, tWriter );
 }
 
 template<typename QUERY>
@@ -3506,7 +3506,7 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 }
 
 template<typename WRITER>
-void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
+void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 {
 	tWriter.ZipOffset ( tQuery.m_iQUID );
 	tWriter.ZipInt ( tQuery.m_bQL );
@@ -3744,15 +3744,14 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & 
 	LoadStoredQuery<CSphReader> ( uVersion, tQuery, tReader );
 }
 
-void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut )
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, MemoryWriter_c& tWriter )
 {
-	MemoryWriter_c tWriter ( dOut );
-	SaveStoredQuery ( tQuery, tWriter );
+	SaveStoredQueryImpl<MemoryWriter_c> ( tQuery, tWriter );
 }
 
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter )
 {
-	SaveStoredQuery<CSphWriter> ( tQuery, tWriter );
+	SaveStoredQueryImpl<CSphWriter> ( tQuery, tWriter );
 }
 
 template<typename READER>
@@ -3786,9 +3785,8 @@ void SaveDeleteQuery_T ( const VecTraits_T<int64_t>& dQueries, const char* sTags
 	tWriter.PutString ( sTags );
 }
 
-void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, CSphVector<BYTE>& dOut )
+void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, MemoryWriter_c& tWriter )
 {
-	MemoryWriter_c tWriter ( dOut );
 	SaveDeleteQuery_T ( dQueries, sTags, tWriter );
 }
 

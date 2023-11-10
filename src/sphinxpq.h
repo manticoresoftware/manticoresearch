@@ -109,11 +109,11 @@ static const int PQ_META_VERSION_MAX = 255;
 void LoadStoredQuery ( ByteBlob_t tData, StoredQueryDesc_t& tQuery );
 void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader );
 void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader );
-void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut );
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, MemoryWriter_c& tWriter );
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter );
 void LoadDeleteQuery ( ByteBlob_t tData, CSphVector<int64_t>& dQueries, CSphString& sTags );
 void LoadDeleteQuery ( CSphVector<int64_t> & dQueries, CSphString & sTags, CSphReader & tReader );
-void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphVector<BYTE> & dOut );
+void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, MemoryWriter_c& tWriter );
 void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphWriter & tWriter );
 
 //////////////////////////////////////////////////////////////////////////

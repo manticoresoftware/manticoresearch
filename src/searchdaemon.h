@@ -1470,31 +1470,7 @@ struct PercolateOptions_t
 struct CPqResult; // defined in sphinxpq.h
 
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
-void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc
-							   , CPqResult &tResult );
-
-void SendArray ( const VecTraits_T<CSphString> & dBuf, ISphOutputBuffer & tOut );
-void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn );
-
-template <typename T>
-void SendArray ( const VecTraits_T<T> & dBuf, ISphOutputBuffer & tOut )
-{
-	tOut.SendInt ( dBuf.GetLength() );
-	if ( dBuf.GetLength() )
-		tOut.SendBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
-}
-
-template<typename T>
-void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
-{
-	int iCount = tIn.GetInt();
-	if ( !iCount )
-		return;
-
-	dBuf.Reset ( iCount );
-	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
-}
-
+void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc, CPqResult &tResult );
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );

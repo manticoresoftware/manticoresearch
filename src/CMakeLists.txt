@@ -158,7 +158,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskoptimize.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h networking_daemon.h query_status.h
-		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h replication/wsrep_api_stub.h searchdssl.h digest_sha1.h
+		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h)
 
@@ -324,7 +324,8 @@ add_library ( searchd_replication searchdreplication.cpp )
 target_link_libraries ( searchd_replication PUBLIC lextra )
 if (WITH_GALERA)
 	add_subdirectory ( replication )
-	target_link_libraries ( searchd_replication PRIVATE manticore::wsrep )
+	target_link_libraries ( searchd_replication PRIVATE manticore::wsrepcxx )
+	target_link_libraries ( searchd_replication PRIVATE repli_stuff )
 	install_galera ( "${CMAKE_INSTALL_DATADIR}/manticore/modules" )
 endif ()
 target_link_libraries ( lsearchd PUBLIC searchd_replication )

@@ -341,7 +341,7 @@ public:
 		( new Worker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ();
 	}
 
-	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
+	// invoked from CallCoroutine -> ReplicationServiceStart on daemon startup. Schedule into primary queue.
 	// Adopt parent's task info (if any), and may change it exclusively.
 	// Parent thread at the moment blocked and may display info about it
 	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )

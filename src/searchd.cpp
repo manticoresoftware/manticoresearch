@@ -26,6 +26,7 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
+#include "replication/api_command_cluster.h"
 #include "threadutils.h"
 #include "searchdtask.h"
 #include "global_idf.h"
@@ -20144,8 +20145,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	// set index cluster name for check
 	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )
-		for ( const auto & sIndexName : tClusterDesc.m_dIndexes )
-			AssignClusterToIndex ( sIndexName, tClusterDesc.m_sName );
+		for ( const auto & tIndex : tClusterDesc.m_hIndexes )
+			AssignClusterToIndex ( tIndex.first, tClusterDesc.m_sName );
 	sphLogDebugRpl ( "%d clusters loaded from config", GetClustersInt().GetLength() );
 
 
@@ -21112,6 +21113,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
+	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
 
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
@@ -21129,7 +21131,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
-	ReplicationServiceStart ( dListenerDescs, bNewCluster, bNewClusterForce );
+	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
 	searchd::AddShutdownCb ( BuddyStop );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest

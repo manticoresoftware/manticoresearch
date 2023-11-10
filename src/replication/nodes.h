@@ -1,0 +1,29 @@
+//
+// Copyright (c) 2019-2023, Manticore Software LTD (http://manticoresearch.com)
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
+#pragma once
+
+#include "searchdha.h"
+
+constexpr int g_iNodeRetry = 3;
+
+// 200 msec is ok as we do not need to any missed nodes in cluster node list
+constexpr int g_iAnyNodesTimeoutMs = 200;
+constexpr int g_iNodeRetryWaitMs = 500;
+
+using VecAgentDesc_t = CSphVector<AgentDesc_t>;
+
+// string to list
+StrVec_t ParseNodesFromString ( CSphString sNodes );
+
+// collect listener API with external address
+VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString> & dNodes );
+
+StrVec_t FilterNodesByProto ( const VecTraits_T<CSphString> & dSrcNodes, Proto_e eProto, bool bResolve = true );

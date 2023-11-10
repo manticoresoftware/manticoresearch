@@ -60,6 +60,7 @@ struct ReplicationCommand_t
 {
 	// common
 	ReplCmd_e m_eCommand { ReplCmd_e::TOTAL };
+	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
 

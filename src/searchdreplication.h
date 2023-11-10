@@ -18,11 +18,11 @@
 #include "searchdsql.h"
 #include <optional>
 
-bool ReplicationEnabled();
-void ReplicationSetIncoming ( CSphString sIncoming );
+// return path to given cluster, or empty and error
+std::optional<CSphString> GetClusterPath ( const CSphString& sCluster );
 
 // collect all available into an array
-void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters );
+CSphVector<ClusterDesc_t> ReplicationCollectClusters ();
 
 // set Galera option for cluster
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal );
@@ -32,11 +32,18 @@ bool HandleCmdReplicate ( RtAccum_t & tAcc );
 bool HandleCmdReplicateDelete ( RtAccum_t & tAcc, int & iDeletedCount );
 bool HandleCmdReplicateUpdate ( RtAccum_t & tAcc, CSphString & sWarning, int & iUpdated );
 
+// Commit replicated commands came from cluster
+bool HandleCmdReplicated ( RtAccum_t& m_tAcc );
+
 // delete all clusters on daemon shutdown
 void ReplicationServiceShutdown();
 
+// prepare saved clusters (but not yet touch wsrep or even update nodes from remotes; only offline actions)
+// bForce will cause 'safe_to_bootstrap: 1' added to grastate.data
+void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bForce );
+
 // start clusters on daemon start
-void ReplicationServiceStart ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce );
+void ReplicationServiceStart ( bool bBootStrap );
 
 // cluster joins to existed nodes
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes );
@@ -45,10 +52,10 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues );
 
 // cluster deletes
-bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString& sError );
+bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
 
-// handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
-void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
+// Return actual nodes list at cluster
+StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );
 
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError );
@@ -65,7 +72,10 @@ bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 
 // set cluster name into index desc for fast rejects
-bool AssignClusterToIndex ( const CSphString& sIndex, const CSphString& sCluster, CSphString * pError= nullptr );
+bool AssignClusterToIndex ( const CSphString& sIndex, CSphString sCluster );
+
+bool AddIndexToClusterTOI ( ServedClone_c* pDesc, const ReplicationCommand_t* pCmd );
+bool DropIndexFromClusterTOI ( const ReplicationCommand_t* pCmd );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );

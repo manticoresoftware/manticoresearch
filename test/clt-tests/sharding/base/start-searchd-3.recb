@@ -2,7 +2,7 @@
 mkdir -p /var/{run,lib,log}/manticore-3/{a,b,c,d,e}
 ––– output –––
 ––– input –––
-searchd -c test/clt-tests/sharding/base/config/searchd-3.conf
+INSTANCE=3 searchd -c test/clt-tests/sharding/base/config/searchd-with-flexible-ports.conf
 ––– output –––
 Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -18,5 +18,5 @@ tail -n 100 -f /var/log/manticore-3/searchd.log | grep -qm1 'started v' && echo 
 ––– output –––
 Buddy started!
 ––– input –––
-mysql -h0 -P19306 -e "show tables"
+mysql -h0 -P39306 -e "show tables"
 ––– output –––

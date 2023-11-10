@@ -1,8 +1,9 @@
 ––– block: ../base/init –––
 ––– block: ../base/start-searchd-1 –––
 ––– input –––
-mysql -h0 -P19306 -e "CREATE TABLE a"
+mysql -h0 -P19306 -e "CREATE TABLE a"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P19306 -e "SHOW TABLES\G"
 ––– output –––
@@ -18,6 +19,60 @@ mysql -h0 -P19306 -e "create table t(id bigint) shards=a rf=b"
 ––– output –––
 ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
-mysql -h0 -P19306 -e "create table c:a SHARDS=10 RF=x2"
+mysql -h0 -P19306 -e "create table c:m SHARDS=10 RF=2"
+––– output –––
+ERROR 1064 (42000) at line 1: Waiting timeout exceeded.
+––– input –––
+mysql -h0 -P19306 -e "create table e(id bigint) shards=10 rf=1"
+––– input –––
+mysql -h0 -P19306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Index: a
+Type: rt
+*************************** 2. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 3. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 4. row ***************************
+Index: sharding_table
+Type: rt
+––– input –––
+mysql -h0 -P19306 -e "create table s SHARDS=10 RF=1"
+––– output –––
+ERROR 1064 (42000) at line 1: Waiting timeout exceeded.
+––– input –––
+mysql -h0 -P19306 -e "create table l(id bigint) SHARDS=-10 RF=-1"
 ––– output –––
 ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P19306 -e "create table n(id bigint) shards=10 rf=2"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+mysql -h0 -P19306 -e "create table k(id bigint) SHARDS=10 RF=1"
+––– output –––
+ERROR 1064 (42000) at line 1: Waiting timeout exceeded.
+––– input –––
+mysql -h0 -P19306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Index: a
+Type: rt
+*************************** 2. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 3. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 4. row ***************************
+Index: sharding_table
+Type: rt
+––– block: ../base/start-searchd-2 –––
+––– block: ../base/start-searchd-3 –––
+––– block: ../base/create-cluster-3 –––
+––– input –––
+mysql -h0 -P19306 -e "create table c:m(id bigint) SHARDS=10 RF=2"
+––– output –––

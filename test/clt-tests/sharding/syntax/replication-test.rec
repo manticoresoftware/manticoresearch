@@ -1,0 +1,122 @@
+––– block: ../base/init –––
+––– block: ../base/start-searchd-1 –––
+––– block: ../base/start-searchd-2 –––
+––– block: ../base/start-searchd-3 –––
+––– block: ../base/start-searchd-4 –––
+––– block: ../base/start-searchd-5 –––
+––– input –––
+mysql -h0 -P19306 -e "CREATE CLUSTER replication;"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_view';"
+––– output –––
++--------------------------------+---------------------------------------------+
+| Counter                        | Value                                       |
++--------------------------------+---------------------------------------------+
+| cluster_replication_nodes_view | 127.0.0.1:19312,127.0.0.1:19322:replication |
++--------------------------------+---------------------------------------------+
+––– input –––
+mysql -h0 -P29306 -e "JOIN CLUSTER replication AT '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P29306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_view';"
+––– output –––
++--------------------------------+-----------------------------------------------------------------------------------------+
+| Counter                        | Value                                                                                   |
++--------------------------------+-----------------------------------------------------------------------------------------+
+| cluster_replication_nodes_view | 127.0.0.1:19312,127.0.0.1:19322:replication,127.0.0.1:29312,127.0.0.1:29322:replication |
++--------------------------------+-----------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P39306 -e "JOIN CLUSTER replication AT '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P39306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_view';"
+––– output –––
++--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| Counter                        | Value                                                                                                                               |
++--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| cluster_replication_nodes_view | 127.0.0.1:19312,127.0.0.1:19322:replication,127.0.0.1:29312,127.0.0.1:29322:replication,127.0.0.1:39312,127.0.0.1:39322:replication |
++--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P49306 -e "JOIN CLUSTER replication AT '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P49306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_view';"
+––– output –––
++--------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Counter                        | Value                                                                                                                                                                           |
++--------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| cluster_replication_nodes_view | 127.0.0.1:19312,127.0.0.1:19322:replication,127.0.0.1:29312,127.0.0.1:29322:replication,127.0.0.1:39312,127.0.0.1:39322:replication,127.0.0.1:49312,127.0.0.1:49322:replication |
++--------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P59306 -e "JOIN CLUSTER replication AT '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P59306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_view';"
+––– output –––
++--------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Counter                        | Value                                                                                                                                                                                                                       |
++--------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| cluster_replication_nodes_view | 127.0.0.1:19312,127.0.0.1:19322:replication,127.0.0.1:29312,127.0.0.1:29322:replication,127.0.0.1:39312,127.0.0.1:39322:replication,127.0.0.1:49312,127.0.0.1:49322:replication,127.0.0.1:59312,127.0.0.1:59322:replication |
++--------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P19306 -e "CREATE TABLE testrt (title text, content text, gid uint);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P19306 -e "INSERT INTO testrt VALUES(0,'List of HP business laptops','Elitebook Probook',10);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P19306 -e "INSERT INTO testrt VALUES(0,'List of Dell business laptops','Latitude Precision Vostro',10);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P19306 -e "ALTER CLUSTER replication ADD testrt;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P19306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+--------+
+| Counter                     | Value  |
++-----------------------------+--------+
+| cluster_replication_indexes | testrt |
++-----------------------------+--------+
+––– input –––
+mysql -h0 -P19306 -e "SELECT * FROM testrt\G;"
+––– output –––
+*************************** 1. row ***************************
+id: %{NUMBER}
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 10
+*************************** 2. row ***************************
+id: %{NUMBER}
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 10
+––– block: ../base/stop-searchd-5 –––
+––– input –––
+mysql -h0 -P19306 -e "INSERT INTO replication:testrt VALUES(0,'List of HP business laptops','Macbook',10);"; echo $?
+––– output –––
+0
+––– block: ../base/start-searchd-5 –––
+––– input –––
+mysql -h0 -P59306 -e "SELECT * FROM testrt\G;"
+––– output –––
+*************************** 1. row ***************************
+id: %{NUMBER}
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 10
+*************************** 2. row ***************************
+id: %{NUMBER}
+title: List of HP business laptops
+content: Macbook
+gid: 10
+*************************** 3. row ***************************
+id: %{NUMBER}
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 10

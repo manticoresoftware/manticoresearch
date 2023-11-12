@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<requires>
+<lemmatizer_base/>
+</requires>
+
+<name>aot morphology vs original forms</name>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test11
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select * from test_table11
+	sql_attr_uint	= gid
+}
+
+index lem_ru_all
+{
+	source			= test11
+	path			= <data_path/>/lem_ru_all
+	morphology		= lemmatize_ru_all
+	index_exact_words = 1
+}
+
+index lem_ru
+{
+	source			= test11
+	path			= <data_path/>/lem_ru
+	morphology		= lemmatize_ru
+	index_exact_words = 1
+}
+
+index morph_ru
+{
+	source			= test11
+	path			= <data_path/>/morph_ru
+	morphology		= stem_ru
+	index_exact_words = 1
+}
+
+index lem_en_all
+{
+	source			= test11
+	path			= <data_path/>/lem_en_all
+	morphology		= lemmatize_en_all
+	index_exact_words = 1
+}
+
+index lem_en
+{
+	source			= test11
+	path			= <data_path/>/lem_en
+	morphology		= lemmatize_en
+	index_exact_words = 1
+}
+
+index morph_en
+{
+	source			= test11
+	path			= <data_path/>/morph_en
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table11
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) CHARACTER SET utf8 NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table11</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>INSERT INTO test_table11 VALUES
+    ( 11, 11, 'мм в год' ),
+    ( 12, 11, 'миллиметр в год' ),
+	( 13, 11, 'см в год' ),
+    ( 14, 11, 'сантиметр в год' ),
+    ( 15, 11, 'км в год' ),
+    ( 16, 11, 'километр в год' ),
+    ( 21, 11, 'run for the prize' ),
+    ( 22, 11, 'runs for the prize' ),
+    ( 23, 11, 'running for the prize' )
+</db_insert>
+
+<metaindex name='META:tbl_ru'>
+<index>lem_ru_all</index>
+<index>lem_ru</index>
+<index>morph_ru</index>
+</metaindex>
+
+<metaindex name='META:tbl_en'>
+<index>lem_en_all</index>
+<index>lem_en</index>
+<index>morph_en</index>
+</metaindex>
+
+
+<queries>
+<sphinxql>
+	<!-- regression lemmatizer vs original forms -->
+    SELECT * FROM META:tbl_ru WHERE MATCH('мм'); show meta;
+    SELECT * FROM META:tbl_ru WHERE MATCH('миллиметр'); show meta;
+    SELECT * FROM META:tbl_ru WHERE MATCH('см'); show meta;
+    SELECT * FROM META:tbl_ru WHERE MATCH('сантиметр'); show meta;
+    SELECT * FROM META:tbl_ru WHERE MATCH('км'); show meta;
+    SELECT * FROM META:tbl_ru WHERE MATCH('километр'); show meta;
+    
+    SELECT * FROM META:tbl_en WHERE MATCH('run'); show meta;
+    SELECT * FROM META:tbl_en WHERE MATCH('runs'); show meta;
+    SELECT * FROM META:tbl_en WHERE MATCH('running'); show meta;
+   
+</sphinxql>
+</queries>
+
+</test>

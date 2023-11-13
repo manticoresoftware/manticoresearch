@@ -37,6 +37,8 @@ source test
 	<sql_settings/>
 	sql_query = SELECT * FROM test_table
 	sql_attr_uint = aa
+    sql_attr_json   = j
+    sql_attr_string   = s
 }
 
 index test
@@ -90,6 +92,9 @@ index test
 	select minute(timediff(908, 0));
 	select second(timediff(908, 0));
 
+    <!-- date_format support for JSON and STRING attributes -->
+    SELECT id, j.jdata, s, date_format(j.jdata, 'JSON: %m, year of %Y') as jdata, date_format(s, 'STR: %m, year of %Y') as sdata from test order by id asc;
+
 	</sphinxql>
     
 </queries>
@@ -108,7 +113,9 @@ CREATE TABLE test_table
 (
 	id INT NOT NULL,
 	aa INT NOT NULL,
-	title VARCHAR(255) NOT NULL
+	title VARCHAR(255) NOT NULL,
+    j varchar(100) NOT NULL,
+    s varchar(100) NOT NULL
 );
 </db_create>
 
@@ -119,10 +126,10 @@ CREATE TABLE test_table
 		INSERT INTO test_table_bigint VALUES <vals/><db_insert/></repeat>
 </db_insert>
 <db_insert>
-INSERT INTO test_table ( id, aa, title ) VALUES
-( 1, 2, 'dummy' ),
-( 10, 3, 'ohai' ),
-( 11, 4, 'ohai2' )
+INSERT INTO test_table ( id, aa, title, j, s ) VALUES
+( 1, 2, 'dummy', '{"jdata":1699852617}', '1681392867' ),
+( 10, 3, 'ohai', '{"jdata":1668346467}', '1649856867' ),
+( 11, 4, 'ohai2', '{"jdata":1636810467}', '1618320867' )
 </db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table_bigint</db_drop>

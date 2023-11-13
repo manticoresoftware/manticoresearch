@@ -213,12 +213,11 @@ struct CSphNamedVariant
 
 
 /// string expression traits
-/// can never be evaluated in floats or integers, only StringEval() is allowed
 struct ISphStringExpr : public ISphExpr
 {
-	float		Eval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as float" ); return 0; }
-	int			IntEval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as int" ); return 0; }
-	int64_t		Int64Eval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as bigint" ); return 0; }
+	float		Eval ( const CSphMatch & tMatch ) const final;
+	int			IntEval ( const CSphMatch & tMatch ) const final;
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final;
 };
 
 /// hook to extend expressions

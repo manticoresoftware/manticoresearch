@@ -144,11 +144,11 @@ const BYTE * ISphExpr::StringEvalPacked ( const CSphMatch & tMatch ) const
 	return pRes;
 }
 
-
-class Expr_WithLocator_c : public ISphExpr, public ExprLocatorTraits_t
+template<class BaseExpr_T>
+class Expr_WithLocator_T : public BaseExpr_T, public ExprLocatorTraits_t
 {
 public:
-	Expr_WithLocator_c ( const CSphAttrLocator & tLocator, int iLocator )
+	Expr_WithLocator_T ( const CSphAttrLocator & tLocator, int iLocator )
 		: ExprLocatorTraits_t ( tLocator, iLocator )
 	{}
 
@@ -163,10 +163,17 @@ public:
 	}
 
 protected:
-	Expr_WithLocator_c ( const Expr_WithLocator_c& rhs )
+	Expr_WithLocator_T ( const Expr_WithLocator_T & rhs )
 		: ExprLocatorTraits_t (rhs) {}
 };
 
+class Expr_WithLocator_c : public Expr_WithLocator_T<ISphExpr>
+{
+public:
+	Expr_WithLocator_c ( const CSphAttrLocator & tLocator, int iLocator )
+		: Expr_WithLocator_T ( tLocator, iLocator )
+	{}
+};
 
 // has string expression traits, but has no locator
 class Expr_StrNoLocator_c : public ISphStringExpr
@@ -174,6 +181,85 @@ class Expr_StrNoLocator_c : public ISphStringExpr
 public:
 	void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override {}
 };
+
+//	base class does not convert string to float
+float ISphStringExpr::Eval ( const CSphMatch & tMatch ) const
+{
+	float fVal = 0.f;
+	const char * pBuf = nullptr;
+	int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+	if ( iLen && pBuf )
+	{
+		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+		if ( pBuf<pMax )
+		{
+			fVal = (float) strtod ( pBuf, nullptr );
+		}
+		else
+		{
+			CSphString sBuf;
+			sBuf.SetBinary ( pBuf, iLen );
+			fVal = (float) strtod ( sBuf.cstr(), nullptr );
+		}
+	}
+
+	FreeDataPtr ( *this, pBuf );
+	return fVal;
+}
+
+//	base class does not convert string to int
+int ISphStringExpr::IntEval ( const CSphMatch & tMatch ) const
+{
+	int iVal = 0;
+	const char * pBuf = nullptr;
+	int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+	if ( iLen && pBuf )
+	{
+		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+		if ( pBuf<pMax )
+		{
+			iVal = strtol ( pBuf, NULL, 10 );
+		}
+		else
+		{
+			CSphString sBuf;
+			sBuf.SetBinary ( pBuf, iLen );
+			iVal = strtol ( sBuf.cstr(), NULL, 10 );
+		}
+	}
+
+	FreeDataPtr ( *this, pBuf );
+	return iVal;
+}
+
+//	base class does not convert string to int64
+int64_t ISphStringExpr::Int64Eval ( const CSphMatch & tMatch ) const
+{
+	int64_t iVal = 0;
+	const char * pBuf = nullptr;
+	int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+	if ( iLen && pBuf )
+	{
+		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+		if ( pBuf<pMax )
+		{
+			iVal = strtoll ( pBuf, nullptr, 10 );
+		}
+		else
+		{
+			CSphString sBuf;
+			sBuf.SetBinary ( pBuf, iLen );
+			iVal = strtoll ( sBuf.cstr(), nullptr, 10 );
+		}
+	}
+
+	FreeDataPtr ( *this, pBuf );
+	return iVal;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -271,17 +357,16 @@ private:
 };
 
 
-class Expr_GetString_c : public Expr_WithLocator_c
+class Expr_GetString_c : public Expr_WithLocator_T<ISphStringExpr>
 {
 public:
 	Expr_GetString_c ( const CSphAttrLocator & tLocator, int iLocator )
-		: Expr_WithLocator_c ( tLocator, iLocator )
+		: Expr_WithLocator_T ( tLocator, iLocator )
 	{}
 
-	float Eval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
-		Expr_WithLocator_c::Command ( eCmd, pArg );
+		Expr_WithLocator_T::Command ( eCmd, pArg );
 
 		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
 			m_pBlobPool = (const BYTE*)pArg;
@@ -311,7 +396,7 @@ public:
 private:
 	const BYTE * m_pBlobPool {nullptr};
 
-	Expr_GetString_c ( const Expr_GetString_c& rhs ) : Expr_WithLocator_c ( rhs ) {}
+	Expr_GetString_c ( const Expr_GetString_c& rhs ) : Expr_WithLocator_T ( rhs ) {}
 };
 
 
@@ -514,9 +599,6 @@ public:
 		return m_iLen;
 	}
 
-	float Eval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
-	int IntEval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
-	int64_t Int64Eval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
 	bool IsConst () const final { return true; }
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -2270,84 +2352,6 @@ public:
 		return m_bFreeResPtr;
 	}
 
-	//	base class does not convert string to float
-	float Eval ( const CSphMatch & tMatch ) const final
-	{
-		float fVal = 0.f;
-		const char * pBuf = nullptr;
-		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
-
-		if ( iLen && pBuf )
-		{
-			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-			if ( pBuf<pMax )
-			{
-				fVal = (float) strtod ( pBuf, nullptr );
-			}
-			else
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( pBuf, iLen );
-				fVal = (float) strtod ( sBuf.cstr(), nullptr );
-			}
-		}
-
-		FreeDataPtr ( *this, pBuf );
-		return fVal;
-	}
-
-	//	base class does not convert string to int
-	int IntEval ( const CSphMatch & tMatch ) const final
-	{
-		int iVal = 0;
-		const char * pBuf = nullptr;
-		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
-
-		if ( iLen && pBuf )
-		{
-			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-			if ( pBuf<pMax )
-			{
-				iVal = strtol ( pBuf, NULL, 10 );
-			}
-			else
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( pBuf, iLen );
-				iVal = strtol ( sBuf.cstr(), NULL, 10 );
-			}
-		}
-
-		FreeDataPtr ( *this, pBuf );
-		return iVal;
-	}
-
-	//	base class does not convert string to int64
-	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
-	{
-		int64_t iVal = 0;
-		const char * pBuf = nullptr;
-		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
-
-		if ( iLen && pBuf )
-		{
-			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-			if ( pBuf<pMax )
-			{
-				iVal = strtoll ( pBuf, nullptr, 10 );
-			}
-			else
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( pBuf, iLen );
-				iVal = strtoll ( sBuf.cstr(), nullptr, 10 );
-			}
-		}
-
-		FreeDataPtr ( *this, pBuf );
-		return iVal;
-	}
-
 	bool IsConst () const final { return false; }
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -2499,84 +2503,6 @@ public:
     {
         return true;
     }
-
-	//	base class does not convert string to float
-	float Eval ( const CSphMatch & tMatch ) const final
-	{
-		float fVal = 0.f;
-		const char * pBuf = nullptr;
-		int  iLen = StringEval ( tMatch, (const BYTE **)&pBuf );
-
-		if ( iLen && pBuf )
-		{
-			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-			if ( pBuf<pMax )
-			{
-				fVal = (float) strtod ( pBuf, nullptr );
-			}
-			else
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( pBuf, iLen );
-				fVal = (float) strtod ( sBuf.cstr(), nullptr );
-			}
-		}
-
-		FreeDataPtr ( *this, pBuf );
-		return fVal;
-	}
-	
-	//	base class does not convert string to int
-    int IntEval ( const CSphMatch & tMatch ) const final
-    {
-        int iVal = 0;
-        const char * pBuf = nullptr;
-        int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
-
-        if ( iLen && pBuf )
-        {
-            const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-            if ( pBuf<pMax )
-            {
-                iVal = strtol ( pBuf, NULL, 10 );
-            }
-            else
-            {
-                CSphString sBuf;
-                sBuf.SetBinary ( pBuf, iLen );
-                iVal = strtol ( sBuf.cstr(), NULL, 10 );
-            }
-        }
-
-        FreeDataPtr ( *this, pBuf );
-        return iVal;
-    }
-
-	//	base class does not convert string to int64
-	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
-	{
-		int64_t iVal = 0;
-		const char * pBuf = nullptr;
-		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
-
-		if ( iLen && pBuf )
-		{
-			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-			if ( pBuf<pMax )
-			{
-				iVal = strtoll ( pBuf, nullptr, 10 );
-			}
-			else
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( pBuf, iLen );
-				iVal = strtoll ( sBuf.cstr(), nullptr, 10 );
-			}
-		}
-
-		FreeDataPtr ( *this, pBuf );
-		return iVal;
-	}
 
 	bool IsConst () const final { return false; }
 
@@ -4100,7 +4026,9 @@ static inline bool CanEvalNumbers ( int iFunc )
 	case FUNC_TIMEDIFF:
 	case FUNC_SUBSTRING_INDEX:
 	case FUNC_UPPER:
-	case FUNC_LOWER: return true;
+	case FUNC_LOWER:
+	case FUNC_DATE_FORMAT:
+		return true;
 	default: return false;
 	}
 }
@@ -9354,9 +9282,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			m_sParserError.SetSprintf ( "%s() called with %d args, but 2 args expected", sFuncName, dRetTypes.GetLength() );
 			return -1;
 		}
-		if ( m_dNodes[0].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[0].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[0].m_eRetType!=SPH_ATTR_BIGINT )
+		if ( m_dNodes[0].m_eRetType!=SPH_ATTR_INTEGER && m_dNodes[0].m_eRetType!=SPH_ATTR_TIMESTAMP && m_dNodes[0].m_eRetType!=SPH_ATTR_BIGINT && m_dNodes[0].m_eRetType!=SPH_ATTR_STRING )
 		{
-			m_sParserError.SetSprintf ( "%s() argument 1 must be integer, bigint or timestamp", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 1 must be integer, bigint or timestamp, json, string", sFuncName );
 			return -1;
 		}
 		if ( dRetTypes[1]!=SPH_ATTR_STRING )

@@ -72,10 +72,10 @@ do
 	# Search each downloaded file and find the line with the specific package, version, date, and commit
 	for index in "${!repo_urls[@]}"; do
 		if [ "$package" = 'manticore-executor|manticore-extra' ]; then
-      echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
-			wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
+      		echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
+			wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
 			tar -xzf 'manticore-executor-dev.tar.gz'
-			executor_dev_path=$(realpath "manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev/manticore-executor")
+			executor_dev_path=$(realpath "manticore-executor_${version}-${date}-${commit}_linux_amd64-dev/manticore-executor")
 		fi
 
 		cat "/tmp/packages_${index}" | egrep "$package" | grep $commit | grep ".deb" | awk -v repo_url="${repo_urls[$index]}" -F\" '{print repo_url""$2"?ci=1"}' |

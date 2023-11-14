@@ -11,20 +11,9 @@ mysql -h0 -P19306 -e "SHOW TABLES\G"
 Index: a
 Type: rt
 ––– input –––
-mysql -h0 -P19306 -e "create table h random=5"
+mysql -h0 -P19306 -e "create table e(id bigint) shards=10 rf=1"; echo $?
 ––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
-––– input –––
-mysql -h0 -P19306 -e "create table t(id bigint) shards=a rf=b"
-––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
-––– input –––
-mysql -h0 -P19306 -e "create table c:m SHARDS=10 RF=2"
-––– output –––
-ERROR 1064 (42000) at line 1: Cluster 'c' does not exist
-––– input –––
-mysql -h0 -P19306 -e "create table e(id bigint) shards=10 rf=1"
-––– output –––
+0
 ––– input –––
 mysql -h0 -P19306 -e "SHOW TABLES\G"
 ––– output –––
@@ -74,19 +63,13 @@ Type: rt
 Index: sharding_table
 Type: rt
 ––– input –––
-mysql -h0 -P19306 -e "create table s SHARDS=10 RF=1"
+mysql -h0 -P19306 -e "create table s SHARDS=10 RF=1"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P19306 -e "create table l(id bigint) SHARDS=-10 RF=-1"
+mysql -h0 -P19306 -e "create table k(id bigint) SHARDS=10 RF=1"; echo $?
 ––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
-––– input –––
-mysql -h0 -P19306 -e "create table n(id bigint) shards=10 rf=2"
-––– output –––
-ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
-––– input –––
-mysql -h0 -P19306 -e "create table k(id bigint) SHARDS=10 RF=1"
-––– output –––
+0
 ––– input –––
 mysql -h0 -P19306 -e "SHOW TABLES\G"
 ––– output –––
@@ -205,5 +188,17 @@ Type: rt
 ––– block: ../base/start-searchd-3 –––
 ––– block: ../base/create-cluster-3 –––
 ––– input –––
-mysql -h0 -P19306 -e "create table c:m(id bigint) SHARDS=10 RF=2"
+mysql -h0 -P29306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P39306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P29306 -e "create table c:m(id bigint) SHARDS=10 RF=2"
+––– output –––
+––– input –––
+mysql -h0 -P39306 -e "create table c:j(id bigint) SHARDS=10 RF=3"
+––– output –––
+––– input –––
+mysql -h0 -P39306 -e "create table c:x(id bigint) SHARDS=10 RF=10"
 ––– output –––

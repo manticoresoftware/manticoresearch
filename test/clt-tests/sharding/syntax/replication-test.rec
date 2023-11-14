@@ -101,9 +101,9 @@ gid: 10
 mysql -h0 -P19306 -e "INSERT INTO replication:testrt VALUES(0,'List of HP business laptops','Macbook',10);"; echo $?
 ––– output –––
 0
-––– block: ../base/start-searchd-5 –––
+––– block: ../base/start-searchd-5-restart –––
 ––– input –––
-mysql -h0 -P59306 -e "SELECT * FROM testrt\G;"
+sleep 5; mysql -h0 -P59306 -e "SELECT * FROM testrt\G;"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}

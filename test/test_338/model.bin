@@ -1,4 +1,4 @@
-a:1:{i:0;a:50:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:278:"{
+a:1:{i:0;a:57:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:278:"{
 	"index":"test_rt",
 	"id":1,
 	"doc":
@@ -194,4 +194,25 @@ a:1:{i:0;a:50:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 	{
 		"json_col": ["31"]
 	}
-}";s:4:"rows";s:77:"{"_index":"test_rt","_id":204,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:46;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:154:"{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":200, "lt":300 } } }, "sort": ["id"] }";s:4:"rows";s:283:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":"201","_score":1,"_source":{"json_col":null,"mva_col":[11,12,13]}},{"_id":"202","_score":1,"_source":{"json_col":[21,22,23],"mva_col":[]}},{"_id":"204","_score":1,"_source":{"json_col":["31"],"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:47;a:3:{s:8:"sphinxql";s:55:"insert into test_rt(id, mva_col) values  (205, '["a"]')";s:5:"errno";i:1064;s:5:"error";s:57:"row 1, column 2: non-MVA value specified for a MVA column";}i:48;a:2:{s:8:"sphinxql";s:55:"insert into test_rt(id, json_col) values (206, '["a"]')";s:14:"total_affected";i:1;}i:49;a:3:{s:8:"sphinxql";s:85:"SELECT id, mva_col, json_col FROM test_rt WHERE id > 200 and id < 300 order by id asc";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:2:"id";s:3:"201";s:7:"mva_col";s:8:"11,12,13";s:8:"json_col";N;}i:1;a:3:{s:2:"id";s:3:"202";s:7:"mva_col";s:0:"";s:8:"json_col";s:10:"[21,22,23]";}i:2;a:3:{s:2:"id";s:3:"204";s:7:"mva_col";s:0:"";s:8:"json_col";s:6:"["31"]";}i:3;a:3:{s:2:"id";s:3:"206";s:7:"mva_col";s:0:"";s:8:"json_col";s:5:"["a"]";}}}}}
+}";s:4:"rows";s:77:"{"_index":"test_rt","_id":204,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:46;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:154:"{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":200, "lt":300 } } }, "sort": ["id"] }";s:4:"rows";s:283:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":"201","_score":1,"_source":{"json_col":null,"mva_col":[11,12,13]}},{"_id":"202","_score":1,"_source":{"json_col":[21,22,23],"mva_col":[]}},{"_id":"204","_score":1,"_source":{"json_col":["31"],"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:47;a:3:{s:8:"sphinxql";s:55:"insert into test_rt(id, mva_col) values  (205, '["a"]')";s:5:"errno";i:1064;s:5:"error";s:57:"row 1, column 2: non-MVA value specified for a MVA column";}i:48;a:2:{s:8:"sphinxql";s:55:"insert into test_rt(id, json_col) values (206, '["a"]')";s:14:"total_affected";i:1;}i:49;a:3:{s:8:"sphinxql";s:85:"SELECT id, mva_col, json_col FROM test_rt WHERE id > 200 and id < 300 order by id asc";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:2:"id";s:3:"201";s:7:"mva_col";s:8:"11,12,13";s:8:"json_col";N;}i:1;a:3:{s:2:"id";s:3:"202";s:7:"mva_col";s:0:"";s:8:"json_col";s:10:"[21,22,23]";}i:2;a:3:{s:2:"id";s:3:"204";s:7:"mva_col";s:0:"";s:8:"json_col";s:6:"["31"]";}i:3;a:3:{s:2:"id";s:3:"206";s:7:"mva_col";s:0:"";s:8:"json_col";s:5:"["a"]";}}}i:50;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:109:"{
+	"index":"test_rt",
+	"id":1001,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}";s:4:"rows";s:78:"{"_index":"test_rt","_id":1001,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:51;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:109:"{
+	"index":"test_rt",
+	"id":1002,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}";s:4:"rows";s:78:"{"_index":"test_rt","_id":1002,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:52;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:109:"{
+	"index":"test_rt",
+	"id":1003,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}";s:4:"rows";s:78:"{"_index":"test_rt","_id":1003,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:53;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:49:"{
+	"index":"test_rt",
+	"id":[201,202, 204, 1,2]
+}";s:4:"rows";s:62:"{"_index":"test_rt","_id":201,"found":true,"result":"deleted"}";s:9:"http_code";i:200;s:4:"http";i:1;}i:54;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:121:"{ "index": "test_rt", "_source": { "includes": [ "id"] }, "query": { "range": { "id": { "lt":2000 } } }, "sort": ["id"] }";s:4:"rows";s:224:"{"timed_out":false,"hits":{"total":4,"total_relation":"eq","hits":[{"_id":"206","_score":1,"_source":{}},{"_id":"1001","_score":1,"_source":{}},{"_id":"1002","_score":1,"_source":{}},{"_id":"1003","_score":1,"_source":{}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:55;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:53:"{
+	"index":"test_rt",
+	"id":[1001,"1002", 202, 1,2]
+}";s:4:"rows";s:42:"{"error":"Document ids should be integer"}";s:9:"http_code";i:400;s:4:"http";i:1;}i:56;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:36:"{
+	"index":"test_rt",
+	"id":"1002"
+}";s:4:"rows";s:63:"{"error":"Document ids should be integer or array of integers"}";s:9:"http_code";i:400;s:4:"http";i:1;}}}

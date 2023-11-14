@@ -715,7 +715,7 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 }
 
 
-static bool ParseIndexId ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
 	if ( !ParseIndex ( tRoot, tStmt, sError ) )
 		return false;
@@ -723,20 +723,44 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t &
 	JsonObj_c tId = tRoot.GetItem ( "id" );
 	if ( tId )
 	{
-		if ( !tId.IsInt() && !tId.IsUint() )
+		if ( !tId.IsInt() && !tId.IsUint() && !tId.IsArray() )
+		{
+			sError = "Document ids should be integer or array of integers";
+			return false;
+		}
+
+		if ( !bArrayIds && tId.IsArray() )
 		{
 			sError = "Document ids should be integer";
 			return false;
 		}
 
-		if ( tId.IsInt() && tId.IntVal()<0 )
+		if ( !tId.IsArray() )
 		{
-			sError = "Negative document ids are not allowed";
-			return false;
+			if ( tId.IsInt() && tId.IntVal()<0 )
+			{
+				sError = "Negative document ids are not allowed";
+				return false;
+			}
+		} else
+		{
+			for ( const auto & tItem : tId )
+			{
+				if ( !tItem.IsInt() && !tItem.IsUint() )
+				{
+					sError = "Document ids should be integer";
+					return false;
+				}
+				if ( tItem.IsInt() && tItem.IntVal()<0 )
+				{
+					sError = "Negative document ids are not allowed";
+					return false;
+				}
+			}
 		}
 	}
 
-	if ( tId )
+	if ( tId && !tId.IsArray() )
 		tDocId = tId.IntVal();
 	else
 		tDocId = 0; 	// enable auto-id
@@ -974,7 +998,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 
 bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, bool bCompat, CSphString & sError )
 {
-	if ( !ParseIndexId ( tRoot, tStmt, tDocId, sError ) )
+	if ( !ParseIndexId ( tRoot, false, tStmt, tDocId, sError ) )
 		return false;
 
 	if ( !ParseCluster ( tRoot, tStmt, sError ) )
@@ -1069,7 +1093,7 @@ bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tD
 }
 
 
-static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {	
 	tStmt.m_tQuery.m_sSelect = "id";
 	if ( !ParseIndex ( tRoot, tStmt, sError ) )
@@ -1081,15 +1105,23 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 	JsonObj_c tId = tRoot.GetItem ( "id" );
 	if ( tId )
 	{
-		if ( !ParseIndexId ( tRoot, tStmt, tDocId, sError ) )
+		if ( !ParseIndexId ( tRoot, bDelete, tStmt, tDocId, sError ) )
 			return false;
 
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
 		tFilter.m_eType = SPH_FILTER_VALUES;
-		tFilter.m_dValues.Add ( tId.IntVal() );
+		if ( bDelete && tId.IsArray() )
+		{
+			for ( const auto & tItem : tId )
+				tFilter.m_dValues.Add ( tItem.IntVal() );
+
+		} else
+		{
+			tFilter.m_dValues.Add ( tId.IntVal() );
+		}
 		tFilter.m_sAttrName = "id";
 
-		tDocId = tId.IntVal();
+		tDocId = tFilter.m_dValues[0];
 	}
 
 	// "query" is optional
@@ -1111,7 +1143,7 @@ bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 
 	tStmt.m_eStmt = STMT_UPDATE;
 
-	if ( !ParseUpdateDeleteQueries ( tRoot, tStmt, tDocId, sError ) )
+	if ( !ParseUpdateDeleteQueries ( tRoot, false, tStmt, tDocId, sError ) )
 		return false;
 
 	JsonObj_c tSource = tRoot.GetObjItem ( "doc", sError );
@@ -1223,7 +1255,7 @@ bool sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CS
 static bool ParseJsonDelete ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 {
 	tStmt.m_eStmt = STMT_DELETE;
-	return ParseUpdateDeleteQueries ( tRoot, tStmt, tDocId, sError );
+	return ParseUpdateDeleteQueries ( tRoot, true, tStmt, tDocId, sError );
 }
 
 

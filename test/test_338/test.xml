@@ -396,4 +396,50 @@ index test_rt
 <sphinxql>SELECT id, mva_col, json_col FROM test_rt WHERE id &gt; 200 and id &lt; 300 order by id asc</sphinxql>
 </sphqueries>
 
+<!-- delete by array of ids -->
+<httpqueries>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1001,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1002,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1003,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}
+</query>
+<query endpoint="json/delete">
+{
+	"index":"test_rt",
+	"id":[201,202, 204, 1,2]
+}
+</query>
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id"] }, "query": { "range": { "id": { "lt":2000 } } }, "sort": ["id"] }</query>
+<!-- invalid delete with array of id - only numbers allowed -->
+<query endpoint="json/delete">
+{
+	"index":"test_rt",
+	"id":[1001,"1002", 202, 1,2]
+}
+</query>
+<!-- invalid delete id - only numbers allowed -->
+<query endpoint="json/delete">
+{
+	"index":"test_rt",
+	"id":"1002"
+}
+</query>
+</httpqueries>
+
 </test>

@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd-1 –––
+––– block: ../base/start-searchd-with-cpustats –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW THREADS\G;"
 ––– output –––

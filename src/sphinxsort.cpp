@@ -2171,6 +2171,17 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::MultipleKeysFromMatch ( const CSphMat
 			PushJsonField ( m_dJsonKeys[i]->Int64Eval(tMatch), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey ){ dCurKeys.Add(uMatchGroupKey); return true; } );
 			break;
 
+		case SPH_ATTR_JSON_FIELD:
+		{
+			assert ( m_dAttrs[i].m_pExpr );
+			PushJsonField ( m_dAttrs[i].m_pExpr->Int64Eval ( tMatch ), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
+				{
+					dCurKeys.Add ( uMatchGroupKey );
+					return true;
+				});
+		}
+		break;
+
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_STRINGPTR:
 			{
@@ -2204,7 +2215,7 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::MultipleKeysFromMatch ( const CSphMat
 template <class PRED, bool HAVE_COLUMNAR>
 bool CSphGrouperMulti<PRED,HAVE_COLUMNAR>::IsMultiValue() const
 {
-	return m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET; } );
+	return m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD || tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET; } );
 }
 
 template <class PRED, bool HAVE_COLUMNAR>
@@ -4360,13 +4371,10 @@ private:
 	FORCE_INLINE bool PushMatch ( const CSphMatch & tMatch )
 	{
 		SphGroupKey_t uGroupKey = this->m_pGrouper->KeyFromMatch ( tMatch );
-
-		auto iValue = (int64_t)uGroupKey;
-		CSphGrouper * pGrouper = this->m_pGrouper;
-		const BYTE * pBlobPool = ((CSphGrouperJsonField*)pGrouper)->GetBlobPool();
+		const BYTE * pBlobPool = this->m_pGrouper->GetBlobPool();
 		bool bClearNotify = true;
 
-		return PushJsonField ( iValue, pBlobPool, [this, &tMatch, &bClearNotify]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
+		return PushJsonField ( uGroupKey, pBlobPool, [this, &tMatch, &bClearNotify]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
 			{
 				bool bPushed = BASE::template PushEx<false> ( tMatch, uMatchGroupKey, false, false, bClearNotify, pAttr );
 				bClearNotify = false; // need to clear notifications once per match - not for every pushed value

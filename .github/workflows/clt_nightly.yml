@@ -2,9 +2,8 @@ name: CLT latest release installation tests
 run-name: CLT latest release installation tests ${{ github.sha }}
 
 on:
-  push:
-    branches:
-      - update-release-to-nightly
+  schedule:
+    - cron: '00 20 * * *'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

@@ -65,7 +65,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sph
 		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp client_task_info.cpp
 		indexfiles.cpp indexfilebase.cpp attrindex_builder.cpp queryfilter.cpp aggregate.cpp secondarylib.cpp costestimate.cpp
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
-		detail/indexlink.cpp knnmisc.cpp knnlib.cpp )
+		detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
@@ -110,7 +110,6 @@ add_subdirectory ( indexing_sources )
 target_link_libraries ( lmanticore PUBLIC sourcedoc )
 
 if (WIN32)
-	target_sources ( lmanticore PRIVATE libutils.cpp )
 	if (NOT CMAKE_CROSSCOMPILING)
 		target_compile_options ( lmanticore PRIVATE /bigobj )
 	endif ()

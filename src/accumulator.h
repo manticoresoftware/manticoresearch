@@ -141,7 +141,7 @@ private:
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
-	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder;
+	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
@@ -154,7 +154,7 @@ private:
 	void			SetupDocstore();
 
 	// defined in sphinxrt.cpp
-	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>& );
+	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>&, CSphString& );
 };
 
 #endif // _accumulator_

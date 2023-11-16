@@ -25,6 +25,7 @@
 #include "columnarexpr.h"
 #include "conversion.h"
 #include "geodist.h"
+#include "knnmisc.h"
 #include <time.h>
 #include <math.h>
 #include "uni_algo/case.h"
@@ -1467,6 +1468,11 @@ public:
 					auto dMva = m_pFirst->MvaEval ( tMatch );
 					sphMVA2Str ( dMva, m_eArg==SPH_ATTR_INT64SET || m_eArg==SPH_ATTR_INT64SET_PTR, m_sBuilder );
 				}
+				break;
+
+			case SPH_ATTR_FLOAT_VECTOR:
+			case SPH_ATTR_FLOAT_VECTOR_PTR:
+				sphFloatVec2Str ( m_pFirst->MvaEval(tMatch), m_sBuilder );
 				break;
 
 			case SPH_ATTR_STRING:
@@ -3527,6 +3533,7 @@ enum Tokh_e : BYTE
 	FUNC_SINT,
 	FUNC_CRC32,
 	FUNC_FIBONACCI,
+	FUNC_KNN_DIST,
 
 	FUNC_DAY,
 	FUNC_MONTH,
@@ -3622,8 +3629,7 @@ enum Tokh_e : BYTE
 };
 
 // dHash2Op [i-FUNC_FUNCS_COUNT] returns 1:1 mapping from hash to the token
-const static int dHash2Op[TOKH_TOKH_COUNT-TOKH_TOKH_OFFSET] = { TOK_COUNT, TOK_WEIGHT,
-		TOK_GROUPBY, TOK_DISTINCT, TOK_AND, TOK_OR, TOK_NOT, TOK_DIV, TOK_MOD, TOK_FOR, TOK_IS, TOK_NULL, };
+const static int g_dHash2Op[TOKH_TOKH_COUNT-TOKH_TOKH_OFFSET] = { TOK_COUNT, TOK_WEIGHT, TOK_GROUPBY, TOK_DISTINCT, TOK_AND, TOK_OR, TOK_NOT, TOK_DIV, TOK_MOD, TOK_FOR, TOK_IS, TOK_NULL, };
 
 struct TokhKeyVal_t
 {
@@ -3658,6 +3664,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "sint",			FUNC_SINT			},	// type-enforcer special as-if-function
 	{ "crc32",			FUNC_CRC32			},
 	{ "fibonacci",		FUNC_FIBONACCI		},
+	{ "knn_dist",		FUNC_KNN_DIST		},
 
 	{ "day",			FUNC_DAY			},
 	{ "month",			FUNC_MONTH			},
@@ -3782,49 +3789,49 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
 	{
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126,  39, 126,
-       50,  44,  49, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126,  33,  39,  11,   0,  17,
-	   31,  29,  44,   6, 126,  126, 13,  23,   1,  34,
-	   19,  20,   6,   2,   5,  27,  55,  44,  34,  23,
-	   42, 126, 126, 126, 126,  35, 126,  33,  39,  11,
-        0,  17,  31,  29,  44,   6, 126, 126,  13,  23,
-        1,  34,  19,  20,   6,   2,   5,  27,  55,  44,
-       34,  23,  42, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
-      126, 126, 126, 126, 126, 126
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 40, 126,
+		50, 46, 50, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 33, 39, 11, 0, 17,
+		31, 29, 44, 6, 126, 64, 13, 23, 1, 34,
+		19, 20, 6, 2, 5, 27, 55, 44, 34, 23,
+		42, 126, 126, 126, 126, 40, 126, 33, 39, 11,
+		0, 17, 31, 29, 44, 6, 126, 64, 13, 23,
+		1, 34, 19, 20, 6, 2, 5, 27, 55, 44,
+		34, 23, 42, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126, 126, 126, 126, 126,
+		126, 126, 126, 126, 126, 126,
 	};
 
 	const static short dIndexes[] =
     {
-		-1, -1, -1, -1, -1, -1, -1, 4, -1, 31,
-		87, 66, 12, -1, 83, 80, 6, 10, 5, 22,
-		42, 73, 38, 40, 46, 59, 85, 28, 23, 71,
-		74, 88, 30, 35, 2, 58, 81, 51, 36, 27,
-		1, 54, 82, 63, 62, 43, 86, 21, 77, 15,
-		47, 44, 64, 33, 75, 32, 49, 69, 9, 50,
-		39, 78, 60, 55, 48, 53, 17, 57, 70, 76,
-		56, 26, 37, 16, 67, 34, 3, 13, 41, 11,
-		72, 20, 61, 52, 29, 14, 8, -1, -1, -1,
-		68, 19, 0, 79, 24, -1, 7, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, 18,
-		25, -1, -1, 84, -1, -1, -1, -1, -1, -1,
-		-1, 65, -1, -1, -1, 45,
+		-1, -1, -1, -1, -1, -1, -1, 4, -1, 32,
+		88, 67, 12, -1, 84, 81, 6, 10, 5, 23,
+		43, 74, 39, 41, 47, 60, 86, 29, 24, 72,
+		75, 89, 31, 36, 2, 59, 82, 52, 37, 28,
+		1, 55, 83, 64, 63, 44, 87, 22, 78, 16,
+		48, 45, 65, 34, 76, 33, 50, 70, 9, 51,
+		40, 79, 61, 56, 49, 54, 18, 58, 71, 77,
+		57, 27, 38, 17, 68, 35, 3, 13, 15, 11,
+		73, 21, 62, 42, 53, 14, 30, 8, -1, -1,
+		69, 20, 0, 80, 25, -1, 7, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, 19,
+		26, -1, -1, 85, -1, -1, -1, -1, -1, -1,
+		-1, 66, -1, -1, -1, 46,
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -3921,6 +3928,7 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"sint",			*/		1,	TOK_FUNC,		/*FUNC_SINT,			*/	SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
 	{ /*"crc32",		*/		1,	TOK_FUNC,		/*FUNC_CRC32,			*/	SPH_ATTR_INTEGER },
 	{ /*"fibonacci",	*/		1,	TOK_FUNC,		/*FUNC_FIBONACCI,		*/	SPH_ATTR_INTEGER },
+	{ /*"knn_dist"",	*/		0,	TOK_FUNC,		/*FUNC_KNN_DIST,		*/	SPH_ATTR_FLOAT },
 
 	{ /*"day",			*/		1,	TOK_FUNC,		/*FUNC_DAY,				*/	SPH_ATTR_INTEGER },
 	{ /*"month",		*/		1,	TOK_FUNC,		/*FUNC_MONTH,			*/	SPH_ATTR_INTEGER },
@@ -4003,7 +4011,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 
 	static const char * dNames[FUNC_FUNCS_COUNT] =
 		{ "now", "abs", "ceil", "floor", "sin", "cos", "ln", "log2", "log10", "exp", "sqrt", "bigint", "sint"
-		, "crc32", "fibonacci", "day", "month", "year", "yearmonth", "yearmonthday", "hour", "minute"
+		, "crc32", "fibonacci", "knn_dist", "day", "month", "year", "yearmonth", "yearmonthday", "hour", "minute"
 		, "second", "min", "max", "pow", "idiv", "if", "madd", "mul3", "interval", "in", "bitdot", "remap"
 		, "geodist", "exist", "poly2d", "geopoly2d", "contains", "zonespanlist", "concat", "to_string"
 		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
@@ -4167,7 +4175,7 @@ protected:
 	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeField ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator );
-	int						AddNodeWeight ();
+	int						AddNodeWeight();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc0 ( int iFunc );
 	int						AddNodeFunc ( int iFunc, int iArg );
@@ -4265,7 +4273,7 @@ private:
 	ISphExpr *				CreateColumnarIntNode ( int iAttr, ESphAttr eAttrType );
 	ISphExpr *				CreateColumnarFloatNode ( int iAttr );
 	ISphExpr *				CreateColumnarStringNode ( int iAttr );
-	ISphExpr *				CreateColumnarMvaNode ( int iAttr, ESphAttr eAttrType );
+	ISphExpr *				CreateColumnarMvaNode ( int iAttr );
 
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 	ISphExpr *				CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr * pAttr, ISphExpr * pOpts );
@@ -4367,6 +4375,7 @@ static int ConvertToColumnarType ( ESphAttr eAttr )
 	case SPH_ATTR_STRING:		return TOK_COLUMNAR_STRING;
 	case SPH_ATTR_UINT32SET:	return TOK_COLUMNAR_UINT32SET;
 	case SPH_ATTR_INT64SET:		return TOK_COLUMNAR_INT64SET;
+	case SPH_ATTR_FLOAT_VECTOR:	return TOK_COLUMNAR_FLOATVEC;
 	default:
 		assert ( 0 && "Unknown columnar type" );
 		return -1;
@@ -4528,7 +4537,7 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 		if ( iRes>=0 ) 
 			return iRes;
 
-		return dHash2Op[eTok-FUNC_FUNCS_COUNT];
+		return g_dHash2Op[eTok-FUNC_FUNCS_COUNT];
 	}
 
 	CSphString sTok;
@@ -5139,6 +5148,7 @@ static const char * TokName (int iTok, int iFunc)
 		case TOK_COLUMNAR_STRING:    return "columnar_string";
 		case TOK_COLUMNAR_UINT32SET: return "columnar_uint32set";
 		case TOK_COLUMNAR_INT64SET:  return "columnar_int64set";
+		case TOK_COLUMNAR_FLOATVEC:  return "columnar_floatvec";
 		case TOK_ATWEIGHT:     return "atweight";
 		case TOK_GROUPBY:      return "groupby";
 		case TOK_WEIGHT:       return "weight";
@@ -6463,7 +6473,7 @@ ISphExpr * ExprParser_t::CreateColumnarStringNode ( int iAttr )
 }
 
 
-ISphExpr * ExprParser_t::CreateColumnarMvaNode ( int iAttr, ESphAttr eAttrType )
+ISphExpr * ExprParser_t::CreateColumnarMvaNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
 	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
@@ -6668,6 +6678,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
 	case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
 	case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
+	case FUNC_KNN_DIST:	return new Expr_GetFloat_c ( m_pSchema->GetAttr ( GetKnnDistAttrName() )->m_tLocator, m_pSchema->GetAttrIndex ( GetKnnDistAttrName() ) );
 
 	case FUNC_DAY:			return ExprDay ( dArgs[0] );
 	case FUNC_MONTH:		return ExprMonth ( dArgs[0] );
@@ -6867,6 +6878,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_DATABASE:
 		case FUNC_USER:
 		case FUNC_VERSION:
+		case FUNC_KNN_DIST:
 			bSkipChildren = true;
 			break;
 		default:
@@ -6930,8 +6942,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_COLUMNAR_BOOL:		return CreateColumnarIntNode ( tNode.m_iLocator, SPH_ATTR_BOOL );
 		case TOK_COLUMNAR_FLOAT:	return CreateColumnarFloatNode ( tNode.m_iLocator );
 		case TOK_COLUMNAR_STRING:	return CreateColumnarStringNode ( tNode.m_iLocator );
-		case TOK_COLUMNAR_UINT32SET:return CreateColumnarMvaNode ( tNode.m_iLocator, SPH_ATTR_UINT32SET );
-		case TOK_COLUMNAR_INT64SET:	return CreateColumnarMvaNode ( tNode.m_iLocator, SPH_ATTR_INT64SET );
+
+		case TOK_COLUMNAR_UINT32SET:
+		case TOK_COLUMNAR_INT64SET:
+		case TOK_COLUMNAR_FLOATVEC:	return CreateColumnarMvaNode ( tNode.m_iLocator );
 
 		case TOK_FIELD:			return CreateFieldNode ( tNode.m_iLocator );
 
@@ -6948,7 +6962,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_SUBKEY:
 			return new Expr_GetStrConst_c ( m_sExpr.first+GetConstStrOffset(tNode), GetConstStrLength(tNode), false );
 
-		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
+		case TOK_WEIGHT:		return new Expr_GetWeight_c();
 
 		case '+':				return new Expr_Add_c ( pLeft, pRight );
 		case '-':				return new Expr_Sub_c ( pLeft, pRight );
@@ -8854,6 +8868,7 @@ int ExprParser_t::AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator )
 	case TOK_COLUMNAR_STRING:		tNode.m_eRetType = SPH_ATTR_STRINGPTR; break;
 	case TOK_COLUMNAR_UINT32SET:	tNode.m_eRetType = SPH_ATTR_UINT32SET_PTR; break;
 	case TOK_COLUMNAR_INT64SET:		tNode.m_eRetType = SPH_ATTR_INT64SET_PTR; break;
+	case TOK_COLUMNAR_FLOATVEC:		tNode.m_eRetType = SPH_ATTR_FLOAT_VECTOR_PTR; break;
 	default:
 		assert ( 0 && "Unsupported columnar type" );
 		break;
@@ -8882,6 +8897,7 @@ int ExprParser_t::AddNodeWeight ()
 	tNode.m_eRetType = SPH_ATTR_BIGINT;
 	return m_dNodes.GetLength()-1;
 }
+
 
 int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 {

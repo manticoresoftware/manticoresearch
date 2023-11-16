@@ -95,6 +95,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarni
 	m_dColumnarNonStoredAttrs = tSettings.m_dColumnarNonStoredAttrs;
 	m_dRowwiseAttrs = tSettings.m_dRowwiseAttrs;
 	m_dColumnarStringsNoHash = tSettings.m_dColumnarStringsNoHash;
+	m_dKNN = tSettings.m_dKNN;
 	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;
 	m_eEngine = tSettings.m_eEngine;
 

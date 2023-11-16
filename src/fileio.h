@@ -70,6 +70,10 @@ public:
 	void		SkipBytes ( int iCount );
 	SphOffset_t	GetPos () const { return m_iPos+m_iBuffPos; }
 
+	template <typename T>
+	void		Read ( T & tValue )						{ GetBytes ( &tValue, sizeof(tValue) ); }
+	void		Read ( void * pData, size_t tSize )		{ GetBytes ( pData, tSize ); }
+
 	void		GetBytes ( void * pData, int iSize );
 
 	int			GetByte ();
@@ -194,6 +198,10 @@ public:
 	bool			OpenFile ( const CSphString & sName, int iOpenFlags, CSphString & sError );
 	void			SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CSphString & sError );
 	void			CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
+
+	template <typename T>
+	void			Write ( const T & tValue )					{ PutBytes ( &tValue, sizeof(tValue) ); }
+	void			Write ( const void * pData, int64_t iSize ) { PutBytes ( pData, iSize ); }
 
 	void			PutByte ( BYTE uValue ) override;
 	void			PutBytes ( const void * pData, int64_t iSize ) override;

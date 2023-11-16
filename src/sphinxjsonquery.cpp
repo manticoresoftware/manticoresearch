@@ -1051,13 +1051,13 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 				if ( tItem.IsArray() )
 				{
 					tNewValue.m_iType = SqlInsert_t::CONST_MVA;
-					tNewValue.m_pVals = new RefcountedVector_c<SphAttr_t>;
+					tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
 					for ( const auto & tArrayItem : tItem )
 					{
 						if ( !tArrayItem.IsInt() )
 							break;
 
-						tNewValue.m_pVals->Add ( tArrayItem.IntVal() );
+						tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
 						bMVA = true;
 					}
 				}

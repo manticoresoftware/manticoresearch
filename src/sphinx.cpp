@@ -50,7 +50,9 @@
 #include "indexfiles.h"
 #include "task_dispatcher.h"
 #include "secondarylib.h"
+#include "knnlib.h"
 #include "attrindex_merge.h"
+#include "knnmisc.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -747,6 +749,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		case SPH_ATTR_TIMESTAMP:
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_BIGINT:
 		case SPH_ATTR_FLOAT:
@@ -757,8 +760,8 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			return false;
 		}
 
-		bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
-		bool bDstMva = ( tUpdAttr.m_eType==SPH_ATTR_UINT32SET || tUpdAttr.m_eType==SPH_ATTR_INT64SET );
+		bool bSrcMva = tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR;
+		bool bDstMva = tUpdAttr.m_eType==SPH_ATTR_UINT32SET || tUpdAttr.m_eType==SPH_ATTR_INT64SET || tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR;
 		if ( bSrcMva!=bDstMva )
 		{
 			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", sUpdAttrName.cstr() );
@@ -771,12 +774,23 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			return false;
 		}
 
+		if( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR )
+		{
+			sError.SetSprintf ( "can't update MVA attribute '%s' bits with float vector value", sUpdAttrName.cstr() );
+			return false;
+		}
+
 		if ( tCol.IsColumnar() )
 		{
 			sError.SetSprintf ( "unable to update columnar attribute '%s'", sUpdAttrName.cstr() );
 			return false;
 		}
 
+		if ( tCol.IsIndexedKNN() )
+		{
+			sError.SetSprintf ( "unable to update attribute '%s' that has a KNN index", sUpdAttrName.cstr() );
+			return false;
+		}
 	}
 
 	return true;
@@ -865,6 +879,7 @@ static void IncUpdatePoolPos ( UpdateContext_t & tCtx, int iAttr, int & iPos )
 	{
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_FLOAT_VECTOR:
 		iPos += tCtx.m_tUpd.m_pUpdate->m_dPool[iPos] + 1;
 		break;
 
@@ -979,7 +994,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 		return true;
 
 	CSphTightVector<BYTE> tBlobPool;
-	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder = sphCreateBlobRowBuilderUpdate ( tCtx.m_tSchema, tBlobPool, tCtx.m_dSchemaUpdateMask );
+	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder = sphCreateBlobRowBuilderUpdate ( tCtx.m_tSchema, tUpd.m_dAttributes, tBlobPool, tCtx.m_dSchemaUpdateMask );
 
 	const CSphColumnInfo * pBlobLocator = tCtx.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
@@ -1018,6 +1033,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 			{
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
+			case SPH_ATTR_FLOAT_VECTOR:
 				{
 					DWORD uLength = tUpd.m_dPool[iPos++];
 					if ( iBlobId!=-1 )
@@ -1256,6 +1272,7 @@ public:
 	bool				PreallocHistograms ( StrVec_t & dWarnings );
 	bool				PreallocDocstore();
 	bool				PreallocColumnar();
+	bool				PreallocKNN();
 	bool				PreallocSkiplist();
 
 	bool				PreallocSecondaryIndex();
@@ -1310,8 +1327,8 @@ private:
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
-
 	std::unique_ptr<SI::Index_i> m_pSIdx;
+	std::unique_ptr<knn::KNN_i>	m_pKNN;
 
 	DWORD						m_uVersion;				///< data files version
 	volatile bool				m_bPassedRead;
@@ -1389,7 +1406,8 @@ private:
 
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
-	RowidIterator_i *			SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
+	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
+	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
@@ -2075,6 +2093,9 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & 
 	if ( !tQuery.m_sQuery.IsEmpty() )
 		return false;
 
+	if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		return false;
+
 	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
 	if ( bHasSI )
 	{
@@ -2470,13 +2491,15 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
-	if ( m_pSIdx && ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) ) )
+	if ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) )
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
-		{
 			if ( tAttr.m_iSchemaAttr!=-1 )
-				m_pSIdx->ColumnUpdated ( m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName.cstr() );
-		}
+			{
+				auto & sName = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName;
+				if ( m_pSIdx )
+					m_pSIdx->ColumnUpdated ( sName.cstr() );
+			}
 	}
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
@@ -3093,6 +3116,9 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		// limit the number of threads for anything with FT as it looks better in average (some queries are faster without thread cap)
 		if ( !tQuery.m_sQuery.IsEmpty() )
 			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
+
+		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+			iThreadCap = 1;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
 			continue;
@@ -3741,6 +3767,10 @@ static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
 	tCol.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
 	tCol.m_eAttrType = (ESphAttr)Int ( tNode.ChildByName ( "type" ) );
 	ReadLocatorJson ( tNode.ChildByName ("locator"), tCol.m_tLocator );
+
+	NodeHandle_t tKNN = tNode.ChildByName ("knn");
+	if ( tKNN!=nullnode )
+		tCol.m_tKNN = ReadKNNJson(tKNN);
 }
 
 
@@ -3833,6 +3863,9 @@ void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
 	tOut.NamedValNonDefault ( "engine", (DWORD)tCol.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
 	tOut.NamedVal ( "type", tCol.m_eAttrType );
 	tOut.NamedVal ( "locator", tCol.m_tLocator );
+
+	if ( tCol.IsIndexedKNN() )
+		tOut.NamedVal ( "knn", tCol.m_tKNN );
 }
 } // namespace
 
@@ -4693,42 +4726,6 @@ static void BuildStoreHistograms ( const CSphSchema & tSchema, DocID_t tDocId, C
 			default:
 				tItem.m_pHist->Insert ( tSource.GetAttr ( tItem.m_iAttr ) );
 				break;
-		}
-	}
-}
-
-
-void BuildStoreHistograms ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms )
-{
-	for ( int iAttr=0; iAttr<dAttrs.GetLength(); iAttr++ )
-	{
-		const PlainOrColumnar_t & tSrc = dAttrs[iAttr];
-
-		switch ( tSrc.m_eType )
-		{
-		case SPH_ATTR_UINT32SET:
-		case SPH_ATTR_INT64SET:
-		{
-			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
-			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
-			for ( int iVal=0; iVal<iValues; iVal++ )
-				tHistograms.Insert ( iAttr, pSrc[iVal] );
-		}
-		break;
-
-		case SPH_ATTR_STRING:
-		{
-			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
-			SphAttr_t uHash = sphCRC32 ( pSrc, iBytes );
-			tHistograms.Insert ( iAttr, uHash );
-		}
-		break;
-
-		default:
-			tHistograms.Insert ( iAttr, tSrc.Get ( tRowID, pRow, dIterators ) );
-			break;
 		}
 	}
 }
@@ -6694,8 +6691,7 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 }
 
 
-bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,
-	bool bSrcSettings, bool bSupressDstDocids )
+bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,	bool bSrcSettings, bool bSupressDstDocids )
 {
 	auto & tMonitor = tProgress.GetMergeCb();
 	assert ( pDstIndex && pSrcIndex );
@@ -7254,6 +7250,7 @@ inline void CalcContextItem ( CSphMatch & tMatch, const CSphQueryContext::CalcIt
 
 	case SPH_ATTR_INT64SET_PTR:
 	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
 		tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->Int64Eval ( tMatch ) );
 		break;
 
@@ -8077,6 +8074,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	float fCostOfFilters = 0.0f;
 	if ( tEstimate.m_iDocs>0 )
 	{
+		// fixme! update code to use SelectIteratorCtx_t::m_fDocsLeft
 		float fRatio = float ( tEstimate.m_iDocs ) / tSelectIteratorCtx.m_iTotalDocs;
 		for ( auto & i : dSIInfoFilters )
 			i.m_iRsetEstimate *= fRatio;
@@ -8131,43 +8129,74 @@ static void RemoveOptionalFilters ( const CSphVector<CSphFilterSettings> & dFilt
 }
 
 
-RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
+bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
 {
-	if ( !dFilters.GetLength() )
-		return nullptr;
-
-	CSphVector<SecondaryIndexInfo_t> dSIInfo;
 	StrVec_t dWarnings;
+	bool bKNN = !tQuery.m_sKNNAttr.IsEmpty();
+	float fBestCost = FLT_MAX;
 
-	if ( !pRanker )
+	if ( bKNN )
 	{
-		// In order to maintain some consistency with GetPseudoShardingMetric() we need to do one of the following:
-		// a. Run this with the number of docs in this pseudo_chunk and one thread
-		// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetric()
-		// For now we use approach b) as it is simpler
- 		float fBestCost = FLT_MAX;
-		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
+		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, 1 );
+		tSelectIteratorCtx.m_bFromIterator = true;
+
+		int iRequestedKNNDocs = Min ( tQuery.m_iKNNK, m_iDocinfo );
+		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
-		if ( dWarnings.GetLength() )
-			tMeta.m_sWarning = ConcatWarnings(dWarnings);
 	}
 	else
 	{
-		bool bRes = SelectIteratorsFT ( tQuery, dFilters, tMaxSorterSchema, pRanker, dSIInfo, iCutoff, iThreads, dWarnings );
-		if ( dWarnings.GetLength() )
-			tMeta.m_sWarning = ConcatWarnings(dWarnings);
-
-		if ( !bRes )
+		if ( !pRanker )
 		{
-			// if we did not spawn any iterators, we need to remove optional filters (as they assume they will be replaced by iterators)
-			RemoveOptionalFilters ( dFilters, tCtx, tFlx, tMeta, dModifiedFilters );
-			return nullptr;
+			// In order to maintain some consistency with GetPseudoShardingMetric() we need to do one of the following:
+			// a. Run this with the number of docs in this pseudo_chunk and one thread
+			// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetric()
+			// For now we use approach b) as it is simpler
+			SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
+			dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
+		}
+		else
+		{
+			bool bRes = SelectIteratorsFT ( tQuery, dFilters, tMaxSorterSchema, pRanker, dSIInfo, iCutoff, iThreads, dWarnings );
+			if ( !bRes )
+			{
+				// if we did not spawn any iterators, we need to remove optional filters (as they assume they will be replaced by iterators)
+				RemoveOptionalFilters ( dFilters, tCtx, tFlx, tMeta, dModifiedFilters );
+				return false;
+			}
 		}
 	}
 
-	RowIteratorsWithEstimates_t dSIIterators, dLookupIterators, dAnalyzerIterators;
+	if ( dWarnings.GetLength() )
+		tMeta.m_sWarning = ConcatWarnings(dWarnings);
+
+	return true;
+}
+
+
+std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
+{
+	if ( !dFilters.GetLength() )
+	{
+		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, tMeta.m_sError );
+
+		return { nullptr, false };
+	}
+
+	CSphVector<SecondaryIndexInfo_t> dSIInfo;
+	if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker ) )
+		return { nullptr, false };
+
+	RowIteratorsWithEstimates_t dSIIterators, dLookupIterators, dAnalyzerIterators, dKNNIterators;
 
 	int iRemovedOptional = CalcRemovedOptionalFilters ( dFilters, dSIInfo );
+
+	// knn iterators
+	bool bError = false;
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, bError, tMeta.m_sError );
+	if ( bError )
+		return { nullptr, true };
 
 	// secondary index iterators
 	dSIIterators = CreateSecondaryIndexIterator ( m_pSIdx.get(), dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff );
@@ -8193,6 +8222,9 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, cons
 		RecreateFilters ( dSIInfo, dFilters, tCtx, tFlx, tMeta, dModifiedFilters );
 
 	RowIteratorsWithEstimates_t dAllIterators;
+	for ( auto i : dKNNIterators )
+		dAllIterators.Add(i);
+
 	for ( auto i : dSIIterators )
 		dAllIterators.Add(i);
 
@@ -8212,14 +8244,14 @@ RowidIterator_i * CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, cons
 	{
 	case 0:
 		RemoveOptionalFilters ( dFilters, tCtx, tFlx, tMeta, dModifiedFilters );
-		return nullptr;
+		return { nullptr, false };
 
 	case 1:
-		return dFinalIterators[0];
+		return { dFinalIterators[0], false };
 
 	default:
 		// both columnar iterator wrappers and secondary index iterators support rowid filtering, so no need for it here
-		return CreateIteratorIntersect ( dFinalIterators, nullptr );
+		return { CreateIteratorIntersect ( dFinalIterators, nullptr ), false };
 	}
 }
 
@@ -8370,7 +8402,12 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( bAllPrecalc )
 		tCtx.m_pFilter.reset();
 	else
-		pIterator = std::unique_ptr<RowidIterator_i> ( SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, nullptr ) );
+	{
+		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, nullptr );
+		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
+		if ( tSpawned.second )
+			return false;
+	}
 	
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );
 
@@ -9481,6 +9518,29 @@ bool CSphIndex_VLN::PreallocColumnar()
 }
 
 
+bool CSphIndex_VLN::PreallocKNN()
+{
+	if ( m_uVersion<65 )
+		return true;
+
+	if ( !m_tSchema.HasKNNAttrs() )
+		return true;
+
+	m_pKNN = CreateKNN(m_sLastError);
+	if ( !m_pKNN )
+		return false;
+
+	std::string sErrorSTL;
+	if ( !m_pKNN->Load ( GetFilename ( SPH_EXT_SPKNN ).cstr(), sErrorSTL ) )
+	{
+		m_sLastError = sErrorSTL.c_str();
+		return false;
+	}
+
+	return !!m_pKNN;
+}
+
+
 bool CSphIndex_VLN::PreallocSkiplist()
 {
 	if ( m_bDebugCheck )
@@ -9583,8 +9643,9 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( !PreallocHistograms(dWarnings) ) return false;
 	if ( !PreallocDocstore() )		return false;
 	if ( !PreallocColumnar() )		return false;
+	if ( !PreallocKNN() )			return false;
 	if ( !PreallocSkiplist() )		return false;
-	if ( !PreallocSecondaryIndex() )	return false;
+	if ( !PreallocSecondaryIndex() ) return false;
 
 	// almost done
 	m_bPassedAlloc = true;
@@ -11534,7 +11595,11 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	std::unique_ptr<RowidIterator_i> pIterator ( SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, pRanker.get() ) );
+	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, pRanker.get() );
+	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
+	if ( tSpawned.second )
+		return false;
+
 	if ( pIterator )
 	{
 		auto pIter = pIterator.get();

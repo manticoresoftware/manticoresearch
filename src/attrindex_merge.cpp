@@ -17,6 +17,7 @@
 #include "killlist.h"
 #include "attrindex_builder.h"
 #include "secondarylib.h"
+#include "knnmisc.h"
 #include "attrindex_merge.h"
 
 class AttrMerger_c::Impl_c
@@ -24,6 +25,8 @@ class AttrMerger_c::Impl_c
 	AttrIndexBuilder_c						m_tMinMax;
 	HistogramContainer_c					m_tHistograms;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
+	std::unique_ptr<knn::Builder_i>			m_pKNNBuilder;
+	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
 	CSphWriter								m_tWriterSPA;
 	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
@@ -104,6 +107,13 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 			return false;
 	}
 
+	if ( pDstIndex->GetMatchSchema().HasKNNAttrs() )
+	{
+		m_pKNNBuilder = BuildCreateKNN ( pDstIndex->GetMatchSchema(), m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		if ( !m_pKNNBuilder )
+			return false;
+	}
+
 	if ( IsSecondaryLibLoaded() )
 	{
 		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_sError );
@@ -114,7 +124,7 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	m_tMinMax.Init ( pDstIndex->GetMatchSchema() );
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
-	CreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->GetMatchSchema() );
+	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->GetMatchSchema() );
 
 	m_tResultRowID = 0;
 	return true;
@@ -160,7 +170,13 @@ bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex
 		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+			BuildStoreSI ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		}
+
+		if ( m_pKNNBuilder && !BuildStoreKNN ( tRowID, nullptr, nullptr, dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+		{
+			m_sError = m_pKNNBuilder->GetError().c_str();
+			return false;
 		}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
@@ -231,12 +247,19 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+			BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		}
+
+		if ( m_pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+		{
+			m_sError = m_pKNNBuilder->GetError().c_str();
+			return false;
 		}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
+
 	return true;
 }
 
@@ -303,6 +326,12 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 
 	std::string sError;
 	if ( m_pSIdxBuilder && !m_pSIdxBuilder->Done ( sError ) )
+	{
+		m_sError = sError.c_str();
+		return false;
+	}
+
+	if ( m_pKNNBuilder && !m_pKNNBuilder->Save ( GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN ).cstr(), sError ) )
 	{
 		m_sError = sError.c_str();
 		return false;
@@ -386,7 +415,7 @@ bool SiBuilder_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const V
 			return false;
 
 		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuilderStoreAttrs ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		BuildStoreSI ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 	}
 	return true;
 }
@@ -413,7 +442,7 @@ bool SiBuilder_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTrait
 			return false;
 
 		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuilderStoreAttrs ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 	}
 	return true;
 }

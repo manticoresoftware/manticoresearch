@@ -934,7 +934,7 @@ std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAtt
 }
 
 
-void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema )
+void BuildCreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema )
 {
 	int iColumnar = 0;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -954,5 +954,41 @@ void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrCo
 
 		if ( tAttr.IsColumnar() )
 			iColumnar++;
+	}
+}
+
+
+void BuildStoreHistograms ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms )
+{
+	for ( int iAttr=0; iAttr<dAttrs.GetLength(); iAttr++ )
+	{
+		const PlainOrColumnar_t & tSrc = dAttrs[iAttr];
+
+		switch ( tSrc.m_eType )
+		{
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+		{
+			const BYTE * pSrc = nullptr;
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
+			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
+			for ( int iVal=0; iVal<iValues; iVal++ )
+				tHistograms.Insert ( iAttr, pSrc[iVal] );
+		}
+		break;
+
+		case SPH_ATTR_STRING:
+		{
+			const BYTE * pSrc = nullptr;
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
+			SphAttr_t uHash = sphCRC32 ( pSrc, iBytes );
+			tHistograms.Insert ( iAttr, uHash );
+		}
+		break;
+
+		default:
+			tHistograms.Insert ( iAttr, tSrc.Get ( tRowID, pRow, dIterators ) );
+			break;
+		}
 	}
 }

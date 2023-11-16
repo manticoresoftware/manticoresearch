@@ -1077,11 +1077,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 	for ( int i = 0; i < iNumValues; ++i )
 	{
 		dStr << sComma;
-#if __has_include( <charconv>)
-		dStr.SetPos ( std::to_chars ( dStr.end (), dStr.AfterEnd(), pFloatVec[i] ).ptr );
-#else
 		dStr << pFloatVec[i];
-#endif
 	}
 	*dStr.end() = '\0';
 }

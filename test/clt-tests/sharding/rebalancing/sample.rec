@@ -1,7 +1,10 @@
 ––– block: ../base/init –––
-––– block: ../base/start-searchd-1 –––
 ––– input –––
-mysql -h0 -P19306 -e "SELECT 'Hello world'"
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT 'Hello world'"
 ––– output –––
 +-------------+
 | Value       |

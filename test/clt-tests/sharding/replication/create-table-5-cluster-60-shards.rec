@@ -1,12 +1,30 @@
 ––– block: ../base/init –––
-––– block: ../base/start-searchd-1 –––
-––– block: ../base/start-searchd-2 –––
-––– block: ../base/start-searchd-3 –––
-––– block: ../base/start-searchd-4 –––
-––– block: ../base/start-searchd-5 –––
-––– block: ../base/create-cluster-5 –––
 ––– input –––
-mysql -h0 -P19306 -e "create table c:t(id bigint) shards=60 rf=3"
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards=60 rf=3"
 ––– output –––
 ––– input –––
 for i in 1 2 3 4 5; do mysql -h0 -P${i}9306 -e "show tables\G"; done | grep 'Index: t' | sort -V

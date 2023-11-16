@@ -1,21 +1,60 @@
 ––– block: ../base/init –––
-––– block: ../base/start-searchd-1 –––
 ––– input –––
-mysql -h0 -P19306 -e "CREATE TABLE a"; echo $?
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=6
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=7
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=8
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=9
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=10
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE a"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P19306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
 *************************** 1. row ***************************
 Index: a
 Type: rt
 ––– input –––
-mysql -h0 -P19306 -e "create table e(id bigint) shards=10 rf=1"; echo $?
+mysql -h0 -P1306 -e "create table e(id bigint) shards=10 rf=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P19306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
 *************************** 1. row ***************************
 Index: a
@@ -63,15 +102,15 @@ Type: rt
 Index: sharding_table
 Type: rt
 ––– input –––
-mysql -h0 -P19306 -e "create table s SHARDS=10 RF=1"; echo $?
+mysql -h0 -P1306 -e "create table s SHARDS=10 RF=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P19306 -e "create table k(id bigint) SHARDS=10 RF=1"; echo $?
+mysql -h0 -P1306 -e "create table k(id bigint) SHARDS=10 RF=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P19306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
 *************************** 1. row ***************************
 Index: a
@@ -184,21 +223,22 @@ Type: rt
 *************************** 37. row ***************************
 Index: sharding_table
 Type: rt
-––– block: ../base/start-searchd-2 –––
-––– block: ../base/start-searchd-3 –––
-––– block: ../base/create-cluster-3 –––
 ––– input –––
-mysql -h0 -P29306 -e "SHOW TABLES\G"
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G"
 ––– output –––
 ––– input –––
-mysql -h0 -P39306 -e "SHOW TABLES\G"
+mysql -h0 -P3306 -e "SHOW TABLES\G"
 ––– output –––
 ––– input –––
-mysql -h0 -P29306 -e "create table c:m(id bigint) SHARDS=10 RF=2"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:m(id bigint) SHARDS=10 RF=2"
 ––– output –––
 ––– input –––
-mysql -h0 -P39306 -e "create table c:j(id bigint) SHARDS=10 RF=3"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:j(id bigint) SHARDS=10 RF=3"
 ––– output –––
 ––– input –––
-mysql -h0 -P39306 -e "create table c:x(id bigint) SHARDS=10 RF=10"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:x(id bigint) SHARDS=10 RF=10"
 ––– output –––

@@ -360,6 +360,59 @@ class DeleteResponse {
 <!-- end -->
 
 <!-- example delete 4 -->
+Here, documents with `id` matching values from the table named `test` are deleted:
+
+Note that the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+DELETE FROM TEST WHERE id IN (101,102);
+
+SELECT * FROM TEST;
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 2 rows affected (0.00 sec)
+
++------+------+-------------+------+
+| id   | gid  | mva1        | mva2 |
++------+------+-------------+------+
+|  103 | 1003 | 103,204     | 103  |
+|  104 | 1004 | 104,204,205 | 104  |
+|  105 | 1005 | 105,206     | 105  |
++------+------+-------------+------+
+3 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+``` json
+POST /delete -d '
+    {
+        "index":"test",
+        "id": [101,102]
+    }'
+```
+
+<!-- response JSON -->
+
+``` json
+    {
+        "_index":"test",
+        "_id":101,
+        "found":true,
+        "result":"deleted"      
+    }
+```    
+<!-- end -->
+
+<!-- example delete 5 -->
 Manticore SQL allows to use complex conditions for the `DELETE` statement.
 
 For example here we are deleting documents that match full-text query `dummy` and have attribute `mva1` with a value greater than 206 or `mva1` values 100 or 103 from table named `test`:
@@ -393,7 +446,7 @@ Query OK, 4 rows affected (0.00 sec)
 ```
 <!-- end -->
 
-<!-- example delete 5 -->
+<!-- example delete 6 -->
 Here is an example of deleting documents in cluster `cluster`'s table `test`:
 
 

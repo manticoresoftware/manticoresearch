@@ -1080,7 +1080,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 #if __has_include( <charconv>)
 		dStr.SetPos ( std::to_chars ( dStr.end (), dStr.AfterEnd(), pFloatVec[i] ).ptr );
 #else
-		dStr += sph::FtoA ( dStr.end(), pMVA[i] );
+		dStr << pFloatVec[i];
 #endif
 	}
 	*dStr.end() = '\0';

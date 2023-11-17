@@ -1407,7 +1407,9 @@ static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISc
 		const CSphColumnInfo * pAttr = tSchema.GetAttr ( i.m_sName.c_str() );
 		assert(pAttr);
 
-		dDstAttrs.Add ( PlainOrColumnar_t ( *pAttr, iColumnar++ ) );
+		dDstAttrs.Add ( PlainOrColumnar_t ( *pAttr, iColumnar ) );
+		if ( pAttr->IsColumnar() )
+			iColumnar++;
 	}
 }
 

@@ -944,12 +944,7 @@ void BuildCreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<Plai
 		if ( pHistogram )
 		{
 			tHistograms.Add ( std::move ( pHistogram ) );
-			PlainOrColumnar_t & tNewAttr = dAttrsForHistogram.Add();
-			tNewAttr.m_eType = tAttr.m_eAttrType;
-			if ( tAttr.IsColumnar() )
-				tNewAttr.m_iColumnarId = iColumnar;
-			else
-				tNewAttr.m_tLocator = tAttr.m_tLocator;
+			dAttrsForHistogram.Add ( PlainOrColumnar_t ( tAttr, iColumnar ) );
 		}
 
 		if ( tAttr.IsColumnar() )

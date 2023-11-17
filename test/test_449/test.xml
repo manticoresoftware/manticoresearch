@@ -111,6 +111,16 @@ searchd
 	insert into a(b) values ('c');
 	delete from a where b='c';
 	drop table a;
+
+	create table t(title text, mva multi engine='columnar');
+	desc t;
+	show create table t;
+	insert into t values (1,'title1', (1,2,3,4,5));
+	insert into t values (2,'title2', (10,20,30,40,50));
+	select * from t order by id asc;
+	flush ramchunk t;
+	select * from t order by id asc;
+	drop table t;
 </sphinxql>
 </queries>
 

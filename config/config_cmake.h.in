@@ -155,6 +155,9 @@
 /* default name of secondary index shared library */
 #cmakedefine LIB_MANTICORE_SECONDARY "${LIB_MANTICORE_SECONDARY}"
 
+/* default name of knn search shared library */
+#cmakedefine LIB_MANTICORE_KNN "${LIB_MANTICORE_KNN}"
+
 /* define to set custom directory for shared files. Absolute as /usr/local/share/manticore */
 #define FULL_SHARE_DIR "${FULL_SHARE_DIR}"
 

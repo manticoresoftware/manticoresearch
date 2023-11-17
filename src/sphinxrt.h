@@ -21,6 +21,7 @@
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
+#include "knnmisc.h"
 #include "tokenizer/tokenizer.h"
 #include "indexing_sources/source_document.h"
 

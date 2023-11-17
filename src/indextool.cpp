@@ -22,6 +22,7 @@
 #include "tokenizer/charset_definition_parser.h"
 #include "indexcheck.h"
 #include "secondarylib.h"
+#include "knnlib.h"
 #include "detail/indexlink.h"
 
 #include <ctime>
@@ -1212,14 +1213,19 @@ static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * p
 
 int main ( int argc, char ** argv )
 {
-	CSphString sError, sErrorSI;
+	CSphString sError, sErrorSI, sErrorKNN;
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( sErrorSI );
+	bool bKNNError = !InitKNN ( sErrorKNN );
 
 	if ( bColumnarError )
 		fprintf ( stdout, "Error initializing columnar storage: %s", sError.cstr() );
+
 	if ( bSecondaryError )
 		fprintf ( stdout, "Error initializing secondary index: %s", sErrorSI.cstr() );
+
+	if ( bKNNError )
+		fprintf ( stdout, "Error initializing knn index: %s", sErrorKNN.cstr() );
 
 	if ( argc<=1 )
 	{
@@ -1643,6 +1649,8 @@ int main ( int argc, char ** argv )
 	}
 
 	ShutdownColumnar();
+	ShutdownSecondary();
+	ShutdownKNN();
 
 	return 0;
 }

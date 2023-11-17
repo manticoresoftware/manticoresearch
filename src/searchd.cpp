@@ -48,6 +48,7 @@
 #include "index_rotator.h"
 #include "config_reloader.h"
 #include "secondarylib.h"
+#include "knnlib.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
@@ -208,6 +209,7 @@ static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static bool				g_bCwdChanged = false;
 static int				g_iDumpDocs = 1000000000;
 
 // for CLang thread-safety analysis
@@ -219,6 +221,7 @@ ThreadRole HandlerThread; // thread which serves clients
 static CSphString		g_sConfigFile;
 static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
 static CSphString		g_sConfigPath; // for resolve paths to absolute
+static CSphString		g_sExePath;
 
 static auto&			g_bSeamlessRotate	= sphGetSeamlessRotate ();
 
@@ -791,6 +794,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown columnar ...";
 	ShutdownColumnar();
+
+	SHUTINFO << "Shutdown secondary ...";
+	ShutdownSecondary();
+
+	SHUTINFO << "Shutdown knn ...";
+	ShutdownKNN();
 
 	SHUTINFO << "Shutdown listeners ...";
 	for ( auto& dListener : g_dListeners )
@@ -1575,8 +1584,8 @@ void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 		{
 			auto * pAgent = new AgentConn_t;
 			pAgent->m_tDesc.CloneFrom ( dHost );
-			pAgent->m_iMyQueryTimeoutMs = m_iAgentQueryTimeoutMs;
-			pAgent->m_iMyConnectTimeoutMs = m_iAgentConnectTimeoutMs;
+			pAgent->m_iMyQueryTimeoutMs = GetAgentConnectTimeoutMs();
+			pAgent->m_iMyConnectTimeoutMs = GetAgentQueryTimeoutMs();
 			dTarget.Add ( pAgent );
 		}
 }
@@ -1589,6 +1598,27 @@ DistributedIndex_t::~DistributedIndex_t ()
 	m_dAgents.Reset();
 	MultiAgentDesc_c::CleanupOrphaned ();
 };
+
+int DistributedIndex_t::GetAgentConnectTimeoutMs ( bool bRaw ) const
+{
+	return ( ( m_iAgentConnectTimeoutMs || bRaw ) ? m_iAgentConnectTimeoutMs : g_iAgentConnectTimeoutMs );
+}
+
+int DistributedIndex_t::GetAgentQueryTimeoutMs ( bool bRaw ) const
+{
+	return ( ( m_iAgentQueryTimeoutMs || bRaw ) ? m_iAgentQueryTimeoutMs : g_iAgentQueryTimeoutMs );
+}
+
+void DistributedIndex_t::SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs )
+{
+	m_iAgentConnectTimeoutMs = iAgentConnectTimeoutMs;
+}
+
+void DistributedIndex_t::SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs )
+{
+	m_iAgentQueryTimeoutMs = iAgentQueryTimeoutMs;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
@@ -1938,6 +1968,18 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 				}
 			}
 			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+		{
+			int iValues = tReq.GetDword ();
+			BYTE * pData = nullptr;
+			BYTE * pPacked = sphPackPtrAttr ( iValues*sizeof(DWORD), &pData );
+			tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)pPacked );
+			auto * pFloatVec = (float *)pData;
+			while ( iValues-- )
+				sphUnalignedWrite ( pFloatVec++, tReq.GetFloat() );
+		}
+		break;
 
 		case SPH_ATTR_STRINGPTR:
 		case SPH_ATTR_JSON_PTR:
@@ -3444,6 +3486,24 @@ static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
 }
 
 
+static void SendFloatVec ( ISphOutputBuffer & tOut, const BYTE * pData )
+{
+	if ( !pData )
+	{
+		tOut.SendDword(0);
+		return;
+	}
+
+	auto dFloatVec = sphUnpackPtrAttr ( pData );
+	DWORD uValues = dFloatVec.second / sizeof(float);
+	tOut.SendDword(uValues);
+
+	auto pValues = (const float *) dFloatVec.first;
+	while ( uValues-- )
+		tOut.SendFloat ( *pValues++ );
+}
+
+
 static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSchema & tSchema, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
@@ -3456,6 +3516,9 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 
 	case SPH_ATTR_INT64SET_PTR:
 		return SPH_ATTR_INT64SET;
+
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		return SPH_ATTR_FLOAT_VECTOR;
 
 	case SPH_ATTR_STRINGPTR:
 	{
@@ -3522,6 +3585,10 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 		SendMVA ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), tAttr.m_eAttrType==SPH_ATTR_INT64SET_PTR );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		SendFloatVec ( tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
 		break;
 
 	case SPH_ATTR_JSON_PTR:
@@ -4618,8 +4685,7 @@ bool MinimizeSchemas ( AggrResult_t & tRes )
 class FrontendSchemaBuilder_c
 {
 public:
-			FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,
-				const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals );
+			FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,	const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals );
 
 	void	CollectKnownItems();
 	void	AddAttrs();
@@ -4648,8 +4714,7 @@ private:
 };
 
 
-FrontendSchemaBuilder_c::FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,
-		const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals )
+FrontendSchemaBuilder_c::FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems, const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals )
 	: m_tRes ( tRes )
 	, m_tQuery ( tQuery )
 	, m_dItems ( dItems )
@@ -4694,7 +4759,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		const CSphColumnInfo & tCol = m_tRes.m_tSchema.GetAttr(iCol);
 
 		assert ( !tCol.m_sName.IsEmpty() );
-		bool bMagic = ( IsGroupbyMagic ( tCol.m_sName ) || IsSortStringInternal ( tCol.m_sName ) );
+		bool bMagic = IsGroupbyMagic ( tCol.m_sName ) || IsSortStringInternal ( tCol.m_sName );
 
 		if ( !bMagic && tCol.m_pExpr )
 		{
@@ -4914,7 +4979,7 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
 		// checking _PTR attrs only because we should not have and non-ptr attr at this point
-		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 		{
 			tFrontend.m_tLocator = pGroupByCol->m_tLocator;
 			tFrontend.m_eAttrType = pGroupByCol->m_eAttrType;
@@ -7006,8 +7071,8 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				pConn->SetMultiAgent ( pAgent );
 				pConn->m_iStoreTag = iOrderTag++;
 				pConn->m_iWeight = iWeight;
-				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-				pConn->m_iMyQueryTimeoutMs = ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT ? tQuery.m_iAgentQueryTimeoutMs : pDist->m_iAgentQueryTimeoutMs );
+				pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+				pConn->m_iMyQueryTimeoutMs = ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT ? tQuery.m_iAgentQueryTimeoutMs : pDist->GetAgentQueryTimeoutMs() );
 				dRemotes.Add ( pConn );
 			}
 
@@ -8007,8 +8072,8 @@ static VecRefPtrsAgentConn_t GetDistrAgents ( const cDistributedIndexRefPtr_t& p
 	{
 		auto * pConn = new AgentConn_t;
 		pConn->SetMultiAgent ( pAgent );
-		pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-		pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+		pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+		pConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 		tRemotes.Add ( pConn );
 	}
 	return tRemotes;
@@ -10284,8 +10349,8 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		{
 			auto * pConn = new AgentConn_t;
 			pConn->SetMultiAgent ( pAgent );
-			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+			pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+			pConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 			dAgents.Add ( pConn );
 		}
 
@@ -10864,7 +10929,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -10888,7 +10953,7 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 
 	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 		m_dMvas.Add(0);
 
 	SqlInsert_t tDefaultVal;
@@ -10918,20 +10983,37 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 		return false;
 
 	// MVA column? grab the values
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+	switch ( tCol.m_eAttrType )
 	{
-		// collect data from scattered insvals
-		// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
-		int iLen = 0;
-		if ( tVal.m_pVals )
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
 		{
-			tVal.m_pVals->Uniq();
-			iLen = tVal.m_pVals->GetLength();
-		}
+			// collect data from scattered insvals
+			// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
+			int iLen = 0;
+			if ( tVal.m_pVals )
+			{
+				tVal.m_pVals->Uniq();
+				iLen = tVal.m_pVals->GetLength();
+			}
 
-		m_dMvas.Add ( iLen );
-		for ( int j=0; j<iLen; j++ )
-			m_dMvas.Add ( (*tVal.m_pVals)[j] );
+			m_dMvas.Add ( iLen );
+			for ( int j=0; j<iLen; j++ )
+				m_dMvas.Add ( (*tVal.m_pVals)[j].m_iValue );
+		}
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR:
+		{
+			int iLen = tVal.m_pVals ? tVal.m_pVals->GetLength() : 0;
+			m_dMvas.Add ( iLen );
+			for ( int j=0; j<iLen; j++ )
+				m_dMvas.Add ( sphF2DW ( (*tVal.m_pVals)[j].m_fValue ) );
+		}
+		break;
+
+	default:
+		break;
 	}
 
 	SphAttr_t tAttr;
@@ -11916,6 +11998,9 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	if ( tAttr.IsColumnar() )
 		sProps << "columnar";
 
+	if ( tAttr.IsIndexedKNN() )
+		sProps << "knn";
+
 	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
 		sProps << "fast_fetch";
 
@@ -12514,7 +12599,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "Connection from" );
 	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
 //	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
-	tOut.HeadColumn ( "This/prev job time, s" );
+	tOut.HeadColumn ( "This/prev job time" );
 	if ( g_bCpuStats )
 	{
 //		tOut.HeadColumn ( "Work time CPU" );
@@ -12551,7 +12636,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		int64_t tmNow = sphMicroTimer (); // short-term cache
 //		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
 //		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
-		// This/prev job time, s
+		// This/prev job time
 		if ( dThd.m_tmLastJobStartTimeUS < 0 )
 			tOut.PutString ( "-" ); // last job take
 		else if ( dThd.m_tmLastJobDoneTimeUS < 0 )
@@ -12895,21 +12980,19 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * sDistributed,
-	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning,
-	const cServedIndexRefPtr_c & pServed )
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
 	CSphString sError;
 	// checks
 	if ( !pServed )
 	{
-		dFails.Submit ( sIndex, sDistributed, "table not available" );
+		dFails.Submit ( sIndex, szDistributed, "table not available" );
 		return;
 	}
 
 	if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 	{
-		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, szDistributed, sError.cstr() );
 		return;
 	}
 
@@ -12924,7 +13007,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 
 	if ( sError.Length() )
 	{
-		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, szDistributed, sError.cstr() );
 		return;
 	}
 
@@ -13351,6 +13434,14 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 					dRows.PutArray ( dStr, false );
 					break;
 				}
+
+			case SPH_ATTR_FLOAT_VECTOR_PTR:
+			{
+				StringBuilder_c dStr;
+				sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+				dRows.PutArray ( dStr, false );
+				break;
+			}
 
 			case SPH_ATTR_STRINGPTR:
 				{
@@ -18262,7 +18353,7 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		if ( hIndex["agent_connect_timeout"].intval()<=0 )
 			sphWarning ( "table '%s': agent_connect_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentConnectTimeoutMs = hIndex.GetMsTimeMs ( "agent_connect_timeout" );
+			tIdx.SetAgentConnectTimeoutMs ( hIndex.GetMsTimeMs ( "agent_connect_timeout" ) );
 	}
 
 	tIdx.m_bDivideRemoteRanges = hIndex.GetInt ( "divide_remote_ranges", 0 )!=0;
@@ -18272,7 +18363,7 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		if ( hIndex["agent_query_timeout"].intval()<=0 )
 			sphWarning ( "table '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout");
+			tIdx.SetAgentQueryTimeoutMs ( hIndex.GetMsTimeMs ( "agent_query_timeout") );
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );
@@ -19894,6 +19985,7 @@ static void CheckSetCwd () REQUIRES ( MainThread )
 
 	sphLogDebug ( "current working directory changed to '%s'", sDataDir.cstr() );
 	DirMustWritable ( sDataDir );
+	g_bCwdChanged = true;
 }
 
 static void PutPath ( const CSphString & sCwd, const CSphString & sVar, RowBuffer_i & tOut )
@@ -20148,6 +20240,21 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 		fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
+// if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
+static void FixPathAbsolute ( CSphString & sPath )
+{
+	if ( !g_bCwdChanged )
+		return;
+
+	if ( sPath.IsEmpty() || IsPathAbsolute ( sPath ) )
+		return;
+
+	assert ( !g_sExePath.IsEmpty() );
+	CSphString sFullPath;
+	sFullPath.SetSprintf ( "%s/%s", g_sExePath.cstr(), sPath.cstr() );
+
+	sPath = sphNormalizePath ( sFullPath );
+}
 
 void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
@@ -20178,6 +20285,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 	}
 	if ( !g_bLogSyslog )
 	{
+		FixPathAbsolute ( sLog );
 		g_iLogFile = open ( sLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( g_iLogFile<0 )
 		{
@@ -20242,6 +20350,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
 	CSphString sPidFile = v->cstr();
+	FixPathAbsolute ( sPidFile );
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
 		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
@@ -20390,18 +20499,24 @@ static void InitBanner()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	const char * sSiVer = GetSecondaryVersionStr();
+	const char * szSiVer = GetSecondaryVersionStr();
 	CSphString sSi = "";
-	if ( sSiVer )
-		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+	if ( szSiVer )
+		sSi.SetSprintf ( " (secondary %s)", szSiVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr() );
+	const char * szKNNVer = GetKNNVersionStr();
+	CSphString sKNN = "";
+	if ( szKNNVer )
+		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
 	g_sBanner.SetSprintf ( "%s%s", g_sBannerVersion.cstr(), szMANTICORE_BANNER_TEXT );
-	g_sMySQLVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
-	g_sStatusVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
+	g_sMySQLVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	g_sStatusVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
 }
 
-static void CheckSSL ()
+
+static void CheckSSL()
 {
 	// check for SSL inited well
 	for ( const auto & tListener : g_dListeners )
@@ -20474,10 +20589,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CheckWinInstall();
 #endif
 
-	CSphString sError;
+	CSphString sError, sKNNError;
 	// initialize it before other code to fetch version string for banner
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( g_sSecondaryError );
+	bool bKNNError = !InitKNN ( sKNNError );
 	sphCollationInit ();
 
 	InitBanner();
@@ -20487,8 +20603,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
 	if ( bSecondaryError )
 		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
+
+	if ( bKNNError )
+		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
 
 	if ( !sError.IsEmpty() )
 		sError = "";
@@ -20684,9 +20804,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphFatal ( "%s", sError.cstr() );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+	g_sExePath = sphGetCwd();
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();
-	sphConfigureCommon ( hConf ); // this also inits plugins now
+	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
@@ -20719,6 +20840,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptPIDFile )
 	{
 		g_sPidFile = hSearchdpre["pid_file"].cstr();
+		FixPathAbsolute ( g_sPidFile );
 
 		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
@@ -20773,6 +20895,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				g_bQuerySyslog = true;
 			else
 			{
+				FixPathAbsolute ( sQueryLog );
 				g_iQueryLogFile = open ( sQueryLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
 					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );
@@ -20805,7 +20928,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 
 	// init before workpool, as last checks binlog
-	ModifyDaemonPaths ( hSearchd );
+	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );
 	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 
 	// after next line executed we're in mt env, need to take rwlock accessing config.
@@ -20851,7 +20974,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
-	SetServerSSLKeys ( hSearchd ( "ssl_cert" ), hSearchd ( "ssl_key" ), hSearchd ( "ssl_ca" ) );
+	CSphString sSslCert ( hSearchd.GetStr ( "ssl_cert" ) );
+	CSphString sSslKey ( hSearchd.GetStr ( "ssl_key" ) );
+	CSphString sSslCa ( hSearchd.GetStr ( "ssl_ca" ) );
+	FixPathAbsolute ( sSslCert );
+	FixPathAbsolute ( sSslKey );
+	FixPathAbsolute ( sSslCa );
+	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
 	CheckSSL();
 
 	// set up ping service (if necessary) before loading indexes
@@ -20904,7 +21033,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();
 	else
-		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
+		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
+	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
 	{
 		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
@@ -21068,7 +21198,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		CSphString sSQLStateDefault;
 		if ( IsConfigless() )
 			sSQLStateDefault.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
-		if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ), sError ))
+		CSphString sSQLStatePath { hSearchd.GetStr ( "sphinxql_state", sSQLStateDefault.scstr() ) };
+		FixPathAbsolute ( sSQLStatePath );
+		if ( !InitSphinxqlState ( sSQLStatePath, sError ))
 			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 	}
 

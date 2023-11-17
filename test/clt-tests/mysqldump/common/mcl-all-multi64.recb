@@ -1,4 +1,3 @@
-––– block: start-searchd –––
 ––– input –––
 mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-all/multi64.sql
 ––– output –––

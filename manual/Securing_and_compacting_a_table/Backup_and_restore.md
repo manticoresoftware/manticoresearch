@@ -135,6 +135,8 @@ Manticore versions:
 |-|-|
 | `--backup-dir=path` | This is the path to the backup directory where the backup will be stored. The directory must already exist. This argument is required and has no default value. On each backup run, manticore-backup will create a subdirectory in the provided directory with a timestamp in the name (`backup-[datetime]`), and will copy all required tables to it. So the `--backup-dir` is a container for all your backups, and it's safe to run the script multiple times.|
 | `--restore[=backup]` | Restore from `--backup-dir`. Just --restore lists available backups. `--restore=backup` will restore from `<--backup-dir>/backup`. |
+| `--force` | Skip versions check on restore and gracefully restore the backup. |
+| `--disable-telemetry` | Pass this flag in case you want to disable sending anonymized metrics  to Manticore. You can also use environment variable TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Path to Manticore config. This is optional. If it's not passed, a default one for your operating system will be used. It's used to get the host and port to communicate with the Manticore daemon. |
 | `--tables=tbl1,tbl2, ...` | Semicolon-separated list of tables that you want to back up. To back up all tables, omit this argument. All the provided tables must exist in the Manticore instance you are backing up from, or the backup will fail. |
 | `--compress` | Whether the backed up files should be compressed. Not enabled by default. | optional |

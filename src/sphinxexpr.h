@@ -46,6 +46,7 @@ enum ESphAttr
 	SPH_ATTR_JSON		= 12,			///< JSON subset; converted, packed, and stored as string
 	SPH_ATTR_DOUBLE		= 13,			///< floating point number (IEEE 64-bit)
 	SPH_ATTR_UINT64		= 14,			///< unsigned 64-bit integer
+	SPH_ATTR_FLOAT_VECTOR = 15,
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
@@ -59,6 +60,7 @@ enum ESphAttr
 
 	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
 	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
+	SPH_ATTR_FLOAT_VECTOR_PTR,			// in-memory version of FLOAT_VECTOR
 	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
 	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
 	SPH_ATTR_STORED_FIELD
@@ -213,12 +215,11 @@ struct CSphNamedVariant
 
 
 /// string expression traits
-/// can never be evaluated in floats or integers, only StringEval() is allowed
 struct ISphStringExpr : public ISphExpr
 {
-	float		Eval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as float" ); return 0; }
-	int			IntEval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as int" ); return 0; }
-	int64_t		Int64Eval ( const CSphMatch & ) const override { assert ( 0 && "one just does not simply evaluate a string as bigint" ); return 0; }
+	float		Eval ( const CSphMatch & tMatch ) const final;
+	int			IntEval ( const CSphMatch & tMatch ) const final;
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final;
 };
 
 /// hook to extend expressions

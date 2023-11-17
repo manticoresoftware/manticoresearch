@@ -176,6 +176,8 @@ public:
 	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
 	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
 
+	CSphVector<NamedKNNSettings_t> m_dKNN;		///< knn index settings
+
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
 	int GetMinPrefixLen ( bool bWordDict ) const;
 	void SetMinPrefixLen ( int iMinPrefixLen );
@@ -272,6 +274,7 @@ public:
 private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
 	bool			ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError );
+	bool			ParseKNNSettings ( const CSphConfigSection & hIndex, CSphString & sError );
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
 };
 
@@ -363,9 +366,11 @@ bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const 
 
 struct CreateTableAttr_t
 {
-	CSphColumnInfo	m_tAttr;
-	bool			m_bFastFetch = true;
-	bool			m_bStringHash = true;
+	CSphColumnInfo			m_tAttr;
+	bool					m_bFastFetch = true;
+	bool					m_bStringHash = true;
+	bool					m_bKNN = false;
+	knn::IndexSettings_t	m_tKNN;
 };
 
 struct NameValueStr_t
@@ -411,6 +416,7 @@ private:
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetDefaults();
 };
 

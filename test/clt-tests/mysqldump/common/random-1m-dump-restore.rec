@@ -1,4 +1,3 @@
-––– block: start-searchd –––
 ––– input –––
 ./test/clt-tests/mysqldump/scripts/generate-1m-records.sh | mysql -h0 -P9306
 ––– output –––
@@ -84,7 +83,7 @@ mysql -h0 -P9306 -e "select * from t where a = 18530 order by id asc limit 20"
 | 927293 | aaaaaaa | 18530 | 2061602176.000000 | CEj  | {"a":[1692024962,226190597],"b":244362696}  | 704309221,941341928,1976830946   |
 +--------+---------+-------+-------------------+------+---------------------------------------------+----------------------------------+
 ––– input –––
-mysqldump -h0 -P9306 Manticore > /tmp/all-databases.sql
+mysqldump -h0 -P9306 Manticore 2>/dev/null 1> /tmp/all-databases.sql
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "drop table t"

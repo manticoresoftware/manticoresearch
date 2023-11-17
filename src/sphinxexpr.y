@@ -57,6 +57,7 @@
 %token <iAttrLocator>	TOK_COLUMNAR_STRING
 %token <iAttrLocator>	TOK_COLUMNAR_UINT32SET
 %token <iAttrLocator>	TOK_COLUMNAR_INT64SET
+%token <iAttrLocator>	TOK_COLUMNAR_FLOATVEC
 
 
 %token	TOK_ATWEIGHT
@@ -130,6 +131,7 @@ attr:
 	| TOK_COLUMNAR_STRING 			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_STRING, $1 ); }
 	| TOK_COLUMNAR_UINT32SET 		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_UINT32SET, $1 ); }
 	| TOK_COLUMNAR_INT64SET 		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_INT64SET, $1 ); }
+	| TOK_COLUMNAR_FLOATVEC			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_FLOATVEC, $1 ); }
 	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
 	;

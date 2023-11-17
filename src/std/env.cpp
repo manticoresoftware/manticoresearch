@@ -89,7 +89,7 @@ CSphString GET_GALERA_FULLPATH()
 	return sResult;
 }
 
-CSphString GET_COLUMNAR_FULLPATH()
+CSphString GetColumnarFullpath()
 {
 	CSphString sResult;
 	const char* szEnv = getenv ( "LIB_MANTICORE_COLUMNAR" );
@@ -97,10 +97,11 @@ CSphString GET_COLUMNAR_FULLPATH()
 		sResult = szEnv;
 	else
 		sResult.SetSprintf ( "%s/" LIB_MANTICORE_COLUMNAR, GET_MANTICORE_MODULES() );
+
 	return sResult;
 }
 
-CSphString GET_SECONDARY_FULLPATH()
+CSphString GetSecondaryFullpath()
 {
 	CSphString sResult;
 	const char* szEnv = getenv ( "LIB_MANTICORE_SECONDARY" );
@@ -108,9 +109,21 @@ CSphString GET_SECONDARY_FULLPATH()
 		sResult = szEnv;
 	else
 		sResult.SetSprintf ( "%s/" LIB_MANTICORE_SECONDARY, GET_MANTICORE_MODULES() );
+
 	return sResult;
 }
 
+CSphString GetKNNFullpath()
+{
+	CSphString sResult;
+	const char* szEnv = getenv ( "LIB_MANTICORE_KNN" );
+	if ( szEnv )
+		sResult = szEnv;
+	else
+		sResult.SetSprintf ( "%s/" LIB_MANTICORE_KNN, GET_MANTICORE_MODULES() );
+
+	return sResult;
+}
 
 CSphString GET_ICU_DATA_DIR()
 {

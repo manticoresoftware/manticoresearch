@@ -1,30 +1,29 @@
-––– block: start-searchd –––
 ––– input –––
-mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-all/json.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/no-mcl/json.sql
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e 'select * from mcl_all_json limit -1'
+mysql -h0 -P9306 -e 'select * from no_mcl_json limit -1'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-all/json-batch-1.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/no-mcl/json-batch-1.sql
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e 'flush ramchunk mcl_all_json'
+mysql -h0 -P9306 -e 'flush ramchunk no_mcl_json'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-all/json-batch-2.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/no-mcl/json-batch-2.sql
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e 'flush ramchunk mcl_all_json'
+mysql -h0 -P9306 -e 'flush ramchunk no_mcl_json'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/mcl-all/json-batch-3.sql
+mysql -h0 -P9306 < test/clt-tests/mysqldump/dumps/no-mcl/json-batch-3.sql
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e 'flush table mcl_all_json'
+mysql -h0 -P9306 -e 'flush table no_mcl_json'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e 'select * from mcl_all_json limit 20'
+mysql -h0 -P9306 -e 'select * from no_mcl_json limit 20'
 ––– output –––
 +------+---------------------------------------------------------------------------------------------+
 | id   | value                                                                                       |
@@ -51,7 +50,7 @@ mysql -h0 -P9306 -e 'select * from mcl_all_json limit 20'
 |   18 | {"flower":"Rose","color":"Red","symbol":"Love","origin":"Asia"}                             |
 +------+---------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e 'select * from mcl_all_json limit -1'
+mysql -h0 -P9306 -e 'select * from no_mcl_json limit -1'
 ––– output –––
 +------+---------------------------------------------------------------------------------------------+
 | id   | value                                                                                       |
@@ -78,7 +77,7 @@ mysql -h0 -P9306 -e 'select * from mcl_all_json limit -1'
 |   20 | {"computer":"MacBook Pro","manufacturer":"Apple","year":2021,"OS":"macOS"}                  |
 +------+---------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from mcl_all_json'
+mysql -h0 -P9306 -e 'select /*!40001 SQL_NO_CACHE */ * from no_mcl_json'
 ––– output –––
 +------+---------------------------------------------------------------------------------------------+
 | id   | value                                                                                       |

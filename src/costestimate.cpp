@@ -373,7 +373,7 @@ float CostEstimate_c::CalcQueryCost()
 	bool bFirstDocsAssigned = false;
 
 	float fCost = 0.0f;
-	float fDocsLeft = 1.0f;
+	float fDocsLeft = m_tCtx.m_fDocsLeft;
 	for ( int i = 0; i < GetNumIndexes(); i++ )
 	{
 		const auto & tIndex = GetIndex(i);

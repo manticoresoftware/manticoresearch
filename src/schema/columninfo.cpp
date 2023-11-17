@@ -17,7 +17,6 @@
 #include "indexing_sources/source_stats.h"
 #include "match.h"
 
-
 CSphColumnInfo::CSphColumnInfo ( const char* sName, ESphAttr eType )
 	: m_sName ( sName )
 	, m_eAttrType ( eType )
@@ -63,6 +62,12 @@ bool CSphColumnInfo::IsColumnarExpr() const
 bool CSphColumnInfo::IsStoredExpr() const
 {
 	return m_pExpr.Ptr() && m_pExpr->IsStored();
+}
+
+
+bool CSphColumnInfo::IsIndexedKNN() const
+{
+	return m_uAttrFlags & ATTR_INDEXED_KNN;
 }
 
 

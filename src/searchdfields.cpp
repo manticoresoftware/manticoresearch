@@ -157,8 +157,8 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 			{
 				auto * pConn = new AgentConn_t;
 				pConn->SetMultiAgent ( pAgent );
-				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+				pConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+				pConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 				pConn->m_pResult = std::make_unique<RemoteFieldsAnswer_t>();
 				dRemotes.Add ( pConn );
 			}

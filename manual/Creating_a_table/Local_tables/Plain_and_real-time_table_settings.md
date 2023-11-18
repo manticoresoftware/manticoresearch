@@ -43,6 +43,8 @@ table <table name> {
   [rt_attr_multi_64 = <another multi-bigint (MVA) field name>]
   [rt_attr_float = <float field name>]
   [rt_attr_float = <another float field name>]
+  [rt_attr_float_vector = <float vector field name>]
+  [rt_attr_float_vector = <another float vector field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -269,6 +271,16 @@ Declares floating point attributes with single precision, 32-bit IEEE 754 format
 
 Value: field name. Multiple records allowed.
 
+#### rt_attr_float_vector
+
+```ini
+rt_attr_float_vector = image_vector
+```
+
+Declares a vector of floating-point values.
+
+Value: field name. Multiple records allowed.
+
 #### rt_attr_bool
 
 ```ini
@@ -416,6 +428,7 @@ For more information on data types, see [more about data types here](../../Creat
 | [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| integer	 | int, uint |
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| big integer	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | float  |   |
+| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | a vector of float values  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | multi-integer |   |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | multi-bigint  |   |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | boolean |   |

@@ -12503,7 +12503,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 11;
+	int iColCount = 10;
 	if ( bAll )
 		iColCount += 1;
 	if ( g_bCpuStats )
@@ -12524,7 +12524,6 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		tOut.HeadColumn ( "CPU activity", MYSQL_COL_FLOAT);
 	}
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
-	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "Thread status" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
@@ -12572,15 +12571,12 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		tOut.PutNumAsString ( dThd.m_iTotalJobsDone ); // jobs done
 		if ( dThd.m_tmLastJobStartTimeUS<0 )
 		{
-			tOut.PutString ( "-" ); // last job take
 			tOut.PutString ( "idling" ); // idle for
 		} else if ( dThd.m_tmLastJobDoneTimeUS<0 )
 		{
-			tOut.PutTimeAsString ( tmNow-dThd.m_tmLastJobStartTimeUS ); // last job take
 			tOut.PutString ( "working" ); // idle for
 		} else
 		{
-			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS-dThd.m_tmLastJobStartTimeUS ); // last job take
 			tOut.PutString ( "idling" ); // notice, just 'idling' instead of 'idling for N seconds'. So, value of dThd.m_tmLastJobDoneTimeUS is never more displayed.
 		}
 

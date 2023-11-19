@@ -2269,14 +2269,17 @@ class SphinxConfig
                     '/connect and query timed out/', // also windows
                     '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
                     '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end',
-                    '/(.* error: no AF_INET address found for:.*, error)(.*)/'
+                    '/(.* error: no AF_INET address found for:.*, error)(.*)/',
+                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/'
+
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "\$end",
-                    "$1: substituted"
+                    "$1: substituted",
+                    "$1",
                 ], $s );
 		return $s;
 	}
@@ -4160,8 +4163,10 @@ class SphinxConfig
 			}
 		}
 
-		$searchdlog = $sd_split_logs ? testdir($this->_sd_log) : $sd_log;
-		fwrite ( $fp, "\tlog			= $searchdlog\n" );
+		if ( $sd_split_logs )
+		    fwrite ( $fp, "\tlog			= {$this->_sd_log}\n" );
+		else
+            fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tnetwork_timeout= $sd_network_timeout\n" );
 		fwrite ( $fp, "\tmax_connections	= $sd_max_children\n" );
@@ -4678,7 +4683,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$error_agent = "error_".$agent_id.".txt";
-				$config->SetAgent ( $agents [$i], $i );
+				$config->SetAgent ( $agents [$i], 0 );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;

@@ -61,7 +61,7 @@ StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes
 {
 	StrVec_t dNodes;
 	TlsMsg::ResetErr();
-	VecAgentDesc_t dDesc = GetDescAPINodes ( dClusterNodes );
+	VecAgentDesc_t dDesc = GetDescAPINodes ( dClusterNodes, Resolve_e::QUICK );
 	if ( dDesc.IsEmpty() )
 	{
 		if ( TlsMsg::HasErr() )

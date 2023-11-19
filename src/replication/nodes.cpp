@@ -56,9 +56,24 @@ CSphString GetStringAddr ( const ListenerDesc_t& tListen )
 	return sAddr.data();
 }
 
+template<Resolve_e> struct Wait_T
+{
+	inline static constexpr int m_dMultipliers[] { 1, 1, 1 };
+	inline static constexpr int m_iTimeoutMs = g_iAnyNodesTimeoutMs;
+	inline static constexpr int m_iMultipliers = sizeof ( m_dMultipliers ) / sizeof ( int );
+};
+
+template<>
+struct Wait_T<Resolve_e::SLOW>
+{
+	inline static constexpr int m_dMultipliers[] { 1, 2, 2, 3, 3, 4, 4, 6, 6, 10, 10, 20, 30, 40, 50, 60, 70, 100, 100, 100 };
+	inline static constexpr int m_iTimeoutMs = g_iNodeRetryWaitMs;
+	inline static constexpr int m_iMultipliers = sizeof ( m_dMultipliers ) / sizeof ( int );
+};
+
 // get nodes of specific type from string
-template<typename PROC>
-class ISphDescIterator_T : public PROC
+template<typename PROC, Resolve_e EWAIT>
+class ISphDescIterator_T : public PROC, public Wait_T<EWAIT>
 {
 public:
     template<typename... V>
@@ -70,21 +85,25 @@ public:
 		if ( dNodes.IsEmpty() )
 			return TlsMsg::Err ( "empty nodes list" );
 
-		for ( int iRetry = 0; iRetry < g_iNodeRetry; ++iRetry )
+		int64_t tmStart = sphMicroTimer();
+
+		if ( dNodes.all_of ( [this] ( const auto& sNode ) { return PROC::SetNode ( sNode.cstr() ); } ) )
+			return true;
+
+		int iRetry = 0;
+		for ( int iMultiplier : Wait_T<EWAIT>::m_dMultipliers )
 		{
+			++iRetry;
+			PROC::ResetNodes();
+			TlsMsg::ResetErr();
+			// should wait and retry for DNS set
+			Threads::Coro::SleepMsec ( Wait_T<EWAIT>::m_iTimeoutMs * iMultiplier );
+
 			if ( dNodes.all_of ( [this] ( const auto& sNode ) { return PROC::SetNode ( sNode.cstr() ); } ) )
 				return true;
-
-			if ( iRetry + 1 >= g_iNodeRetry )
-				break;
-
-			TlsMsg::ResetErr();
-			PROC::ResetNodes();
-			// should wait and retry for DNS set
-			Threads::Coro::SleepMsec ( g_iAnyNodesTimeoutMs );
 		}
 
-		return PROC::IsValid();
+		return PROC::IsValid() || TlsMsg::Err ( "%s; in %d retries within %.3f sec", TlsMsg::szError(), iRetry, ( sphMicroTimer() - tmStart ) / 1000000.0f );
 	}
 
 	bool ProcessNodes ( const char* szNodes )
@@ -118,9 +137,8 @@ public:
 		if ( MyIncomingApiAddrBeginsWith ( sNode.cstr() ) )
 			return true;
 
-		CSphString sError;
+		TLS_MSG_STRING ( sError );
 		ListenerDesc_t tListen = ParseListener ( sNode.cstr(), &sError );
-		TlsMsg::Err ( sError );
 
 		if ( tListen.m_eProto == Proto_e::UNKNOWN )
 			return false;
@@ -142,13 +160,21 @@ public:
 	}
 };
 
+template<Resolve_e eSpeed>
+inline static void ProcessNodes ( const VecTraits_T<CSphString>& dNodes, VecAgentDesc_t& dApiNodes )
+{
+	ISphDescIterator_T<AgentDescIterator_c, eSpeed> tIt { dApiNodes };
+	tIt.ProcessNodes ( dNodes );
+}
 
-VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString>& dNodes )
+VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString>& dNodes, Resolve_e eSpeed )
 {
 	TlsMsg::ResetErr();
 	VecAgentDesc_t dApiNodes;
-	ISphDescIterator_T<AgentDescIterator_c> tIt { dApiNodes };
-	tIt.ProcessNodes ( dNodes );
+	if ( eSpeed == Resolve_e::QUICK )
+		ProcessNodes<Resolve_e::QUICK> ( dNodes, dApiNodes );
+	else
+		ProcessNodes<Resolve_e::SLOW> ( dNodes, dApiNodes );
 	if ( TlsMsg::HasErr() )
 		sphLogDebugRpl ( "node parse error: %s", TlsMsg::szError() );
 	return dApiNodes;
@@ -199,9 +225,8 @@ public:
 
 	bool SetNode ( const CSphString& sNode )
 	{
-		CSphString sError;
+		TLS_MSG_STRING( sError );
 		ListenerDesc_t tListen = ParseResolveListener ( sNode.cstr(), m_bResolve, &sError );
-		TlsMsg::Err ( sError );
 
 		if ( tListen.m_eProto == Proto_e::UNKNOWN )
 			return false;
@@ -220,7 +245,7 @@ public:
 StrVec_t FilterNodesByProto ( const VecTraits_T<CSphString>& dSrcNodes, Proto_e eProto, bool bResolve )
 {
 	TlsMsg::ResetErr();
-	ISphDescIterator_T<ListenerProtocolIterator_c> tIt ( eProto, bResolve );
+	ISphDescIterator_T<ListenerProtocolIterator_c, Resolve_e::QUICK> tIt ( eProto, bResolve );
 	tIt.ProcessNodes ( dSrcNodes );
 	return tIt.GetNodes();
 }

@@ -24,6 +24,7 @@ using VecAgentDesc_t = CSphVector<AgentDesc_t>;
 StrVec_t ParseNodesFromString ( CSphString sNodes );
 
 // collect listener API with external address
-VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString> & dNodes );
+enum class Resolve_e { QUICK, SLOW };
+VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString> & dNodes, Resolve_e eSpeed );
 
 StrVec_t FilterNodesByProto ( const VecTraits_T<CSphString> & dSrcNodes, Proto_e eProto, bool bResolve = true );

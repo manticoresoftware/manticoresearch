@@ -18,6 +18,8 @@
 
 bool StrEq ( const char* l, const char* r );
 bool StrEqN ( const char* l, const char* r );
+bool StrEq ( Str_t l, const char* r );
+bool StrEqN ( Str_t l, const char* r );
 
 
 /// immutable C string proxy
@@ -73,6 +75,11 @@ public:
 		return StrEq ( t, m_sValue );
 	}
 
+	inline bool operator== ( Str_t t ) const
+	{
+		return StrEq ( t, m_sValue );
+	}
+
 	inline bool operator== ( const CSphString& t ) const
 	{
 		return operator== ( t.cstr() );
@@ -84,6 +91,11 @@ public:
 	}
 
 	bool operator!= ( const char* t ) const
+	{
+		return !operator== ( t );
+	}
+
+	bool operator!= ( Str_t t ) const
 	{
 		return !operator== ( t );
 	}

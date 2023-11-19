@@ -9,6 +9,7 @@ ADD_LIBRARY ( repli_stuff STATIC wsrep_cxx.cpp wsrep_cxx.h
 		cluster_index_add_local.h cluster_index_add_local.cpp
 		cluster_synced.h cluster_synced.cpp
 		cluster_update_nodes.h cluster_update_nodes.cpp
+		grastate.h grastate.cpp
 		commit_monitor.h commit_monitor.cpp
 		common.h
 		configuration.cpp

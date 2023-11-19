@@ -32,6 +32,7 @@
 #include "replication/cluster_update_nodes.h"
 #include "replication/cluster_synced.h"
 #include "replication/replicate_index.h"
+#include "replication/grastate.h"
 
 #if !_WIN32
 // MAC-specific header
@@ -560,7 +561,7 @@ ReplicationCluster_t::~ReplicationCluster_t()
 
 	sphLogDebugRpl ( "deleting provider of cluster %s", m_sName.cstr() );
 	SafeDelete ( m_pProvider );
-	sphLogDebugRpl ( "cluster '%s' finished, cluster deleted, lib %p unloaded", m_sName.scstr(), m_pProvider );
+	sphLogDebugRpl ( "cluster '%s' finished, cluster deleted", m_sName.scstr() );
 }
 
 // add 'RPL' flag - i.e., that we're working in replication
@@ -1202,74 +1203,6 @@ static bool ClusterCheckPath ( const CSphString& sPath, const char* szCluster, b
 	return true;
 }
 
-// set safe_to_bootstrap: 1 at cluster/grastate.dat for Galera to start properly
-// fixme! m.b. refactor & reuse Jugglefile from index?
-static bool NewClusterForce ( const CSphString & sPath )
-{
-	using namespace TlsMsg;
-	CSphString sClusterState;
-	sClusterState.SetSprintf ( "%s/grastate.dat", sPath.cstr() );
-	CSphString sNewState;
-	sNewState.SetSprintf ( "%s/grastate.dat.new", sPath.cstr() );
-	CSphString sOldState;
-	sOldState.SetSprintf ( "%s/grastate.dat.old", sPath.cstr() );
-	const auto sPattern = FROMS ( "safe_to_bootstrap" );
-	const auto sSafeMsg = FROMS ( "safe_to_bootstrap: 1" );
-
-	// cluster starts well without grastate.dat file
-	if ( !sphIsReadable ( sClusterState ) )
-		return true;
-
-	CSphAutoreader tReader;
-	CSphWriter tWriter;
-	{
-		KeepError_c sLegacyError;
-		if ( !tReader.Open ( sClusterState, sLegacyError ) )
-			return false;
-
-		if ( !tWriter.OpenFile ( sNewState, sLegacyError ) )
-			return false;
-
-		CSphFixedVector<char> dBuf { 2048 };
-		SphOffset_t iStateSize = tReader.GetFilesize();
-		while ( tReader.GetPos() < iStateSize )
-		{
-			int iLineLen = tReader.GetLine ( dBuf.Begin(), (int)dBuf.GetLengthBytes() );
-			// replace value of safe_to_bootstrap to 1
-			if ( iLineLen > sPattern.second && strncmp ( dBuf.Begin(), sPattern.first, sPattern.second ) == 0 )
-				tWriter.PutBlob ( sSafeMsg );
-			else
-				tWriter.PutBytes ( dBuf.Begin(), iLineLen );
-			tWriter.PutByte ( '\n' );
-		}
-
-		if ( tWriter.IsError() )
-			return false;
-	}
-
-	if ( tReader.GetErrorFlag() )
-		return Err ( tReader.GetErrorMessage() );
-
-	tReader.Close();
-	tWriter.CloseFile();
-
-	if ( sph::rename ( sClusterState.cstr(), sOldState.cstr() ) != 0 )
-		return Err ( "failed to rename %s to %s", sClusterState.cstr(), sOldState.cstr() );
-
-	if ( sph::rename ( sNewState.cstr(), sClusterState.cstr() ) != 0 )
-		return Err ( "failed to rename %s to %s", sNewState.cstr(), sClusterState.cstr() );
-
-	::unlink ( sOldState.cstr() );
-	return true;
-}
-
-// clean up Galera files at cluster path to start new and fresh cluster again
-static void NewClusterClean ( const CSphString & sPath )
-{
-	for ( const char * sFile : { "grastate.dat", "galera.cache" } )
-		::unlink ( SphSprintf ( "%s/%s", sPath.cstr(), sFile ).cstr() );
-}
-
 static ReplicationCluster_t* MakeClusterOffline ( ClusterDesc_t tDesc )
 {
 	auto tPort = PortRange::AcquirePort();
@@ -1346,12 +1279,16 @@ static bool ClusterDescOk ( const ClusterDesc_t& tDesc, bool bForce ) noexcept
 		return false;
 	}
 
-	// set safe_to_bootstrap to 1 into grastate.dat file at cluster path
-	if ( bForce && !NewClusterForce ( GetDatadirPath ( tDesc.m_sPath ) ) )
+	if ( !bForce )
+		return true;
+
+	auto sDataDirPath = GetDatadirPath ( tDesc.m_sPath );
+	if ( !NewClusterForce ( sDataDirPath ) || !CheckClusterNew ( sDataDirPath ) )
 	{
-		sphWarning ( "%s, cluster '%s' skipped", TlsMsg::szError(), tDesc.m_sName.cstr() );
+		sphWarning ( "Cluster %s: %s, skipped", tDesc.m_sName.cstr(), TlsMsg::szError() );
 		return false;
 	}
+
 	return true;
 }
 
@@ -1565,8 +1502,10 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( !tDesc )
 		return false;
 
+	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( dNames ).cstr() );
+
 	// need to clean up Galera system files left from previous cluster
-	NewClusterClean ( GetDatadirPath ( tDesc->m_sPath ) );
+	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
 
 	ReplicationClusterRefPtr_c pCluster { MakeCluster ( tDesc.value(), BOOTSTRAP_E::NO ) };
 	if ( !pCluster )
@@ -1620,7 +1559,9 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 		return TlsMsg::Err ( "failed to create desc: %s", TlsMsg::szError() );
 
 	// need to clean up Galera system files left from previous cluster
-	NewClusterClean ( GetDatadirPath ( tDesc->m_sPath ) );
+	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
+
+	sphLogDebugRpl ( "creating cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( dNames ).cstr() );
 
 	ReplicationClusterRefPtr_c pCluster { MakeCluster ( tDesc.value(), BOOTSTRAP_E::YES ) };
 	if ( !pCluster )
@@ -1752,7 +1693,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	// ok for just created cluster (wo nodes) to add existed index
 	if ( !dNodes.IsEmpty() )
 	{
-		VecAgentDesc_t dDesc = GetDescAPINodes ( dNodes );
+		VecAgentDesc_t dDesc = GetDescAPINodes ( dNodes, Resolve_e::QUICK );
 		if ( TlsMsg::HasErr() )
 			return false;
 
@@ -1819,7 +1760,7 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 // send local indexes to remote nodes via API
 bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID )
 {
-	auto dDesc = GetDescAPINodes ( ParseNodesFromString ( sNode ) );
+	auto dDesc = GetDescAPINodes ( ParseNodesFromString ( sNode ), Resolve_e::SLOW );
 	if ( dDesc.IsEmpty() )
 	{
 		if ( TlsMsg::HasErr() )

@@ -38,7 +38,7 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes ), GetQueryTimeoutForReplication(), tRequest );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tRequest );
 	if ( dAgents.IsEmpty() )
 		return false;
 

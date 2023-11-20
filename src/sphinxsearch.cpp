@@ -2079,6 +2079,7 @@ bool FactorPool_c::FlushEntry ( SphFactorHashEntry_t * pEntry )
 
 void FactorPool_c::Flush()
 {
+	[[maybe_unused]] int iUsed = 0;
 	ARRAY_FOREACH ( i, m_dHash )
 	{
 		SphFactorHashEntry_t * pEntry = m_dHash[i];
@@ -2086,12 +2087,20 @@ void FactorPool_c::Flush()
 		{
 			SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 			bool bHead = !pEntry->m_pPrev;
+
+#ifndef NDEBUG
+			if ( pEntry->m_iRefCount )
+				iUsed++;
+#endif
+
 			if ( FlushEntry(pEntry) && bHead )
 				m_dHash[i] = pNext;
 
 			pEntry = pNext;
 		}
 	}
+
+	assert ( !m_dHash.GetLength() || iUsed+MAX_BLOCK_DOCS<=m_dHash.GetLength() );
 }
 
 
@@ -3996,13 +4005,16 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 template <bool NEED_PACKEDFACTORS, bool HANDLE_DUPES>
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 {
-	if_const ( eType!=EXTRA_SET_BLOBPOOL && !NEED_PACKEDFACTORS )
+	if_const ( !( eType==EXTRA_SET_BLOBPOOL || eType==EXTRA_SET_COLUMNAR ) && !NEED_PACKEDFACTORS )
 		return false;
 
 	switch ( eType )
 	{
 		case EXTRA_SET_BLOBPOOL:
 			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, *ppResult );
+			return true;
+		case EXTRA_SET_COLUMNAR:
+			m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, *ppResult );
 			return true;
 		case EXTRA_SET_POOL_CAPACITY:
 			m_iPoolMatchCapacity = *(int*)ppResult;
@@ -4687,6 +4699,9 @@ CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 
 	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<=SPH_QUERY_PARAGRAPH )
 		return szNodeNames [ pNode->GetOp()-SPH_QUERY_AND ];
+
+	if ( pNode->GetOp()==SPH_QUERY_REGEX )
+		return "REGEX";
 
 	CSphString sTmp;
 	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );

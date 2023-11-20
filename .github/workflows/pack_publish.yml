@@ -243,7 +243,7 @@ jobs:
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
           name: win_installer
           path: build/manticore-*.exe

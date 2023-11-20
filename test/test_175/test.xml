@@ -306,7 +306,7 @@ create table table_quorum_tail_2
 	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/6 like ' );
 	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/7 like ' );
 
-	select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount;
+	select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount, cutoff=0;
 	</sphinxql>
 
 	<!-- regression - expand_keywords got lost for disk chunks of RT ndex -->

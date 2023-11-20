@@ -18,7 +18,8 @@
 
 #include <utility>
 
-enum ESphExt : BYTE {
+enum ESphExt : BYTE
+{
 	SPH_EXT_SPH,
 	SPH_EXT_SPA,
 	SPH_EXT_SPB,
@@ -35,6 +36,7 @@ enum ESphExt : BYTE {
 	SPH_EXT_SPL,
 	SPH_EXT_SETTINGS,
 	SPH_EXT_SPIDX,
+	SPH_EXT_SPKNN,
 
 	SPH_EXT_TOTAL
 };

@@ -67,7 +67,6 @@ struct ExtraSortExpr_t
 
 /// parses sort clause, using a given schema
 /// fills eFunc and tState and optionally sError, returns result code
-ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * sClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState,
-	CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, CSphString & sError );
+ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * sClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, CSphString & sError );
 
 #endif // _sortsetup_

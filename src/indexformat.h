@@ -117,6 +117,7 @@ public:
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
 	void								GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const override;
 	void								GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const override;
+	void								ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const override;
 
 	void								SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const override;
 	void								SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const override;

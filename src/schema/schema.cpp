@@ -356,7 +356,7 @@ bool CSphSchema::IsReserved ( const char* szToken )
 	static const char * dReserved[] =
 	{
 		"AND", "AS", "BY", "COLUMNARSCAN", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
-		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "IS", "LIMIT",
+		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "IS", "KNN", "LIMIT",
 		"MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
 		"OFFSET", "OR", "ORDER", "REGEX", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
 		"TRUE", NULL
@@ -561,6 +561,23 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 }
 
 
+void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
+{
+	SmallStringHash_T<int> hKNN;
+	ARRAY_FOREACH ( i, tSettings.m_dKNN )
+		hKNN.Add ( i, tSettings.m_dKNN[i].m_sName );
+
+	for ( auto & tAttr : m_dAttrs )
+	{
+		if ( !hKNN.Exists ( tAttr.m_sName ) )
+			continue;
+
+		int iId = hKNN[tAttr.m_sName];
+		tAttr.m_tKNN = tSettings.m_dKNN[iId];
+	}
+}
+
+
 void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings )
 {
 	bool bAllFieldsStored = false;
@@ -586,7 +603,10 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, St
 	}
 
 	if ( !bPQ )
+	{
 		SetupColumnarFlags ( tSettings, pWarnings );
+		SetupKNNFlags(tSettings);
+	}
 
 	bool bAllNonStored = false;
 	SmallStringHash_T<int> hColumnarNonStored;
@@ -631,6 +651,12 @@ bool CSphSchema::HasColumnarAttrs() const
 bool CSphSchema::HasNonColumnarAttrs() const
 {
 	return m_dAttrs.any_of ( [] ( const CSphColumnInfo& tAttr ) { return !tAttr.IsColumnar(); } );
+}
+
+
+bool CSphSchema::HasKNNAttrs() const
+{
+	return m_dAttrs.any_of ( [] ( const CSphColumnInfo& tAttr ) { return tAttr.IsIndexedKNN(); } );
 }
 
 

@@ -101,7 +101,7 @@ void		ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter
 
 std::unique_ptr<FilenameBuilder_i> CreateFilenameBuilder ( const char * szIndex );
 
-void		ModifyDaemonPaths ( CSphConfigSection & hSearchd );
+void		ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnPathFix = nullptr );
 CSphString	GetDataDirInt();
 bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();

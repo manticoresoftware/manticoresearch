@@ -684,8 +684,6 @@ struct DistributedIndex_t : public ISphRefcountedMT
 {
 	CSphVector<MultiAgentDescRefPtr_c> m_dAgents;	///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
-	int m_iAgentConnectTimeoutMs	{ g_iAgentConnectTimeoutMs };	///< in msec
-	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };		///< in msec
 	int m_iAgentRetryCount			= 0;			///< overrides global one
 	bool m_bDivideRemoteRanges		= false;		///< whether we divide big range onto agents or not
 	HAStrategies_e m_eHaStrategy	= HA_DEFAULT;	///< how to select the best of my agents
@@ -715,10 +713,18 @@ struct DistributedIndex_t : public ISphRefcountedMT
 				pFunc ( dHost );
 	}
 
+	int GetAgentConnectTimeoutMs ( bool bRaw=false ) const;
+	int GetAgentQueryTimeoutMs ( bool bRaw=false ) const;
+	void SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs );
+	void SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs );
+
 private:
 	~DistributedIndex_t() override;
 
 	mutable SharedPtr_t<CSphIndex>		m_pRtMadeFromDistrIndex;
+
+	int m_iAgentConnectTimeoutMs	= 0;	///< in msec, 0 means g_iAgentConnectTimeoutMs
+	int m_iAgentQueryTimeoutMs		= 0;	///< in msec, 0 means g_iAgentQueryTimeoutMs
 };
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;

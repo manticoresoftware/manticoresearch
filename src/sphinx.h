@@ -486,6 +486,10 @@ struct CSphQuery
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
+	CSphString		m_sKNNAttr;					///< which attr to use for KNN search (enables KNN if not empty)
+	int				m_iKNNK = 0;				///< KNN K
+	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
+
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
 	bool			m_bSimplify = false;		///< whether to apply boolean simplification
@@ -676,13 +680,6 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 // ATTRIBUTE UPDATE QUERY
 /////////////////////////////////////////////////////////////////////////////
-
-struct TypedAttribute_t
-{
-	CSphString	m_sName;
-	ESphAttr	m_eType;
-};
-
 
 struct CSphAttrUpdate
 {

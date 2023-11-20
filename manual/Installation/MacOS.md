@@ -19,8 +19,8 @@ If you plan to use [indexer](../Creating_a_table/Local_tables/Plain_table.md) to
 ###### Development packages
 If you prefer "Nightly" (development) versions do:
 ```bash
-brew tap manticoresoftware/tap
-brew install manticoresoftware/tap/manticoresearch-dev manticoresoftware/tap/manticore-extra-dev
+brew tap manticoresoftware/tap-dev
+brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev
 brew services start manticoresearch-dev
 ```
 

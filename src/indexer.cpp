@@ -23,6 +23,7 @@
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
 #include "secondarylib.h"
+#include "knnlib.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1665,12 +1666,17 @@ static void MakeVersion()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	const char * sSiVer = GetSecondaryVersionStr();
+	const char * szSiVer = GetSecondaryVersionStr();
 	CSphString sSi = "";
-	if ( sSiVer )
-		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+	if ( szSiVer )
+		sSi.SetSprintf ( " (secondary %s)", szSiVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr() );
+	const char * szKNNVer = GetKNNVersionStr();
+	CSphString sKNN = "";
+	if ( szKNNVer )
+		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
 }
 
 static void ShowVersion()
@@ -1747,9 +1753,10 @@ int main ( int argc, char ** argv )
 	CheckWinInstall();
 #endif
 
-	CSphString sError, sErrorSI;
+	CSphString sError, sErrorSI, sErrorKNN;
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( sErrorSI );
+	bool bKNNError = !InitKNN ( sErrorKNN );
 	MakeVersion();
 
 	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
@@ -1891,8 +1898,12 @@ int main ( int argc, char ** argv )
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
 	if ( bSecondaryError )
 		sphWarning ( "Error initializing secondary index: %s", sErrorSI.cstr() );
+
+	if ( bKNNError )
+		sphWarning ( "Error initializing knn index: %s", sErrorKNN.cstr() );
 
 	if ( !isatty ( fileno(stdout) ) )
 		g_bProgress = false;
@@ -2082,7 +2093,10 @@ int main ( int argc, char ** argv )
 	}
 
 	sphShutdownWordforms ();
+
 	ShutdownColumnar();
+	ShutdownSecondary();
+	ShutdownKNN();
 
 	if ( !g_bQuiet )
 	{

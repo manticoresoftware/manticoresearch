@@ -39,11 +39,13 @@ SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBu
 	{
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_FLOAT_VECTOR:
 	{
 		const BYTE * pResult = nullptr;
 		int iBytes = pIterator->Get ( tRowID, pResult );
-		int iValues = iBytes / ( eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
-		if ( eType==SPH_ATTR_UINT32SET )
+		bool b32Bits = eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_FLOAT_VECTOR;
+		int iValues = iBytes / (  b32Bits ? sizeof(DWORD) : sizeof(int64_t) );
+		if ( b32Bits )
 		{
 			// need a 64-bit array as input. so we need to convert our 32-bit array to 64-bit entries
 			dTmp.Resize(iValues);
@@ -94,6 +96,16 @@ void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * p
 		pBuilder->SetAttr ( iAttr, 0 );
 		break;
 	}
+}
+
+
+PlainOrColumnar_t::PlainOrColumnar_t ( const CSphColumnInfo & tAttr, int iColumnar )
+{
+	m_eType = tAttr.m_eAttrType;
+	if ( tAttr.IsColumnar() )
+		m_iColumnarId = iColumnar;
+	else
+		m_tLocator = tAttr.m_tLocator;
 }
 
 

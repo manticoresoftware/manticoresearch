@@ -534,20 +534,10 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 	return !( bson::IsNullNode ( tParsed.m_tType ) || bson::IsNullNode ( tParsed.m_tMessage ) );
 }
 
-static const sph::StringSet g_dAllowedEndpoints = {
-	"/_license",
-	"/_license?human=false"
-};
-
-static bool RequestSkipBuddy ( Str_t sSrcQuery, const CSphString & sURL )
-{
-	return ( IsEmpty ( sSrcQuery ) && !g_dAllowedEndpoints[sURL] );
-}
-
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse )
 {
-	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) || RequestSkipBuddy ( sSrcQuery, hOptions["full_url"] ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) )
 	{
 		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
 		{

@@ -9,7 +9,7 @@ Proto: mysql
 State: query
 Connection from: 127.0.0.1:%{NUMBER}
 ConnID: %{NUMBER}
-This/prev job time, s: %{NUMBER}ms
+This/prev job time: %{NUMBER}#!/(s|ms|us)/!#
 CPU activity: %{NUMBER}.%{NUMBER}%
 Jobs done: %{NUMBER}
 Thread status: working

@@ -1937,10 +1937,16 @@ public:
 		assert ( m_eDocstoreType==DOCSTORE_ATTR );
 
 		DocstoreDoc_t tDoc;
-		if ( m_eAttrType==SPH_ATTR_UINT32SET_PTR || m_eAttrType==SPH_ATTR_INT64SET_PTR )
+		switch ( m_eAttrType )
+		{
+		case SPH_ATTR_UINT32SET_PTR:
+		case SPH_ATTR_INT64SET_PTR:
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
 			return (int64_t)sphPackPtrAttr ( GetBlob ( tDoc, tMatch ) );
 
-		return ConvertBlobType<int64_t> ( GetBlob ( tDoc, tMatch ) );
+		default:
+			return ConvertBlobType<int64_t> ( GetBlob ( tDoc, tMatch ) );
+		}
 	}
 
 	bool IsDataPtrAttr() const final	{ return sphIsBlobAttr(m_eAttrType); }

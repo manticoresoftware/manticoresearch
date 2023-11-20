@@ -43,6 +43,7 @@
 %token					TOK_PARAGRAPH
 %token					TOK_MAYBE
 %token <tInt>			TOK_NOTNEAR
+%token <pNode>			TOK_REGEX
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
@@ -108,6 +109,7 @@ atom:
 	| '(' expr ')'						{ $$ = $2; }
 	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true ); }
 	| atom TOK_NOTNEAR atom				{ $$ = pParser->AddOp ( SPH_QUERY_NOTNEAR, $1, $3, $2.iValue ); }
+	| TOK_REGEX							{ $$ = $1; }
 	;
 
 keyword:

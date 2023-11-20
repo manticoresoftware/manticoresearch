@@ -4854,7 +4854,12 @@ struct QuorumCmpHitPos_fn
 			DWORD uHitPosB = HITMAN::GetPosWithField(b.m_uHitpos);
 
 			if ( uHitPosA==uHitPosB )
-				return a.m_uQuerypos<b.m_uQuerypos;
+			{
+				if ( a.m_uQuerypos==b.m_uQuerypos )
+					return HITMAN::IsEnd ( b.m_uHitpos );
+				else
+					return ( a.m_uQuerypos<b.m_uQuerypos );
+			}
 
 			return uHitPosA<uHitPosB;
 		}

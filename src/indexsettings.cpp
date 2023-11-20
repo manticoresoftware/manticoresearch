@@ -18,9 +18,11 @@
 #include "sphinxstem.h"
 #include "icu.h"
 #include "attribute.h"
+#include "knnmisc.h"
 #include "indexfiles.h"
 #include "tokenizer/tokenizer.h"
 #include "client_task_info.h"
+#include "knnlib.h"
 
 #if !_WIN32
 	#include <glob.h>
@@ -204,7 +206,8 @@ static RtTypedAttr_t g_dRtTypedAttrs[]=
 	{ SPH_ATTR_STRING,		"rt_attr_string" },
 	{ SPH_ATTR_JSON,		"rt_attr_json" },
 	{ SPH_ATTR_UINT32SET,	"rt_attr_multi" },
-	{ SPH_ATTR_INT64SET,	"rt_attr_multi_64" }
+	{ SPH_ATTR_INT64SET,	"rt_attr_multi_64" },
+	{ SPH_ATTR_FLOAT_VECTOR,"rt_attr_float_vector" }
 };
 
 
@@ -781,6 +784,21 @@ bool CSphIndexSettings::ParseColumnarSettings ( const CSphConfigSection & hIndex
 }
 
 
+bool CSphIndexSettings::ParseKNNSettings ( const CSphConfigSection & hIndex, CSphString & sError )
+{
+	if ( !hIndex.Exists("knn") )
+		return true;
+
+	if ( !IsKNNLibLoaded() )
+	{
+		sError = "knn library not loaded";
+		return false;
+	}
+
+ 	return ParseKNNConfigStr ( hIndex.GetStr("knn"), m_dKNN, sError );
+}
+
+
 bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError )
 {
 	m_uBlockSize = hIndex.GetSize ( "docstore_block_size", DEFAULT_DOCSTORE_BLOCK );
@@ -844,6 +862,9 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	ParseStoredFields(hIndex);
 
 	if ( !ParseColumnarSettings ( hIndex, sError ) )
+		return false;
+
+	if ( !ParseKNNSettings ( hIndex, sError ) )
 		return false;
 
 	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )
@@ -1244,6 +1265,26 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 }
 
 
+void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable )
+{
+	StringBuilder_c sColumnarAttrs(",");
+
+	CSphVector<NamedKNNSettings_t> dKNNAttrs;
+	for ( const auto & i : tCreateTable.m_dAttrs )
+		if ( i.m_bKNN )
+		{
+			NamedKNNSettings_t & tNamedKNN = dKNNAttrs.Add();
+			(knn::IndexSettings_t&)tNamedKNN = i.m_tKNN;
+			tNamedKNN.m_sName = i.m_tAttr.m_sName;
+		}
+
+	if ( !dKNNAttrs.GetLength() )
+		return;
+
+	Add ( "knn", FormatKNNConfigStr(dKNNAttrs).cstr() );
+}
+
+
 bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sStoredFields(",");
@@ -1290,6 +1331,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 			return false;
 
 	SetupColumnarAttrs(tCreateTable);
+	SetupKNNAttrs(tCreateTable);
 
 	if ( !Contains("type") )
 		Add ( "type", "rt" );
@@ -1784,7 +1826,8 @@ static RtTypedAttr_t g_dTypeNames[] =
 	{ SPH_ATTR_JSON,		"json" },
 	{ SPH_ATTR_STRING,		"string" },
 	{ SPH_ATTR_STRINGPTR,	"string" },
-	{ SPH_ATTR_TIMESTAMP,	"timestamp" }
+	{ SPH_ATTR_TIMESTAMP,	"timestamp" },
+	{ SPH_ATTR_FLOAT_VECTOR, "float_vector" }
 };
 
 
@@ -1921,6 +1964,7 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 
 	AddStorageSettings ( sRes, tAttr, *pIndex, false, iNumColumnar );
 	AddEngineSettings ( sRes, tAttr );
+	AddKNNSettings ( sRes, tAttr );
 
 	return sRes.cstr();
 }

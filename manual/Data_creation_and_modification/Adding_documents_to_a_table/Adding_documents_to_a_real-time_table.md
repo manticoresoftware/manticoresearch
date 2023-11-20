@@ -773,6 +773,29 @@ POST /insert
   }
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch:
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/1
+{
+  "title": "shoes",
+  "sizes" : [40, 41, 42, 43]
+}
+```
+
+Or, alternatively
+```json
+POST /products/_doc/
+{
+  "title": "shoes",
+  "sizes" : [40, 41, 42, 43]
+}
+```
+
+
 <!-- intro -->
 ##### PHP
 <!-- request PHP -->
@@ -877,6 +900,35 @@ POST /insert
   }
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch:
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/1
+{
+  "title": "shoes",
+  "meta" : {
+    "size": 41,
+    "color": "red"
+  }
+}
+```
+
+Or, alternatively
+```json
+POST /products/_doc/
+{
+  "title": "shoes",
+  "meta" : {
+    "size": 41,
+    "color": "red"
+  }
+}
+```
+
+
 <!-- intro -->
 ##### PHP
 Consider JSON just as string:

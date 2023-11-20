@@ -20,7 +20,6 @@ struct CSphString;
 bool			InitSecondary ( CSphString & sError );
 void			ShutdownSecondary();
 const char *	GetSecondaryVersionStr();
-int				GetSecondaryStorageVersion();
 bool			IsSecondaryLibLoaded();
 
 SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );

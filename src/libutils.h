@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "sphinxstd.h"
+
 #if _WIN32
 	#define RTLD_LAZY		0
 	#define RTLD_NOW		0
@@ -56,4 +58,26 @@ public:
 private:
 	void * m_pHandle = nullptr;
 };
+
+template <typename T>
+bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
+{
+	pFunc = (T) dlsym ( pHandle, szFunc );
+	if ( !pFunc )
+	{
+		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
+		dlclose ( pHandle );
+		return false;
+	}
+
+	return true;
+}
+#else
+template <typename T>
+bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
+{
+	return false;
+}
 #endif // HAVE_DLOPEN
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath );

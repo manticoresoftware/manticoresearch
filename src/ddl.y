@@ -39,9 +39,13 @@
 %token	TOK_EXISTS
 %token	TOK_FAST_FETCH
 %token	TOK_FLOAT
+%token	TOK_FLOAT_VECTOR
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_HASH
+%token	TOK_HNSW_EF_CONSTRUCTION
+%token	TOK_HNSW_M
+%token	TOK_HNSW_SIMILARITY
 %token	TOK_IF
 %token	TOK_IMPORT
 %token	TOK_INDEXED
@@ -50,6 +54,8 @@
 %token	TOK_JOIN
 %token	TOK_JSON
 %token	TOK_KILLLIST_TARGET
+%token	TOK_KNN_DIMS
+%token	TOK_KNN_TYPE
 %token	TOK_LIKE
 %token	TOK_MULTI
 %token	TOK_MULTI64
@@ -118,6 +124,7 @@ attribute_type:
 	| TOK_INT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_TIMESTAMP	{ $$.SetValueInt ( SPH_ATTR_TIMESTAMP ); }
+	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
 	;
 	
 //////////////////////////////////////////////////////////////////////////
@@ -247,6 +254,46 @@ item_option:
 	| TOK_FAST_FETCH '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionFastFetch ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_KNN_TYPE '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionKNNType ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_KNN_DIMS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionKNNDims ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_HNSW_SIMILARITY '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionHNSWSimilarity ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_HNSW_M '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionHNSWM ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_HNSW_EF_CONSTRUCTION '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionHNSWEfConstruction ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

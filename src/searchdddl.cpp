@@ -32,7 +32,15 @@ public:
 
 		bool			m_bHashOptionSet = false;
 
-		void			Reset();
+		CSphString		m_sKNNType;
+		int				m_iKNNDims = 0;
+		int				m_iHNSWM = 16;
+		int				m_iHNSWEFConstruction = 200;
+		knn::HNSWSimilarity_e m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
+		bool			m_bKNNDimsSpecified = false;
+		bool			m_bHNSWSimilaritySpecified = false;
+
+		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
 	};
 
@@ -47,6 +55,12 @@ public:
 	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
 	bool	AddItemOptionHash ( const SqlNode_t & tOption );
 	bool	AddItemOptionFastFetch ( const SqlNode_t & tOption );
+
+	bool	AddItemOptionKNNType ( const SqlNode_t & tOption );
+	bool	AddItemOptionKNNDims ( const SqlNode_t & tOption );
+	bool	AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption );
+	bool	AddItemOptionHNSWM ( const SqlNode_t & tOption );
+	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
@@ -104,21 +118,12 @@ static int yylex ( YYSTYPE * lvalp, DdlParser_c * pParser )
 
 //////////////////////////////////////////////////////////////////////////
 
-void DdlParser_c::ItemOptions_t::Reset()
-{
-	m_eEngine = AttrEngine_e::DEFAULT;
-	m_bStringHash = true;
-	m_bFastFetch = true;
-
-	m_bHashOptionSet = false;
-}
-
-
 DWORD DdlParser_c::ItemOptions_t::ToFlags() const
 {
 	DWORD uFlags = 0;
 	uFlags |= m_bStringHash ? CSphColumnInfo::ATTR_COLUMNAR_HASHES : 0;
 	uFlags |= m_bFastFetch ? CSphColumnInfo::ATTR_STORED : 0;
+	uFlags |= m_sKNNType.IsEmpty() ? 0 : CSphColumnInfo::ATTR_INDEXED_KNN;
 	return uFlags;
 }
 
@@ -175,11 +180,25 @@ static DWORD ConvertFlags ( int iFlags )
 
 bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError )
 {
+	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && !tOpts.m_sKNNType.IsEmpty() )
+	{
+		sError = "knn_type='hnsw' can only be used with float_vector attributes";
+		return false;
+	}
+
 	if ( eAttrType==SPH_ATTR_STRING )
 	{
 		if ( ( iFlags & FLAG_ATTRIBUTE ) && ( iFlags & FLAG_STORED ) )
 		{
 			sError.SetSprintf ( "unable to create a stored attribute '%s'", sName.cstr() );
+			return false;
+		}
+	}
+	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	{
+		if ( !tOpts.m_sKNNType.IsEmpty() && ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) )
+		{
+			sError = "knn_dims and hnsw_similarity are required if knn_type='hnsw'";
 			return false;
 		}
 	}
@@ -250,11 +269,17 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	if ( eAttrType!=SPH_ATTR_STRING )
 	{
 		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-		tAttr.m_tAttr.m_sName		= sName;
-		tAttr.m_tAttr.m_eAttrType	= eAttrType;
-		tAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
-		tAttr.m_bFastFetch			= tOpts.m_bFastFetch;
-		tAttr.m_bStringHash			= tOpts.m_bStringHash;
+		tAttr.m_tAttr.m_sName			= sName;
+		tAttr.m_tAttr.m_eAttrType		= eAttrType;
+		tAttr.m_tAttr.m_eEngine			= tOpts.m_eEngine;
+		tAttr.m_bFastFetch				= tOpts.m_bFastFetch;
+		tAttr.m_bStringHash				= tOpts.m_bStringHash;
+		tAttr.m_bKNN					= !tOpts.m_sKNNType.IsEmpty();
+		tAttr.m_tKNN.m_iDims			= tOpts.m_iKNNDims;
+		tAttr.m_tKNN.m_eHNSWSimilarity	= tOpts.m_eHNSWSimilarity;
+		tAttr.m_tKNN.m_iHNSWM			= tOpts.m_iHNSWM;
+		tAttr.m_tKNN.m_iHNSWEFConstruction = tOpts.m_iHNSWEFConstruction;
+
 		return true;
 	}
 
@@ -342,6 +367,64 @@ bool DdlParser_c::AddItemOptionFastFetch ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_bFastFetch = !!strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionKNNType ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sKNNType = ToStringUnescape(tOption).ToUpper();
+	if ( m_tItemOptions.m_sKNNType!="HNSW" )
+	{
+		m_sError.SetSprintf ( "Unknown KNN type '%s'", m_tItemOptions.m_sKNNType.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionKNNDims ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_iKNNDims = strtoull ( sValue.cstr(), NULL, 10 );
+	m_tItemOptions.m_bKNNDimsSpecified = true;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption).ToUpper();
+	if ( sValue=="L2" )
+		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
+	else if ( sValue=="IP" )
+		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::IP;
+	else if ( sValue=="COSINE" )
+		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::COSINE;
+	else
+	{
+		m_sError.SetSprintf ( "Unknown HNSW similarity '%s'", sValue.cstr() );
+		return false;
+	}
+
+	m_tItemOptions.m_bHNSWSimilaritySpecified = true;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionHNSWM ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_iHNSWM = strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_iHNSWEFConstruction = strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
 }
 

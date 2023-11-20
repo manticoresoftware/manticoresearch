@@ -35,6 +35,7 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the table" },
 	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"table runtime settings" },
 	{ SPH_EXT_SPIDX,	".spidx",	62,	true,	true,	"secondary index" },
+	{ SPH_EXT_SPKNN,	".spknn",	65,	true,	true,	"knn index" }
 };
 
 

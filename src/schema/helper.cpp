@@ -15,7 +15,7 @@
 #include "attribute.h"
 
 
-void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo>& dAttrs, CSphVector<int>& dUsed, int iPos, const CSphColumnInfo& tCol, bool bDynamic )
+void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic )
 {
 	assert ( 0 <= iPos && iPos <= dAttrs.GetLength() );
 	assert ( tCol.m_eAttrType != SPH_ATTR_NONE );
@@ -23,7 +23,8 @@ void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo>& dAttrs, CSphVect
 		return;
 
 	dAttrs.Insert ( iPos, tCol );
-	CSphAttrLocator& tLoc = dAttrs[iPos].m_tLocator;
+
+	CSphAttrLocator & tLoc = dAttrs[iPos].m_tLocator;
 
 	int iBits = ROWITEM_BITS;
 	if ( tLoc.m_iBitCount > 0 )

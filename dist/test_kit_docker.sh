@@ -72,10 +72,10 @@ do
 	# Search each downloaded file and find the line with the specific package, version, date, and commit
 	for index in "${!repo_urls[@]}"; do
 		if [ "$package" = 'manticore-executor|manticore-extra' ]; then
-      echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
-			wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev.tar.gz"
+      		echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
+			wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
 			tar -xzf 'manticore-executor-dev.tar.gz'
-			executor_dev_path=$(realpath "manticore-executor_${version}-${date:0:6}-${commit}_linux_amd64-dev/manticore-executor")
+			executor_dev_path=$(realpath "manticore-executor_${version}-${date}-${commit}_linux_amd64-dev/manticore-executor")
 		fi
 
 		cat "/tmp/packages_${index}" | egrep "$package" | grep $commit | grep ".deb" | awk -v repo_url="${repo_urls[$index]}" -F\" '{print repo_url""$2"?ci=1"}' |
@@ -113,10 +113,10 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	"php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" && php -r \"if (hash_file('sha384', 'composer-setup.php') === 'e21205b207c3ff031906575712edab6f13eb0b361f2085f1f1237b7126d785e826a450292b6cfd1d64d92e6563bbde02') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;\" && php composer-setup.php && php -r \"unlink('composer-setup.php');\" && mv composer.phar /usr/bin/composer || true"
 
-img_url="ghcr.io/manticoresoftware/manticoresearch:test-kit-${BUILD_COMMIT}"
+img_url="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${BUILD_COMMIT}"
 images=("$img_url")
 [[ $GITHUB_REF_NAME == "master" ]] \
-  && img_url_latest="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest" \
+  && img_url_latest="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-latest" \
   && images+=("$img_url_latest") \
   || img_url_latest=""
 

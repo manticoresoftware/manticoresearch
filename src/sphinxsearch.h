@@ -239,6 +239,8 @@ public:
 	WordlistStub_c() {}
 	void GetPrefixedWords ( const char * , int , const char * , ISphWordlist::Args_t & ) const override {}
 	void GetInfixedWords ( const char * , int , const char * , ISphWordlist::Args_t & ) const override {}
+	void ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const override {}
+
 };
 
 #endif // _sphinxsearch_

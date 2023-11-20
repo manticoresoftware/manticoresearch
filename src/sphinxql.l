@@ -141,6 +141,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
 "IS"				{ YYSTOREBOUNDS; return TOK_IS; }
 "KILL"	    		{ YYSTOREBOUNDS; return TOK_KILL; }
+"KNN"	    		{ YYSTOREBOUNDS; return TOK_KNN; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
 "LOGS"				{ YYSTOREBOUNDS; return TOK_LOGS; }
 "FREEZE"			{ YYSTOREBOUNDS; return TOK_FREEZE; }

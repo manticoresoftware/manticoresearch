@@ -298,11 +298,12 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 
 		switch ( tNew.m_eAttrType )
 		{
-		case SPH_ATTR_STRINGPTR:	tAction.m_eAction = MapAction_t::EVALEXPR_STR;		break;
-		case SPH_ATTR_BIGINT:		tAction.m_eAction = MapAction_t::EVALEXPR_BIGINT;	break;
+		case SPH_ATTR_STRINGPTR:		tAction.m_eAction = MapAction_t::EVALEXPR_STR;		break;
+		case SPH_ATTR_BIGINT:			tAction.m_eAction = MapAction_t::EVALEXPR_BIGINT;	break;
 		case SPH_ATTR_UINT32SET_PTR:
-		case SPH_ATTR_INT64SET_PTR:	tAction.m_eAction = MapAction_t::EVALEXPR_MVA;		break;
-		default:					tAction.m_eAction = MapAction_t::EVALEXPR_INT;		break;
+		case SPH_ATTR_INT64SET_PTR:
+		case SPH_ATTR_FLOAT_VECTOR_PTR:	tAction.m_eAction = MapAction_t::EVALEXPR_MVA;		break;
+		default:						tAction.m_eAction = MapAction_t::EVALEXPR_INT;		break;
 		}
 
 		return;
@@ -1365,6 +1366,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				dRows.PutArray ( dStr, false );
 				break;
 			}
+
 		case SPH_ATTR_INT64SET_PTR:
 		case SPH_ATTR_UINT32SET_PTR:
 			{
@@ -1373,6 +1375,23 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				dRows.PutArray ( dStr, false );
 				break;
 			}
+
+		case SPH_ATTR_FLOAT_VECTOR:
+			{
+				StringBuilder_c dStr;
+				auto dFloatVec = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
+				sphFloatVec2Str ( dFloatVec, dStr );
+				dRows.PutArray ( dStr, false );
+			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+			{
+				StringBuilder_c dStr;
+				sphPackedFloatVec2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
+				dRows.PutArray ( dStr, false );
+			}
+			break;
 
 		case SPH_ATTR_JSON:
 			{
@@ -2171,6 +2190,17 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::MultipleKeysFromMatch ( const CSphMat
 			PushJsonField ( m_dJsonKeys[i]->Int64Eval(tMatch), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey ){ dCurKeys.Add(uMatchGroupKey); return true; } );
 			break;
 
+		case SPH_ATTR_JSON_FIELD:
+		{
+			assert ( m_dAttrs[i].m_pExpr );
+			PushJsonField ( m_dAttrs[i].m_pExpr->Int64Eval ( tMatch ), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
+				{
+					dCurKeys.Add ( uMatchGroupKey );
+					return true;
+				});
+		}
+		break;
+
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_STRINGPTR:
 			{
@@ -2204,7 +2234,7 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::MultipleKeysFromMatch ( const CSphMat
 template <class PRED, bool HAVE_COLUMNAR>
 bool CSphGrouperMulti<PRED,HAVE_COLUMNAR>::IsMultiValue() const
 {
-	return m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET; } );
+	return m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD || tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET; } );
 }
 
 template <class PRED, bool HAVE_COLUMNAR>
@@ -4360,13 +4390,10 @@ private:
 	FORCE_INLINE bool PushMatch ( const CSphMatch & tMatch )
 	{
 		SphGroupKey_t uGroupKey = this->m_pGrouper->KeyFromMatch ( tMatch );
-
-		auto iValue = (int64_t)uGroupKey;
-		CSphGrouper * pGrouper = this->m_pGrouper;
-		const BYTE * pBlobPool = ((CSphGrouperJsonField*)pGrouper)->GetBlobPool();
+		const BYTE * pBlobPool = this->m_pGrouper->GetBlobPool();
 		bool bClearNotify = true;
 
-		return PushJsonField ( iValue, pBlobPool, [this, &tMatch, &bClearNotify]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
+		return PushJsonField ( uGroupKey, pBlobPool, [this, &tMatch, &bClearNotify]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
 			{
 				bool bPushed = BASE::template PushEx<false> ( tMatch, uMatchGroupKey, false, false, bClearNotify, pAttr );
 				bClearNotify = false; // need to clear notifications once per match - not for every pushed value
@@ -5187,6 +5214,7 @@ private:
 	bool	MaybeAddExpressionsFromSelectList();
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
+	bool	AddKNNDistColumn();
 	bool	CheckHavingConstraints() const;
 	bool	SetupGroupbySettings ( bool bHasImplicitGrouping );
 	void	AssignOrderByToPresortStage ( const int * pAttrs, int iAttrCount );
@@ -5202,6 +5230,7 @@ private:
 	bool	SetupMatchesSortingFunc();
 	bool	SetupGroupSortingFunc ( bool bGotDistinct );
 	bool	AddGroupbyStuff();
+	void	AddKnnDistSort ( CSphString & sSortBy );
 	bool	SetGroupSorting();
 	void	ExtraAddSortkeys ( const int * dAttrs );
 	bool	AddStoredFieldExpressions();
@@ -6466,6 +6495,42 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 	return true;
 }
 
+
+bool QueueCreator_c::AddKNNDistColumn()
+{
+	if ( m_tQuery.m_sKNNAttr.IsEmpty() || m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )>=0 )
+		return true;
+
+	auto pAttr = m_pSorterSchema->GetAttr ( m_tQuery.m_sKNNAttr.cstr() );
+	if ( !pAttr )
+	{
+		m_sError.SetSprintf ( "requested KNN search attribute '%s' not found", m_tQuery.m_sKNNAttr.cstr() );
+		return false;
+	}
+
+	if ( !pAttr->IsIndexedKNN() )
+	{
+		m_sError.SetSprintf ( "KNN index not enabled for attribute '%s'", m_tQuery.m_sKNNAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNN.m_iDims!=m_tQuery.m_dKNNVec.GetLength() )
+	{
+		m_sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", m_tQuery.m_sKNNAttr.cstr(), pAttr->m_tKNN.m_iDims, m_tQuery.m_dKNNVec.GetLength() );
+		return false;
+	}
+
+	CSphColumnInfo tKNNDist ( GetKnnDistAttrName(), SPH_ATTR_FLOAT );
+	tKNNDist.m_eStage = SPH_EVAL_PRESORT;
+	tKNNDist.m_pExpr = CreateExpr_KNNDist ( m_tQuery.m_dKNNVec, *pAttr );
+
+	m_pSorterSchema->AddAttr ( tKNNDist, true );
+	m_hQueryColumns.Add ( tKNNDist.m_sName );
+
+	return true;
+}
+
+
 bool QueueCreator_c::CheckHavingConstraints () const
 {
 	if ( m_tSettings.m_pAggrFilter && !m_tSettings.m_pAggrFilter->m_sAttrName.IsEmpty () )
@@ -6725,13 +6790,23 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 		ExtraAddSortkeys ( tState.m_dAttrs );
 }
 
+
+void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy )
+{
+	if ( m_pSorterSchema->GetAttr ( GetKnnDistAttrName() ) && !strstr ( sSortBy.cstr(), "knn_dist" ) )
+		sSortBy.SetSprintf ( "knn_dist() asc, %s", sSortBy.cstr() );
+}
+
 // matches sorting function
-bool QueueCreator_c::SetupMatchesSortingFunc ()
+bool QueueCreator_c::SetupMatchesSortingFunc()
 {
 	m_bRandomize = false;
 	if ( m_tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, m_tQuery.m_sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_bComputeItems, m_sError );
+		CSphString sSortBy = m_tQuery.m_sSortBy;
+		AddKnnDistSort ( sSortBy );
+
+		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_bComputeItems, m_sError );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return false;
 
@@ -6970,21 +7045,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
 }
 
 
@@ -7044,6 +7119,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 bool QueueCreator_c::SetupComputeQueue ()
 {
 	return MaybeAddGeodistColumn ()
+		&& AddKNNDistColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates();

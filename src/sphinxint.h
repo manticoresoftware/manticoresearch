@@ -37,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 64;				///< bumped to 64 since header is now stored as json
+const DWORD		INDEX_FORMAT_VERSION		= 65;				///< added .spknn
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -748,6 +748,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 
 		case SPH_ATTR_UINT32SET:	return "mva";
 		case SPH_ATTR_INT64SET:		return "mva64";
+		case SPH_ATTR_FLOAT_VECTOR:	return "float_vector";
 		default:					return "unknown";
 	}
 }
@@ -788,6 +789,7 @@ inline const char * sphRtTypeDirective ( ESphAttr eType )
 
 		case SPH_ATTR_UINT32SET:	return "rt_attr_multi";
 		case SPH_ATTR_INT64SET:		return "rt_attr_multi64";
+		case SPH_ATTR_FLOAT_VECTOR:	return "rt_attr_float_vector";
 		default:					return nullptr;
 	}
 }
@@ -1156,6 +1158,8 @@ public:
 
 void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
 
+using RegexTerm_t = std::pair <CSphString, XQNode_t *>;
+class DictTerm2Expanded_i;
 
 class ISphWordlist
 {
@@ -1168,13 +1172,12 @@ public:
 		const bool					m_bHasExactForms;
 		const ESphHitless			m_eHitless;
 
-		ISphSubstringPayload *		m_pPayload;
+		std::unique_ptr<ISphSubstringPayload> m_pPayload { nullptr };
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
 		cRefCountedRefPtrGeneric_t	m_pIndexData;
 
 		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData );
-		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
 
@@ -1185,8 +1188,18 @@ public:
 	virtual ~ISphWordlist () {}
 	virtual void GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const = 0;
 	virtual void GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const = 0;
+	virtual void ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecTraits_T< std::unique_ptr<DictTerm2Expanded_i> > & dConverters ) const = 0;
 };
 
+class DictTerm2Expanded_i
+{
+public:
+	DictTerm2Expanded_i() = default;
+	virtual ~DictTerm2Expanded_i() = default;
+	virtual void Convert ( ISphWordlist::Args_t & tArgs ) = 0;
+};
+
+using VecExpandConv_t = VecTraits_T< std::unique_ptr<DictTerm2Expanded_i> >;
 
 class CSphScopedPayload
 {
@@ -1219,7 +1232,8 @@ struct ExpansionContext_t
 	int m_iCutoff = -1;
 	cRefCountedRefPtrGeneric_t m_pIndexData;
 
-	bool					m_bOnlyTreeFix = false;
+	bool								m_bOnlyTreeFix = false;
+	CSphVector<RegexTerm_t>				m_dRegexTerms;
 };
 
 struct GetKeywordsSettings_t
@@ -1246,7 +1260,7 @@ inline bool sphIsExpandedPayload ( int iDocs, int iHits )
 }
 bool sphHasExpandableWildcards ( const char * sWord );
 bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tWordlist );
-
+bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError );
 
 template<typename T>
 struct ExpandedOrderDesc_T

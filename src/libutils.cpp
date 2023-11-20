@@ -11,11 +11,9 @@
 //
 
 #include "libutils.h"
+#include "fileutils.h"
 
 #if _WIN32
-
-#include "sphinxstd.h"
-
 void * dlsym ( void * lib, const char * name )
 {
 	return (void*)GetProcAddress ( (HMODULE)lib, name );
@@ -45,3 +43,19 @@ const char * dlerror()
 }
 
 #endif // _WIN32
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath )
+{
+	if ( sphFileExists ( sFullpath.cstr() ) )
+		return sFullpath;
+
+#if _WIN32
+	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
+	CSphString sPath;
+	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+	if ( sphFileExists ( sPath.cstr() ) )
+		return sPath;
+#endif
+
+	return "";
+}

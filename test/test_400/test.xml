@@ -199,6 +199,16 @@ searchd
 	create table t(f text) read_buffer_hits='128k';
 	show create table t;
 	drop table t;
+
+	create table t(t text, f float_vector);
+	show create table t;
+	insert into t values (1,'text',(5.5,4.4,5.5));
+	insert into t values (2,'text',(1,2,3,4));
+	select * from t;
+	update t set f=(500,400,300,200) where id=1;
+	update t set f=(3.14,2.71) where id=2;
+	select * from t;
+	drop table t;
 </sphinxql>
 </queries>
 

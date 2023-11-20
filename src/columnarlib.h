@@ -28,7 +28,6 @@ common::AttrType_e	ToColumnarType ( ESphAttr eAttrType, int iBitCount );
 bool			InitColumnar ( CSphString & sError );
 void			ShutdownColumnar();
 const char *	GetColumnarVersionStr();
-int				GetColumnarStorageVersion();
 bool			IsColumnarLibLoaded();
 
 // params rearranged for most frequently used defaults

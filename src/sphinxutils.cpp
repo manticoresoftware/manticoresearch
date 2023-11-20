@@ -3112,14 +3112,18 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 }
 
 
-void sphConfigureCommon ( const CSphConfig & hConf )
+void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !hConf("common") || !hConf["common"]("common") )
 		return;
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	if ( hCommon ( "lemmatizer_base" ) )
+	{
+		if ( fnPathFix )
+			fnPathFix ( g_sLemmatizerBase );
 		g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
+	}
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;
@@ -3148,8 +3152,13 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 	bJsonAutoconvNumbers = ( hCommon.GetInt ( "json_autoconv_numbers", 0 )!=0 );
 	sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
 
-	if ( hCommon("plugin_dir") )
-		sphPluginInit ( hCommon["plugin_dir"].cstr() );
+	if ( hCommon( "plugin_dir" ) )
+	{
+		CSphString sPluginDir ( hCommon["plugin_dir"].cstr() );
+		if ( fnPathFix )
+			fnPathFix ( sPluginDir );
+		sphPluginInit ( sPluginDir.cstr() );
+	}
 }
 
 bool sphIsChineseCode ( int iCode )

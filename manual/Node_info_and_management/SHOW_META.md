@@ -7,6 +7,16 @@ SHOW META [ LIKE pattern ]
 <!-- example show meta -->
 `SHOW META` is an SQL statement that displays additional meta-information about the processed query, including the query time, keyword statistics, and information about the secondary indexes used. The syntax is:
 
+The included items are:
+* `total`: The number of matches actually retrieved and sent to the client.
+* `total_found`: The estimated total number of matches for the query in the index.
+* `total_relation`: If Manticore cannot calculate the exact `total` value, this field will display `total_relation: gte`, indicating that the actual count is **Greater Than or Equal** to `total_found`. If the `total` value is precise, `total_relation: eq` will be shown.
+* `time`: The duration (in seconds) it took to process the search query.
+* `keyword[N]`: The n-th keyword used in the search query. Note that the keyword can be presented as a wildcard, e.g., `abc*`.
+* `docs[N]`: The total number of documents (or records) containing the n-th keyword from the search query. If the keyword is presented as a wildcard, this value represents the sum of documents for all expanded sub-keywords, potentially exceeding the actual number of matched documents.
+* `hits[N]`: The total number of occurrences (or hits) of the n-th keyword across all documents.
+* `index`: Information about the utilized index (e.g., secondary index).
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

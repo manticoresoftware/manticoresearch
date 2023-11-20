@@ -362,10 +362,11 @@ jobs:
       cmake_command: |
         mkdir build
         cd build
-        cmake -DPACK=1 ..
+        cmake -DPACK=1 -DCMAKE_BUILD_TYPE=Debug ..
         cmake --build . --target package
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
+      CTEST_CONFIGURATION_TYPE: "Debug"
 
   build_test_kit_docker:
     name: Test Kit docker image
@@ -386,7 +387,7 @@ jobs:
         uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
-          name: build_jammy_RelWithDebInfo_x86_64
+          name: build_jammy_Debug_x86_64
           path: .
       # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
       # - run: |
@@ -412,7 +413,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.1
+      - uses: manticoresoftware/clt@0.1.7
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -423,7 +424,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.1
+      - uses: manticoresoftware/clt@0.1.7
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -435,7 +436,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.1
+      - uses: manticoresoftware/clt@0.1.7
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img

@@ -17,6 +17,7 @@ mysql -P9306 -h0 -e "select * from pq"
 ––– input –––
 mysqldump -h0 -P9306 manticore > /tmp/pq-dump.sql
 ––– output –––
+-- Warning: column statistics not supported by the server.
 ––– input –––
 mysql -P9306 -h0 -e 'drop table pq'
 ––– output –––

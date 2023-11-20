@@ -104,14 +104,11 @@ static int fnSslError ( const char * pStr, size_t iLen, void * pError )
 #define BACKN FYELLOW
 #define SYSN FCYAN
 
-void SetServerSSLKeys ( CSphVariant* pSslCert, CSphVariant* pSslKey, CSphVariant* pSslCa )
+void SetServerSSLKeys ( const CSphString & sSslCert,  const CSphString & sSslKey,  const CSphString & sSslCa )
 {
-	if ( pSslCert )
-		g_sSslCert = pSslCert->cstr();
-	if ( pSslKey )
-		g_sSslKey = pSslKey->cstr ();
-	if ( pSslCa )
-		g_sSslCa = pSslCa->cstr ();
+	g_sSslCert = sSslCert;
+	g_sSslKey = sSslKey;
+	g_sSslCa = sSslCa;
 }
 
 static bool IsKeysSet()
@@ -565,7 +562,7 @@ bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 #else
 
 // these stubs for non-daemon (i.e. for tests)
-void SetServerSSLKeys ( CSphVariant *,  CSphVariant *,  CSphVariant * ) {}
+void SetServerSSLKeys ( const CSphString & ,  const CSphString & ,  const CSphString & ) {}
 bool CheckWeCanUseSSL ( CSphString * pError )
 {
 	if ( pError )

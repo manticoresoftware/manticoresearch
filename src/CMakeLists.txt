@@ -324,7 +324,9 @@ endif (WITH_SSL)
 
 # support for replication
 add_subdirectory ( replication )
-#	install_galera ( "${CMAKE_INSTALL_DATADIR}/manticore/modules" )
+if (NOT WIN32)
+	install_galera ( "${CMAKE_INSTALL_DATADIR}/manticore/modules" )
+endif()
 target_link_libraries ( lsearchd PUBLIC repli_stuff)
 
 trace ( lextra )

@@ -1340,8 +1340,8 @@ private:
 	bool						RunFullscanOnIterator ( RowidIterator_i * pIterator, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
 	bool						MultiScan ( CSphQueryResult& tResult, const CSphQuery& tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters, const CSphMultiQueryArgs& tArgs, int64_t tmMaxTimer ) const;
 
-	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-	void						MatchExtended ( CSphQueryContext & tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
+	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS, bool HAS_SORT_CALC, bool HAS_WEIGHT_FILTER, bool HAS_FILTER_CALC, bool HAS_CUTOFF>
+	void						MatchExtended ( CSphQueryContext & tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff ) const;
 
 	const CSphRowitem *			FindDocinfo ( DocID_t tDocID ) const;
 
@@ -7435,21 +7435,17 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 }
 
 
-template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
+template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS, bool HAS_SORT_CALC, bool HAS_WEIGHT_FILTER, bool HAS_FILTER_CALC, bool HAS_CUTOFF>
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff ) const
 {
+	if ( !iCutoff )
+		return;
+
 	QueryProfile_c * pProfile = tCtx.m_pProfile;
 	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
 
-	if_const ( USE_FACTORS )
-	{
+	if constexpr ( USE_FACTORS )
 		pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
-	}
-
-
-	int iCutoff = tQuery.m_iCutoff;
-	if ( iCutoff<=0 )
-		iCutoff = -1;
 
 	// do searching
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
@@ -7465,19 +7461,26 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 		for ( int i=0; i<iMatches; i++ )
 		{
 			CSphMatch & tMatch = pMatch[i];
-			if_const ( USE_KLIST )
+			if constexpr ( USE_KLIST )
 			{
 				if ( m_tDeadRowMap.IsSet ( tMatch.m_tRowID ) )
 					continue;
 			}
 
 			tMatch.m_iWeight *= iIndexWeight;
-			tCtx.CalcSort ( tMatch );
 
-			if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
+			if constexpr ( HAS_SORT_CALC )
+				tCtx.CalcSort ( tMatch );
+
+			if constexpr ( HAS_WEIGHT_FILTER )
 			{
-				tCtx.FreeDataSort ( tMatch );
-				continue;
+				if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
+				{
+					if constexpr ( HAS_SORT_CALC )
+						tCtx.FreeDataSort ( tMatch );
+
+					continue;
+				}
 			}
 
 			tMatch.m_iTag = iTag;
@@ -7488,21 +7491,24 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 			{
 				// all non-random sorters are in the beginning,
 				// so we can avoid the simple 'first-element' assertion
-				if_const ( RANDOMIZE )
+				if constexpr ( RANDOMIZE )
 				{
 					if ( !bRand && pSorter->IsRandom() )
 					{
 						bRand = true;
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
-						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
-							break;
+						if constexpr ( HAS_WEIGHT_FILTER )
+						{
+							if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
+								break;
+						}
 					}
 				}
 
 				bNewMatch |= pSorter->Push ( tMatch );
 
-				if_const ( USE_FACTORS )
+				if constexpr ( USE_FACTORS )
 				{
 					RowTagged_t tJustPushed = pSorter->GetJustPushed();
 					VecTraits_T<RowTagged_t> dJustPopped = pSorter->GetJustPopped();
@@ -7511,16 +7517,24 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 				}
 			}
 
-			tCtx.FreeDataFilter ( tMatch );
-			tCtx.FreeDataSort ( tMatch );
+			if constexpr ( HAS_FILTER_CALC )
+				tCtx.FreeDataFilter ( tMatch );
 
-			if ( bNewMatch )
-				if ( --iCutoff==0 )
+			if constexpr ( HAS_SORT_CALC )
+				tCtx.FreeDataSort ( tMatch );
+
+			if constexpr ( HAS_CUTOFF )
+			{
+				if ( bNewMatch && --iCutoff==0 )
 					break;
+			}
 		}
 
-		if ( iCutoff==0 )
-			break;
+		if constexpr ( HAS_CUTOFF )
+		{
+			if ( !iCutoff )
+				break;
+		}
 	}
 }
 
@@ -7657,15 +7671,16 @@ template <bool HAVE_DEAD>
 class RowIterator_T : public ISphNoncopyable
 {
 public:
-	RowIterator_T ( const RowIdBoundaries_t & tBoundaries, const DeadRowMap_Disk_c & tDeadRowMap )
+	RowIterator_T ( const RowIdBoundaries_t & tBoundaries, const DeadRowMap_Disk_c & tDeadRowMap, int iCutoff )
 		: m_tRowID ( tBoundaries.m_tMinRowID )
 		, m_tBoundaries ( tBoundaries )
 		, m_tDeadRowMap	( tDeadRowMap )
+		, m_iRowsLeft ( iCutoff>=0 ? iCutoff : INT_MAX )
 	{}
 
 	FORCE_INLINE bool GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
-	DWORD		GetNumProcessed() const { return m_tRowID-m_tBoundaries.m_tMinRowID; }
-	bool		WasCutoffHit() const { return false; }
+	DWORD		GetNumProcessed() const	{ return m_tRowID-m_tBoundaries.m_tMinRowID; }
+	bool		WasCutoffHit() const	{ return !m_iRowsLeft; }
 
 private:
 	static const int MAX_COLLECTED = 128;
@@ -7674,13 +7689,14 @@ private:
 	RowIdBoundaries_t			m_tBoundaries;
 	CSphFixedVector<RowID_t>	m_dCollected {MAX_COLLECTED};		// store 128 values (same as .spa attr block size)
 	const DeadRowMap_Disk_c &	m_tDeadRowMap;
+	int							m_iRowsLeft = INT_MAX;
 };
 
 template <>
 bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength();
+	RowID_t * pRowIdMax = pRowIdStart + Min ( m_iRowsLeft, m_dCollected.GetLength() );
 	RowID_t * pRowID = pRowIdStart;
 
 	while ( pRowID<pRowIdMax && m_tRowID<=m_tBoundaries.m_tMaxRowID )
@@ -7691,6 +7707,7 @@ bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 		m_tRowID++;
 	}
 
+	m_iRowsLeft = Max ( m_iRowsLeft - int(pRowID-pRowIdStart), 0 );
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
@@ -7699,6 +7716,7 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
 	int64_t iDelta = Min ( RowID_t(m_dCollected.GetLength()), int64_t(m_tBoundaries.m_tMaxRowID)-m_tRowID+1 );
+	iDelta = Min ( iDelta, m_iRowsLeft );
 	assert ( iDelta>=0 );
 	RowID_t * pRowIdMax = pRowIdStart + iDelta;
 	RowID_t * pRowID = pRowIdStart;
@@ -7707,6 +7725,7 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 	while ( pRowID<pRowIdMax )
 		*pRowID++ = m_tRowID++;
 
+	m_iRowsLeft = Max ( m_iRowsLeft - int(pRowID-pRowIdStart), 0 );
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
@@ -7868,12 +7887,12 @@ bool CSphIndex_VLN::RunFullscanOnAttrs ( const RowIdBoundaries_t & tBoundaries, 
 
 	if ( m_tDeadRowMap.HasDead() )
 	{
-		RowIterator_T<true> tIt ( tBoundaries, m_tDeadRowMap );
+		RowIterator_T<true> tIt ( tBoundaries, m_tDeadRowMap, iCutoff );
 		return RunFullscan ( tIt, fnToStatic, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
 	}
 	else
 	{
-		RowIterator_T<false> tIt ( tBoundaries, m_tDeadRowMap );
+		RowIterator_T<false> tIt ( tBoundaries, m_tDeadRowMap, iCutoff );
 		return RunFullscan ( tIt, fnToStatic, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
 	}
 }
@@ -11459,7 +11478,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		i->SetColumnar ( m_pColumnar.get() );
 	}
 
-	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
+	SwitchProfile ( pProfile, SPH_QSTATE_SETUP_ITER );
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
@@ -11470,12 +11489,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
 	}
 
-	bool bHaveRandom = false;
-	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
-
-	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
-	bool bHaveDead = m_tDeadRowMap.HasDead();
-
 	//////////////////////////////////////
 	// find and weight matching documents
 	//////////////////////////////////////
@@ -11483,57 +11496,28 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	bool bFinalPass = !!tCtx.m_dCalcFinal.GetLength();
 	int iMyTag = bFinalPass ? -1 : tArgs.m_iTag;
 
-	// a shortcut to avoid listing all args every time
-	void (CSphIndex_VLN::*pFunc)(CSphQueryContext &, const CSphQuery &, const VecTraits_T<ISphMatchSorter*>&, ISphRanker *, int, int) const = nullptr;
+	assert ( tQuery.m_eMode==SPH_MATCH_ALL || tQuery.m_eMode==SPH_MATCH_PHRASE || tQuery.m_eMode==SPH_MATCH_ANY || tQuery.m_eMode==SPH_MATCH_EXTENDED || tQuery.m_eMode==SPH_MATCH_EXTENDED2 || tQuery.m_eMode==SPH_MATCH_BOOLEAN  );
 
-	switch ( tQuery.m_eMode )
+	bool bHaveRandom = false;
+	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
+
+	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
+	bool bUseKlist = m_tDeadRowMap.HasDead();
+	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
+	bool bHasWeightFilter = !!tCtx.m_pWeightFilter;
+	bool bHasFilterCalc = !tCtx.m_dCalcFilter.IsEmpty();
+	bool bHasCutoff = iCutoff!=-1;
+
+	int iIndex = bUseKlist*64 + bHaveRandom*32 + bUseFactors*16 + bHasSortCalc*8 + bHasWeightFilter*4 + bHasFilterCalc*2 + bHasCutoff;
+
+	switch ( iIndex )
 	{
-		case SPH_MATCH_ALL:
-		case SPH_MATCH_PHRASE:
-		case SPH_MATCH_ANY:
-		case SPH_MATCH_EXTENDED:
-		case SPH_MATCH_EXTENDED2:
-		case SPH_MATCH_BOOLEAN:
-			if ( bHaveDead )
-			{
-				if ( bHaveRandom )
-				{
-					if ( bUseFactors )
-						pFunc = &CSphIndex_VLN::MatchExtended<true, true, true>;
-					else
-						pFunc = &CSphIndex_VLN::MatchExtended<true, true, false>;
-				}
-				else
-				{
-					if ( bUseFactors )
-						pFunc = &CSphIndex_VLN::MatchExtended<true, false, true>;
-					else
-						pFunc = &CSphIndex_VLN::MatchExtended<true, false, false>;
-				}
-			}
-			else
-			{
-				if ( bHaveRandom )
-				{
-					if ( bUseFactors )
-						pFunc = &CSphIndex_VLN::MatchExtended<false, true, true>;
-					else
-						pFunc = &CSphIndex_VLN::MatchExtended<false, true, false>;
-				}
-				else
-				{
-					if ( bUseFactors )
-						pFunc = &CSphIndex_VLN::MatchExtended<false, false, true>;
-					else
-						pFunc = &CSphIndex_VLN::MatchExtended<false, false, false>;
-				}
-			}
-
-			(*this.*pFunc)( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight );
-			break;
-
+#define DECL_FNSCAN( _, n, params ) case n: MatchExtended<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1)> params; break;
+	BOOST_PP_REPEAT ( 128, DECL_FNSCAN, ( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight, iCutoff ) )
+#undef DECL_FNSCAN
 		default:
-			sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", tQuery.m_eMode );
+			assert ( 0 && "Internal error" );
+			break;
 	}
 
 	////////////////////

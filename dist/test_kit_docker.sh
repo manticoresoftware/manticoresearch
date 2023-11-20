@@ -12,25 +12,6 @@ fi
 git clone https://github.com/manticoresoftware/docker.git docker
 cd docker
 
-# cat > manticore.conf << EOF
-# common {
-# 	plugin_dir = /usr/local/lib/manticore
-# 	lemmatizer_base = /usr/share/manticore/
-# }
-# searchd {
-# 	listen = 9306:mysql41
-# 	listen = /var/run/mysqld/mysqld.sock:mysql41
-# 	listen = 9312
-# 	listen = 9308:http
-# 	log = /var/log/manticore/searchd.log
-# 	query_log = /var/log/manticore/query.log
-# 	pid_file = /var/run/manticore/searchd.pid
-# 	data_dir = /var/lib/manticore
-# 	query_log_format = sphinxql
-# 	# buddy_path = manticore-executor-dev /workdir/src/main.php
-# }
-# EOF
-
 repo_urls=("https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-amd64/"
 		   "https://repo.manticoresearch.com/repository/manticoresearch_jammy/dists/jammy/main/binary-amd64/")
 

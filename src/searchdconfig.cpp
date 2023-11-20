@@ -295,8 +295,8 @@ void IndexDescDistr_t::Save ( JsonEscapedBuilder& tOut ) const
 		for_each ( m_dAgents, [&tOut] ( const auto& sNode ) { tOut << sNode; } );
 	}
 
-	tOut.NamedVal ( "agent_connect_timeout", m_iAgentConnectTimeout );
-	tOut.NamedVal ( "agent_query_timeout", m_iAgentQueryTimeout );
+	tOut.NamedValNonDefault ( "agent_connect_timeout", m_iAgentConnectTimeout, 0 );
+	tOut.NamedValNonDefault ( "agent_query_timeout", m_iAgentQueryTimeout, 0 );
 	tOut.NamedValNonDefault ( "agent_retry_count", m_iAgentRetryCount, 0 );
 	tOut.NamedVal ( "divide_remote_ranges", m_bDivideRemoteRanges );
 	tOut.NamedStringNonDefault ( "ha_strategy", m_sHaStrategy, {} );
@@ -321,8 +321,10 @@ void IndexDescDistr_t::Save ( CSphConfigSection & hIndex ) const
 	}
 
 	CSphString sTmp;
-	hIndex.AddEntry ( "agent_connect_timeout",	sTmp.SetSprintf ( "%d", m_iAgentConnectTimeout ).cstr() );
-	hIndex.AddEntry ( "agent_query_timeout",	sTmp.SetSprintf ( "%d", m_iAgentQueryTimeout ).cstr() );
+	if ( m_iAgentConnectTimeout>0 )
+		hIndex.AddEntry ( "agent_connect_timeout",	sTmp.SetSprintf ( "%d", m_iAgentConnectTimeout ).cstr() );
+	if ( m_iAgentQueryTimeout>0 )
+		hIndex.AddEntry ( "agent_query_timeout",	sTmp.SetSprintf ( "%d", m_iAgentQueryTimeout ).cstr() );
 	if ( m_iAgentRetryCount > 0 )
 		hIndex.AddEntry ( "agent_retry_count",		sTmp.SetSprintf ( "%d", m_iAgentRetryCount ).cstr() );
 
@@ -638,8 +640,8 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		const auto& tIdx = *tIt.second;
 
 		tIndex.m_tDistr.m_dLocals				= tIdx.m_dLocal;
-		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIdx.m_iAgentConnectTimeoutMs;
-		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIdx.m_iAgentQueryTimeoutMs;
+		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIdx.GetAgentConnectTimeoutMs ( true );
+		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIdx.GetAgentQueryTimeoutMs ( true );
 		tIndex.m_tDistr.m_iAgentRetryCount		= tIdx.m_iAgentRetryCount;
 		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIdx.m_bDivideRemoteRanges;
 		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIdx.m_eHaStrategy );
@@ -754,7 +756,7 @@ bool SaveConfigInt ( CSphString & sError )
 
 	if ( !ReplicationEnabled() && !IsConfigless() )
 		return true;
-	
+
 
 	// save clusters and their indexes into JSON config on daemon shutdown
 	auto dClusters = ReplicationCollectClusters ();
@@ -1005,11 +1007,11 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 
 	DistributedIndexRefPtr_t pDefault ( new DistributedIndex_t );
 	CSphString sOpt;
-	if ( tDistr.m_iAgentConnectTimeoutMs!=pDefault->m_iAgentConnectTimeoutMs )
-		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.m_iAgentConnectTimeoutMs );
+	if ( tDistr.GetAgentConnectTimeoutMs ( true )!=pDefault->GetAgentConnectTimeoutMs ( true ) )
+		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.GetAgentConnectTimeoutMs ( true ) );
 
-	if ( tDistr.m_iAgentQueryTimeoutMs!=pDefault->m_iAgentQueryTimeoutMs )
-		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.m_iAgentQueryTimeoutMs );
+	if ( tDistr.GetAgentQueryTimeoutMs ( true )!=pDefault->GetAgentQueryTimeoutMs ( true ) )
+		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.GetAgentQueryTimeoutMs ( true ) );
 
 	if ( tDistr.m_iAgentRetryCount!=pDefault->m_iAgentRetryCount )
 		sRes << sOpt.SetSprintf ( "agent_retry_count='%d'", tDistr.m_iAgentRetryCount );

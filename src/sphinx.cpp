@@ -11424,6 +11424,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	const BYTE * pBlobPool = m_tBlobAttrs.GetReadPtr();
 	pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
+	const columnar::Columnar_i * pColumnar = m_pColumnar.get();
+	pRanker->ExtraData ( EXTRA_SET_COLUMNAR, (void**)&pColumnar );
 
 	int iMatchPoolSize = 0;
 	dSorters.Apply ( [&iMatchPoolSize] ( const ISphMatchSorter * p ) { iMatchPoolSize += p->GetMatchCapacity(); } );

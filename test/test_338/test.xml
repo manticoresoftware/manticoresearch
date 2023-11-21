@@ -440,6 +440,29 @@ index test_rt
 	"id":"1002"
 }
 </query>
+
+<!-- inserts of empty array into JSON and MVA columns -->
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":2001,
+	"doc":
+	{
+		"mva_col" : []
+	}
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":2002,
+	"doc":
+	{
+		"json_col": []
+	}
+}
+</query>
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":2000, "lt":3000 } } }, "sort": ["id"] }</query>
 </httpqueries>
 
 </test>

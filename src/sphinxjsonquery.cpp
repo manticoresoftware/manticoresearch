@@ -1074,6 +1074,8 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 						tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
 						bMVA = true;
 					}
+					if ( !bMVA && !tItem.Size() )
+						bMVA = true;
 				}
 
 				if ( !bMVA )

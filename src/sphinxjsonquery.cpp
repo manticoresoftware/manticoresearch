@@ -906,6 +906,39 @@ static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStri
 }
 
 
+static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+{
+	if ( !tJson )
+		return true;
+
+	if ( !tJson.IsObj() )
+	{	
+		sError = "\"knn\" property value should be an object";
+		return false;
+	}
+
+	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
+	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
+
+	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
+	if ( !tQueryVec )
+		return false;
+
+	for ( const auto & tArrayItem : tQueryVec )
+	{
+		if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+		{
+			sError = "\"query_vector\" items should be integer of float";
+			return false;
+		}
+
+		tQuery.m_dKNNVec.Add ( tArrayItem.FltVal() );
+	}
+
+	return true;
+}
+
+
 bool sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
 {
 	JsonObj_c tRoot ( sQuery );
@@ -936,9 +969,21 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 		return false;
 
 	JsonObj_c tJsonQuery = tRoot.GetItem("query");
+	JsonObj_c tKNNQuery = tRoot.GetItem("knn");
+	if ( tJsonQuery && tKNNQuery )
+	{
+		sError = "\"query\" can't be used together with \"knn\"";
+		return false;
+	}
 
 	// common code used by search queries and update/delete by query
 	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, sWarning ) )
+		return false;
+
+	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, sWarning ) )
+		return false;
+
+	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, sWarning ) )
 		return false;
 
 	JsonObj_c tOptions = tRoot.GetItem("options");
@@ -988,6 +1033,13 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 		bool bTrackScore = tTrackScore && tTrackScore.BoolVal();
 		if ( !bGotWeight && !bTrackScore )
 			tQuery.m_eRanker = SPH_RANK_NONE;
+	}
+	else
+	{
+		// set defaults
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+		tQuery.m_sSortBy = "@weight desc";
+		tQuery.m_sOrderBy = "@weight desc";
 	}
 
 	// source \ select filter
@@ -1068,7 +1120,7 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 					tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
 					for ( const auto & tArrayItem : tItem )
 					{
-						if ( !tArrayItem.IsInt() )
+						if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
 							break;
 
 						tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
@@ -1344,6 +1396,7 @@ static void PackedShortMVA2Json ( StringBuilder_c & tOut, const BYTE * pMVA )
 		tOut.NtoA(pValues[i]);
 }
 
+
 static void PackedWideMVA2Json ( StringBuilder_c & tOut, const BYTE * pMVA )
 {
 	auto dMVA = sphUnpackPtrAttr ( pMVA );
@@ -1352,6 +1405,17 @@ static void PackedWideMVA2Json ( StringBuilder_c & tOut, const BYTE * pMVA )
 	for ( int i = 0; i<(int) nValues; ++i )
 		tOut.NtoA(pValues[i]);
 }
+
+
+static void PackedFloatVec2Json ( StringBuilder_c & tOut, const BYTE * pFV )
+{
+	auto tFV = sphUnpackPtrAttr(pFV);
+	int iNumValues = tFV.second / sizeof(float);
+	auto pValues = (const float *)tFV.first;
+	for ( int i = 0; i<iNumValues; i++ )
+		tOut.FtoA(pValues[i]);
+}
+
 
 static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
 {
@@ -1382,13 +1446,16 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
 	{
 		auto _ = tOut.Array ();
 		const auto * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
 			PackedShortMVA2Json ( tOut, pMVA );
-		else
+		else if ( eAttrType==SPH_ATTR_INT64SET_PTR )
 			PackedWideMVA2Json ( tOut, pMVA );
+		else
+			PackedFloatVec2Json ( tOut, pMVA );
 	}
 	break;
 
@@ -1495,6 +1562,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( g_szHighlight ) ) return true;
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
+	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
 
 	if ( !tQuery.m_dIncludeItems.GetLength() && !tQuery.m_dExcludeItems.GetLength () )
 		return false;
@@ -1773,15 +1841,18 @@ static CSphString JsonEncodeResultError ( const CSphString & sError, const char 
 	return sResult;
 }
 
+
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus )
 {
 	return JsonEncodeResultError ( sError, sErrorType, &iStatus );
 }
 
+
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus, const char * sIndex )
 {
 	return JsonEncodeResultError ( sError, sErrorType, &iStatus, sIndex );
 }
+
 
 CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, bool bCompat )
 {
@@ -1845,6 +1916,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 	tOut.StartBlock ( ",", R"("hits":[)", "]" );
 
 	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
+	const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
 
 	bool bCompatId = false;
 	const CSphColumnInfo * pCompatRaw = nullptr;
@@ -1865,7 +1937,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 	bool bTag = tRes.m_bTagsAssigned;
 	int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto& tMatch : dMatches )
+	for ( const auto & tMatch : dMatches )
 	{
 		ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
 
@@ -1874,7 +1946,8 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		{
 			JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
 			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
-		} else if ( pId )
+		}
+		else if ( pId )
 		{
 			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
 			tOut.Sprintf ( R"("_id":"%U","_score":%d)", tDocID, tMatch.m_iWeight );
@@ -1892,13 +1965,14 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 				tOut += R"("_version": 1)";
 		}
 
+		if ( pKNNDist )
+			tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
+
 		tOut.StartBlock ( ",", "\"_source\":{", "}");
 
 		if ( pCompatRaw )
-		{
 			JsonObjAddAttr ( tOut, pCompatRaw->m_eAttrType, "_raw", tMatch, pCompatRaw->m_tLocator );
-		} else
-		{
+		else
 			for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
 			{
 				if ( !tAttrsToSend.BitGet(iAttr) )
@@ -1908,10 +1982,8 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 					continue;
 
 				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-				const char * sName = tCol.m_sName.cstr();
-				JsonObjAddAttr ( tOut, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator );
+				JsonObjAddAttr ( tOut, tCol.m_eAttrType, tCol.m_sName.cstr(), tMatch, tCol.m_tLocator );
 			}
-		}
 
 		tOut.FinishBlock ( false ); // _source obj
 

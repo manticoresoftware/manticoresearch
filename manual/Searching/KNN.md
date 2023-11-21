@@ -43,7 +43,50 @@ insert into test values ( 1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)
 ```sql
 Query OK, 2 rows affected (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+	"index":"test_vec",
+	"id":1,
+	"doc": 	{ "title" : "yellow bag", "image_vector" : [0.653448,0.192478,0.017971,0.339821] }
+}
+
+POST /insert
+{
+	"index":"test_vec",
+	"id":2,
+	"doc": 	{ "title" : "white bag", "image_vector" : [-0.148894,0.748278,0.091892,-0.095406] }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+	"_index":"test",
+	"_id":1,
+	"created":true,
+	"result":"created",
+	"status":201
+}
+
+{
+	"_index":"test",
+	"_id":2,
+	"created":true,
+	"result":"created",
+	"status":201
+}
+```
+
 <!-- end -->
+
 
 Now, you can initiate the KNN search using the `knn()` clause.
 
@@ -66,6 +109,62 @@ select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816
 +------+------------+
 2 rows in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+	"index": "test",
+	"knn":
+	{
+		"field": "image_vector",
+		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
+		"k": 5
+	}
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"total_relation":"eq",
+		"hits":
+		[
+			{
+				"_id":"1",
+				"_score":1,
+				"_knn_dist":0.28146550,
+				"_source":
+				{
+					"title":"yellow bag",
+					"image_vector":[0.653448,0.192478,0.017971,0.339821]
+				}
+			},
+			{
+				"_id":"2",
+				"_score":1,
+				"_knn_dist":0.81527930,
+				"_source":
+				{
+					"title":"white bag",
+					"image_vector":[-0.148894,0.748278,0.091892,-0.095406]
+				}
+			}
+		]
+	}
+}
+```
+
 <!-- end -->
 
 The `knn()` clause has the following syntax: `knn ( <attribute_name>, <k>, <query_vector> )`
@@ -94,6 +193,62 @@ select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816
 |    2 | 0.81527930 |
 +------+------------+
 1 row in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+	"index": "test",
+	"knn":
+	{
+		"field": "image_vector",
+		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
+		"k": 5,
+		"filter":
+		{
+			"bool":
+			{
+				"must":
+				[
+					{ "match": {"_all":"white"} },
+			        { "range": { "id": { "lt": 10 } } }
+				]
+			}
+		}
+	}
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"total_relation":"eq",
+		"hits":
+		[
+			{
+				"_id":"2",
+				"_score":1643,
+				"_knn_dist":0.81527930,
+				"_source":
+				{
+					"title":"white bag",
+					"image_vector":[-0.148894,0.748278,0.091892,-0.095406]
+				}
+			}
+		]
+	}
+}
 ```
 
 <!-- end -->

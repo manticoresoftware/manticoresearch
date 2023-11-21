@@ -59,3 +59,40 @@ Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
 ––– block: check-buddy –––
 ––– block: check-backup –––
+––– input –––
+wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb; echo $?
+––– output –––
+0
+––– input –––
+dpkg -i manticore-dev-repo.noarch.deb > /dev/null;
+––– output –––
+gpg: keyring '/etc/apt/trusted.gpg.d/manticore-keyring.gpg' created
+gpg: directory '/root/.gnupg' created
+gpg: /root/.gnupg/trustdb.gpg: trustdb created
+gpg: key 14D612DB3D2730E2: public key "Manticore Search <support@manticoresearch.com>" imported
+gpg: Total number processed: 1
+gpg:               imported: 1
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y manticore manticore-extra > /dev/null;
+––– output –––
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+LANGUAGE = (unset),
+LC_ALL = (unset),
+LANG = "en_US.UTF-8"
+are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+debconf: delaying package configuration, since apt-utils is not installed
+––– input –––
+searchd --version
+––– output –––
+Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] WARNING: Error initializing columnar storage: daemon requires columnar library v%{NUMBER} (trying to load v%{NUMBER})
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] WARNING: Error initializing secondary index: daemon requires secondary library v%{NUMBER} (trying to load v%{NUMBER})

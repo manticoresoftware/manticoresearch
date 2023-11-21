@@ -9061,27 +9061,39 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	bool bGotString = false, bGotMva = false;
 	CSphVector<ESphAttr> dRetTypes;
 	GatherArgRetTypes ( iArg, dRetTypes );
-	for ( ESphAttr eRetType: dRetTypes ) switch ( eRetType )
+	for ( ESphAttr eRetType: dRetTypes )
 	{
-		case SPH_ATTR_UINT32SET: case SPH_ATTR_INT64SET: case SPH_ATTR_UINT32SET_PTR: case SPH_ATTR_INT64SET_PTR: bGotMva = true; break;
-		case SPH_ATTR_STRING : bGotString = true;
-		default:;
+		switch ( eRetType )
+		{
+			case SPH_ATTR_UINT32SET: case SPH_ATTR_INT64SET: case SPH_ATTR_UINT32SET_PTR: case SPH_ATTR_INT64SET_PTR: bGotMva = true; break;
+			case SPH_ATTR_STRING : bGotString = true;
+			default:;
+		}
 	}
 
-	if ( bGotString ) switch ( eFunc )
+	if ( bGotString )
 	{
-		default: m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName ); return -1;
-		case FUNC_LENGTH: case FUNC_TO_STRING: case FUNC_CONCAT: case FUNC_SUBSTRING_INDEX: case FUNC_UPPER: case FUNC_LOWER: case FUNC_CRC32:
-		case FUNC_EXIST: case FUNC_POLY2D: case FUNC_GEOPOLY2D: case FUNC_REGEX: case FUNC_LEVENSHTEIN: case FUNC_DATE_FORMAT: case FUNC_BIGINT:;
+		switch ( eFunc )
+		{
+			default: m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName ); return -1;
+			case FUNC_LENGTH: case FUNC_TO_STRING: case FUNC_CONCAT: case FUNC_SUBSTRING_INDEX: case FUNC_UPPER: case FUNC_LOWER: case FUNC_CRC32:
+			case FUNC_EXIST: case FUNC_POLY2D: case FUNC_GEOPOLY2D: case FUNC_REGEX: case FUNC_LEVENSHTEIN: case FUNC_DATE_FORMAT: case FUNC_BIGINT:
+			case FUNC_DAY: case FUNC_MONTH: case FUNC_YEAR: case FUNC_YEARMONTH: case FUNC_YEARMONTHDAY:
+			case FUNC_SECOND: case FUNC_MINUTE: case FUNC_HOUR:
+			break;
+		}
 	}
 
-	if ( bGotMva ) switch ( eFunc )
+	if ( bGotMva )
 	{
-		default: m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName ); return -1;
-		case FUNC_TO_STRING: case FUNC_LENGTH: case FUNC_LEAST: case FUNC_GREATEST:;
+		switch ( eFunc )
+		{
+			default: m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName ); return -1;
+			case FUNC_TO_STRING: case FUNC_LENGTH: case FUNC_LEAST: case FUNC_GREATEST:;
+		}
 	}
 
-	auto& dArg = m_dNodes[iArg];
+	auto & dArg = m_dNodes[iArg];
 
 	switch ( eFunc )
 	{
@@ -9130,9 +9142,11 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		if ( !( dArg.m_eRetType==SPH_ATTR_INTEGER
 				 || dArg.m_eRetType==SPH_ATTR_TIMESTAMP
 				 || dArg.m_eRetType==SPH_ATTR_BIGINT
+				 || dArg.m_eRetType==SPH_ATTR_JSON_FIELD
+				 || dArg.m_eRetType==SPH_ATTR_STRING
 				 || CanEvalNumbers ( dArg.m_iFunc ) ) )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint, timestamp, or evaluated to number", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument must be integer, bigint, timestamp, json, string or evaluated to number", sFuncName );
 			return -1;
 		}
 		break;

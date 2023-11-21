@@ -29,6 +29,14 @@ index test_rt
 	rt_attr_json = json_col
 	rt_attr_string = title
 }
+
+index test_vec
+{
+    type = rt
+    path = <data_path/>/test_vec
+    rt_field = title
+	rt_attr_float_vector = vec
+}
 </config>
 
 <httpqueries>
@@ -440,6 +448,48 @@ index test_rt
 	"id":"1002"
 }
 </query>
+<!-- inserts of empty array into JSON and MVA columns -->
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":2001,
+	"doc":
+	{
+		"mva_col" : []
+	}
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":2002,
+	"doc":
+	{
+		"json_col": []
+	}
+}
+</query>
+
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":2000, "lt":3000 } } }, "sort": ["id"] }</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id": 1,
+	"doc": 	{ "title" : "doc one", "vec" : [3,2,1] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":2,
+	"doc": 	{ "title" : "doc two", "vec" : [30.3,20.2,10.1] }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} } }, "sort": ["id"] }</query>
+
 </httpqueries>
 
 </test>

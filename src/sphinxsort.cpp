@@ -7308,7 +7308,7 @@ static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTr
 }
 
 
-int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters )
+int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT )
 {
 	bool bAllPrecalc = dSorters.GetLength() && dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
 	if ( bAllPrecalc )
@@ -7330,10 +7330,7 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 		return -1;
 
 	// implicit cutoff when there's no sorting and no grouping
-	bool bNoSortScan = tQuery.m_sQuery.IsEmpty() && ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() );
-	bool bNoSortFT = !tQuery.m_sQuery.IsEmpty() && !strstr ( tQuery.m_sSortBy.scstr(), "weight" );
-
-	if ( ( bNoSortScan || bNoSortFT ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
+	if ( !bFT && ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
 		return tQuery.m_iLimit+tQuery.m_iOffset;
 
 	return -1;

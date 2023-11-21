@@ -1411,7 +1411,7 @@ private:
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
-	CSphVector<SecondaryIndexInfo_t> GetEnabledIndexes ( const CSphQuery & tQuery, float & fCost, int iThreads ) const;
+	CSphVector<SecondaryIndexInfo_t> GetEnabledIndexes ( const CSphQuery & tQuery, bool bFT, float & fCost, int iThreads ) const;
 
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
@@ -3084,13 +3084,13 @@ static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tSc
 }
 
 
-CSphVector<SecondaryIndexInfo_t> CSphIndex_VLN::GetEnabledIndexes ( const CSphQuery & tQuery, float & fCost, int iThreads ) const
+CSphVector<SecondaryIndexInfo_t> CSphIndex_VLN::GetEnabledIndexes ( const CSphQuery & tQuery, bool bFT, float & fCost, int iThreads ) const
 {
 	// if there's a filter tree, we don't have any indexes and there's no point in wasting time to eval them
 	if ( tQuery.m_dFilterTree.GetLength() )
 		return {};
 
-	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, {}, bFT );
 
 	StrVec_t dWarnings;
 	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
@@ -3114,7 +3114,8 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		auto & tQuery = dQueries[i];
 
 		// limit the number of threads for anything with FT as it looks better in average (some queries are faster without thread cap)
-		if ( !tQuery.m_sQuery.IsEmpty() )
+		bool bFulltext = !tQuery.m_pQueryParser->IsFullscan(tQuery);
+		if ( bFulltext )
 			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
 		if ( !tQuery.m_sKNNAttr.IsEmpty() )
@@ -3124,7 +3125,7 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 			continue;
 
 		float fCost = FLT_MAX;
-		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = GetEnabledIndexes ( tQuery, fCost, iThreads );
+		CSphVector<SecondaryIndexInfo_t> dEnabledIndexes = GetEnabledIndexes ( tQuery, bFulltext, fCost, iThreads );
 		bAllFast &= IsQueryFast ( tQuery, dEnabledIndexes, fCost );
 
 		// disable pseudo sharding if any of the queries use docid lookups
@@ -8393,7 +8394,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_SETUP_ITER );
 
-	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, false );
 	bool bAllPrecalc = dSorters.GetLength() && dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
 
 	// try to spawn an iterator from a secondary index
@@ -11593,7 +11594,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	SwitchProfile ( pProfile, SPH_QSTATE_SETUP_ITER );
 
-	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
 	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, pRanker.get() );
 	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );

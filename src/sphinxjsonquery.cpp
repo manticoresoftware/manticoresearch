@@ -189,10 +189,9 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 class QueryParserJson_c : public QueryParser_i
 {
 public:
+	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
 	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
-	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
-		TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson,
-		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const final;
+	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const final;
 
 private:
 	XQNode_t *		ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const;
@@ -205,6 +204,21 @@ private:
 
 	XQNode_t *		ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
 };
+
+
+bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
+{
+	const char * szQ = tQuery.m_sQuery.cstr();
+	if ( !szQ )									return true;
+	if ( strstr ( szQ, R"("match")" ) )			return false;
+	if ( strstr ( szQ, R"("terms")" ) )			return false;
+	if ( strstr ( szQ, R"("match_phrase")" ) )	return false;
+	if ( strstr ( szQ, R"("term")" ) )			return false;
+	if ( strstr ( szQ, R"("query_string")" ) )	return false;
+	if ( strstr ( szQ, R"("simple_query_string")" ) ) return false;
+
+	return true;
+}
 
 
 bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const

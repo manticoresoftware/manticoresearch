@@ -26,7 +26,7 @@ export CLUSTER_NAME=replication
 ––– input –––
 export CLUSTER_NAME=replication
 ––– output –––
-––– block: ../base/flexible/join-cluster –––
+––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);"; echo $?
 ––– output –––

@@ -293,7 +293,6 @@ jobs:
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
-          run_args: -e TELEMETRY=0
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
@@ -308,4 +307,4 @@ jobs:
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-
-          run_args: -e TELEMETRY=0
+          

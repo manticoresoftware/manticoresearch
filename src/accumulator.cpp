@@ -217,6 +217,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
 				const int64_t* pMva = &tDoc.m_dMvas[iMva];
 				int nValues = (int)*pMva++;

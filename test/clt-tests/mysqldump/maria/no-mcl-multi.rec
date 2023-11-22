@@ -1,0 +1,3 @@
+––– block: ../../base/start-searchd –––
+––– block: init –––
+––– block: ../common/no-mcl-multi –––

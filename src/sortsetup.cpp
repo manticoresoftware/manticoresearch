@@ -14,6 +14,7 @@
 
 #include "sphinxjson.h"
 #include "sphinxsort.h"
+#include "knnmisc.h"
 
 
 CSphMatchComparatorState::CSphMatchComparatorState()
@@ -216,6 +217,8 @@ void SortStateSetup_c::UnifyInternalAttrNames()
 		m_szTok = "@groupby"; // facet() is essentially a @groupby alias
 	else if ( strcasecmp ( m_szTok, "count" )>=0 && m_tTok.IsSparseCount ( m_szTok + sizeof ( "count" ) - 1 ) ) // epression count(*) with various spaces
 		m_szTok = "@count";
+	else if ( !strcasecmp ( m_szTok, "knn_dist()" ) )
+		m_szTok = "@knn_dist";
 }
 
 
@@ -458,8 +461,7 @@ bool SortStateSetup_c::Setup ( CSphString & sError )
 
 //////////////////////////////////////////////////////////////////////////
 
-ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState,
-	CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, CSphString & sError )
+ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, CSphString & sError )
 {
 	for ( auto & tAttr : tState.m_dAttrs )
 		tAttr = -1;

@@ -1,0 +1,12 @@
+––– input –––
+apt-get -yqq update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt -yqq install mariadb-server > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysqldump --version
+––– output –––
+mysqldump  Ver %{NUMBER}.%{NUMBER} Distrib %{SEMVER}-MariaDB, for debian-linux-gnu (x86_64)

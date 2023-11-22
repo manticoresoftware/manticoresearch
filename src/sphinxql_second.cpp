@@ -40,7 +40,8 @@ public:
 		return sResult;
 	}
 
-	void SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
+	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
+	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, const RefcountedVector_c<AttrValue_t> & dValues );
 };
 
 void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
@@ -48,6 +49,17 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
 	m_pStmt->m_eStmt = STMT_SET;
 	m_pStmt->m_eSet = eSet;
 	ToString ( m_pStmt->m_sSetName, tName );
+}
+
+
+void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, const RefcountedVector_c<AttrValue_t> & dValues )
+{
+	SetStatement ( tName, eSet );
+	
+	auto & dSV = m_pStmt->m_dSetValues;
+	dSV.Resize ( dValues.GetLength() );
+	ARRAY_FOREACH ( i, dValues )
+		dSV[i] = dValues[i].m_iValue;
 }
 
 #define YYSTYPE SqlNode_t

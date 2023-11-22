@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>knn search vs json queries</name>
+
+<skip_indexer/>
+
+<requires>
+<http/>
+<knn/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index test_vec
+{
+    type = rt
+    path = <data_path/>/test_vec
+    rt_field = title
+	rt_attr_float_vector = vec
+	knn = {"attrs":[{"name":"vec","type":"hnsw","dims":3,"hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200}]}
+}
+</config>
+
+<httpqueries>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":1,
+	"doc": 	{ "title" : "doc one", "vec" : [-0.0738,0.1067,0.0680] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":2,
+	"doc": 	{ "title" : "doc two", "vec" : [0.3968,0.1118,0.7669] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":3,
+	"doc": 	{ "title" : "doc three", "vec" : [-0.3379,0.3237,0.4578] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":4,
+	"doc": 	{ "title" : "doc four", "vec" : [-0.0292,-0.2448,0.1817] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":5,
+	"doc": 	{ "title" : "doc five", "vec" : [0.1816,-0.1221,0.6820] }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} }, "sort": [ { "id": "asc" } ] }</query>
+
+<query endpoint="json/search">
+{
+"index": "test_vec",
+"knn":
+{
+    "field": "vec",
+    "query_vector": [0.0452, 0.3906, -0.0110],
+    "k": 5,
+    "filter":
+	{
+      "term": { "title": "doc" }
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+"index": "test_vec",
+"knn":
+{
+    "field": "vec",
+    "query_vector": [0.0452, 0.3906, -0.0110],
+    "k": 5,
+    "filter":
+	{
+      "term": { "title": "docz" }
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+"index": "test_vec",
+"knn":
+{
+    "field": "vec",
+    "query_vector": [0.0452, 0.3906, -0.0110],
+    "k": 5
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+"index": "test_vec",
+"knn":
+{
+    "field": "vec",
+    "query_vector": [0.0452, 0.3906, -0.0110],
+    "k": 5,
+    "filter":
+	{
+      "equals": { "id":5 }
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+"index": "test_vec",
+"knn":
+{
+    "field": "vec",
+    "query_vector": [0.0452, 0.3906, -0.0110],
+    "k": 5,
+    "filter":
+	{
+      "bool" :
+      {
+        "must":
+        [
+          { "query_string": "four | five" },
+	      { "equals": { "id":5 } }
+        ]
+      }
+    }
+  }
+}
+</query>
+
+</httpqueries>
+
+</test>

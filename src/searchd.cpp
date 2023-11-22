@@ -48,6 +48,7 @@
 #include "index_rotator.h"
 #include "config_reloader.h"
 #include "secondarylib.h"
+#include "knnlib.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
@@ -793,6 +794,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown columnar ...";
 	ShutdownColumnar();
+
+	SHUTINFO << "Shutdown secondary ...";
+	ShutdownSecondary();
+
+	SHUTINFO << "Shutdown knn ...";
+	ShutdownKNN();
 
 	SHUTINFO << "Shutdown listeners ...";
 	for ( auto& dListener : g_dListeners )
@@ -1961,6 +1968,18 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 				}
 			}
 			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+		{
+			int iValues = tReq.GetDword ();
+			BYTE * pData = nullptr;
+			BYTE * pPacked = sphPackPtrAttr ( iValues*sizeof(DWORD), &pData );
+			tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)pPacked );
+			auto * pFloatVec = (float *)pData;
+			while ( iValues-- )
+				sphUnalignedWrite ( pFloatVec++, tReq.GetFloat() );
+		}
+		break;
 
 		case SPH_ATTR_STRINGPTR:
 		case SPH_ATTR_JSON_PTR:
@@ -3467,6 +3486,24 @@ static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
 }
 
 
+static void SendFloatVec ( ISphOutputBuffer & tOut, const BYTE * pData )
+{
+	if ( !pData )
+	{
+		tOut.SendDword(0);
+		return;
+	}
+
+	auto dFloatVec = sphUnpackPtrAttr ( pData );
+	DWORD uValues = dFloatVec.second / sizeof(float);
+	tOut.SendDword(uValues);
+
+	auto pValues = (const float *) dFloatVec.first;
+	while ( uValues-- )
+		tOut.SendFloat ( *pValues++ );
+}
+
+
 static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSchema & tSchema, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
@@ -3479,6 +3516,9 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 
 	case SPH_ATTR_INT64SET_PTR:
 		return SPH_ATTR_INT64SET;
+
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		return SPH_ATTR_FLOAT_VECTOR;
 
 	case SPH_ATTR_STRINGPTR:
 	{
@@ -3545,6 +3585,10 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 		SendMVA ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), tAttr.m_eAttrType==SPH_ATTR_INT64SET_PTR );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		SendFloatVec ( tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
 		break;
 
 	case SPH_ATTR_JSON_PTR:
@@ -4641,8 +4685,7 @@ bool MinimizeSchemas ( AggrResult_t & tRes )
 class FrontendSchemaBuilder_c
 {
 public:
-			FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,
-				const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals );
+			FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,	const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals );
 
 	void	CollectKnownItems();
 	void	AddAttrs();
@@ -4671,8 +4714,7 @@ private:
 };
 
 
-FrontendSchemaBuilder_c::FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,
-		const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals )
+FrontendSchemaBuilder_c::FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems, const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals )
 	: m_tRes ( tRes )
 	, m_tQuery ( tQuery )
 	, m_dItems ( dItems )
@@ -4717,7 +4759,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		const CSphColumnInfo & tCol = m_tRes.m_tSchema.GetAttr(iCol);
 
 		assert ( !tCol.m_sName.IsEmpty() );
-		bool bMagic = ( IsGroupbyMagic ( tCol.m_sName ) || IsSortStringInternal ( tCol.m_sName ) );
+		bool bMagic = IsGroupbyMagic ( tCol.m_sName ) || IsSortStringInternal ( tCol.m_sName );
 
 		if ( !bMagic && tCol.m_pExpr )
 		{
@@ -4937,7 +4979,7 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
 		// checking _PTR attrs only because we should not have and non-ptr attr at this point
-		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 		{
 			tFrontend.m_tLocator = pGroupByCol->m_tLocator;
 			tFrontend.m_eAttrType = pGroupByCol->m_eAttrType;
@@ -10887,7 +10929,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -10911,7 +10953,7 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 
 	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 		m_dMvas.Add(0);
 
 	SqlInsert_t tDefaultVal;
@@ -10941,20 +10983,37 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 		return false;
 
 	// MVA column? grab the values
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+	switch ( tCol.m_eAttrType )
 	{
-		// collect data from scattered insvals
-		// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
-		int iLen = 0;
-		if ( tVal.m_pVals )
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
 		{
-			tVal.m_pVals->Uniq();
-			iLen = tVal.m_pVals->GetLength();
-		}
+			// collect data from scattered insvals
+			// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
+			int iLen = 0;
+			if ( tVal.m_pVals )
+			{
+				tVal.m_pVals->Uniq();
+				iLen = tVal.m_pVals->GetLength();
+			}
 
-		m_dMvas.Add ( iLen );
-		for ( int j=0; j<iLen; j++ )
-			m_dMvas.Add ( (*tVal.m_pVals)[j] );
+			m_dMvas.Add ( iLen );
+			for ( int j=0; j<iLen; j++ )
+				m_dMvas.Add ( (*tVal.m_pVals)[j].m_iValue );
+		}
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR:
+		{
+			int iLen = tVal.m_pVals ? tVal.m_pVals->GetLength() : 0;
+			m_dMvas.Add ( iLen );
+			for ( int j=0; j<iLen; j++ )
+				m_dMvas.Add ( sphF2DW ( (*tVal.m_pVals)[j].m_fValue ) );
+		}
+		break;
+
+	default:
+		break;
 	}
 
 	SphAttr_t tAttr;
@@ -11939,6 +11998,9 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	if ( tAttr.IsColumnar() )
 		sProps << "columnar";
 
+	if ( tAttr.IsIndexedKNN() )
+		sProps << "knn";
+
 	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
 		sProps << "fast_fetch";
 
@@ -12918,21 +12980,19 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * sDistributed,
-	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning,
-	const cServedIndexRefPtr_c & pServed )
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
 	CSphString sError;
 	// checks
 	if ( !pServed )
 	{
-		dFails.Submit ( sIndex, sDistributed, "table not available" );
+		dFails.Submit ( sIndex, szDistributed, "table not available" );
 		return;
 	}
 
 	if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 	{
-		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, szDistributed, sError.cstr() );
 		return;
 	}
 
@@ -12947,7 +13007,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 
 	if ( sError.Length() )
 	{
-		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, szDistributed, sError.cstr() );
 		return;
 	}
 
@@ -13374,6 +13434,14 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 					dRows.PutArray ( dStr, false );
 					break;
 				}
+
+			case SPH_ATTR_FLOAT_VECTOR_PTR:
+			{
+				StringBuilder_c dStr;
+				sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+				dRows.PutArray ( dStr, false );
+				break;
+			}
 
 			case SPH_ATTR_STRINGPTR:
 				{
@@ -20431,18 +20499,24 @@ static void InitBanner()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	const char * sSiVer = GetSecondaryVersionStr();
+	const char * szSiVer = GetSecondaryVersionStr();
 	CSphString sSi = "";
-	if ( sSiVer )
-		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+	if ( szSiVer )
+		sSi.SetSprintf ( " (secondary %s)", szSiVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr() );
+	const char * szKNNVer = GetKNNVersionStr();
+	CSphString sKNN = "";
+	if ( szKNNVer )
+		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
 	g_sBanner.SetSprintf ( "%s%s", g_sBannerVersion.cstr(), szMANTICORE_BANNER_TEXT );
-	g_sMySQLVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
-	g_sStatusVersion.SetSprintf ( "%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr() );
+	g_sMySQLVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	g_sStatusVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
 }
 
-static void CheckSSL ()
+
+static void CheckSSL()
 {
 	// check for SSL inited well
 	for ( const auto & tListener : g_dListeners )
@@ -20515,10 +20589,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CheckWinInstall();
 #endif
 
-	CSphString sError;
+	CSphString sError, sKNNError;
 	// initialize it before other code to fetch version string for banner
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( g_sSecondaryError );
+	bool bKNNError = !InitKNN ( sKNNError );
 	sphCollationInit ();
 
 	InitBanner();
@@ -20528,8 +20603,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
 	if ( bSecondaryError )
 		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
+
+	if ( bKNNError )
+		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
 
 	if ( !sError.IsEmpty() )
 		sError = "";

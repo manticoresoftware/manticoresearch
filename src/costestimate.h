@@ -58,6 +58,7 @@ struct SelectIteratorCtx_t
 	int										m_iThreads = 1;
 	bool									m_bCalcPushCost = true;
 	bool									m_bFromIterator = false;
+	float									m_fDocsLeft = 1.0f;
 
 			SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
 

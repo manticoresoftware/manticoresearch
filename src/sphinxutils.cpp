@@ -877,6 +877,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_uint",			KEY_LIST, NULL },
 	{ "rt_attr_bigint",			KEY_LIST, NULL },
 	{ "rt_attr_float",			KEY_LIST, NULL },
+	{ "rt_attr_float_vector",	KEY_LIST, NULL },
 	{ "rt_attr_timestamp",		KEY_LIST, NULL },
 	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_attr_multi",			KEY_LIST, NULL },
@@ -923,6 +924,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_subblock",		KEY_REMOVED, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
 	{ "engine_default",			0, nullptr },
+	{ "knn",					0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 

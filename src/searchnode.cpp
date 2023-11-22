@@ -4149,12 +4149,13 @@ void ExtNWay_T<FSM>::DebugDump ( int iLevel )
 
 static DWORD GetQposMask ( const CSphVector<ExtNode_i *> & dQwords )
 {
-	DWORD uQposMask = ( 1 << dQwords[0]->GetAtomPos() );
-	for ( int i=1; i<dQwords.GetLength(); i++ )
+	DWORD uQposMask = 0;
+	for ( const ExtNode_i * pNode : dQwords )
 	{
-		int iQpos = dQwords[i]->GetAtomPos();
-		assert ( iQpos<(int)sizeof(uQposMask)*8 );
-		uQposMask |= ( 1 << iQpos );
+		int iQpos = pNode->GetAtomPos();
+		// no more than 32 query terms could be checked, all other skipped
+		if ( iQpos<0x1f )
+			uQposMask |= ( 1 << iQpos );
 	}
 
 	return uQposMask;
@@ -4854,7 +4855,12 @@ struct QuorumCmpHitPos_fn
 			DWORD uHitPosB = HITMAN::GetPosWithField(b.m_uHitpos);
 
 			if ( uHitPosA==uHitPosB )
-				return a.m_uQuerypos<b.m_uQuerypos;
+			{
+				if ( a.m_uQuerypos==b.m_uQuerypos )
+					return HITMAN::IsEnd ( b.m_uHitpos );
+				else
+					return ( a.m_uQuerypos<b.m_uQuerypos );
+			}
 
 			return uHitPosA<uHitPosB;
 		}

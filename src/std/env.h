@@ -28,9 +28,9 @@ const char* GET_MANTICORE_MODULES();
 CSphString GET_GALERA_FULLPATH();
 
 // this returns env LIB_MANTICORE_COLUMNAR, or GET_MANTICORE_MODULES()/lib_manticore_columnar.xx (xx=so or dll)
-CSphString GET_COLUMNAR_FULLPATH();
-
-CSphString GET_SECONDARY_FULLPATH();
+CSphString GetColumnarFullpath();
+CSphString GetSecondaryFullpath();
+CSphString GetKNNFullpath();
 
 // return value of asked ENV, or default.
 // note, default determines the type which to return

@@ -118,6 +118,7 @@ public:
 	bool					HasStoredAttrs() const;
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
+	bool					HasKNNAttrs() const;
 	bool					IsFieldStored ( int iField ) const;
 	bool					IsAttrStored ( int iAttr ) const;
 
@@ -152,4 +153,5 @@ private:
 	void					UpdateHash ( int iStartIdx, int iAddVal );
 
 	void					SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
+	void					SetupKNNFlags ( const CSphSourceSettings & tSettings );
 };

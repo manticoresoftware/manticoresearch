@@ -200,7 +200,7 @@ bool			GetAccurateAggregationDefault();
 void			SetDistinctThreshDefault ( int iThresh );
 int 			GetDistinctThreshDefault();
 
-int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
+int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT );
 bool			HasImplicitGrouping ( const CSphQuery & tQuery );
 
 /// creates proper queue for given query

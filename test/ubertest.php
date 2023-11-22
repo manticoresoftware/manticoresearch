@@ -219,6 +219,7 @@ if ( !$g_guesscached ) {
 	GuessSSL();
 	GuessColumnar();
 	GuessSecondary();
+	GuessKNN();
 	if ( !$force_guess )
 		CacheGuesses();
 }

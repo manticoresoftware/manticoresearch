@@ -410,7 +410,7 @@ jobs:
 
 
   clt_core_test:
-    name: name: CLT test core logic of the manticoresearch
+    name: CLT test core logic
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
@@ -470,8 +470,6 @@ jobs:
           artifact: manticore_test_kit.img
           image: test-kit:img
           test_prefix: test/clt-tests/sharding/cluster/
-          run_args: -e TELEMETRY=0
-
   clt_sharding_syntax_test:
     name: CLT test syntax of autosharding
     needs: build_test_kit_docker

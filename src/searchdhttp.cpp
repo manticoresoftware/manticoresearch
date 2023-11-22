@@ -2513,8 +2513,7 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 }
 
 
-bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const JsonObj_c& tJsonQuery,
-	const JsonObj_c& tRoot, CSphString* pUID, bool bReplace )
+bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace )
 {
 	CSphString sTmp, sWarning;
 

@@ -7266,7 +7266,7 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
-		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, false );
 		tMeta.m_bTotalMatchesApprox |= PerformFullscan ( dRamChunks, tMaxSorterSchema.GetDynamicSize(), tArgs.m_iIndexWeight, iStride, iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta.m_sWarning );
 	}
 
@@ -7417,7 +7417,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
 		// do searching
-		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
 		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
 	}
 

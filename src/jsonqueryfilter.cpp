@@ -1003,14 +1003,23 @@ static bool ConstructFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSph
 	if ( sName.IsEmpty() )
 		return false;
 
-	if ( sName!="query" )
+	bool bKNN = sName=="knn";
+	if ( sName!="query" && !bKNN )
 	{
-		sError.SetSprintf ( R"("query" expected, got %s)", sName.cstr() );
+		sError.SetSprintf ( R"("query" or "knn" expected, got %s)", sName.cstr() );
 		return false;
 	}
 
+	JsonObj_c tKNNFilter;
+	if ( bKNN )
+	{
+		tKNNFilter = tJson.GetObjItem ( "filter", sError, true );
+		if ( !tKNNFilter )
+			return true;
+	}
+
 	FilterTreeConstructor_c tTreeConstructor ( tQuery, sError, sWarning );
-	return tTreeConstructor.Parse(tJson);
+	return tTreeConstructor.Parse ( bKNN ? tKNNFilter : tJson );
 }
 
 
@@ -1032,16 +1041,22 @@ bool ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphSt
 	bool bFullscan = !tJson || ( tJson.Size()==1 && tJson.HasItem("match_all") );
 
 	if ( !bFullscan )
-		tQuery.m_sQuery = tJson.AsString();
+	{
+		if ( CSphString ( tJson.Name() )=="knn" )
+		{
+			JsonObj_c tFilter = tJson.GetObjItem ( "filter", sError, true );
+			if ( tFilter )
+				tQuery.m_sQuery = tFilter.AsString();
+		}
+		else
+			tQuery.m_sQuery = tJson.AsString();
+	}
 
 	// because of the way sphinxql parsing was implemented
 	// we need to parse our query and extract filters now
 	// and parse the rest of the query later
-	if ( tJson )
-	{
-		if ( !ConstructFilters ( tJson, tQuery, sError, sWarning ) )
-			return false;
-	}
+	if ( tJson && !ConstructFilters ( tJson, tQuery, sError, sWarning ) )
+		return false;
 
 	return true;
 }

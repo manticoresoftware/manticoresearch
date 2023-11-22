@@ -1859,6 +1859,99 @@ var searchResponse = searchApi.Search(searchRequest);
 
 <!-- end -->
 
+## Float vector
+
+<!-- example for creating float_vector -->
+
+Float vector attributes allow storing variable-length lists of floats. It's important to note that this concept differs from multi-valued attributes. Multi-valued attributes (MVAs) are essentially sets; they do not preserve value order, and duplicate values are not retained. In contrast, float vectors perform no additional processing on values during insertion.
+
+Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, image_vector float_vector);
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+    'title'=>['type'=>'text'],
+	'image_vector'=>['type'=>'float_vector']
+]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### config:
+
+<!-- request config -->
+
+```ini
+table products
+{
+	type = rt
+	path = products
+
+	rt_field = title
+	stored_fields = title
+
+	rt_attr_float_vector = image_vector
+}
+```
+
+<!-- end -->
+
 ## Multi-value integer (MVA)
 
 <!-- example for creating MVA32 -->

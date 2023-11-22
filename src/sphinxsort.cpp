@@ -27,9 +27,10 @@
 #include "aggregate.h"
 #include "distinct.h"
 #include "netreceive_ql.h"
+#include "knnmisc.h"
 
-#include <time.h>
-#include <math.h>
+#include <ctime>
+#include <cmath>
 
 #if !_WIN32
 #include <unistd.h>

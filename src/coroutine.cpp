@@ -191,6 +191,10 @@ class Worker_c : public details::SchedulerOperation_t
 	int64_t			m_tmRuntimePeriodUS = 0;
 	int				m_iNumOfRestarts = 0;
 
+	// task-local msg
+	StringBuilder_c m_sTlsMsg;
+	StringBuilder_c* m_pPrevTlsMsg = nullptr;
+
 	static uint64_t InitWorkerID()
 	{
 		static std::atomic<uint64_t> uWorker { 0ULL };
@@ -210,7 +214,9 @@ class Worker_c : public details::SchedulerOperation_t
 	inline void CoroGuardEnter()
 	{
 		m_pPreviousWorker = std::exchange ( m_pTlsThis, this );
-		m_pCurrentTaskInfo = MyThd().m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+		auto& tMyThd = MyThd();
+		m_pPrevTlsMsg = tMyThd.m_pTlsMsg.exchange ( &m_sTlsMsg, std::memory_order_relaxed );
+		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		m_tmCpuTimeBase -= sphThreadCpuTimer();
 		++m_iNumOfRestarts;
 		CheckEngageTimer( TimePoint_e::fromresume );
@@ -221,7 +227,9 @@ class Worker_c : public details::SchedulerOperation_t
 		if ( m_tmRuntimePeriodUS )
 			m_tInternalTimer.UnEngage();
 		m_tmCpuTimeBase += sphThreadCpuTimer();
-		m_pCurrentTaskInfo = MyThd().m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+		auto& tMyThd = MyThd();
+		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+		tMyThd.m_pTlsMsg.store ( m_pPrevTlsMsg, std::memory_order_relaxed );
 	}
 
 	static inline void CoroGuardExit()
@@ -333,7 +341,7 @@ public:
 		( new Worker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ();
 	}
 
-	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
+	// invoked from CallCoroutine -> ReplicationServiceStart on daemon startup. Schedule into primary queue.
 	// Adopt parent's task info (if any), and may change it exclusively.
 	// Parent thread at the moment blocked and may display info about it
 	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )

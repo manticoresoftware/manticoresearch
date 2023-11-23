@@ -3196,11 +3196,11 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 
 #if HAVE_DLOPEN
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath )
+CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath, bool bGlobal )
 	: m_bReady ( false )
 	, m_pLibrary ( nullptr )
 {
-	m_pLibrary = dlopen ( sPath, RTLD_NOW | RTLD_GLOBAL );
+	m_pLibrary = dlopen ( sPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
 	if ( !m_pLibrary )
 		sphLogDebug ( "dlopen(%s) failed", sPath );
 	else
@@ -3413,7 +3413,12 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 
 namespace TlsMsg
 {
-	static thread_local StringBuilder_c sTlsMsgs;
+//	static thread_local StringBuilder_c sTlsMsgs;
+	inline StringBuilder_c& TlsMsgs() noexcept
+	{
+		return *Threads::MyThd().m_pTlsMsg.load ( std::memory_order_relaxed );
+	}
+
 
 	bool Err( const char* sFmt, ... )
 	{
@@ -3422,7 +3427,7 @@ namespace TlsMsg
 		va_start ( ap, sFmt );
 		sMsgs.vSprintf( sFmt, ap );
 		va_end ( ap );
-		sTlsMsgs.Swap ( sMsgs );
+		TlsMsgs().Swap ( sMsgs );
 		return false;
 	}
 
@@ -3430,21 +3435,28 @@ namespace TlsMsg
 	{
 		if (sMsg.IsEmpty())
 			return true;
-		sTlsMsgs << sMsg;
+		TlsMsgs() << sMsg;
 		return false;
 	}
 
-	void ResetErr() { sTlsMsgs.Clear(); }
-	StringBuilder_c& Err() { return sTlsMsgs; }
-	const char* szError() { return sTlsMsgs.cstr(); }
+	void ResetErr() { TlsMsgs().Clear(); }
+	StringBuilder_c& Err() { return TlsMsgs(); }
+	const char* szError() { return TlsMsgs().cstr(); }
 	void MoveError ( CSphString& sError )
 	{
-		if ( sTlsMsgs.IsEmpty())
+		if ( TlsMsgs().IsEmpty())
 			return;
-		sTlsMsgs.MoveTo(sError);
+		TlsMsgs().MoveTo(sError);
 	}
 
-	bool HasErr() { return !sTlsMsgs.IsEmpty(); }
+	CSphString MoveToString ()
+	{
+		CSphString sError;
+		TlsMsgs().MoveTo ( sError );
+		return sError;
+	}
+
+	bool HasErr() { return !TlsMsgs().IsEmpty(); }
 }
 
 const char * GetBaseName ( const CSphString & sFullPath )

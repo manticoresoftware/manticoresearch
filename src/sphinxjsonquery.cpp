@@ -16,6 +16,7 @@
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "searchdsql.h"
+#include "knnmisc.h"
 
 #include "json/cJSON.h"
 

@@ -26,6 +26,7 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
+#include "replication/api_command_cluster.h"
 #include "threadutils.h"
 #include "searchdtask.h"
 #include "global_idf.h"
@@ -7230,7 +7231,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// connect to remote agents and query them, if required
 	std::unique_ptr<SearchRequestBuilder_c> tReqBuilder;
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { nullptr };
-	std::unique_ptr<ReplyParser_i> tParser;;
+	std::unique_ptr<ReplyParser_i> tParser;
 	if ( !dRemotes.IsEmpty() )
 	{
 		SwitchProfile(m_pProfile, SPH_QSTATE_DIST_CONNECT);
@@ -8760,18 +8761,18 @@ static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sClus
 	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails )
 {
 	int iUpd = 0;
-	CSphString sError, sWarning;
+	CSphString sWarning;
 	RtAccum_t tAcc;
-	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sIndex, sCluster );
+	ReplicationCommand_t* pCmd = tAcc.AddCommand ( ReplCmd_e::UPDATE_API, sIndex, sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = std::move(pUpd);
 	pCmd->m_bBlobUpdate = bBlobUpdate;
 
-	HandleCmdReplicate ( tAcc, sError, sWarning, iUpd );
+	HandleCmdReplicateUpdate ( tAcc, sWarning, iUpd );
 
 	if ( iUpd<0 )
 	{
-		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, sDistributed, TlsMsg::szError() );
 	} else
 	{
 		iUpdated += iUpd;
@@ -9514,7 +9515,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName () ); break;
+		case SEARCHD_COMMAND_CLUSTER:	HandleAPICommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 		default:						assert ( 0 && "internal error: unhandled command" ); break;
@@ -11097,7 +11098,7 @@ static bool InsertToPQ ( const SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t 
 	auto pStored = pQIndex->CreateQuery ( tArgs, sError );
 	if ( pStored )
 	{
-		auto * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sIndex, tStmt.m_sCluster );
+		auto * pCmd = pAccum->AddCommand ( ReplCmd_e::PQUERY_ADD, tStmt.m_sIndex, tStmt.m_sCluster );
 		dIds.Add ( pStored->m_iQUID );
 		pCmd->m_pStored = std::move ( pStored );
 	}
@@ -11112,8 +11113,11 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
-	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
+	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc() ) )
+	{
+		TlsMsg::MoveError ( sError );
 		return tOut.Error ( "%s", sError.cstr() );
+	}
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -11137,8 +11141,9 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
-			if ( !HandleCmdReplicate ( *pAccum, sError, iDeleted ) )
+			if ( !HandleCmdReplicateDelete ( *pAccum, iDeleted ) )
 			{
+				TlsMsg::MoveError(sError);
 				tOut.Error ( "%s", sError.cstr() );
 				return;
 			}
@@ -11227,11 +11232,8 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 		return false;
 	}
 
-	if ( !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
-	{
-		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
-		return false;
-	}
+	if ( !ValidateClusterStatement ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+		TlsMsg::MoveError ( sError );
 
 	if ( !sError.IsEmpty() )
 	{
@@ -11313,7 +11315,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 			pIndex->AddDocument ( tConverter, bReplace, tStmt.m_sStringParam, sError, sWarning, pAccum );
 			dIds.Add ( tConverter.GetID() );
 
-			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, tStmt.m_sIndex, tStmt.m_sCluster );
+			pAccum->AddCommand ( ReplCmd_e::RT_TRX, tStmt.m_sIndex, tStmt.m_sCluster );
 		}
 
 		if ( !sError.IsEmpty() )
@@ -11348,9 +11350,10 @@ static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed,
 		RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
 		assert ( pSession->m_tAcc.GetAcc ( RIdx_T<RtIndex_i *>(pServed), sError )==pAccum );
 
-		if ( !HandleCmdReplicate ( *pAccum, sError ) )
+		if ( !HandleCmdReplicate ( *pAccum ) )
 		{
 			RIdx_T<RtIndex_i *> pIndex { pServed };
+			TlsMsg::MoveError ( sError );
 			pIndex->RollBack ( pAccum ); // clean up collected data
 			tOut.Error ( "%s", sError.cstr() );
 			return;
@@ -12982,7 +12985,7 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
-	CSphString sError;
+	TlsMsg::ResetErr();
 	// checks
 	if ( !pServed )
 	{
@@ -12990,24 +12993,24 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
+	if ( !ValidateClusterStatement ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 	{
-		dFails.Submit ( sIndex, szDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
 		return;
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
 	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
-	HandleCmdReplicate ( tAcc, sError, sWarning, iUpdated );
+	HandleCmdReplicateUpdate ( tAcc, sWarning, iUpdated );
 
-	if ( sError.Length() )
+	if ( TlsMsg::HasErr() )
 	{
-		dFails.Submit ( sIndex, szDistributed, sError.cstr() );
+		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
 		return;
 	}
 
@@ -13617,7 +13620,7 @@ static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand
 
 	const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 
-	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
+	auto pCmd = MakeReplicationCommand ( ReplCmd_e::PQUERY_DELETE, std::move ( sIndex ), std::move ( sCluster ) );
 	if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 	{
 		pCmd->m_dDeleteQueries.Append ( pFilter->GetValues() );
@@ -13664,8 +13667,8 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		return err ( "table not available, or does not support DELETE" );
 
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sName );
-	if ( !CheckIndexCluster ( sName, *pServed, sCluster, IsHttpStmt ( tStmt ), sError ) )
-		return err();
+	if ( !ValidateClusterStatement ( sName, *pServed, sCluster, IsHttpStmt ( tStmt ) ) )
+		return err ( TlsMsg::szError() );
 
 	// process store to local variable instead of deletion (here we don't need any stuff like accum, txn, replication)
 	if ( bOnlyStoreDocIDs )
@@ -13719,15 +13722,15 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 			return err();
 
 		assert ( pAccum );
-		pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sName, sCluster );
+		pAccum->AddCommand ( ReplCmd_e::RT_TRX, sName, sCluster );
 	}
 
 	int iAffected = 0;
 	if ( bCommit )
 	{
-		if ( !HandleCmdReplicate ( *pAccum, sError, iAffected ) )
+		if ( !HandleCmdReplicateDelete ( *pAccum, iAffected ) )
 		{
-			dErrors.Submit ( sName, sDistributed, sError.cstr() );
+			dErrors.Submit ( sName, sDistributed, TlsMsg::szError() );
 			return 0;
 		}
 	}
@@ -13846,13 +13849,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	tOut.Ok ( iAffected );
 }
-
-struct SessionVars_t
-{
-	bool			m_bAutoCommit = true;
-	bool			m_bInTransaction = false;
-	CSphVector<int64_t> m_dLastIds;
-};
 
 // fwd
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow );
@@ -14081,8 +14077,11 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		pSession->m_bInTransaction = false;
 
 		// commit all pending changes
-		if ( bAutoCommit && tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc(), sError ) )
+		if ( bAutoCommit && tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc() ) )
+		{
+			TlsMsg::MoveError(sError);
 			return false;
+		}
 		return true;
 	}
 
@@ -14428,9 +14427,9 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 	case SET_CLUSTER_UVAR: // SET CLUSTER ident GLOBAL 'variable' = string|int
 		{
-			if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetName, tStmt.m_sSetValue, sError ) )
+			if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetName, tStmt.m_sSetValue ) )
 			{
-				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+				tOut.Error ( tStmt.m_sStmt, TlsMsg::szError() );
 				return;
 			}
 		}
@@ -15138,7 +15137,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
-	auto pCmd = MakeReplicationCommand ( ReplicationCommand_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
+	auto pCmd = MakeReplicationCommand ( ReplCmd_e::TRUNCATE, tStmt.m_sIndex, tStmt.m_sCluster );
 	CSphString sError;
 	StrVec_t dWarnings;
 	const CSphString & sIndex = tStmt.m_sIndex;
@@ -15165,9 +15164,9 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 			return;
 		}
 
-		if ( !CheckIndexCluster ( sIndex, *pIndex, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
+		if ( !ValidateClusterStatement ( sIndex, *pIndex, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 		{
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( tStmt.m_sStmt, TlsMsg::szError() );
 			return;
 		}
 	}
@@ -15179,9 +15178,9 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	sWarning = ConcatWarnings ( dWarnings );
 
-	bool bRes = HandleCmdReplicate ( *pAccum, sError );
+	bool bRes = HandleCmdReplicate ( *pAccum );
 	if ( !bRes )
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, TlsMsg::szError() );
 	else
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
@@ -17253,21 +17252,27 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:
-		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes, m_sError ) )
+		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
 			tOut.Ok();
 		else
+		{
+			TlsMsg::MoveError ( m_sError );
 			tOut.Error ( sQuery.first, m_sError.cstr() );
+		}
 		return true;
 	case STMT_CLUSTER_CREATE:
-		if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
+		if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
 			tOut.Ok();
 		else
+		{
+			TlsMsg::MoveError ( m_sError );
 			tOut.Error ( sQuery.first, m_sError.cstr() );
+		}
 		return true;
 
 	case STMT_CLUSTER_DELETE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterDelete ( pStmt->m_sIndex, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
+		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
@@ -17276,7 +17281,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
+		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
@@ -20228,8 +20233,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	// set index cluster name for check
 	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )
-		for ( const CSphString & sIndexName : tClusterDesc.m_dIndexes )
-			SetIndexCluster ( sIndexName, tClusterDesc.m_sName );
+		for ( const auto & tIndex : tClusterDesc.m_hIndexes )
+			AssignClusterToIndex ( tIndex.first, tClusterDesc.m_sName );
 	sphLogDebugRpl ( "%d clusters loaded from config", GetClustersInt().GetLength() );
 
 
@@ -21236,6 +21241,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
+	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
 
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
@@ -21252,8 +21258,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	Detached::MakeAloneIteratorAvailable ();
 
 	// time for replication to sync with cluster
-	searchd::AddShutdownCb ( ReplicateClustersDelete );
-	ReplicationStart ( dListenerDescs, bNewCluster, bNewClusterForce );
+	searchd::AddShutdownCb ( ReplicationServiceShutdown );
+	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
 	searchd::AddShutdownCb ( BuddyStop );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest

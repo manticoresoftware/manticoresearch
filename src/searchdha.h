@@ -183,7 +183,7 @@ using HostDashboardRefPtr_t = CSphRefcountedPtr<HostDashboard_t>;
 using cHostDashboardRefPtr_t = CSphRefcountedPtr<const HostDashboard_t>;
 
 /// generic descriptor of remote host
-struct HostDesc_t : ISphNoncopyable
+struct HostDesc_t
 {
 	int m_iFamily = AF_INET;	///< TCP or UNIX socket
 	CSphString m_sAddr;			///< remote searchd host (used to update m_uAddr with resolver)
@@ -231,13 +231,13 @@ struct HostDashboard_t : public ISphRefcountedMT
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
 	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
-	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
-	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
+	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock ) = sphMicroTimer();    // updated when we get an answer from the host
+	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = sphMicroTimer();    // updated when we send a query to a host
 	int64_t m_iErrorsARow GUARDED_BY ( m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
 	DWORD m_uPingTripUS = 0;		// round-trip in uS. We send ping with current time, on receive answer compare with current time and fix that difference
 
 public:
-	explicit HostDashboard_t ( const HostDesc_t &tAgent );
+	explicit HostDashboard_t ( const HostDesc_t &tAgent = {});
 	int64_t EngageTime () const;
 	MetricsAndCounters_t &GetCurrentMetrics () REQUIRES ( m_dMetricsLock );
 	void GetCollectedMetrics ( HostMetricsSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dMetricsLock );
@@ -501,9 +501,15 @@ public:
 
 struct iQueryResult
 {
-	virtual ~iQueryResult() {}
+	virtual ~iQueryResult() = default;
 	virtual void Reset() = 0;
-	virtual bool HasWarnings() const = 0;
+	[[nodiscard]] virtual bool HasWarnings() const = 0;
+};
+
+struct DefaultQueryResult_t : public iQueryResult
+{
+	void Reset() final {}
+	[[nodiscard]] bool HasWarnings() const final { return false; }
 };
 
 /// remote agent connection (local per-query state)

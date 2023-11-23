@@ -181,7 +181,7 @@ endif (COVERAGE_TEST)
 
 # options for clang in C++
 target_compile_options ( lextra INTERFACE $<${CLANGCXX}:
-		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof> )
+		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof -Wc++11-narrowing> )
 
 # Checking for unaligned RAM access
 if (CMAKE_CROSSCOMPILING)

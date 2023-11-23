@@ -1031,7 +1031,7 @@ bool HttpHandler_c::CheckValid ( const ServedIndex_c* pServed, const CSphString&
 	}
 	if ( pServed->m_eType!=eType )
 	{
-		FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetTypeName ( eType ).cstr() );
+		FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetIndexTypeName ( eType ) );
 		return false;
 	}
 	return true;
@@ -1290,7 +1290,7 @@ protected:
 
 typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
 
-static const char * GetTypeName ( MysqlColumnType_e eType )
+static const char * GetMysqlTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
 	{
@@ -1304,7 +1304,7 @@ static const char * GetTypeName ( MysqlColumnType_e eType )
 	};
 }
 
-static MysqlColumnType_e GetTypeName ( const CSphString& sType )
+static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 {
 	if ( sType=="decimal")
 		return MYSQL_COL_DECIMAL;
@@ -1330,7 +1330,7 @@ static MysqlColumnType_e GetTypeName ( const CSphString& sType )
 
 JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eType )
 {
-	tOut.FixupSpacedAndAppendEscaped ( GetTypeName ( eType ) );
+	tOut.FixupSpacedAndAppendEscaped ( GetMysqlTypeName ( eType ) );
 	return tOut;
 }
 
@@ -1544,7 +1544,7 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 		{
 			assert ( tColumnNode.IsAssoc() ); // like {"id":{"type":"long long"}}
 			tColumnNode.ForEach( [&] ( CSphString&& sName, const NodeHandle_t& tNode ) {
-				auto eType = GetTypeName ( String ( Bson_c ( tNode ).ChildByName ( "type" ) ) );
+				auto eType = GetMysqlTypeByName ( String ( Bson_c ( tNode ).ChildByName ( "type" ) ) );
 				dSqlColumns.Add ( {sName,eType});
 			} );
 		}
@@ -2615,12 +2615,13 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 			auto& tAcc = pSession->m_tAcc;
 			auto* pAccum = tAcc.GetAcc( pIndex, m_sError );
 
-			ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, sIndex );
+			ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplCmd_e::PQUERY_ADD, sIndex );
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
 			pCmd->m_pStored = std::move ( pStored );
 
-			bOk = HandleCmdReplicate ( *pAccum, m_sError );
+			bOk = HandleCmdReplicate ( *pAccum );
+			TlsMsg::MoveError ( m_sError );
 		}
 	}
 
@@ -2658,7 +2659,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	auto& tAcc = pSession->m_tAcc;
 	auto* pAccum = tAcc.GetAcc ();
 
-	ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_DELETE, sIndex );
+	ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplCmd_e::PQUERY_DELETE, sIndex );
 
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", m_sError, true );
 	if ( !m_sError.IsEmpty() )
@@ -2691,7 +2692,8 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	bool bOk = HandleCmdReplicate ( *pAccum, m_sError, iDeleted );
+	bool bOk = HandleCmdReplicateDelete ( *pAccum, iDeleted );
+	TlsMsg::MoveError ( m_sError );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 

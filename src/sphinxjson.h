@@ -234,7 +234,7 @@ public:
 	ScopedComma_c Named ( const char * sName )
 	{
 		Base_T::FixupSpacedAndAppendEscaped ( sName );
-		AppendRawChunk ( {":", 1} );
+		AppendRawChunk ( FROMS ( ":" ) );
 		SkipNextComma ();
 		return { *this, nullptr };
 	}
@@ -261,7 +261,7 @@ public:
 
 	int NamedBlock( const char* sName )
 	{
-		Base_T::FixupSpacedAndAppendEscaped( sName );
+		FixupSpacedAndAppendEscaped( sName );
 		AppendRawChunk( { ":", 1 } );
 		SkipNextComma();
 		return MuteBlock();
@@ -290,13 +290,13 @@ public:
 	void NamedString ( const char* szName, const char* szValue )
 	{
 		Named ( szName );
-		Base_T::FixupSpacedAndAppendEscaped ( szValue );
+		FixupSpacedAndAppendEscaped ( szValue );
 	}
 
 	void NamedString ( const char* szName, Str_t sValue )
 	{
 		Named ( szName );
-		Base_T::FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
+		FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
 	}
 
 	void NamedString ( const char* szName, const CSphString& sValue )
@@ -307,6 +307,12 @@ public:
 	void NamedStringNonEmpty ( const char* szName, const CSphString& sValue )
 	{
 		if ( !sValue.IsEmpty() )
+			NamedString ( szName, sValue );
+	}
+
+	void NamedStringNonDefault ( const char* szName, const CSphString& sValue, CSphString sDefault )
+	{
+		if ( sValue!=sDefault )
 			NamedString ( szName, sValue );
 	}
 
@@ -322,6 +328,27 @@ public:
 	{
 		if ( tValue != tDefault )
 			NamedVal ( szName, tValue );
+	}
+
+	void String ( const char* szValue )
+	{
+		FixupSpacedAndAppendEscaped ( szValue );
+	}
+
+	void String ( Str_t sValue )
+	{
+		FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
+	}
+
+	void String ( const CSphString& sValue )
+	{
+		FixupSpacedAndAppendEscaped ( sValue.cstr() );
+	}
+
+	void StringNonEmpty ( const CSphString& sValue )
+	{
+		if ( !sValue.IsEmpty() )
+			String ( sValue );
 	}
 
 	// non-escaped.

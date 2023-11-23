@@ -200,11 +200,12 @@ namespace sph
 	SmallStringHash_T<CSphVariant> ParseKeyValueVars ( const char * sBuf );
 
 	template<typename FnFilter>
-	void ParseKeyValues ( const char * sBuf, FnFilter && fnFilter )
+	void ParseKeyValues ( const char * sBuf, FnFilter fnFilter, const char* szDelim = ",; \t\n\r" )
 	{
-		if ( sBuf && ( *sBuf ))
-		{
-			sph::Split ( sBuf, -1, ",; \t\n\r", [&] (const char* sToken, int iLen)
+		if ( !sBuf || ( !*sBuf ))
+			return;
+
+		sph::Split ( sBuf, -1, szDelim, [&] (const char* sToken, int iLen)
 			{
 				auto dOption = sphSplit ( sToken, iLen, "=" );
 				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
@@ -212,7 +213,6 @@ namespace sph
 				fnFilter ( std::move ( dOption[0] ), std::move ( dOption[1] ));
 			});
 		}
-	}
 
 	/// zero-copy split by the given boundaries, result valid until sIn lives.
 	void Split ( StrtVec_t& dOut, const char* sIn, const char* sBounds );
@@ -440,13 +440,14 @@ class CSphDynamicLibrary : public ISphNoncopyable
 	void *		m_pLibrary; // internal handle
 
 public:
-	explicit CSphDynamicLibrary ( const char* sPath );
+	explicit CSphDynamicLibrary ( const char* sPath, bool bGlobal=true );
 
 	// We are suppose, that library is loaded once when necessary, and will alive whole lifetime of utility.
 	// So, no need to explicitly desctruct it, this is intended leak.
 	~CSphDynamicLibrary ();
 
 	bool		LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum );
+	inline void * GetLib() const noexcept { return m_pLibrary; }
 };
 
 /// collect warnings/errors from any suitable context.
@@ -507,6 +508,9 @@ namespace TlsMsg
 	// move error to given string, or leave it intact if no error
 	void MoveError( CSphString& sError );
 
+	// return error msg (if any) and reset buff
+	CSphString MoveToString();
+
 	// true if some error was reported.
 	bool HasErr();
 
@@ -522,6 +526,12 @@ namespace TlsMsg
 		operator CSphString&() { return m_sPrevError;}
 	};
 }
+
+/// link given var to be reported at scope exit
+#define TLS_MSG_CATCH( STR ) AT_SCOPE_EXIT ( [&STR] {if ( !STR.IsEmpty() ) TlsMsg::Err(STR); } )
+
+/// declare str var and link it to be reported
+#define TLS_MSG_STRING( STR ) CSphString STR; TLS_MSG_CATCH ( STR )
 
 // extract basename from path
 const char * GetBaseName ( const CSphString & sFullPath );

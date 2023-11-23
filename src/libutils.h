@@ -38,7 +38,7 @@
 class ScopedHandle_c
 {
 public:
-	ScopedHandle_c ( void * pHandle )
+	explicit ScopedHandle_c ( void * pHandle )
 		: m_pHandle ( pHandle )
 	{}
 

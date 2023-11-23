@@ -40,6 +40,7 @@
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "pseudosharding.h"
+#include "knnmisc.h"
 #include "std/sys.h"
 
 #include <sys/stat.h>

@@ -82,9 +82,7 @@ HostDashboard_t::HostDashboard_t ( const HostDesc_t & tHost )
 {
 	assert ( !tHost.m_pDash );
 	m_tHost.CloneFromHost ( tHost );
-	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer ();
-	for ( auto & dMetric : m_dPeriodicMetrics )
-		dMetric.m_dMetrics.Reset ();
+	for_each ( m_dPeriodicMetrics, [] ( auto& dMetric ) { dMetric.m_dMetrics.Reset(); } );
 }
 
 HostDashboard_t::~HostDashboard_t ()

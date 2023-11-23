@@ -36,4 +36,19 @@ mysql> select CONNECTION_ID();
 +-----------------+
 1 row in set (0.00 sec)
 ```
+
+### KNN_DIST()
+
+Returns [KNN vector search](../Searching/KNN.md) distance.
+
+```sql
+mysql> select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) ) and match('white') and id < 10;
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    2 | 0.81527930 |
++------+------------+
+1 row in set (0.00 sec)
+```
+
 <!-- proofread -->

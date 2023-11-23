@@ -10184,7 +10184,7 @@ void sphRTSetTestMode ()
 }
 
 
-static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSettings, StrVec_t * pWarnings )
+static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSettings )
 {
 	bool bAllColumnar = false;
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
@@ -10192,19 +10192,7 @@ static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & t
 
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
 		if ( i==tCol.m_sName || bAllColumnar )
-		{
-			if ( tCol.m_eAttrType==SPH_ATTR_JSON )
-			{
-				if ( pWarnings )
-				{
-					CSphString sWarning;
-					sWarning.SetSprintf ( "columnar storage does not support json type ('%s' attribute specified as columnar)", tCol.m_sName.cstr() );
-					pWarnings->Add(sWarning);
-				}
-			}
-			else
-				tCol.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
-		}
+			tCol.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
 }
 
 
@@ -10238,7 +10226,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	CSphColumnInfo tDocIdCol ( sphGetDocidName() );
 	tDocIdCol.m_eAttrType = SPH_ATTR_BIGINT;
 	if ( !bPQ )
-		SetColumnarFlag ( tDocIdCol, tSettings, pWarnings );
+		SetColumnarFlag ( tDocIdCol, tSettings );
 
 	tSchema.AddAttr ( tDocIdCol, false );
 
@@ -10281,7 +10269,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 
 			if ( !bPQ )
 			{
-				SetColumnarFlag ( tCol, tSettings, pWarnings );
+				SetColumnarFlag ( tCol, tSettings );
 				SetKNNFlag ( tCol, tSettings );
 			}
 

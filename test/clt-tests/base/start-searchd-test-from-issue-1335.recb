@@ -1,5 +1,5 @@
 ––– input –––
-searchd -c /etc/manticoresearch/manticore.conf.sh
+searchd
 ––– output –––
 Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff

@@ -4,6 +4,11 @@ run-name: CLT latest release installation tests ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  push:
+    paths:
+      - 'test/clt-tests/**'
+    branches:
+      - manticore-6.2.12
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

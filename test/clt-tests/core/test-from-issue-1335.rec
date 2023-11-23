@@ -5,12 +5,12 @@ php ./test/clt-tests/core/issue-1335-dump.php 10000 30 800000
 finished inserting
 %{NUMBER} docs per sec
 ––– input –––
-mysql -e "SELECT COUNT(*) FROM test\G;"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test\G;"
 ––– output –––
 *************************** 1. row ***************************
 count(*): %{NUMBER}
 ––– input –––
-timeout 10 mysql -e "select * from test where MATCH('@street walnut blvd') and country='US'\G;"
+timeout 10 mysql -h0 -P9306 -e "select * from test where MATCH('@street walnut blvd') and country='US'\G;"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}
@@ -91,4 +91,4 @@ country: US
 *************************** 20. row ***************************
 id: %{NUMBER}
 street: %{NUMBER} Walnut Blvd
-country: US 
+country: US

@@ -10191,7 +10191,7 @@ static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & t
 		bAllColumnar |= i=="*";	
 
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
-		if ( i==tCol.m_sName || bAllColumnar )
+		if ( ( i==tCol.m_sName || bAllColumnar ) && tCol.m_eAttrType!=SPH_ATTR_JSON )
 			tCol.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
 }
 

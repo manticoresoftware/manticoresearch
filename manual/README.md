@@ -113,7 +113,7 @@
     * [• Query cache](Searching/Query_cache.md)
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
-    * [• K-nearest neighbor search](Searching/KNN.md)
+    * [• K-nearest neighbor vector search](Searching/KNN.md)
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)    
 * [⪢ Functions](Functions.md)
     * [• Mathematical functions](Functions/Mathematical_functions.md)

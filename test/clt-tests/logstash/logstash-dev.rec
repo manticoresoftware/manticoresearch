@@ -34,10 +34,10 @@ tar -xvzf logstash-7.10.0-linux-x86_64.tar.gz > /dev/null; echo $?
 mkdir /usr/share/filebeat && cd /usr/share/filebeat
 ––– output –––
 ––– input –––
-wget -q https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-7.10.0-linux-x86_64.tar.gz
+wget -q https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-8.11.0-linux-x86_64.tar.gz
 ––– output –––
 ––– input –––
-tar -xvzf filebeat-7.10.0-linux-x86_64.tar.gz > /dev/null; echo $?
+tar -xvzf filebeat-8.11.0-linux-x86_64.tar.gz > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -47,7 +47,7 @@ cd /usr/local/src
 ln -s /usr/share/logstash/logstash-7.10.0/bin/logstash /usr/bin/logstash
 ––– output –––
 ––– input –––
-ln -s /usr/share/filebeat/filebeat-7.10.0-linux-x86_64/filebeat /usr/bin/filebeat
+ln -s /usr/share/filebeat/filebeat-8.11.0-linux-x86_64/filebeat /usr/bin/filebeat
 ––– output –––
 ––– input –––
 manticore-executor -v
@@ -68,7 +68,7 @@ curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sor
 ––– output –––
 [{"Field":"@timestamp","Type":"text","Properties":"indexed stored"},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_2"\n  allow_older_versions: true\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_2"\n  pattern: "testlog_2"\n\nseccomp:\n  default_action: allow\n  syscalls:\n  - action: allow\n    names:\n    - rseq' > filebeat.yml
+printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_2"\n  allow_older_versions: true\n  compression_level: 0\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_2"\n  pattern: "testlog_2"\n\nseccomp:\n  default_action: allow\n  syscalls:\n  - action: allow\n    names:\n    - rseq' > filebeat.yml
 ––– output –––
 ––– input –––
 filebeat -c filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log & pid=$!

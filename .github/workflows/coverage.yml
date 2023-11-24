@@ -13,7 +13,8 @@ concurrency:
 
 jobs:
   commit_info:
-    name: Commit
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Commit info
     runs-on: ubuntu-22.04
     steps:
       - run: |

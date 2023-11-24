@@ -27,11 +27,10 @@ jobs:
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:
-      - name: Adding markdown
-        run: echo '# Automated Tests of commit ${{ github.sha }}
-        Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})
-        Ref: ${{ github.ref_type }} "${{ github.ref_name }}"
-        Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
+      - run: echo '# Automated Tests of commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+      - run: echo '* Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
+      - run: echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
+      - run: echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
 
   win_bundle:
     name: Windows supplementary files preparation

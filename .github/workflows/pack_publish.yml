@@ -21,16 +21,6 @@ concurrency:
 
 jobs:
 
-  commit_info:
-    name: Commit
-    runs-on: ubuntu-22.04
-    steps:
-      - run: |
-          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
-          echo '* Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
-          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
-          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
-
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -66,6 +56,11 @@ jobs:
       )
     steps:
       - run: echo "All set to build packages"
+      - run: |
+          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '* Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
+          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages

@@ -24,7 +24,7 @@ concurrency:
 jobs:
 
   commit_info:
-    name: Commit
+    name: Commit info
     runs-on: ubuntu-22.04
     steps:
       - run: |

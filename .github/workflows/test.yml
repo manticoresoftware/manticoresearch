@@ -24,7 +24,7 @@ concurrency:
 jobs:
 
   commit_info:
-    name: Windows supplementary files preparation
+    name: Commit info
     runs-on: ubuntu-22.04
     steps:
       - run: echo '# Automated Tests of commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY

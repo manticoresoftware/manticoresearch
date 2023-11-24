@@ -10822,6 +10822,7 @@ private:
 
 	bool		CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
+	bool		CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
 };
 
@@ -10919,6 +10920,45 @@ bool AttributeConverter_c::CheckJson ( const CSphColumnInfo & tCol, const SqlIns
 }
 
 
+bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
+{
+	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+		return true;
+
+	if ( !tVal.m_pVals )
+	{
+		m_dMvas.Add(0);
+		return true;
+	}
+
+	auto & tAddVals = *tVal.m_pVals;
+	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	{
+		m_dMvas.Add ( tAddVals.GetLength() );
+		for ( const auto & i : tAddVals )
+			m_dMvas.Add ( sphF2DW ( i.m_fValue ) );
+
+		return true;
+	}
+
+	// collect data from scattered insvals
+	// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
+	bool bFloatInMVA = false;
+	for ( const auto & i : tAddVals )
+		bFloatInMVA |= i.m_bFloat;
+
+	if ( bFloatInMVA )
+		m_sWarning.SetSprintf ( "MVA attribute %d at row %d: inserting float value", iCol, iRow );
+
+	tAddVals.Uniq();
+	m_dMvas.Add ( tAddVals.GetLength() );
+	for ( const auto & i : tAddVals )
+		m_dMvas.Add ( i.m_iValue );
+
+	return true;
+}
+
+
 bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
 {
 	if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING
@@ -10983,40 +11023,6 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 	if ( !CheckInsertTypes ( tCol, tVal, iRow, iQuerySchemaIdx ) )
 		return false;
 
-	// MVA column? grab the values
-	switch ( tCol.m_eAttrType )
-	{
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_INT64SET:
-		{
-			// collect data from scattered insvals
-			// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
-			int iLen = 0;
-			if ( tVal.m_pVals )
-			{
-				tVal.m_pVals->Uniq();
-				iLen = tVal.m_pVals->GetLength();
-			}
-
-			m_dMvas.Add ( iLen );
-			for ( int j=0; j<iLen; j++ )
-				m_dMvas.Add ( (*tVal.m_pVals)[j].m_iValue );
-		}
-		break;
-
-	case SPH_ATTR_FLOAT_VECTOR:
-		{
-			int iLen = tVal.m_pVals ? tVal.m_pVals->GetLength() : 0;
-			m_dMvas.Add ( iLen );
-			for ( int j=0; j<iLen; j++ )
-				m_dMvas.Add ( sphF2DW ( (*tVal.m_pVals)[j].m_fValue ) );
-		}
-		break;
-
-	default:
-		break;
-	}
-
 	SphAttr_t tAttr;
 	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, tAttr, bDocId, sError ) )
 	{
@@ -11031,6 +11037,7 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 
 	if ( !CheckStrings ( tCol, tVal, iCol, iRow ) )	return false;
 	if ( !CheckJson ( tCol, tVal ) )				return false;
+	if ( !CheckMVA ( tCol, tVal, iCol, iRow ) )		return false;
 
 	return true;
 }

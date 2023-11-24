@@ -209,6 +209,12 @@ searchd
 	update t set f=(3.14,2.71) where id=2;
 	select * from t;
 	drop table t;
+
+	create table t(t text, m multi);
+	insert into t values (1,'text',(5.5,4.4,5.5));
+	show meta;
+	select * from t;
+	drop table t;
 </sphinxql>
 </queries>
 

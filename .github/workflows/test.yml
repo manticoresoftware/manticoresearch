@@ -30,6 +30,7 @@ jobs:
       - run: |
           echo '# Automated Tests of commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
           echo '* Commit: [${{ github.event.head_commit.message }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Initiated by: ${{ github.actor }}
           echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
           echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
 

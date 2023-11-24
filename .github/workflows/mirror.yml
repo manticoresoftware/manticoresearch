@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Commit info
         run: |
-          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '# Syncing commit ${{ github.sha }} to GitLab' >> $GITHUB_STEP_SUMMARY
           echo '* Commit: [${{ github.event.head_commit.message }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
           echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
           echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY

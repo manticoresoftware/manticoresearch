@@ -27,10 +27,11 @@ jobs:
     name: Commit info
     runs-on: ubuntu-22.04
     steps:
-      - run: echo '# Automated Tests of commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
-      - run: echo '* Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
-      - run: echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
-      - run: echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
+      - run: |
+          echo '# Automated Tests of commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '* Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
+          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
 
   win_bundle:
     name: Windows supplementary files preparation

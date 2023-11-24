@@ -23,6 +23,13 @@ concurrency:
 
 jobs:
 
+  commit info:
+    name: Windows supplementary files preparation
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Adding markdown
+        run: echo '# Tests of commit [${{ github.sha }}](/${{ github.repository }})/commit/${{ github.sha }}) in branch "${{ github.ref }}"' >> $GITHUB_STEP_SUMMARY
+
   win_bundle:
     name: Windows supplementary files preparation
     if: |

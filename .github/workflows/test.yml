@@ -28,9 +28,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Adding markdown
-        run: |
-        echo '# Automated Tests of commit ${{ github.sha }}
-        Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }}) 
+        run: echo '# Automated Tests of commit ${{ github.sha }}
+        Commit: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})
         Ref: ${{ github.ref_type }} "${{ github.ref_name }}"
         Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
 

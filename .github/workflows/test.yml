@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
 
-  commit info:
+  commit_info:
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:

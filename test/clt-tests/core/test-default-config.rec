@@ -1,0 +1,34 @@
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+#!/bin/sh
+ip=`hostname -i|rev|cut -d\  -f 1|rev`
+cat << EOF
+searchd {
+data_dir = /var/lib/manticore
+listen = 9306:mysql41
+listen = /var/run/mysqld/mysqld.sock:mysql41
+listen = $ip:9312
+listen = 9308:http
+listen = $ip:9315-9325:replication
+log = /var/log/manticore/searchd.log
+max_packet_size = 128M
+pid_file = /var/run/manticore/searchd.pid
+query_log_format = sphinxql
+}
+common {
+}
+EOF
+––– input –––
+searchd
+––– output –––
+Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on UNIX socket /var/run/mysqld/mysqld.sock
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}

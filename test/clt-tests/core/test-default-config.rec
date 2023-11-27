@@ -1,21 +1,12 @@
 ––– input –––
 cat /etc/manticoresearch/manticore.conf
 ––– output –––
-#!/bin/sh
-ip=`hostname -i|rev|cut -d\  -f 1|rev`
-cat << EOF
 searchd {
-data_dir = /var/lib/manticore
-listen = 9306:mysql41
-listen = /var/run/mysqld/mysqld.sock:mysql41
-listen = $ip:9312
-listen = 9308:http
-listen = $ip:9315-9325:replication
+listen = 127.0.0.1:9312
+listen = 127.0.0.1:9306:mysql
+listen = 127.0.0.1:9308:http
 log = /var/log/manticore/searchd.log
-max_packet_size = 128M
+query_log = /var/log/manticore/query.log
 pid_file = /var/run/manticore/searchd.pid
-query_log_format = sphinxql
+data_dir = /var/lib/manticore
 }
-common {
-}
-EOF

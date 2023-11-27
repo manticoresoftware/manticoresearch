@@ -27,15 +27,13 @@ Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: check-buddy –––
 ––– block: check-backup –––
 ––– input –––
-yum install -y -q --enablerepo manticore-dev manticore manticore-extra > /dev/null 2>&1; echo $?
+yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
 searchd --version
 ––– output –––
-Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev
+Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-WARNING: Error initializing columnar storage: daemon requires columnar library v%{NUMBER} (trying to load v%{NUMBER})
-WARNING: Error initializing secondary index: daemon requires secondary library v%{NUMBER} (trying to load v%{NUMBER})

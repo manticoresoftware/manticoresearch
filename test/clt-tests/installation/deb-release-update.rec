@@ -78,8 +78,9 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y manticore manticore-extra > /dev/null;
+apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l > /dev/null
 ––– output –––
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
 perl: warning: Setting locale failed.
 perl: warning: Please check that your locale settings:
 LANGUAGE = (unset),
@@ -91,9 +92,7 @@ debconf: delaying package configuration, since apt-utils is not installed
 ––– input –––
 searchd --version
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} dev
+Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-WARNING: Error initializing columnar storage: daemon requires columnar library v%{NUMBER} (trying to load v%{NUMBER})
-WARNING: Error initializing secondary index: daemon requires secondary library v%{NUMBER} (trying to load v%{NUMBER})

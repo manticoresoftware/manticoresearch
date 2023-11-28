@@ -43,4 +43,4 @@ export CLUSTER_NAME=c
 ––– input –––
 mysql -h0 -P1306 -e "create table c:m(id bigint) SHARDS=10 RF=2"
 ––– output –––
-sfdghsh
+ERROR 1064 (42000) at line 1: Waiting timeout exceeded.

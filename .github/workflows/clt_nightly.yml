@@ -9,6 +9,10 @@ on:
       - 'test/clt-tests/**'
     branches:
       - manticore-6.2.12
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'test/clt-tests/installation/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

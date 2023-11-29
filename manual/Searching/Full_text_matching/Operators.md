@@ -163,7 +163,7 @@ The inline operators require `dict=keywords` and infixing enabled.
 REGEX(/t.?e/)
 ```
 
-Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) or suffix [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) and [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords options to be set (which is a default).
+Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) or [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) and [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords options to be set (which is a default).
 
 Similarly to the [wildcard operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators), the REGEX operator attempts to find all tokens matching the provided pattern, and each expansion is recorded as a matched hit. Note, this can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX pattern.
 

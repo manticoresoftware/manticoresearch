@@ -4857,7 +4857,7 @@ struct QuorumCmpHitPos_fn
 			if ( uHitPosA==uHitPosB )
 			{
 				if ( a.m_uQuerypos==b.m_uQuerypos )
-					return HITMAN::IsEnd ( b.m_uHitpos );
+					return HITMAN::IsEnd ( a.m_uHitpos ) < HITMAN::IsEnd ( b.m_uHitpos );
 				else
 					return ( a.m_uQuerypos<b.m_uQuerypos );
 			}

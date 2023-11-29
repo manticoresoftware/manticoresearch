@@ -49,7 +49,7 @@ searchd --version
 Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 manticore-executor -v
 ––– output –––

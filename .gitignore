@@ -76,5 +76,6 @@
 
 /local_*_src.txt
 /test/clt-tests/**/*.rep
+/test/clt-tests/**/*.cmp
 /clt
 

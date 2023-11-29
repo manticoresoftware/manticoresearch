@@ -297,7 +297,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.11
+      - uses: manticoresoftware/clt@0.1.5
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -312,7 +312,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.11
+      - uses: manticoresoftware/clt@0.1.5
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

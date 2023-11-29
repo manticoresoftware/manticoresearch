@@ -1,0 +1,244 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=6
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=7
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=8
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=9
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=10
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE a"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Index: a
+Type: rt
+––– input –––
+mysql -h0 -P1306 -e "create table e(id bigint) shards=10 rf=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Index: a
+Type: rt
+*************************** 2. row ***************************
+Index: e
+Type: distributed
+*************************** 3. row ***************************
+Index: e_s0
+Type: rt
+*************************** 4. row ***************************
+Index: e_s1
+Type: rt
+*************************** 5. row ***************************
+Index: e_s2
+Type: rt
+*************************** 6. row ***************************
+Index: e_s3
+Type: rt
+*************************** 7. row ***************************
+Index: e_s4
+Type: rt
+*************************** 8. row ***************************
+Index: e_s5
+Type: rt
+*************************** 9. row ***************************
+Index: e_s6
+Type: rt
+*************************** 10. row ***************************
+Index: e_s7
+Type: rt
+*************************** 11. row ***************************
+Index: e_s8
+Type: rt
+*************************** 12. row ***************************
+Index: e_s9
+Type: rt
+*************************** 13. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 14. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 15. row ***************************
+Index: sharding_table
+Type: rt
+––– input –––
+mysql -h0 -P1306 -e "create table s SHARDS='10' RF='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table k(id bigint) SHARDS='10' RF='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Index: a
+Type: rt
+*************************** 2. row ***************************
+Index: e
+Type: distributed
+*************************** 3. row ***************************
+Index: e_s0
+Type: rt
+*************************** 4. row ***************************
+Index: e_s1
+Type: rt
+*************************** 5. row ***************************
+Index: e_s2
+Type: rt
+*************************** 6. row ***************************
+Index: e_s3
+Type: rt
+*************************** 7. row ***************************
+Index: e_s4
+Type: rt
+*************************** 8. row ***************************
+Index: e_s5
+Type: rt
+*************************** 9. row ***************************
+Index: e_s6
+Type: rt
+*************************** 10. row ***************************
+Index: e_s7
+Type: rt
+*************************** 11. row ***************************
+Index: e_s8
+Type: rt
+*************************** 12. row ***************************
+Index: e_s9
+Type: rt
+*************************** 13. row ***************************
+Index: k
+Type: distributed
+*************************** 14. row ***************************
+Index: k_s0
+Type: rt
+*************************** 15. row ***************************
+Index: k_s1
+Type: rt
+*************************** 16. row ***************************
+Index: k_s2
+Type: rt
+*************************** 17. row ***************************
+Index: k_s3
+Type: rt
+*************************** 18. row ***************************
+Index: k_s4
+Type: rt
+*************************** 19. row ***************************
+Index: k_s5
+Type: rt
+*************************** 20. row ***************************
+Index: k_s6
+Type: rt
+*************************** 21. row ***************************
+Index: k_s7
+Type: rt
+*************************** 22. row ***************************
+Index: k_s8
+Type: rt
+*************************** 23. row ***************************
+Index: k_s9
+Type: rt
+*************************** 24. row ***************************
+Index: s
+Type: distributed
+*************************** 25. row ***************************
+Index: s_s0
+Type: rt
+*************************** 26. row ***************************
+Index: s_s1
+Type: rt
+*************************** 27. row ***************************
+Index: s_s2
+Type: rt
+*************************** 28. row ***************************
+Index: s_s3
+Type: rt
+*************************** 29. row ***************************
+Index: s_s4
+Type: rt
+*************************** 30. row ***************************
+Index: s_s5
+Type: rt
+*************************** 31. row ***************************
+Index: s_s6
+Type: rt
+*************************** 32. row ***************************
+Index: s_s7
+Type: rt
+*************************** 33. row ***************************
+Index: s_s8
+Type: rt
+*************************** 34. row ***************************
+Index: s_s9
+Type: rt
+*************************** 35. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 36. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 37. row ***************************
+Index: sharding_table
+Type: rt
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:m(id bigint) SHARDS='10' RF='2'"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:j(id bigint) SHARDS='10' RF='3'"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:x(id bigint) SHARDS='10' RF='10'"
+––– output –––

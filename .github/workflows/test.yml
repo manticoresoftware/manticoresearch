@@ -23,18 +23,6 @@ concurrency:
 
 jobs:
 
-  commit_info:
-    name: Commit info
-    runs-on: ubuntu-22.04
-    steps:
-      - run: |
-          echo '# Automated Tests of commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
-          echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
-          echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
-          echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
-          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
-          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
-
   win_bundle:
     name: Windows supplementary files preparation
     if: |
@@ -422,7 +410,7 @@ jobs:
 
 
   clt_core_test:
-    name: CLT test of core logic of Manticore Search
+    name: CLT test core logic
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
@@ -431,13 +419,13 @@ jobs:
           artifact: manticore_test_kit.img
           image: test-kit:img
           test_prefix: test/clt-tests/core/
-
+          
   clt_logstash_test:
     name: CLT test on Logstash and Filebeat
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.5
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -459,7 +447,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.5
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -470,13 +458,24 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.5
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
           test_prefix: test/clt-tests/expected-errors/
 
-  build_aarch64:
+  clt_sharding_syntax_test:
+    name: CLT test syntax of autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/syntax/
+
+          build_aarch64:
     name: Linux aarch64 build
     if: |
       (github.event_name == 'push')

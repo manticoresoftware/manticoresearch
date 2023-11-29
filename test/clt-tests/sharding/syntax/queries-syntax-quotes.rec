@@ -1,0 +1,42 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "create table u(id bigint) shards=10 rf=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+ *************************** 1. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 2. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 3. row ***************************
+Index: sharding_table
+Type: rt
+*************************** 4. row ***************************
+Index: u
+Type: distributed
+*************************** 5. row ***************************
+Index: u_s0
+Type: rt
+*************************** 6. row ***************************
+Index: u_s1
+Type: rt
+*************************** 7. row ***************************
+Index: u_s2
+Type: rt
+*************************** 8. row ***************************
+Index: u_s3
+Type: rt
+––– input –––
+mysql -h0 -P1306 -e "create table b(id bigint) shards='10' rf='1'"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––

@@ -15284,7 +15284,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	auto VarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
 	{
 		constexpr auto iSysvars = sizeof ( dSysvars ) / sizeof ( dSysvars[0] );
-		for ( int i = 1; i < iSysvars; ++i )
+		for ( int i = 1; i<(int)iSysvars; ++i )
 			if ( sName == dSysvars[i].m_szName )
 				return i;
 		return 0;

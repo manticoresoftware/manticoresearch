@@ -1227,7 +1227,7 @@ static bool PrepareNodesAndInitCluster ( ReplicationCluster_t& tCluster, BOOTSTR
 {
 	sphLogDebugRpl ( "PrepareNodesAndInitCluster '%s', bootstrap %d, nodes: %d", tCluster.m_sName.cstr(), (int)eBootStrap, tCluster.m_dClusterNodes.GetLength() );
 
-	if ( tCluster.m_dClusterNodes.IsEmpty() )
+	if ( tCluster.m_dClusterNodes.IsEmpty() && eBootStrap!=BOOTSTRAP_E::YES )
 	{
 		sphWarning ( "no nodes found, created new cluster '%s'", tCluster.m_sName.cstr() );
 		eBootStrap = BOOTSTRAP_E::YES;
@@ -1344,11 +1344,9 @@ static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClusters
 // start clusters on daemon start
 void ReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
 {
+	// should be lined up with PrepareClustersOnStartup
 	if ( !ReplicationEnabled() )
-	{
-		sphWarning ( "ReplicationServiceStart: replication is disabled" );
 		return;
-	}
 
 	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoReplicationServiceStart ( bBootStrap ); } );
 }

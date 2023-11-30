@@ -283,6 +283,7 @@ void sphSetSockReuseAddr ( int );
 void sphSetSockReusePort ( int );
 void sphSetSockTFO ( int );
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
+void SafeCloseSocket ( int & iFD );
 
 /** \brief wrapper over getaddrinfo
 Invokes getaddrinfo for given host which perform name resolving (dns).

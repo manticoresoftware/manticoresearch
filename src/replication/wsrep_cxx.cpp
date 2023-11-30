@@ -264,7 +264,7 @@ public:
 	Status_e Init ( const Raw::InitArgs_t * pArgs )
 	{
 		if ( !m_bValid )
-			return Status_e::FATAL;
+			return Status_e::NOT_IMPL;
 		assert ( m_bValid );
 		return m_tWsrep.m_fnInit ( &m_tWsrep, pArgs );
 	}
@@ -1213,7 +1213,7 @@ public:
 		m_pCluster->OnRecvStarted ();
 		sphLogDebugRpl ( "receiver thread started" );
 		Status_e eState = m_pWsrep->Recv ( m_pReceiver.Ptr ());
-		sphLogDebugRpl ( "receiver done, code %d, %s", eState, GetStatus ( eState ));
+		sphLogDebugRpl ( "receiver done, code %d, %s", (int)eState, GetStatus ( eState ));
 		m_pCluster->OnRecvFinished ( eState!= Status_e::CONNECTION_FAIL && eState!= Status_e::NODE_FAIL && eState!= Status_e::FATAL );
 		m_pCluster->Release ();
 	}

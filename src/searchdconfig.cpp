@@ -637,25 +637,7 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		IndexDesc_t & tIndex = dIndexes.Add();
 		tIndex.m_sName = tIt.first;
 		tIndex.m_eType = IndexType_e::DISTR;
-		const auto& tIdx = *tIt.second;
-
-		tIndex.m_tDistr.m_dLocals				= tIdx.m_dLocal;
-		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIdx.GetAgentConnectTimeoutMs ( true );
-		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIdx.GetAgentQueryTimeoutMs ( true );
-		tIndex.m_tDistr.m_iAgentRetryCount		= tIdx.m_iAgentRetryCount;
-		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIdx.m_bDivideRemoteRanges;
-		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIdx.m_eHaStrategy );
-
-		for ( const auto& i : tIdx.m_dAgents )
-		{
-			if ( !i || !i->GetLength() )
-				continue;
-
-			AgentConfigDesc_t & tAgent = tIndex.m_tDistr.m_dAgents.Add();
-			tAgent.m_sConfig		= i->GetConfigStr();
-			tAgent.m_bBlackhole		= (*i)[0].m_bBlackhole;
-			tAgent.m_bPersistent	= (*i)[0].m_bPersistent;
-		}
+		tIndex.m_tDistr = GetDistributedDesc ( *tIt.second );
 	}
 }
 
@@ -1381,3 +1363,29 @@ RunIdx_e IndexIsServed ( const CSphString& sName )
 		return DISTR;
 	return NOTSERVED;
 }
+
+IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
+{
+	IndexDescDistr_t tIndex;
+
+	tIndex.m_dLocals				= tDist.m_dLocal;
+	tIndex.m_iAgentConnectTimeout	= tDist.GetAgentConnectTimeoutMs ( true );
+	tIndex.m_iAgentQueryTimeout		= tDist.GetAgentQueryTimeoutMs ( true );
+	tIndex.m_iAgentRetryCount		= tDist.m_iAgentRetryCount;
+	tIndex.m_bDivideRemoteRanges	= tDist.m_bDivideRemoteRanges;
+	tIndex.m_sHaStrategy			= HAStrategyToStr ( tDist.m_eHaStrategy );
+
+	for ( const auto & tAgentIt : tDist.m_dAgents )
+	{
+		if ( !tAgentIt || !tAgentIt->GetLength() )
+			continue;
+
+		AgentConfigDesc_t & tAgent = tIndex.m_dAgents.Add();
+		tAgent.m_sConfig		= tAgentIt->GetConfigStr();
+		tAgent.m_bBlackhole		= (*tAgentIt)[0].m_bBlackhole;
+		tAgent.m_bPersistent	= (*tAgentIt)[0].m_bPersistent;
+	}
+
+	return tIndex;
+}
+

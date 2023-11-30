@@ -1620,6 +1620,21 @@ void DistributedIndex_t::SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs )
 	m_iAgentQueryTimeoutMs = iAgentQueryTimeoutMs;
 }
 
+DistributedIndex_t * DistributedIndex_t::Clone() const
+{
+
+	DistributedIndex_t * pDist ( new DistributedIndex_t );
+	pDist->m_dAgents = m_dAgents;
+	pDist->m_dLocal = m_dLocal;
+	pDist->m_iAgentRetryCount = m_iAgentRetryCount;
+	pDist->m_bDivideRemoteRanges = m_bDivideRemoteRanges;
+	pDist->m_eHaStrategy = m_eHaStrategy;
+	pDist->m_sCluster = m_sCluster;
+	pDist->m_iAgentConnectTimeoutMs = m_iAgentConnectTimeoutMs;
+	pDist->m_iAgentQueryTimeoutMs = m_iAgentQueryTimeoutMs;
+
+	return pDist;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
@@ -17296,7 +17311,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CLUSTER_ALTER_UPDATE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, true, m_tLastMeta.m_sError ) )
+		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
 			tOut.Ok();
 		else
 			tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );

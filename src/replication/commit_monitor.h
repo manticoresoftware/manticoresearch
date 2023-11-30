@@ -41,7 +41,7 @@ public:
 	bool Commit ();
 
 	// commit for Total Order Isolation commands
-	bool CommitTOI ( ServedClone_c* pDesc );
+	bool CommitTOI ();
 
 	// update with Total Order Isolation
 	bool UpdateTOI ();

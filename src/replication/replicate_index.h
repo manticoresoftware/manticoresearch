@@ -15,3 +15,6 @@
 
 // send local index to remote nodes via API
 bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sIndex, const VecTraits_T<AgentDesc_t>& dDesc, const cServedIndexRefPtr_c& pServedIndex );
+
+// send distributed index to remote nodes via API
+bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString & sIndex, const VecTraits_T<AgentDesc_t> & dDesc );

@@ -68,15 +68,14 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i * pIndex, const Replication
 }
 
 // commit for Total Order Isolation commands
-bool CommitMonitor_c::CommitTOI ( ServedClone_c* pDesc )
+bool CommitMonitor_c::CommitTOI()
 {
 	const ReplicationCommand_t & tCmd = *m_tAcc.m_dCmd[0];
 	switch (tCmd.m_eCommand)
 	{
 	case ReplCmd_e::CLUSTER_ALTER_ADD:
-		return AddIndexToClusterTOI ( pDesc, &tCmd );
 	case ReplCmd_e::CLUSTER_ALTER_DROP:
-		return DropIndexFromClusterTOI ( &tCmd );
+		return SetIndexClusterTOI ( &tCmd );
 	default:
 		return TlsMsg::Err ( "unknown command '%d'", (int) tCmd.m_eCommand );
 	}

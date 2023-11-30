@@ -23,3 +23,5 @@ void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CS
 
 // sending doesn't include cluster name
 void ReceiveClusterFileSend ( ISphOutputBuffer& tOutb, InputBuffer_c& tBuf );
+
+void ReceiveDistIndex ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );

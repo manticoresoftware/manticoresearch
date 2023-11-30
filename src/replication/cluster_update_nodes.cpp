@@ -39,8 +39,9 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	tRequest.m_eKindNodes = eNodes;
 
 	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tRequest );
+	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
-		return false;
+		return true;
 
 	ClusterUpdateNodes_c tReq;
 	return PerformRemoteTasksWrap ( dAgents, tReq, tReq );

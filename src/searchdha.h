@@ -694,6 +694,7 @@ struct DistributedIndex_t : public ISphRefcountedMT
 	bool m_bDivideRemoteRanges		= false;		///< whether we divide big range onto agents or not
 	HAStrategies_e m_eHaStrategy	= HA_DEFAULT;	///< how to select the best of my agents
 	mutable ServedStats_c			m_tStats;
+	CSphString						m_sCluster;
 
 	// get hive of all index'es hosts (not agents, but hosts, i.e. all mirrors as simple vector)
 	void GetAllHosts ( VectorAgentConn_t &dTarget ) const;
@@ -723,11 +724,10 @@ struct DistributedIndex_t : public ISphRefcountedMT
 	int GetAgentQueryTimeoutMs ( bool bRaw=false ) const;
 	void SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs );
 	void SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs );
+	DistributedIndex_t * Clone() const;
 
 private:
 	~DistributedIndex_t() override;
-
-	mutable SharedPtr_t<CSphIndex>		m_pRtMadeFromDistrIndex;
 
 	int m_iAgentConnectTimeoutMs	= 0;	///< in msec, 0 means g_iAgentConnectTimeoutMs
 	int m_iAgentQueryTimeoutMs		= 0;	///< in msec, 0 means g_iAgentQueryTimeoutMs

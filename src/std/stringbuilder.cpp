@@ -349,5 +349,5 @@ CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim
 {
 	StringBuilder_c tOut ( szDelim );
 	tVec.Apply ( [&tOut] ( const CSphString& sNode ) { tOut << sNode; } );
-	return { tOut };
+	return CSphString { tOut };
 }

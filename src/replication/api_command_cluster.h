@@ -34,6 +34,7 @@ enum class E_CLUSTER : WORD
 	SYNCED				= 5,
 	GET_NODES			= 6,
 	UPDATE_NODES		= 7,
+	INDEX_ADD_DIST		= 8,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -47,6 +48,8 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::SYNCED: return "synced";
 	case E_CLUSTER::GET_NODES: return "get_nodes";
 	case E_CLUSTER::UPDATE_NODES: return "update_nodes";
+	case E_CLUSTER::INDEX_ADD_DIST: return "index_add_distributed";
+	default: return "unknown";
 	}
 }
 

@@ -330,10 +330,10 @@ public:
 	}
 	using RowBuffer_i::Eof;
 
-	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
+	void Error ( const char * sError, MysqlErrors_e ) override
 	{
 		m_bError = true;
-		m_sError.SetSprintf ( "%s: %s", sStmt, sError );
+		m_sError = sError;
 		Eof ();
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
@@ -468,10 +468,10 @@ public:
 	bool Commit() override { return false;}
 	void Eof ( bool, int, const char* ) override {}
 	using RowBuffer_i::Eof;
-	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
+	void Error ( const char * sError, MysqlErrors_e ) override
 	{
 		m_bError = true;
-		m_sError.SetSprintf ( "%s:%s", sStmt, sError );
+		m_sError = sError;
 		Eof ();
 	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}

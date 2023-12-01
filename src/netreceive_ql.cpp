@@ -273,13 +273,10 @@ enum
 	MYSQL_COM_SET_OPTION	= 27
 };
 
-void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
-	Str_t sError, MysqlErrors_e iErr )
+static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, MysqlErrors_e iErr )
 {
 	if ( IsEmpty ( sError ) )
 		sError = FROMS("(null)");
-
-	LogSphinxqlError ( sStmt, sError );
 
 	// cut the error message to fix issue with long message for popular clients
 	if ( sError.second>MYSQL_ERROR::MAX_LENGTH )
@@ -629,11 +626,11 @@ public:
 	}
 	using RowBuffer_i::Eof;
 
-	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
+	void Error ( const char * sError, MysqlErrors_e iErr ) override
 	{
 		m_bError = true;
 		m_sError = sError;
-		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, FromSz(sError), iErr );
+		SendMysqlErrorPacket ( m_tOut, m_uPacketID, FromSz(sError), iErr );
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
@@ -981,14 +978,17 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 			tSess.m_pSqlRowBuffer = &tRows;
 			auto tStoredPos = tRows.GetCurrentPositionState();
 			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
-			if ( tRows.IsError() && HasBuddy() )
+			if ( tRows.IsError() )
 			{
-				if ( tRows.WasFlushed() )
+				if ( !HasBuddy() || tRows.WasFlushed() )
 				{
-					sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
-					break;
+					LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( tRows.GetError() ) );
+					if ( tRows.WasFlushed() )
+						sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
+				} else
+				{
+					ProcessSqlQueryBuddy ( myinfo::UnsafeDescription(), FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
 				}
-				ProcessSqlQueryBuddy ( myinfo::UnsafeDescription(), FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
 			}
 		}
 		break;
@@ -997,7 +997,8 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 			// default case, unknown command
 			StringBuilder_c sError;
 			sError << "unknown command (code=" << uMysqlCmd << ")";
-			SendMysqlErrorPacket ( tOut, uPacketID, NULL, Str_t(sError), MYSQL_ERR_UNKNOWN_COM_ERROR );
+			LogSphinxqlError ( "", Str_t ( sError ) );
+			SendMysqlErrorPacket ( tOut, uPacketID, Str_t(sError), MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 
@@ -1151,7 +1152,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 				LogNetError ( sError.cstr(), bNotError );
 				if ( !bNotError )
 				{
-					SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+					SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
 					pOut->Flush ();
 				}
 				return;
@@ -1177,7 +1178,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			{
 				sError.SetSprintf ( "failed to receive MySQL request body, expected length %d, %s", iPacketLen, ( pIn->GetError() ? pIn->GetErrorMessage().cstr() : sphSockError() ) );
 				LogNetError ( sError.cstr() );
-				SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
 				pOut->Flush ();
 				return;
 			}
@@ -1207,7 +1208,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( IsMaxedOut() )
 			{
 				LogNetError ( g_sMaxedOutMessage.first );
-				SendMysqlErrorPacket ( *pOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( *pOut, uPacketID, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
 				pOut->Flush ();
 				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 				break;

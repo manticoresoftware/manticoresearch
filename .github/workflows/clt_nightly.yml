@@ -59,7 +59,7 @@ jobs:
         with:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
-          test_prefix: test/clt-tests/installation/rhel-dev-u
+          test_prefix: test/clt-tests/installation/rhel-dev-
 
   clt_deb_dev_update:
     name: Testing DEB dev packages update
@@ -73,4 +73,4 @@ jobs:
         with:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
-          test_prefix: test/clt-tests/installation/deb-dev-u
+          test_prefix: test/clt-tests/installation/deb-dev-

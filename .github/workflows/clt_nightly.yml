@@ -46,3 +46,31 @@ jobs:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-release-
+
+  clt_rhel_dev_update:
+    name: Testing RHEL dev packages update
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.13
+        with:
+          ref: manticore-6.2.12
+          image: ${{ matrix.image }}
+          test_prefix: test/clt-tests/installation/rhel-dev-update
+
+  clt_deb_dev_update:
+    name: Testing DEB dev packages update
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.13
+        with:
+          ref: manticore-6.2.12
+          image: ${{ matrix.image }}
+          test_prefix: test/clt-tests/installation/deb-dev-update

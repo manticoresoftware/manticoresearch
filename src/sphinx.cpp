@@ -10154,7 +10154,7 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 #if defined( __clang__ )
 #if defined( __x86_64__ )
 static int SPH_EXTNODE_STACK_SIZE = 0x140;
-#elif defined ( __ARM_ARCH_ISA_A64 )
+#else // if defined ( __ARM_ARCH_ISA_A64 ) and all the others
 static int SPH_EXTNODE_STACK_SIZE = 0x160;
 #endif
 #elif defined( _WIN32 )

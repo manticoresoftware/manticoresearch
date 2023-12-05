@@ -961,8 +961,6 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 		return false;
 
 	tQuery.m_sIndexes = tIndex.StrVal();
-	tQuery.m_sIndexes.ToLower();
-
 	if ( tQuery.m_sIndexes==g_szAll )
 		tQuery.m_sIndexes = "*";
 

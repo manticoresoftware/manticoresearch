@@ -78,4 +78,4 @@
 /test/clt-tests/**/*.rep
 /test/clt-tests/**/*.cmp
 /clt
-
+**/.DS_Store

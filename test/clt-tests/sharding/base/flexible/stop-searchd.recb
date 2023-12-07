@@ -1,7 +1,7 @@
 ––– input –––
 searchd --stop -c test/clt-tests/sharding/base/config/searchd-with-flexible-ports.conf
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)

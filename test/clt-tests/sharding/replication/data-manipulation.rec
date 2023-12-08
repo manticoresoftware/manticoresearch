@@ -1,0 +1,64 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table testrt(id bigint, title text, content text, gid uint) shards=10 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(0,'List of HP business laptops','Elitebook Probook',1);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(1,'List of Dell business laptops','Latitude Precision Vostro',2);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM testrt\G;"
+––– output –––
+*************************** 1. row ***************************
+id: %{NUMBER}
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: %{NUMBER}
+*************************** 2. row ***************************
+id: %{NUMBER}
+title: List of HP business laptops
+content: Elitebook Probook
+gid: %{NUMBER}
+––– input –––
+mysql -h0 -P1306 -e "ALTER TABLE testrt ADD COLUMN new_column INT;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_с_indexes'\G;"
+––– output –––

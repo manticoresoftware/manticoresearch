@@ -1,10 +1,20 @@
 # Changelog
 
-# Dev version
+# Version x.y.z (dev)
 
-### New features
+### Major changes
+* KNN vector search
+* REGEX full-text operator
+* Galera-related refactoring
+* Replication of distributed tables
+
+### Minor changes
 * Improved integration with Beats:
-  - Support for Filebeat versions 8.10 - 8.11   
+  - Support for Filebeat versions 8.10 - 8.11
+* Many more
+
+### Bugfixing
+* Lots of
 
 # Version 6.2.12
 Released: August 23rd 2023

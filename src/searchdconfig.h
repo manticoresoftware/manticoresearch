@@ -32,6 +32,7 @@ struct ClusterOptions_t
 
 	void						Parse ( const CSphString & sOptions );
 	[[nodiscard]] CSphString	AsStr () const;
+	[[nodiscard]] bool			IsEmpty() const noexcept;
 };
 
 // cluster data that gets stored and loaded

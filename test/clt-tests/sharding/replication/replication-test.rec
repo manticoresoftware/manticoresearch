@@ -2,23 +2,23 @@
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 export INSTANCE=3
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 export INSTANCE=4
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 export INSTANCE=5
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 export CLUSTER_NAME=replication
 ––– output –––
@@ -28,23 +28,7 @@ export CLUSTER_NAME=replication
 ––– output –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(0,'List of HP business laptops','Elitebook Probook',1);"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860994,'List of Dell business laptops','Latitude Precision Vostro',2);"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(0,'List of HP business laptops','Elitebook Probook',1);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860994,'List of Dell business laptops','Latitude Precision Vostro',2);" && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
 +-----------------------------+--------+
 | Counter                     | Value  |
@@ -75,7 +59,7 @@ mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(0,'List of HP busines
 ––– input –––
 export INSTANCE=5
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt\G;"
 ––– output –––
@@ -102,10 +86,7 @@ export INSTANCE=2
 mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(0,'NEW','TABLE',4);"; echo $?
 ––– output –––
 0
-––– input –––
-export INSTANCE=2
-––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt\G;"
 ––– output –––
@@ -227,7 +208,7 @@ gid: 1
 ––– input –––
 export INSTANCE=4
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
 sleep 5;mysql -h0 -P1306 -e "SELECT * FROM testrt\G;"
 ––– output –––

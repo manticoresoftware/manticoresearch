@@ -215,6 +215,12 @@ searchd
 	show meta;
 	select * from t;
 	drop table t;
+
+	<!-- regression for a crash on buffer overflow -->
+	create table test(f1 string attribute);
+	insert into test (f1) values ('ООО "МНОГОПРОФИЛЬНЫЙ ЦЕНТР ЭКСПЕРТИЗ И ИССЛЕДОВАНИЯ ДОКУМЕНТА "ГАРАНТ"');
+	SELECT LEVENSHTEIN('ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ ЦЕНТР ЭКСПЕРТИЗ', f1, {normalize=1,length_delta=24}) as lev FROM test;
+	drop table test;
 </sphinxql>
 </queries>
 

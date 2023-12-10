@@ -438,6 +438,9 @@ public:
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 	int					GetDocsCount() const override { return m_bEmpty ? 0 : ExtTwofer_c::GetDocsCount(); }
 	void				DebugDump ( int iLevel ) override;
+
+private:
+	bool				m_bEmpty = false;
 };
 
 // AND that returns hits from right node only
@@ -2835,6 +2838,7 @@ void ExtTwofer_c::SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries )
 ExtAnd_c::ExtAnd_c ( ExtNode_i * pLeft, ExtNode_i * pRight )
 	: ExtTwofer_c ( pLeft, pRight )
 {
+	m_bEmpty = ( !m_pLeft || !m_pLeft->GetDocsCount() ) || ( !m_pRight || !m_pRight->GetDocsCount() );
 	if ( m_pLeft && m_pLeft->GetDocsCount() && ( !m_pRight || !m_pRight->GetDocsCount() ) )
 		std::swap ( m_pLeft, m_pRight );
 }

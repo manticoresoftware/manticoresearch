@@ -6547,6 +6547,7 @@ private:
 	LevenshteinOptions_t	m_tOpts;
 	CSphString				m_sPattern;
 	int						m_iPattersLen = 0;
+	mutable CSphVector<int>	m_dTmp;
 
 	Expr_Levenshtein_c ( const Expr_Levenshtein_c& rhs )
 		: Expr_Binary_c ( rhs )
@@ -6569,7 +6570,7 @@ private:
 		tDist.second = Max ( iPatternLen, iLen );
 		tDist.first = tDist.second;
 		if ( !m_tOpts.m_iLengthDelta || ( abs ( iPatternLen-iLen )<m_tOpts.m_iLengthDelta ) )
-			tDist.first = sphLevenshtein ( (const char *)sPattern, iPatternLen, (const char *)pStr, iLen );
+			tDist.first = sphLevenshtein ( (const char *)sPattern, iPatternLen, (const char *)pStr, iLen, m_dTmp );
 
 		FreeDataPtr ( *m_pSecond, pStr );
 		if_const(!PATTERN_STRING)

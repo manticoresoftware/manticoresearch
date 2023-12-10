@@ -13412,14 +13412,15 @@ static void sphBuildNGrams ( const char * sWord, int iLen, int iGramLen, CSphVec
 }
 
 template <typename T>
-int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2 )
+int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2, CSphVector<int> & dTmp )
 {
 	if ( !iLen1 )
 		return iLen2;
 	if ( !iLen2 )
 		return iLen1;
 
-	int dTmp [ 3*SPH_MAX_WORD_LEN+1 ]; // FIXME!!! remove extra length after utf8->codepoints conversion
+	// FIXME!!! remove extra length after utf8->codepoints conversion
+	dTmp.Resize ( Max ( iLen1, iLen2 )+1 );
 
 	for ( int i=0; i<=iLen2; i++ )
 		dTmp[i] = i;
@@ -13441,14 +13442,14 @@ int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2 )
 	return dTmp[iLen2];
 }
 
-int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 )
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2, CSphVector<int> & dTmp )
 {
-	return sphLevenshtein<char> ( sWord1, iLen1, sWord2, iLen2 );
+	return sphLevenshtein<char> ( sWord1, iLen1, sWord2, iLen2, dTmp );
 }
 
-int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 )
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2, CSphVector<int> & dTmp )
 {
-	return sphLevenshtein<int> ( sWord1, iLen1, sWord2, iLen2 );
+	return sphLevenshtein<int> ( sWord1, iLen1, sWord2, iLen2, dTmp );
 }
 
 // sort by distance(uLen) desc, checkpoint index(uOff) asc
@@ -13686,6 +13687,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	const int iNGramLen = tRes.m_iNGramLen;
 	tRes.m_dMatched.Reserve ( iQLen * 2 );
 	CmpSuggestOrder_fn fnCmp;
+	CSphVector<int> dLevenshteinTmp;
 
 	ARRAY_FOREACH ( i, dCheckpoints )
 	{
@@ -13766,9 +13768,9 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 
 			int iDist = INT_MAX;
 			if_const ( SINGLE_BYTE_CHAR )
-				iDist = sphLevenshtein ( tRes.m_sWord.cstr(), tRes.m_iLen, sDictWord, iDictWordLen );
+				iDist = sphLevenshtein ( tRes.m_sWord.cstr(), tRes.m_iLen, sDictWord, iDictWordLen, dLevenshteinTmp );
 			else
-				iDist = sphLevenshtein ( tRes.m_dCodepoints, tRes.m_iCodepoints, dDictWordCodepoints, iDictCodepoints );
+				iDist = sphLevenshtein ( tRes.m_dCodepoints, tRes.m_iCodepoints, dDictWordCodepoints, iDictCodepoints, dLevenshteinTmp );
 
 			// skip word in case of too many edits
 			if ( iDist>iMaxEdits )

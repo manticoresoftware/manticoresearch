@@ -1063,10 +1063,10 @@ struct ISphSubstringPayload
 
 
 // levenstein distance for words
-int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 );
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 // levenstein distance for unicode codepoints
-int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 );
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 struct Slice_t
 {

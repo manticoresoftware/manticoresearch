@@ -135,6 +135,7 @@ Section "Manticore Executor"
 	; Var R0
 	FileOpen $0 "executor_src.txt" r
 	FileRead $0 $R0
+	DetailPrint $R0
 	FileClose $0
 	nsExec::Exec '"docker" "pull" $R0'
 	Pop $0  ; Pop the exit code from the stack

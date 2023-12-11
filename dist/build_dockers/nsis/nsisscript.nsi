@@ -120,6 +120,7 @@ Section "Manticore Search"
 SectionEnd
 
 Section "Manticore Executor"
+	File "executor_src.txt"
 	; Check if Docker is installed and working
 	nsExec::ExecToStack 'docker --version'
 	Pop $0  ; Pop the exit code from the stack
@@ -130,25 +131,48 @@ Section "Manticore Executor"
 	docker_installed:
 	Pop $1  ; Pop the command output from the stack (and ignore it)
 
-	; Pull Docker image from the URL in executor_src.txt
-	; Var hFile
-	; Var R0
-	FileOpen $0 "executor_src.txt" r
+	; Attempt to open the file
+	StrCpy $R0 "$INSTDIR\executor_src.txt"
+	FileOpen $0 $R0 r
+	IfErrors file_open_failed
+
+	; Attempt to read from the file
 	FileRead $0 $R0
-	DetailPrint $R0
+	IfErrors file_read_failed
+	StrCmp $R0 "" read_no_data
+
+	DetailPrint "Executor docker image read from file: $R0"
+
+	; Close the file handle
 	FileClose $0
+
+	; Continue with Docker pull if $R0 has data
 	nsExec::Exec '"docker" "pull" $R0'
 	Pop $0  ; Pop the exit code from the stack
-	StrCmp $0 0 docker_pull_succeed  ; Compare the exit code to 0 (success)
+	StrCmp $0 0 docker_pull_succeed
+
 	MessageBox MB_OK "Failed to pull Docker image from: $R0"
 	Abort
 
-	docker_pull_succeed:
+	; Error handling labels
+	file_open_failed:
+    MessageBox MB_ICONEXCLAMATION "Failed to open executor_src.txt."
+    Abort
 
-	File "buddy_src.txt"
-	Push "buddy.zip"
-	Push "buddy_src.txt"
-	Call unpackInstall
+	file_read_failed:
+    MessageBox MB_ICONEXCLAMATION "Failed to read from executor_src.txt."
+    Abort
+
+	read_no_data:
+    MessageBox MB_ICONEXCLAMATION "No data read from executor_src.txt."
+    Abort
+
+  SetDetailsView show
+	docker_pull_succeed:
+		File "buddy_src.txt"
+		Push "buddy.zip"
+		Push "buddy_src.txt"
+		Call unpackInstall
 SectionEnd
 
 Section "Manticore Columnar Library"

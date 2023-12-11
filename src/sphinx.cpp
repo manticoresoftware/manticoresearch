@@ -10948,7 +10948,8 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 	std::atomic<bool> bInterrupt {false};
 	auto CheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
 
-	Threads::Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
+	int iConcurrency = tClonableCtx.Concurrency(iJobs);
+	Threads::Coro::ExecuteN ( iConcurrency, [&]
 	{
 		auto pSource = pDispatcher->MakeSource();
 		int iJob = -1; // make it consumed
@@ -10985,7 +10986,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
 			tMultiArgs.m_bModifySorterSchemas = false;
-			tMultiArgs.m_iTotalThreads = tArgs.m_iTotalThreads;
+			tMultiArgs.m_iTotalThreads = iConcurrency;
 
 			CSphQuery tQueryWithExtraFilter = tQuery;
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iJob, iJobs );

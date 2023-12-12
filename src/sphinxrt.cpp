@@ -4664,8 +4664,13 @@ void RtIndex_c::Preread ()
 {
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto& pChunk : *pChunks )
+	{
 		if (pChunk)
 			pChunk->CastIdx().Preread();
+
+		if ( sphInterrupted() )
+			break;
+	}
 }
 
 template<typename P>

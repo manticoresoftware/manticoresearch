@@ -680,7 +680,7 @@ static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
 #else
 static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
 #endif
-static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore:1.0.5" );
+static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore:1.0.11" );
 
 static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
 {
@@ -703,7 +703,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf ( "docker run %s -v '%s/%s:/buddy' -w /buddy /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr(), GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr());
+	sExecPath.SetSprintf ( "docker run -v '%s/%s:/buddy' -w /buddy %s /buddy/src/main.php", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sDefaultBuddyDockerImage.cstr());
 	if ( !sphFileExists ( sExecPath.cstr() ) )
 	{
 		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyDockerImage.cstr(), sExecPath.cstr() );

@@ -176,9 +176,12 @@ mysql -h0 -P3306 -e "SHOW TABLES\G"
 ––– input –––
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:m(id bigint) SHARDS='10' RF='2'"
 ––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:j(id bigint) SHARDS='10' RF='3'"
 ––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:x(id bigint) SHARDS='10' RF='10'"
 ––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query

@@ -47,7 +47,7 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
   WIN_REPO="https://repo.manticoresearch.com/repository/manticoresearch_windows/$DESTINATION/x64/"
 
   BUDDY_PACKAGE_NAME="manticore-buddy_${BUDDY_VERSION}_${BUDDY_DATE}.${BUDDY_COMMIT_SHA}.zip"
-  MCL_PACKAGE_NAME="manticore-columnar-lib-${MCL_VERSION}-${MCL_DATE}-${MCL_COMMIT_SHA}-x64.zip"
+  MCL_PACKAGE_NAME="manticore-columnar-lib-${MCL_VERSION}-${MCL_DATE}-${MCL_COMMIT_SHA}-x64-libs.zip"
   MANTICORE_PACKAGE_NAME="manticore-${MANTICORE_VERSION}-${MANTICORE_DATE}-${CI_COMMIT_SHORT_SHA}-x64-main.zip"
 
   if [ -n "$MANTICORE_PACKAGE_NAME" ] && [ -n "$BUDDY_PACKAGE_NAME" ] && [ -n "$EXECUTOR_VERSION" ] && [ -n "$MCL_PACKAGE_NAME" ] && [ -n "$TZDATA_PACKAGE_NAME" ]; then

@@ -4991,6 +4991,9 @@ void FrontendSchemaBuilder_c::RemapFacets()
 			return;
 	}
 
+	if ( m_tQuery.m_sGroupBy.IsEmpty() )
+		return;
+
 	for ( auto & tFrontend : m_dFrontend )
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
@@ -5279,7 +5282,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	tFrontendBuilder.RemapGroupBy();
-	tFrontendBuilder.RemapFacets();
+	// agent should provide raw attributes into master without any remapping
+	if ( bMaster )
+		tFrontendBuilder.RemapFacets();
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema

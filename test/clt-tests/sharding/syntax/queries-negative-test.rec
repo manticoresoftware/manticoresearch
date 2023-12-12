@@ -14,7 +14,7 @@ export INSTANCE=3
 ––– input –––
 mysql -h0 -P1306 -e "create table h random=5"
 ––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
 ––– input –––
 mysql -h0 -P1306 -e "create table t(id bigint) shards=a rf=b"
 ––– output –––
@@ -22,7 +22,6 @@ ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
 mysql -h0 -P1306 -e "create table u(id bigint) rf=1 shards=10"
 ––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
 mysql -h0 -P1306 -e "create table c:m SHARDS=10 RF=2"
 ––– output –––

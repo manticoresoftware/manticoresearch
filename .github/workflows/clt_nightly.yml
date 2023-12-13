@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - run: |
-          echo '# Nightly tests of latest release' >> $GITHUB_STEP_SUMMARY
-          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
+          echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
   clt_rhel_release_installation:
     name: Testing RHEL release packages installation

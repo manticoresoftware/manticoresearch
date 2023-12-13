@@ -703,7 +703,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf ( "docker run -v '%s/%s:/buddy' -w /buddy %s /buddy/src/main.php", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sDefaultBuddyDockerImage.cstr());
+	sExecPath.SetSprintf ( "docker run -v \"%s/%s:/buddy\" -w /buddy %s /buddy/src/main.php", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sDefaultBuddyDockerImage.cstr());
 	if ( !sphFileExists ( sExecPath.cstr() ) )
 	{
 		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyDockerImage.cstr(), sExecPath.cstr() );

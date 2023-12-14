@@ -109,7 +109,7 @@ bool SyncSrc_t::CalculateFilesSignatures()
 		while ( iReadTotal < tChunk.m_iFileSize )
 		{
 			int64_t iLeftTotal = tChunk.m_iFileSize - iReadTotal;
-			int iLeft = (int)Min ( iLeftTotal, tChunk.m_iChunkBytes );
+			int64_t iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
 			iReadTotal += iLeft;
 
 			if ( !tIndexFile.Read ( dReadBuf.Begin(), iLeft, sError ) )

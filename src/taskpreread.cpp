@@ -14,7 +14,8 @@
 #include "searchdaemon.h"
 
 namespace {
-OneshotEvent_c g_tPrereadFinished; // invoked from main thread, so use raw (not coro) event.
+OneshotEvent_c	g_tPrereadFinished; // invoked from main thread, so use raw (not coro) event.
+bool			g_bPrereadStarted = false;
 
 void DoPreread ()
 {
@@ -66,11 +67,16 @@ void DoPreread ()
 
 bool WaitPrereadFinished ( int64_t uSec )
 {
+	if ( !g_bPrereadStarted )
+		return true;
+
 	return g_tPrereadFinished.WaitEvent ( int ( uSec / 1000 ));
 }
 
 void PrereadIndexes ( bool bForce )
 {
+	g_bPrereadStarted = true;
+
 	if ( bForce )
 		return Threads::CallCoroutine ( DoPreread );
 

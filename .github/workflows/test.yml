@@ -419,7 +419,7 @@ jobs:
           artifact: manticore_test_kit.img
           image: test-kit:img
           test_prefix: test/clt-tests/core/
-          
+
   clt_logstash_test:
     name: CLT test on Logstash and Filebeat
     needs: build_test_kit_docker
@@ -447,7 +447,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.5
+      - uses: manticoresoftware/clt@0.1.13
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img

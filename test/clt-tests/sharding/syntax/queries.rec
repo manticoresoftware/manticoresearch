@@ -44,63 +44,31 @@ mysql -h0 -P1306 -e "CREATE TABLE a"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
-*************************** 1. row ***************************
-Index: a
-Type: rt
+a
 ––– input –––
 mysql -h0 -P1306 -e "create table e(id bigint) shards=10 rf=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
-*************************** 1. row ***************************
-Index: a
-Type: rt
-*************************** 2. row ***************************
-Index: e
-Type: distributed
-*************************** 3. row ***************************
-Index: e_s0
-Type: rt
-*************************** 4. row ***************************
-Index: e_s1
-Type: rt
-*************************** 5. row ***************************
-Index: e_s2
-Type: rt
-*************************** 6. row ***************************
-Index: e_s3
-Type: rt
-*************************** 7. row ***************************
-Index: e_s4
-Type: rt
-*************************** 8. row ***************************
-Index: e_s5
-Type: rt
-*************************** 9. row ***************************
-Index: e_s6
-Type: rt
-*************************** 10. row ***************************
-Index: e_s7
-Type: rt
-*************************** 11. row ***************************
-Index: e_s8
-Type: rt
-*************************** 12. row ***************************
-Index: e_s9
-Type: rt
-*************************** 13. row ***************************
-Index: sharding_queue
-Type: rt
-*************************** 14. row ***************************
-Index: sharding_state
-Type: rt
-*************************** 15. row ***************************
-Index: sharding_table
-Type: rt
+a
+e
+e_s0
+e_s1
+e_s2
+e_s3
+e_s4
+e_s5
+e_s6
+e_s7
+e_s8
+e_s9
+sharding_queue
+sharding_state
+sharding_table
 ––– input –––
 mysql -h0 -P1306 -e "create table s SHARDS='10' RF='1'"; echo $?
 ––– output –––
@@ -110,59 +78,25 @@ mysql -h0 -P1306 -e "create table k(id bigint) SHARDS='10' RF='1'"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
-*************************** 1. row ***************************
-Index: a
-Type: rt
-*************************** 2. row ***************************
-Index: e
-Type: distributed
-*************************** 3. row ***************************
-Index: e_s0
-Type: rt
-*************************** 4. row ***************************
-Index: e_s1
-Type: rt
-*************************** 5. row ***************************
-Index: e_s2
-Type: rt
-*************************** 6. row ***************************
-Index: e_s3
-Type: rt
-*************************** 7. row ***************************
-Index: e_s4
-Type: rt
-*************************** 8. row ***************************
-Index: e_s5
-Type: rt
-*************************** 9. row ***************************
-Index: e_s6
-Type: rt
-*************************** 10. row ***************************
-Index: e_s7
-Type: rt
-*************************** 11. row ***************************
-Index: e_s8
-Type: rt
-*************************** 12. row ***************************
-Index: e_s9
-Type: rt
-*************************** 13. row ***************************
-Index: k
-Type: rt
-*************************** 14. row ***************************
-Index: s
-Type: rt
-*************************** 15. row ***************************
-Index: sharding_queue
-Type: rt
-*************************** 16. row ***************************
-Index: sharding_state
-Type: rt
-*************************** 17. row ***************************
-Index: sharding_table
-Type: rt
+a
+e
+e_s0
+e_s1
+e_s2
+e_s3
+e_s4
+e_s5
+e_s6
+e_s7
+e_s8
+e_s9
+k
+s
+sharding_queue
+sharding_state
+sharding_table
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––

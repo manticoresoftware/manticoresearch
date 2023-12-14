@@ -89,6 +89,7 @@ extern bool g_bJsonKeynamesToLowercase;
 #define SZ_BOOST			"n"
 #define SZ_ZONES            "o"
 #define SZ_ZONESPANS        "p"
+#define SZ_REGEX			"r"
 
 /// generic COM-like uids
 enum ExtraData_e

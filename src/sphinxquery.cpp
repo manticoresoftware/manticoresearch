@@ -1157,8 +1157,8 @@ XQNode_t * XQParser_t::ParseRegex ( const char * sStart )
 		{
 			// spawn token node
 			XQNode_t * pNode = AddKeyword ( nullptr, 0 );
-			pNode->SetOp ( XQOperator_e::SPH_QUERY_REGEX );
 			pNode->m_dWords[0].m_sWord.SetBinary ( sToken, sNextDel-sToken );
+			pNode->m_dWords[0].m_bRegex = true;
 			// skip the whole expression
 			m_pTokenizer->SetBufferPtr ( sNextDel+2 );
 			return pNode;
@@ -1412,7 +1412,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle REGEX
-		if ( !bMultiDest && p && !m_pTokenizer->IsPhraseMode() && !strncmp ( p, "REGEX(", 6 ) )
+		if ( !bMultiDest && p && !strncmp ( p, "REGEX(", 6 ) )
 		{
 			// we just lexed our REGEX token
 			XQNode_t * pRegex = ParseRegex ( p+6 );

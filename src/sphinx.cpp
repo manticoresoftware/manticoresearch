@@ -10506,7 +10506,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// check the wildcards
 	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
-	const bool bRegex = ( pNode->GetOp()==SPH_QUERY_REGEX );
+	const bool bRegex = ( pNode->m_dWords[0].m_bRegex );
 
 	// no wildcards, or just wildcards? do not expand
 	if ( !( bRegex || sphHasExpandableWildcards ( sFull ) ) )

@@ -1,4 +1,3 @@
-––– block: ../base/init –––
 ––– input –––
 export INSTANCE=1
 ––– output –––
@@ -32,33 +31,43 @@ mysql -h0 -P1306 -e "create table testrt(id bigint, title text, content text, gi
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(0,'List of HP business laptops','Elitebook Probook',1);"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO testrt (0, 'List of HP business laptops', 'Elitebook Probook', 1);"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(1,'List of Dell business laptops','Latitude Precision Vostro',2);"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(1, 'List of Dell business laptops', 'Latitude Precision Vostro', 2);"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G;"
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+sharding_queue
+sharding_state
+sharding_table
+testrt
+testrt_s0
+testrt_s1
+testrt_s2
+testrt_s3
+testrt_s4
+testrt_s5
+testrt_s6
+testrt_s7
+testrt_s8
+testrt_s9
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE testrt"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P1306 -e "SHOW COLUMNS FROM testrt;"
 ––– output –––
-*************************** 1. row ***************************
-id: %{NUMBER}
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: %{NUMBER}
-*************************** 2. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: %{NUMBER}
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "ALTER TABLE testrt ADD COLUMN new_column INT;"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_с_indexes'\G;"
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_с_indexes'\G"
 ––– output –––

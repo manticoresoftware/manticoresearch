@@ -10260,10 +10260,31 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		return pNode;
 	}
 
+	// do not expand into wildcard words shorter than min_prefix_len or min_infix_len
+	bool bExpandInfix = false;
+	bool bExpandPrefix = false;
+	if ( ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	{
+		assert ( pNode->m_dChildren.GetLength()==0 );
+		assert ( pNode->m_dWords.GetLength()==1 );
+		int iLen = sphUTF8Len ( pNode->m_dWords[0].m_sWord.cstr() );
+
+		int iMinInfix = tSettings.m_iMinInfixLen;
+		int iMinPrefix = tSettings.RawMinPrefixLen();
+
+		if ( iMinInfix>0 && iLen>=iMinInfix )
+			bExpandInfix = true;
+		else if ( iMinPrefix>0 && iLen>=iMinPrefix )
+			bExpandPrefix = true;
+	}
+	bool bExpandExact = ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_EXACT )==KWE_EXACT );
+	if ( !bExpandInfix && !bExpandPrefix && !bExpandExact )
+		return pNode;
+
 	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
-	if ( tSettings.m_iMinInfixLen>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	if ( bExpandInfix )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -10271,7 +10292,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
 		pInfix->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pInfix );
-	} else if ( tSettings.GetMinPrefixLen ( bWordDict )>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	} else if ( bExpandPrefix )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -10281,7 +10302,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pExpand->m_dChildren.Add ( pPrefix );
 	}
 
-	if ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_EXACT )==KWE_EXACT )
+	if ( bExpandExact )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );

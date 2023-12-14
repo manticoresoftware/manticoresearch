@@ -35,18 +35,18 @@ mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" 
 | cluster_replication_indexes | testrt |
 +-----------------------------+--------+
 ––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
-*************************** 2. row ***************************
 id: %{NUMBER}
 title: List of HP business laptops
 content: Elitebook Probook
 gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
 ––– input –––
 export INSTANCE=5
 ––– output –––
@@ -60,13 +60,13 @@ export INSTANCE=5
 ––– output –––
 ––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
-sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt\G;"
+sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
 *************************** 2. row ***************************
 id: %{NUMBER}
 title: List of HP business laptops
@@ -74,9 +74,9 @@ content: Macbook
 gid: 3
 *************************** 3. row ***************************
 id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
 ––– input –––
 export INSTANCE=2
 ––– output –––
@@ -87,13 +87,13 @@ mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(0,'NEW','TABLE',4);";
 0
 ––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
-sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt\G;"
+sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
 *************************** 2. row ***************************
 id: %{NUMBER}
 title: List of HP business laptops
@@ -106,17 +106,17 @@ content: TABLE
 gid: 4
 *************************** 4. row ***************************
 id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
 ––– input –––
-mysql -h0 -P3306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
 *************************** 2. row ***************************
 id: %{NUMBER}
 title: List of HP business laptops
@@ -129,17 +129,17 @@ content: TABLE
 gid: 4
 *************************** 4. row ***************************
 id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
 ––– input –––
-mysql -h0 -P4306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P4306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
 *************************** 2. row ***************************
 id: %{NUMBER}
 title: List of HP business laptops
@@ -152,17 +152,17 @@ content: TABLE
 gid: 4
 *************************** 4. row ***************************
 id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
 ––– input –––
-mysql -h0 -P5306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: %{NUMBER}
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
 *************************** 2. row ***************************
 id: %{NUMBER}
 title: List of HP business laptops
@@ -175,9 +175,9 @@ content: TABLE
 gid: 4
 *************************** 4. row ***************************
 id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
 ––– input –––
 export INSTANCE=4
 ––– output –––
@@ -187,96 +187,37 @@ sleep 5;mysql -h0 -P2306 -e "DELETE FROM replication:testrt WHERE id = 677583656
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P2306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G" > output_2306.txt;
 ––– output –––
-*************************** 1. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Macbook
-gid: 3
-*************************** 2. row ***************************
-id: %{NUMBER}
-title: NEW
-content: TABLE
-gid: 4
-*************************** 3. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
 ––– input –––
 export INSTANCE=4
 ––– output –––
 ––– block: ../base/flexible/start-searchd-precach –––
 ––– input –––
-sleep 5;mysql -h0 -P1306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G" > output_1306.txt;
 ––– output –––
-*************************** 1. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Macbook
-gid: 3
-*************************** 2. row ***************************
-id: %{NUMBER}
-title: NEW
-content: TABLE
-gid: 4
-*************************** 3. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
 ––– input –––
-mysql -h0 -P3306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC\G" > output_3306.txt;
 ––– output –––
-*************************** 1. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Macbook
-gid: 3
-*************************** 2. row ***************************
-id: %{NUMBER}
-title: NEW
-content: TABLE
-gid: 4
-*************************** 3. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
 ––– input –––
-mysql -h0 -P4306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P4306 -e "SELECT * FROM testrt ORDER BY id ASC\G" > output_4306.txt;
 ––– output –––
-*************************** 1. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Macbook
-gid: 3
-*************************** 2. row ***************************
-id: %{NUMBER}
-title: NEW
-content: TABLE
-gid: 4
-*************************** 3. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
 ––– input –––
-mysql -h0 -P5306 -e "SELECT * FROM testrt\G;"
+mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G" > output_5306.txt;
 ––– output –––
-*************************** 1. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Macbook
-gid: 3
-*************************** 2. row ***************************
-id: %{NUMBER}
-title: NEW
-content: TABLE
-gid: 4
-*************************** 3. row ***************************
-id: %{NUMBER}
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+––– input –––
+diff output_1306.txt output_2306.txt; echo $?
+––– output –––
+0
+––– input –––
+diff output_1306.txt output_3306.txt; echo $?
+––– output –––
+0
+––– input –––
+diff output_1306.txt output_4306.txt; echo $?
+––– output –––
+0
+––– input –––
+diff output_1306.txt output_5306.txt; echo $?
+––– output –––
+0

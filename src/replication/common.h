@@ -13,9 +13,6 @@
 #include "std/string.h"
 #include "searchdaemon.h"
 
-// check whether local indexes with given name exists and it is mutable (pq or rt)
-bool CheckMutableIndexExists ( const CSphString & sIndex );
-
 // Update nodes list at cluster from actual nodes list
 enum class NODES_E : bool { VIEW, BOTH };
 bool ClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, StrVec_t* pNodes = nullptr );

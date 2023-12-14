@@ -91,6 +91,12 @@ INSERT INTO rt1 (id, title) VALUES (15, 'tost15 it'), (65, 'top16 the box');
 
 SELECT id, title FROM rt1 WHERE MATCH (' ( REGEX(/t.*\d*/) | REGEX(/.{3}t/) ) it ') ORDER BY id ASC;
 
+<!-- regex full text inside complex operators -->
+SELECT id, title FROM rt1 WHERE MATCH (' it REGEX(/te.*/) ') ORDER BY id ASC;
+SELECT id, title FROM rt1 WHERE MATCH (' " it REGEX(/te.*/) " ') ORDER BY id ASC;
+SELECT id, title FROM rt1 WHERE MATCH (' " it REGEX(/te.*/) of "/2 ') ORDER BY id ASC;
+SELECT id, title FROM rt1 WHERE MATCH (' " do REGEX(/te.*/) "~3 ') ORDER BY id ASC;
+
 </sphinxql></queries>
 
 </test>

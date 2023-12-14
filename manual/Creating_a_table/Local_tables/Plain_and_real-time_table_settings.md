@@ -473,12 +473,12 @@ Values:
 * **rowwise (default)** - Doesn't change anything and uses the traditional row-wise storage for the table.
 
 
-# Other settings
+## Other settings
 The following settings are applicable for both real-time and plain tables, regardless of whether they are specified in a configuration file or set online using the `CREATE` or `ALTER` command.
 
-## Performance related
+### Performance related
 
-### Accessing table files
+#### Accessing table files
 Manticore supports two access modes for reading table data: seek+read and mmap.
 
 In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the`*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.

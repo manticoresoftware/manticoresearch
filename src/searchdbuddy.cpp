@@ -27,7 +27,6 @@
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
 static CSphString g_sListener4Buddy;
-static int g_iBuddyVersion = 1;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
@@ -52,6 +51,10 @@ static const int g_iBuddyLoopSleep = 15;
 
 static const int g_iRestartMax = 3;
 static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
+
+static int g_iBuddyVersion = 1;
+static bool g_bBuddyVersion = false;
+extern CSphString g_sStatusVersion;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
@@ -227,6 +230,12 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	sphInfo ( "[BUDDY] started %.*s '%s' at %s", sBuddyVer.second, sBuddyVer.first, g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
 	if ( sLinesTail.second )
 		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
+
+	if ( !g_bBuddyVersion )
+	{
+		g_bBuddyVersion = true;
+		g_sStatusVersion.SetSprintf ( "%s (buddy %.*s)", g_sStatusVersion.cstr(), sBuddyVer.second, sBuddyVer.first );
+	}
 }
 
 static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
@@ -585,6 +594,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery );
 	if ( !tReplyRaw.first )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return;
 	}
@@ -593,17 +603,20 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	BuddyReply_t tReplyParsed;
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="sql response" )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
 
 	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
 		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );
 		return;

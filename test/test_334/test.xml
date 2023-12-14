@@ -126,6 +126,12 @@ index test_exc1
   exceptions = <this_test/>/exc.txt
 }
 
+index T
+{
+    type = rt
+    path = <data_path/>/test_t
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -488,6 +494,18 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- case sensitive table names -->
+<query endpoint="json/search">
+{
+  "index": "T"
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "t"
+}
+</query>
 
 </queries>
 </test>

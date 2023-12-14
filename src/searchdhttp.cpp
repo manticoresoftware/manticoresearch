@@ -1419,7 +1419,7 @@ public:
 		m_dBuf.FinishBlock ( false ); // root object
 	}
 
-	void Error ( const char *, const char * szError, MysqlErrors_e iErr ) override
+	void Error ( const char * szError, MysqlErrors_e iErr ) override
 	{
 		auto _ = m_dBuf.Object ( false );
 		DataFinish ( 0, szError, nullptr );
@@ -1525,9 +1525,10 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 
 		if ( !sError.IsEmpty() )
 		{
+			LogSphinxqlError ( sStmt, FromStr ( sError ) );
 			session::GetClientSession()->m_sError = sError;
 			session::GetClientSession()->m_tLastMeta.m_sError = sError;
-			tOut.Error ( sStmt, sError.cstr() );
+			tOut.Error ( sError.cstr() );
 			break;
 		}
 		if ( !iItem ) // only zero result set sets meta

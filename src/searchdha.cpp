@@ -1457,7 +1457,7 @@ void IOVec_c::StepForward ( size_t uStep )
 	}
 }
 
-static void SafeCloseSocket ( int & iFD )
+void SafeCloseSocket ( int & iFD )
 {
 	if ( iFD>=0 )
 		sphSockClose ( iFD );

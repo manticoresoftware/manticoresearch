@@ -9669,11 +9669,22 @@ void CSphIndex_VLN::Preread()
 	///////////////////
 
 	PrereadMapping ( GetName(), "attributes", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eAttr ), m_tAttr );
+	if ( sphInterrupted() ) return;
+
 	PrereadMapping ( GetName(), "blobs", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eBlob ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eBlob ), m_tBlobAttrs );
+	if ( sphInterrupted() ) return;
+
 	PrereadMapping ( GetName(), "skip-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tSkiplists );
+	if ( sphInterrupted() ) return;
+
 	PrereadMapping ( GetName(), "dictionary", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tWordlist.m_tBuf );
+	if ( sphInterrupted() ) return;
+
 	PrereadMapping ( GetName(), "docid-lookup", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tDocidLookup );
+	if ( sphInterrupted() ) return;
+
 	m_tDeadRowMap.Preread ( GetName(), "kill-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ) );
+	if ( sphInterrupted() ) return;
 
 	m_bPassedRead = true;
 	sphLogDebug ( "Preread successfully finished" );
@@ -10154,7 +10165,7 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 #if defined( __clang__ )
 #if defined( __x86_64__ )
 static int SPH_EXTNODE_STACK_SIZE = 0x140;
-#elif defined ( __ARM_ARCH_ISA_A64 )
+#else // if defined ( __ARM_ARCH_ISA_A64 ) and all the others
 static int SPH_EXTNODE_STACK_SIZE = 0x160;
 #endif
 #elif defined( _WIN32 )
@@ -10495,7 +10506,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// check the wildcards
 	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
-	const bool bRegex = ( pNode->GetOp()==SPH_QUERY_REGEX );
+	const bool bRegex = ( pNode->m_dWords[0].m_bRegex );
 
 	// no wildcards, or just wildcards? do not expand
 	if ( !( bRegex || sphHasExpandableWildcards ( sFull ) ) )
@@ -10948,7 +10959,8 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 	std::atomic<bool> bInterrupt {false};
 	auto CheckInterrupt = [&bInterrupt]() { return bInterrupt.load ( std::memory_order_relaxed ); };
 
-	Threads::Coro::ExecuteN ( tClonableCtx.Concurrency ( iJobs ), [&]
+	int iConcurrency = tClonableCtx.Concurrency(iJobs);
+	Threads::Coro::ExecuteN ( iConcurrency, [&]
 	{
 		auto pSource = pDispatcher->MakeSource();
 		int iJob = -1; // make it consumed
@@ -10985,7 +10997,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			tMultiArgs.m_pLocalDocs = pLocalDocs;
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
 			tMultiArgs.m_bModifySorterSchemas = false;
-			tMultiArgs.m_iTotalThreads = tArgs.m_iTotalThreads;
+			tMultiArgs.m_iTotalThreads = iConcurrency;
 
 			CSphQuery tQueryWithExtraFilter = tQuery;
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iJob, iJobs );
@@ -13412,14 +13424,15 @@ static void sphBuildNGrams ( const char * sWord, int iLen, int iGramLen, CSphVec
 }
 
 template <typename T>
-int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2 )
+int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2, CSphVector<int> & dTmp )
 {
 	if ( !iLen1 )
 		return iLen2;
 	if ( !iLen2 )
 		return iLen1;
 
-	int dTmp [ 3*SPH_MAX_WORD_LEN+1 ]; // FIXME!!! remove extra length after utf8->codepoints conversion
+	// FIXME!!! remove extra length after utf8->codepoints conversion
+	dTmp.Resize ( Max ( iLen1, iLen2 )+1 );
 
 	for ( int i=0; i<=iLen2; i++ )
 		dTmp[i] = i;
@@ -13441,14 +13454,14 @@ int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2 )
 	return dTmp[iLen2];
 }
 
-int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 )
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2, CSphVector<int> & dTmp )
 {
-	return sphLevenshtein<char> ( sWord1, iLen1, sWord2, iLen2 );
+	return sphLevenshtein<char> ( sWord1, iLen1, sWord2, iLen2, dTmp );
 }
 
-int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 )
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2, CSphVector<int> & dTmp )
 {
-	return sphLevenshtein<int> ( sWord1, iLen1, sWord2, iLen2 );
+	return sphLevenshtein<int> ( sWord1, iLen1, sWord2, iLen2, dTmp );
 }
 
 // sort by distance(uLen) desc, checkpoint index(uOff) asc
@@ -13686,6 +13699,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	const int iNGramLen = tRes.m_iNGramLen;
 	tRes.m_dMatched.Reserve ( iQLen * 2 );
 	CmpSuggestOrder_fn fnCmp;
+	CSphVector<int> dLevenshteinTmp;
 
 	ARRAY_FOREACH ( i, dCheckpoints )
 	{
@@ -13766,9 +13780,9 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 
 			int iDist = INT_MAX;
 			if_const ( SINGLE_BYTE_CHAR )
-				iDist = sphLevenshtein ( tRes.m_sWord.cstr(), tRes.m_iLen, sDictWord, iDictWordLen );
+				iDist = sphLevenshtein ( tRes.m_sWord.cstr(), tRes.m_iLen, sDictWord, iDictWordLen, dLevenshteinTmp );
 			else
-				iDist = sphLevenshtein ( tRes.m_dCodepoints, tRes.m_iCodepoints, dDictWordCodepoints, iDictCodepoints );
+				iDist = sphLevenshtein ( tRes.m_dCodepoints, tRes.m_iCodepoints, dDictWordCodepoints, iDictCodepoints, dLevenshteinTmp );
 
 			// skip word in case of too many edits
 			if ( iDist>iMaxEdits )

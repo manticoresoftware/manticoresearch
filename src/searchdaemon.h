@@ -180,7 +180,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x106,
+	VER_COMMAND_CLUSTER		= 0x107,
 	VER_COMMAND_GETFIELD	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
@@ -283,6 +283,7 @@ void sphSetSockReuseAddr ( int );
 void sphSetSockReusePort ( int );
 void sphSetSockTFO ( int );
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
+void SafeCloseSocket ( int & iFD );
 
 /** \brief wrapper over getaddrinfo
 Invokes getaddrinfo for given host which perform name resolving (dns).
@@ -1405,7 +1406,7 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery );
 void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, bool bCommit );
 bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
-bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
+bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
@@ -1555,7 +1556,7 @@ public:
 	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
 	inline void Eof () { return Eof ( false ); }
 
-	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
+	virtual void Error ( const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 
 	virtual void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, int64_t iLastInsertId=0 ) = 0;
 
@@ -1614,7 +1615,7 @@ public:
 		PutString ( sTime );
 	}
 
-	void ErrorEx ( const char * sStmt, const char * sTemplate, ... )
+	void ErrorEx ( const char * sTemplate, ... )
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1623,10 +1624,10 @@ public:
 		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( sStmt, sBuf, MYSQL_ERR_PARSE_ERROR );
+		Error ( sBuf, MYSQL_ERR_PARSE_ERROR );
 	}
 
-	void ErrorAbsent ( const char * sStmt, const char * sTemplate, ... )
+	void ErrorAbsent ( const char * sTemplate, ... )
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1635,7 +1636,7 @@ public:
 		vsnprintf ( sBuf, sizeof ( sBuf ), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( sStmt, sBuf, MYSQL_ERR_NO_SUCH_TABLE );
+		Error ( sBuf, MYSQL_ERR_NO_SUCH_TABLE );
 	}
 
 	// popular pattern of 2 columns of data

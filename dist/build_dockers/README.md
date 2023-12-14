@@ -1,4 +1,4 @@
-# Official build docker
+# Special docker image used for building Manticore Search
 
 This directory contains the sources for a Docker image that is used for building official packages of Manticore Search. It also includes instructions and scripts for extracting and packing the necessary files for different distros/packages.
 
@@ -8,7 +8,7 @@ Note that Docker is **NOT** standalone and requires an internet connection to fe
 
 ## Running the docker
 
-You need to provide a few environment variables: `DISTR`, `arch`, and `SYSROOT_URL` and some others. It's best to use the CI yaml file as a reference - https://github.com/manticoresoftware/manticoresearch/blob/master/dist/gitlab-release.yml
+You need to provide a few environment variables: `DISTR`, `arch`, and `SYSROOT_URL` and some others. It's best to use the CI yaml file as a reference - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
 
 For example,
 ```bash

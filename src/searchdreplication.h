@@ -61,7 +61,7 @@ StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError );
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
-bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, bool bRemoteError, CSphString & sError );
+bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError );
 
 // dump all clusters statuses
 void ReplicateClustersStatus ( VectorLike & dStatus );
@@ -72,10 +72,9 @@ bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 
 // set cluster name into index desc for fast rejects
-bool AssignClusterToIndex ( const CSphString& sIndex, CSphString sCluster );
+bool AssignClusterToIndex ( const CSphString & sIndex, CSphString sCluster );
 
-bool AddIndexToClusterTOI ( ServedClone_c* pDesc, const ReplicationCommand_t* pCmd );
-bool DropIndexFromClusterTOI ( const ReplicationCommand_t* pCmd );
+bool SetIndexClusterTOI ( const ReplicationCommand_t * pCmd );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );

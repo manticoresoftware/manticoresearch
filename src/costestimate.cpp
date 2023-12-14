@@ -296,13 +296,15 @@ float CostEstimate_c::CalcIndexCost ( const SecondaryIndexInfo_t & tIndex, const
 
 	const int64_t READ_BLOCK_SIZE = 1024;
 	int64_t iDocsToRead = Max ( int64_t(iDocs*fDocsLeft), READ_BLOCK_SIZE );
-	if ( !NeedBitmapUnion(uNumIterators) )
-		fCost += Cost_IndexUnionQueue(iDocsToRead);
-
 	if ( uNumIterators==1 )
 		fCost += Cost_IndexReadSingle(iDocsToRead);
 	else
-		fCost += Cost_IndexReadBitmap(iDocs); // read all docs (when constructing the bitmap), not only the ones left
+	{
+		if ( NeedBitmapUnion(uNumIterators) )
+			fCost += Cost_IndexReadBitmap(iDocs); // read all docs (when constructing the bitmap), not only the ones left
+		else
+			fCost += Cost_IndexUnionQueue(iDocsToRead);
+	}
 
 	fCost += Cost_IndexIteratorInit(uNumIterators);
 	return fCost;

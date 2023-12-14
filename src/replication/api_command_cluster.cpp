@@ -140,6 +140,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveClusterUpdateNodes ( tOut, tBuf, sCluster );
 		break;
 
+	case E_CLUSTER::INDEX_ADD_DIST:
+		ReceiveDistIndex ( tOut, tBuf, sCluster );
+		break;
+
 	default:
 		TlsMsg::Err ( "INTERNAL ERROR: unhandled command %d", (int) eClusterCmd );
 		break;

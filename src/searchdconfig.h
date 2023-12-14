@@ -32,6 +32,7 @@ struct ClusterOptions_t
 
 	void						Parse ( const CSphString & sOptions );
 	[[nodiscard]] CSphString	AsStr () const;
+	[[nodiscard]] bool			IsEmpty() const noexcept;
 };
 
 // cluster data that gets stored and loaded
@@ -89,6 +90,8 @@ struct IndexDesc_t
 // load data from internal config on daemon start
 bool		LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError );
 bool		SaveConfigInt ( CSphString & sError );
+struct DistributedIndex_t;
+IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist );
 
 // load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void		ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter );

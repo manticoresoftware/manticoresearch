@@ -44,7 +44,7 @@ static bool IsInetAddrFree ( DWORD uAddr, int iPort )
 	}
 
 	int iRes = bind ( iSock, (struct sockaddr*)&iaddr, sizeof ( iaddr ) );
-	SafeClose ( iSock );
+	SafeCloseSocket ( iSock );
 
 	return ( iRes == 0 );
 }

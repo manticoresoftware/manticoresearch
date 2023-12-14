@@ -22,6 +22,8 @@
 
 #include <cmath>
 
+// for send dist indexes
+#include "nodes.h"
 
 class IndexSaveGuard_c: public ISphNoncopyable
 {
@@ -107,7 +109,7 @@ bool SyncSrc_t::CalculateFilesSignatures()
 		while ( iReadTotal < tChunk.m_iFileSize )
 		{
 			int64_t iLeftTotal = tChunk.m_iFileSize - iReadTotal;
-			int iLeft = (int)Min ( iLeftTotal, tChunk.m_iChunkBytes );
+			int64_t iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
 			iReadTotal += iLeft;
 
 			if ( !tIndexFile.Read ( dReadBuf.Begin(), iLeft, sError ) )
@@ -232,4 +234,111 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tIndexSaveGuard.EnableSave ();
 
 	return ActivateIndexOnRemotes ( sCluster, sIndex, eType, bSendOk, dActivateIndexes, tmLongOpTimeout ) && bSendOk;
+}
+
+struct DistIndexSendRequest_t : public ClusterRequest_t
+{
+	DistIndexSendRequest_t() = default;
+	DistIndexSendRequest_t ( const DistributedIndex_t & tDistIndex, const CSphString & sCluster, const CSphString & sIndex )
+	{
+		m_sCluster = sCluster;
+		m_sIndex = sIndex;
+
+		JsonEscapedBuilder sDesc;
+		IndexDescDistr_t tDesc = GetDistributedDesc ( tDistIndex );
+		tDesc.Save ( sDesc );
+
+		sDesc.MoveTo ( m_sDesc );
+	}
+
+	CSphString m_sIndex;
+	CSphString m_sDesc;
+};
+
+void operator<< ( ISphOutputBuffer & tOut, const DistIndexSendRequest_t & tReq )
+{
+	tOut.SendString ( tReq.m_sCluster.cstr() );
+	tOut.SendString ( tReq.m_sIndex.cstr() );
+	tOut.SendString ( tReq.m_sDesc.cstr() );
+}
+
+void operator>> ( InputBuffer_c & tIn, DistIndexSendRequest_t & tReq )
+{
+	tReq.m_sCluster = tIn.GetString();
+	tReq.m_sIndex = tIn.GetString();
+	tReq.m_sDesc = tIn.GetString();
+}
+
+using ClusterSendDistIndex_c = ClusterCommand_T<E_CLUSTER::INDEX_ADD_DIST, DistIndexSendRequest_t>;
+
+// send distributed index to remote nodes via API
+bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString & sIndex, const VecTraits_T<AgentDesc_t> & dDesc )
+{
+	cDistributedIndexRefPtr_t pDist ( GetDistr ( sIndex ) );
+	if ( !pDist )
+	{
+		TlsMsg::Err() << "unknown or wrong type of table '" << sIndex << "'";
+		return false;
+	}
+
+	ClusterSendDistIndex_c tReq;
+	DistIndexSendRequest_t tSend ( *pDist, sCluster, sIndex );
+
+	int64_t tmTimeout = GetQueryTimeoutForReplication();
+	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, tmTimeout, tSend );
+
+	sphLogDebugRpl ( "sending table '%s' to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmTimeout / 1000 ), (int)( tmTimeout % 1000 ) );
+
+	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
+}
+
+static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
+{
+	TLS_MSG_STRING ( sError );
+
+	cDistributedIndexRefPtr_t pDist ( GetDistr ( tCmd.m_sIndex ) );
+	if ( pDist && !pDist->m_sCluster.IsEmpty() )
+		return TlsMsg::Err ( "distributed table '%s:%s' is already the part of the cluster %s, remove it first", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), pDist->m_sCluster.cstr() );
+
+	CSphVector<BYTE> dBsonParsed;
+	if ( !sphJsonParse ( dBsonParsed, (char *)tCmd.m_sDesc.cstr(), false, false, false, sError ) )
+		return false;
+
+	using namespace bson;
+	Bson_c tBson ( dBsonParsed );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+		return TlsMsg::Err ( "bad json for distributed table '%s:%s': %s", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), tCmd.m_sDesc.cstr() );
+
+	CSphString sWarning;
+	IndexDesc_t tIndexDesc;
+	if ( !tIndexDesc.Parse ( tBson, tCmd.m_sIndex, sWarning ) )
+		return false;
+
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "table '%s' create warning: %s", tCmd.m_sIndex.cstr(), sWarning.cstr() );
+
+	CSphConfigSection hConf;
+	tIndexDesc.Save ( hConf );
+
+	StrVec_t dWarnings;
+	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
+	ConfigureDistributedIndex ( []( const auto & sIdx ){ return true; }, *pIdx, tCmd.m_sIndex.cstr(), hConf, &dWarnings );
+	for ( const CSphString & sMsg : dWarnings )
+		sphWarning ( "distributed table '%s:%s': %s", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), sMsg.cstr() );
+
+	// finally, check and add a new or replace an existed distributed index to global table
+	g_pDistIndexes->AddOrReplace ( pIdx, tCmd.m_sIndex );
+
+	return true;
+}
+
+void ReceiveDistIndex ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster )
+{
+	ClusterSendDistIndex_c tReq;
+	DistIndexSendRequest_t tDistCmd;
+
+	ClusterSendDistIndex_c::ParseRequest ( tBuf, tDistCmd );
+	sCluster = tDistCmd.m_sCluster;
+	if ( AddDistIndex ( tDistCmd ) )
+		ClusterSendDistIndex_c::BuildReply ( tOut );
 }

@@ -96,6 +96,8 @@ SELECT id, title FROM rt1 WHERE MATCH (' it REGEX(/te.*/) ') ORDER BY id ASC;
 SELECT id, title FROM rt1 WHERE MATCH (' " it REGEX(/te.*/) " ') ORDER BY id ASC;
 SELECT id, title FROM rt1 WHERE MATCH (' " it REGEX(/te.*/) of "/2 ') ORDER BY id ASC;
 SELECT id, title FROM rt1 WHERE MATCH (' " do REGEX(/te.*/) "~3 ') ORDER BY id ASC;
+INSERT INTO rt1 (id, title) VALUES (20, 'R U ON E');
+select * from rt1 where match(' "REGEX(/u/) REGEX(/on/) REGEX(/e/)" ') ORDER BY id ASC;
 
 </sphinxql></queries>
 

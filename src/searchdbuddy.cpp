@@ -680,7 +680,7 @@ static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
 #else
 static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
 #endif
-static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore:1.0.11" );
+static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:1.0.11" );
 
 static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
 {

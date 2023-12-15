@@ -371,13 +371,19 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 CSphString GetUrl ( const ListenerDesc_t & tDesc )
 {
-	char sAddrBuf [ SPH_ADDRESS_SIZE ];
-	sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
-	
-	CSphString sURI;
-	sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
+    CSphString sURI;
 
-	return sURI;
+#ifdef _WIN32
+    // Use the constant host for Windows
+    sURI.SetSprintf ("http://%s:%d", "host.docker.internal", tDesc.m_iPort);
+#else
+    // Original code for other systems
+    char sAddrBuf [ SPH_ADDRESS_SIZE ];
+    sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
+    sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
+#endif
+
+    return sURI;
 }
 
 
@@ -703,7 +709,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf ( "docker run -v \"%s/%s:/buddy\" -w /buddy %s /buddy/src/main.php", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sDefaultBuddyDockerImage.cstr());
+	sExecPath.SetSprintf ( "docker run --rm --publish-all -v \"%s/%s:/buddy\" -w /buddy %s /buddy/src/main.php", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sDefaultBuddyDockerImage.cstr());
 	if ( !sphFileExists ( sExecPath.cstr() ) )
 	{
 		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyDockerImage.cstr(), sExecPath.cstr() );

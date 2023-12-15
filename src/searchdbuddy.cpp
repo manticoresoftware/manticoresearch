@@ -61,6 +61,12 @@ static CSphString GetUrl ( const ListenerDesc_t & tDesc );
 static CSphString BuddyGetPath ( const CSphString & sPath, bool bHasBuddyPath );
 
 #if _WIN32
+static CSphString g_sBuddyBind = "0.0.0.0";
+#else
+static CSphString g_sBuddyBind = "127.0.0.1";
+#endif
+
+#if _WIN32
 struct BuddyWindow_t : boost::process::detail::handler_base
 {
     // this function will be invoked at child process constructor before spawning process
@@ -339,7 +345,7 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 		g_pIOS->stop();
 
 	g_pPipe.reset();
-	g_pIOS.reset(); 
+	g_pIOS.reset();
 
 	g_pIOS.reset ( new boost::asio::io_service );
 	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
@@ -427,12 +433,13 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s %s --threads=%d",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s --bind=%s %s --threads=%d",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
+		g_sBuddyBind.cstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
 		iThreads );
-		
+
 
 	CSphString sErorr;
 	BuddyState_e eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );
@@ -582,7 +589,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint with User-Agent:Manticore Buddy" );
 			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
 		}
-		
+
 		assert ( dResult.GetLength()>0 );
 		return tRes.m_bOk;
 	}

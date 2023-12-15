@@ -43,7 +43,7 @@ title: List of HP business laptops
 content: Elitebook Probook
 gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
+id: %{NUMBER}
 title: List of Dell business laptops
 content: Latitude Precision Vostro
 gid: 2

@@ -1373,6 +1373,7 @@ private:
 	void						StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
+	bool						VerifyKNN ( InsertDocData_t & tDoc, CSphString & sError ) const;
 
 	template<typename PRED>
 	int64_t						GetMemCount(PRED&& fnPred) const;
@@ -1783,6 +1784,33 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 }
 
 
+bool RtIndex_c::VerifyKNN ( InsertDocData_t & tDoc, CSphString & sError ) const
+{
+	int iMva = 0;
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+		if ( !IsMvaAttr ( tAttr.m_eAttrType ) )
+			continue;
+
+		const int64_t * pMva = &tDoc.m_dMvas[iMva];
+		int iNumValues = (int)*pMva++;
+		iMva += iNumValues + 1;
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
+			continue;
+
+		if ( iNumValues!=tAttr.m_tKNN.m_iDims )
+		{
+			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
 bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
 	assert ( g_bRTChangesAllowed );
@@ -1879,6 +1907,9 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
+
+	if ( !VerifyKNN ( tDoc, sError ) )
+		return false;
 
 	CSphVector<CSphVector<BYTE>> dTmpAttrStorage;
 	DocstoreBuilder_i::Doc_t tStoredDoc;

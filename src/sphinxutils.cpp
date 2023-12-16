@@ -3543,9 +3543,3 @@ int64_t GenerateIndexId()
 {
 	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
 }
-
-void SetIndexId ( int64_t iId )
-{
-	g_tIndexId.store ( iId );
-}
-

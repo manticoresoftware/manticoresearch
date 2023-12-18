@@ -1941,7 +1941,7 @@ CSphIndex::CSphIndex ( CSphString sIndexName, CSphString sFileBase )
 	, m_tSchema { std::move ( sFileBase ) }
 	, m_sIndexName ( std::move ( sIndexName ) )
 {
-	m_iIndexId = GenerateIndexId();
+	m_iIndexId = GetIndexUid();
 	m_tMutableSettings = MutableIndexSettings_c::GetDefaults();
 }
 
@@ -8752,7 +8752,7 @@ void CSphIndex_VLN::Dealloc ()
 	if ( pSkipCache )
 		pSkipCache->DeleteAll(m_iIndexId);
 
-	m_iIndexId = GenerateIndexId();
+	m_iIndexId = GetIndexUid();
 }
 
 

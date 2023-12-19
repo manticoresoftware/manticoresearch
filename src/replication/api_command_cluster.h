@@ -98,7 +98,6 @@ class ClusterCommand_T: public RequestBuilder_i, public ReplyParser_i
 public:
 	using REQUEST_T = REQUEST;
 	using REPLY_T = REPLY;
-	static constexpr E_CLUSTER m_eCMD = CMD;
 
 	static REPLY& GetRes ( const AgentConn_t& tAgent )
 	{
@@ -144,15 +143,26 @@ public:
 
 	void BuildRequest ( const AgentConn_t& tAgent, ISphOutputBuffer& tOut ) const final
 	{
-		if ( m_eCMD==E_CLUSTER::FILE_SEND )
+		if ( CMD==E_CLUSTER::FILE_SEND )
 		{
-			auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
-			tOut.SendInt ( 1 ); // set persistent to 1.
+			{
+				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
+				tOut.SendInt ( 1 ); // set persistent to 1
+			}
 		}
 		// API header
 		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER );
 		tOut.SendWord ( static_cast<WORD> ( CMD ) );
 		tOut << GetReq ( tAgent );
+
+		if ( CMD==E_CLUSTER::FILE_SEND )
+		{
+			{
+				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
+				tOut.SendInt ( 0 ); // set persistent to 0
+			}
+		}
+
 		VerboseProto ( "BldRq", GetReq ( tAgent ) );
 	}
 

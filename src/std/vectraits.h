@@ -13,6 +13,7 @@
 #pragma once
 
 #include "generics.h"
+#include "ints.h"
 
 /// vector traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway

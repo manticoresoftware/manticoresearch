@@ -20,7 +20,17 @@ template < typename T >
 class RefcountedVector_c : public CSphVector<T>, public ISphRefcountedMT
 {};
 
-using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> >;
+struct AttrValue_t
+{
+	int64_t m_iValue;
+	float	m_fValue;
+	bool	m_bFloat;
+
+	bool operator == ( const AttrValue_t & rhs ) const	{ return m_iValue==rhs.m_iValue && m_fValue==rhs.m_fValue && m_bFloat==rhs.m_bFloat; }
+	bool operator < ( const AttrValue_t & rhs ) const	{ return m_iValue<rhs.m_iValue; }
+};
+
+using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<AttrValue_t> >;
 
 
 /// parser view on a generic node
@@ -40,8 +50,10 @@ struct SqlNode_t
 
 	void					SetValueInt ( int64_t iValue );
 	void					SetValueInt ( uint64_t uValue, bool bNegative );
+	void					SetValueFloat ( float fValue );
 	int64_t					GetValueInt() const;
 	uint64_t				GetValueUint() const;
+	float					GetValueFloat() const	{ return m_fValue; }
 	void					CopyValueInt ( const SqlNode_t & tRhs );
 };
 
@@ -68,7 +80,7 @@ enum
 {
 	SPHINXQL_TOK_COUNT		= -1,
 	SPHINXQL_TOK_GROUPBY	= -2,
-	SPHINXQL_TOK_WEIGHT		= -3
+	SPHINXQL_TOK_WEIGHT		= -3,
 };
 
 
@@ -334,6 +346,7 @@ public:
 	void			PushQuery();
 	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
+	float			ToFloat ( const SqlNode_t & tNode ) const { return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr ); }
 	void			ProcessParsingError ( const char* szMessage );
 	bool 			IsWrongSyntaxError() const noexcept;
 
@@ -346,11 +359,12 @@ public:
 	void 			AddComment ( const SqlNode_t* tNode ) const;
 
 protected:
+	CSphVector<SqlStmt_t> &	m_dStmt;
+
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
+
 	bool			CheckInteger ( const CSphString& sOpt, const CSphString& sVal ) const;
 	virtual bool	CheckOption ( Option_e eOption ) const;
-
-	CSphVector<SqlStmt_t> &	m_dStmt;
 };
 
 

@@ -80,8 +80,8 @@ public:
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const = 0;
 	virtual bool				GotHitless () = 0;
-	virtual int					GetDocsCount () { return INT_MAX; }
-	virtual int					GetHitsCount () { return 0; }
+	virtual int					GetDocsCount() const { return INT_MAX; }
+	virtual int					GetHitsCount() const { return 0; }
 	virtual uint64_t			GetWordID () const = 0;			///< for now, only used for duplicate keyword checks in quorum operator
 	virtual void 				SetAtomPos ( int iPos ) = 0;
 	virtual int					GetAtomPos() const = 0;

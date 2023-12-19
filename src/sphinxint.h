@@ -37,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 64;				///< bumped to 64 since header is now stored as json
+const DWORD		INDEX_FORMAT_VERSION		= 65;				///< added .spknn
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -89,6 +89,7 @@ extern bool g_bJsonKeynamesToLowercase;
 #define SZ_BOOST			"n"
 #define SZ_ZONES            "o"
 #define SZ_ZONESPANS        "p"
+#define SZ_REGEX			"r"
 
 /// generic COM-like uids
 enum ExtraData_e
@@ -748,6 +749,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 
 		case SPH_ATTR_UINT32SET:	return "mva";
 		case SPH_ATTR_INT64SET:		return "mva64";
+		case SPH_ATTR_FLOAT_VECTOR:	return "float_vector";
 		default:					return "unknown";
 	}
 }
@@ -788,6 +790,7 @@ inline const char * sphRtTypeDirective ( ESphAttr eType )
 
 		case SPH_ATTR_UINT32SET:	return "rt_attr_multi";
 		case SPH_ATTR_INT64SET:		return "rt_attr_multi64";
+		case SPH_ATTR_FLOAT_VECTOR:	return "rt_attr_float_vector";
 		default:					return nullptr;
 	}
 }
@@ -1061,10 +1064,10 @@ struct ISphSubstringPayload
 
 
 // levenstein distance for words
-int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 );
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 // levenstein distance for unicode codepoints
-int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 );
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 struct Slice_t
 {

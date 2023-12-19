@@ -96,6 +96,7 @@
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - Removes a document from a table
 * [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Executes multiple insert, update, or delete operations in a single call. Learn more about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
+* [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
 
 ### Common things
@@ -184,6 +185,7 @@
 * [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -308,6 +310,8 @@
 * [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
 *
 ##### Other
+* [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
+* [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
 * [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
 
 ## Common settings in configuration file
@@ -549,7 +553,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, KNN, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Documentation for old Manticore versions

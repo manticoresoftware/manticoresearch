@@ -113,6 +113,7 @@
     * [• Query cache](Searching/Query_cache.md)
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
+    * [• K-nearest neighbor vector search](Searching/KNN.md)
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)    
 * [⪢ Functions](Functions.md)
     * [• Mathematical functions](Functions/Mathematical_functions.md)
@@ -164,6 +165,9 @@
     * [• Comments](Server_settings/Comments.md)
     * [• Inheritance of table and source declarations](Server_settings/Inheritance_of_index_and_source_declarations.md)
     * [• Setting variables online](Server_settings/Setting_variables_online.md)
+* [⪢ Integration]
+    * [Logstash](Integration/Logstash.md)
+    * [Filebeat](Integration/Filebeat.md)
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)

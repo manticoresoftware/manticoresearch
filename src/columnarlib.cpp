@@ -27,7 +27,6 @@ static CreateStorageReader_fn	g_fnCreateColumnarStorage = nullptr;
 static CreateBuilder_fn 		g_fnCreateColumnarBuilder = nullptr;
 static CheckStorage_fn			g_fnCheckColumnarStorage = nullptr;
 static VersionStr_fn			g_fnVersionStr = nullptr;
-static GetVersion_fn			g_fnStorageVersion  = nullptr;
 
 /////////////////////////////////////////////////////////////////////
 
@@ -45,6 +44,7 @@ common::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 	case SPH_ATTR_STRING:		return common::AttrType_e::STRING;
 	case SPH_ATTR_UINT32SET:	return common::AttrType_e::UINT32SET;
 	case SPH_ATTR_INT64SET:		return common::AttrType_e::INT64SET;
+	case SPH_ATTR_FLOAT_VECTOR:	return common::AttrType_e::FLOATVEC;
 	default:
 		assert ( 0 && "Unknown columnar type");
 		return common::AttrType_e::NONE;
@@ -124,42 +124,11 @@ void CheckColumnarStorage ( const CSphString & sFile, DWORD uNumRows, std::funct
 
 
 #if HAVE_DLOPEN
-template <typename T>
-static bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
-{
-	pFunc = (T) dlsym ( pHandle, szFunc );
-	if ( !pFunc )
-	{
-		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
-		dlclose ( pHandle );
-		return false;
-	}
-
-	return true;
-}
-
-static CSphString TryDifferentPaths ( const CSphString & sLibfile )
-{
-	CSphString sPath = GET_COLUMNAR_FULLPATH();
-	if ( sphFileExists ( sPath.cstr() ) )
-		return sPath;
-
-#if _WIN32
-	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
-	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
-	if ( sphFileExists ( sPath.cstr() ) )
-		return sPath;
-#endif
-
-	return "";
-}
-
-
 bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR );
+	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath() );
 	if ( sLibfile.IsEmpty() )
 		return true;
 
@@ -194,7 +163,6 @@ bool InitColumnar ( CSphString & sError )
 	if ( !LoadFunc ( g_fnCreateColumnarBuilder, tHandle.Get(), "CreateColumnarBuilder", sLibfile, sError ) )		return false;
 	if ( !LoadFunc ( g_fnCheckColumnarStorage, tHandle.Get(), "CheckColumnarStorage", sLibfile, sError ) )			return false;
 	if ( !LoadFunc ( g_fnVersionStr, tHandle.Get(), "GetColumnarLibVersionStr", sLibfile, sError ) )				return false;
-	if ( !LoadFunc ( g_fnStorageVersion, tHandle.Get(), "GetColumnarStorageVersion", sLibfile, sError ) )			return false;
 
 	g_pColumnarLib = tHandle.Leak();
 
@@ -229,23 +197,13 @@ const char * GetColumnarVersionStr()
 }
 
 
-int GetColumnarStorageVersion()
-{
-	if ( !IsColumnarLibLoaded() )
-		return -1;
-
-	assert ( g_fnStorageVersion );
-	return g_fnStorageVersion();
-}
-
-
 bool IsColumnarLibLoaded()
 {
 	return !!g_pColumnarLib;
 }
 
 
-std::unique_ptr<columnar::Iterator_i> CreateColumnarIterator ( const columnar::Columnar_i * pColumnar, const std::string&  sName, std::string & sError, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities )
+std::unique_ptr<columnar::Iterator_i> CreateColumnarIterator ( const columnar::Columnar_i * pColumnar, const std::string & sName, std::string & sError, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities )
 {
 	return std::unique_ptr<columnar::Iterator_i> { pColumnar->CreateIterator ( sName, tHints, pCapabilities, sError ) };
 }

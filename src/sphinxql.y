@@ -91,6 +91,7 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_KILL
+%token	TOK_KNN
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
@@ -624,13 +625,21 @@ where_item:
 		}
 	;
 
+knn_item:
+	TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, $8 ) )
+				YYERROR;
+		}
+	;
+
 filter_expr:
 	filter_item							{ pParser->SetOp ( $$ ); }
 	| filter_expr TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $3 ); }
 	| filter_expr TOK_OR filter_expr	{ pParser->FilterOr ( $$, $1, $3 ); }
 	| '(' filter_expr ')'				{ pParser->FilterGroup ( $$, $2 ); }
+	| knn_item
 	;
-	
 	
 filter_item:	
 	expr_ident '=' bool_or_integer_value
@@ -651,19 +660,15 @@ filter_item:
 		}
 	| expr_ident TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, *$4.m_pValues );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues = *$4.m_pValues;
-			pFilter->m_dValues.Uniq();
 		}
 	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, *$5.m_pValues );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues = *$5.m_pValues;
-			pFilter->m_dValues.Uniq();
 			pFilter->m_bExclude = true;
 		}
 	| expr_ident TOK_IN '(' string_list ')'
@@ -837,19 +842,15 @@ filter_item:
 		}
 	| mva_aggr TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES );
+			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, *$4.m_pValues );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
-			f->m_dValues = *$4.m_pValues;
-			f->m_dValues.Uniq();
 		}
 	| mva_aggr TOK_NOT TOK_IN '(' const_list ')'
 		{
 			// tricky bit with inversion again
-			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES );
+			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, *$5.m_pValues );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ANY : SPH_MVAFUNC_ALL;
 			f->m_bExclude = true;
-			f->m_dValues = *$5.m_pValues;
-			f->m_dValues.Uniq();
 		}
 	| mva_aggr TOK_BETWEEN const_int TOK_AND const_int
 		{
@@ -940,8 +941,8 @@ const_int:
 	;
 
 const_float:
-	const_float_unsigned		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
-	| '-' const_float_unsigned	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
+	const_float_unsigned		{ $$.m_iType = TOK_CONST_FLOAT; $$.SetValueFloat ( $1.m_fValue ); }
+	| '-' const_float_unsigned	{ $$.m_iType = TOK_CONST_FLOAT; $$.SetValueFloat ( -$2.m_fValue ); }
 	;
 
 // fixme! That is non-consequetive behaviour.
@@ -956,12 +957,22 @@ const_list:
 	const_int
 		{
 			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
-			$$.m_pValues->Add ( $1.GetValueInt() ); 
+			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
+			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), false } ); 
+		}
+	| const_float
+		{
+			assert ( !$$.m_pValues );
+			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
+			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), true } ); 
 		}
 	| const_list ',' const_int
 		{
-			$$.m_pValues->Add ( $3.GetValueInt() );
+			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
+		}
+	| const_list ',' const_float
+		{
+			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat(), true } );
 		}
 	;
 
@@ -969,12 +980,12 @@ string_list:
 	TOK_QUOTED_STRING
 		{
 			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
-			$$.m_pValues->Add ( $1.GetValueInt() );
+			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
+			$$.m_pValues->Add ( { $1.GetValueInt(), 0.0f } );
 		}
 	| string_list ',' TOK_QUOTED_STRING
 		{
-			$$.m_pValues->Add ( $3.GetValueInt() );
+			$$.m_pValues->Add ( { $3.GetValueInt(), 0.0f } );
 		}
 	;
 

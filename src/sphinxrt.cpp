@@ -40,6 +40,7 @@
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "pseudosharding.h"
+#include "knnmisc.h"
 #include "std/sys.h"
 
 #include <sys/stat.h>
@@ -1372,6 +1373,7 @@ private:
 	void						StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
+	bool						VerifyKNN ( InsertDocData_t & tDoc, CSphString & sError ) const;
 
 	template<typename PRED>
 	int64_t						GetMemCount(PRED&& fnPred) const;
@@ -1715,24 +1717,25 @@ static void ProcessStoredAttrs ( DocstoreBuilder_i::Doc_t & tStoredDoc, const In
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
 				const int64_t * pMva = &tDoc.m_dMvas[iMva];
 				int iNumValues = (int)*pMva++;
 				iMva += iNumValues+1;
 
-				if ( bStored )
-				{
-					if ( tAttr.m_eAttrType == SPH_ATTR_INT64SET )
-						pAddedAttrs[iStoredAttr] = { (BYTE*)pMva, int(iNumValues*sizeof(int64_t)) };
-					else
-					{
-						dTmpAttrStorage[i].Resize ( iNumValues*sizeof(DWORD) );
-						DWORD * pAttrs = (DWORD*)dTmpAttrStorage[i].Begin();
-						for ( int iValue = 0; iValue < iNumValues; iValue++ )
-							pAttrs[iValue] = (DWORD)pMva[iValue];
+				if ( !bStored )
+					break;
 
-						pAddedAttrs[iStoredAttr] = dTmpAttrStorage[i];
-					}
+				if ( tAttr.m_eAttrType == SPH_ATTR_INT64SET )
+					pAddedAttrs[iStoredAttr] = { (BYTE*)pMva, int(iNumValues*sizeof(int64_t)) };
+				else
+				{
+					dTmpAttrStorage[i].Resize ( iNumValues*sizeof(DWORD) );
+					DWORD * pAttrs = (DWORD*)dTmpAttrStorage[i].Begin();
+					for ( int iValue = 0; iValue < iNumValues; iValue++ )
+						pAttrs[iValue] = (DWORD)pMva[iValue];
+
+					pAddedAttrs[iStoredAttr] = dTmpAttrStorage[i];
 				}
 			}
 			break;
@@ -1778,6 +1781,33 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 	ProcessStoredAttrs ( tStoredDoc, tDoc, m_tSchema, dTmpAttrStorage );
 
 	return &tStoredDoc;
+}
+
+
+bool RtIndex_c::VerifyKNN ( InsertDocData_t & tDoc, CSphString & sError ) const
+{
+	int iMva = 0;
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+		if ( !IsMvaAttr ( tAttr.m_eAttrType ) )
+			continue;
+
+		const int64_t * pMva = &tDoc.m_dMvas[iMva];
+		int iNumValues = (int)*pMva++;
+		iMva += iNumValues + 1;
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
+			continue;
+
+		if ( iNumValues!=tAttr.m_tKNN.m_iDims )
+		{
+			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
+			return false;
+		}
+	}
+
+	return true;
 }
 
 
@@ -1877,6 +1907,9 @@ bool RtIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphS
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
+
+	if ( !VerifyKNN ( tDoc, sError ) )
+		return false;
 
 	CSphVector<CSphVector<BYTE>> dTmpAttrStorage;
 	DocstoreBuilder_i::Doc_t tStoredDoc;
@@ -2064,7 +2097,7 @@ static void CreateSegmentHits ( RtAccum_t& tAcc, RtSegment_t * pSeg, int iWordsC
 	}
 }
 
-RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords )
+RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords, CSphString & sError )
 {
 	TRACE_CONN ( "conn", "CreateSegment" );
 
@@ -2073,15 +2106,15 @@ RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless
 		return nullptr;
 
 	MEMORY ( MEM_RT_ACCUM );
-	auto * pSeg = new RtSegment_t ( pAcc->m_uAccumDocs, pAcc->m_pIndex->GetInternalSchema() );
+	auto * pSeg = new RtSegment_t ( pAcc->m_uAccumDocs, pAcc->GetIndex()->GetInternalSchema() );
 	FakeWL_t tFakeLock {pSeg->m_tLock};
 	CreateSegmentHits ( *pAcc, pSeg, iWordsCheckpoint, eHitless, dHitlessWords );
 
 	if ( pAcc->m_bKeywordDict )
 		FixupSegmentCheckpoints(pSeg);
 
-	pSeg->m_dRows.SwapData( pAcc->m_dAccumRows);
-	pSeg->m_dBlobs.SwapData( pAcc->m_dBlobs);
+	pSeg->m_dRows.SwapData ( pAcc->m_dAccumRows );
+	pSeg->m_dBlobs.SwapData ( pAcc->m_dBlobs) ;
 	std::swap ( pSeg->m_pDocstore, pAcc->m_pDocstore );
 
 	if ( pAcc->m_pColumnarBuilder )
@@ -2091,10 +2124,8 @@ RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless
 	}
 
 	pSeg->BuildDocID2RowIDMap ( pAcc->m_pIndex->GetInternalSchema() );
-
 	pAcc->m_tNextRowID = 0;
 
-	// done
 	return pSeg;
 }
 
@@ -2711,7 +2742,7 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 	dHits.Resize ( iDst );
 }
 
-bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
+bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 {
 	TRACE_CONN ( "conn", "RtIndex_c::Commit" );
 
@@ -2743,7 +2774,16 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* pError )
 	pAcc->Sort();
 	CleanupHitDuplicates ( pAcc->m_dAccum );
 
-	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords ) };
+	CSphString sCreateError;
+	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords, sCreateError ) };
+	if ( !pNewSeg && !sCreateError.IsEmpty() )
+	{
+		if ( pError )
+			*pError = sCreateError;
+
+		return false;
+	}
+
 	assert ( !pNewSeg || pNewSeg->m_uRows>0 );
 	assert ( !pNewSeg || pNewSeg->m_tAliveRows>0 );
 
@@ -3257,6 +3297,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	auto sSPDS = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPDS );
 	auto sSPC = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPC );
 	auto sSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPIDX );
+	auto sSKNN = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPKNN );
 
 	CSphWriter tWriterSPA;
 	if ( !tWriterSPA.OpenFile ( sSPA, sError ) )
@@ -3293,7 +3334,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	HistogramContainer_c tHistograms;
 	CSphVector<PlainOrColumnar_t> dAttrsForHistogram;
-	CreateHistograms ( tHistograms, dAttrsForHistogram, m_tSchema );
+	BuildCreateHistograms ( tHistograms, dAttrsForHistogram, m_tSchema );
 
 	CSphVector<PlainOrColumnar_t> dSiAttrs;
 	std::unique_ptr<SI::Builder_i> pSIdxBuilder;
@@ -3307,6 +3348,15 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	tCtx.m_iTotalDocuments = 0;
 	for ( const auto & i : tCtx.m_tRamSegments )
 		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
+
+	CSphVector<PlainOrColumnar_t> dAttrsForKNN;
+	std::unique_ptr<knn::Builder_i> pKNNBuilder;
+	if ( m_tSchema.HasKNNAttrs() )
+	{
+		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAttrsForKNN, sError );
+		if ( !pKNNBuilder )
+			return false;
+	}
 
 	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );
 
@@ -3362,7 +3412,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( pSIdxBuilder.get() )
 			{
 				pSIdxBuilder->SetRowID ( tNextRowID );
-				BuilderStoreAttrs ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dSiAttrs, pSIdxBuilder.get(), dTmp );
+				BuildStoreSI ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dSiAttrs, pSIdxBuilder.get(), dTmp );
 			}
 
 			dRawLookup[tNextRowID] = { tDocID, tNextRowID };
@@ -3370,6 +3420,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			{
 				assert ( tSeg.m_pDocstore );
 				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
+			}
+
+			if ( pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+			{
+				sError = pKNNBuilder->GetError().c_str();
+				return false;
 			}
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
@@ -3392,6 +3448,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	if ( pDocstoreBuilder )
 		pDocstoreBuilder->Finalize();
+
+	if ( pKNNBuilder && !pKNNBuilder->Save ( sSKNN.cstr(), sErrorSTL ) )
+	{
+		sError = sErrorSTL.c_str();
+		return false;
+	}
 
 	dLookup.Sort ( CmpDocidLookup_fn() );
 
@@ -4633,8 +4695,13 @@ void RtIndex_c::Preread ()
 {
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto& pChunk : *pChunks )
+	{
 		if (pChunk)
 			pChunk->CastIdx().Preread();
+
+		if ( sphInterrupted() )
+			break;
+	}
 }
 
 template<typename P>
@@ -7236,7 +7303,7 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
-		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, false );
 		tMeta.m_bTotalMatchesApprox |= PerformFullscan ( dRamChunks, tMaxSorterSchema.GetDynamicSize(), tArgs.m_iIndexWeight, iStride, iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta.m_sWarning );
 	}
 
@@ -7387,7 +7454,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
 		// do searching
-		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters );
+		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
 		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
 	}
 
@@ -10153,27 +10220,23 @@ void sphRTSetTestMode ()
 }
 
 
-static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSettings, StrVec_t * pWarnings )
+static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSettings )
 {
 	bool bAllColumnar = false;
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
 		bAllColumnar |= i=="*";	
 
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
-		if ( i==tCol.m_sName || bAllColumnar )
-		{
-			if ( tCol.m_eAttrType==SPH_ATTR_JSON )
-			{
-				if ( pWarnings )
-				{
-					CSphString sWarning;
-					sWarning.SetSprintf ( "columnar storage does not support json type ('%s' attribute specified as columnar)", tCol.m_sName.cstr() );
-					pWarnings->Add(sWarning);
-				}
-			}
-			else
-				tCol.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
-		}
+		if ( ( i==tCol.m_sName || bAllColumnar ) && tCol.m_eAttrType!=SPH_ATTR_JSON )
+			tCol.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
+}
+
+
+static void SetKNNFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSettings )
+{
+	for ( const auto & i : tSettings.m_dKNN )
+		if ( i.m_sName==tCol.m_sName )
+			tCol.m_uAttrFlags |= CSphColumnInfo::ATTR_INDEXED_KNN;
 }
 
 
@@ -10199,14 +10262,14 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	CSphColumnInfo tDocIdCol ( sphGetDocidName() );
 	tDocIdCol.m_eAttrType = SPH_ATTR_BIGINT;
 	if ( !bPQ )
-		SetColumnarFlag ( tDocIdCol, tSettings, pWarnings );
+		SetColumnarFlag ( tDocIdCol, tSettings );
 
 	tSchema.AddAttr ( tDocIdCol, false );
 
 	// attrs
-	const int iNumTypes = 9;
-	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64" };
-	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET };
+	const int iNumTypes = 10;
+	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64", "rt_attr_float_vector" };
+	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_FLOAT_VECTOR };
 
 	for ( int iType=0; iType<iNumTypes; ++iType )
 	{
@@ -10241,7 +10304,10 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 				return false;
 
 			if ( !bPQ )
-				SetColumnarFlag ( tCol, tSettings, pWarnings );
+			{
+				SetColumnarFlag ( tCol, tSettings );
+				SetKNNFlag ( tCol, tSettings );
+			}
 
 			tSchema.AddAttr ( tCol, false );
 

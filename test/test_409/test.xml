@@ -86,7 +86,7 @@ searchd
 
 <!-- request to node 1 -->
 <sphinxql d="1">
-	debug wait test status 7 like 'state' option 'timeout'=30;
+	debug wait test status 11 like 'state' option 'timeout'=30;
 	SELECT * FROM test:rt_many2 where match ('windows rulez'); SHOW META;
 	SELECT * FROM test:rt_many2 where match ('^many things'); SHOW META;
 	SELECT * FROM test:rt_many2 where match ('windows be like'); SHOW META;
@@ -98,13 +98,27 @@ ALTER CLUSTER test DROP rt_wf11;
 DROP TABLE rt_wf11;
 </sphinxql>
 
+<!-- replication of the distributed table -->
+<sphinxql d="0">
+create table dist1 type='distributed' local='rt_many1' local='rt_many2';
+ALTER CLUSTER test add dist1;
+SELECT * FROM dist1 order by id asc;
+</sphinxql>
+
+<sphinxql d="1">
+debug wait test status 13 like 'state' option 'timeout'=30;
+SELECT * FROM dist1 order by id asc;
+</sphinxql>
+
 <!-- cleanup -->
 <sphinxql d="0">
+	ALTER CLUSTER test DROP dist1;
 	ALTER CLUSTER test DROP rt_st1;
 	ALTER CLUSTER test DROP rt_many1;
 	ALTER CLUSTER test DROP rt_many2;
 	ALTER CLUSTER test DROP rt_st2;
 	ALTER CLUSTER test DROP pq_st2;
+	DROP TABLE dist1;
 	DROP TABLE rt_st1;
 	DROP TABLE rt_many1;
 	DROP TABLE rt_many2;

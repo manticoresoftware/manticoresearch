@@ -908,6 +908,15 @@ static inline bool IsRuFreq3 ( BYTE * pWord )
 		|| iCode==0xE3EEE4 || iCode==0xF7F2EE || iCode==0xE1E5E7 ); // god, chto, bez
 }
 
+static inline bool IsRuNeed2 ( BYTE * pWord )
+{
+	if ( pWord[2]!=0 )
+		return false;
+	int iCode = ( ( pWord[0]<<8 ) + ( pWord[1] ) ) | 0x2020;
+	return ( iCode==0xECEC || iCode==0xF1EC || iCode==0xEAEC || iCode==0xEAE3 ); // mm, cm, km, kg
+}
+
+
 static inline bool IsEnFreq3 ( BYTE * )
 {
 	// stub
@@ -1313,7 +1322,7 @@ void sphAotLemmatizeRu ( StrVec_t & dLemmas, const BYTE * pWord )
 
 	if ( iFormLen<2 || IsRuFreq2(sForm) )
 		return;
-	if ( iFormLen<3 || IsRuFreq3(sForm) )
+	if ( ( iFormLen<3 || IsRuFreq3(sForm) ) && !IsRuNeed2(sForm) )
 		return;
 
 	DWORD FindResults[12]; // max results is like 6

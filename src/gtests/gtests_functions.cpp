@@ -105,8 +105,7 @@ TEST ( Misc, SpanSearch )
 TEST( functions, TaggedHash20_t )
 {
 	const char * sFIPS = "45f44fd2db02b08b4189abf21e90edd712c9616d *rt_full.ram\n";
-	const BYTE bytescheck[HASH20_SIZE] = { 0x45, 0xf4, 0x4f, 0xd2, 0xdb, 0x02, 0xb0, 0x8b, 0x41, 0x89, 0xab, 0xf2
-										   , 0x1e, 0x90, 0xed, 0xd7, 0x12, 0xc9, 0x61, 0x6d };
+	const HASH20_t bytescheck { 0x45, 0xf4, 0x4f, 0xd2, 0xdb, 0x02, 0xb0, 0x8b, 0x41, 0x89, 0xab, 0xf2, 0x1e, 0x90, 0xed, 0xd7, 0x12, 0xc9, 0x61, 0x6d };
 	const char * namecheck = "rt_full.ram";
 
 	TaggedHash20_t tHash ( "HelloFips" );
@@ -117,7 +116,7 @@ TEST( functions, TaggedHash20_t )
 	tHash.FromFIPS ( sFIPS );
 	ASSERT_TRUE ( tHash.m_sTagName==namecheck );
 
-	ASSERT_TRUE ( 0==memcmp ( tHash.m_dHashValue, bytescheck, HASH20_SIZE ) );
+	ASSERT_EQ ( tHash.m_dHashValue, bytescheck );
 
 	sFips = tHash.ToFIPS ();
 	ASSERT_TRUE ( sFips==sFIPS );

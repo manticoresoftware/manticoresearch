@@ -60,7 +60,7 @@ jobs:
           cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
           cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
       - name: Setup Flex and Bison
-        run: Choco-Install -PackageName winflexbison
+        run: Install-ChocoPackage winflexbison
       - name: Run mysql
         run: |
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
@@ -95,7 +95,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v2
+        uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status*"

@@ -76,8 +76,10 @@ private:
 };
 
 
-std::unique_ptr<Histogram_i>	CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
-void			CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema );
+std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAttr eAttrType, int iSize=0 );
+
+void BuildCreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema );
+void BuildStoreHistograms ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms );
 
 struct HistogramSource_t
 {

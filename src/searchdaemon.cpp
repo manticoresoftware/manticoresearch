@@ -103,9 +103,9 @@ CheckLike::CheckLike( const char* sPattern )
 	*d = '\0';
 }
 
-bool CheckLike::Match( const char* sValue )
+bool CheckLike::Match ( const char* sValue ) const noexcept
 {
-	return sValue && ( m_sPattern.IsEmpty() || sphWildcardMatch( sValue, m_sPattern.cstr()));
+	return sValue && ( m_sPattern.IsEmpty() || sphWildcardMatch ( sValue, m_sPattern.cstr() ) );
 }
 
 // string vector with 'like' matcher
@@ -178,6 +178,19 @@ bool VectorLike::MatchAddf ( const char* sTemplate, ... )
 	return MatchAdd( sValue.cstr());
 }
 
+bool VectorLike::Matchf ( const char* sTemplate, ... ) const noexcept
+{
+	assert ( m_dHeadNames.GetLength() >= 1 );
+	va_list ap;
+	CSphString sValue;
+
+	va_start ( ap, sTemplate );
+	sValue.SetSprintfVa ( sTemplate, ap );
+	va_end ( ap );
+
+	return Match ( sValue.cstr() );
+}
+
 void VectorLike::Addf ( const char * sValueTmpl, ... )
 {
 	va_list ap;
@@ -247,18 +260,17 @@ void VectorLike::FillTail ( int iHas )
 }
 
 
-static const char * g_dIndexTypeName[1 + ( int ) IndexType_e::ERROR_] = {
-	"plain",
-	"template",
-	"rt",
-	"percolate",
-	"distributed",
-	"invalid"
-};
-
-CSphString GetTypeName( IndexType_e eType )
+const char* GetIndexTypeName ( IndexType_e eType )
 {
-	return g_dIndexTypeName[( int ) eType];
+	switch ( eType )
+	{
+	case IndexType_e::PLAIN : return "plain";
+	case IndexType_e::TEMPLATE: return "template";
+	case IndexType_e::RT: return "rt";
+	case IndexType_e::PERCOLATE: return "percolate";
+	case IndexType_e::DISTR: return "distributed";
+	default: return "invalid";
+	}
 }
 
 IndexType_e TypeOfIndexConfig( const CSphString& sType )
@@ -362,10 +374,8 @@ static bool ProtoByName ( CSphString sFullProto, ListenerDesc_t & tDesc, CSphStr
 	return false;
 }
 
-static const ListenerDesc_t g_tInvalidListener;
-
 /// listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol ] [ "_vip" ]
-ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
+ListenerDesc_t ParseResolveListener ( const char* sSpec, bool bResolve, CSphString* pFatal )
 {
 	ListenerDesc_t tRes;
 	tRes.m_eProto = Proto_e::SPHINX;
@@ -382,7 +392,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 	if ( iParts>3 )
 	{
 		MaybeFatalLog ( pFatal, "invalid listen format (too many fields)" );
-		return g_tInvalidListener;
+		return {};
 	}
 
 	assert ( iParts>=1 && iParts<=3 );
@@ -394,18 +404,18 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		if ( iParts>2 )
 		{
 			MaybeFatalLog ( pFatal, "invalid listen format (too many fields)" );
-			return g_tInvalidListener;
+			return {};
 		}
 
 		if ( iParts==2 && !ProtoByName ( dParts[1], tRes, pFatal ) )
-			return g_tInvalidListener;
+			return {};
 
 		tRes.m_sUnix = dParts[0];
 
 		// MOVED!!! check outside ParseListener in order to make tests consistent despite platforms
 #if _WIN32
 		MaybeFatalLog ( pFatal, "UNIX sockets are not supported on Windows" );
-		return g_tInvalidListener;
+		return {};
 #else
 		return tRes;
 #endif
@@ -425,7 +435,7 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 	{
 		iPort = atol( sPart );
 		if ( !CheckPort ( iPort, pFatal ) ) // lets forbid ambiguous magic like 0:sphinx or 99999:mysql41
-			return g_tInvalidListener;
+			return {};
 	}
 
 	// handle TCP port case
@@ -440,9 +450,9 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		{
 			// host name on itself
 			tRes.m_sAddr = sSpec;
-			tRes.m_uIP = sphGetAddress ( sSpec, ( pFatal==nullptr ), false, pFatal );
+			tRes.m_uIP = bResolve ? sphGetAddress ( sSpec, ( pFatal==nullptr ), false, pFatal  ) : 0;
 			if ( pFatal && !pFatal->IsEmpty() )
-				return g_tInvalidListener;
+				return {};
 		}
 		return tRes;
 	}
@@ -454,18 +464,18 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 		if ( iParts!=2 )
 		{
 			MaybeFatalLog ( pFatal, "invalid listen format (expected port:proto, got extra trailing part in listen=%s)", sSpec );
-			return g_tInvalidListener;
+			return {};
 		}
 
 		tRes.m_iPort = iPort;
 		if ( !ProtoByName ( dParts[1], tRes, pFatal ) )
-			return g_tInvalidListener;
+			return {};
 		return tRes;
 	}
 
-	// 1st part must be a host name; must be host:port[:proto]
+	// 1st part must be a host name; must be: host:port[:proto]
 	if ( iParts==3 && !ProtoByName ( dParts[2], tRes, pFatal ) )
-		return g_tInvalidListener;
+		return {};
 
 	if ( dParts[0].IsEmpty() )
 	{
@@ -473,39 +483,44 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString * pFatal )
 	} else
 	{
 		tRes.m_sAddr = dParts[0];
-		tRes.m_uIP = sphGetAddress ( dParts[0].cstr(), ( pFatal==nullptr ), false, pFatal );
+		tRes.m_uIP = bResolve ? sphGetAddress ( dParts[0].cstr(), ( pFatal==nullptr ), false, pFatal ) : 0;
 		if ( pFatal && !pFatal->IsEmpty() )
-			return g_tInvalidListener;
+			return {};
 	}
 
 
 	auto dPorts = sphSplit( dParts[1].scstr(), "-" );
 	tRes.m_iPort = atoi( dPorts[0].cstr());
 	if ( !CheckPort( tRes.m_iPort, pFatal ) )
-		return g_tInvalidListener;
+		return {};
 
 	if ( dPorts.GetLength()==2 )
 	{
 		int iPortsEnd = atoi( dPorts[1].scstr() );
 		if ( !CheckPort ( iPortsEnd, pFatal ) )
-			return g_tInvalidListener;
+			return {};
 
 		int iPortsCount = iPortsEnd - tRes.m_iPort + 1;
 
 		if ( iPortsEnd<=tRes.m_iPort )
 		{
 			MaybeFatalLog ( pFatal, "ports range invalid %d-%d", tRes.m_iPort, iPortsEnd );
-			return g_tInvalidListener;
+			return {};
 		}
 		if ( iPortsCount<2 )
 		{
 			MaybeFatalLog( pFatal, "ports range %d-%d count should be at least 2, got %d", tRes.m_iPort, iPortsEnd, iPortsCount );
-			return g_tInvalidListener;
+			return {};
 		}
 
 		tRes.m_iPortsCount = iPortsCount;
 	}
 	return tRes;
+}
+
+ListenerDesc_t ParseListener ( const char* sSpec, CSphString* pFatal )
+{
+	return ParseResolveListener ( sSpec, true, pFatal );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -692,23 +707,23 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP, CSphString * pF
 	if ( pResult->ai_next )
 	{
 		const bool bLocalHost = IsLocalhost ( uAddr );
-		char sAddrBuf[SPH_ADDRESS_SIZE+1];
+		std::array<char, SPH_ADDRESS_SIZE + 1> sAddrBuf{};
 		StringBuilder_c sBuf( "; ip=", "ip=" );
 
 		while ( pResult )
 		{
 			auto * pAddr = ( struct sockaddr_in *)pResult->ai_addr;
 			DWORD uNextAddr = pAddr->sin_addr.s_addr;
-			sphFormatIP( sAddrBuf, sizeof( sAddrBuf ), uNextAddr );
-			sBuf += sAddrBuf; // can not use << as builder appends string buffer with tail '\0' and next chunks are invisible
+			sphFormatIP( sAddrBuf.data(), sAddrBuf.size(), uNextAddr );
+			sBuf += sAddrBuf.data(); // can not use << as builder appends string buffer with tail '\0' and next chunks are invisible
 			pResult = pResult->ai_next;
 
 			if ( bLocalHost && !IsLocalhost ( uNextAddr ) )
 				uAddr = uNextAddr;
 		}
 
-		sphFormatIP( sAddrBuf, sizeof( sAddrBuf ), uAddr );
-		sphWarning( "multiple addresses (%s) found for '%s', using first one (%s)", sBuf.cstr(), sHost, sAddrBuf );
+		sphFormatIP( sAddrBuf.data(), sAddrBuf.size(), uAddr );
+		sphWarning( "multiple addresses (%s) found for '%s', using first one (%s)", sBuf.cstr(), sHost, sAddrBuf.data() );
 	}
 
 	return uAddr;

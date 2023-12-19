@@ -106,7 +106,6 @@ int GetOsProcessId()
 #include "event.h"
 
 #include <atomic>
-#include <optional>
 
 //////////////////////////////////////////////////////////////////////////
 /// functional threadpool with minimum footprint

@@ -13,11 +13,20 @@ concurrency:
   group: mirror_${{ github.ref }}
 
 jobs:
+
   to_gitlab:
     name: Sync to GitLab
     if: github.repository == 'manticoresoftware/manticoresearch'
     runs-on: ubuntu-latest
     steps:
+      - name: Commit info
+        run: |
+          echo "# Syncing commit ${{ github.sha }} to GitLab" >> $GITHUB_STEP_SUMMARY
+          echo "${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
       - name: Checkout repository
         uses: actions/checkout@v3
         with:

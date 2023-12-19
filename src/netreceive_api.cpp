@@ -135,7 +135,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
 
 
-		bool bCheckLen = ( eCommand!=SEARCHD_COMMAND_CLUSTERPQ );
+		bool bCheckLen = ( eCommand!= SEARCHD_COMMAND_CLUSTER );
 		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
 		// should not fail replication commands from other nodes as max_packet_size could be different between nodes
 		bool bBadLength = ( iReplySize<0 || ( bCheckLen && iReplySize>tIn.GetMaxPacketSize() ) );

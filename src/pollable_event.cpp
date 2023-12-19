@@ -18,13 +18,6 @@
 #include <sys/eventfd.h>
 #endif
 
-static void SafeCloseSocket ( int& iFD )
-{
-	if ( iFD >= 0 )
-		sphSockClose ( iFD );
-	iFD = -1;
-}
-
 #if !HAVE_EVENTFD
 static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 {

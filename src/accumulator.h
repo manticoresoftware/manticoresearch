@@ -36,8 +36,7 @@ public:
 };
 
 // commands that got replicated, transactions
-enum class ReplicationCommand_e
-{
+enum class ReplCmd_e {
 	PQUERY_ADD = 0,
 	PQUERY_DELETE,
 	TRUNCATE,
@@ -60,7 +59,8 @@ class MemoryWriter_c;
 struct ReplicationCommand_t
 {
 	// common
-	ReplicationCommand_e	m_eCommand { ReplicationCommand_e::TOTAL };
+	ReplCmd_e m_eCommand { ReplCmd_e::TOTAL };
+	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
 
@@ -84,7 +84,7 @@ struct ReplicationCommand_t
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
-std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
+std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
 
 class RtIndex_i;
 class ColumnarBuilderRT_i;
@@ -124,9 +124,9 @@ public:
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
 	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
-	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
+	ReplicationCommand_t * AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
-	void			LoadRtTrx ( const BYTE * pData, int iLen, DWORD uVer );
+	void			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer );
 	void			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
 
 	const BYTE *	GetPackedKeywords() const;
@@ -141,7 +141,7 @@ private:
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
-	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder;
+	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
@@ -154,7 +154,7 @@ private:
 	void			SetupDocstore();
 
 	// defined in sphinxrt.cpp
-	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>& );
+	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>&, CSphString& );
 };
 
 #endif // _accumulator_

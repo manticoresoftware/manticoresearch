@@ -20,6 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -55,6 +56,13 @@ jobs:
       )
     steps:
       - run: echo "All set to build packages"
+      - run: |
+          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
+          echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
+          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
@@ -243,7 +251,7 @@ jobs:
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
           name: win_installer
           path: build/manticore-*.exe
@@ -289,7 +297,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.7
+      - uses: manticoresoftware/clt@0.1.11
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -304,7 +312,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.7
+      - uses: manticoresoftware/clt@0.1.11
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

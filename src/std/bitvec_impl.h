@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#include "bitcount.h"
 #include <utility>
 #include <cstring>
 

@@ -877,6 +877,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_uint",			KEY_LIST, NULL },
 	{ "rt_attr_bigint",			KEY_LIST, NULL },
 	{ "rt_attr_float",			KEY_LIST, NULL },
+	{ "rt_attr_float_vector",	KEY_LIST, NULL },
 	{ "rt_attr_timestamp",		KEY_LIST, NULL },
 	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_attr_multi",			KEY_LIST, NULL },
@@ -923,6 +924,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_subblock",		KEY_REMOVED, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
 	{ "engine_default",			0, nullptr },
+	{ "knn",					0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -1033,6 +1035,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
+	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },
 	{ "ssl_key",				0, nullptr },
 	{ "ssl_ca",					0, nullptr },
@@ -3194,11 +3197,11 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 
 #if HAVE_DLOPEN
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath )
+CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath, bool bGlobal )
 	: m_bReady ( false )
 	, m_pLibrary ( nullptr )
 {
-	m_pLibrary = dlopen ( sPath, RTLD_NOW | RTLD_GLOBAL );
+	m_pLibrary = dlopen ( sPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
 	if ( !m_pLibrary )
 		sphLogDebug ( "dlopen(%s) failed", sPath );
 	else
@@ -3411,7 +3414,12 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 
 namespace TlsMsg
 {
-	static thread_local StringBuilder_c sTlsMsgs;
+//	static thread_local StringBuilder_c sTlsMsgs;
+	inline StringBuilder_c& TlsMsgs() noexcept
+	{
+		return *Threads::MyThd().m_pTlsMsg.load ( std::memory_order_relaxed );
+	}
+
 
 	bool Err( const char* sFmt, ... )
 	{
@@ -3420,7 +3428,7 @@ namespace TlsMsg
 		va_start ( ap, sFmt );
 		sMsgs.vSprintf( sFmt, ap );
 		va_end ( ap );
-		sTlsMsgs.Swap ( sMsgs );
+		TlsMsgs().Swap ( sMsgs );
 		return false;
 	}
 
@@ -3428,21 +3436,28 @@ namespace TlsMsg
 	{
 		if (sMsg.IsEmpty())
 			return true;
-		sTlsMsgs << sMsg;
+		TlsMsgs() << sMsg;
 		return false;
 	}
 
-	void ResetErr() { sTlsMsgs.Clear(); }
-	StringBuilder_c& Err() { return sTlsMsgs; }
-	const char* szError() { return sTlsMsgs.cstr(); }
+	void ResetErr() { TlsMsgs().Clear(); }
+	StringBuilder_c& Err() { return TlsMsgs(); }
+	const char* szError() { return TlsMsgs().cstr(); }
 	void MoveError ( CSphString& sError )
 	{
-		if ( sTlsMsgs.IsEmpty())
+		if ( TlsMsgs().IsEmpty())
 			return;
-		sTlsMsgs.MoveTo(sError);
+		TlsMsgs().MoveTo(sError);
 	}
 
-	bool HasErr() { return !sTlsMsgs.IsEmpty(); }
+	CSphString MoveToString ()
+	{
+		CSphString sError;
+		TlsMsgs().MoveTo ( sError );
+		return sError;
+	}
+
+	bool HasErr() { return !TlsMsgs().IsEmpty(); }
 }
 
 const char * GetBaseName ( const CSphString & sFullPath )
@@ -3458,21 +3473,38 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-static std::atomic<int64_t> g_iUID { 1 };
-static int64_t g_iUidBase = 0;
+struct UUID_t
+{
+	std::atomic<int64_t> m_iUID { 1 };
+	int64_t m_iUidBase = 0;
+
+	int64_t Get ()
+	{
+		int64_t iVal = m_iUID.fetch_add (1, std::memory_order_relaxed);
+		int64_t iUID = m_iUidBase + iVal;
+		return iUID;
+	}
+};
+
+static UUID_t g_tUidShort;
+static UUID_t g_tIndexUid;
 
 int64_t UidShort()
 {
-	int64_t iVal = g_iUID.fetch_add (1, std::memory_order_relaxed);
-	int64_t iUID = g_iUidBase + iVal;
-	return iUID;
+	return g_tUidShort.Get();
+}
+
+int64_t GetIndexUid()
+{
+	return g_tIndexUid.Get();
 }
 
 void UidShortSetup ( int iServer, int iStarted )
 {
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
-	g_iUidBase = iSeed;
+	g_tUidShort.m_iUidBase = iSeed;
+	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
 }
 
@@ -3520,17 +3552,5 @@ int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
 		return -1;
 
 	return std::mktime ( &tTM );
-}
-
-static std::atomic<long> g_tIndexId { 0 };
-
-int64_t GenerateIndexId()
-{
-	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
-}
-
-void SetIndexId ( int64_t iId )
-{
-	g_tIndexId.store ( iId );
 }
 

@@ -1407,15 +1407,12 @@ static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISc
 		const CSphColumnInfo * pAttr = tSchema.GetAttr ( i.m_sName.c_str() );
 		assert(pAttr);
 
-		PlainOrColumnar_t & tDstAttr = dDstAttrs.Add();
-		tDstAttr.m_eType = pAttr->m_eAttrType;
-
+		dDstAttrs.Add ( PlainOrColumnar_t ( *pAttr, iColumnar ) );
 		if ( pAttr->IsColumnar() )
-			tDstAttr.m_iColumnarId = iColumnar++;
-		else
-			tDstAttr.m_tLocator = pAttr->m_tLocator;
+			iColumnar++;
 	}
 }
+
 
 std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema& tSchema, CSphBitvec& tSIAttrs, const CSphString& sFile, CSphString& sError )
 {
@@ -1436,22 +1433,18 @@ std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSph
 }
 
 
-void BuilderStoreAttrs ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
+void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
 {
 	for ( int i = 0; i < dAttrs.GetLength(); i++ )
 	{
 		const PlainOrColumnar_t & tSrc = dAttrs[i];
 
+		const BYTE * pSrc = nullptr;
 		switch ( tSrc.m_eType )
 		{
 		case SPH_ATTR_UINT32SET:
-		case SPH_ATTR_INT64SET:
-		{
-			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
-			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
-			if ( tSrc.m_eType==SPH_ATTR_UINT32SET )
 			{
+				int iValues = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc ) / sizeof(DWORD);
 				// need a 64-bit array as input. so we need to convert our 32-bit array to 64-bit entries
 				dTmp.Resize ( iValues );
 				ARRAY_FOREACH ( i, dTmp )
@@ -1459,8 +1452,24 @@ void BuilderStoreAttrs ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * 
 
 				pBuilder->SetAttr ( i, dTmp.Begin(), iValues );
 			}
-			else
+			break;
+
+		case SPH_ATTR_INT64SET:
+			{
+				int iValues = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc ) / sizeof(int64_t);
 				pBuilder->SetAttr ( i, (const int64_t*)pSrc, iValues );
+			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR:
+		{
+			int iValues = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc ) / sizeof(float);
+			// need a 64-bit array as input. so we need to convert our 32-bit array to 64-bit entries
+			dTmp.Resize ( iValues );
+			ARRAY_FOREACH ( i, dTmp )
+				dTmp[i] = sphF2DW ( ((float*)pSrc)[i] );
+
+			pBuilder->SetAttr ( i, dTmp.Begin(), iValues );
 		}
 		break;
 

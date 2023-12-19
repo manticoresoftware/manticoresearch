@@ -240,9 +240,9 @@ SearchResponse searchResponse = searchApi.search(searchRequest);
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
 var boolFilter = new BoolFilter();
-boolFilter.Must = new List<Object> { 
-    new EqualsFilter("author_id", 123), 
-    new InFilter("forum_id", new List<Object> {1,3,7}) 
+boolFilter.Must = new List<Object> {
+    new EqualsFilter("author_id", 123),
+    new InFilter("forum_id", new List<Object> {1,3,7})
 };
 searchRequest.AttrFilter = boolFilter;
 searchRequest.Sort = new List<Object> { new SortOrder("post_date", SortOrder.OrderEnum.Desc) };
@@ -1417,8 +1417,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Expressions = new List<Object>{ 
-    new Dictionary<string, string> { {"ebs", "abs(a-b)"} } 
+searchRequest.Expressions = new List<Object>{
+    new Dictionary<string, string> { {"ebs", "abs(a-b)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 
@@ -1500,8 +1500,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Expressions = new List<Object> { 
-    new Dictionary<string, string> { {"ebs", "in(ceil(attr*100),200,250,350)"} } 
+searchRequest.Expressions = new List<Object> {
+    new Dictionary<string, string> { {"ebs", "in(ceil(attr*100),200,250,350)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
@@ -1674,8 +1674,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Expressions = new List<Object> { 
-    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} } 
+searchRequest.Expressions = new List<Object> {
+    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
@@ -1770,8 +1770,8 @@ var searchRequest = new SearchRequest("forum", query);
 var rangeFilter = new RangeFilter("c");
 rangeFilter.Gt = 0;
 searchRequest.AttrFilter = rangeFilter;
-searchRequest.Expressions = new List<Object> { 
-    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} } 
+searchRequest.Expressions = new List<Object> {
+    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
@@ -1851,10 +1851,105 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Sort = new List<Object> { 
-    new SortOrder("double(data.myfloat)", SortOrder.OrderEnum.Desc) 
+searchRequest.Sort = new List<Object> {
+    new SortOrder("double(data.myfloat)", SortOrder.OrderEnum.Desc)
 };
 var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- end -->
+
+## Float vector
+
+<!-- example for creating float_vector -->
+
+Float vector attributes allow storing variable-length lists of floats. It's important to note that this concept differs from multi-valued attributes. Multi-valued attributes (MVAs) are essentially sets; they do not preserve value order, and duplicate values are not retained. In contrast, float vectors perform no additional processing on values during insertion.
+
+Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
+
+** Currently, `float_vector` fields can only be utilized in KNN search and the data type is not supported in any other functions or expressions. **
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, image_vector float_vector);
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+    'title'=>['type'=>'text'],
+	'image_vector'=>['type'=>'float_vector']
+]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### config:
+
+<!-- request config -->
+
+```ini
+table products
+{
+	type = rt
+	path = products
+
+	rt_field = title
+	stored_fields = title
+
+	rt_attr_float_vector = image_vector
+}
 ```
 
 <!-- end -->
@@ -2111,8 +2206,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Sort = new List<Object> { 
-    new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min) 
+searchRequest.Sort = new List<Object> {
+    new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min)
 };
 searchResponse = searchApi.search(searchRequest);
 ```
@@ -2369,7 +2464,7 @@ class SearchResponse {
 <!-- request C# -->
 
 ```clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "first");
 doc.Add("product_codes", new List<Object> {4,2,1,3});
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);

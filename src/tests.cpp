@@ -577,7 +577,7 @@ static float GetEstimatedCost ( CSphQuery & tQuery, CSphIndex * pIndex, Secondar
 		dSIInfo[i].m_eType = eType;
 	}
 
-	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, {}, false );
 	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, pIndex->GetMatchSchema(), pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->GetColumnar(), pIndex->Debug_GetSI(), iCutoff, tStats.m_iTotalDocuments, 1 );
 	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::ANALYZER; } );
 	if ( iNumIterators > 1 )

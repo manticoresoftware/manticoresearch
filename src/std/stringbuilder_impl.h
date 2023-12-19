@@ -302,9 +302,9 @@ inline void StringBuilder_c::LazyComma_c::Swap ( LazyComma_c & rhs ) noexcept
 }
 
 template<typename... Params>
-StringBuilder_c& StringBuilder_c::Sprint ( const Params&... tValues )
+StringBuilder_c& StringBuilder_c::Sprint ( Params&&... tValues )
 {
-	(void)std::initializer_list<int> { ( *this << tValues, 0 )... };
+	(void)std::initializer_list<int> { ( *this << std::forward<Params>(tValues), 0 )... };
 	return *this;
 }
 
@@ -329,14 +329,14 @@ inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal )
 }
 
 template<typename INT, int iPrec>
-inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal )
+inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec> tVal )
 {
 	tOut.template IFtoA<INT, iPrec>(tVal);
 	return tOut;
 }
 
 template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
-StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill>&& tVal )
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill> tVal )
 {
 	tOut.template NtoA<INT, iBase, iWidth, iPrec, cFill> ( tVal.m_tVal );
 	return tOut;

@@ -29,6 +29,14 @@ index test_rt
 	rt_attr_json = json_col
 	rt_attr_string = title
 }
+
+index test_vec
+{
+    type = rt
+    path = <data_path/>/test_vec
+    rt_field = title
+	rt_attr_float_vector = vec
+}
 </config>
 
 <httpqueries>
@@ -344,6 +352,143 @@ index test_rt
 </query>
 
 <query endpoint="search">{ "index": "test_rt", "query": { "match": { "*": "big" } } } }</query>
+
+<!-- inserts of array into JSON and MVA columns -->
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":201,
+	"doc":
+	{
+		"mva_col" : [11,12,13]
+	}
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":202,
+	"doc":
+	{
+		"json_col": [21,22,23]
+	}
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":203,
+	"doc":
+	{
+		"mva_col" : ["31"]
+	}
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":204,
+	"doc":
+	{
+		"json_col": ["31"]
+	}
+}
+</query>
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":200, "lt":300 } } }, "sort": ["id"] }</query>
+</httpqueries>
+
+<!-- inserts of array into JSON and MVA columns continue -->
+<sphqueries>
+<sphinxql>insert into test_rt(id, mva_col) values  (205, '["a"]')</sphinxql>
+<sphinxql>insert into test_rt(id, json_col) values (206, '["a"]')</sphinxql>
+<sphinxql>SELECT id, mva_col, json_col FROM test_rt WHERE id &gt; 200 and id &lt; 300 order by id asc</sphinxql>
+</sphqueries>
+
+<!-- delete by array of ids -->
+<httpqueries>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1001,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1002,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1003,
+	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
+}
+</query>
+<query endpoint="json/delete">
+{
+	"index":"test_rt",
+	"id":[201,202, 204, 1,2]
+}
+</query>
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id"] }, "query": { "range": { "id": { "lt":2000 } } }, "sort": ["id"] }</query>
+<!-- invalid delete with array of id - only numbers allowed -->
+<query endpoint="json/delete">
+{
+	"index":"test_rt",
+	"id":[1001,"1002", 202, 1,2]
+}
+</query>
+<!-- invalid delete id - only numbers allowed -->
+<query endpoint="json/delete">
+{
+	"index":"test_rt",
+	"id":"1002"
+}
+</query>
+<!-- inserts of empty array into JSON and MVA columns -->
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":2001,
+	"doc":
+	{
+		"mva_col" : []
+	}
+}
+</query>
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":2002,
+	"doc":
+	{
+		"json_col": []
+	}
+}
+</query>
+
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":2000, "lt":3000 } } }, "sort": ["id"] }</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id": 1,
+	"doc": 	{ "title" : "doc one", "vec" : [3,2,1] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":2,
+	"doc": 	{ "title" : "doc two", "vec" : [30.3,20.2,10.1] }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} } }, "sort": ["id"] }</query>
 
 </httpqueries>
 

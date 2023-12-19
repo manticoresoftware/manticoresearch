@@ -79,7 +79,9 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 
-		auto iTimeoutS = tSess.GetPersistent() ? 1 : g_iReadTimeoutS; // default 1 vs 5 seconds
+		// default client_timeout vs 5 seconds
+		// for persist connection should wait client_timeout or reactivate sock timeout after each received packet
+		auto iTimeoutS = ( tSess.GetPersistent() ? g_iClientTimeoutS : g_iReadTimeoutS );
 		sphLogDebugv ( "conn %s(%d): loop start with timeout %d", sClientIP, iCID, iTimeoutS );
 		tIn.SetTimeoutUS ( S2US * iTimeoutS );
 

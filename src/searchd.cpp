@@ -17655,7 +17655,7 @@ bool ApplyKillListsTo ( CSphIndex* pKillListTarget, CSphString & sError )
 
 				// kill all the docids present in this index
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )
-					pKillListTarget->KillExistingDocids ( pIndexWithKillList );
+					pIndexWithKillList->KillExistingDocids ( pKillListTarget );
 			}
 	}
 
@@ -20233,7 +20233,6 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	InitPersistentPool();
 
-	int64_t iIndexId = -1;
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto& tIt : *hLocal )
 	{
@@ -20247,14 +20246,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 			if ( sWarning.Length() )
 				sphWarning ( "%s", sWarning.cstr() );
-
-			iIndexId = Max ( iIndexId, pIdx->GetIndexId() );
 		}
 	}
-
-	// set index_id to max of existed indexes after all indexes were loaded
-	if ( iIndexId!=-1 )
-		SetIndexId ( iIndexId + 1 );
 
 	// set index cluster name for check
 	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )

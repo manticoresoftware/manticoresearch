@@ -1420,7 +1420,6 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				m_tPendingToken.pNode = pRegex;
 				m_iPendingType = TOK_REGEX;
-				m_iAtomPos -= 1;
 				break;
 			}
 		}

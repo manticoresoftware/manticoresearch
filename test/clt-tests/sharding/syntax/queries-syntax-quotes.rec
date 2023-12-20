@@ -104,3 +104,28 @@ Type: rt
 *************************** 15. row ***************************
 Index: u_s9
 Type: rt
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE u;"
+––– output –––
++-------+-------+
+| Agent | Type  |
++-------+-------+
+| u_s0  | local |
+| u_s1  | local |
+| u_s2  | local |
+| u_s3  | local |
+| u_s4  | local |
+| u_s5  | local |
+| u_s6  | local |
+| u_s7  | local |
+| u_s8  | local |
+| u_s9  | local |
++-------+-------+
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE b;"
+––– output –––
++-------+--------+------------+
+| Field | Type   | Properties |
++-------+--------+------------+
+| id    | bigint |            |
++-------+--------+------------+

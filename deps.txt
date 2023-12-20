@@ -1,5 +1,5 @@
 backup 1.3.3 23121805 ad2e5da
-buddy 2.0.9 23121805 f8bcc0e
+buddy 2.0.9 23122008 55f95ab
 mcl 2.2.5 231204 1d1e432
 executor 1.0.11 23111308 574ff64
 executor-win 0.3.5 221125 a40554c

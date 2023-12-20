@@ -40,6 +40,16 @@ searchd
 	flush ramchunk t;
 	select id, knn_dist() from t where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303));
 	drop table t;
+
+	<!-- regression for inserting wrong sized knn vectors -->
+	create table t (title text, emp float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='l2' );
+	insert into t values (1, 'title1', (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473,-0.49481201171875));
+	insert into t values (2, 'title2', (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473));
+	insert into t values (3, 'title3', ());
+	select * from t;
+	flush ramchunk t;
+	select * from t;
+	drop table t;
 </sphinxql>
 </queries>
 

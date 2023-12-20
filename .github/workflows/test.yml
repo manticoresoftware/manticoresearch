@@ -426,7 +426,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.9
+      - uses: manticoresoftware/clt@0.1.17
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -437,7 +437,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.15
+      - uses: manticoresoftware/clt@0.1.17
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -448,7 +448,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.17
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -459,7 +459,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.17
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -470,7 +470,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.15
+      - uses: manticoresoftware/clt@0.1.17
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img

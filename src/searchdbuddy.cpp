@@ -474,6 +474,9 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 
 	StrVec_t dHeaders;
 	dHeaders.Add ( SphSprintf ( "Request-ID: %d_%u", session::GetConnID(), sphCRC32 ( sQuery.first, sQuery.second, sphRand() ) ) );
+	// disable Expect: 100-continue
+	// as Expect: 100-continue header added by curl library do not with the buddy
+	dHeaders.Add ( "Expect:" );
 
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }

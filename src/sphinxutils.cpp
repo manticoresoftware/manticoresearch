@@ -1035,6 +1035,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
+	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },
 	{ "ssl_key",				0, nullptr },
 	{ "ssl_ca",					0, nullptr },
@@ -3472,21 +3473,38 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-static std::atomic<int64_t> g_iUID { 1 };
-static int64_t g_iUidBase = 0;
+struct UUID_t
+{
+	std::atomic<int64_t> m_iUID { 1 };
+	int64_t m_iUidBase = 0;
+
+	int64_t Get ()
+	{
+		int64_t iVal = m_iUID.fetch_add (1, std::memory_order_relaxed);
+		int64_t iUID = m_iUidBase + iVal;
+		return iUID;
+	}
+};
+
+static UUID_t g_tUidShort;
+static UUID_t g_tIndexUid;
 
 int64_t UidShort()
 {
-	int64_t iVal = g_iUID.fetch_add (1, std::memory_order_relaxed);
-	int64_t iUID = g_iUidBase + iVal;
-	return iUID;
+	return g_tUidShort.Get();
+}
+
+int64_t GetIndexUid()
+{
+	return g_tIndexUid.Get();
 }
 
 void UidShortSetup ( int iServer, int iStarted )
 {
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
-	g_iUidBase = iSeed;
+	g_tUidShort.m_iUidBase = iSeed;
+	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
 }
 
@@ -3534,17 +3552,5 @@ int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
 		return -1;
 
 	return std::mktime ( &tTM );
-}
-
-static std::atomic<long> g_tIndexId { 0 };
-
-int64_t GenerateIndexId()
-{
-	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
-}
-
-void SetIndexId ( int64_t iId )
-{
-	g_tIndexId.store ( iId );
 }
 

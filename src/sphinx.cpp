@@ -1941,7 +1941,7 @@ CSphIndex::CSphIndex ( CSphString sIndexName, CSphString sFileBase )
 	, m_tSchema { std::move ( sFileBase ) }
 	, m_sIndexName ( std::move ( sIndexName ) )
 {
-	m_iIndexId = GenerateIndexId();
+	m_iIndexId = GetIndexUid();
 	m_tMutableSettings = MutableIndexSettings_c::GetDefaults();
 }
 
@@ -8056,11 +8056,6 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	if ( !dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eType==SecondaryIndexType_e::LOOKUP || tInfo.m_eType==SecondaryIndexType_e::INDEX || tInfo.m_eType==SecondaryIndexType_e::ANALYZER; } ) )
 		return false;
 
-	// if we are forcing this behavior, there's no point in further calculations
-	// and we are forcing it if we have any hints specified
-	if ( tQuery.m_dIndexHints.GetLength() )
-		return true;
-
 	CSphVector<SecondaryIndexInfo_t> dSIInfoFilters { dSIInfo.GetLength() };
 	float fValuesAfterFilters = 1.0f;
 	ARRAY_FOREACH ( i, dSIInfo )
@@ -8757,7 +8752,7 @@ void CSphIndex_VLN::Dealloc ()
 	if ( pSkipCache )
 		pSkipCache->DeleteAll(m_iIndexId);
 
-	m_iIndexId = GenerateIndexId();
+	m_iIndexId = GetIndexUid();
 }
 
 
@@ -10260,10 +10255,31 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		return pNode;
 	}
 
+	// do not expand into wildcard words shorter than min_prefix_len or min_infix_len
+	bool bExpandInfix = false;
+	bool bExpandPrefix = false;
+	if ( ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	{
+		assert ( pNode->m_dChildren.GetLength()==0 );
+		assert ( pNode->m_dWords.GetLength()==1 );
+		int iLen = sphUTF8Len ( pNode->m_dWords[0].m_sWord.cstr() );
+
+		int iMinInfix = tSettings.m_iMinInfixLen;
+		int iMinPrefix = tSettings.RawMinPrefixLen();
+
+		if ( iMinInfix>0 && iLen>=iMinInfix )
+			bExpandInfix = true;
+		else if ( iMinPrefix>0 && iLen>=iMinPrefix )
+			bExpandPrefix = true;
+	}
+	bool bExpandExact = ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_EXACT )==KWE_EXACT );
+	if ( !bExpandInfix && !bExpandPrefix && !bExpandExact )
+		return pNode;
+
 	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
-	if ( tSettings.m_iMinInfixLen>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	if ( bExpandInfix )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -10271,7 +10287,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
 		pInfix->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pInfix );
-	} else if ( tSettings.GetMinPrefixLen ( bWordDict )>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	} else if ( bExpandPrefix )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -10281,7 +10297,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pExpand->m_dChildren.Add ( pPrefix );
 	}
 
-	if ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_EXACT )==KWE_EXACT )
+	if ( bExpandExact )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );

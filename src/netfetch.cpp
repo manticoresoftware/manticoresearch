@@ -13,11 +13,11 @@
 #include "coroutine.h"
 #include "networking_daemon.h"
 
-#define LOG_LEVEL_MULTIINFO false
-#define LOG_LEVEL_TIMERCB ( LOG_LEVEL_MULTIINFO && false )
-#define LOG_LEVEL_CULRSOCKET false
-#define LOG_LEVEL_CURLEASY false
-#define LOG_LEVEL_CB false
+#define LOG_LEVEL_MULTIINFO true
+#define LOG_LEVEL_TIMERCB ( LOG_LEVEL_MULTIINFO && true )
+#define LOG_LEVEL_CULRSOCKET true
+#define LOG_LEVEL_CURLEASY true
+#define LOG_LEVEL_CB true
 
 #define CURL_VERBOSE false
 #define CURL_VERBOSE_CB ( CURL_VERBOSE && false )

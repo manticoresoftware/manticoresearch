@@ -357,7 +357,7 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-The hostname_lookup setting determines the hostnames renew strategy. By default, IP addresses of agent host names are cached at server start to avoid extra load on the DNS. In some cases, the IP can change dynamically (e.g. cloud hosting) t' disables the caching and queries the DNS at each query. The IP addresses can also be manually renewed with the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
 
 ### jobs_queue_size
 

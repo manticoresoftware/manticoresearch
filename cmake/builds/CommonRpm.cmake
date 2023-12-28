@@ -56,6 +56,12 @@ set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
 set ( CPACK_RPM_TOOLS_PACKAGE_REQUIRES "manticore-backup >= ${DEP_BACKUP_VERSION}, manticore-backup < ${BACKUP_VERNUM_MAX}" )
 set ( CPACK_RPM_TOOLS_PACKAGE_OBSOLETES "sphinx" )
 
+set ( CPACK_RPM_GALERA_PACKAGE_NAME "manticore-galera" )
+set ( CPACK_RPM_GALERA_PACKAGE_SUMMARY "Galera library" )
+set ( CPACK_RPM_GALERA_PACKAGE_URL "https://github.com/manticoresoftware/galera" )
+set ( CPACK_RPM_GALERA_PACKAGE_DESCRIPTION "Manticore's fork of Galera library." )
+set ( CPACK_RPM_GALERA_FILE_NAME "manticore-galera-${GALERA_VERSION}.deb" )
+
 set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
 

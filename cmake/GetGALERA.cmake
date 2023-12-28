@@ -4,6 +4,7 @@ cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 set ( GALERA_REPO "https://github.com/manticoresoftware/galera" )
 set ( GALERA_REV "a79a074" )
 set ( GALERA_SRC_MD5 "720cbbed3916ce217285349140f1fca6" )
+set ( GALERA_VERSION "25.3.35" )
 
 set ( WSREP_REPO "https://github.com/percona/wsrep-API" )
 set ( WSREP_REV "2c211e1" ) # or "percona-3.x-5.7-v31"
@@ -20,8 +21,8 @@ if (DEFINED WITH_GALERA AND NOT WITH_GALERA) # already defined and required NOT 
 endif ()
 
 # here WITH_GALERA is not defined, or explicitly required.
-set ( WITH_GALERA ON CACHE BOOL "Build and use Galera replication library" FORCE )
-add_feature_info ( Galera WITH_GALERA "replication of indexes" )
+set ( WITH_GALERA ON CACHE BOOL "Build Galera replication library" FORCE )
+add_feature_info ( Galera WITH_GALERA "table replication" )
 
 # that will read galera location from the target and install it to final destination
 include ( printers ) # for diag
@@ -47,7 +48,7 @@ set_package_properties ( galera PROPERTIES TYPE RUNTIME
 		URL "${GALERA_REPO}"
 		)
 if (TARGET galera::galera)
-	diagst ( galera::galera "library found ready (no need to build)" )
+	diagst ( galera::galera "library found (no need to build)" )
 	return ()
 endif ()
 
@@ -60,4 +61,4 @@ execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIR
 execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
 
 find_package ( galera REQUIRED )
-diagst ( galera::galera "library was built and saved" )
+diagst ( galera::galera "library built and saved" )

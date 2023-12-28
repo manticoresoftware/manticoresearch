@@ -79,6 +79,10 @@ set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONTROL_EXTRA "${dirtools}/conffiles" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_REPLACES "${breaks}" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_BREAKS "${breaks}" )
 
+set ( CPACK_DEBIAN_GALERA_PACKAGE_NAME "manticore-galera" )
+set ( CPACK_DEBIAN_GALERA_DESCRIPTION "Manticore's fork of Galera library." )
+set ( CPACK_DEBIAN_GALERA_FILE_NAME "manticore-galera-${GALERA_VERSION}.deb" )
+
 set ( CPACK_DEBIAN_DEVEL_PACKAGE_NAME "manticore-dev" )
 set ( CPACK_DEBIAN_DEVEL_PACKAGE_ARCHITECTURE all )
 

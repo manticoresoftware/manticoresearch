@@ -49,6 +49,7 @@ set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "${COMMON_MANTICORE_INFO} includes auxil
 set ( CPACK_COMPONENT_GROUP_GALERA_DISPLAY_NAME "Galera" )
 set ( CPACK_COMPONENT_GALERA_DISPLAY_NAME "Galera library" )
 set ( CPACK_COMPONENT_GALERA_DESCRIPTION "Manticore's fork of Galera library." )
+set ( CPACK_ARCHIVE_GALERA_FILE_NAME "manticore-galera-${GALERA_VERSION}" )
 
 # development files
 set ( CPACK_COMPONENT_DEVEL_GROUP "main" )

@@ -8,7 +8,9 @@ To prepare [official release and development packages](https://repo.manticoresea
 * `DISTR`: the target platform
 * `arch`: the architecture
 * `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
-* Use the CI yaml file as a reference to find the other environment variables you might need to use - https://github.com/manticoresoftware/manticoresearch/blob/master/dist/gitlab-release.yml
+* Use the CI workflow files as a reference to find the other environment variables you might need to use:
+  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
 
 To find possible values for `DISTR` and `arch`, you can use the directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a reference, as it includes sysroots for all supported combinations.
 

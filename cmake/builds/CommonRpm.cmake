@@ -60,7 +60,7 @@ set ( CPACK_RPM_GALERA_PACKAGE_NAME "manticore-galera" )
 set ( CPACK_RPM_GALERA_PACKAGE_SUMMARY "Galera library" )
 set ( CPACK_RPM_GALERA_PACKAGE_URL "https://github.com/manticoresoftware/galera" )
 set ( CPACK_RPM_GALERA_PACKAGE_DESCRIPTION "Manticore's fork of Galera library." )
-set ( CPACK_RPM_GALERA_FILE_NAME "manticore-galera-${GALERA_VERSION}.rpm" )
+set ( CPACK_RPM_GALERA_FILE_NAME "manticore-galera-${GALERA_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}.${CPACK_RPM_PACKAGE_ARCHITECTURE}.rpm" )
 
 set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )

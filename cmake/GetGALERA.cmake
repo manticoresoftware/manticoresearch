@@ -2,8 +2,8 @@
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
 set ( GALERA_REPO "https://github.com/manticoresoftware/galera" )
-set ( GALERA_REV "21411c14" )
-set ( GALERA_SRC_MD5 "4c1327089f085101282b1097e2cc6879" )
+set ( GALERA_REV "8b2bba77" )
+set ( GALERA_SRC_MD5 "c66a5eced8f552942c097a209a5645ad" )
 
 set ( WSREP_REPO "https://github.com/percona/wsrep-API" )
 set ( WSREP_REV "2c211e1" ) # or "percona-3.x-5.7-v31"

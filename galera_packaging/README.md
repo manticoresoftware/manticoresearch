@@ -28,8 +28,10 @@ These files are distributed here to have more granular control over the metadata
 
 ## CI for Packaging and Publishing Galera Packages
 
-The GitHub CI workflow file is located in `.github/workflows/pack_publish_galera.yml`. It's triggered when `cmake/GetGALERA.cmake` is updated and one of the following conditions is met:
+The GitHub CI workflow file is located in `.github/workflows/pack_publish_galera.yml`. It's triggered when `cmake/GetGALERA.cmake` or `galera_packaging/*` is updated and one of the following conditions is met:
 - Pull request to the `master` branch and:
   - Label `pack` to build the packages
   - Label `publish` to upload the packages to https://repo.manticoresearch.com/
 - Push to one of the following branches: `master`, `maintenance-release`, `manticore-*`
+
+Another supported label is `release`. When this is set, the Galera packages will be uploaded to https://repo.manticoresearch.com/ with the `release` target. This action will actually place them in the release candidate directories. Otherwise, the packages will be placed to dev directories.

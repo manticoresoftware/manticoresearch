@@ -1,6 +1,8 @@
 name: 📦 Pack and publish Galera
 run-name: 📦 Pack and publish Galera ${{ github.sha }}
 
+# See galera_packaging/README.md for packaging instructions
+
 on:
   pull_request:
     branches: [ master ]

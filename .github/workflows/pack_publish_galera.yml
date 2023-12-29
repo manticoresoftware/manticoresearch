@@ -155,6 +155,7 @@ jobs:
           artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: deb
           delimiter: "-"
+          target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || '' }}
 
   publish_rhel:
     needs: publish
@@ -174,6 +175,7 @@ jobs:
           artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: rpm
           delimiter: "_"
+          target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || '' }}
 
   # publish_macos:
   #   name: Publishing MacOS
@@ -192,6 +194,7 @@ jobs:
   #         artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
   #         type: arc
   #         delimiter: "-"
+  #         target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || '' }}
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation

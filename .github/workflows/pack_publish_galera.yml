@@ -1,0 +1,217 @@
+name: 📦 Pack and publish Galera
+run-name: 📦 Pack and publish Galera ${{ github.sha }}
+
+on:
+  pull_request:
+    branches: [ master ]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    paths:
+      - 'cmake/GetGALERA.cmake'
+    branches:
+      - master
+      - maintenance-release
+      - manticore-*
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: pack_galera_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  pack:
+    name: OK to pack?
+    runs-on: ubuntu-22.04
+    if: |
+      (
+        github.event_name == 'pull_request'
+        &&
+        (
+          contains(
+            github.event.pull_request.labels.*.name, 'pack'
+          )
+          ||
+          contains(
+            github.event.pull_request.labels.*.name, 'publish'
+          )
+        )
+      )
+      ||
+      (
+        github.event_name == 'push'
+      )
+    steps:
+      - run: echo "All set to build packages"
+      - run: |
+          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
+          echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
+          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
+          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
+
+  pack_debian_ubuntu:
+    name: Debian/Ubuntu packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        arch: [x86_64, aarch64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      PACK_GALERA: 1
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+      cache_key: pack_galera_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*deb"
+
+  pack_rhel:
+    name: RHEL packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [rhel7, rhel8, rhel9]
+        arch: [x86_64, aarch64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      boost: boost_rhel_feb17
+      PACK_GALERA: 1
+      cmake_command: |
+        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*rpm"
+
+  pack_macos:
+    name: MacOS packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [macos]
+        arch: [x86_64, arm64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      HOMEBREW_PREFIX: /opt/homebrew
+      PACK_GALERA: 1
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*tar.gz"
+
+  # virtual job to simplify the CI
+  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
+  publish:
+    name: OK to publish?
+    runs-on: ubuntu-22.04
+    needs: [pack_debian_ubuntu, pack_rhel, pack_macos]
+    if: |
+      (github.repository == 'manticoresoftware/manticoresearch')
+      && (
+        (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
+        || (github.event_name == 'push')
+      )
+    steps:
+      - run: echo "Ready to publish"
+
+  publish_debian_ubuntu:
+    needs: publish
+    strategy:
+      fail-fast: true
+      matrix:
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        arch: [x86_64, aarch64]
+    runs-on: ubuntu-22.04
+    name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+          type: deb
+          delimiter: "-"
+
+  publish_rhel:
+    needs: publish
+    strategy:
+      fail-fast: true
+      matrix:
+        DISTR: [7, 8, 9]
+        arch: [x86_64, aarch64]
+    runs-on: ubuntu-22.04
+    name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+          type: rpm
+          delimiter: "_"
+
+  publish_macos:
+    name: Publishing MacOS
+    needs: publish
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [x86_64, arm64]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: macos
+          arch: ${{ matrix.arch }}
+          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
+          type: arc
+          delimiter: "-"
+
+  clt_rhel_dev_installation:
+    name: Testing RHEL dev packages installation
+    needs: publish_rhel
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.11
+        with:
+          image: ${{ matrix.image }}
+          test_prefix: test/clt-tests/installation/rhel-dev-
+
+  clt_deb_dev_installation:
+    name: Testing DEB dev packages installation
+    needs: publish_debian_ubuntu
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.11
+        with:
+          image: ${{ matrix.image }}
+          test_prefix: test/clt-tests/installation/deb-dev-

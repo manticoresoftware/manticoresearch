@@ -9,12 +9,16 @@ project ( galera-prepackage NONE )
 include ( FetchContent )
 # SOURCE_SUBDIR set to unexistent folder, because wsrep sources include own CMakeLists.txt we don't need at all.
 FetchContent_Declare ( WSREP_POPULATE URL @WSREP_PLACE@ URL_MD5 @WSREP_SRC_MD5@ SOURCE_SUBDIR foo )
+FetchContent_Declare ( GALERA_POPULATE URL @GALERA_PLACE@ URL_MD5 @GALERA_SRC_MD5@ SOURCE_SUBDIR foo )
+
 FetchContent_MakeAvailable ( WSREP_POPULATE )
+FetchContent_MakeAvailable ( GALERA_POPULATE )
+
+execute_process ( COMMAND @CMAKE_COMMAND@ -E copy_directory @MANTICORE_SOURCE_DIR@/galera_packaging ${galera_populate_SOURCE_DIR}/cmake )
 
 include ( ExternalProject )
-ExternalProject_Add ( galera_populate
-		URL @GALERA_PLACE@
-		URL_MD5 @GALERA_SRC_MD5@
+ExternalProject_Add ( galera_prepare
+        SOURCE_DIR ${galera_populate_SOURCE_DIR}
 		CMAKE_ARGS -DPACK=1
 		CMAKE_CACHE_ARGS -DWSREP_PATH:STRING=${wsrep_populate_SOURCE_DIR} -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo -DGALERA_REV:STRING=@GALERA_REV@
 		BUILD_COMMAND "@CMAKE_COMMAND@" --build . --config RelWithDebInfo --target package

@@ -2,8 +2,8 @@
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
 set ( GALERA_REPO "https://github.com/manticoresoftware/galera" )
-set ( GALERA_REV "8b2bba77" )
-set ( GALERA_SRC_MD5 "c66a5eced8f552942c097a209a5645ad" )
+set ( GALERA_REV "dfce7662" )
+set ( GALERA_SRC_MD5 "c4afea2ccd88a53acb23261b71421958" )
 
 set ( WSREP_REPO "https://github.com/percona/wsrep-API" )
 set ( WSREP_REV "2c211e1" ) # or "percona-3.x-5.7-v31"
@@ -41,8 +41,7 @@ endif ()
 if (PACK_GALERA)
 	select_nearest_url ( GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB} )
 	select_nearest_url ( WSREP_PLACE "wsrep" ${WSREP_BUNDLE} ${WSREP_GITHUB} ) # WSREP_PATH provides path to galera-imported for build
-	get_build ( GALERA_BUILD galera )
-	configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-package.cmake.in galera-build/CMakeLists.txt @ONLY ) # consumes WSREP_PLACE, WSREP_SRC_MD5, GALERA_PLACE, GALERA_SRC_MD5, GALERA_REV, GALERA_BUILD
+	configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-package.cmake.in galera-build/CMakeLists.txt @ONLY ) # consumes WSREP_PLACE, WSREP_SRC_MD5, GALERA_PLACE, GALERA_SRC_MD5, GALERA_REV
 	configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-copy-package.sh.in galera-build/galera-copy-package.sh @ONLY )
 	execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
 	execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
@@ -63,7 +62,7 @@ endif ()
 select_nearest_url ( GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB} )
 select_nearest_url ( WSREP_PLACE "wsrep" ${WSREP_BUNDLE} ${WSREP_GITHUB} ) # WSREP_PATH provides path to galera-imported for build
 get_build ( GALERA_BUILD galera )
-configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-imported.cmake.in galera-build/CMakeLists.txt @ONLY ) # consumes GALERA_PLACE, GALERA_SRC_MD5, WSREP_PATH, GALERA_BUILD, GALERA_REV
+configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-imported.cmake.in galera-build/CMakeLists.txt @ONLY ) # consumes WSREP_PLACE, WSREP_SRC_MD5, GALERA_PLACE, GALERA_SRC_MD5, GALERA_REV, GALERA_BUILD
 execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
 execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )
 

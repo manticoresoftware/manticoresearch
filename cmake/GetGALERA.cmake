@@ -39,6 +39,9 @@ endif ()
 
 
 if (PACK_GALERA)
+	select_nearest_url ( GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB} )
+	select_nearest_url ( WSREP_PLACE "wsrep" ${WSREP_BUNDLE} ${WSREP_GITHUB} ) # WSREP_PATH provides path to galera-imported for build
+	get_build ( GALERA_BUILD galera )
 	configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-package.cmake.in galera-build/CMakeLists.txt @ONLY ) # consumes WSREP_PLACE, WSREP_SRC_MD5, GALERA_PLACE, GALERA_SRC_MD5, GALERA_REV, GALERA_BUILD
 	configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/galera-copy-package.sh.in galera-build/galera-copy-package.sh @ONLY )
 	execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/galera-build )

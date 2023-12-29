@@ -9,9 +9,11 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - 'cmake/GetGALERA.cmake'
+      - '.github/workflows/pack_publish_galera.yml'
   push:
     paths:
       - 'cmake/GetGALERA.cmake'
+      - '.github/workflows/pack_publish_galera.yml'
     branches:
       - master
       - maintenance-release
@@ -98,33 +100,34 @@ jobs:
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
 
-  pack_macos:
-    name: MacOS packages
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    strategy:
-      fail-fast: false
-      matrix:
-        DISTR: [macos]
-        arch: [x86_64, arm64]
-    with:
-      DISTR: ${{ matrix.DISTR }}
-      arch: ${{ matrix.arch }}
-      HOMEBREW_PREFIX: /opt/homebrew
-      PACK_GALERA: 1
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*tar.gz"
+  # pack_macos:
+  #   name: MacOS packages
+  #   uses: ./.github/workflows/build_template.yml
+  #   needs: pack
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       DISTR: [macos]
+  #       arch: [x86_64, arm64]
+  #   with:
+  #     DISTR: ${{ matrix.DISTR }}
+  #     arch: ${{ matrix.arch }}
+  #     HOMEBREW_PREFIX: /opt/homebrew
+  #     PACK_GALERA: 1
+  #     cmake_command: |
+  #       mkdir build
+  #       cd build
+  #       cmake -DPACK=1 ..
+  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+  #     artifact_list: "build/manticore*tar.gz"
 
   # virtual job to simplify the CI
   # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
-    needs: [pack_debian_ubuntu, pack_rhel, pack_macos]
+#    needs: [pack_debian_ubuntu, pack_rhel, pack_macos]
+    needs: [pack_debian_ubuntu, pack_rhel]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
       && (
@@ -172,23 +175,23 @@ jobs:
           type: rpm
           delimiter: "_"
 
-  publish_macos:
-    name: Publishing MacOS
-    needs: publish
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: [x86_64, arm64]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: macos
-          arch: ${{ matrix.arch }}
-          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
-          type: arc
-          delimiter: "-"
+  # publish_macos:
+  #   name: Publishing MacOS
+  #   needs: publish
+  #   strategy:
+  #     fail-fast: true
+  #     matrix:
+  #       arch: [x86_64, arm64]
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: manticoresoftware/publish_to_repo@main
+  #       with:
+  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
+  #         distr: macos
+  #         arch: ${{ matrix.arch }}
+  #         artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
+  #         type: arc
+  #         delimiter: "-"
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation

@@ -13,12 +13,14 @@ on:
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
   push:
     branches:
       - manticore-*
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

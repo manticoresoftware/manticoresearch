@@ -10,10 +10,12 @@ on:
     paths:
       - 'cmake/GetGALERA.cmake'
       - '.github/workflows/pack_publish_galera.yml'
+      - 'galera_packaging/**'
   push:
     paths:
       - 'cmake/GetGALERA.cmake'
       - '.github/workflows/pack_publish_galera.yml'
+      - 'galera_packaging/**'
     branches:
       - master
       - maintenance-release

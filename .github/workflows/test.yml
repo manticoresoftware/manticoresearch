@@ -10,10 +10,12 @@ on:
       - manticore-*
     paths-ignore:
       - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
   pull_request:
     branches: [ master ]
     paths-ignore:
       - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)

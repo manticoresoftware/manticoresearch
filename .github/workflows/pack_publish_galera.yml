@@ -5,6 +5,8 @@ on:
   pull_request:
     branches: [ master ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - 'cmake/GetGALERA.cmake'
   push:
     paths:
       - 'cmake/GetGALERA.cmake'
@@ -44,7 +46,7 @@ jobs:
     steps:
       - run: echo "All set to build packages"
       - run: |
-          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '# Packing and publishing Galera for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
           echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
           echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
           echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
@@ -91,7 +93,6 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
-        cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
 
@@ -113,7 +114,6 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
-        cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"
 

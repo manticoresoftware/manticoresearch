@@ -55,7 +55,7 @@ using ClusterSynced_c = ClusterCommand_T<E_CLUSTER::SYNCED, ClusterSyncedRequest
 bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest_t& tRequest )
 {
 	ClusterSynced_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, GetQueryTimeoutForReplication(), tRequest );
+	auto dNodes = tReq.MakeAgents ( dDesc, GetQueryTimeoutForReplication(), tRequest, true );
 	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
 }
 

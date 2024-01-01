@@ -113,19 +113,21 @@ public:
 		return pResult->m_tRequest;
 	}
 
-	static AgentConn_t* CreateAgent ( const AgentDesc_t& tDesc, int64_t iTimeoutMs, const REQUEST& tReq )
+	static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, int64_t iTimeoutMs, const REQUEST & tReq, bool bRetry )
 	{
 		auto* pAgent = CreateAgentBase ( tDesc, iTimeoutMs );
+		if ( bRetry )
+			pAgent->SetRetry ( g_iAgentRetryCount );
 		pAgent->m_pResult = std::make_unique<CustomAgentData_T<REQUEST, REPLY>> ( tReq );
 		return pAgent;
 	}
 
-	static VecRefPtrs_t<AgentConn_t*> MakeAgents ( const VecTraits_T<AgentDesc_t>& dDesc, int64_t iTimeout, const REQUEST& tReq )
+	static VecRefPtrs_t<AgentConn_t*> MakeAgents ( const VecTraits_T<AgentDesc_t> & dDesc, int64_t iTimeout, const REQUEST & tReq, bool bRetry )
 	{
 		VecRefPtrs_t<AgentConn_t*> dNodes;
 		dNodes.Resize ( dDesc.GetLength() );
 		ARRAY_FOREACH ( i, dDesc )
-			dNodes[i] = CreateAgent ( dDesc[i], iTimeout, tReq );
+			dNodes[i] = CreateAgent ( dDesc[i], iTimeout, tReq, bRetry );
 		return dNodes;
 	}
 

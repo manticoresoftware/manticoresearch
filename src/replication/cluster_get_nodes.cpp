@@ -75,7 +75,7 @@ StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes
 	ClusterRequest_t dRequest;
 	dRequest.m_sCluster = sCluster;
 
-	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterGetNodes_c::MakeAgents ( dDesc, g_iAnyNodesTimeoutMs, dRequest );
+	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterGetNodes_c::MakeAgents ( dDesc, g_iAnyNodesTimeoutMs, dRequest, true );
 	dNodes = RemoteClusterGetNodes ( dAgents );
 
 	ScopedComma_c tColon ( TlsMsg::Err(), ";" );

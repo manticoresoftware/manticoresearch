@@ -566,6 +566,7 @@ public:
 
 	// helper for beautiful logging
 	inline const char * StateName () const 	{ return Agent_e_Name ( m_eConnState ); }
+	void SetRetry ( int iQueryRetry, int iQueryDelay=-1 );
 
 private:
 

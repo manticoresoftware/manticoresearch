@@ -63,7 +63,7 @@ static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphStrin
 	ARRAY_FOREACH ( i, dActivateIndexes )
 	{
 		const AgentDesc_t& tDesc = *dActivateIndexes[i];
-		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, g_iRemoteTimeoutMs, tAddLocal );
+		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, g_iRemoteTimeoutMs, tAddLocal, true );
 	}
 
 	sphLogDebugRpl ( "sent table '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout / 1000 ), (int)( tmLongOpTimeout % 1000 ) );
@@ -167,7 +167,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tRequest.m_sIndex = sIndex;
 	tRequest.m_pChunks = &tSigSrc;
 	tRequest.m_sIndexFileName = GetBaseName ( sIndexPath );
-	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, tmLongOpTimeout, tRequest );
+	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, tmLongOpTimeout, tRequest, true );
 	assert ( dDesc.GetLength() == dNodes.GetLength() );
 	auto bOk = SendClusterFileReserve ( dNodes );
 
@@ -285,7 +285,7 @@ bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString &
 	DistIndexSendRequest_t tSend ( *pDist, sCluster, sIndex );
 
 	int64_t tmTimeout = GetQueryTimeoutForReplication();
-	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, tmTimeout, tSend );
+	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, tmTimeout, tSend, true );
 
 	sphLogDebugRpl ( "sending table '%s' to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmTimeout / 1000 ), (int)( tmTimeout % 1000 ) );
 

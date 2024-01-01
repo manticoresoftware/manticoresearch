@@ -2538,6 +2538,15 @@ void AgentConn_t::SetMultiAgent ( MultiAgentDescRefPtr_c pAgent )
 	m_bManyTries = m_iRetries>0;
 }
 
+void AgentConn_t::SetRetry ( int iQueryRetry, int iQueryDelay )
+{
+	if ( iQueryRetry>=0 )
+		m_iRetries = iQueryRetry;
+	if ( iQueryDelay>=0 )
+		m_iDelay = iQueryDelay;
+	m_bManyTries = ( m_iRetries>0 );
+}
+
 #if 0
 
 // here is async dns resolution made on mac os

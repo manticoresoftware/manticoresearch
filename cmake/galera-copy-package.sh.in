@@ -1,2 +1,2 @@
 #!/bin/bash
-cp -t @MANTICORE_BINARY_DIR@ *.deb *.rpm *.ddeb || true
+cp -t @MANTICORE_BINARY_DIR@ *deb *.rpm *.tar.gz || true

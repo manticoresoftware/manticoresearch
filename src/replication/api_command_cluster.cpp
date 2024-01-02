@@ -71,13 +71,13 @@ AgentConn_t* CreateAgentBase ( const AgentDesc_t& tDesc, int64_t iTimeoutMs )
 }
 
 // wrapper of PerformRemoteTasks
-bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply )
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply/*, int iQueryRetry, int iQueryDelay*/ )
 {
 	if ( dNodes.IsEmpty() )
 		return true;
 
 	int iNodes = dNodes.GetLength();
-	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply );
+	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply/*, iQueryRetry, iQueryDelay*/ );
 
 	if ( iFinished!=iNodes )
 		sphLogDebugRpl ( "%d(%d) nodes finished well", iFinished, iNodes );
@@ -91,10 +91,10 @@ bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tRe
 			tTmp.Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
 		}
 	}
-	if ( !tTmp.IsEmpty() )
+	if ( iFinished!=iNodes && !tTmp.IsEmpty() )
 		TlsMsg::Err() << tTmp.cstr();
 
-	return iFinished==iNodes && !TlsMsg::HasErr();
+	return ( iFinished==iNodes && !TlsMsg::HasErr() );
 }
 
 

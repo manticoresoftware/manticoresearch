@@ -7,12 +7,6 @@ if ( NOT PACK )
 	return ( )
 endif()
 
-set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
-set ( CMAKE_INSTALL_PREFIX "${CPACK_PACKAGING_INSTALL_PREFIX}" CACHE PATH "prefix from distr build" FORCE )
-include ( GNUInstallDirs )
-
-install ( TARGETS galera LIBRARY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules )
-
 set ( DISTR "$ENV{DISTR}" )
 
 # common metadata

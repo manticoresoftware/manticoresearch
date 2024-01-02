@@ -90,7 +90,7 @@ struct CustomAgentData_T final: public DefaultQueryResult_t
 AgentConn_t* CreateAgentBase ( const AgentDesc_t& tDesc, int64_t iTimeoutMs );
 
 // set to true to see all proto exchanging in the log
-constexpr bool VERBOSE_LOG = false;
+constexpr bool VERBOSE_LOG = true;
 
 template<E_CLUSTER CMD, typename REQUEST = ClusterRequest_t, typename REPLY = EmptyReply_t >
 class ClusterCommand_T: public RequestBuilder_i, public ReplyParser_i

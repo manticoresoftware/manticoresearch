@@ -93,6 +93,8 @@ bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tRe
 	}
 	if ( iFinished!=iNodes && !tTmp.IsEmpty() )
 		TlsMsg::Err() << tTmp.cstr();
+	if ( TlsMsg::HasErr() )
+		sphWarning ( "nodes %d(%d), tls msg: %s", iFinished, iNodes, TlsMsg::szError() );
 
 	return ( iFinished==iNodes && !TlsMsg::HasErr() );
 }

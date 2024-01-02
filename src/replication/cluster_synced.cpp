@@ -56,7 +56,7 @@ bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest
 {
 	ClusterSynced_c tReq;
 	auto dNodes = tReq.MakeAgents ( dDesc, GetQueryTimeoutForReplication(), tRequest );
-	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
+	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
 void ReceiveClusterSynced ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString& sCluster )

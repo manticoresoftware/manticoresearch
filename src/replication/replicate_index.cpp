@@ -69,7 +69,7 @@ static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphStrin
 	sphLogDebugRpl ( "sent table '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout / 1000 ), (int)( tmLongOpTimeout % 1000 ) );
 
 	ClusterIndexAddLocal_c tReq;
-	if ( !PerformRemoteTasksWrap ( dNodes, tReq, tReq ) )
+	if ( !PerformRemoteTasksWrap ( dNodes, tReq, tReq, true ) )
 		return false;
 
 	sphLogDebugRpl ( "remote table '%s' %s", sIndex.cstr(), ( bSendOk ? "added" : "rolled-back" ) );
@@ -289,7 +289,7 @@ bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString &
 
 	sphLogDebugRpl ( "sending table '%s' to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmTimeout / 1000 ), (int)( tmTimeout % 1000 ) );
 
-	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
+	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
 static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )

@@ -187,7 +187,7 @@ public:
 	}
 };
 
-bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply );
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry );
 
 // handle all API incoming.
 void HandleAPICommandCluster ( ISphOutputBuffer& tOut, WORD uCommandVer, InputBuffer_c& tBuf, const char* szClient );

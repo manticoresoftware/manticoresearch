@@ -40,5 +40,5 @@ void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSp
 	ClusterRequest_t tData { sCluster };
 	ClusterDelete_c tReq;
 	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tData );
-	PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

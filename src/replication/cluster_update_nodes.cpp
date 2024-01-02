@@ -44,7 +44,7 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 		return true;
 
 	ClusterUpdateNodes_c tReq;
-	return PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }
 
 

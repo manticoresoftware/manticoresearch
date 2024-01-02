@@ -321,5 +321,5 @@ bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents )
 		return false;
 
 	ClusterFileReserve_c tReq;
-	return PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

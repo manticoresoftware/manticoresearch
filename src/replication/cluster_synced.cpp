@@ -55,8 +55,8 @@ using ClusterSynced_c = ClusterCommand_T<E_CLUSTER::SYNCED, ClusterSyncedRequest
 bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest_t& tRequest )
 {
 	ClusterSynced_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, GetQueryTimeoutForReplication(), tRequest, true );
-	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
+	auto dNodes = tReq.MakeAgents ( dDesc, GetQueryTimeoutForReplication(), tRequest );
+	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
 void ReceiveClusterSynced ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString& sCluster )

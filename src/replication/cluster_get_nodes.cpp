@@ -26,7 +26,7 @@ StrVec_t RemoteClusterGetNodes ( VectorAgentConn_t & dAgents )
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver ());
 	ClusterGetNodes_c tReq;
-	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter );
+	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter, g_iAgentRetryCount );
 
 	bool bDone = false;
 	while (!bDone)
@@ -75,7 +75,7 @@ StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes
 	ClusterRequest_t dRequest;
 	dRequest.m_sCluster = sCluster;
 
-	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterGetNodes_c::MakeAgents ( dDesc, g_iAnyNodesTimeoutMs, dRequest, true );
+	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterGetNodes_c::MakeAgents ( dDesc, g_iAnyNodesTimeoutMs, dRequest );
 	dNodes = RemoteClusterGetNodes ( dAgents );
 
 	ScopedComma_c tColon ( TlsMsg::Err(), ";" );

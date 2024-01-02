@@ -63,13 +63,13 @@ static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphStrin
 	ARRAY_FOREACH ( i, dActivateIndexes )
 	{
 		const AgentDesc_t& tDesc = *dActivateIndexes[i];
-		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, g_iRemoteTimeoutMs, tAddLocal, true );
+		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, g_iRemoteTimeoutMs, tAddLocal );
 	}
 
 	sphLogDebugRpl ( "sent table '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout / 1000 ), (int)( tmLongOpTimeout % 1000 ) );
 
 	ClusterIndexAddLocal_c tReq;
-	if ( !PerformRemoteTasksWrap ( dNodes, tReq, tReq ) )
+	if ( !PerformRemoteTasksWrap ( dNodes, tReq, tReq, true ) )
 		return false;
 
 	sphLogDebugRpl ( "remote table '%s' %s", sIndex.cstr(), ( bSendOk ? "added" : "rolled-back" ) );
@@ -167,7 +167,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tRequest.m_sIndex = sIndex;
 	tRequest.m_pChunks = &tSigSrc;
 	tRequest.m_sIndexFileName = GetBaseName ( sIndexPath );
-	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, tmLongOpTimeout, tRequest, true );
+	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, tmLongOpTimeout, tRequest );
 	assert ( dDesc.GetLength() == dNodes.GetLength() );
 	auto bOk = SendClusterFileReserve ( dNodes );
 
@@ -285,11 +285,11 @@ bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString &
 	DistIndexSendRequest_t tSend ( *pDist, sCluster, sIndex );
 
 	int64_t tmTimeout = GetQueryTimeoutForReplication();
-	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, tmTimeout, tSend, true );
+	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, tmTimeout, tSend );
 
 	sphLogDebugRpl ( "sending table '%s' to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmTimeout / 1000 ), (int)( tmTimeout % 1000 ) );
 
-	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
+	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
 static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )

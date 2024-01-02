@@ -113,21 +113,19 @@ public:
 		return pResult->m_tRequest;
 	}
 
-	static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, int64_t iTimeoutMs, const REQUEST & tReq, bool bRetry )
+	static AgentConn_t* CreateAgent ( const AgentDesc_t& tDesc, int64_t iTimeoutMs, const REQUEST& tReq )
 	{
 		auto* pAgent = CreateAgentBase ( tDesc, iTimeoutMs );
-		if ( bRetry )
-			pAgent->SetRetry ( g_iAgentRetryCount );
 		pAgent->m_pResult = std::make_unique<CustomAgentData_T<REQUEST, REPLY>> ( tReq );
 		return pAgent;
 	}
 
-	static VecRefPtrs_t<AgentConn_t*> MakeAgents ( const VecTraits_T<AgentDesc_t> & dDesc, int64_t iTimeout, const REQUEST & tReq, bool bRetry )
+	static VecRefPtrs_t<AgentConn_t*> MakeAgents ( const VecTraits_T<AgentDesc_t>& dDesc, int64_t iTimeout, const REQUEST& tReq )
 	{
 		VecRefPtrs_t<AgentConn_t*> dNodes;
 		dNodes.Resize ( dDesc.GetLength() );
 		ARRAY_FOREACH ( i, dDesc )
-			dNodes[i] = CreateAgent ( dDesc[i], iTimeout, tReq, bRetry );
+			dNodes[i] = CreateAgent ( dDesc[i], iTimeout, tReq );
 		return dNodes;
 	}
 
@@ -189,7 +187,7 @@ public:
 	}
 };
 
-bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply/*, int iQueryRetry, int iQueryDelay=-1*/ );
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry );
 
 // handle all API incoming.
 void HandleAPICommandCluster ( ISphOutputBuffer& tOut, WORD uCommandVer, InputBuffer_c& tBuf, const char* szClient );

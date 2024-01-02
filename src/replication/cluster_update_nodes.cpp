@@ -38,13 +38,13 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tRequest, true );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tRequest );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
 
 	ClusterUpdateNodes_c tReq;
-	return PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }
 
 

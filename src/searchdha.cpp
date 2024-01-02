@@ -59,7 +59,7 @@ CSphString HostDesc_t::GetMyUrl() const
 	return sName;
 }
 
-#define VERBOSE_NETLOOP 1
+#define VERBOSE_NETLOOP 0
 
 #if VERBOSE_NETLOOP
 	#define sphLogDebugA( ... ) TimePrefixed::LogDebugv ("A ", __VA_ARGS__)
@@ -2536,15 +2536,6 @@ void AgentConn_t::SetMultiAgent ( MultiAgentDescRefPtr_c pAgent )
 	m_iRetries = pAgent->GetRetryLimit ();
 	m_pMultiAgent = std::move ( pAgent );
 	m_bManyTries = m_iRetries>0;
-}
-
-void AgentConn_t::SetRetry ( int iQueryRetry, int iQueryDelay )
-{
-	if ( iQueryRetry>=0 )
-		m_iRetries = iQueryRetry;
-	if ( iQueryDelay>=0 )
-		m_iDelay = iQueryDelay;
-	m_bManyTries = ( m_iRetries>0 );
 }
 
 #if 0

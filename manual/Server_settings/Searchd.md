@@ -873,6 +873,30 @@ pseudo_sharding = 0
 ```
 <!-- end -->
 
+
+### replication_connect_timeout
+
+The `replication_connect_timeout` directive defines the timeout for connecting to remote node. By default, the value is assumed to be in milliseconds, but can have [another suffix](../../Server_settings/Special_suffixes.md)). The default value is 1000 (1 second).
+
+When connecting to remote node, Manticore will wait for this amount of time at most to complete the connection successfully. If the timeout is reached but the connection has not been established, and `retries` are enabled, a retry will be initiated.
+
+
+### replication_query_timeout
+
+The `replication_query_timeout` sets the amount of time that searchd will wait for a remote node to complete a query. The default value is 3000 milliseconds (3 seconds), but can be `suffixed` to indicate a different unit of time.
+
+After establishing a connection, Manticore will wait for a maximum of replication_query_timeout for remote node to complete. Note that this timeout is separate from the `replication_connect_timeout` and the total possible delay caused by a remote node will be the sum of both values.
+
+
+### replication_retry_delay
+
+This setting is an integer that specifies how many times Manticore will attempt to connect and query remote node during replication before reporting a fatal query error. The default value is 3. 
+
+
+### replication_retry_count
+
+This setting is an integer in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)) that specifies the delay before Manticore retries querying a remote node in case of failure during replication. This value is only relevant when a non-zero is specified. The default value is 500.
+
 ### qcache_max_bytes
 
 <!-- example conf qcache_max_bytes -->

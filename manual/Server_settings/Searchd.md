@@ -876,7 +876,7 @@ pseudo_sharding = 0
 
 ### replication_connect_timeout
 
-The `replication_connect_timeout` directive defines the timeout for connecting to a remote node. By default, the value is assumed to be in milliseconds, but it can have [another suffix](../../Server_settings/Special_suffixes.md)). The default value is 1000 (1 second).
+The `replication_connect_timeout` directive defines the timeout for connecting to a remote node. By default, the value is assumed to be in milliseconds, but it can have [another suffix](../../Server_settings/Special_suffixes.md). The default value is 1000 (1 second).
 
 When connecting to a remote node, Manticore will wait for this amount of time at most to complete the connection successfully. If the timeout is reached but the connection has not been established, and `retries` are enabled, a retry will be initiated.
 

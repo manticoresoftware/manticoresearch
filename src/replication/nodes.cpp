@@ -15,6 +15,7 @@
 #include "configuration.h"
 #include "searchdaemon.h"
 #include "coroutine.h"
+#include "api_command_cluster.h"
 
 StrVec_t ParseNodesFromString ( CSphString sNodes )
 {
@@ -59,7 +60,7 @@ CSphString GetStringAddr ( const ListenerDesc_t& tListen )
 template<Resolve_e> struct Wait_T
 {
 	inline static constexpr int m_dMultipliers[] { 1, 1, 1 };
-	inline static constexpr int m_iTimeoutMs = g_iAnyNodesTimeoutMs;
+	inline static int m_iTimeoutMs = ReplicationTimeoutAnyNode();
 	inline static constexpr int m_iMultipliers = sizeof ( m_dMultipliers ) / sizeof ( int );
 };
 
@@ -67,7 +68,7 @@ template<>
 struct Wait_T<Resolve_e::SLOW>
 {
 	inline static constexpr int m_dMultipliers[] { 1, 2, 2, 3, 3, 4, 4, 6, 6, 10, 10, 20, 30, 40, 50, 60, 70, 100, 100, 100 };
-	inline static constexpr int m_iTimeoutMs = g_iNodeRetryWaitMs;
+	inline static int m_iTimeoutMs = ReplicationFileRetryDelay();
 	inline static constexpr int m_iMultipliers = sizeof ( m_dMultipliers ) / sizeof ( int );
 };
 

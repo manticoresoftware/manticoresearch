@@ -26,7 +26,7 @@ StrVec_t RemoteClusterGetNodes ( VectorAgentConn_t & dAgents )
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver ());
 	ClusterGetNodes_c tReq;
-	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter );
+	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter, g_iAgentRetryCount );
 
 	bool bDone = false;
 	while (!bDone)

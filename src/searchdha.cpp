@@ -2175,8 +2175,8 @@ static bool RunRemoteTask ( AgentConn_t * pConnection, RequestBuilder_i * pQuery
 void AgentConn_t::GenericInit ( RequestBuilder_i * pQuery, ReplyParser_i * pParser,
 								Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
 {
-	sphLogDebugA ( "%d GenericInit() pBuilder %p, parser %p, retries %d, delay %d, ref=%d",
-		m_iStoreTag, pQuery, pParser, iQueryRetry, iQueryDelay, ( int ) GetRefcount ());
+	sphLogDebugA ( "%d GenericInit() pBuilder %p, parser %p, retries %d(%d), delay %d(%d), ref=%d",
+		m_iStoreTag, pQuery, pParser, iQueryRetry, m_iRetries, iQueryDelay, m_iDelay, ( int ) GetRefcount ());
 	if ( iQueryDelay>=0 )
 		m_iDelay = iQueryDelay;
 

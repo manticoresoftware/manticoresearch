@@ -18,6 +18,12 @@ else ()
 	set ( MYVER "${CPACK_RPM_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}%{?dist}" )
 endif ()
 
+set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
+set ( CMAKE_INSTALL_PREFIX "${CPACK_PACKAGING_INSTALL_PREFIX}" CACHE PATH "prefix from distr build" FORCE )
+include ( GNUInstallDirs )
+
+install ( TARGETS galera LIBRARY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules )
+
 #fixup - CMAKE_INSTALL_DOCDIR is share/doc/GALERA, fixup to share/doc/galera
 set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/galera" )
 GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTALL_DOCDIR DOCDIR )

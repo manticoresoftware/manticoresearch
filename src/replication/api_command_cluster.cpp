@@ -71,30 +71,32 @@ AgentConn_t* CreateAgentBase ( const AgentDesc_t& tDesc, int64_t iTimeoutMs )
 }
 
 // wrapper of PerformRemoteTasks
-bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply )
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry )
 {
 	if ( dNodes.IsEmpty() )
 		return true;
 
+	int iQueryRetry = ( bRetry ? g_iAgentRetryCount : -1 );
 	int iNodes = dNodes.GetLength();
-	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply );
+	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply, iQueryRetry );
 
-	if ( iFinished!=iNodes )
-		sphLogDebugRpl ( "%d(%d) nodes finished well", iFinished, iNodes );
+	bool bOk = ( iFinished==iNodes );
+	if ( !bOk || TlsMsg::HasErr() )
+		sphLogDebugRpl ( "%d(%d) nodes finished well, tls msg: %s", iFinished, iNodes, TlsMsg::szError() );
+	if ( bOk && TlsMsg::HasErr() )
+		TlsMsg::ResetErr();
 
-	StringBuilder_c tTmp ( ";" );
 	for ( const AgentConn_t * pAgent : dNodes )
 	{
 		if ( !pAgent->m_sFailure.IsEmpty() )
 		{
 			sphWarning ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-			tTmp.Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+			if ( !bOk )
+				TlsMsg::Err().Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
 		}
 	}
-	if ( !tTmp.IsEmpty() )
-		TlsMsg::Err() << tTmp.cstr();
 
-	return iFinished==iNodes && !TlsMsg::HasErr();
+	return ( bOk && !TlsMsg::HasErr() );
 }
 
 

@@ -888,12 +888,12 @@ The `replication_query_timeout` sets the amount of time that searchd will wait f
 After establishing a connection, Manticore will wait for a maximum of `replication_query_timeout` for the remote node to complete. Note that this timeout is separate from the `replication_connect_timeout`, and the total possible delay caused by a remote node will be the sum of both values.
 
 
-### replication_retry_delay
+### replication_retry_count
 
 This setting is an integer that specifies how many times Manticore will attempt to connect and query a remote node during replication before reporting a fatal query error. The default value is 3. 
 
 
-### replication_retry_count
+### replication_retry_delay
 
 This setting is an integer in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)) that specifies the delay before Manticore retries querying a remote node in case of failure during replication. This value is only relevant when a non-zero value is specified. The default value is 500.
 

@@ -11,12 +11,9 @@ yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-searchd --version
+export current_version=$(searchd --version | head -n 1 | cut -d" " -f2); echo $current_version
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+%{SEMVER}
 ––– input –––
 manticore-executor -v
 ––– output –––
@@ -31,9 +28,10 @@ yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-co
 ––– output –––
 0
 ––– input –––
-searchd --version
+export new_version=$(searchd --version | head -n 1 | cut -d" " -f2); echo $new_version
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+%{SEMVER}
+––– input –––
+if [[ "$new_version" > "$current_version" ]]; then echo "Upgrade successful. New version: $new_version"; else echo "Upgrade failed. Current version: $current_version, new version: $new_version"; fi
+––– output –––
+Upgrade successful. New version: %{SEMVER}

@@ -1,30 +1,29 @@
-name: 📦 Pack and publish
-run-name: 📦 Pack and publish ${{ github.sha }}
+name: 📦 Pack and publish Galera
+run-name: 📦 Pack and publish Galera ${{ github.sha }}
 
-#on: workflow_call
+# See galera_packaging/README.md for packaging instructions
+
 on:
-  workflow_run:
-    workflows: [ 🔬 Test ]
-    types: [ completed ]
-    branches: [ master ]
   pull_request:
     branches: [ master ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
-    paths-ignore:
-      - 'manual/**'
+    paths:
       - 'cmake/GetGALERA.cmake'
+      - '.github/workflows/pack_publish_galera.yml'
       - 'galera_packaging/**'
   push:
-    branches:
-      - manticore-*
-    paths-ignore:
-      - 'manual/**'
+    paths:
       - 'cmake/GetGALERA.cmake'
+      - '.github/workflows/pack_publish_galera.yml'
       - 'galera_packaging/**'
+    branches:
+      - master
+      - maintenance-release
+      - manticore-*
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
-  group: pack_${{ github.ref }}
+  group: pack_galera_${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -48,24 +47,12 @@ jobs:
       )
       ||
       (
-        github.event_name == 'workflow_run'
-        &&
-        github.event.workflow_run.conclusion == 'success'
-        &&
-        github.ref == 'refs/heads/master'
-      )
-      ||
-      (
         github.event_name == 'push'
-        &&
-        startsWith(
-          github.ref, 'refs/heads/manticore-'
-        )
       )
     steps:
       - run: echo "All set to build packages"
       - run: |
-          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
+          echo '# Packing and publishing Galera for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
           echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
           echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
           echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
@@ -84,12 +71,12 @@ jobs:
     with:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
+      PACK_GALERA: 1
       cmake_command: |
         mkdir build
         cd build
         cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      cache_key: pack_galera_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*deb"
 
   pack_rhel:
@@ -105,13 +92,13 @@ jobs:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       boost: boost_rhel_feb17
+      PACK_GALERA: 1
       cmake_command: |
         ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
         cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
         mkdir build
         cd build
         cmake -DPACK=1 ..
-        cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
 
@@ -128,41 +115,26 @@ jobs:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       HOMEBREW_PREFIX: /opt/homebrew
+      PACK_GALERA: 1
       cmake_command: |
         mkdir build
         cd build
         cmake -DPACK=1 ..
-        cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"
-
-  pack_windows:
-    name: Windows x64 package
-    uses: ./.github/workflows/build_template.yml
-    needs: pack
-    with:
-      DISTR: windows
-      arch: x64
-      sysroot: roots_apr12
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*exe build/manticore*zip"
 
   # virtual job to simplify the CI
   # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
-    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
+#    needs: [pack_debian_ubuntu, pack_rhel, pack_macos]
+    needs: [pack_debian_ubuntu, pack_rhel]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
       && (
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-        || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        || (github.event_name == 'push')
       )
     steps:
       - run: echo "Ready to publish"
@@ -185,6 +157,7 @@ jobs:
           artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: deb
           delimiter: "-"
+          target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || 'dev' }}
 
   publish_rhel:
     needs: publish
@@ -204,6 +177,7 @@ jobs:
           artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: rpm
           delimiter: "_"
+          target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || 'dev' }}
 
   publish_macos:
     name: Publishing MacOS
@@ -222,79 +196,7 @@ jobs:
           artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
           type: arc
           delimiter: "-"
-
-  publish_windows:
-    name: Publishing Windows packages to repo.manticoresearch.com
-    needs: publish
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: windows
-          arch: x64
-          artifact: build_windows_RelWithDebInfo_x64
-          type: arc
-          delimiter: "-"
-
-  build_nsis:
-    name: Making and publishing Windows NSIS installer
-    needs: publish_windows
-    runs-on: ubuntu-22.04
-    container:
-      image: manticoresearch/build_nsis:1.0.0
-    env:
-      CI_COMMIT_SHA: ${{ github.sha }}
-    steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
-      - name: Initialization
-        # without adding the safe.directory the script fails to do git show ...
-        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-      - name: Make installer
-        # TODO: remove the hardcoded paths /builds/ below
-        run: |
-          mkdir -p /builds/manticoresearch/dev/build/
-          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
-        shell: bash
-      - run: mv /builds/manticoresearch/dev/build build
-      - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v3
-        with:
-          name: win_installer
-          path: build/manticore-*.exe
-
-  publish_nsis:
-    name: Publishing Windows NSIS installer
-    needs: build_nsis
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr:
-          arch:
-          artifact: win_installer
-          type: arc
-          delimiter:
-
-  build_docker:
-    name: Building and pushing docker
-    needs: publish_debian_ubuntu
-    runs-on: ubuntu-22.04
-    env:
-      DOCKER_USER: ${{ secrets.DOCKER_USER }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GHCR_USER: ${{ secrets.GHCR_USER }}
-      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-    steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
-      - name: Calculate short commit hash
-        id: sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      - name: Building docker
-        run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
+          target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || 'dev' }}
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
@@ -309,7 +211,6 @@ jobs:
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
-          run_args: -e TELEMETRY=0
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
@@ -324,4 +225,3 @@ jobs:
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-
-          run_args: -e TELEMETRY=0

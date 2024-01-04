@@ -12,12 +12,6 @@
 
 #include "searchdha.h"
 
-constexpr int g_iNodeRetry = 3;
-
-// 200 msec is ok as we do not need to any missed nodes in cluster node list
-constexpr int g_iAnyNodesTimeoutMs = 200;
-constexpr int g_iNodeRetryWaitMs = 500;
-
 using VecAgentDesc_t = CSphVector<AgentDesc_t>;
 
 // string to list

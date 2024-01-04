@@ -173,7 +173,7 @@ client_timeout = 1h
 
 ### hostname_lookup
 
-The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to 'request' disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
 
 ### listen_tfo
 

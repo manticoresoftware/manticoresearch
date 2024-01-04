@@ -47,6 +47,10 @@ on:
         required: false
         type: string
         default:
+      PACK_GALERA:
+        required: false
+        type: number
+        default: 0
 
 jobs:
   build:
@@ -71,6 +75,7 @@ jobs:
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
+        PACK_GALERA: ${{ inputs.PACK_GALERA }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

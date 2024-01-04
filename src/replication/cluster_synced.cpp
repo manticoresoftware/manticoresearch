@@ -14,9 +14,7 @@
 #include "cluster_commands.h"
 
 #include "api_command_cluster.h"
-#include "configuration.h"
 #include "common.h"
-
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterSyncedRequest_t& tReq )
 {
@@ -55,8 +53,8 @@ using ClusterSynced_c = ClusterCommand_T<E_CLUSTER::SYNCED, ClusterSyncedRequest
 bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest_t& tRequest )
 {
 	ClusterSynced_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, GetQueryTimeoutForReplication(), tRequest );
-	return PerformRemoteTasksWrap ( dNodes, tReq, tReq );
+	auto dNodes = tReq.MakeAgents ( dDesc, ReplicationTimeoutQuery(), tRequest );
+	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
 void ReceiveClusterSynced ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString& sCluster )

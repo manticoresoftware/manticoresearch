@@ -65,36 +65,39 @@ AgentConn_t* CreateAgentBase ( const AgentDesc_t& tDesc, int64_t iTimeoutMs )
 	pAgent->m_tDesc.CloneFrom ( tDesc );
 	pAgent->SetNoLimitReplySize();
 	pAgent->m_tDesc.m_pDash = new HostDashboard_t;
-	pAgent->m_iMyConnectTimeoutMs = g_iAgentConnectTimeoutMs;
+	pAgent->m_iMyConnectTimeoutMs = ReplicationTimeoutConnect();
 	pAgent->m_iMyQueryTimeoutMs = iTimeoutMs;
 	return pAgent;
 }
 
 // wrapper of PerformRemoteTasks
-bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply )
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry )
 {
 	if ( dNodes.IsEmpty() )
 		return true;
 
+	int iQueryRetry = ( bRetry ? ReplicationRetryCount() : -1 );
+	int iQueryDelay = ( bRetry ? ReplicationRetryDelay() : -1 );
 	int iNodes = dNodes.GetLength();
-	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply );
+	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply, iQueryRetry, iQueryDelay );
 
-	if ( iFinished!=iNodes )
-		sphLogDebugRpl ( "%d(%d) nodes finished well", iFinished, iNodes );
+	bool bOk = ( iFinished==iNodes );
+	if ( !bOk || TlsMsg::HasErr() )
+		sphLogDebugRpl ( "%d(%d) nodes finished well, tls msg: %s", iFinished, iNodes, TlsMsg::szError() );
+	if ( bOk && TlsMsg::HasErr() )
+		TlsMsg::ResetErr();
 
-	StringBuilder_c tTmp ( ";" );
 	for ( const AgentConn_t * pAgent : dNodes )
 	{
 		if ( !pAgent->m_sFailure.IsEmpty() )
 		{
 			sphWarning ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-			tTmp.Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+			if ( !bOk )
+				TlsMsg::Err().Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
 		}
 	}
-	if ( !tTmp.IsEmpty() )
-		TlsMsg::Err() << tTmp.cstr();
 
-	return iFinished==iNodes && !TlsMsg::HasErr();
+	return ( bOk && !TlsMsg::HasErr() );
 }
 
 
@@ -161,4 +164,59 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	tOut.SendString ( SphSprintf ( "[%s] %s", szIncomingIP(), szError ).cstr() );
 
 	ReportClusterError ( sCluster, szError, szClient, (int)eClusterCmd );
+}
+
+// 200 msec is ok as we do not need to any missed nodes in cluster node list
+constexpr int g_iAnyNodesTimeoutMs = 200;
+constexpr int g_iNodeRetryWaitMs = 500;
+
+static int g_iReplConnectTimeoutMs = 0;
+static int g_iReplQueryTimeoutMs = 0;
+static int g_iReplRetryCount = 0;
+static int g_iReplRetryDelayMs = 0;
+
+void ReplicationSetTimeouts ( int iConnectTimeoutMs, int iQueryTimeoutMs, int iRetryCount, int iRetryDelayMs )
+{
+	g_iReplConnectTimeoutMs = iConnectTimeoutMs;
+	g_iReplQueryTimeoutMs = iQueryTimeoutMs;
+	g_iReplRetryCount = iRetryCount;
+	g_iReplRetryDelayMs = iRetryDelayMs;
+}
+
+int64_t ReplicationTimeoutQuery ( int64_t iTimeout )
+{
+	// need default of 2 minutes in msec for replication requests as they are mostly long-running
+	int64_t iTmAtLeast2Min = Max ( g_iReplQueryTimeoutMs, 120 * 1000 );
+	// should be 2 minutes or timeout if it is longer
+	return Max ( iTmAtLeast2Min, Min ( iTimeout, INT_MAX ) );
+}
+
+int ReplicationTimeoutConnect ()
+{
+	return g_iReplConnectTimeoutMs;
+}
+
+int ReplicationRetryCount ()
+{
+	return g_iReplRetryCount;
+}
+
+int ReplicationRetryDelay ()
+{
+	return g_iReplRetryDelayMs;
+}
+
+int ReplicationTimeoutAnyNode ()
+{
+	return g_iAnyNodesTimeoutMs;
+}
+
+int ReplicationFileRetryCount ()
+{
+	return Max ( g_iReplRetryCount, 3 ); // should be at least 3 try on file send failure
+}
+
+int ReplicationFileRetryDelay ()
+{
+	return Max ( g_iReplRetryDelayMs, g_iNodeRetryWaitMs );
 }

@@ -16,7 +16,6 @@
 
 #include "common.h"
 #include "nodes.h"
-#include "configuration.h"
 
 // API command to remote node to delete cluster
 using ClusterDelete_c = ClusterCommand_T<E_CLUSTER::DELETE_>;
@@ -39,6 +38,6 @@ void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSp
 
 	ClusterRequest_t tData { sCluster };
 	ClusterDelete_c tReq;
-	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tData );
-	PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), ReplicationTimeoutQuery(), tData );
+	PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

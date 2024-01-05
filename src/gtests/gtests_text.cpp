@@ -93,7 +93,8 @@ static int ProxyLevenshtein ( const char * sA, const char * sB )
 {
 	auto iLenA = (int) strlen ( sA );
 	auto iLenB = (int) strlen ( sB );
-	return sphLevenshtein ( sA, iLenA, sB, iLenB );
+	CSphVector<int> dTmp;
+	return sphLevenshtein ( sA, iLenA, sB, iLenB, dTmp );
 }
 
 TEST ( Text, Levenshtein )

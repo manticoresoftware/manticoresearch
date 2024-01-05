@@ -173,6 +173,11 @@ CSphString ClusterOptions_t::AsStr () const
 	return (CSphString)tBuf;
 }
 
+bool ClusterOptions_t::IsEmpty() const noexcept
+{
+	return m_hOptions.IsEmpty();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CSphString& sWarning )
@@ -183,23 +188,20 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 
 	m_sName = sName;
 
-	m_tOptions.m_hOptions.Reset();
-	Bson_c ( tBson.ChildByName ( "options" ) ).ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) {
-		m_tOptions.m_hOptions.Add ( sName, String ( tNode ) );
-	} );
-
 	m_dClusterNodes.Reset();
-	Bson_c ( tBson.ChildByName ( "nodes" ) ).ForEach ( [this] ( const NodeHandle_t& tNode ) {
-		m_dClusterNodes.Add ( String ( tNode ) );
-	} );
+	Bson_c tNodes { tBson.ChildByName ( "nodes" ) };
+	if ( tNodes.IsString() ) // old config - all nodes in one line, ','-separated
+		sphSplit ( m_dClusterNodes, String ( tNodes ).cstr(), "," );
+	else
+		tNodes.ForEach ( [this] ( const NodeHandle_t& tNode ) { m_dClusterNodes.Add ( String ( tNode ) ); } );
 
-	auto tPath = tBson.ChildByName ( "path" );
-	if ( tPath==nullnode )
-		return TlsMsg::Err ( "no path in config" );
+	m_tOptions.m_hOptions.Reset();
+	Bson_c tOptions { tBson.ChildByName ( "options" ) };
+	if ( tOptions.IsString() ) // old config - all options in one line, need to be parsed
+		m_tOptions.Parse ( String ( tOptions ) );
+	else
+		tOptions.ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) { m_tOptions.m_hOptions.Add ( sName, String ( tNode ) ); } );
 
-	m_sPath = String ( tPath );
-
-	// set indexes prior replication init
 	int iItem = 0;
 	Bson_c ( tBson.ChildByName ( "indexes" ) ).ForEach ( [this,&iItem,&sWarning] ( const NodeHandle_t& tNode ) {
 		if ( IsString(tNode ) )
@@ -209,6 +211,7 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 		++iItem;
 	} );
 
+	m_sPath = String ( tBson.ChildByName ( "path" ) );
 	return true;
 }
 
@@ -228,18 +231,21 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 {
 	tOut.Named ( m_sName.cstr() );
 	auto _0 = tOut.ObjectW();
-	tOut.NamedString ( "path", m_sPath );
+	if ( !m_dClusterNodes.IsEmpty() )
 	{
 		tOut.Named ( "nodes" );
 		auto _1 = tOut.Array();
 		for_each ( m_dClusterNodes, [&tOut] ( const auto& sNode ) { tOut.String ( sNode ); } );
 	}
-	tOut.NamedVal ( "options", m_tOptions );
+	if ( !m_tOptions.IsEmpty() )
+		tOut.NamedVal ( "options", m_tOptions );
+	if ( !m_hIndexes.IsEmpty() )
 	{
 		tOut.Named ( "indexes" );
 		auto _1 = tOut.Array();
 		for_each ( m_hIndexes, [&tOut] ( const auto& tIndex ) { tOut.String ( tIndex.first ); } );
 	}
+	tOut.NamedStringNonEmpty ( "path", m_sPath );
 }
 
 //////////////////////////////////////////////////////////////////////////

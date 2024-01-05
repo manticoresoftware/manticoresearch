@@ -26,7 +26,7 @@ struct FileChunks_t
 
 	// count of chunks for file size
 	[[nodiscard]] int GetChunksCount () const noexcept;
-	[[nodiscard]] int GetChunkFileLength ( int iChunk ) const noexcept;
+	[[nodiscard]] int64_t GetChunkFileLength ( int iChunk ) const noexcept;
 	[[nodiscard]] int64_t GetChunkFileOffset ( int iChunk ) const noexcept;
 };
 

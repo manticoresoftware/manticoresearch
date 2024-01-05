@@ -140,10 +140,3 @@ bool MyIncomingApiAddrBeginsWith ( const char* szHost )
 {
 	return g_sIncomingApiPoint.Begins ( szHost );
 }
-
-int64_t GetQueryTimeoutForReplication ( int64_t iTimeout )
-{
-	// need default of 2 minutes in msec for replication requests as they are mostly long-running
-	int64_t iTmAtLeast2Min = Max ( g_iAgentQueryTimeoutMs, 120 * 1000 );
-	return Max ( iTmAtLeast2Min, Min ( iTimeout, INT_MAX ) );
-}

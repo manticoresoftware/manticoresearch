@@ -189,14 +189,22 @@ static int64_t			g_iDocstoreCache = 0;
 static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
-int				g_iAgentConnectTimeoutMs = 1000;
-int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
-const int	MAX_RETRY_COUNT		= 8;
-const int	MAX_RETRY_DELAY		= 1000;
+const int DAEMON_DEFAULT_CONNECT_TIMEOUT	= 1000;
+const int DAEMON_DEFAULT_QUERY_TIMEOUT		= 3000;
+const int DAEMON_MAX_RETRY_COUNT			= 8;
+const int DAEMON_MAX_RETRY_DELAY			= 1000;
 
-int						g_iAgentRetryCount = 0;
-int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+int g_iAgentConnectTimeoutMs		= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+int g_iAgentQueryTimeoutMs			= DAEMON_DEFAULT_QUERY_TIMEOUT;	// global (default). May be override by index-scope values, if one specified
+int g_iAgentRetryCount				= 0;
+int g_iAgentRetryDelayMs			= DAEMON_MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+
+static int g_iReplConnectTimeoutMs	= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+static int g_iReplQueryTimeoutMs	= DAEMON_DEFAULT_QUERY_TIMEOUT;
+static int g_iReplRetryCount		= 3;
+static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
+
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 CSphString				g_sDbName = "Manticore";
@@ -2309,10 +2317,10 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCa
 	if ( tQuery.m_iCutoff<-1 )
 		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
-	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
 		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
 		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
@@ -4991,6 +4999,9 @@ void FrontendSchemaBuilder_c::RemapFacets()
 			return;
 	}
 
+	if ( m_tQuery.m_sGroupBy.IsEmpty() )
+		return;
+
 	for ( auto & tFrontend : m_dFrontend )
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
@@ -5279,7 +5290,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	tFrontendBuilder.RemapGroupBy();
-	tFrontendBuilder.RemapFacets();
+	// agent should provide raw attributes into master without any remapping
+	if ( bMaster )
+		tFrontendBuilder.RemapFacets();
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
@@ -17650,7 +17663,7 @@ bool ApplyKillListsTo ( CSphIndex* pKillListTarget, CSphString & sError )
 
 				// kill all the docids present in this index
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )
-					pKillListTarget->KillExistingDocids ( pIndexWithKillList );
+					pIndexWithKillList->KillExistingDocids ( pKillListTarget );
 			}
 	}
 
@@ -19824,14 +19837,22 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iPingIntervalUs = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
 	g_uHAPeriodKarmaS = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
 	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
+
 	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
 	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
 	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
-	if ( g_iAgentRetryDelayMs > MAX_RETRY_DELAY )
-		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, MAX_RETRY_DELAY );
+	if ( g_iAgentRetryDelayMs > DAEMON_MAX_RETRY_DELAY )
+		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, DAEMON_MAX_RETRY_DELAY );
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
-	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
-		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
+	if ( g_iAgentRetryCount > DAEMON_MAX_RETRY_COUNT )
+		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, DAEMON_MAX_RETRY_COUNT );
+
+	g_iReplConnectTimeoutMs = hSearchd.GetMsTimeMs ( "replication_connect_timeout", g_iReplConnectTimeoutMs );
+	g_iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	g_iReplRetryCount = hSearchd.GetInt ( "replication_retry_count", g_iReplRetryCount );
+	g_iReplRetryDelayMs = hSearchd.GetMsTimeMs ( "replication_retry_delay", g_iReplRetryDelayMs );
+	ReplicationSetTimeouts ( g_iReplConnectTimeoutMs, g_iReplQueryTimeoutMs, g_iReplRetryCount, g_iReplRetryDelayMs );
+
 	g_tmWaitUS = hSearchd.GetUsTime64Ms ( "net_wait_tm", g_tmWaitUS );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
@@ -20228,7 +20249,6 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	InitPersistentPool();
 
-	int64_t iIndexId = -1;
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto& tIt : *hLocal )
 	{
@@ -20242,14 +20262,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 			if ( sWarning.Length() )
 				sphWarning ( "%s", sWarning.cstr() );
-
-			iIndexId = Max ( iIndexId, pIdx->GetIndexId() );
 		}
 	}
-
-	// set index_id to max of existed indexes after all indexes were loaded
-	if ( iIndexId!=-1 )
-		SetIndexId ( iIndexId + 1 );
 
 	// set index cluster name for check
 	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )

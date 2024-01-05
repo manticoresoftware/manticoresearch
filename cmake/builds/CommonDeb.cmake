@@ -62,6 +62,7 @@ set ( CPACK_DEBIAN_SEARCHD_PACKAGE_REPLACES "manticore-bin, sphinxsearch, ${brea
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_CONTROL_EXTRA "${dircore}/postinst;${dircore}/postrm" )
 seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
 seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-server (= ${CPACK_PACKAGE_VERSION})" )
+#seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-galera" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_BREAKS "${breaks}" )
 
 set ( CPACK_DEBIAN_SERVER_PACKAGE_NAME "manticore-server" )

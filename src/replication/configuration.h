@@ -39,5 +39,3 @@ bool MyIncomingApiAddrBeginsWith ( const char* szHost );
 void SetReplicationListener ( const VecTraits_T<ListenerDesc_t>& dListeners );
 
 void ReplicationSetIncoming ( CSphString sIncoming );
-
-int64_t GetQueryTimeoutForReplication ( int64_t iTimeout = 0 ); // 2 minutes in msec

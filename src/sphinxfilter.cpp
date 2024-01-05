@@ -2222,10 +2222,21 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 	{
 		case SPH_FILTER_VALUES:
 			//tBuf << " " << f.m_sAttrName;
+			// MVA + bExclude needs function inversion as does on parsing at sphinxql.y > mva_aggr TOK_NE const_int
 			switch (f.m_eMvaFunc)
 			{
-				case SPH_MVAFUNC_ALL: tBuf << "ALL(" << f.m_sAttrName << ")"; break;
-				case SPH_MVAFUNC_ANY: tBuf << "ANY(" << f.m_sAttrName << ")"; break;
+				case SPH_MVAFUNC_ALL:
+					if ( f.m_bExclude )
+						tBuf << "ANY(" << f.m_sAttrName << ")";
+					else
+						tBuf << "ALL(" << f.m_sAttrName << ")";
+				break;
+				case SPH_MVAFUNC_ANY:
+					if ( f.m_bExclude )
+						tBuf << "ALL(" << f.m_sAttrName << ")";
+					else
+						tBuf << "ANY(" << f.m_sAttrName << ")";
+				break;
 				case SPH_MVAFUNC_NONE: default: tBuf << f.m_sAttrName;
 			}
 

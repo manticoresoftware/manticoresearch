@@ -10,9 +10,17 @@ on:
   pull_request:
     branches: [ master ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths-ignore:
+      - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
   push:
     branches:
       - manticore-*
+    paths-ignore:
+      - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -58,7 +66,6 @@ jobs:
       - run: echo "All set to build packages"
       - run: |
           echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
-          echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
           echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
           echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
           echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY

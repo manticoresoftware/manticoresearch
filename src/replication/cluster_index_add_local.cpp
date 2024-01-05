@@ -30,7 +30,7 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const ClusterIndexAddLocalR
 {
 	tOut << (const ClusterRequest_t&)tReq;
 	tOut << "index:" << tReq.m_sIndex;
-	tOut << "eindex:" << (BYTE)tReq.m_eIndex;
+	tOut << "type:" << (BYTE)tReq.m_eIndex;
 	tOut << "SendFilesSuccess:" << tReq.m_bSendFilesSuccess;
 	return tOut;
 }

@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <optional>
 
 #if _WIN32
 #include <winsock2.h>
@@ -496,7 +497,7 @@ struct CSphQuery
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
-	bool			m_bLocalDF = false;			///< whether to use calculate DF among local indexes
+	std::optional<bool> m_bLocalDF;				///< whether to use calculate DF among local indexes
 	bool			m_bLowPriority = false;		///< set low thread priority for this query
 	DWORD			m_uDebugFlags = 0;
 	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion

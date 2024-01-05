@@ -7572,13 +7572,20 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
 
+
+	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
+	assert ( pQueryParser );
+	const bool bFullscan = pQueryParser->IsFullscan ( tQuery );
+
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
 	const SmallStringHash_T<int64_t> * pLocalDocs = tArgs.m_pLocalDocs;
 	SmallStringHash_T<int64_t> hLocalDocs;
 	int64_t iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
-	bool bGotLocalDF = tArgs.m_bLocalDF;
-	if ( tArgs.m_bLocalDF && !tArgs.m_pLocalDocs && !tQuery.m_sQuery.IsEmpty() && !dDiskChunks.IsEmpty() )
+	// already might local df calculated and set by distributed index
+	bool bGotLocalDF = ( tArgs.m_bLocalDF && tArgs.m_pLocalDocs );
+	// if not explicitly disbled lets calculate local_idf per disk chunks if it not was already calculated per distributed index
+	if ( !bGotLocalDF && !bFullscan && tQuery.m_eRanker!=SPH_RANK_NONE && tQuery.m_bLocalDF.value_or ( true ) && dDiskChunks.GetLength()>1 )
 	{
 		SwitchProfile ( pProfiler, SPH_QSTATE_LOCAL_DF );
 		GetKeywordsSettings_t tSettings;
@@ -7675,9 +7682,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	XQQuery_t tParsed;
 	// FIXME!!! provide segments list instead index to tTermSetup.m_pIndex
 
-	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
-	assert ( pQueryParser );
-
 	CSphScopedPayload tPayloads;
 
 	// FIXME!!! add proper
@@ -7686,7 +7690,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tCtx.m_bSkipQCache = true;
 
 	int iStackNeed = -1;
-	bool bFullscan = pQueryParser->IsFullscan ( tQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
 	{

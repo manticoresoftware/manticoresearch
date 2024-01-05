@@ -1701,7 +1701,8 @@ enum
 	QFLAG_FACET					= 1UL << 9,
 	QFLAG_FACET_HEAD			= 1UL << 10,
 	QFLAG_JSON_QUERY			= 1UL << 11,
-	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12
+	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
+	QFLAG_LOCAL_DF_SET			= 1UL << 13
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -1728,11 +1729,12 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
-	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
+	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF.value_or ( false );
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	uFlags |= QFLAG_FACET * q.m_bFacet;
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
+	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -2651,7 +2653,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
-		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
+		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )
+			tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
 		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
@@ -3018,8 +3021,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		tBuf.FinishBlock ();
 	}
 
-	if ( tQuery.m_bLocalDF!=g_tDefaultQuery.m_bLocalDF )
-		tBuf << "local_df=1";
+	if ( tQuery.m_bLocalDF.has_value() )
+		tBuf.Appendf ( "local_df=%d", tQuery.m_bLocalDF.value() ? 1 : 0 );
 
 	if ( tQuery.m_dIndexWeights.GetLength() )
 	{
@@ -6536,8 +6539,9 @@ void SearchHandler_c::SetupLocalDF ()
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
 		bOnlyFullScan &= tQuery.m_sQuery.IsEmpty();
-		bHasLocalDF |= tQuery.m_bLocalDF;
-		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF )
+		
+		bHasLocalDF |= tQuery.m_bLocalDF.value_or ( false );
+		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF.value_or ( false ) )
 			bOnlyNoneRanker &= ( tQuery.m_eRanker==SPH_RANK_NONE );
 	}
 	// bail out queries: full-scan, ranker=none, local_idf=0
@@ -6548,7 +6552,7 @@ void SearchHandler_c::SetupLocalDF ()
 	dQuery.Resize ( 0 );
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
-		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF || tQuery.m_eRanker==SPH_RANK_NONE )
+		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF.value_or ( false ) || tQuery.m_eRanker==SPH_RANK_NONE )
 			continue;
 
 		int iLen = tQuery.m_sQuery.Length();

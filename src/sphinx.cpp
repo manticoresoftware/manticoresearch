@@ -7665,20 +7665,23 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
+// the iterator does not support cutoff
+// overwise tIterator.WasCutoffHit() at the Fullscan ends iterating blocks after 0 block fully scanned (!m_iRowsLeft)
+// and for small cuttoff itrator scans only up to cuttoff rows in each block
+
 template <bool HAVE_DEAD>
 class RowIterator_T : public ISphNoncopyable
 {
 public:
-	RowIterator_T ( const RowIdBoundaries_t & tBoundaries, const DeadRowMap_Disk_c & tDeadRowMap, int iCutoff )
+	RowIterator_T ( const RowIdBoundaries_t & tBoundaries, const DeadRowMap_Disk_c & tDeadRowMap )
 		: m_tRowID ( tBoundaries.m_tMinRowID )
 		, m_tBoundaries ( tBoundaries )
 		, m_tDeadRowMap	( tDeadRowMap )
-		, m_iRowsLeft ( iCutoff>=0 ? iCutoff : INT_MAX )
 	{}
 
 	FORCE_INLINE bool GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
 	DWORD		GetNumProcessed() const	{ return m_tRowID-m_tBoundaries.m_tMinRowID; }
-	bool		WasCutoffHit() const	{ return !m_iRowsLeft; }
+	bool		WasCutoffHit() const	{ return false; }
 
 private:
 	static const int MAX_COLLECTED = 128;
@@ -7687,14 +7690,13 @@ private:
 	RowIdBoundaries_t			m_tBoundaries;
 	CSphFixedVector<RowID_t>	m_dCollected {MAX_COLLECTED};		// store 128 values (same as .spa attr block size)
 	const DeadRowMap_Disk_c &	m_tDeadRowMap;
-	int							m_iRowsLeft = INT_MAX;
 };
 
 template <>
 bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + Min ( m_iRowsLeft, m_dCollected.GetLength() );
+	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength();
 	RowID_t * pRowID = pRowIdStart;
 
 	while ( pRowID<pRowIdMax && m_tRowID<=m_tBoundaries.m_tMaxRowID )
@@ -7705,7 +7707,6 @@ bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 		m_tRowID++;
 	}
 
-	m_iRowsLeft = Max ( m_iRowsLeft - int(pRowID-pRowIdStart), 0 );
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
@@ -7714,7 +7715,6 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
 	int64_t iDelta = Min ( RowID_t(m_dCollected.GetLength()), int64_t(m_tBoundaries.m_tMaxRowID)-m_tRowID+1 );
-	iDelta = Min ( iDelta, m_iRowsLeft );
 	assert ( iDelta>=0 );
 	RowID_t * pRowIdMax = pRowIdStart + iDelta;
 	RowID_t * pRowID = pRowIdStart;
@@ -7723,7 +7723,6 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 	while ( pRowID<pRowIdMax )
 		*pRowID++ = m_tRowID++;
 
-	m_iRowsLeft = Max ( m_iRowsLeft - int(pRowID-pRowIdStart), 0 );
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
@@ -7885,12 +7884,12 @@ bool CSphIndex_VLN::RunFullscanOnAttrs ( const RowIdBoundaries_t & tBoundaries, 
 
 	if ( m_tDeadRowMap.HasDead() )
 	{
-		RowIterator_T<true> tIt ( tBoundaries, m_tDeadRowMap, iCutoff );
+		RowIterator_T<true> tIt ( tBoundaries, m_tDeadRowMap );
 		return RunFullscan ( tIt, fnToStatic, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
 	}
 	else
 	{
-		RowIterator_T<false> tIt ( tBoundaries, m_tDeadRowMap, iCutoff );
+		RowIterator_T<false> tIt ( tBoundaries, m_tDeadRowMap );
 		return RunFullscan ( tIt, fnToStatic, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
 	}
 }

@@ -11,6 +11,10 @@ yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
+yum install -y -q binutils > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 export current_version_searchd=$(searchd --version | head -n 1 | cut -d" " -f2); echo $current_version_searchd
 ––– output –––
 %{SEMVER}

@@ -13,17 +13,20 @@ export CLUSTER_NAME=c
 ––– block: ../base/flexible/create-cluster –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
+mysql -h0 -P1306 -e "CREATE TABLE a (title text, content text, gid uint) DIST_CLUSTER = 'c';"
 ––– output –––
-+-------------------+-------+
-| Counter           | Value |
-+-------------------+-------+
-| cluster_c_indexes |       |
-+-------------------+-------+
 ––– input –––
-mysql -h0 -P1306 -e "create table c:a(id bigint) shards=10 rf=1"; echo $?
+mysql -h0 -P1306 -e "CREATE TABLE b (title text, content text, gid uint);"
 ––– output –––
-0
 ––– input –––
-mysql -h0 -P2306 -e "create table b(id bigint) shards=10 rf=1"; echo $?
-0
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'с'";
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES";
+––– output –––
++-------+------+
+| Index | Type |
++-------+------+
+| a     | rt   |
+| b     | rt   |
++-------+------+

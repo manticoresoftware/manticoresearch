@@ -69,4 +69,4 @@ execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_C
 find_package ( galera REQUIRED )
 diagst ( galera::galera "library was built and saved" )
 
-# tmp line to trigger CI - v1
+# tmp line to trigger CI - v2

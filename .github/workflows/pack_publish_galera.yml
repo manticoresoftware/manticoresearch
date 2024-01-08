@@ -53,7 +53,6 @@ jobs:
       - run: echo "All set to build packages"
       - run: |
           echo '# Packing and publishing Galera for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
-          echo '${{ github.event.head_commit.message }}' >> $GITHUB_STEP_SUMMARY
           echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
           echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
           echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
@@ -102,26 +101,26 @@ jobs:
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
 
-  # pack_macos:
-  #   name: MacOS packages
-  #   uses: ./.github/workflows/build_template.yml
-  #   needs: pack
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       DISTR: [macos]
-  #       arch: [x86_64, arm64]
-  #   with:
-  #     DISTR: ${{ matrix.DISTR }}
-  #     arch: ${{ matrix.arch }}
-  #     HOMEBREW_PREFIX: /opt/homebrew
-  #     PACK_GALERA: 1
-  #     cmake_command: |
-  #       mkdir build
-  #       cd build
-  #       cmake -DPACK=1 ..
-  #     cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-  #     artifact_list: "build/manticore*tar.gz"
+  pack_macos:
+    name: MacOS packages
+    uses: ./.github/workflows/build_template.yml
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [macos]
+        arch: [x86_64, arm64]
+    with:
+      DISTR: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      HOMEBREW_PREFIX: /opt/homebrew
+      PACK_GALERA: 1
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      artifact_list: "build/manticore*tar.gz"
 
   # virtual job to simplify the CI
   # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
@@ -179,24 +178,24 @@ jobs:
           delimiter: "_"
           target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || 'dev' }}
 
-  # publish_macos:
-  #   name: Publishing MacOS
-  #   needs: publish
-  #   strategy:
-  #     fail-fast: true
-  #     matrix:
-  #       arch: [x86_64, arm64]
-  #   runs-on: ubuntu-22.04
-  #   steps:
-  #     - uses: manticoresoftware/publish_to_repo@main
-  #       with:
-  #         ssh_key: ${{ secrets.REPO_SSH_KEY }}
-  #         distr: macos
-  #         arch: ${{ matrix.arch }}
-  #         artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
-  #         type: arc
-  #         delimiter: "-"
-  #         target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || 'dev' }}
+  publish_macos:
+    name: Publishing MacOS
+    needs: publish
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [x86_64, arm64]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: macos
+          arch: ${{ matrix.arch }}
+          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
+          type: arc
+          delimiter: "-"
+          target: ${{ contains(github.event.pull_request.labels.*.name, 'release') && 'release' || 'dev' }}
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation

@@ -24,15 +24,11 @@ include ( GNUInstallDirs )
 
 install ( TARGETS galera LIBRARY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules )
 
-#fixup - CMAKE_INSTALL_DOCDIR is share/doc/GALERA, fixup to share/doc/galera
-set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/galera" )
+#fixup - CMAKE_INSTALL_DOCDIR is share/doc/GALERA, fixup to share/doc/manticore-galera
+set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore-galera" )
 GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTALL_DOCDIR DOCDIR )
 
-# /usr/share/doc/galera/AUTHORS - no changes (AUTHORS)
-# /usr/share/doc/galera/COPYING - no changes (COPYING)
-# /usr/share/doc/galera/LICENSE.asio - no changes (`asio/LICENSE_1_0.txt)
-# /usr/share/doc/galera/README - no changes (README)
-# see https://github.com/manticoresoftware/dev/issues/416 for details
+# see https://github.com/manticoresoftware/dev/issues/416#issuecomment-1807560203 for details
 
 install ( FILES AUTHORS COPYING README DESTINATION ${CMAKE_INSTALL_DOCDIR} )
 install ( FILES asio/LICENSE_1_0.txt DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME "LICENSE.asio" )

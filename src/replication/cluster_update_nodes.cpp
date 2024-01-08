@@ -15,7 +15,6 @@
 #include "api_command_cluster.h"
 #include "common.h"
 #include "nodes.h"
-#include "configuration.h"
 
 // API command to remote node to update nodes by nodes it sees
 using ClusterUpdateNodes_c = ClusterCommand_T<E_CLUSTER::UPDATE_NODES, UpdateNodesRequest_t>;
@@ -38,7 +37,7 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tRequest );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), ReplicationTimeoutQuery(), tRequest );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;

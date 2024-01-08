@@ -4686,7 +4686,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$error_agent = "error_".$agent_id.".txt";
-				$config->SetAgent ( $agents [$i], 0 );
+				$config->SetAgent ( $agents [$i], $i );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;

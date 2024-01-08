@@ -1834,10 +1834,12 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 				tStmt.m_tQuery.m_bFacet = true;
 
 				tStmt.m_eStmt = STMT_SELECT;
-				tStmt.m_tQuery.m_sIndexes = tHeadQuery.m_sIndexes;
-				tStmt.m_tQuery.m_sSelect = tStmt.m_tQuery.m_sFacetBy;
-				tStmt.m_tQuery.m_sQuery = tHeadQuery.m_sQuery;
+				tStmt.m_tQuery.m_sIndexes	= tHeadQuery.m_sIndexes;
+				tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
+				tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
 				tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
+				tStmt.m_tQuery.m_sKNNAttr	= tHeadQuery.m_sKNNAttr;
+				tStmt.m_tQuery.m_dKNNVec	= tHeadQuery.m_dKNNVec;
 
 				// append filters
 				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )

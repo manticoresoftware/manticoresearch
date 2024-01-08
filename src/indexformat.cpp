@@ -629,7 +629,7 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 
 	CSphFixedVector<RegexMatch_t> dRegex ( dTerms.GetLength() );
 	RE2::Options tOptions;
-	tOptions.set_encoding ( RE2::Options::Encoding::EncodingLatin1 );
+	tOptions.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
 	ARRAY_FOREACH ( i, dRegex )
 	{
 		dRegex[i].m_pRe = std::make_unique<RE2> ( dTerms[i].first.cstr(), tOptions );

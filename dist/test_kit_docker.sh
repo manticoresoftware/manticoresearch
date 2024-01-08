@@ -109,7 +109,7 @@ docker exec manticore-test-kit bash -c \
   'ls -la /build/'
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	"apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
+	"apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb manticore-galera libxml2 libcurl4 libonig5 libzip4 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
 docker exec manticore-test-kit bash -c \
 	"php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" && php -r \"if (hash_file('sha384', 'composer-setup.php') === 'e21205b207c3ff031906575712edab6f13eb0b361f2085f1f1237b7126d785e826a450292b6cfd1d64d92e6563bbde02') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;\" && php composer-setup.php && php -r \"unlink('composer-setup.php');\" && mv composer.phar /usr/bin/composer || true"
 

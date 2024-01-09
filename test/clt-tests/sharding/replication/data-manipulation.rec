@@ -22,16 +22,16 @@ export INSTANCE=5
 export CLUSTER_NAME=c
 ––– output –––
 ––– block: ../base/flexible/create-cluster –––
-––– input –––
-export CLUSTER_NAME=c
-––– output –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table testrt(id bigint, title text, content text, gid uint) shards=10 rf=1;"; echo $?
+mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=10 rf=1;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES";
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt (0, 'List of HP business laptops', 'Elitebook Probook', 1);"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO testrt (id, title, content, gid) VALUES (0, 'List of HP business laptops', 'Elitebook Probook', 1);"; echo $?
 ––– output –––
 0
 ––– input –––

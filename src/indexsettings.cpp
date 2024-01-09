@@ -1087,6 +1087,7 @@ void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_
 	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),		m_eHitlist!=tDefault.m_eHitlist );
 	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,		m_eAttr!=tDefault.m_eAttr );
 	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,		m_eBlob!=tDefault.m_eBlob );
+	tOut.Add ( "access_dict",			FileAccessName(m_eDict) ,		m_eDict!=tDefault.m_eDict );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2142,6 +2143,7 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::ACCESS_BLOB_ATTRS: return "access_blob_attrs";
 		case MutableName_e::ACCESS_DOCLISTS: return "access_doclists";
 		case MutableName_e::ACCESS_HITLISTS: return "access_hitlists";
+		case MutableName_e::ACCESS_DICT: return "access_dict";
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
@@ -2309,6 +2311,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	GetFileAccess( tParser, MutableName_e::ACCESS_BLOB_ATTRS, false, m_tFileAccess.m_eBlob, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
+	GetFileAccess( tParser, MutableName_e::ACCESS_DICT, false, m_tFileAccess.m_eDict, m_dLoaded );
 
 	JsonObj_c tReadBuffer = tParser.GetIntItem ( "read_buffer_docs", sError, true );
 	if ( tReadBuffer )
@@ -2402,6 +2405,7 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 	GetFileAccess( hIndex, MutableName_e::ACCESS_BLOB_ATTRS, false, m_tFileAccess.m_eBlob, m_dLoaded );
 	GetFileAccess( hIndex, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
 	GetFileAccess( hIndex, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
+	GetFileAccess( hIndex, MutableName_e::ACCESS_DICT, false, m_tFileAccess.m_eDict, m_dLoaded );
 
 	if ( hIndex.Exists ( "read_buffer_docs" ) )
 	{
@@ -2470,6 +2474,7 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eBlob ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_DOCLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eDoclist ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_HITLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eHitlist ) );
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_DICT, tRoot, FileAccessName ( m_tFileAccess.m_eDict ) );
 
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_DOCS, tRoot, m_tFileAccess.m_iReadBufferDocList );
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
@@ -2521,6 +2526,11 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_tFileAccess.m_eHitlist = tOther.m_tFileAccess.m_eHitlist;
 		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_HITLISTS );
 	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_DICT ) )
+	{
+		m_tFileAccess.m_eDict = tOther.m_tFileAccess.m_eDict;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_DICT );
+	}
 
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::READ_BUFFER_DOCS ) )
 	{
@@ -2569,6 +2579,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_DOCLISTS, m_tFileAccess.m_eDoclist!=tDefaults.m_tFileAccess.m_eDoclist ) );
 	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_HITLISTS ), FileAccessName ( m_tFileAccess.m_eHitlist ),
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_HITLISTS, m_tFileAccess.m_eHitlist!=tDefaults.m_tFileAccess.m_eHitlist ) );
+	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_DICT ), FileAccessName ( m_tFileAccess.m_eDict ),
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_DICT, m_tFileAccess.m_eDict!=tDefaults.m_tFileAccess.m_eDict ) );
 
 	tOut.Add ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ), m_tFileAccess.m_iReadBufferDocList,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_DOCS, m_tFileAccess.m_iReadBufferDocList!=tDefaults.m_tFileAccess.m_iReadBufferDocList ) );

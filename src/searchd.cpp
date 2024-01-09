@@ -19802,6 +19802,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
 	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+	tDefaultFA.m_eDict = GetFileAccess( hSearchd, "access_dict", false, tDefaultFA.m_eDict );
 
 	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
 	tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;

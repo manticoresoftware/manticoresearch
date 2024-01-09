@@ -26,6 +26,12 @@ This setting sets instance-wide defaults for [access_hitlists](../Creating_a_tab
 
 The `access_hitlists` directive allows you to define the default value of [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
 
+### access_dict
+
+This setting sets instance-wide defaults for [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `mmap_preread`.
+
+The `access_dict` directive allows you to define the default value of [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
 ### agent_connect_timeout
 
 This setting sets instance-wide defaults for the [agent_connect_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) parameter.

@@ -1474,7 +1474,7 @@ bool IsOndisk ( FileAccess_e eType ) { return eType==FileAccess_e::FILE || eType
 
 bool FileAccessSettings_t::operator== ( const FileAccessSettings_t & tOther ) const
 {
-	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist &&
+	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist && m_eDict==tOther.m_eDict &&
 		m_iReadBufferDocList==tOther.m_iReadBufferDocList && m_iReadBufferHitList==tOther.m_iReadBufferHitList );
 }
 
@@ -9671,7 +9671,7 @@ void CSphIndex_VLN::Preread()
 	PrereadMapping ( GetName(), "skip-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tSkiplists );
 	if ( sphInterrupted() ) return;
 
-	PrereadMapping ( GetName(), "dictionary", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tWordlist.m_tBuf );
+	PrereadMapping ( GetName(), "dictionary", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eDict ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eDict ), m_tWordlist.m_tBuf );
 	if ( sphInterrupted() ) return;
 
 	PrereadMapping ( GetName(), "docid-lookup", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tDocidLookup );

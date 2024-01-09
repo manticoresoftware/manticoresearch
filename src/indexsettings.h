@@ -297,6 +297,7 @@ enum class MutableName_e
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
 	ACCESS_HITLISTS,
+	ACCESS_DICT,
 	READ_BUFFER_DOCS,
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
@@ -313,6 +314,7 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
+	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
 

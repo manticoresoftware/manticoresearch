@@ -1,3 +1,4 @@
+––– block: ./init –––
 ––– input –––
 export INSTANCE=1
 ––– output –––
@@ -27,47 +28,23 @@ export CLUSTER_NAME=c
 mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=10 rf=1;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES";
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt (id, title, content, gid) VALUES (0, 'List of HP business laptops', 'Elitebook Probook', 1);"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(1, 'List of Dell business laptops', 'Latitude Precision Vostro', 2);"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
-––– output –––
-sharding_queue
-sharding_state
-sharding_table
-testrt
-testrt_s0
-testrt_s1
-testrt_s2
-testrt_s3
-testrt_s4
-testrt_s5
-testrt_s6
-testrt_s7
-testrt_s8
-testrt_s9
-––– input –––
-mysql -h0 -P1306 -e "DESCRIBE testrt"
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) VALUES (1, 'Title 1', 'Content 1', 1);"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW COLUMNS FROM testrt;"
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) VALUES (2, 'Title 2', 'Content 2', 2);"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+mysql -h0 -P1306 -e "SELECT * FROM c:testrt WHERE id IN (1, 2);"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "ALTER TABLE testrt ADD COLUMN new_column INT;"; echo $?
+mysql -h0 -P1306 -e "UPDATE c:testrt SET title = 'Updated Title' WHERE id = 1;"
 ––– output –––
-0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_с_indexes'\G"
+mysql -h0 -P1306 -e "DELETE FROM c:testrt WHERE id = 2;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER c ADD NODE '127.0.0.1:1313';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP CLUSTER c;"
 ––– output –––

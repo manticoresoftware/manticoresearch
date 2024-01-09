@@ -7873,6 +7873,25 @@ public:
 		return 0;
 	}
 
+	static bool ConvertBool ( const SqlInsert_t & tVal, SphAttr_t & tAttr )
+	{
+		if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+			return false;
+
+		if ( tVal.m_sVal.EqN ( "true" ) )
+		{
+			tAttr = 1;
+			return true;
+		}
+		if ( tVal.m_sVal.EqN ( "false" ) )
+		{
+			tAttr = 0;
+			return true;
+		}
+
+		return false;
+	}
+
 	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
@@ -7881,9 +7900,13 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
-		case SPH_ATTR_BOOL:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
+			break;
+
+		case SPH_ATTR_BOOL:
+			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
+				tAttr = ToInt ( tVal );
 			break;
 
 		case SPH_ATTR_BIGINT:

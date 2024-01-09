@@ -299,6 +299,5 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 
 We recommend specifying the `manticore` database explicitly when you plan to back up all databases, rather than using the `--all-databases` option. 
 
-Keep in mind that `mysqldump` currently lacks support for backing up distributed indexes.
-
+Keep in mind that `mysqldump` does not support backing up distributed tables. Additionally, it cannot back up tables that contain non-stored fields (consider using `manticore-backup` or the `BACKUP` SQL command).
 <!-- proofread -->

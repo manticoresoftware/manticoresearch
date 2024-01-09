@@ -325,11 +325,12 @@ bool ReplicationCluster_t::IsHealthy() const
 static int GetClusterMemLimitMB ( int iMemLimit, int iIndexes )
 {
 	const int CACHE_PER_INDEX = 16;
+	const int MIN_CACHE_SIZE = 128;
 
-	// change default cache size to 16Mb per added index or size of largest rt_mem_limit of RT index
+	// change default cache size to 16Mb per added index or size of largest rt_mem_limit of RT index but at least 128Mb
 	int iSize = iMemLimit / 1024 / 1024;
 	iIndexes = Max ( 1, iIndexes );
-	return Max ( iIndexes * CACHE_PER_INDEX, iSize );
+	return Max ( Max ( iIndexes * CACHE_PER_INDEX, iSize ), MIN_CACHE_SIZE );
 }
 
 bool ReplicationCluster_t::Init()

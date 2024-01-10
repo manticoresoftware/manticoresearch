@@ -21,6 +21,10 @@ debconf: delaying package configuration, since apt-utils is not installed
 wget -q https://repo.manticoresearch.com/manticore-repo.noarch.deb
 ––– output –––
 ––– input –––
+apt-get install -y -q binutils > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 dpkg -i manticore-repo.noarch.deb > /dev/null; echo $?
 ––– output –––
 gpg: key 14D612DB3D2730E2: "Manticore Search <support@manticoresearch.com>" not changed
@@ -55,7 +59,42 @@ manticore-executor -v
 ––– output –––
 PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (ZTS)
 Copyright (c) The PHP Group
-Zend Engine %{SEMVER}, Copyright (c) Zend Technologies
+Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
 ––– block: check-buddy –––
 ––– block: check-backup –––
+––– block: check-version/export-current-version –––
+––– input –––
+wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb; echo $?
+––– output –––
+0
+––– input –––
+dpkg -i manticore-dev-repo.noarch.deb > /dev/null; echo $?
+––– output –––
+gpg: keyring '/etc/apt/trusted.gpg.d/manticore-keyring.gpg' created
+gpg: directory '/root/.gnupg' created
+gpg: /root/.gnupg/trustdb.gpg: trustdb created
+gpg: key 14D612DB3D2730E2: public key "Manticore Search <support@manticoresearch.com>" imported
+gpg: Total number processed: 1
+gpg:               imported: 1
+0
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l manticore-galera > /dev/null
+––– output –––
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+LANGUAGE = (unset),
+LC_ALL = (unset),
+LANG = "en_US.UTF-8"
+are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+debconf: delaying package configuration, since apt-utils is not installed
+––– block: stop-searchd-dev –––
+––– block: start-searchd-dev –––
+––– block: check-version/export-new-version –––
+––– block: check-version/comparison-version –––

@@ -11,12 +11,9 @@ yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-searchd --version
+yum install -y -q binutils > /dev/null 2>&1; echo $?
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#) (secondary %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#)
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+0
 ––– input –––
 manticore-executor -v
 ––– output –––
@@ -26,3 +23,12 @@ Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
 ––– block: check-buddy –––
 ––– block: check-backup –––
+––– block: check-version/export-current-version –––
+––– input –––
+yum -y --enablerepo manticore-dev update manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– block: stop-searchd-dev –––
+––– block: start-searchd-dev –––
+––– block: check-version/export-new-version –––
+––– block: check-version/comparison-version –––

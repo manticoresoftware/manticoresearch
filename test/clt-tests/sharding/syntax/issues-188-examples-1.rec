@@ -13,20 +13,68 @@ export CLUSTER_NAME=c
 ––– block: ../base/flexible/create-cluster –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE a (title text, content text, gid uint) DIST_CLUSTER = 'c';"
+mysql -h0 -P1306 -e "CREATE TABLE c:a (title text, content text, gid uint) shards=2 rf=1";
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE b (title text, content text, gid uint);"
+mysql -h0 -P1306 -e "CREATE TABLE b (title text, content text, gid uint) shards=2 rf=1";
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'с'";
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
+a
+a_s0
+b
+b_s0
+b_s1
+sharding_queue
+sharding_state
+sharding_table
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES";
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes'";
 ––– output –––
-+-------+------+
-| Index | Type |
-+-------+------+
-| a     | rt   |
-| b     | rt   |
-+-------+------+
++-------------------+----------------------------------------------+
+| Counter           | Value                                        |
++-------------------+----------------------------------------------+
+| cluster_c_indexes | sharding_state,sharding_table,sharding_queue |
++-------------------+----------------------------------------------+
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE a\G" | awk '/Agent:|Type:/{print $2}' | sort
+––– output –––
+Agent: 127.0.0.1
+Type: 2312
+Agent: a_s0
+Type: local
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE b\G" | awk '/Agent:|Type:/{print $2}' | sort
+––– output –––
+Agent: b_s0
+Type: local
+Agent: b_s1
+Type: local
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+ a
+a_s1
+sharding_queue
+sharding_state
+sharding_table
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_c_indexes'";
+––– output –––
++-------------------+----------------------------------------------+
+| Counter           | Value                                        |
++-------------------+----------------------------------------------+
+| cluster_c_indexes | sharding_state,sharding_table,sharding_queue |
++-------------------+----------------------------------------------+
+––– input –––
+mysql -h0 -P2306 -e "DESCRIBE a\G" | awk '/Agent:|Type:/{print $2}' | sort
+––– output –––
+Agent: 127.0.0.1
+Type: 1312
+Agent: a_s1
+Type: local
+––– input –––
+mysql -h0 -P2306 -e "DESCRIBE a\G" | awk '/Agent:|Type:/{print $2}' | sort
+––– output –––
+ERROR 1064 (42000) at line 1: no such table 'b'

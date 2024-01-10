@@ -1985,7 +1985,15 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster || !pCluster->IsHealthy() )
+	{
+		// node in the joining state should skip the command
+		if ( pCluster && pCluster->GetState()==ClusterState_e::JOINING )
+		{
+			TlsMsg::ResetErr();
+			return true;
+		}
 		return false;
+	}
 
 	auto fnNodesHash = [](const StrVec_t dNodes) {
 		uint64_t uRes = SPH_FNV64_SEED;

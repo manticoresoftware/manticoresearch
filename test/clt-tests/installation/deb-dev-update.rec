@@ -97,3 +97,4 @@ debconf: delaying package configuration, since apt-utils is not installed
 ––– block: stop-searchd-dev –––
 ––– block: start-searchd-dev –––
 ––– block: check-version/export-new-version –––
+––– block: check-version/comparison-version –––

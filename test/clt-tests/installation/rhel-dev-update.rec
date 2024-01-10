@@ -31,3 +31,4 @@ yum -y --enablerepo manticore-dev update manticore manticore-extra manticore-com
 ––– block: stop-searchd-dev –––
 ––– block: start-searchd-dev –––
 ––– block: check-version/export-new-version –––
+––– block: check-version/comparison-version –––

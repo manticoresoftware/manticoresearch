@@ -1,0 +1,24 @@
+––– input –––
+if [[ "$new_version_searchd" > "$current_version_searchd" ]]; then echo "Upgrade successful. New version searchd: $new_version_searchd"; else echo "Upgrade failed. Current version searchd: $current_version_searchd, new version: $new_version_searchd"; fi
+––– output –––
+Upgrade successful. New version searchd: %{SEMVER}
+––– input –––
+if [[ "$new_version_columnar" > "$current_version_columnar" ]]; then echo "Upgrade successful. New version columnar: $new_version_columnar"; else echo "Upgrade failed. Current version columnar: $current_version_columnar, new version: $new_version_columnar"; fi
+––– output –––
+Upgrade successful. New version columnar: %{SEMVER}
+––– input –––
+if [[ "$new_version_secondary" > "$current_version_secondary" ]]; then echo "Upgrade successful. New version secondary: $new_version_secondary"; else echo "Upgrade failed. Current version secondary: $current_version_knn, new version: $new_version_secondary"; fi
+––– output –––
+Upgrade successful. New version secondary: %{SEMVER}
+––– input –––
+if [[ "$new_version_knn" > "$current_version_knn" ]]; then echo "Upgrade successful. New version knn: $new_version_knn"; else echo "Upgrade failed. Current version knn: $current_version_knn, new version: $new_version_knn"; fi
+––– output –––
+Upgrade successful. New version knn: %{SEMVER}
+––– input –––
+[[ "$(echo -e "$new_version_galera\n$current_version_galera" | sort -V | tail -n1)" == "$new_version_galera" ]] && echo "Upgrade successful. New version galera: $new_version_galera" || echo "Upgrade failed. Current version galera: $current_version_galera, new version: $new_version_galera"
+––– output –––
+Upgrade successful. New version galera: #!/[0-9]{1}\.[0-9]{2}/!#
+––– input –––
+[[ "$(echo -e "$new_version_buddy\n$current_version_buddy" | sort -V | tail -n1)" == "$new_version_buddy" ]] && echo "Upgrade successful. New version buddy: $new_version_buddy" || echo "Upgrade failed. Current version buddy: $current_version_buddy, new version: $new_version_buddy"
+––– output –––
+Upgrade successful. New version buddy: #!/[0-9]{1}\.[0-9]{1}\.[0-9]{1}/!#

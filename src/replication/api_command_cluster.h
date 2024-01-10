@@ -198,3 +198,5 @@ int ReplicationRetryDelay ();
 int ReplicationTimeoutAnyNode ();
 int ReplicationFileRetryCount ();
 int ReplicationFileRetryDelay ();
+void ReportClusterError ( const CSphString& sCluster, const CSphString& sError, const char* szClient, E_CLUSTER eCmd );
+

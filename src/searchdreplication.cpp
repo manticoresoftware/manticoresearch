@@ -312,7 +312,6 @@ ClusterState_e ReplicationCluster_t::WaitReady()
 
 bool ReplicationCluster_t::IsHealthy() const
 {
-
 	if ( !IsPrimary() )
 		return TlsMsg::Err ( "cluster '%s' is not ready, not primary state (%s)", m_sName.cstr(), szState() );
 
@@ -1540,7 +1539,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		TlsMsg::Err ( pCluster->m_sError.cstr() );
 	}
 
-	sphLogFatal ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
+	sphWarning ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
 	// need to wait recv thread to complete in case of error after worker started
 	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 	Threads::SccWL_t wLock ( g_tClustersLock );
@@ -1608,12 +1607,12 @@ StrVec_t ReplicationCluster_t::GetIndexes() const noexcept
 	return dIndexes;
 }
 
-void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * szClient, int iCmd )
+void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * szClient, E_CLUSTER eCmd )
 {
 	if ( sError.IsEmpty() )
 		return;
 
-	sphLogFatal ( "'%s' cluster [%s], cmd: %d, error: %s", sCluster.cstr(), szClient, iCmd, sError.cstr() );
+	sphWarning ( "'%s' cluster [%s], cmd: %s(%d), error: %s", sCluster.cstr(), szClient, szClusterCmd ( eCmd ), (int)eCmd, sError.cstr() );
 
 	auto pCluster = ClusterByName ( sCluster, nullptr );
 	if ( !pCluster )

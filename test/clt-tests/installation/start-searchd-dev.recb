@@ -2,7 +2,7 @@
 mkdir -p /var/run/manticore
 ––– output –––
 ––– input –––
-searchd
+sleep 5; searchd
 ––– output –––
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff

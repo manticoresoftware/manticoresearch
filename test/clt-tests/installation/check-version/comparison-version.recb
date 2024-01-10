@@ -15,10 +15,10 @@ if [[ "$new_version_knn" > "$current_version_knn" ]]; then echo "Upgrade success
 ––– output –––
 Upgrade successful. New version knn: %{SEMVER}
 ––– input –––
-[[ "$(echo -e "$new_version_galera\n$current_version_galera" | sort -V | tail -n1)" == "$new_version_galera" ]] && echo "Upgrade successful. New version galera: $new_version_galera" || echo "Upgrade failed. Current version galera: $current_version_galera, new version: $new_version_galera"
+if [[ "$new_version_galera" > "$current_version_galera" ]] || [[ "$new_version_galera" == "$current_version_galera" ]]; then echo "Upgrade successful. New version galera: $new_version_galera"; else echo "Upgrade failed. Current version galera: $current_version_galera, new version: $new_version_galera"; fi
 ––– output –––
 Upgrade successful. New version galera: #!/[0-9]{1}\.[0-9]{2}/!#
 ––– input –––
-[[ "$(echo -e "$new_version_buddy\n$current_version_buddy" | sort -V | tail -n1)" == "$new_version_buddy" ]] && echo "Upgrade successful. New version buddy: $new_version_buddy" || echo "Upgrade failed. Current version buddy: $current_version_buddy, new version: $new_version_buddy"
+if [[ "$new_version_buddy" > "$current_version_buddy" ]]; then echo "Upgrade successful. New version buddy: $new_version_buddy"; else echo "Upgrade failed. Current version buddy: $current_version_buddy, new version: $new_version_buddy"; fi
 ––– output –––
 Upgrade successful. New version buddy: #!/[0-9]{1}\.[0-9]{1}\.[0-9]{1}/!#

@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "INDEXER" "1" "18/07/2023" "Manticore Search" ""
+.TH "INDEXER" "1" "04/01/2024" "Manticore Search" ""
 .SH "NAME"
 indexer \- Manticore Search Indexer Tool
 .SH "SYNOPSIS"
@@ -65,6 +65,24 @@ The exit codes for indexer are as follows:
 .IP \(bu 2
 2: indexing went OK, but the \fB\fC\-\-rotate\fR attempt failed
 .RE
+.PP
+Also, you can run \fB\fCindexer\fR via a systemctl unit file:
+.PP
+.RS
+.nf
+systemctl start \-\-no\-block manticore\-indexer
+.fi
+.RE
+.PP
+Or, in case you want to build a specific table:
+.PP
+.RS
+.nf
+systemctl start \-\-no\-block manticore\-indexer@specific\-table\-name
+.fi
+.RE
+.PP
+Find more information about scheduling \fB\fCindexer\fR via systemd below.
 .SH OPTIONS
 .RS
 .IP \(bu 2
@@ -218,9 +236,9 @@ into the specified file, in a MySQL compatible syntax. The resulting dumps are t
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2023 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2024 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
-Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 or any later version published by the Free Software Foundation\&.
+Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"
 .PP
 \fBsearchd\fR(1),

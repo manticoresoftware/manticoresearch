@@ -13,15 +13,14 @@ export CLUSTER_NAME=c
 ––– block: ../base/flexible/create-cluster –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE c:a (title text, content text, gid uint) shards=4 rf=1";
+mysql -h0 -P1306 -e "CREATE TABLE a (title text, content text, gid uint) shards=4 rf=1";
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE b (title text, content text, gid uint) shards=4 rf=1";
+mysql -h0 -P1306 -e "CREATE TABLE c:b (title text, content text, gid uint) shards=4 rf=1";
 ––– output –––
 ––– input –––
 for i in 1 2; do mysql -h0 -P${i}306 -e "show tables\G"; done | grep 'Index: a' | sort -V
 ––– output –––
-Index: a
 Index: a
 Index: a_s0
 Index: a_s1
@@ -31,26 +30,17 @@ Index: a_s3
 for i in 1 2; do mysql -h0 -P${i}306 -e "show tables\G"; done | grep 'Index: b' | sort -V
 ––– output –––
 Index: b
-Index: b_s0
 Index: b_s1
 Index: b_s2
-Index: b_s3
 ––– input –––
 for i in 1 2; do mysql -h0 -P${i}306 -e "describe a\G"; done | awk '/Agent:|Type:/ {printf "%s%s ", $1, $2} /Type:/ {print ""}' | sort
 ––– output –––
-Agent:%{IPADDR}:%{NUMBER}:a_s%{NUMBER} Type:remote_%{NUMBER}
-Agent:%{IPADDR}:%{NUMBER}:a_s%{NUMBER} Type:remote_%{NUMBER}
-Agent:%{IPADDR}:%{NUMBER}:a_s%{NUMBER} Type:remote_%{NUMBER}
-Agent:%{IPADDR}:%{NUMBER}:a_s%{NUMBER} Type:remote_%{NUMBER}
-Agent:a_s%{NUMBER} Type:local
-Agent:a_s%{NUMBER} Type:local
-Agent:a_s%{NUMBER} Type:local
-Agent:a_s%{NUMBER} Type:local
+ERROR 1064 (42000) at line 1: no such table 'a'
+Agent:a_s0 Type:local
+Agent:a_s1 Type:local
+Agent:a_s2 Type:local
+Agent:a_s3 Type:local
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes'";
 ––– output –––
-+-------------------+----------------------------------------------+
-| Counter           | Value                                        |
-+-------------------+----------------------------------------------+
-| cluster_c_indexes | sharding_state,sharding_table,sharding_queue |
-+-------------------+----------------------------------------------+
+

@@ -74,8 +74,7 @@ License: [Apache 2.0](https://raw.githubusercontent.com/manticoresoftware/column
 
 ## libsphinxclient
 
-Source files:
-- `./api/libsphinxclient/*`
+Source files: `./api/libsphinxclient/*`
 
 Copyright:
 ```

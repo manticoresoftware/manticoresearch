@@ -189,7 +189,7 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 install ( FILES doc/indexer.1 doc/indextool.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
 install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common RENAME manticore.conf.dist )
-install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES LICENSE INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore

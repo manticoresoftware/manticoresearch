@@ -53,7 +53,7 @@ message ( STATUS "Will create ${CPACK_GENERATOR} with build for MacOS" )
 configure_config ( manticore )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.conf" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
-install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES LICENSE INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
 

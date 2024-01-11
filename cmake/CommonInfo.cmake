@@ -7,7 +7,7 @@ set ( COMMON_MANTICORE_INFO "Manticore Search - database for search. Lightweight
 set ( CPACK_PACKAGE_CONTACT "Manticore Search Maintainers <build@manticoresearch.com>" )
 set ( CMAKE_PROJECT_HOMEPAGE_URL "https://manticoresearch.com" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
-set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
+set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/LICENSE" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore Search - database for search" )
 
 # converter tool - only citizen of group 'helpers'

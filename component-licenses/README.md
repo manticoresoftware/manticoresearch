@@ -259,7 +259,7 @@ License: [MIT License](./http_parser-license).
 https://cmake.org/
 
 Source files: Manticore Search project does not modify of redistribute any source
-files from this component. CLang is used to build Manticore Search packages.
+files from this component. CMake is used to build Manticore Search packages.
 
 Copyright:
 ```

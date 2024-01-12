@@ -6867,7 +6867,11 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 {
 	assert ( m_bGotGroupby );
-	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, m_tQuery.m_sGroupSortBy.cstr(), *m_pSorterSchema, m_eGroupFunc,	m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_bComputeItems, m_sError );
+	CSphString sGroupOrderBy = m_tQuery.m_sGroupSortBy;
+	if ( sGroupOrderBy=="@weight desc" )
+		AddKnnDistSort ( sGroupOrderBy );
+
+	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc,	m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_bComputeItems, m_sError );
 
 	if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 	{

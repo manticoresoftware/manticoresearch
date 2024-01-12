@@ -436,11 +436,47 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	// format the message
 	if ( sFmt )
 	{
-		// need more space for tail zero and "\n" that added at sphLogEntry
-		int iSafeGap = 4;
-		int iBufSize = sizeof(sBuf)-iLen-iSafeGap;
-		vsnprintf ( sBuf+iLen, iBufSize, sFmt, ap );
-		sBuf[ sizeof(sBuf)-iSafeGap ] = '\0';
+		// Use vsnprintf to get the total length required for the formatted string
+		va_list ap_copy;
+		va_copy(ap_copy, ap);
+		int iRequiredLength = vsnprintf(NULL, 0, sFmt, ap_copy);
+		va_end(ap_copy);
+
+		// Allocate a temporary buffer to hold the entire formatted message
+		char* sMessage = (char*)malloc(iRequiredLength + 1); // +1 for null terminator
+		if (!sMessage)
+		{
+			// Handle malloc failure if necessary
+			return;
+		}
+
+		// Use vsnprintf again to write the formatted message into sMessage
+		va_copy(ap_copy, ap);
+		vsnprintf(sMessage, iRequiredLength + 1, sFmt, ap_copy);
+		va_end(ap_copy);
+
+		// Now iterate over the message, writing it in chunks
+		for (int iOffset = 0; iOffset < iRequiredLength;)
+		{
+			// Calculate space left in sBuf after the banner and timestamp
+			int iSpaceLeft = sizeof(sBuf) - iLen - 1; // -1 for null terminator
+
+			// Determine the chunk length (do not exceed the space left in sBuf)
+			int iChunkLength = (iRequiredLength - iOffset) < iSpaceLeft ? (iRequiredLength - iOffset) : iSpaceLeft;
+
+			// Copy the next chunk of the message into the buffer
+			strncpy(sBuf + iLen, sMessage + iOffset, iChunkLength);
+			sBuf[iLen + iChunkLength] = '\0'; // Ensure null-termination
+
+			// Log the current chunk
+			sphLogEntry(eLevel, sBuf, sTtyBuf);
+
+			// Move the offset by the chunk length for the next iteration
+			iOffset += iChunkLength;
+		}
+
+		// Free the allocated memory for the message
+   		free(sMessage);
 	}
 
 	if ( sFmt && eLevel>SPH_LOG_INFO && g_iLogFilterLen )
@@ -490,7 +526,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	uLastEntry = uEntry;
 
 	// do the logging
-	sphLogEntry ( eLevel, sBuf, sTtyBuf );
+	// sphLogEntry ( eLevel, sBuf, sTtyBuf );
 }
 
 void Shutdown (); // forward

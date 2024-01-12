@@ -14,6 +14,7 @@
 #include "sphinxint.h"
 #include "conversion.h"
 #include <math.h>
+#include <algorithm>
 
 template <typename T>
 struct HSBucket_T
@@ -493,11 +494,11 @@ int HistogramStreamed_T<T>::LerpCounter ( int iBucket, T tVal ) const
 	const HSBucket_T<T> & tBucketR = m_dBuckets[iBucket+1];
 	assert ( tBucketL.m_tCentroid<=tVal && tVal<=tBucketR.m_tCentroid );
 
-	double fDistL = (double)tVal - (double)tBucketL.m_tCentroid;
-	double fDist = (double)tBucketR.m_tCentroid - (double)tBucketL.m_tCentroid;
+	T tDistL = tVal - tBucketL.m_tCentroid;
+	T tDist = tBucketR.m_tCentroid - tBucketL.m_tCentroid;
 
-	double fLerp = fDistL / fDist;
-	assert ( fLerp>=0.0 && fLerp<=1.0 );
+	double fLerp = (double)tDistL / (double)tDist;
+	fLerp = std::clamp ( fLerp, 0.0, 1.0 ); //clamp instead of assert as it runs out of bounds at INT64_MAX
 
 	return int ( fLerp * tBucketR.m_iCount + ( 1.0f - fLerp ) * tBucketL.m_iCount );
 }

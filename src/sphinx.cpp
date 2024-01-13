@@ -3223,6 +3223,9 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 	if ( m_uVersion >= 57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		fnAddFile ( SPH_EXT_SPDS );
 
+	if ( m_uVersion >= 65 && m_tSchema.HasKNNAttrs() )
+		fnAddFile ( SPH_EXT_SPKNN );
+
 	if ( m_bIsEmpty )
 		return;
 

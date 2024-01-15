@@ -21,23 +21,23 @@ mysql -h0 -P19306 -e "show tables"
 ––– input –––
 mysql -h0 -P29306 -e "join cluster a at '127.0.0.1:19312' 'a' as path" &
 ––– output –––
-[1] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P19306 -e "alter cluster a add t1" &
 ––– output –––
-[2] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P39306 -e "join cluster a at '127.0.0.1:19312' 'a' as path" &
 ––– output –––
-[3] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P19306 -e "alter cluster a add t2" &
 ––– output –––
-[4] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P19306 -e "alter cluster a add t3" &
 ––– output –––
-[5] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
 ––– output –––

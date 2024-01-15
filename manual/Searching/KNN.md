@@ -210,7 +210,7 @@ POST /search
 
 ### Search KNN similar docs
 
-Manticore perform way to find similar KNN documents, that's already presented in your index
+The ManticoreSearch algorithm excels in identifying analogous KNN documents already existing within your table.
 
 
 - SQL: `select ... from <table name> where knn ( <field>, <k>, <document id> )`
@@ -231,7 +231,7 @@ Manticore perform way to find similar KNN documents, that's already presented in
 The parameters are:
 * `field`: This is the name of the float vector attribute containing vector data.
 * `k`: This represents the number of documents to return. It indicates how many documents a single Hierarchical Navigable Small World (HNSW) index will return. The actual result may include more documents than `k` (e.g., if each disk chunk in a real-time table returns `k` documents, the total would be `num_chunks * k` documents). Conversely, the result might contain fewer than `k` documents if, for example, you request `k` documents and subsequently filter them by some attribute.
-* `document id`: ID of document for KNN similar search 
+* `document id`: Document ID for KNN similarity search:
 
 
 <!-- intro -->

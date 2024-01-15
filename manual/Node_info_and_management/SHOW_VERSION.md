@@ -5,7 +5,7 @@
 SHOW VERSION
 ```
 
-`SHOW VERSION` returns information about all currently running queries. The output is a table with the following structure:
+`SHOW VERSION` command provides details about ManticoreSearch and its associated libraries.
 
 - `Component`: Library name
 - `Version`: Component version

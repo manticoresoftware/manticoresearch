@@ -168,7 +168,7 @@ Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcar
 Similarly to the [wildcard operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators), the REGEX operator attempts to find all tokens matching the provided pattern, and each expansion is recorded as a matched hit. Note, this can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX pattern.
 
 The patterns should adhere to the [RE2 syntax](https://github.com/google/re2/wiki/Syntax). The REGEX expression delimiter is the first symbol after the open bracket. In other words, all text between the open bracket followed by the delimiter and the delimiter and the closed bracket is considered as a RE2 expression.
-Please note that the terms stored in the dictionary undergo `charset_table` transformation, meaning that for example, REGEX may not be able to match uppercase characters if all characters are lowercased according to the `charset_table` (which happens by default). To match a term, the REGEX expression must match the entire string. Use `.*` around the term for partial matching.
+Please note that the terms stored in the dictionary undergo `charset_table` transformation, meaning that for example, REGEX may not be able to match uppercase characters if all characters are lowercased according to the `charset_table` (which happens by default). To successfully match a term using a REGEX expression, the pattern must correspond to the entire token. To achieve partial matching, place `.*` at the beginning and/or end of your pattern.
 
 ```sql
 REGEX(/.{3}t/)

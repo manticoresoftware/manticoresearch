@@ -522,10 +522,10 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		CSphColumnInfo tCol ( sName );
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
-			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
+		{
+			const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
+			if ( !strcasecmp ( tCol.m_sName.cstr(), tAttr.m_sName.cstr() ) )
 			{
-				const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
-
 				tCol.m_eAttrType = tAttr.m_eAttrType;
 				assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
 
@@ -536,6 +536,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 				dFound[j] = true;
 				break;
 			}
+			if ( !strcasecmp ( sphGetDocidName(), tAttr.m_sName.cstr() ) )
+				LOC_ERROR ( "can not redefine auto-defined '%s' attribute", tAttr.m_sName.cstr() );
+		}
 
 		for ( auto & tJoined : m_tParams.m_dJoinedFields )
 			if ( tJoined.m_sName==sName )

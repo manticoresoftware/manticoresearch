@@ -133,56 +133,44 @@ static void AddTail ( Str_t tLine )
 	memcpy ( pDst, tLine.first, tLine.second );
 }
 
-static bool HasLineEnd ( Str_t tBuf, Str_t tLine )
-{
-	const char * sEnd = tBuf.first + tBuf.second;
-	return ( ( tLine.first + tLine.second )<sEnd );
+static bool HasLineEnd(Str_t tBuf, Str_t tLine) {
+    if (tLine.second == 0) {
+        // Empty line, no content to check for line ending
+        return false;
+    }
+
+    // Get the last character of the line
+    const char lastChar = *(tLine.first + tLine.second - 1);
+    // Check if the last character is a line-ending character
+    return lastChar == '\n' || lastChar == '\r';
 }
 
-static void LogPipe ( Str_t tSrc )
-{
-	CSphVector<Str_t> dLines;
-	sphSplitApply ( tSrc.first, tSrc.second, "\n\r", [&dLines] ( const char * pLine, int iLen ) { dLines.Add ( Str_t { pLine, iLen } ); } );
+static void LogPipe(Str_t tSrc) {
+    CSphVector<Str_t> dLines;
+    sphSplitApply(tSrc.first, tSrc.second, "\n\r", [&dLines](const char* pLine, int iLen) {
+        dLines.Add(Str_t{pLine, iLen});
+    });
 
-	if ( !dLines.GetLength() )
-		return;
+    if (!dLines.GetLength()) {
+        return;
+    }
 
-	// whole pipe buffer without line end - collect into line buffer
-	Str_t tLine0 = dLines[0];
-	if ( !HasLineEnd ( tSrc, tLine0 ) )
-	{
-		AddTail ( tLine0 );
-		return;
-	}
+    // Process each line and log it immediately
+    for (int i = 0; i < dLines.GetLength(); ++i) {
+        Str_t& tLine = dLines[i];
+        bool hasLineEnd = HasLineEnd(tSrc, tLine);
 
-	// join pipe buffer with line buffer collected so far
-	if ( g_dLogBuf.GetLength() )
-	{
-		sphInfo ( "[BUDDY] %.*s%.*s", g_dLogBuf.GetLength(), g_dLogBuf.Begin(), tLine0.second, tLine0.first );
-		g_dLogBuf.Resize ( 0 );
-	} else
-	{
-		sphInfo ( "[BUDDY] %.*s", tLine0.second, tLine0.first );
-	}
+        // If this line does not have a line end, it may be part of the next chunk
+        if (!hasLineEnd && i == dLines.GetLength() - 1) {
+            AddTail(tLine); // Save incomplete line for next chunk processing
+        } else {
+            // Log the line immediately
+            sphInfo("[BUDDY] %.*s", tLine.second, tLine.first);
+        }
+    }
 
-	if ( dLines.GetLength()==1 )
-		return;
-
-	for ( int i=1; i<dLines.GetLength()-1; i++ )
-	{
-		Str_t tLine = dLines[i];
-		sphInfo ( "[BUDDY] %.*s", tLine.second, tLine.first );
-	}
-
-	Str_t tLineLast = dLines.Last();
-	// last line could be without line end - collect into line buffer
-	if ( HasLineEnd ( tSrc, tLineLast ) )
-	{
-		sphInfo ( "[BUDDY] %.*s", tLineLast.second, tLineLast.first );
-	} else
-	{
-		AddTail ( tLineLast );
-	}
+    // Clear the log buffer, since we are logging each line immediately
+    g_dLogBuf.Resize(0);
 }
 
 static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size_t iSize )
@@ -327,7 +315,7 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 		g_pIOS->stop();
 
 	g_pPipe.reset();
-	g_pIOS.reset(); 
+	g_pIOS.reset();
 
 	g_pIOS.reset ( new boost::asio::io_service );
 	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
@@ -361,7 +349,7 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 {
 	char sAddrBuf [ SPH_ADDRESS_SIZE ];
 	sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
-	
+
 	CSphString sURI;
 	sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
 
@@ -414,7 +402,7 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 		g_sListener4Buddy.cstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
 		iThreads );
-		
+
 
 	CSphString sErorr;
 	BuddyState_e eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );
@@ -559,7 +547,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint with User-Agent:Manticore Buddy" );
 			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
 		}
-		
+
 		assert ( dResult.GetLength()>0 );
 		return tRes.m_bOk;
 	}

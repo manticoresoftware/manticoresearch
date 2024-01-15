@@ -4,12 +4,12 @@ mkdir -p /var/{run,lib,log}/manticore-5/{a,b,c,d,e}
 ––– input –––
 searchd -c test/clt-tests/sharding/base/config/searchd-5.conf
 ––– output –––
-Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
+Manticore %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{8}/!# dev (columnar %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!#) (secondary %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!#) (knn %{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!#)
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 [#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
-starting daemon version '%{SEMVER} #!/[a-z0-9]{7,9}@[0-9]{6}/!# dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})' ...
+starting daemon version '%{SEMVER} #!/[A-Za-z0-9]{7,9}@[0-9]{8}/!# dev (columnar %{SEMVER} #!/[A-Za-z0-9]{7,9}@[0-9]{6}/!#) (secondary %{SEMVER} #!/[A-Za-z0-9]{7,9}@[0-9]{6}/!#) (knn %{SEMVER} #!/[A-Za-z0-9]{7,9}@[0-9]{6}/!#)' ...
 listening on all interfaces for mysql, port=%{NUMBER}
 listening on all interfaces for sphinx and http(s), port=%{NUMBER}
 listening on all interfaces for sphinx and http(s), port=%{NUMBER}

@@ -1445,6 +1445,7 @@ namespace session
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+int GetDaemonLogBufSize ();
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );

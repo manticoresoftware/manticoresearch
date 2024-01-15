@@ -139,6 +139,30 @@ static bool HasLineEnd ( Str_t tBuf, Str_t tLine )
 	return ( ( tLine.first + tLine.second )<sEnd );
 }
 
+static void DaemonLogBuddyLine ( Str_t tLine )
+{
+	// if some message already at the buffer - lets copy the tail there and print the whole message from the buffer - not from the message
+	if ( g_dLogBuf.GetLength() )
+	{
+		AddTail ( tLine );
+		tLine = g_dLogBuf;
+	}
+
+	const int LOG_LINE_HEADER = 60; // daemon adds timestamp, tid then our buddy header
+	const int iBufMax = GetDaemonLogBufSize() - LOG_LINE_HEADER;
+
+	while ( tLine.second>0 )
+	{
+		int iLen = Min ( iBufMax, tLine.second );
+		sphInfo ( "[BUDDY] %.*s", iLen, tLine.first );
+		tLine.first += iLen;
+		tLine.second -= iLen;
+	}
+
+	if ( g_dLogBuf.GetLength() )
+		g_dLogBuf.Resize ( 0 );
+}
+
 static void LogPipe ( Str_t tSrc )
 {
 	CSphVector<Str_t> dLines;
@@ -155,30 +179,18 @@ static void LogPipe ( Str_t tSrc )
 		return;
 	}
 
-	// join pipe buffer with line buffer collected so far
-	if ( g_dLogBuf.GetLength() )
-	{
-		sphInfo ( "[BUDDY] %.*s%.*s", g_dLogBuf.GetLength(), g_dLogBuf.Begin(), tLine0.second, tLine0.first );
-		g_dLogBuf.Resize ( 0 );
-	} else
-	{
-		sphInfo ( "[BUDDY] %.*s", tLine0.second, tLine0.first );
-	}
-
+	DaemonLogBuddyLine ( tLine0 );
 	if ( dLines.GetLength()==1 )
 		return;
 
 	for ( int i=1; i<dLines.GetLength()-1; i++ )
-	{
-		Str_t tLine = dLines[i];
-		sphInfo ( "[BUDDY] %.*s", tLine.second, tLine.first );
-	}
+		DaemonLogBuddyLine ( dLines[i] );
 
 	Str_t tLineLast = dLines.Last();
 	// last line could be without line end - collect into line buffer
 	if ( HasLineEnd ( tSrc, tLineLast ) )
 	{
-		sphInfo ( "[BUDDY] %.*s", tLineLast.second, tLineLast.first );
+		DaemonLogBuddyLine ( tLineLast );
 	} else
 	{
 		AddTail ( tLineLast );

@@ -385,6 +385,12 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 	}
 }
 
+const int LOG_BUF_SIZE = 1024;
+int GetDaemonLogBufSize ()
+{
+	return LOG_BUF_SIZE;
+}
+
 /// log entry (with log levels, dupe catching, etc)
 /// call with NULL format for dupe flushing
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
@@ -425,7 +431,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
 	if ( eLevel==SPH_LOG_RPL_DEBUG ) sBanner = "RPL: ";
 
-	char sBuf [ 1024 ];
+	char sBuf [ LOG_BUF_SIZE ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%d] ", sTimeBuf, GetOsThreadId() );
 
 	char * sTtyBuf = sBuf + strlen(sBuf);

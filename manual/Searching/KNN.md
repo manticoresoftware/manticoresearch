@@ -210,7 +210,7 @@ POST /search
 
 ### Search KNN similar docs
 
-The ManticoreSearch algorithm excels in identifying analogous KNN documents already existing within your index.
+The ManticoreSearch algorithm excels in identifying analogous KNN documents already existing within your table.
 
 
 - SQL: `select ... from <table name> where knn ( <field>, <k>, <document id> )`

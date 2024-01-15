@@ -66,7 +66,7 @@ Manticore Search binaries may dynamically load and utilize the library at runtim
 
 Copyright:
 ```
-Copyright (c) 2020-2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 ```
 
@@ -80,7 +80,7 @@ Copyright:
 ```
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc
-Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 
 This program is free software; you can redistribute it and/or modify
@@ -212,7 +212,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 =============================================================================
 Copyright 2015 Sphinx Technologies, Inc.
-Copyright 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Distributed under the OSI-approved BSD License (the "License");
 see accompanying file Copyright.txt for details.

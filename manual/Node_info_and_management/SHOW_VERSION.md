@@ -5,10 +5,11 @@
 SHOW VERSION
 ```
 
-`SHOW VERSION` command provides details about ManticoreSearch and its associated libraries.
+`SHOW VERSION` provides detailed version information of various components of the Manticore Search instance. This command is particularly useful for administrators and developers who need to verify the version of Manticore Search they are running, along with the versions of its associated components.
 
-- `Component`: Library name
-- `Version`: Component version
+The output table includes two columns:
+- `Component`: This column names the specific component of Manticore Search.
+- `Version`: This column displays the version information for the respective component.
 
 <!-- request SQL -->
 ```sql

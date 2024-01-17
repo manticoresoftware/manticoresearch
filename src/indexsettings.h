@@ -464,4 +464,6 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDic
 void SetDefaultAttrEngine ( AttrEngine_e eEngine );
 AttrEngine_e GetDefaultAttrEngine();
 
+bool ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty );
+
 #endif // _indexsettings_

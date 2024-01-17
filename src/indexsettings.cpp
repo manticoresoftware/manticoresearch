@@ -1803,8 +1803,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		dWarnings.Add ( "no morphology, index_exact_words=1 has no effect, ignoring" );
 	}
 
-	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
-		( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen || !pDict->GetSettings().m_sMorphFields.IsEmpty() ) && !tSettings.m_bIndexExactWords )
+	if ( !tSettings.m_bIndexExactWords && ForceExactWords ( pDict->GetSettings().m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 	{
 		tSettings.m_bIndexExactWords = true;
 		pIndex->Setup ( tSettings );
@@ -1815,6 +1814,10 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	return true;
 }
 
+bool ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty )
+{
+	return ( bWordDict && bHasMorphology && ( iMinPrefixLen || iMinInfixLen || !bMorphFieldsEmpty ) );
+}
 
 static RtTypedAttr_t g_dTypeNames[] =
 {

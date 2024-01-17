@@ -229,6 +229,7 @@ struct ExplainQueryArgs_t
 	int m_iExpansionLimit = 0;
 	bool m_bExpandPrefix = false;
 	cRefCountedRefPtrGeneric_t m_pIndexData;
+	const CSphBitvec * m_pMorphFields { nullptr };
 };
 
 Bson_t Explain ( ExplainQueryArgs_t & tArgs );

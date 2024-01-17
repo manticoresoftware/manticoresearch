@@ -194,7 +194,7 @@ int BitVec_T<T, STATICBITS>::BitCount() const noexcept
 }
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::Scan ( int iStart )
+int BitVec_T<T, STATICBITS>::Scan ( int iStart ) const
 {
 	assert ( iStart < m_iElements );
 
@@ -216,7 +216,7 @@ int BitVec_T<T, STATICBITS>::Scan ( int iStart )
 
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::ScanBit ( int iIndex, int iStart )
+int BitVec_T<T, STATICBITS>::ScanBit ( int iIndex, int iStart ) const
 {
 	T uData = m_pData[iIndex];
 	for ( int i = iStart; i < SIZEBITS; i++ )
@@ -230,4 +230,11 @@ template<typename T, int STATICBITS>
 int BitVec_T<T, STATICBITS>::CalcStorage() const noexcept
 {
 	return ( m_iElements + SIZEBITS - 1 ) / SIZEBITS;
+}
+
+template<typename T, int STATICBITS>
+void BitVec_T<T, STATICBITS>::Negate()
+{
+	for ( int i = 0; i < CalcStorage(); i++ )
+		m_pData[i] = ~m_pData[i];
 }

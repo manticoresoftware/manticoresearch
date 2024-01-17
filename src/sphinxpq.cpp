@@ -1823,7 +1823,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	std::unique_ptr<QueryParser_i> tParser = g_pCreateQueryParser ( !tArgs.m_bQL );
 
 	// right tokenizer created at upper level
-	if ( !tParser->ParseQuery ( *tParsed, sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings ) )
+	if ( !tParser->ParseQuery ( *tParsed, sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 	{
 		sError = tParsed->m_sParseError;
 		return nullptr;
@@ -3371,6 +3371,7 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( bWordDict && IsStarDict ( bWordDict ) );
+	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	return Explain ( tArgs );
 }

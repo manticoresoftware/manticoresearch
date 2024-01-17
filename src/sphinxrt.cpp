@@ -1321,7 +1321,6 @@ private:
 	CSphFixedVector<int64_t>	m_dFieldLens { SPH_MAX_FIELDS };	///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam { SPH_MAX_FIELDS };	///< field lengths summed over current RAM chunk
 	CSphFixedVector<int64_t>	m_dFieldLensDisk { SPH_MAX_FIELDS };	///< field lengths summed over all disk chunks
-	CSphBitvec					m_tMorphFields;
 	CSphVector<SphWordID_t>		m_dHitlessWords;
 
 	std::unique_ptr<DocstoreFields_i> m_pDocstoreFields;	// rt index doesn't have its own docstore, but it must keep all fields to get their ids for GetDoc
@@ -5079,10 +5078,6 @@ void RtIndex_c::PostSetup()
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
 	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 
-	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
-	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
-		sphWarning ( "table '%s': %s", GetName(), m_sLastError.cstr() );
-
 	// hitless
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
 	if ( GetIndexFilenameBuilder() )
@@ -7718,7 +7713,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( !bFullscan )
 	{
 		assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
-		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
+		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			tMeta.m_sError = tParsed.m_sParseError;
 			iStackNeed = 0;
@@ -10339,6 +10334,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_bKeywordDict ) );
+	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	auto tGuard = RtGuard();
 	tArgs.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;

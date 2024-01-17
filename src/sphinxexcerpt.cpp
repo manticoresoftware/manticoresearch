@@ -1424,7 +1424,7 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 
 	// OPTIMIZE? double lightweight clone here? but then again it's lightweight
 	if ( !m_pState->m_pQueryParser->ParseQuery ( *m_pState->m_pExtQuery, (const char*)szModifiedQuery, nullptr,
-			m_pQueryTokenizer, m_pState->m_pTokenizerJson, &m_pState->m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings ) )
+			m_pQueryTokenizer, m_pState->m_pTokenizerJson, &m_pState->m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings, &m_pState->m_pIndex->GetMorphFields() ) )
 	{
 		sError = m_pState->m_pExtQuery->m_sParseError;
 		return false;

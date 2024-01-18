@@ -381,7 +381,7 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 
 #ifdef _WIN32
     // Use the constant host for Windows
-    sURI.SetSprintf ("http://%s:%d", "host.docker.internal", tDesc.m_iPort);
+    sURI.SetSprintf ("http://host.docker.internal:%d", tDesc.m_iPort);
 #else
     // Original code for other systems
     char sAddrBuf [ SPH_ADDRESS_SIZE ];

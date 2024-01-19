@@ -4318,7 +4318,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 
 	{
 		CSphString sWarning;
-		tDictSettings.Load ( rdMeta, tEmbeddedFiles, sWarning );
+		tDictSettings.Load ( rdMeta, tEmbeddedFiles, pFilenameBuilder, sWarning );
 		if ( !sWarning.IsEmpty() )
 			dWarnings.Add(sWarning);
 	}
@@ -4455,7 +4455,7 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 
 	{
 		CSphString sWarning;
-		tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+		tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, sWarning );
 		if ( !sWarning.IsEmpty() )
 			dWarnings.Add(sWarning);
 	}
@@ -9252,7 +9252,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSp
 		return {};
 	}
 
-	tSettings.m_tDict.Load ( tReader, tEmbeddedFiles, sError );
+	tSettings.m_tDict.Load ( tReader, tEmbeddedFiles, pFilenameBuilder.get(), sError );
 	tSettings.m_tFieldFilter.Load(tReader);
 
 	Binlog::CheckTnxResult_t tRes = fnCanContinue();

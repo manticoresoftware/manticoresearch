@@ -8919,7 +8919,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
-	tDictSettings.Load ( rdInfo, tEmbeddedFiles, sWarning );
+	tDictSettings.Load ( rdInfo, tEmbeddedFiles, pFilenameBuilder, sWarning );
 
 	if ( bStripPath )
 	{
@@ -9042,7 +9042,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
-	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, sWarning );
 
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );

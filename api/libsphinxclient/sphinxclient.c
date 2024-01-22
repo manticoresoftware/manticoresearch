@@ -1,13 +1,13 @@
 //
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License. You should
-// have received a copy of the LGPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org/
+// it under the terms of the GNU Library General Public License version 3 or later.
+// You should have received a copy of the LGPL license along with this program;
+// if you did not, you can find it at http://www.gnu.org/
 //
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1526,7 +1526,7 @@ static int net_create_inet_sock ( sphinx_client * client )
 	struct hostent * hp;
 	struct sockaddr_in sa;
 	int sock, res, err;
-	
+
 #if defined(SO_NOSIGPIPE)
 	int optval;
 #endif

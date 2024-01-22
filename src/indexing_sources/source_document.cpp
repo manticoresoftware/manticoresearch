@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -400,11 +400,23 @@ bool AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
 
 bool CSphSource::AddAutoAttrs ( CSphString & sError, StrVec_t * pDefaults )
 {
+	int iSchemaId = m_tSchema.GetAttrIndex ( sphGetDocidName() );
+
 	// id is the first attr
-	if ( m_tSchema.GetAttr ( sphGetDocidName() ) )
+	if ( iSchemaId!=-1 )
 	{
-		assert ( m_tSchema.GetAttrIndex ( sphGetDocidName() )==0 );
-		assert ( m_tSchema.GetAttr ( sphGetDocidName() )->m_eAttrType==SPH_ATTR_BIGINT );
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( iSchemaId );
+		if ( iSchemaId!=0 )
+		{
+			sError.SetSprintf ( "can not define auto-defined '%s' attribute", tCol.m_sName.cstr() );
+			return false;
+		}
+		if  ( tCol.m_eAttrType!=SPH_ATTR_BIGINT )
+		{
+			sError.SetSprintf ( "can not define auto-defined '%s' attribute with the wrong type '%s', should be '%s'", tCol.m_sName.cstr(), AttrType2Str ( tCol.m_eAttrType ), AttrType2Str ( SPH_ATTR_BIGINT ) );
+			return false;
+		}
+
 	} else
 	{
 		CSphColumnInfo tCol ( sphGetDocidName() );

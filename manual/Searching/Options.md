@@ -177,7 +177,7 @@ IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfi
 Named integer list. Per-table user weights for ranking.
 
 ### local_df
-`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table.
+`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table. Enabled dy default for disk chunks of the RT table.
 
 ### low_priority
 `0` or `1` (`0` by default). Setting `low_priority=1` executes the query with a lower priority in terms of Linux CPU scheduling. You may also consider using the `threads=1` option instead, or combine it with `low_priority=1`, as it could be more effective in certain scenarios.

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -161,7 +161,7 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 void ClusterOptions_t::Parse ( const CSphString & sOptions )
 {
 	if ( !sOptions.IsEmpty() )
-		sph::ParseKeyValues ( sOptions.cstr(), [this] ( CSphString&& sIdent, const CSphString& sValue ) {	m_hOptions.Add ( std::move(sIdent), sValue ); }, ";" );
+		sph::ParseKeyValues ( sOptions.cstr(), [this] ( CSphString&& sIdent, const CSphString& sValue ) {	m_hOptions.Add ( sValue, std::move(sIdent) ); }, ";" );
 }
 
 // get string of cluster options with semicolon delimiter
@@ -200,7 +200,7 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 	if ( tOptions.IsString() ) // old config - all options in one line, need to be parsed
 		m_tOptions.Parse ( String ( tOptions ) );
 	else
-		tOptions.ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) { m_tOptions.m_hOptions.Add ( sName, String ( tNode ) ); } );
+		tOptions.ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) { m_tOptions.m_hOptions.Add ( String ( tNode ), sName ); } );
 
 	int iItem = 0;
 	Bson_c ( tBson.ChildByName ( "indexes" ) ).ForEach ( [this,&iItem,&sWarning] ( const NodeHandle_t& tNode ) {

@@ -65,7 +65,7 @@ PUT /products/_doc/2
   "price": 20
 }
 
-POST /products/_doc/
+POST /products/_doc/3
 {
   "title": "product three",
   "price": 10
@@ -86,11 +86,11 @@ POST /products/_doc/
 },
 "_type":"_doc",
 "_version":1,
-"result":"created"
+"result":"updated"
 }
 
 {
-"_id":2235747273424240642,
+"_id":3,
 "_index":"products",
 "_primary_term":1,
 "_seq_no":0,
@@ -101,7 +101,7 @@ POST /products/_doc/
 },
 "_type":"_doc",
 "_version":1,
-"result":"created"
+"result":"updated"
 }
 ```
 
@@ -191,7 +191,7 @@ class SuccessResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "document one");
 doc.Add("price", 10);
 InsertDocumentRequest docRequest = new InsertDocumentRequest(index: "products", id: 1, doc: doc);

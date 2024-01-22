@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -910,6 +910,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "access_dict",			0, nullptr },
 	{ "stored_fields",			0, nullptr },
 	{ "stored_only_fields",		0, nullptr },
 	{ "docstore_block_size",	0, nullptr },
@@ -1034,6 +1035,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "access_dict",			0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
 	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },

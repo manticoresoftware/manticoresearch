@@ -146,8 +146,9 @@
 * [⪢ Node info and management]
     * [• Node status](Node_info_and_management/Node_status.md)
     * [• SHOW META](Node_info_and_management/SHOW_META.md)
-    * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md)
+    * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 
     * [• SHOW QUERIES](Node_info_and_management/SHOW_QUERIES.md)
+    * [• SHOW VERSION](Node_info_and_management/SHOW_VERSION.md)
     * [• KILL](Node_info_and_management/KILL.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
     * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)

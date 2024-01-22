@@ -488,7 +488,7 @@ jobs:
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          test_prefix: test/clt-tests/sharding/replication/
+          test_prefix: test/clt-tests/replication/
 
   build_aarch64:
     name: Linux aarch64 build

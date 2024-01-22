@@ -13,4 +13,4 @@
 #include "wsrep_cxx.h"
 
 // returns main receiver which will take and apply replication commands from remote nodes
-Wsrep::Receiver_i* MakeReceiverCtx ( CSphString sName, Wsrep::Provider_c * pProvider, std::function<void()> fnOnClean );
+Wsrep::Receiver_i* MakeReceiverCtx ( CSphString sName, Wsrep::Provider_i * pProvider, std::function<void()> fnOnClean );

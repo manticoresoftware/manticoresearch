@@ -76,7 +76,7 @@ struct ReplicationCluster_t final : public ClusterDesc_t, Wsrep::Cluster_i
 {
 public:
 	// replicator
-	Wsrep::Provider_c* m_pProvider = nullptr;
+	Wsrep::Provider_i* m_pProvider = nullptr;
 
 	// serializer for replicator - guards for only one replication Op a time
 	Threads::Coro::Mutex_c m_tReplicationMutex;
@@ -578,7 +578,7 @@ DEFINE_RENDER ( RPLRep_t )
 
 // repl version
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_c& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
+static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
 {
 	TRACE_CONN ( "conn", "Replicate" );
 
@@ -623,7 +623,7 @@ static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BY
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_c & tWriteSet, CommitMonitor_c & tMonitor )
+static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c & tMonitor )
 {
 	bool bOk = tWriteSet.ToExecuteStart ( dKeys, tQueries );
 	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, tWriteSet.LastSeqno() );
@@ -1044,15 +1044,15 @@ static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSph
 	}
 	END_CONN ( "conn" );
 
-	auto tWriteSet = pCluster->m_pProvider->MakeWriteSet();
+	auto pWriteSet = pCluster->m_pProvider->MakeWriteSet();
 
 	BEGIN_CONN ( "conn", "HandleCmdReplicate.cluster_lock" );
 	Threads::ScopedCoroMutex_t tClusterLock { pCluster->m_tReplicationMutex };
 	END_CONN ( "conn" );
 
 	if ( !bTOI )
-		return Replicate ( dBufKeys, dBufQueries, tWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
-	return ReplicateTOI ( dBufKeys, dBufQueries, tWriteSet, tMonitor );
+		return Replicate ( dBufKeys, dBufQueries, *pWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
+	return ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, tMonitor );
 }
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc )

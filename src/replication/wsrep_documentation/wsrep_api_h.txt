@@ -1,1 +1,1 @@
-https://github.com/percona/wsrep-API/blob/2c211e1aad315e3118969beada4d4767118be88f/wsrep_api.h#L66
+wsrep v31: https://raw.githubusercontent.com/percona/wsrep-API/2c211e1aad315e3118969beada4d4767118be88f/wsrep_api.h

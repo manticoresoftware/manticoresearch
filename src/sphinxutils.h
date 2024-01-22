@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -543,15 +543,13 @@ bool HasMvaUpdated ( const CSphString & sIndexPath );
 //	4		startup time of server in seconds
 //	3		increment base part
 int64_t	UidShort();
+int64_t GetIndexUid();
 
 // server - is server id used as iServer & 0x7f
 // started - is a server start time \ Unix timestamp in seconds
 void		UidShortSetup ( int iServer, int iStarted );
 
 BYTE Pearson8 ( const BYTE * pBuf, int iLen );
-
-int64_t GenerateIndexId();
-void SetIndexId ( int64_t iId );
 
 #if _WIN32
 void		CheckWinInstall();

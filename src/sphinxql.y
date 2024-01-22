@@ -953,17 +953,18 @@ const_float_unsigned:
 	| TOK_DOT_NUMBER		{ $$.m_fValue = pParser->ToFloat ($1); }
 	;
 
-const_list_entry:
-	const_int
-	| const_float
-	;
-
 const_list:
-	const_list_entry
+	const_int
 		{
 			assert ( !$$.m_pValues );
 			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
 			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), false } ); 
+		}
+	| const_float
+		{
+			assert ( !$$.m_pValues );
+			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
+			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), true } ); 
 		}
 	| const_list ',' const_int
 		{

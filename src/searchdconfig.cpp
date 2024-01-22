@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -161,7 +161,7 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 void ClusterOptions_t::Parse ( const CSphString & sOptions )
 {
 	if ( !sOptions.IsEmpty() )
-		sph::ParseKeyValues ( sOptions.cstr(), [this] ( CSphString&& sIdent, const CSphString& sValue ) {	m_hOptions.Add ( std::move(sIdent), sValue ); }, ";" );
+		sph::ParseKeyValues ( sOptions.cstr(), [this] ( CSphString&& sIdent, const CSphString& sValue ) {	m_hOptions.Add ( sValue, std::move(sIdent) ); }, ";" );
 }
 
 // get string of cluster options with semicolon delimiter
@@ -171,6 +171,11 @@ CSphString ClusterOptions_t::AsStr () const
 	for ( const auto& tOpt : m_hOptions )
 		tBuf.Sprintf ( "%s=%s", tOpt.first.cstr(), tOpt.second.cstr() );
 	return (CSphString)tBuf;
+}
+
+bool ClusterOptions_t::IsEmpty() const noexcept
+{
+	return m_hOptions.IsEmpty();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -183,23 +188,20 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 
 	m_sName = sName;
 
-	m_tOptions.m_hOptions.Reset();
-	Bson_c ( tBson.ChildByName ( "options" ) ).ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) {
-		m_tOptions.m_hOptions.Add ( sName, String ( tNode ) );
-	} );
-
 	m_dClusterNodes.Reset();
-	Bson_c ( tBson.ChildByName ( "nodes" ) ).ForEach ( [this] ( const NodeHandle_t& tNode ) {
-		m_dClusterNodes.Add ( String ( tNode ) );
-	} );
+	Bson_c tNodes { tBson.ChildByName ( "nodes" ) };
+	if ( tNodes.IsString() ) // old config - all nodes in one line, ','-separated
+		sphSplit ( m_dClusterNodes, String ( tNodes ).cstr(), "," );
+	else
+		tNodes.ForEach ( [this] ( const NodeHandle_t& tNode ) { m_dClusterNodes.Add ( String ( tNode ) ); } );
 
-	auto tPath = tBson.ChildByName ( "path" );
-	if ( tPath==nullnode )
-		return TlsMsg::Err ( "no path in config" );
+	m_tOptions.m_hOptions.Reset();
+	Bson_c tOptions { tBson.ChildByName ( "options" ) };
+	if ( tOptions.IsString() ) // old config - all options in one line, need to be parsed
+		m_tOptions.Parse ( String ( tOptions ) );
+	else
+		tOptions.ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) { m_tOptions.m_hOptions.Add ( String ( tNode ), sName ); } );
 
-	m_sPath = String ( tPath );
-
-	// set indexes prior replication init
 	int iItem = 0;
 	Bson_c ( tBson.ChildByName ( "indexes" ) ).ForEach ( [this,&iItem,&sWarning] ( const NodeHandle_t& tNode ) {
 		if ( IsString(tNode ) )
@@ -209,6 +211,7 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 		++iItem;
 	} );
 
+	m_sPath = String ( tBson.ChildByName ( "path" ) );
 	return true;
 }
 
@@ -228,18 +231,21 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 {
 	tOut.Named ( m_sName.cstr() );
 	auto _0 = tOut.ObjectW();
-	tOut.NamedString ( "path", m_sPath );
+	if ( !m_dClusterNodes.IsEmpty() )
 	{
 		tOut.Named ( "nodes" );
 		auto _1 = tOut.Array();
 		for_each ( m_dClusterNodes, [&tOut] ( const auto& sNode ) { tOut.String ( sNode ); } );
 	}
-	tOut.NamedVal ( "options", m_tOptions );
+	if ( !m_tOptions.IsEmpty() )
+		tOut.NamedVal ( "options", m_tOptions );
+	if ( !m_hIndexes.IsEmpty() )
 	{
 		tOut.Named ( "indexes" );
 		auto _1 = tOut.Array();
 		for_each ( m_hIndexes, [&tOut] ( const auto& tIndex ) { tOut.String ( tIndex.first ); } );
 	}
+	tOut.NamedStringNonEmpty ( "path", m_sPath );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -637,25 +643,7 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		IndexDesc_t & tIndex = dIndexes.Add();
 		tIndex.m_sName = tIt.first;
 		tIndex.m_eType = IndexType_e::DISTR;
-		const auto& tIdx = *tIt.second;
-
-		tIndex.m_tDistr.m_dLocals				= tIdx.m_dLocal;
-		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIdx.GetAgentConnectTimeoutMs ( true );
-		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIdx.GetAgentQueryTimeoutMs ( true );
-		tIndex.m_tDistr.m_iAgentRetryCount		= tIdx.m_iAgentRetryCount;
-		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIdx.m_bDivideRemoteRanges;
-		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIdx.m_eHaStrategy );
-
-		for ( const auto& i : tIdx.m_dAgents )
-		{
-			if ( !i || !i->GetLength() )
-				continue;
-
-			AgentConfigDesc_t & tAgent = tIndex.m_tDistr.m_dAgents.Add();
-			tAgent.m_sConfig		= i->GetConfigStr();
-			tAgent.m_bBlackhole		= (*i)[0].m_bBlackhole;
-			tAgent.m_bPersistent	= (*i)[0].m_bPersistent;
-		}
+		tIndex.m_tDistr = GetDistributedDesc ( *tIt.second );
 	}
 }
 
@@ -1381,3 +1369,29 @@ RunIdx_e IndexIsServed ( const CSphString& sName )
 		return DISTR;
 	return NOTSERVED;
 }
+
+IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
+{
+	IndexDescDistr_t tIndex;
+
+	tIndex.m_dLocals				= tDist.m_dLocal;
+	tIndex.m_iAgentConnectTimeout	= tDist.GetAgentConnectTimeoutMs ( true );
+	tIndex.m_iAgentQueryTimeout		= tDist.GetAgentQueryTimeoutMs ( true );
+	tIndex.m_iAgentRetryCount		= tDist.m_iAgentRetryCount;
+	tIndex.m_bDivideRemoteRanges	= tDist.m_bDivideRemoteRanges;
+	tIndex.m_sHaStrategy			= HAStrategyToStr ( tDist.m_eHaStrategy );
+
+	for ( const auto & tAgentIt : tDist.m_dAgents )
+	{
+		if ( !tAgentIt || !tAgentIt->GetLength() )
+			continue;
+
+		AgentConfigDesc_t & tAgent = tIndex.m_dAgents.Add();
+		tAgent.m_sConfig		= tAgentIt->GetConfigStr();
+		tAgent.m_bBlackhole		= (*tAgentIt)[0].m_bBlackhole;
+		tAgent.m_bPersistent	= (*tAgentIt)[0].m_bPersistent;
+	}
+
+	return tIndex;
+}
+

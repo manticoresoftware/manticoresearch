@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -189,14 +189,22 @@ static int64_t			g_iDocstoreCache = 0;
 static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
-int				g_iAgentConnectTimeoutMs = 1000;
-int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
-const int	MAX_RETRY_COUNT		= 8;
-const int	MAX_RETRY_DELAY		= 1000;
+const int DAEMON_DEFAULT_CONNECT_TIMEOUT	= 1000;
+const int DAEMON_DEFAULT_QUERY_TIMEOUT		= 3000;
+const int DAEMON_MAX_RETRY_COUNT			= 8;
+const int DAEMON_MAX_RETRY_DELAY			= 1000;
 
-int						g_iAgentRetryCount = 0;
-int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+int g_iAgentConnectTimeoutMs		= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+int g_iAgentQueryTimeoutMs			= DAEMON_DEFAULT_QUERY_TIMEOUT;	// global (default). May be override by index-scope values, if one specified
+int g_iAgentRetryCount				= 0;
+int g_iAgentRetryDelayMs			= DAEMON_MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+
+static int g_iReplConnectTimeoutMs	= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+static int g_iReplQueryTimeoutMs	= DAEMON_DEFAULT_QUERY_TIMEOUT;
+static int g_iReplRetryCount		= 3;
+static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
+
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 CSphString				g_sDbName = "Manticore";
@@ -377,6 +385,12 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 	}
 }
 
+const int LOG_BUF_SIZE = 1024;
+int GetDaemonLogBufSize ()
+{
+	return LOG_BUF_SIZE;
+}
+
 /// log entry (with log levels, dupe catching, etc)
 /// call with NULL format for dupe flushing
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
@@ -417,7 +431,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
 	if ( eLevel==SPH_LOG_RPL_DEBUG ) sBanner = "RPL: ";
 
-	char sBuf [ 1024 ];
+	char sBuf [ LOG_BUF_SIZE ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%d] ", sTimeBuf, GetOsThreadId() );
 
 	char * sTtyBuf = sBuf + strlen(sBuf);
@@ -1620,6 +1634,21 @@ void DistributedIndex_t::SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs )
 	m_iAgentQueryTimeoutMs = iAgentQueryTimeoutMs;
 }
 
+DistributedIndex_t * DistributedIndex_t::Clone() const
+{
+
+	DistributedIndex_t * pDist ( new DistributedIndex_t );
+	pDist->m_dAgents = m_dAgents;
+	pDist->m_dLocal = m_dLocal;
+	pDist->m_iAgentRetryCount = m_iAgentRetryCount;
+	pDist->m_bDivideRemoteRanges = m_bDivideRemoteRanges;
+	pDist->m_eHaStrategy = m_eHaStrategy;
+	pDist->m_sCluster = m_sCluster;
+	pDist->m_iAgentConnectTimeoutMs = m_iAgentConnectTimeoutMs;
+	pDist->m_iAgentQueryTimeoutMs = m_iAgentQueryTimeoutMs;
+
+	return pDist;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
@@ -1678,7 +1707,8 @@ enum
 	QFLAG_FACET					= 1UL << 9,
 	QFLAG_FACET_HEAD			= 1UL << 10,
 	QFLAG_JSON_QUERY			= 1UL << 11,
-	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12
+	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
+	QFLAG_LOCAL_DF_SET			= 1UL << 13
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -1705,11 +1735,12 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
-	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
+	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF.value_or ( false );
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	uFlags |= QFLAG_FACET * q.m_bFacet;
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
+	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -2294,10 +2325,10 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCa
 	if ( tQuery.m_iCutoff<-1 )
 		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
-	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
 		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
 		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
@@ -2628,7 +2659,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
-		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
+		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )
+			tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
 		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
@@ -2995,8 +3027,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		tBuf.FinishBlock ();
 	}
 
-	if ( tQuery.m_bLocalDF!=g_tDefaultQuery.m_bLocalDF )
-		tBuf << "local_df=1";
+	if ( tQuery.m_bLocalDF.has_value() )
+		tBuf.Appendf ( "local_df=%d", tQuery.m_bLocalDF.value() ? 1 : 0 );
 
 	if ( tQuery.m_dIndexWeights.GetLength() )
 	{
@@ -4976,6 +5008,9 @@ void FrontendSchemaBuilder_c::RemapFacets()
 			return;
 	}
 
+	if ( m_tQuery.m_sGroupBy.IsEmpty() )
+		return;
+
 	for ( auto & tFrontend : m_dFrontend )
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
@@ -5264,7 +5299,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	tFrontendBuilder.RemapGroupBy();
-	tFrontendBuilder.RemapFacets();
+	// agent should provide raw attributes into master without any remapping
+	if ( bMaster )
+		tFrontendBuilder.RemapFacets();
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
@@ -5682,7 +5719,7 @@ void SearchHandler_c::RunQueries()
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	}
-	OnRunFinished();
+	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
 
 
@@ -6508,8 +6545,9 @@ void SearchHandler_c::SetupLocalDF ()
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
 		bOnlyFullScan &= tQuery.m_sQuery.IsEmpty();
-		bHasLocalDF |= tQuery.m_bLocalDF;
-		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF )
+		
+		bHasLocalDF |= tQuery.m_bLocalDF.value_or ( false );
+		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF.value_or ( false ) )
 			bOnlyNoneRanker &= ( tQuery.m_eRanker==SPH_RANK_NONE );
 	}
 	// bail out queries: full-scan, ranker=none, local_idf=0
@@ -6520,7 +6558,7 @@ void SearchHandler_c::SetupLocalDF ()
 	dQuery.Resize ( 0 );
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
-		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF || tQuery.m_eRanker==SPH_RANK_NONE )
+		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF.value_or ( false ) || tQuery.m_eRanker==SPH_RANK_NONE )
 			continue;
 
 		int iLen = tQuery.m_sQuery.Length();
@@ -7462,6 +7500,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+		tRes.m_iMatches = tRes.m_iCount;
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
@@ -7538,7 +7577,7 @@ bool sphCheckWeCanModify()
 	return !IsReadOnly();
 }
 
-bool sphCheckWeCanModify ( StmtErrorReporter_i& tOut )
+bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut )
 {
 	if ( sphCheckWeCanModify() )
 		return true;
@@ -7547,7 +7586,7 @@ bool sphCheckWeCanModify ( StmtErrorReporter_i& tOut )
 	return false;
 }
 
-bool sphCheckWeCanModify ( CSphString& sError )
+bool sphCheckWeCanModify ( CSphString & sError )
 {
 	if ( sphCheckWeCanModify() )
 		return true;
@@ -7556,12 +7595,12 @@ bool sphCheckWeCanModify ( CSphString& sError )
 	return false;
 }
 
-bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut )
+bool sphCheckWeCanModify ( RowBuffer_i & tOut )
 {
 	if ( sphCheckWeCanModify() )
 		return true;
 
-	tOut.Error ( szStmt, "connection is read-only" );
+	tOut.Error ( "connection is read-only" );
 	return false;
 }
 
@@ -7841,6 +7880,25 @@ public:
 		return 0;
 	}
 
+	static bool ConvertBool ( const SqlInsert_t & tVal, SphAttr_t & tAttr )
+	{
+		if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+			return false;
+
+		if ( tVal.m_sVal.EqN ( "true" ) )
+		{
+			tAttr = 1;
+			return true;
+		}
+		if ( tVal.m_sVal.EqN ( "false" ) )
+		{
+			tAttr = 0;
+			return true;
+		}
+
+		return false;
+	}
+
 	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
@@ -7849,9 +7907,13 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
-		case SPH_ATTR_BOOL:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
+			break;
+
+		case SPH_ATTR_BOOL:
+			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
+				tAttr = ToInt ( tVal );
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -9538,9 +9600,8 @@ void StmtErrorReporter_i::Error ( const char * sTemplate, ... )
 class StmtErrorReporter_c final : public StmtErrorReporter_i
 {
 public:
-	explicit StmtErrorReporter_c ( RowBuffer_i & tBuffer, const char* szStmt = nullptr )
+	explicit StmtErrorReporter_c ( RowBuffer_i & tBuffer )
 		: m_tRowBuffer ( tBuffer )
-		, m_szStmt ( szStmt )
 	{}
 
 	void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) final
@@ -9555,14 +9616,13 @@ public:
 
 	void ErrorEx ( MysqlErrors_e iErr, const char * sError ) final
 	{
-		m_tRowBuffer.Error ( m_szStmt, sError, iErr );
+		m_tRowBuffer.Error ( sError, iErr );
 	}
 
 	RowBuffer_i * GetBuffer() final { return &m_tRowBuffer; }
 
 private:
 	RowBuffer_i & m_tRowBuffer;
-	const char * m_szStmt;
 };
 
 
@@ -10494,7 +10554,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 	// index name, document | documents list, [named opts]
 	if ( tStmt.m_dInsertValues.GetLength()!=2 )
 	{
-		tOut.Error ( tStmt.m_sStmt, "PQ() expects exactly 2 arguments (table, document(s))" );
+		tOut.Error ( "PQ() expects exactly 2 arguments (table, document(s))" );
 		return;
 	}
 	auto &dStmtIndex = tStmt.m_dInsertValues[0];
@@ -10502,12 +10562,12 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 
 	if ( dStmtIndex.m_iType!=SqlInsert_t::QUOTED_STRING )
 	{
-		tOut.Error ( tStmt.m_sStmt, "PQ() argument 1 must be a string" );
+		tOut.Error ( "PQ() argument 1 must be a string" );
 		return;
 	}
 	if ( dStmtDocs.m_iType!=SqlInsert_t::QUOTED_STRING && dStmtDocs.m_iType!=SqlInsert_t::CONST_STRINGS )
 	{
-		tOut.Error ( tStmt.m_sStmt, "PQ() argument 2 must be a string or a string list" );
+		tOut.Error ( "PQ() argument 2 must be a string or a string list" );
 		return;
 	}
 
@@ -10578,7 +10638,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 
 	if ( !sError.IsEmpty() )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -10634,7 +10694,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 
 		if ( !tOpts.m_bSkipBadJson )
 		{
-			tOut.Error ( tStmt.m_sStmt, sBad.cstr ());
+			tOut.Error ( sBad.cstr ());
 			return;
 		}
 		tRes.m_sMessages.Warn ( sBad.cstr () );
@@ -10650,7 +10710,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 	if ( !tRes.m_sMessages.ErrEmpty () )
 	{
 		tRes.m_sMessages.MoveAllTo ( sError );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.Error ( sError.cstr () );
 		return;
 	}
 
@@ -10822,6 +10882,7 @@ private:
 
 	bool		CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
+	bool		CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
 };
 
@@ -10919,6 +10980,45 @@ bool AttributeConverter_c::CheckJson ( const CSphColumnInfo & tCol, const SqlIns
 }
 
 
+bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
+{
+	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+		return true;
+
+	if ( !tVal.m_pVals )
+	{
+		m_dMvas.Add(0);
+		return true;
+	}
+
+	auto & tAddVals = *tVal.m_pVals;
+	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	{
+		m_dMvas.Add ( tAddVals.GetLength() );
+		for ( const auto & i : tAddVals )
+			m_dMvas.Add ( sphF2DW ( i.m_fValue ) );
+
+		return true;
+	}
+
+	// collect data from scattered insvals
+	// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
+	bool bFloatInMVA = false;
+	for ( const auto & i : tAddVals )
+		bFloatInMVA |= i.m_bFloat;
+
+	if ( bFloatInMVA )
+		m_sWarning.SetSprintf ( "MVA attribute %d at row %d: inserting float value", iCol, iRow );
+
+	tAddVals.Uniq();
+	m_dMvas.Add ( tAddVals.GetLength() );
+	for ( const auto & i : tAddVals )
+		m_dMvas.Add ( i.m_iValue );
+
+	return true;
+}
+
+
 bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
 {
 	if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING
@@ -10983,40 +11083,6 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 	if ( !CheckInsertTypes ( tCol, tVal, iRow, iQuerySchemaIdx ) )
 		return false;
 
-	// MVA column? grab the values
-	switch ( tCol.m_eAttrType )
-	{
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_INT64SET:
-		{
-			// collect data from scattered insvals
-			// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
-			int iLen = 0;
-			if ( tVal.m_pVals )
-			{
-				tVal.m_pVals->Uniq();
-				iLen = tVal.m_pVals->GetLength();
-			}
-
-			m_dMvas.Add ( iLen );
-			for ( int j=0; j<iLen; j++ )
-				m_dMvas.Add ( (*tVal.m_pVals)[j].m_iValue );
-		}
-		break;
-
-	case SPH_ATTR_FLOAT_VECTOR:
-		{
-			int iLen = tVal.m_pVals ? tVal.m_pVals->GetLength() : 0;
-			m_dMvas.Add ( iLen );
-			for ( int j=0; j<iLen; j++ )
-				m_dMvas.Add ( sphF2DW ( (*tVal.m_pVals)[j].m_fValue ) );
-		}
-		break;
-
-	default:
-		break;
-	}
-
 	SphAttr_t tAttr;
 	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, tAttr, bDocId, sError ) )
 	{
@@ -11031,6 +11097,7 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 
 	if ( !CheckStrings ( tCol, tVal, iCol, iRow ) )	return false;
 	if ( !CheckJson ( tCol, tVal ) )				return false;
+	if ( !CheckMVA ( tCol, tVal, iCol, iRow ) )		return false;
 
 	return true;
 }
@@ -11378,22 +11445,22 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	// string data, string index, string query, [named opts]
 	if ( tStmt.m_dInsertValues.GetLength()!=3 )
 	{
-		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() expects exactly 3 arguments (data, table, query)" );
+		tOut.Error ( "SNIPPETS() expects exactly 3 arguments (data, table, query)" );
 		return;
 	}
 	if ( tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::QUOTED_STRING && tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::CONST_STRINGS )
 	{
-		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 1 must be a string or a string list" );
+		tOut.Error ( "SNIPPETS() argument 1 must be a string or a string list" );
 		return;
 	}
 	if ( tStmt.m_dInsertValues[1].m_iType!=SqlInsert_t::QUOTED_STRING )
 	{
-		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 2 must be a string" );
+		tOut.Error ( "SNIPPETS() argument 2 must be a string" );
 		return;
 	}
 	if ( tStmt.m_dInsertValues[2].m_iType!=SqlInsert_t::QUOTED_STRING )
 	{
-		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 3 must be a string" );
+		tOut.Error ( "SNIPPETS() argument 3 must be a string" );
 		return;
 	}
 
@@ -11460,13 +11527,13 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	}
 	if ( !sError.IsEmpty() )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( !sphCheckOptionsSPZ ( q, q.m_ePassageSPZ, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -11490,7 +11557,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -11498,7 +11565,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -11624,7 +11691,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 		|| tStmt.m_dInsertValues[1].m_iType!=SqlInsert_t::QUOTED_STRING
 		|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=SqlInsert_t::CONST_INT ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
+		tOut.Error ( "bad argument count or types in KEYWORDS() call" );
 		return;
 	}
 
@@ -11653,7 +11720,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 			if ( tStmt.m_dCallOptValues[i].m_sVal!="docs" && tStmt.m_dCallOptValues[i].m_sVal!="hits" )
 			{
 				sError.SetSprintf ( "unknown option %s mode '%s'", sOpt.cstr(), tStmt.m_dCallOptValues[i].m_sVal.cstr() );
-				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+				tOut.Error ( sError.cstr() );
 				return;
 			}
 			tSettings.m_bSortByDocs = ( tStmt.m_dCallOptValues[i].m_sVal=="docs" );
@@ -11663,7 +11730,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( sError.cstr() );
 			return;
 		}
 
@@ -11671,7 +11738,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 		if ( bOptInt && tStmt.m_dCallOptValues[i].m_iType!=SqlInsert_t::CONST_INT )
 		{
 			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			tOut.Error ( sError.cstr () );
 			return;
 		}
 	}
@@ -11682,7 +11749,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 
 	if ( !DoGetKeywords ( sIndex, sTerm, tSettings, dKeywords, sError, tFailureLog ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -11835,7 +11902,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 			|| tStmt.m_dInsertValues[1].m_iType!=SqlInsert_t::QUOTED_STRING
 			|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=SqlInsert_t::CONST_INT ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
+		tOut.Error ( "bad argument count or types in KEYWORDS() call" );
 		return;
 	}
 
@@ -11880,7 +11947,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			tOut.Error ( sError.cstr () );
 			return;
 		}
 
@@ -11888,7 +11955,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		if ( tStmt.m_dCallOptValues[i].m_iType!=iTokType )
 		{
 			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			tOut.Error ( sError.cstr () );
 			return;
 		}
 	}
@@ -11898,14 +11965,14 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		if ( !pServed )
 		{
 			sError.SetSprintf ( "no such table %s", tStmt.m_dInsertValues[1].m_sVal.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			tOut.Error ( sError.cstr () );
 			return;
 		}
 		RIdx_c pIdx { pServed };
 		if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
 		{
 			sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( sError.cstr() );
 			return;
 		}
 
@@ -12197,7 +12264,7 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		auto pDistr = GetDistr ( tStmt.m_sIndex );
 		if ( !pDistr )
 		{
-			tOut.ErrorAbsent ( tStmt.m_sStmt, "no such table '%s'", tStmt.m_sIndex.cstr () );
+			tOut.ErrorAbsent ( "no such table '%s'", tStmt.m_sIndex.cstr () );
 			return;
 		}
 		DescribeDistributedSchema ( dOut, pDistr );
@@ -12331,13 +12398,13 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
 
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	if ( !IsConfigless() )
 	{
 		sError = "CREATE TABLE requires data_dir to be set in the config file";
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -12347,7 +12414,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( !CheckCreateTable ( tStmt, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -12358,7 +12425,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( !bCreatedOk )
 	{
 		sError.SetSprintf ( "error adding table '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -12392,14 +12459,14 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	if ( !IsConfigless() )
 	{
 		sError = "CREATE TABLE requires data_dir to be set in the config file";
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( !CheckExistingTables ( tStmt, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -12409,7 +12476,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	{
 	case RunIdx_e::NOTSERVED:
 		sError.SetSprintf ( "table '%s': CREATE TABLE LIKE failed: no table '%s' found", tStmt.m_sIndex.cstr(), sLike.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	case RunIdx_e::LOCAL:
 	{
@@ -12417,7 +12484,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		assert ( pServed );
 		if ( !ServedDesc_t::IsMutable ( pServed ) )
 		{
-			tOut.ErrorAbsent ( tStmt.m_sStmt, "table '%s' is not real-time or percolate", sError.cstr() );
+			tOut.ErrorAbsent ( "table '%s' is not real-time or percolate", sError.cstr() );
 			return;
 		}
 		RIdx_c pIdx { pServed };
@@ -12435,13 +12502,13 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( dCreateTableStmts.GetLength()!=1 )
 	{
-		tOut.Error ( tStmt.m_sStmt, "CREATE TABLE LIKE failed" );
+		tOut.Error ( "CREATE TABLE LIKE failed" );
 		return;
 	}
 
@@ -12454,7 +12521,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	CSphString sError;
@@ -12462,14 +12529,14 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, 
 	if ( !IsConfigless() )
 	{
 		sError = "DROP TABLE requires data_dir to be set in the config file";
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError, &sWarning );
 	sphLogDebug ( "dropped table %s, ok %d, error %s", tStmt.m_sIndex.cstr(), (int)bDropped, sError.scstr() ); // FIXME!!! remove
 	if ( !bDropped )
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 	else
 		tOut.Ok ( 0, ( sWarning.IsEmpty() ? 0 : 1 ) );
 }
@@ -12481,13 +12548,13 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto pDist = GetDistr ( tStmt.m_sIndex );
 	if ( !pServed && !pDist )
 	{
-		tOut.ErrorAbsent ( tStmt.m_sStmt, "no such table '%s'", tStmt.m_sIndex.cstr () );
+		tOut.ErrorAbsent ( "no such table '%s'", tStmt.m_sIndex.cstr () );
 		return;
 	}
 
 	if ( pServed && !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.ErrorAbsent ( tStmt.m_sStmt, "table '%s' is not real-time or percolate", tStmt.m_sIndex.cstr () );
+		tOut.ErrorAbsent ( "table '%s' is not real-time or percolate", tStmt.m_sIndex.cstr () );
 		return;
 	}
 
@@ -13189,7 +13256,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 	if ( !sError.IsEmpty() )
 	{
 		// stmt is intentionally NULL, as we did all the reporting just above
-		dRows.Error ( NULL, sError.cstr() );
+		dRows.Error ( sError.cstr() );
 		return false;
 	}
 
@@ -13199,7 +13266,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 	if ( sphInterrupted() )
 	{
 		sphLogDebug ( "HandleClientMySQL: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-		dRows.Error ( NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+		dRows.Error ( "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 		return false;
 	}
 
@@ -13351,7 +13418,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	if ( !tRes.m_iSuccesses )
 	{
 		// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
-		dRows.Error ( nullptr, tRes.m_sError.cstr() );
+		dRows.Error ( tRes.m_sError.cstr() );
 		return;
 	}
 
@@ -13996,7 +14063,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		if ( sphInterrupted() )
 		{
 			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-			dRows.Error ( NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+			dRows.Error ( "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 			return;
 		}
 	}
@@ -14379,7 +14446,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			} else
 			{
 				// unknown variable, return error
-				tOut.ErrorEx ( tStmt.m_sStmt, "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
+				tOut.ErrorEx ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
 				return;
 			}
 		}
@@ -14387,7 +14454,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		if ( sError.IsEmpty() )
 			break;
 		else {
-			tOut.ErrorEx ( tStmt.m_sStmt, "%s", sError.cstr() );
+			tOut.ErrorEx ( "%s", sError.cstr() );
 			return;
 		}
 		break;
@@ -14405,14 +14472,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 		if ( !HandleSetGlobal ( sError, tStmt.m_sSetName, tStmt.m_iSetValue, tStmt.m_sSetValue ) )
 		{
-			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
+			tOut.ErrorEx ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
 			return;
 		}
 
 		if ( sError.IsEmpty() )
 			break;
 		else {
-			tOut.ErrorEx ( tStmt.m_sStmt, "%s", sError.cstr() );
+			tOut.ErrorEx ( "%s", sError.cstr() );
 			return;
 		}
 		break;
@@ -14420,7 +14487,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 	case SET_INDEX_UVAR: //  SET INDEX bar GLOBAL @foo = (values)
 		if ( !SendUserVar ( tStmt.m_sIndex.cstr(), tStmt.m_sSetName.cstr(), tStmt.m_dSetValues, sError ) )
 		{
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( sError.cstr() );
 			return;
 		}
 		break;
@@ -14429,7 +14496,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		{
 			if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetName, tStmt.m_sSetValue ) )
 			{
-				tOut.Error ( tStmt.m_sStmt, TlsMsg::szError() );
+				tOut.Error ( TlsMsg::szError() );
 				return;
 			}
 		}
@@ -14444,14 +14511,14 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 				if ( !HandleSetLocal ( sError, sName, tStmt.m_dInsertValues[i].GetValueInt(), tStmt.m_dInsertValues[i].m_sVal, tAcc ) )
 				{
 					// unknown variable, return error
-					tOut.ErrorEx ( tStmt.m_sStmt, "Unknown session variable '%s' in SET statement", sName.cstr() );
+					tOut.ErrorEx ( "Unknown session variable '%s' in SET statement", sName.cstr() );
 					return;
 				}
 			} else {
 				if ( !HandleSetGlobal ( sError, sName, tStmt.m_dInsertValues[i].GetValueInt(), tStmt.m_dInsertValues[i].m_sVal ) )
 				{
 					// unknown variable, return error
-					tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", sName.cstr() );
+					tOut.ErrorEx ( "Unknown system variable '%s'", sName.cstr() );
 					return;
 				}
 			}
@@ -14459,13 +14526,13 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 		if ( !sError.IsEmpty() )
 		{
-			tOut.ErrorEx ( tStmt.m_sStmt, "%s", sError.cstr() );
+			tOut.ErrorEx ( "%s", sError.cstr() );
 			return;
 		}
 		break;
 
 	default:
-		tOut.ErrorEx ( tStmt.m_sStmt, "internal error: unhandled SET mode %d", (int) tStmt.m_eSet );
+		tOut.ErrorEx ( "internal error: unhandled SET mode %d", (int) tStmt.m_eSet );
 		return;
 	}
 
@@ -14476,57 +14543,84 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 
 void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
 	bool bTruncate = ( tStmt.m_iIntParam==1 );
-	CSphString sError;
+
+	if ( sFrom==sTo )
+	{
+		tOut.ErrorEx ( "can not ATTACH table '%s' to itself", sFrom.cstr() );
+		return;
+	}
 
 	auto pServedFrom = GetServed ( sFrom );
 	auto pServedTo = GetServed ( sTo );
 
-	bool bOk = false;
 	if ( !pServedFrom )
-		tOut.ErrorEx ( nullptr, "no such table '%s'", sFrom.cstr() );
-	else if ( pServedFrom->m_eType != IndexType_e::PLAIN )
-		tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain table" );
-	else if ( !pServedTo )
-		tOut.ErrorEx ( nullptr, "no such table '%s'", sTo.cstr() );
-	else if ( pServedTo->m_eType!=IndexType_e::RT )
-		tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT table" );
-	else
-		bOk = true;
-	if (!bOk)
+	{
+		tOut.ErrorEx ( "no such table '%s'", sFrom.cstr() );
 		return;
+
+	} else if ( pServedFrom->m_eType!=IndexType_e::PLAIN && pServedFrom->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "1st argument to ATTACH must be a plain or a RT table" );
+		return;
+
+	} else if ( !pServedTo )
+	{
+		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
+		return;
+
+	} else if ( pServedTo->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
+		return;
+	}
 
 	// cluster does not implement ATTACH for now
-	auto tCluster = IsPartOfCluster ( pServedTo );
-	if ( tCluster )
+	auto tClusterTo = IsPartOfCluster ( pServedTo );
+	auto tClusterFrom = IsPartOfCluster ( pServedFrom );
+	if ( tClusterTo || tClusterFrom )
 	{
-		tOut.ErrorEx ( nullptr, "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tCluster->cstr(), sError.cstr () );
+		if ( tClusterTo )
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tClusterTo->cstr() );
+		else 
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sFrom.cstr(), tClusterFrom->cstr() );
 		return;
 	}
 
-	WIdx_T<RtIndex_i*> pRtTo { pServedTo };
-	WIdx_c pPlainFrom { pServedFrom };
-
 	bool bFatal = false;
-	StrVec_t dWarnings;
-	auto bAttached = pRtTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, dWarnings, sError );
+	bool bAttached = false;
+	CSphString sError;
+	WIdx_T<RtIndex_i *> pTo { pServedTo };
 
-	sWarning = ConcatWarnings(dWarnings);
-	if ( bAttached || bFatal )
-		g_pLocalIndexes->Delete ( sFrom );
+	if ( pServedFrom->m_eType==IndexType_e::PLAIN )
+	{
+		WIdx_c pPlainFrom { pServedFrom };
+		bAttached = pTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, sError );
+
+		if ( bAttached || bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+
+		if ( bAttached )
+			pServedFrom->ReleaseIdx(); // since index no more belong to us
+
+	} else
+	{
+		WIdx_T<RtIndex_i*> pFrom { pServedFrom };
+		bAttached = pTo->AttachRtIndex ( pFrom, bTruncate, bFatal, sError );
+
+		if ( bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+	}
 
 	if ( bAttached )
-	{
-		pServedFrom->ReleaseIdx(); // since index no more belong to us
 		tOut.Ok();
-	}
-	else
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+	 else
+		tOut.Error ( sError.cstr() );
 }
 
 
@@ -14537,7 +14631,7 @@ void HandleMysqlFlushRtindex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "FLUSH RTINDEX requires an existing RT table" );
+		tOut.Error ( "FLUSH RTINDEX requires an existing RT table" );
 		return;
 	}
 
@@ -14551,7 +14645,7 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto pIndex = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "FLUSH RAMCHUNK requires an existing RT table" );
+		tOut.Error ( "FLUSH RAMCHUNK requires an existing RT table" );
 		return;
 	}
 
@@ -14560,7 +14654,7 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	{
 		CSphString sError;
 		sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.Error ( sError.cstr () );
 		g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		return;
 	}
@@ -14599,14 +14693,14 @@ int GetLogFD ()
 
 void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
-	if ( !sphCheckWeCanModify ( "optimize", tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	auto sIndex = tCmd.m_sParam;
 	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tCmd.m_szStmt, "MERGE requires an existing RT table" );
+		tOut.Error ( "MERGE requires an existing RT table" );
 		return;
 	}
 
@@ -14628,14 +14722,14 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 // command 'drop [chunk] X [from] <IDX> [option...]'
 void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
-	if ( !sphCheckWeCanModify ( "drop", tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	auto sIndex = tCmd.m_sParam;
 	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tCmd.m_szStmt, "DROP requires an existing RT table" );
+		tOut.Error ( "DROP requires an existing RT table" );
 		return;
 	}
 
@@ -14654,14 +14748,14 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 
 void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
-	if ( !sphCheckWeCanModify ( "compress", tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	auto sIndex = tCmd.m_sParam;
 	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tCmd.m_szStmt, "COMPRESS requires an existing RT table" );
+		tOut.Error ( "COMPRESS requires an existing RT table" );
 		return;
 	}
 
@@ -14684,7 +14778,7 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 // uservar is tCmd.m_sParam2
 void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
-	if ( !sphCheckWeCanModify ( "split", tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	// check index existance
@@ -14692,7 +14786,7 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing RT table" );
+		tOut.Error ( "SPLIT requires an existing RT table" );
 		return;
 	}
 
@@ -14706,7 +14800,7 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 	if ( !bVarFound )
 	{
-		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing session @uservar" );
+		tOut.Error ( "SPLIT requires an existing session @uservar" );
 		return;
 	}
 
@@ -14740,7 +14834,7 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsLocal ( pIndex ) )
 	{
-		tOut.Error ( tCmd.m_szStmt, "FILES requires an existing local table" );
+		tOut.Error ( "FILES requires an existing local table" );
 		return;
 	}
 
@@ -14785,7 +14879,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local table" );
+		tOut.Error ( "FILES requires an existing local table" );
 		return;
 	}
 
@@ -14824,13 +14918,13 @@ void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, Debug
 	const char * szCmd = DebugCmd::dCommands[(BYTE) eCmd].m_szExample;
 	if ( g_sShutdownToken.IsEmpty () )
 	{
-		tOut.Error ( szCmd, "shutdown_token is empty. Provide it in searchd config section." );
+		tOut.Error ( "shutdown_token is empty. Provide it in searchd config section." );
 		return;
 	}
 
 	if ( strSHA1 ( sPasswd )!=g_sShutdownToken )
 	{
-		tOut.Error ( szCmd, "FAIL" );
+		tOut.Error ( "FAIL" );
 		return;
 	}
 
@@ -15132,7 +15226,7 @@ static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings &
 
 void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
@@ -15150,7 +15244,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	if ( bReconfigure && !PrepareReconfigure ( sIndex.cstr(), *pCmd->m_tReconfigure, &dWarnings, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.Error ( sError.cstr () );
 		return;
 	}
 
@@ -15160,13 +15254,13 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 		auto pIndex = GetServed ( sIndex );
 		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
-			tOut.Error ( tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT table" );
+			tOut.Error ( "TRUNCATE RTINDEX requires an existing RT table" );
 			return;
 		}
 
 		if ( !ValidateClusterStatement ( sIndex, *pIndex, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 		{
-			tOut.Error ( tStmt.m_sStmt, TlsMsg::szError() );
+			tOut.Error ( TlsMsg::szError() );
 			return;
 		}
 	}
@@ -15180,7 +15274,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	bool bRes = HandleCmdReplicate ( *pAccum );
 	if ( !bRes )
-		tOut.Error ( tStmt.m_sStmt, TlsMsg::szError() );
+		tOut.Error ( TlsMsg::szError() );
 	else
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
@@ -15188,14 +15282,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	auto sIndex = tStmt.m_sIndex;
 	auto pIndex = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "OPTIMIZE TABLE requires an existing RT table" );
+		tOut.Error ( "OPTIMIZE TABLE requires an existing RT table" );
 		return;
 	}
 
@@ -15262,7 +15356,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	auto VarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
 	{
 		constexpr auto iSysvars = sizeof ( dSysvars ) / sizeof ( dSysvars[0] );
-		for ( int i = 1; i < iSysvars; ++i )
+		for ( int i = 1; i<(int)iSysvars; ++i )
 			if ( sName == dSysvars[i].m_szName )
 				return i;
 		return 0;
@@ -15315,7 +15409,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	{
 		StringBuilder_c sError ("; ");
 		dColumns.for_each( [&sError] (const PreparedItem_t& dCol) { if ( !dCol.m_sError.IsEmpty()) sError << dCol.m_sError; });
-		tOut.ErrorEx ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -15737,7 +15831,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i& tOut, const SqlStmt_t& tStmt )
 			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] ( const CSphIndex* pIndex ) {
 				if ( !pIndex )
 				{
-					tOut.Error ( tStmt.m_sStmt, "SHOW TABLE STATUS requires an existing table" );
+					tOut.Error ( "SHOW TABLE STATUS requires an existing table" );
 					return;
 				}
 
@@ -15755,7 +15849,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i& tOut, const SqlStmt_t& tStmt )
 	if ( pIndex )
 		AddDistibutedIndexStatus ( tOut, pIndex, tStmt.m_sIndex, tStmt.m_sStringParam );
 	else
-		tOut.Error ( tStmt.m_sStmt, "SHOW TABLE STATUS requires an existing table" );
+		tOut.Error ( "SHOW TABLE STATUS requires an existing table" );
 }
 
 static bool AddFederatedIndexStatusHeader ( RowBuffer_i& tOut )
@@ -15865,7 +15959,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "select TABLE.status requires an existing table" );
+		tOut.Error ( "select TABLE.status requires an existing table" );
 		return;
 	}
 
@@ -15908,7 +16002,7 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
 	{
-		tOut.Error ( tStmt.m_sStmt, "SHOW TABLE SETTINGS requires an existing table" );
+		tOut.Error ( "SHOW TABLE SETTINGS requires an existing table" );
 		return;
 	}
 
@@ -16093,7 +16187,7 @@ enum class Alter_e
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 	MEMORY ( MEM_SQL_ALTER );
 
@@ -16103,7 +16197,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 	if ( eAction==Alter_e::AddColumn && tStmt.m_eAlterColType==SPH_ATTR_NONE )
 	{
 		sError.SetSprintf ( "unsupported attribute type '%d'", tStmt.m_eAlterColType );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -16112,7 +16206,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 	if ( dNames.IsEmpty() )
 	{
 		sError.SetSprintf ( "no such table '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -16121,7 +16215,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			&& g_pDistIndexes->Contains ( sName ) )
 		{
 			sError.SetSprintf ( "ALTER is only supported for local (not distributed) tables" );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			tOut.Error ( sError.cstr () );
 			return;
 		}
 
@@ -16161,7 +16255,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 	{
 		StringBuilder_c sReport;
 		dErrors.BuildReport ( sReport );
-		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
+		tOut.Error ( sReport.cstr() );
 		return;
 	}
 	tOut.Ok();
@@ -16235,14 +16329,14 @@ static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings &
 // ALTER RTINDEX/TABLE <idx> RECONFIGURE
 static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	MEMORY ( MEM_SQL_ALTER );
 
 	if ( IsConfigless() )
 	{
-		tOut.Error ( tStmt.m_sStmt, "ALTER RECONFIGURE is not supported in RT mode" );
+		tOut.Error ( "ALTER RECONFIGURE is not supported in RT mode" );
 		return;
 	}
 
@@ -16250,7 +16344,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "'%s' is absent, or does not support ALTER", szIndex );
+		tOut.ErrorEx ( "'%s' is absent, or does not support ALTER", szIndex );
 		return;
 	}
 
@@ -16261,7 +16355,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 
 	if ( !PrepareReconfigure ( szIndex, tSettings, &dWarnings, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.Error ( sError.cstr () );
 		return;
 	}
 
@@ -16279,7 +16373,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( sError.IsEmpty() )
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	else
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 }
 
 
@@ -16289,7 +16383,7 @@ static bool ApplyIndexKillList ( const CSphIndex * pIndex, CSphString & sWarning
 // STMT_ALTER_KLIST_TARGET: ALTER TABLE index KILLLIST_TARGET = 'string'
 static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	MEMORY ( MEM_SQL_ALTER );
@@ -16299,7 +16393,7 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 	KillListTargets_c tNewTargets;
 	if ( !tNewTargets.Parse ( tStmt.m_sAlterOption, tStmt.m_sIndex.cstr(), sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -16316,28 +16410,28 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 
 	if ( !sError.IsEmpty () )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.Error ( sError.cstr () );
 		return;
 	}
 
 	WIdx_c pIdx { pServed };
 	if ( !pIdx->AlterKillListTarget ( tNewTargets, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	// apply killlist to new targets
 	if ( !ApplyIndexKillList ( pIdx, sWarning, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( sError.IsEmpty() )
 		tOut.Ok();
 	else
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 }
 
 // remove all old files these are not in the list of current index files
@@ -16362,7 +16456,7 @@ static void RemoveOutdatedFiles ( RtIndex_i * pRtIndex, StrVec_t & dOldFiles )
 // STMT_ALTER_INDEX_SETTINGS: ALTER TABLE index [ident = 'string']*
 static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	MEMORY ( MEM_SQL_ALTER );
@@ -16371,14 +16465,14 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	if ( !IsConfigless() )
 	{
 		sError = "ALTER TABLE requires data_dir to be set in the config file";
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex.cstr() );
 	if ( !pServed || pServed->m_eType != IndexType_e::RT )
 	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "table '%s' is not found, or not real-time", tStmt.m_sIndex.cstr() );
+		tOut.ErrorEx ( "table '%s' is not found, or not real-time", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
@@ -16390,13 +16484,13 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( dCreateTableStmts.GetLength()!=1 )
 	{
-		tOut.Error ( tStmt.m_sStmt, "Unable to alter table settings" );
+		tOut.Error ( "Unable to alter table settings" );
 		return;
 	}
 
@@ -16416,7 +16510,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	if ( !tContainer.CheckPaths() )
 	{
-		tOut.Error ( tStmt.m_sStmt, tContainer.GetError().cstr() );
+		tOut.Error ( tContainer.GetError().cstr() );
 		return;
 	}
 
@@ -16428,7 +16522,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	CSphReconfigureSettings tSettings;
 	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		tOut.Error ( sError.cstr () );
 		return;
 	}
 
@@ -16454,7 +16548,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	}
 	else
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 }
 
 // STMT_SHOW_PLAN: SHOW PLAN
@@ -16518,10 +16612,10 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	// preflight check
 	cServedIndexRefPtr_c pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
-		return tOut.ErrorEx ( tStmt.m_sStmt, "unknown local table '%s'", tStmt.m_sIndex.cstr() );
+		return tOut.ErrorEx ( "unknown local table '%s'", tStmt.m_sIndex.cstr() );
 
 	if ( ServedDesc_t::IsMutable ( pServed ) )
-		return tOut.Error ( tStmt.m_sStmt, "can not reload real-time or percolate table" );
+		return tOut.Error ( "can not reload real-time or percolate table" );
 
 	assert ( pServed->m_eType == IndexType_e::PLAIN );
 
@@ -16538,7 +16632,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( tStmt.m_iIntParam == 1 )
 	{
 		if ( tStmt.m_sStringParam.IsEmpty() )
-			return tOut.Error ( tStmt.m_sStmt, "reload with switchover requires explicit new path to the index" );
+			return tOut.Error ( "reload with switchover requires explicit new path to the index" );
 
 		// here switchover=1 logic goes...
 		if ( g_bSeamlessRotate )
@@ -16560,7 +16654,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			return tOut.Ok();
 
 		sphWarning ( "%s", sError.cstr() );
-		return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return tOut.Error ( sError.cstr() );
 	}
 	assert ( tStmt.m_iIntParam!=1 );
 
@@ -16571,7 +16665,7 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		// or if we have unapplied rotates from indexer - seems that it will garbage .new files?
 		IndexFiles_c sIndexFiles ( pServed->m_sIndexPath );
 		if ( !sIndexFiles.RelocateToNew ( tStmt.m_sStringParam ) )
-			return tOut.Error ( tStmt.m_sStmt, sIndexFiles.ErrorMsg () );
+			return tOut.Error ( sIndexFiles.ErrorMsg () );
 	}
 
 	if ( g_bSeamlessRotate )
@@ -16580,14 +16674,14 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		if ( !LimitedRotateIndexMT ( pNewServed, tStmt.m_sIndex, dWarnings, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
-			return tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			return tOut.Error ( sError.cstr() );
 		}
 	} else {
 		WIdx_c WLock { pServed };
 		if ( !RotateIndexGreedy ( *pServed, tStmt.m_sIndex.cstr(), sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( sError.cstr() );
 			g_pLocalIndexes->Delete ( tStmt.m_sIndex ); // since it unusable - no sense just to disable it.
 			// fixme! RotateIndexGreedy does prealloc. Do we need to perform/signal preload also?
 			return;
@@ -16602,14 +16696,14 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 	CSphString sProc ( tStmt.m_sCallProc );
 	if ( sProc.ToLower()!="query" )
 	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "no such explain procedure %s", tStmt.m_sCallProc.cstr () );
+		tOut.ErrorEx ( "no such explain procedure %s", tStmt.m_sCallProc.cstr () );
 		return;
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
 	{
-		tOut.ErrorEx ( tStmt.m_sStmt, "unknown local table '%s'", tStmt.m_sIndex.cstr ());
+		tOut.ErrorEx ( "unknown local table '%s'", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
@@ -16617,7 +16711,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 	auto dPlan = RIdx_c ( pServed )->ExplainQuery ( tStmt.m_tQuery.m_sQuery );
 	if ( TlsMsg::HasErr ())
 	{
-		tOut.Error ( tStmt.m_sStmt, TlsMsg::szError ());
+		tOut.Error ( TlsMsg::szError ());
 		return;
 	}
 
@@ -16638,7 +16732,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 
 void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
-	if ( !sphCheckWeCanModify ( tStmt.m_sStmt, tOut ) )
+	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
 	CSphString sError;
@@ -16646,14 +16740,14 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 	if ( !IsConfigless() )
 	{
 		sError = "IMPORT TABLE requires data_dir to be set in the config file";
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( IndexIsServed ( tStmt.m_sIndex ) )
 	{
 		sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -16662,14 +16756,14 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 	if ( !CopyIndexFiles ( tStmt.m_sIndex, tStmt.m_sStringParam, bPQ, dWarnings, sError ) )
 	{
 		sError.SetSprintf ( "unable to import table '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
 	if ( !AddExistingIndexConfigless ( tStmt.m_sIndex, bPQ ? IndexType_e::PERCOLATE : IndexType_e::RT, dWarnings, sError ) )
 	{
 		sError.SetSprintf ( "unable to import table '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( sError.cstr() );
 		return;
 	}
 
@@ -16766,7 +16860,7 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 
 	if ( !iKilled )
 	{
-		tOut.Error ( "Kill", SphSprintf ( "Unknown connection id: %d", iKill ).cstr(), MYSQL_ERR_NO_SUCH_THREAD );
+		tOut.ErrorEx ( SphSprintf ( "Unknown connection id: %d", iKill ).cstr(), MYSQL_ERR_NO_SUCH_THREAD );
 	} else
 	{
 		tOut.Ok ( iKilled );
@@ -16885,7 +16979,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		if ( !FixupFederatedQuery ( tSess.GetCollation (), dStmt,  m_sError, m_sFederatedQuery ) )
 		{
 			FreezeLastMeta();
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 			return true;
 		}
 	}
@@ -16921,7 +17015,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	{
 	case STMT_PARSE_ERROR:
 		FreezeLastMeta();
-		tOut.Error ( sQuery.first, m_sError.cstr() );
+		tOut.Error ( m_sError.cstr() );
 		return true;
 
 	case STMT_SELECT:
@@ -16974,14 +17068,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_INSERT:
 	case STMT_REPLACE:
 		{
-			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			StmtErrorReporter_c tErrorReporter ( tOut );
 			sphHandleMysqlInsert ( tErrorReporter, *pStmt );
 			return true;
 		}
 
 	case STMT_DELETE:
 		{
-			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			StmtErrorReporter_c tErrorReporter ( tOut );
 			sphHandleMysqlDelete ( tErrorReporter, *pStmt, sQuery );
 			return true;
 		}
@@ -16993,7 +17087,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_BEGIN:
 		{
-			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			StmtErrorReporter_c tErrorReporter ( tOut );
 			sphHandleMysqlBegin ( tErrorReporter, sQuery );
 			return true;
 		}
@@ -17001,7 +17095,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_COMMIT:
 	case STMT_ROLLBACK:
 		{
-			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			StmtErrorReporter_c tErrorReporter ( tOut );
 			sphHandleMysqlCommitRollback ( tErrorReporter, sQuery, eStmt==STMT_COMMIT );
 			return true;
 		}
@@ -17026,7 +17120,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		} else
 		{
 			m_sError.SetSprintf ( "no such built-in procedure %s", pStmt->m_sCallProc.cstr() );
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 		}
 		return true;
 
@@ -17059,7 +17153,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_UPDATE:
 		{
-			StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
+			StmtErrorReporter_c tErrorReporter ( tOut );
 			sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery );
 			return true;
 		}
@@ -17077,7 +17171,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CREATE_FUNCTION:
 		if ( !sphPluginCreate ( pStmt->m_sUdfLib.cstr(), PLUGIN_FUNCTION, pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 		else
 			tOut.Ok();
 		SphinxqlStateFlush ();
@@ -17085,7 +17179,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_DROP_FUNCTION:
 		if ( !sphPluginDrop ( PLUGIN_FUNCTION, pStmt->m_sUdfName.cstr(), m_sError ) )
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 		else
 			tOut.Ok();
 		SphinxqlStateFlush ();
@@ -17098,7 +17192,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			PluginType_e eType = sphPluginGetType ( pStmt->m_sStringParam );
 			if ( eType==PLUGIN_TOTAL )
 			{
-				tOut.Error ( "unknown plugin type '%s'", pStmt->m_sStringParam.cstr() );
+				tOut.ErrorEx ( "unknown plugin type '%s'", pStmt->m_sStringParam.cstr() );
 				break;
 			}
 
@@ -17111,7 +17205,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 			// report
 			if ( !bRes )
-				tOut.Error ( sQuery.first, m_sError.cstr() );
+				tOut.Error ( m_sError.cstr() );
 			else
 				tOut.Ok();
 			SphinxqlStateFlush ();
@@ -17122,7 +17216,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		if ( sphPluginReload ( pStmt->m_sUdfLib.cstr(), m_sError ) )
 			tOut.Ok();
 		else
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 		return true;
 
 	case STMT_ATTACH_INDEX:
@@ -17257,7 +17351,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		else
 		{
 			TlsMsg::MoveError ( m_sError );
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 		}
 		return true;
 	case STMT_CLUSTER_CREATE:
@@ -17266,7 +17360,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		else
 		{
 			TlsMsg::MoveError ( m_sError );
-			tOut.Error ( sQuery.first, m_sError.cstr() );
+			tOut.Error ( m_sError.cstr() );
 		}
 		return true;
 
@@ -17275,7 +17369,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
-			tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
+			tOut.Error ( m_tLastMeta.m_sError.cstr() );
 		return true;
 
 	case STMT_CLUSTER_ALTER_ADD:
@@ -17284,15 +17378,15 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
-			tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
+			tOut.Error ( m_tLastMeta.m_sError.cstr() );
 		return true;
 
 	case STMT_CLUSTER_ALTER_UPDATE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, true, m_tLastMeta.m_sError ) )
+		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
 			tOut.Ok();
 		else
-			tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
+			tOut.Error ( m_tLastMeta.m_sError.cstr() );
 		return true;
 
 	case STMT_EXPLAIN:
@@ -17325,7 +17419,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
-		tOut.Error ( sQuery.first, m_sError.cstr() );
+		tOut.Error ( m_sError.cstr() );
 		return true;
 	} // switch
 
@@ -17630,7 +17724,7 @@ bool ApplyKillListsTo ( CSphIndex* pKillListTarget, CSphString & sError )
 
 				// kill all the docids present in this index
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )
-					pKillListTarget->KillExistingDocids ( pIndexWithKillList );
+					pIndexWithKillList->KillExistingDocids ( pKillListTarget );
 			}
 	}
 
@@ -19765,6 +19859,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
 	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+	tDefaultFA.m_eDict = GetFileAccess( hSearchd, "access_dict", false, tDefaultFA.m_eDict );
 
 	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
 	tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
@@ -19804,14 +19899,22 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iPingIntervalUs = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
 	g_uHAPeriodKarmaS = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
 	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
+
 	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
 	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
 	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
-	if ( g_iAgentRetryDelayMs > MAX_RETRY_DELAY )
-		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, MAX_RETRY_DELAY );
+	if ( g_iAgentRetryDelayMs > DAEMON_MAX_RETRY_DELAY )
+		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, DAEMON_MAX_RETRY_DELAY );
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
-	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
-		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
+	if ( g_iAgentRetryCount > DAEMON_MAX_RETRY_COUNT )
+		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, DAEMON_MAX_RETRY_COUNT );
+
+	g_iReplConnectTimeoutMs = hSearchd.GetMsTimeMs ( "replication_connect_timeout", g_iReplConnectTimeoutMs );
+	g_iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	g_iReplRetryCount = hSearchd.GetInt ( "replication_retry_count", g_iReplRetryCount );
+	g_iReplRetryDelayMs = hSearchd.GetMsTimeMs ( "replication_retry_delay", g_iReplRetryDelayMs );
+	ReplicationSetTimeouts ( g_iReplConnectTimeoutMs, g_iReplQueryTimeoutMs, g_iReplRetryCount, g_iReplRetryDelayMs );
+
 	g_tmWaitUS = hSearchd.GetUsTime64Ms ( "net_wait_tm", g_tmWaitUS );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
@@ -20208,7 +20311,6 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	InitPersistentPool();
 
-	int64_t iIndexId = -1;
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto& tIt : *hLocal )
 	{
@@ -20222,14 +20324,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 			if ( sWarning.Length() )
 				sphWarning ( "%s", sWarning.cstr() );
-
-			iIndexId = Max ( iIndexId, pIdx->GetIndexId() );
 		}
 	}
-
-	// set index_id to max of existed indexes after all indexes were loaded
-	if ( iIndexId!=-1 )
-		SetIndexId ( iIndexId + 1 );
 
 	// set index cluster name for check
 	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )

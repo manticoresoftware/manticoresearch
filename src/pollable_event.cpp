@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,13 +17,6 @@
 #if HAVE_EVENTFD
 #include <sys/eventfd.h>
 #endif
-
-static void SafeCloseSocket ( int& iFD )
-{
-	if ( iFD >= 0 )
-		sphSockClose ( iFD );
-	iFD = -1;
-}
 
 #if !HAVE_EVENTFD
 static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )

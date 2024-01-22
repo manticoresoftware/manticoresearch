@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,14 +27,13 @@
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
 static CSphString g_sListener4Buddy;
-static int g_iBuddyVersion = 1;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
-static const int g_iPipeBufSize = 2048;
+static const int PIPE_BUF_SIZE = 2048;
 static std::unique_ptr<boost::asio::io_service> g_pIOS;
-static std::vector<char> g_dPipeBuf ( g_iPipeBufSize );
-static CSphVector<char> g_dLogBuf;
+static std::vector<char> g_dPipeBuf ( PIPE_BUF_SIZE );
+static CSphVector<char> g_dLogBuf ( PIPE_BUF_SIZE );
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
 enum class BuddyState_e
 {
@@ -52,6 +51,10 @@ static const int g_iBuddyLoopSleep = 15;
 
 static const int g_iRestartMax = 3;
 static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
+
+static int g_iBuddyVersion = 1;
+static bool g_bBuddyVersion = false;
+extern CSphString g_sStatusVersion;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
@@ -136,6 +139,30 @@ static bool HasLineEnd ( Str_t tBuf, Str_t tLine )
 	return ( ( tLine.first + tLine.second )<sEnd );
 }
 
+static void DaemonLogBuddyLine ( Str_t tLine )
+{
+	// if some message already at the buffer - lets copy the tail there and print the whole message from the buffer - not from the message
+	if ( g_dLogBuf.GetLength() )
+	{
+		AddTail ( tLine );
+		tLine = g_dLogBuf;
+	}
+
+	const int LOG_LINE_HEADER = 60; // daemon adds timestamp, tid then our buddy header
+	const int iBufMax = GetDaemonLogBufSize() - LOG_LINE_HEADER;
+
+	while ( tLine.second>0 )
+	{
+		int iLen = Min ( iBufMax, tLine.second );
+		sphInfo ( "[BUDDY] %.*s", iLen, tLine.first );
+		tLine.first += iLen;
+		tLine.second -= iLen;
+	}
+
+	if ( g_dLogBuf.GetLength() )
+		g_dLogBuf.Resize ( 0 );
+}
+
 static void LogPipe ( Str_t tSrc )
 {
 	CSphVector<Str_t> dLines;
@@ -152,30 +179,18 @@ static void LogPipe ( Str_t tSrc )
 		return;
 	}
 
-	// join pipe buffer with line buffer collected so far
-	if ( g_dLogBuf.GetLength() )
-	{
-		sphInfo ( "[BUDDY] %.*s%.*s", g_dLogBuf.GetLength(), g_dLogBuf.Begin(), tLine0.second, tLine0.first );
-		g_dLogBuf.Resize ( 0 );
-	} else
-	{
-		sphInfo ( "[BUDDY] %.*s", tLine0.second, tLine0.first );
-	}
-
+	DaemonLogBuddyLine ( tLine0 );
 	if ( dLines.GetLength()==1 )
 		return;
 
 	for ( int i=1; i<dLines.GetLength()-1; i++ )
-	{
-		Str_t tLine = dLines[i];
-		sphInfo ( "[BUDDY] %.*s", tLine.second, tLine.first );
-	}
+		DaemonLogBuddyLine ( dLines[i] );
 
 	Str_t tLineLast = dLines.Last();
 	// last line could be without line end - collect into line buffer
 	if ( HasLineEnd ( tSrc, tLineLast ) )
 	{
-		sphInfo ( "[BUDDY] %.*s", tLineLast.second, tLineLast.first );
+		DaemonLogBuddyLine ( tLineLast );
 	} else
 	{
 		AddTail ( tLineLast );
@@ -226,7 +241,13 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	g_iRestartCount = 0;
 	sphInfo ( "[BUDDY] started %.*s '%s' at %s", sBuddyVer.second, sBuddyVer.first, g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
 	if ( sLinesTail.second )
-		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
+		LogPipe ( sLinesTail );
+
+	if ( !g_bBuddyVersion )
+	{
+		g_bBuddyVersion = true;
+		g_sStatusVersion.SetSprintf ( "%s (buddy %.*s)", g_sStatusVersion.cstr(), sBuddyVer.second, sBuddyVer.first );
+	}
 }
 
 static void BuddyPipe_fn ( const boost::system::error_code & tGotCode, std::size_t iSize )
@@ -397,7 +418,7 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 		return;
 	}
 
-	g_dLogBuf.Reserve ( g_iPipeBufSize );
+	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
 	g_sStartArgs.SetSprintf ( "%s --listen=%s %s --threads=%d",
@@ -465,6 +486,9 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 
 	StrVec_t dHeaders;
 	dHeaders.Add ( SphSprintf ( "Request-ID: %d_%u", session::GetConnID(), sphCRC32 ( sQuery.first, sQuery.second, sphRand() ) ) );
+	// disable Expect: 100-continue
+	// as Expect: 100-continue header added by curl library do not with the buddy
+	dHeaders.Add ( "Expect:" );
 
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
@@ -585,6 +609,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery );
 	if ( !tReplyRaw.first )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return;
 	}
@@ -593,17 +618,20 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	BuddyReply_t tReplyParsed;
 	if ( !ParseReply ( const_cast<char *>( tReplyRaw.second.cstr() ), tReplyParsed, sError ) )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
 	if ( bson::String ( tReplyParsed.m_tType )!="sql response" )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
 
 	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
 	{
+		LogSphinxqlError ( sSrcQuery.first, tError );
 		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
 		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );
 		return;

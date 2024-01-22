@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -94,6 +94,9 @@ float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 			NormalizeVec(m_dTmp);
 			dData = m_dTmp;
 		}
+
+		if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
+			return FLT_MAX;
 
 		return m_pDistCalc->CalcDist ( { dData.Begin(), (size_t)dData.GetLength() }, { m_dAnchor.Begin(), (size_t)m_dAnchor.GetLength() } );
 	}

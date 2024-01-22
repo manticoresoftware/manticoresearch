@@ -209,6 +209,18 @@ searchd
 	update t set f=(3.14,2.71) where id=2;
 	select * from t;
 	drop table t;
+
+	create table t(t text, m multi);
+	insert into t values (1,'text',(5.5,4.4,5.5));
+	show meta;
+	select * from t;
+	drop table t;
+
+	<!-- regression for a crash on buffer overflow -->
+	create table test(f1 string attribute);
+	insert into test (f1) values ('ООО "МНОГОПРОФИЛЬНЫЙ ЦЕНТР ЭКСПЕРТИЗ И ИССЛЕДОВАНИЯ ДОКУМЕНТА "ГАРАНТ"');
+	SELECT LEVENSHTEIN('ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ ЦЕНТР ЭКСПЕРТИЗ', f1, {normalize=1,length_delta=24}) as lev FROM test;
+	drop table test;
 </sphinxql>
 </queries>
 

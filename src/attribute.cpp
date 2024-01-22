@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -426,8 +426,10 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		if ( !sphIsBlobAttr(tCol) || tCol.IsColumnar() )
+			continue;
 
-		if ( !dAttrsUpdated.BitGet(i) && sphIsBlobAttr(tCol) )
+		if ( !dAttrsUpdated.BitGet(i) )
 		{
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
 			continue;

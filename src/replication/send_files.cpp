@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,11 +25,11 @@ int FileChunks_t::GetChunksCount () const noexcept
 }
 
 
-int FileChunks_t::GetChunkFileLength ( int iChunk ) const noexcept
+int64_t FileChunks_t::GetChunkFileLength ( int iChunk ) const noexcept
 {
-	int iSize = m_iChunkBytes;
+	int64_t iSize = m_iChunkBytes;
 	if ( iChunk == GetChunksCount() - 1 ) // calculate file tail size for last chunk
-		iSize = m_iFileSize - m_iChunkBytes * iChunk;
+		iSize = m_iFileSize - (int64_t)m_iChunkBytes * iChunk;
 
 	return iSize;
 }
@@ -88,15 +88,16 @@ std::optional<int> SyncSrc_t::InitSyncSrc ()
 
 		// int iChunkBytes = int ( iFileSize / iBlockMin ); // FIXME!!! sqrt ( iFileSize )
 		// no need too small chunks
-		auto iChunkBytes = Min (
+		int64_t iChunkBytes = Min (
 			Min (
-				Max ( iBlockMin, int ( sqrt ( iFileSize ) ) ),
-				(int)iFileSize ),
+				Max ( iBlockMin, int64_t ( sqrt ( iFileSize ) ) ),
+				iFileSize ),
 			m_iBufferSize );
+		assert ( iChunkBytes>0 && iChunkBytes<INT_MAX );
 
 		FileChunks_t& tChunk = m_dChunks[i];
 		tChunk.m_iFileSize = iFileSize;
-		tChunk.m_iChunkBytes = iChunkBytes;
+		tChunk.m_iChunkBytes = (int)iChunkBytes;
 		tChunk.m_iHashStartItem = iHashes;
 
 		iHashes += tChunk.GetChunksCount();
@@ -128,7 +129,7 @@ bool VerifyFileHash ( int iFile, const CSphString& sName, const SyncSrc_t& tSrc,
 	int64_t iReadTotal = 0;
 	while ( iReadTotal < tChunk.m_iFileSize )
 	{
-		int iLeft = tChunk.m_iFileSize - iReadTotal;
+		int64_t iLeft = tChunk.m_iFileSize - iReadTotal;
 		iLeft = Min ( iLeft, tChunk.m_iChunkBytes );
 		iReadTotal += iLeft;
 
@@ -171,11 +172,10 @@ bool SyncSigVerify ( const CSphString& sFile, const HASH20_t& dHash )
 	int64_t iReadTotal = 0;
 	while ( iReadTotal < iFileSize )
 	{
-		const int iLeft = iFileSize - iReadTotal;
+		const int64_t iLeft = iFileSize - iReadTotal;
 
-		// iGot is always less INT_MAX as CSphReader allocates buffer of int size max
-		const BYTE* pData = nullptr;
-		const int iGot = tIndexFile.GetBytesZerocopy ( &pData, iLeft );
+		const BYTE * pData = nullptr;
+		const int64_t iGot = tIndexFile.GetBytesZerocopy ( &pData, iLeft );
 		iReadTotal += iGot;
 
 		// update whole file hash

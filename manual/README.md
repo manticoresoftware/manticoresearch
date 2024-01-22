@@ -113,7 +113,7 @@
     * [• Query cache](Searching/Query_cache.md)
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
-    * [• K-nearest neighbor search](Searching/KNN.md)
+    * [• K-nearest neighbor vector search](Searching/KNN.md)
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)    
 * [⪢ Functions](Functions.md)
     * [• Mathematical functions](Functions/Mathematical_functions.md)
@@ -146,8 +146,9 @@
 * [⪢ Node info and management]
     * [• Node status](Node_info_and_management/Node_status.md)
     * [• SHOW META](Node_info_and_management/SHOW_META.md)
-    * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md)
+    * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 
     * [• SHOW QUERIES](Node_info_and_management/SHOW_QUERIES.md)
+    * [• SHOW VERSION](Node_info_and_management/SHOW_VERSION.md)
     * [• KILL](Node_info_and_management/KILL.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
     * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
@@ -165,6 +166,9 @@
     * [• Comments](Server_settings/Comments.md)
     * [• Inheritance of table and source declarations](Server_settings/Inheritance_of_index_and_source_declarations.md)
     * [• Setting variables online](Server_settings/Setting_variables_online.md)
+* [⪢ Integration]
+    * [Logstash](Integration/Logstash.md)
+    * [Filebeat](Integration/Filebeat.md)
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)

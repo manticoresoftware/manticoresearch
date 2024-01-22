@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -44,7 +44,7 @@ static bool IsInetAddrFree ( DWORD uAddr, int iPort )
 	}
 
 	int iRes = bind ( iSock, (struct sockaddr*)&iaddr, sizeof ( iaddr ) );
-	SafeClose ( iSock );
+	SafeCloseSocket ( iSock );
 
 	return ( iRes == 0 );
 }

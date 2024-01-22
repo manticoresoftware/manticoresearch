@@ -22,7 +22,7 @@
 
 # Introduction
 
-[![License: GPLv2](https://img.shields.io/badge/license-GPL%20V2-green?style=plastic)](COPYING)
+[![License: GPLv3 or later](https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic)](LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic)](https://twitter.com/manticoresearch)
 [![Slack](https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic)](http://slack.manticoresearch.com/)
 [![Docker pulls](https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic)](https://github.com/manticoresoftware/docker)
@@ -69,6 +69,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
+  - [Vector search](https://manual.manticoresearch.com/Searching/dev/KNN)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
   - A wide range of functions for filtering and data manipulation
@@ -111,6 +112,12 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
+  - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
+  - [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/)
+  - [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/)
+  - [Logstash/Filebeat](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)
+  - [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/)
+  - [Mysqldump](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)
   - [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)
 
 # Installation
@@ -197,8 +204,10 @@ Should your company require any help - we provide full-cycle services in the are
 [More details here](https://manticoresearch.com/services/)
 
 # ❤️ How you can support Manticore Search
-
-Manticore Search is a GPLv2-licensed Open Source project with development made possible by support from our core team, contributors, and sponsors. Building premium Open Source software is not easy. If you would like to make sure Manticore Search stays free, here is how you can help the project:
+Manticore Search is an Open Source project with development made possible by support from our core team, contributors, and sponsors. Building premium Open Source software is not easy. If you would like to make sure Manticore Search stays free, here is how you can help the project:
 
 * [Donation through PayPal](https://www.paypal.me/manticoresearch)
 * [Become our client and let us help you](https://manticoresearch.com/services)
+
+# License
+Manticore Search is distributed under [GPLv3 or later](./LICENSE). Manticore Search uses and re-distributes other open-source components. Please check the [component licenses](./component-licenses) directory for details.

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1834,10 +1834,12 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 				tStmt.m_tQuery.m_bFacet = true;
 
 				tStmt.m_eStmt = STMT_SELECT;
-				tStmt.m_tQuery.m_sIndexes = tHeadQuery.m_sIndexes;
-				tStmt.m_tQuery.m_sSelect = tStmt.m_tQuery.m_sFacetBy;
-				tStmt.m_tQuery.m_sQuery = tHeadQuery.m_sQuery;
+				tStmt.m_tQuery.m_sIndexes	= tHeadQuery.m_sIndexes;
+				tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
+				tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
 				tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
+				tStmt.m_tQuery.m_sKNNAttr	= tHeadQuery.m_sKNNAttr;
+				tStmt.m_tQuery.m_dKNNVec	= tHeadQuery.m_dKNNVec;
 
 				// append filters
 				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )

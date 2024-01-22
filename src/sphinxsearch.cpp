@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -362,6 +362,8 @@ bool RenderKeywordNode ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 		tRes += "field_end";
 	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
 		tRes += "morphed";
+	if ( Bool ( tBson.ChildByName ( SZ_REGEX ) ) )
+		tRes += "regex";
 	auto tBoost = tBson.ChildByName ( SZ_BOOST );
 	if ( !IsNullNode ( tBoost ) )
 	{
@@ -432,6 +434,8 @@ bool RenderKeywordNodeDot ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 		tRes += "field_end";
 	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
 		tRes += "morphed";
+	if ( Bool ( tBson.ChildByName ( SZ_REGEX ) ) )
+		tRes += "regex";
 	auto tBoost = tBson.ChildByName ( SZ_BOOST );
 	if ( !IsNullNode ( tBoost ) )
 	{
@@ -537,6 +541,8 @@ void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
 		tWord.AddBool ( SZ_FIELD_END, true );
 	if ( tKeyword.m_bMorphed )
 		tWord.AddBool ( SZ_MORPHED, true );
+	if ( tKeyword.m_bRegex )
+		tWord.AddBool ( SZ_REGEX, true );
 	if ( tKeyword.m_fBoost!=1.0f )
 		tWord.AddDouble ( SZ_BOOST, tKeyword.m_fBoost );
 }
@@ -4699,9 +4705,6 @@ CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 
 	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<=SPH_QUERY_PARAGRAPH )
 		return szNodeNames [ pNode->GetOp()-SPH_QUERY_AND ];
-
-	if ( pNode->GetOp()==SPH_QUERY_REGEX )
-		return "REGEX";
 
 	CSphString sTmp;
 	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );

@@ -96,6 +96,7 @@
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - Removes a document from a table
 * [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Executes multiple insert, update, or delete operations in a single call. Learn more about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
+* [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
 
 ### Common things
@@ -109,6 +110,7 @@
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
+* [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
@@ -309,6 +311,8 @@
 * [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
 *
 ##### Other
+* [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
+* [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
 * [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
 
 ## Common settings in configuration file
@@ -383,6 +387,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - Defines how table's doclists file is accessed
   * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Defines how table's hitlists file is accessed
   * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Defines how search server accesses table's plain attributes
+  * [access_dict](Server_settings/Searchd.md#access_dict) - Defines how table's dictionary file is accessed
   * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Remote agent connection timeout
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies the number of times Manticore tries to connect and query remote agents

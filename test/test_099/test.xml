@@ -40,13 +40,37 @@ index main
 	source			= src1
 	min_word_len	= 1
 }
+
+source src2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT document_id, text FROM large_table
+}
+
+index large
+{
+	path			= <data_path/>/large
+	source			= src2
+}
 </config>
 
 <queries>
-<query>test1</query>
-<query>test511</query>
-<query>test2048</query>
-<query>test4000</query>
+<query index="main">test1</query>
+<query index="main">test511</query>
+<query index="main">test2048</query>
+<query index="main">test4000</query>
+
+<sphinxql>
+	<!-- regression cutoff early exit not scanning the whole block -->
+    SELECT id FROM large where id in (250, 380, 505, 510) option threads=1, cutoff=100 /*+ NO_DocidIndex(id) */;
+    SELECT id FROM large where id in (250, 380, 505, 510) option threads=1, cutoff=50 /*+ NO_DocidIndex(id) */;
+    SELECT id FROM large where id in (250, 380, 505, 510) option threads=1, cutoff=10 /*+ NO_DocidIndex(id) */;
+    SELECT id FROM large where id in (250, 380, 505, 510) option threads=1 /*+ NO_DocidIndex(id) */;
+    SELECT id FROM large where id in (250, 380, 505, 510) /*+ NO_DocidIndex(id) */;
+    SELECT id FROM large where id in (250, 380, 505, 510) order by id asc;
+</sphinxql>
+
 </queries>
 
 <db_create>
@@ -62,9 +86,16 @@ CREATE TABLE `tag_table` (
   `word_tag_id` int(11) NOT NULL
 );
 </db_create>
+<db_create>
+CREATE TABLE `large_table` (
+  `document_id` int(11),
+  `text` varchar(255) NOT NULL
+);
+</db_create>
 
 <db_drop>DROP TABLE IF EXISTS `main_table`</db_drop>
 <db_drop>DROP TABLE IF EXISTS `tag_table`</db_drop>
+<db_drop>DROP TABLE IF EXISTS `large_table`</db_drop>
 
 <db_insert>
 INSERT INTO `main_table` VALUES
@@ -84,6 +115,12 @@ INSERT INTO `tag_table` VALUES (1,1), (1,1), (511,510), (511,511), (511,513),
 	<repeat count="999" vars="i j" init="1 2" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>)</var></repeat>
 	<repeat count="4001" vars="i j" init="1001 1002" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>)</var></repeat>
 	INSERT INTO tag_table VALUES <vals/>
+</db_insert>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="1000" vars="i" init="1" inc="1"><var name="vals" delimiter=",">(<i/>, "test 1")</var></repeat>
+	INSERT INTO large_table VALUES <vals/>
 </db_insert>
 
 </test>

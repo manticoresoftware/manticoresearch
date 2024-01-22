@@ -1,7 +1,7 @@
 ––– input –––
 export new_version_buddy=$(mysql -h0 -P9306 -e "SHOW STATUS LIKE 'version'\G" | awk -F'[ v()]+' '/buddy v/{print $(NF-1)}'); echo $new_version_buddy
 ––– output –––
-#!/[0-9]{1}\.[0-9]{1}\.[0-9]{1}/!#
+#!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}/!#
 ––– input –––
 export new_version_searchd=$(searchd --version | head -n 1 | cut -d" " -f2); echo $new_version_searchd
 ––– output –––
@@ -25,4 +25,4 @@ export new_version_galera=$(strings /usr/share/manticore/modules/libgalera_manti
 ––– input –––
 export new_version_buddy=$(mysql -h0 -P9306 -e "SHOW STATUS LIKE 'version'\G" | awk -F'[ v()]+' '/buddy v/{print $(NF-1)}'); echo $new_version_buddy
 ––– output –––
-#!/[0-9]{1}\.[0-9]{1}\.[0-9]{1}/!#
+#!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}/!#

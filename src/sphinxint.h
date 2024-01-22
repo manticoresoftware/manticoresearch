@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -89,6 +89,7 @@ extern bool g_bJsonKeynamesToLowercase;
 #define SZ_BOOST			"n"
 #define SZ_ZONES            "o"
 #define SZ_ZONESPANS        "p"
+#define SZ_REGEX			"r"
 
 /// generic COM-like uids
 enum ExtraData_e
@@ -1063,10 +1064,10 @@ struct ISphSubstringPayload
 
 
 // levenstein distance for words
-int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 );
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 // levenstein distance for unicode codepoints
-int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 );
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 struct Slice_t
 {

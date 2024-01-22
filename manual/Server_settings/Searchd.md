@@ -26,6 +26,12 @@ This setting sets instance-wide defaults for [access_hitlists](../Creating_a_tab
 
 The `access_hitlists` directive allows you to define the default value of [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
 
+### access_dict
+
+This setting sets instance-wide defaults for [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `mmap_preread`.
+
+The `access_dict` directive allows you to define the default value of [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
 ### agent_connect_timeout
 
 This setting sets instance-wide defaults for the [agent_connect_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) parameter.
@@ -357,7 +363,7 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-The hostname_lookup setting determines the hostnames renew strategy. By default, IP addresses of agent host names are cached at server start to avoid extra load on the DNS. In some cases, the IP can change dynamically (e.g. cloud hosting) t' disables the caching and queries the DNS at each query. The IP addresses can also be manually renewed with the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
 
 ### jobs_queue_size
 
@@ -872,6 +878,30 @@ Enabled by default.
 pseudo_sharding = 0
 ```
 <!-- end -->
+
+
+### replication_connect_timeout
+
+The `replication_connect_timeout` directive defines the timeout for connecting to a remote node. By default, the value is assumed to be in milliseconds, but it can have [another suffix](../../Server_settings/Special_suffixes.md). The default value is 1000 (1 second).
+
+When connecting to a remote node, Manticore will wait for this amount of time at most to complete the connection successfully. If the timeout is reached but the connection has not been established, and `retries` are enabled, a retry will be initiated.
+
+
+### replication_query_timeout
+
+The `replication_query_timeout` sets the amount of time that searchd will wait for a remote node to complete a query. The default value is 3000 milliseconds (3 seconds), but can be `suffixed` to indicate a different unit of time.
+
+After establishing a connection, Manticore will wait for a maximum of `replication_query_timeout` for the remote node to complete. Note that this timeout is separate from the `replication_connect_timeout`, and the total possible delay caused by a remote node will be the sum of both values.
+
+
+### replication_retry_count
+
+This setting is an integer that specifies how many times Manticore will attempt to connect and query a remote node during replication before reporting a fatal query error. The default value is 3. 
+
+
+### replication_retry_delay
+
+This setting is an integer in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)) that specifies the delay before Manticore retries querying a remote node in case of failure during replication. This value is only relevant when a non-zero value is specified. The default value is 500.
 
 ### qcache_max_bytes
 

@@ -10,10 +10,14 @@ on:
       - manticore-*
     paths-ignore:
       - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
   pull_request:
     branches: [ master ]
     paths-ignore:
       - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
@@ -29,7 +33,6 @@ jobs:
     steps:
       - run: |
           echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
           echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
           echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
           echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
@@ -476,8 +479,8 @@ jobs:
           image: test-kit:img
           test_prefix: test/clt-tests/expected-errors/
 
-  clt_sharding_syntax_test:
-    name: CLT test syntax of autosharding
+  clt_restarting_replication_nodes:
+    name: CLT test on replication node restart
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
@@ -485,7 +488,7 @@ jobs:
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          test_prefix: test/clt-tests/sharding/syntax/
+          test_prefix: test/clt-tests/replication/
 
   build_aarch64:
     name: Linux aarch64 build

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -104,8 +104,8 @@ public:
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
-	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-	void			Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning );
+	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
+	void			Load ( const bson::Bson_c & tNode, CSphEmbeddedFiles& tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void			DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -297,6 +297,7 @@ enum class MutableName_e
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
 	ACCESS_HITLISTS,
+	ACCESS_DICT,
 	READ_BUFFER_DOCS,
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
@@ -313,6 +314,7 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
+	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
 
@@ -461,5 +463,7 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDic
 
 void SetDefaultAttrEngine ( AttrEngine_e eEngine );
 AttrEngine_e GetDefaultAttrEngine();
+
+bool ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty );
 
 #endif // _indexsettings_

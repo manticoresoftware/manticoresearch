@@ -79,3 +79,4 @@
 /test/clt-tests/**/*.cmp
 /clt
 **/.DS_Store
+/test/clt-tests/**/*.deb

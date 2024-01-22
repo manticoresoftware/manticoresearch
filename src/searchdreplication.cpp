@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -312,7 +312,6 @@ ClusterState_e ReplicationCluster_t::WaitReady()
 
 bool ReplicationCluster_t::IsHealthy() const
 {
-
 	if ( !IsPrimary() )
 		return TlsMsg::Err ( "cluster '%s' is not ready, not primary state (%s)", m_sName.cstr(), szState() );
 
@@ -325,11 +324,12 @@ bool ReplicationCluster_t::IsHealthy() const
 static int GetClusterMemLimitMB ( int iMemLimit, int iIndexes )
 {
 	const int CACHE_PER_INDEX = 16;
+	const int MIN_CACHE_SIZE = 128;
 
-	// change default cache size to 16Mb per added index or size of largest rt_mem_limit of RT index
+	// change default cache size to 16Mb per added index or size of largest rt_mem_limit of RT index but at least 128Mb
 	int iSize = iMemLimit / 1024 / 1024;
 	iIndexes = Max ( 1, iIndexes );
-	return Max ( iIndexes * CACHE_PER_INDEX, iSize );
+	return Max ( Max ( iIndexes * CACHE_PER_INDEX, iSize ), MIN_CACHE_SIZE );
 }
 
 bool ReplicationCluster_t::Init()
@@ -1539,7 +1539,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		TlsMsg::Err ( pCluster->m_sError.cstr() );
 	}
 
-	sphLogFatal ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
+	sphWarning ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
 	// need to wait recv thread to complete in case of error after worker started
 	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 	Threads::SccWL_t wLock ( g_tClustersLock );
@@ -1607,12 +1607,12 @@ StrVec_t ReplicationCluster_t::GetIndexes() const noexcept
 	return dIndexes;
 }
 
-void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * szClient, int iCmd )
+void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * szClient, E_CLUSTER eCmd )
 {
 	if ( sError.IsEmpty() )
 		return;
 
-	sphLogFatal ( "'%s' cluster [%s], cmd: %d, error: %s", sCluster.cstr(), szClient, iCmd, sError.cstr() );
+	sphWarning ( "'%s' cluster [%s], cmd: %s(%d), error: %s", sCluster.cstr(), szClient, szClusterCmd ( eCmd ), (int)eCmd, sError.cstr() );
 
 	auto pCluster = ClusterByName ( sCluster, nullptr );
 	if ( !pCluster )
@@ -1985,7 +1985,15 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster || !pCluster->IsHealthy() )
+	{
+		// node in the joining state should skip the command
+		if ( pCluster && pCluster->GetState()==ClusterState_e::JOINING )
+		{
+			TlsMsg::ResetErr();
+			return true;
+		}
 		return false;
+	}
 
 	auto fnNodesHash = [](const StrVec_t dNodes) {
 		uint64_t uRes = SPH_FNV64_SEED;

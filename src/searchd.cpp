@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -189,14 +189,22 @@ static int64_t			g_iDocstoreCache = 0;
 static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
-int				g_iAgentConnectTimeoutMs = 1000;
-int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
-const int	MAX_RETRY_COUNT		= 8;
-const int	MAX_RETRY_DELAY		= 1000;
+const int DAEMON_DEFAULT_CONNECT_TIMEOUT	= 1000;
+const int DAEMON_DEFAULT_QUERY_TIMEOUT		= 3000;
+const int DAEMON_MAX_RETRY_COUNT			= 8;
+const int DAEMON_MAX_RETRY_DELAY			= 1000;
 
-int						g_iAgentRetryCount = 0;
-int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+int g_iAgentConnectTimeoutMs		= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+int g_iAgentQueryTimeoutMs			= DAEMON_DEFAULT_QUERY_TIMEOUT;	// global (default). May be override by index-scope values, if one specified
+int g_iAgentRetryCount				= 0;
+int g_iAgentRetryDelayMs			= DAEMON_MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+
+static int g_iReplConnectTimeoutMs	= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+static int g_iReplQueryTimeoutMs	= DAEMON_DEFAULT_QUERY_TIMEOUT;
+static int g_iReplRetryCount		= 3;
+static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
+
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 CSphString				g_sDbName = "Manticore";
@@ -377,6 +385,12 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 	}
 }
 
+const int LOG_BUF_SIZE = 1024;
+int GetDaemonLogBufSize ()
+{
+	return LOG_BUF_SIZE;
+}
+
 /// log entry (with log levels, dupe catching, etc)
 /// call with NULL format for dupe flushing
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
@@ -417,7 +431,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
 	if ( eLevel==SPH_LOG_RPL_DEBUG ) sBanner = "RPL: ";
 
-	char sBuf [ 1024 ];
+	char sBuf [ LOG_BUF_SIZE ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%d] ", sTimeBuf, GetOsThreadId() );
 
 	char * sTtyBuf = sBuf + strlen(sBuf);
@@ -1693,7 +1707,8 @@ enum
 	QFLAG_FACET					= 1UL << 9,
 	QFLAG_FACET_HEAD			= 1UL << 10,
 	QFLAG_JSON_QUERY			= 1UL << 11,
-	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12
+	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
+	QFLAG_LOCAL_DF_SET			= 1UL << 13
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -1720,11 +1735,12 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
-	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
+	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF.value_or ( false );
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	uFlags |= QFLAG_FACET * q.m_bFacet;
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
+	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -2309,10 +2325,10 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCa
 	if ( tQuery.m_iCutoff<-1 )
 		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
-	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
 		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
 		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
@@ -2643,7 +2659,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
-		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
+		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )
+			tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
 		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
@@ -3010,8 +3027,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		tBuf.FinishBlock ();
 	}
 
-	if ( tQuery.m_bLocalDF!=g_tDefaultQuery.m_bLocalDF )
-		tBuf << "local_df=1";
+	if ( tQuery.m_bLocalDF.has_value() )
+		tBuf.Appendf ( "local_df=%d", tQuery.m_bLocalDF.value() ? 1 : 0 );
 
 	if ( tQuery.m_dIndexWeights.GetLength() )
 	{
@@ -5702,7 +5719,7 @@ void SearchHandler_c::RunQueries()
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	}
-	OnRunFinished();
+	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
 
 
@@ -6528,8 +6545,9 @@ void SearchHandler_c::SetupLocalDF ()
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
 		bOnlyFullScan &= tQuery.m_sQuery.IsEmpty();
-		bHasLocalDF |= tQuery.m_bLocalDF;
-		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF )
+		
+		bHasLocalDF |= tQuery.m_bLocalDF.value_or ( false );
+		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF.value_or ( false ) )
 			bOnlyNoneRanker &= ( tQuery.m_eRanker==SPH_RANK_NONE );
 	}
 	// bail out queries: full-scan, ranker=none, local_idf=0
@@ -6540,7 +6558,7 @@ void SearchHandler_c::SetupLocalDF ()
 	dQuery.Resize ( 0 );
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
-		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF || tQuery.m_eRanker==SPH_RANK_NONE )
+		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF.value_or ( false ) || tQuery.m_eRanker==SPH_RANK_NONE )
 			continue;
 
 		int iLen = tQuery.m_sQuery.Length();
@@ -7482,6 +7500,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+		tRes.m_iMatches = tRes.m_iCount;
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
@@ -7861,6 +7880,25 @@ public:
 		return 0;
 	}
 
+	static bool ConvertBool ( const SqlInsert_t & tVal, SphAttr_t & tAttr )
+	{
+		if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+			return false;
+
+		if ( tVal.m_sVal.EqN ( "true" ) )
+		{
+			tAttr = 1;
+			return true;
+		}
+		if ( tVal.m_sVal.EqN ( "false" ) )
+		{
+			tAttr = 0;
+			return true;
+		}
+
+		return false;
+	}
+
 	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
@@ -7869,9 +7907,13 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
-		case SPH_ATTR_BOOL:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
+			break;
+
+		case SPH_ATTR_BOOL:
+			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
+				tAttr = ToInt ( tVal );
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -14507,50 +14549,77 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
 	bool bTruncate = ( tStmt.m_iIntParam==1 );
-	CSphString sError;
+
+	if ( sFrom==sTo )
+	{
+		tOut.ErrorEx ( "can not ATTACH table '%s' to itself", sFrom.cstr() );
+		return;
+	}
 
 	auto pServedFrom = GetServed ( sFrom );
 	auto pServedTo = GetServed ( sTo );
 
-	bool bOk = false;
 	if ( !pServedFrom )
+	{
 		tOut.ErrorEx ( "no such table '%s'", sFrom.cstr() );
-	else if ( pServedFrom->m_eType != IndexType_e::PLAIN )
-		tOut.Error ( "1st argument to ATTACH must be a plain table" );
-	else if ( !pServedTo )
-		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
-	else if ( pServedTo->m_eType!=IndexType_e::RT )
-		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
-	else
-		bOk = true;
-	if (!bOk)
 		return;
+
+	} else if ( pServedFrom->m_eType!=IndexType_e::PLAIN && pServedFrom->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "1st argument to ATTACH must be a plain or a RT table" );
+		return;
+
+	} else if ( !pServedTo )
+	{
+		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
+		return;
+
+	} else if ( pServedTo->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
+		return;
+	}
 
 	// cluster does not implement ATTACH for now
-	auto tCluster = IsPartOfCluster ( pServedTo );
-	if ( tCluster )
+	auto tClusterTo = IsPartOfCluster ( pServedTo );
+	auto tClusterFrom = IsPartOfCluster ( pServedFrom );
+	if ( tClusterTo || tClusterFrom )
 	{
-		tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tCluster->cstr(), sError.cstr () );
+		if ( tClusterTo )
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tClusterTo->cstr() );
+		else 
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sFrom.cstr(), tClusterFrom->cstr() );
 		return;
 	}
 
-	WIdx_T<RtIndex_i*> pRtTo { pServedTo };
-	WIdx_c pPlainFrom { pServedFrom };
-
 	bool bFatal = false;
-	StrVec_t dWarnings;
-	auto bAttached = pRtTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, dWarnings, sError );
+	bool bAttached = false;
+	CSphString sError;
+	WIdx_T<RtIndex_i *> pTo { pServedTo };
 
-	sWarning = ConcatWarnings(dWarnings);
-	if ( bAttached || bFatal )
-		g_pLocalIndexes->Delete ( sFrom );
+	if ( pServedFrom->m_eType==IndexType_e::PLAIN )
+	{
+		WIdx_c pPlainFrom { pServedFrom };
+		bAttached = pTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, sError );
+
+		if ( bAttached || bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+
+		if ( bAttached )
+			pServedFrom->ReleaseIdx(); // since index no more belong to us
+
+	} else
+	{
+		WIdx_T<RtIndex_i*> pFrom { pServedFrom };
+		bAttached = pTo->AttachRtIndex ( pFrom, bTruncate, bFatal, sError );
+
+		if ( bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+	}
 
 	if ( bAttached )
-	{
-		pServedFrom->ReleaseIdx(); // since index no more belong to us
 		tOut.Ok();
-	}
-	else
+	 else
 		tOut.Error ( sError.cstr() );
 }
 
@@ -19790,6 +19859,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
 	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+	tDefaultFA.m_eDict = GetFileAccess( hSearchd, "access_dict", false, tDefaultFA.m_eDict );
 
 	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
 	tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
@@ -19829,14 +19899,22 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iPingIntervalUs = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
 	g_uHAPeriodKarmaS = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
 	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
+
 	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
 	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
 	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
-	if ( g_iAgentRetryDelayMs > MAX_RETRY_DELAY )
-		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, MAX_RETRY_DELAY );
+	if ( g_iAgentRetryDelayMs > DAEMON_MAX_RETRY_DELAY )
+		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, DAEMON_MAX_RETRY_DELAY );
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
-	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
-		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
+	if ( g_iAgentRetryCount > DAEMON_MAX_RETRY_COUNT )
+		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, DAEMON_MAX_RETRY_COUNT );
+
+	g_iReplConnectTimeoutMs = hSearchd.GetMsTimeMs ( "replication_connect_timeout", g_iReplConnectTimeoutMs );
+	g_iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	g_iReplRetryCount = hSearchd.GetInt ( "replication_retry_count", g_iReplRetryCount );
+	g_iReplRetryDelayMs = hSearchd.GetMsTimeMs ( "replication_retry_delay", g_iReplRetryDelayMs );
+	ReplicationSetTimeouts ( g_iReplConnectTimeoutMs, g_iReplQueryTimeoutMs, g_iReplRetryCount, g_iReplRetryDelayMs );
+
 	g_tmWaitUS = hSearchd.GetUsTime64Ms ( "net_wait_tm", g_tmWaitUS );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );

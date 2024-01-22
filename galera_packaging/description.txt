@@ -1,0 +1,4 @@
+Galera is a fast synchronous multimaster wsrep provider (replication engine)
+for transactional databases and similar applications.
+For more information about wsrep API see https://github.com/codership/wsrep-API repository.
+For a description of Galera replication engine see https://www.galeracluster.com web.

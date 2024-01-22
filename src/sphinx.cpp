@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1474,7 +1474,7 @@ bool IsOndisk ( FileAccess_e eType ) { return eType==FileAccess_e::FILE || eType
 
 bool FileAccessSettings_t::operator== ( const FileAccessSettings_t & tOther ) const
 {
-	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist &&
+	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist && m_eDict==tOther.m_eDict &&
 		m_iReadBufferDocList==tOther.m_iReadBufferDocList && m_iReadBufferHitList==tOther.m_iReadBufferHitList );
 }
 
@@ -1990,6 +1990,10 @@ void CSphIndex::SetupQueryTokenizer()
 void CSphIndex::PostSetup()
 {
 	SetupQueryTokenizer();
+
+	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
+	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
+		sphWarning ( "table '%s': %s", GetName(), m_sLastError.cstr() );
 }
 
 TokenizerRefPtr_c CSphIndex::GetTokenizer() const
@@ -3222,6 +3226,9 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 
 	if ( m_uVersion >= 57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		fnAddFile ( SPH_EXT_SPDS );
+
+	if ( m_uVersion >= 65 && m_tSchema.HasKNNAttrs() )
+		fnAddFile ( SPH_EXT_SPKNN );
 
 	if ( m_bIsEmpty )
 		return;
@@ -7665,20 +7672,23 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
+// the iterator does not support cutoff
+// overwise tIterator.WasCutoffHit() at the Fullscan ends iterating blocks after 0 block fully scanned (!m_iRowsLeft)
+// and for small cuttoff itrator scans only up to cuttoff rows in each block
+
 template <bool HAVE_DEAD>
 class RowIterator_T : public ISphNoncopyable
 {
 public:
-	RowIterator_T ( const RowIdBoundaries_t & tBoundaries, const DeadRowMap_Disk_c & tDeadRowMap, int iCutoff )
+	RowIterator_T ( const RowIdBoundaries_t & tBoundaries, const DeadRowMap_Disk_c & tDeadRowMap )
 		: m_tRowID ( tBoundaries.m_tMinRowID )
 		, m_tBoundaries ( tBoundaries )
 		, m_tDeadRowMap	( tDeadRowMap )
-		, m_iRowsLeft ( iCutoff>=0 ? iCutoff : INT_MAX )
 	{}
 
 	FORCE_INLINE bool GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock );
 	DWORD		GetNumProcessed() const	{ return m_tRowID-m_tBoundaries.m_tMinRowID; }
-	bool		WasCutoffHit() const	{ return !m_iRowsLeft; }
+	bool		WasCutoffHit() const	{ return false; }
 
 private:
 	static const int MAX_COLLECTED = 128;
@@ -7687,14 +7697,13 @@ private:
 	RowIdBoundaries_t			m_tBoundaries;
 	CSphFixedVector<RowID_t>	m_dCollected {MAX_COLLECTED};		// store 128 values (same as .spa attr block size)
 	const DeadRowMap_Disk_c &	m_tDeadRowMap;
-	int							m_iRowsLeft = INT_MAX;
 };
 
 template <>
 bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
-	RowID_t * pRowIdMax = pRowIdStart + Min ( m_iRowsLeft, m_dCollected.GetLength() );
+	RowID_t * pRowIdMax = pRowIdStart + m_dCollected.GetLength();
 	RowID_t * pRowID = pRowIdStart;
 
 	while ( pRowID<pRowIdMax && m_tRowID<=m_tBoundaries.m_tMaxRowID )
@@ -7705,7 +7714,6 @@ bool RowIterator_T<true>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 		m_tRowID++;
 	}
 
-	m_iRowsLeft = Max ( m_iRowsLeft - int(pRowID-pRowIdStart), 0 );
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
@@ -7714,7 +7722,6 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 {
 	RowID_t * pRowIdStart = m_dCollected.Begin();
 	int64_t iDelta = Min ( RowID_t(m_dCollected.GetLength()), int64_t(m_tBoundaries.m_tMaxRowID)-m_tRowID+1 );
-	iDelta = Min ( iDelta, m_iRowsLeft );
 	assert ( iDelta>=0 );
 	RowID_t * pRowIdMax = pRowIdStart + iDelta;
 	RowID_t * pRowID = pRowIdStart;
@@ -7723,7 +7730,6 @@ bool RowIterator_T<false>::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
 	while ( pRowID<pRowIdMax )
 		*pRowID++ = m_tRowID++;
 
-	m_iRowsLeft = Max ( m_iRowsLeft - int(pRowID-pRowIdStart), 0 );
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
@@ -7885,12 +7891,12 @@ bool CSphIndex_VLN::RunFullscanOnAttrs ( const RowIdBoundaries_t & tBoundaries, 
 
 	if ( m_tDeadRowMap.HasDead() )
 	{
-		RowIterator_T<true> tIt ( tBoundaries, m_tDeadRowMap, iCutoff );
+		RowIterator_T<true> tIt ( tBoundaries, m_tDeadRowMap );
 		return RunFullscan ( tIt, fnToStatic, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
 	}
 	else
 	{
-		RowIterator_T<false> tIt ( tBoundaries, m_tDeadRowMap, iCutoff );
+		RowIterator_T<false> tIt ( tBoundaries, m_tDeadRowMap );
 		return RunFullscan ( tIt, fnToStatic, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer );
 	}
 }
@@ -8913,7 +8919,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
-	tDictSettings.Load ( rdInfo, tEmbeddedFiles, sWarning );
+	tDictSettings.Load ( rdInfo, tEmbeddedFiles, pFilenameBuilder, sWarning );
 
 	if ( bStripPath )
 	{
@@ -9036,7 +9042,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
-	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, sWarning );
+	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, sWarning );
 
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
@@ -9672,7 +9678,7 @@ void CSphIndex_VLN::Preread()
 	PrereadMapping ( GetName(), "skip-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tSkiplists );
 	if ( sphInterrupted() ) return;
 
-	PrereadMapping ( GetName(), "dictionary", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tWordlist.m_tBuf );
+	PrereadMapping ( GetName(), "dictionary", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eDict ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eDict ), m_tWordlist.m_tBuf );
 	if ( sphInterrupted() ) return;
 
 	PrereadMapping ( GetName(), "docid-lookup", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tDocidLookup );
@@ -11179,7 +11185,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
 	XQQuery_t tParsed;
-	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
 		tMeta.m_sError = tParsed.m_sParseError;
@@ -11295,7 +11301,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		const QueryParser_i * pQueryParser = tCurQuery.m_pQueryParser;
 		assert ( pQueryParser );
 
-		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
+		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tCurQuery.m_bSimplify, this );
@@ -12014,7 +12020,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	}
 
 	XQQuery_t tParsed;
-	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, nullptr, tArgs.m_pQueryTokenizer, nullptr, pSchema, tArgs.m_pDict, *tArgs.m_pSettings ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, nullptr, tArgs.m_pQueryTokenizer, nullptr, pSchema, tArgs.m_pDict, *tArgs.m_pSettings, tArgs.m_pMorphFields ) )
 	{
 		TlsMsg::Err ( tParsed.m_sParseError );
 		return EmptyBson ();
@@ -12072,6 +12078,7 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_pDict->GetSettings().m_bWordDict ) );
+	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	return Explain ( tArgs );
 }

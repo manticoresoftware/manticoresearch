@@ -94,6 +94,21 @@ index dl
 	agent			= <my_address/>:l1,l2
 }
 
+index test_rt1
+{
+	type = rt
+	path =<data_path/>/test_rt1
+
+    rt_field = str
+}
+
+
+index d_rt1
+{
+	type			= distributed
+	agent			= <my_address/>:test_rt1
+}
+
 </config>
 
 <db_create>
@@ -161,6 +176,18 @@ select *, weight() from dl where match('blow') option local_df=1;
 select *, weight() from dl where match('blow');
 
 select id from kw order by weight() asc;
+</sphinxql>
+
+<sphinxql>
+<!-- idf enabled at RT index -->
+insert into test_rt1 (id, str) values(1, 'abc'),(2, 'def');
+flush ramchunk test_rt1;
+insert into test_rt1 (id, str) values(5, 'abc'),(6, 'def');
+flush ramchunk test_rt1;
+select id, weight() as w from test_rt1 where match ('abc') order by id asc option ranker=expr('1000000*sum(sum_idf)');
+select id, weight() as w from d_rt1 where match ('abc') order by id asc option ranker=expr('1000000*sum(sum_idf)');
+select id, weight() as w from test_rt1 where match ('abc') order by id asc option ranker=expr('1000000*sum(sum_idf)'), local_df=0;
+select id, weight() as w from d_rt1 where match ('abc') order by id asc option ranker=expr('1000000*sum(sum_idf)'), local_df=0;
 </sphinxql></queries>
 
 </test>

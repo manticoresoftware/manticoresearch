@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,7 +15,6 @@
 #include "api_command_cluster.h"
 #include "common.h"
 #include "nodes.h"
-#include "configuration.h"
 
 // API command to remote node to update nodes by nodes it sees
 using ClusterUpdateNodes_c = ClusterCommand_T<E_CLUSTER::UPDATE_NODES, UpdateNodesRequest_t>;
@@ -38,13 +37,13 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), GetQueryTimeoutForReplication(), tRequest );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), ReplicationTimeoutQuery(), tRequest );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
 
 	ClusterUpdateNodes_c tReq;
-	return PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }
 
 

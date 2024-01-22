@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -335,7 +335,7 @@ bool FileReader_t::Next ( StringBuilder_c & sErrors )
 			return true;
 		}
 
-		m_iFileRetries = g_iNodeRetry;
+		m_iFileRetries = ReplicationFileRetryCount();
 		LogFileSend ( );
 	}
 
@@ -425,7 +425,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 
 		tReader.m_tFileSendRequest.m_tSendBuf = SendBuf_c ( dReadBuf.Begin() + tSigSrc.m_iBufferSize * iNode, tSigSrc.m_iBufferSize );
 		tReader.m_tFileSendRequest.m_tWriterKey = tKey;
-		tReader.m_iFileRetries = g_iNodeRetry;
+		tReader.m_iFileRetries = ReplicationFileRetryCount();
 
 		if ( !tReader.StartFile ( 0, tErrors ) )
 			return TlsMsg::Err ( "%s", tErrors.cstr() );
@@ -442,7 +442,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
 	ClusterFileSend_c tReq;
-	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter, g_iNodeRetry, g_iNodeRetryWaitMs );
+	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter, ReplicationFileRetryCount(), ReplicationFileRetryDelay() );
 
 	bool bDone = false;
 	while ( !bDone )
@@ -495,7 +495,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 
 			VectorAgentConn_t dNewNode;
 			dNewNode.Add ( pNextJob );
-			ScheduleDistrJobs ( dNewNode, &tReq, &tReq, tReporter, g_iNodeRetry, g_iNodeRetryWaitMs );
+			ScheduleDistrJobs ( dNewNode, &tReq, &tReq, tReporter, ReplicationFileRetryCount(), ReplicationFileRetryDelay() );
 
 			// reset done flag to process new item
 			bDone = false;

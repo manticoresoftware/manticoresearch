@@ -60,7 +60,7 @@ set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
-set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata.rpm" )
+set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata-65l.rpm" )
 set ( CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_COMMON_PACKAGE_NAME "manticore-common" )
@@ -189,7 +189,7 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 install ( FILES doc/indexer.1 doc/indextool.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
 install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common RENAME manticore.conf.dist )
-install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES LICENSE INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore

@@ -857,7 +857,7 @@ var sqlresult = indexApi.Insert(newdoc);
 
 <!-- example JSON_insert -->
 ## Inserting JSON
-JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
+JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL or JSON) or as a JSON object (via the JSON interface).
 
 <!-- intro -->
 ### Examples

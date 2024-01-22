@@ -260,6 +260,9 @@ Wsrep::Provider_i* Wsrep::MakeProvider ( Wsrep::Cluster_i* pCluster, CSphString 
 	if ( !tLoader.m_pLibrary )
 		return nullptr;
 
+	if ( tLoader.m_iIfaceVer == 25 )
+		return MakeProviderV25 ( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions );
+
 	if ( tLoader.m_iIfaceVer == 31 )
 		return MakeProviderV31 ( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions );
 

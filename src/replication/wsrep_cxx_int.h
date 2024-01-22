@@ -449,4 +449,6 @@ Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pClus
 	return pProvider.release();
 }
 
+Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions );
+
 Wsrep::Provider_i* MakeProviderV31 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions );

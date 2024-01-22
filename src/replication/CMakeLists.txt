@@ -21,6 +21,7 @@ ADD_LIBRARY ( repli_stuff STATIC wsrep_cxx.cpp wsrep_cxx.h wsrep_cxx_int.h
 		send_files.h send_files.cpp
 		cluster_commands.h
 		recv_state.h recv_state.cpp
+		wsrep_v25.cpp
 		wsrep_v31.cpp
 )
 

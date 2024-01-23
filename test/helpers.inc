@@ -1008,7 +1008,7 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $columnar, $
 	}
 
 	//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
-	foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
+	foreach ( ['time', 'warning', 'status', 'fields', 'resarray', 'roundoff'] as $key )
 		unset ( $set[$key] );
 
 	// variants are be used to check mva32/mva64, int/bigint, etc

@@ -1,0 +1,44 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "create table h random=5"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+mysql -h0 -P1306 -e "create table t(id bigint) shards=a rf=b"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P1306 -e "create table u(id bigint) rf=1 shards=10"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:m SHARDS=10 RF=2"
+––– output –––
+ERROR 1064 (42000) at line 1: Cluster 'c' does not exist
+––– input –––
+mysql -h0 -P1306 -e "create table l(id bigint) SHARDS=-10 RF=-1"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P1306 -e "create table n(id bigint) shards=10 rf=2"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:m(id bigint) SHARDS=10 RF=2"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count for cluster c is too low: 1. You can create local sharded table.

@@ -30,17 +30,27 @@ Index: a_s3
 for i in 1 2; do mysql -h0 -P${i}306 -e "show tables\G"; done | grep 'Index: b' | sort -V
 ––– output –––
 Index: b
+Index: b
+Index: b_s0
 Index: b_s1
 Index: b_s2
+Index: b_s3
 ––– input –––
-for i in 1 2; do mysql -h0 -P${i}306 -e "describe a\G"; done | awk '/Agent:|Type:/ {printf "%s%s ", $1, $2} /Type:/ {print ""}' | sort
+for i in 1 2; do mysql -h0 -P${i}306 -e "describe b\G"; done | awk '/Agent:|Type:/ {printf "%s%s ", $1, $2} /Type:/ {print ""}' | sort
 ––– output –––
-ERROR 1064 (42000) at line 1: no such table 'a'
-Agent:a_s0 Type:local
-Agent:a_s1 Type:local
-Agent:a_s2 Type:local
-Agent:a_s3 Type:local
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:b_s%{NUMBER} Type:local
+Agent:b_s%{NUMBER} Type:local
+Agent:b_s%{NUMBER} Type:local
+Agent:b_s%{NUMBER} Type:local
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes'";
 ––– output –––
-
++-------------------+----------------------------------------------+
+| Counter           | Value                                        |
++-------------------+----------------------------------------------+
+| cluster_c_indexes | sharding_state,sharding_queue,sharding_table |
++-------------------+----------------------------------------------+

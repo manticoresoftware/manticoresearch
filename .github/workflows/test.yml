@@ -425,7 +425,7 @@ jobs:
 
 
   clt_core_test:
-    name: CLT test of core logic of Manticore Search
+    name: CLT test core logic
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:

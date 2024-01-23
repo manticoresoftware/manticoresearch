@@ -1,5 +1,5 @@
 ––– input –––
-set -b +m
+set -b
 ––– output –––
 ––– input –––
 apt-get update -y > /dev/null; echo $?
@@ -23,5 +23,9 @@ COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
 0
 ––– input –––
 cd /.clt; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y -q binutils > /dev/null; echo $?
 ––– output –––
 0

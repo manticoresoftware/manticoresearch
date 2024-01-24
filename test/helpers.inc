@@ -3243,7 +3243,7 @@ class SphinxConfig
 		CompareResultSetFixup ( $set1, $roundoff, $variants_match, $this->IsColumnar(), $keep_json_ctrls );
 		CompareResultSetFixup ( $set2, $roundoff, $variants_match, $this->IsColumnar(), $keep_json_ctrls );
 
-		return $set1==$set2;
+		return $set1===$set2;
 	}
 
 	function CompareResults ( $query1, $query2 )
@@ -3577,7 +3577,7 @@ class SphinxConfig
 			}
 
 			if ( isset($cur["attrs"]) || isset($ref["attrs"]) )
-				if ( @$cur["attrs"]!=@$ref["attrs"] )
+				if ( @$cur["attrs"]!==@$ref["attrs"] )
 					$opts["format_attrs"] = 1;
 
 			$result_f_cur = $this->FormatResultSet ( $nquery+1, $cur, $opts );

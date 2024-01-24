@@ -3121,7 +3121,7 @@ class SphinxConfig
 			$result = array();
 			foreach ( $v as $key=>$value )
 			{
-				if ( $key==PHP_INT_MAX || $key==-PHP_INT_MAX-1 )
+				if ( $key==PHP_INT_MAX || $key==PHP_INT_MIN )
 					$key = (int)$key;
 				$result[$key] = $this->FixKeys ( $value );
 			}
@@ -3539,7 +3539,7 @@ class SphinxConfig
 				if ( @$cur["attrs"]!=@$ref["attrs"] )
 					$opts["format_attrs"] = 1;
 
-			$result_f_cur = $this->FormatResultSet ( $nquery+1, $_results[$nquery], $opts );
+			$result_f_cur = $this->FormatResultSet ( $nquery+1, $cur, $opts );
 			$result_f_ref = $this->FormatResultSet ( $nquery+1, $ref, $opts );
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );

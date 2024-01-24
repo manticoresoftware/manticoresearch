@@ -5,7 +5,7 @@
 SHOW VERSION
 ```
 
-`SHOW VERSION` returns information about all currently running queries. The output is a table with the following structure:
+`SHOW VERSION` provides detailed version information of various components of the Manticore Search instance. This command is particularly useful for administrators and developers who need to verify the version of Manticore Search they are running, along with the versions of its associated components.
 
 The output table includes two columns:
 - `Component`: This column names the specific component of Manticore Search.

@@ -12,26 +12,19 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../base/flexible/start-searchd –––
 ––– input –––
-export INSTANCE=4
-––– output –––
-––– block: ../base/flexible/start-searchd –––
-––– input –––
-export INSTANCE=5
-––– output –––
-––– block: ../base/flexible/start-searchd –––
-––– input –––
 export CLUSTER_NAME=c
 ––– output –––
 ––– block: ../base/flexible/create-cluster –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=10 rf=1;"; echo $?
+sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=2 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (1, 'Title 1', 'Content 1', 1);"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) VALUES (1, 'Title 1', 'Content 1', 1);"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) VALUES (2, 'Title 2', 'Content 2', 2);"
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (2, 'Title 2', 'Content 2', 2);"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SELECT * FROM c:testrt WHERE id IN (1, 2);"

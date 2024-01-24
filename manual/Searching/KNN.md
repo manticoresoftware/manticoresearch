@@ -261,7 +261,7 @@ select id, knn_dist() from test where knn ( image_vector, 5, 1 );
 ```json
 POST /search
 {
-  "index": test,
+  "index": "test",
   "knn":
   {
     "field": "image_vector",

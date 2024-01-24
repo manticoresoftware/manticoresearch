@@ -30,10 +30,10 @@ static CSphString g_sListener4Buddy;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
-static const int g_iPipeBufSize = 2048;
+static const int PIPE_BUF_SIZE = 2048;
 static std::unique_ptr<boost::asio::io_service> g_pIOS;
-static std::vector<char> g_dPipeBuf ( g_iPipeBufSize );
-static CSphVector<char> g_dLogBuf;
+static std::vector<char> g_dPipeBuf ( PIPE_BUF_SIZE );
+static CSphVector<char> g_dLogBuf ( PIPE_BUF_SIZE );
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
 enum class BuddyState_e
 {
@@ -241,7 +241,7 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	g_iRestartCount = 0;
 	sphInfo ( "[BUDDY] started %.*s '%s' at %s", sBuddyVer.second, sBuddyVer.first, g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
 	if ( sLinesTail.second )
-		sphInfo ( "[BUDDY] %.*s", sLinesTail.second, sLinesTail.first );
+		LogPipe ( sLinesTail );
 
 	if ( !g_bBuddyVersion )
 	{
@@ -418,7 +418,7 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 		return;
 	}
 
-	g_dLogBuf.Reserve ( g_iPipeBufSize );
+	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
 	g_sStartArgs.SetSprintf ( "%s --listen=%s %s --threads=%d",

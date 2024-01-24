@@ -1034,11 +1034,15 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			fprintf ( stdout, "WARNING: table '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
-		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && ( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
+		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 		{
 			tSettings.m_bIndexExactWords = true;
 			fprintf ( stdout, "WARNING: table '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
 		}
+
+		bool bExpandExact = ( tSettings.m_bIndexExactWords && ( tMutableSettings.m_iExpandKeywords & KWE_EXACT )==KWE_EXACT );
+		if ( !pDict->GetSettings().m_sMorphFields.IsEmpty() && !bExpandExact )
+			fprintf ( stdout, "WARNING: table '%s': morphology_skip_fields set, consider enable expand_keywords\n", szIndexName );
 
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 

@@ -48,6 +48,8 @@ NodeEstimate_t & NodeEstimate_t::operator+= ( const NodeEstimate_t & tRhs )
 	return *this;
 }
 
+static void FixupMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec * pMorphFields );
+
 //////////////////////////////////////////////////////////////////////////
 void XQParseHelper_c::SetString ( const char * szString )
 {
@@ -355,12 +357,13 @@ static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned
 	return TransformOnlyNot ( pNode, dSpawned );
 }
 
-XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed )
+XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
 	FixupDestForms ();
 	DeleteNodesWOFields ( pRoot );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
+	FixupMorphOnlyFields ( pRoot, pMorphFields );
 	FixupNulls ( pRoot );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
@@ -712,6 +715,51 @@ const StrVec_t & XQParseHelper_c::GetZone() const
 	return m_pParsed->m_dZones;
 }
 
+static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
+{
+	if ( !pNode )
+		return;
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		TransformMorphOnlyFields ( pNode->m_dChildren[i], tMorphDisabledFields );
+
+	if ( pNode->m_dSpec.IsEmpty () || pNode->m_dWords.IsEmpty () )
+		return;
+
+	const XQLimitSpec_t & tSpec = pNode->m_dSpec;
+	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
+	{
+		int iField=tMorphDisabledFields.Scan ( 0 );
+		while ( iField<tMorphDisabledFields.GetSize() )
+		{
+			if ( pNode->m_dSpec.m_dFieldMask.Test ( iField ) )
+			{
+				pNode->m_dWords.for_each ( [] ( XQKeyword_t & tKw )
+					{
+						if ( !tKw.m_sWord.IsEmpty() && !tKw.m_sWord.Begins( "=" ) && !tKw.m_sWord.Begins("*") && !tKw.m_sWord.Ends("*") )
+							tKw.m_sWord.SetSprintf ( "=%s", tKw.m_sWord.cstr() );
+					});
+			}
+
+			if ( ( iField+1 )<tMorphDisabledFields.GetSize() )
+				iField=tMorphDisabledFields.Scan ( iField+1 );
+			else
+				break;
+		}
+	}
+}
+
+static void FixupMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec * pMorphFields )
+{
+	if ( !pNode || !pMorphFields || pMorphFields->IsEmpty() )
+		return;
+
+	// set the only fields with the morphology_skip_fields option to use bitvec::scan
+	CSphBitvec tMorphDisabledFields ( *pMorphFields );
+	tMorphDisabledFields.Negate(); 
+	TransformMorphOnlyFields ( pNode, tMorphDisabledFields );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class XQParser_t : public XQParseHelper_c
@@ -724,7 +772,7 @@ public:
 					~XQParser_t() override;
 
 public:
-	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c & pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
@@ -1819,7 +1867,7 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	assert ( pTokenizer->IsQueryTok() );
@@ -1892,7 +1940,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	if ( pQuery )
 		bNotOnlyAllowed |= pQuery->m_bNotOnlyAllowed;
 
-	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), bNotOnlyAllowed );
+	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), pMorphFields, bNotOnlyAllowed );
 	if ( !pNewRoot )
 	{
 		Cleanup();
@@ -2066,10 +2114,10 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 }
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings );
+	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings, pMorphFields );
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )
@@ -4519,7 +4567,7 @@ class QueryParserPlain_c : public QueryParser_i
 public:
 	bool IsFullscan ( const XQQuery_t & tQuery ) const override;
 	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson,
-		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const override;
+		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const override;
 };
 
 
@@ -4529,9 +4577,9 @@ bool QueryParserPlain_c::IsFullscan ( const XQQuery_t & /*tQuery*/ ) const
 }
 
 
-bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const
+bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
-	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings );
+	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings, pMorphFields );
 }
 
 

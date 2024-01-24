@@ -47,7 +47,8 @@ public:
 
 	bool IsEmpty() const noexcept;
 	int BitCount () const noexcept;
-	int Scan ( int iStart );
+	int Scan ( int iStart ) const;
+	void Negate ();
 
 protected:
 	static constexpr int	SIZEBITS = sizeof ( T ) * CHAR_BIT;
@@ -60,7 +61,7 @@ protected:
 	int		m_iElements = 0;
 
 private:
-	int ScanBit ( int iIndex, int iStart );
+	int ScanBit ( int iIndex, int iStart ) const;
 	int CalcStorage() const noexcept;
 };
 

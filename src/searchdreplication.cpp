@@ -237,6 +237,9 @@ private:
 
 using ReplicationClusterRefPtr_c = CSphRefcountedPtr<ReplicationCluster_t>;
 
+// serializer for cluster management operations - only one cluster operation a time
+static Threads::Coro::Mutex_c g_tClusterOpsLock;
+
 // cluster list
 static Threads::Coro::RWLock_c g_tClustersLock;
 static SmallStringHash_T<ReplicationClusterRefPtr_c> g_hClusters GUARDED_BY ( g_tClustersLock );
@@ -1500,6 +1503,7 @@ static std::optional<ClusterDesc_t> ClusterDescFromSphinxqlStatement ( const CSp
 /////////////////////////////////////////////////////////////////////////////
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes ) EXCLUDES ( g_tClustersLock )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	auto tDesc = ClusterDescFromSphinxqlStatement ( sCluster, dNames, dValues, MAKE_E::JOIN );
 	if ( !tDesc )
@@ -1553,6 +1557,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 /////////////////////////////////////////////////////////////////////////////
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues ) EXCLUDES ( g_tClustersLock )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	if ( !g_bReplicationStarted )
 		return TlsMsg::Err ( "cluster '%s' is not ready, starting", sCluster.cstr() );
@@ -1759,6 +1764,7 @@ static bool ClusterAddCheckDistLocals ( const StrVec_t & dLocals, const CSphStri
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	{
 		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		bool bMutable = ServedDesc_t::IsMutable ( pServed );

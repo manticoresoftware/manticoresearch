@@ -742,7 +742,7 @@ TEST_F ( QueryParser, test_many )
 	for ( auto & dTest : dTests )
 	{
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, dTest.m_sQuery, NULL, pTokenizer, &tSchema, pDict, tTmpSettings );
+		sphParseExtendedQuery ( tQuery, dTest.m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 		ASSERT_STREQ ( sReconst.cstr(), dTest.m_sReconst );
 	}
@@ -751,16 +751,14 @@ TEST_F ( QueryParser, test_many )
 TEST_F ( QueryParser, NEAR_with_NOT )
 {
 	XQQuery_t tQuery;
-	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", NULL, pTokenizer, &tSchema
-									   , pDict, tTmpSettings ) );
+	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	ASSERT_FALSE ( tQuery.m_pRoot );
 }
 
 TEST_F ( QueryParser, soft_whitespace1 )
 {
 	XQQuery_t tQuery;
-	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ off", NULL, pTokenizer, &tSchema, pDict
-										  , tTmpSettings ) );
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 2 };
 	SCOPED_TRACE( "soft_whitespace1" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -769,8 +767,7 @@ TEST_F ( QueryParser, soft_whitespace1 )
 TEST_F ( QueryParser, soft_whitespace2 )
 {
 	XQQuery_t tQuery;
-	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ ,, &&,[ off", NULL, pTokenizer, &tSchema, pDict
-										  , tTmpSettings ) );
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ ,, &&,[ off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 2 };
 	SCOPED_TRACE( "soft_whitespace2" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -779,8 +776,7 @@ TEST_F ( QueryParser, soft_whitespace2 )
 TEST_F ( QueryParser, soft_whitespace3 )
 {
 	XQQuery_t tQuery;
-	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", NULL, pTokenizer, &tSchema, pDict
-										  , tTmpSettings ) );
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 3 };
 	SCOPED_TRACE( "soft_whitespace3" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -790,8 +786,7 @@ TEST_F ( QueryParser, soft_whitespace4 )
 {
 	XQQuery_t tQuery;
 	ASSERT_TRUE (
-		sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", NULL, pTokenizer, &tSchema, pDict
-								, tTmpSettings ) );
+		sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 3 };
 	SCOPED_TRACE( "soft_whitespace4" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -1147,8 +1142,7 @@ TEST_F ( QueryParser, query_transforms )
 	while ( pTest->m_sQuery )
 	{
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, NULL, pTokenizer, &tSchema, pDict
-								, tTmpSettings );
+		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 
@@ -1187,7 +1181,7 @@ TEST_F ( QueryParser, test_NOT )
 		AllowOnlyNot ( tCase.m_bNotAllowed );
 
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, tCase.m_sQuery, NULL, pTokenizer, &tSchema, pDict, tTmpSettings );
+		sphParseExtendedQuery ( tQuery, tCase.m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 		ASSERT_STREQ ( sReconst.cstr(), tCase.m_sReconst );
 	}

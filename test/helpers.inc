@@ -3152,6 +3152,28 @@ class SphinxConfig
 			$fixarr[] = $v;
 	}
 
+	// linux and windows line ending breaks model at different boxes
+	function fix_crlf ($contents)
+	{
+		return preg_replace_callback('!s:\d+:"(.*?)";!s', function($m) { return "s:" . strlen($m[1]) . ':"'.$m[1].'";'; }, $contents);
+	}
+
+	function fix_serialized_bignums ( $bignumbers, $content )
+	{
+		if ( is_array ($bignumbers) && sizeof($bignumbers)>0)
+		{
+			$findes=[];
+			$replaces=[];
+			foreach ($bignumbers as $key)
+			{
+				$findes[]="i:$key";
+				$replaces[]="s:".strlen($key).":\"$key\"";
+			}
+			$content = str_replace ( $findes, $replaces, $content );
+		}
+		return $content;
+	}
+
 
 	function LoadModel ( $filename )
 	{
@@ -3164,8 +3186,17 @@ class SphinxConfig
 			if ( ! $contents )
 				return 0;
 
-			// linux and windows line ending breaks model at different boxes
-			$fixed_data = preg_replace_callback('!s:\d+:"(.*?)";!s', function($m) { return "s:" . strlen($m[1]) . ':"'.$m[1].'";'; }, $contents);
+			// check for wrapped 'big numbers' model
+			if ( substr( $contents, 0, 24 ) === 'a:2:{s:12:"huge_numbers"' )
+			{
+				$model32 = unserialize ( $contents );
+				$fixed_data = $this->fix_crlf($model32["model64"]);
+
+				// need to patch data only when we need it
+				if (PHP_INT_SIZE<=4)
+					$fixed_data = $this->fix_serialized_bignums (unserialize($model32["huge_numbers"]), $fixed_data );
+			} else
+				$fixed_data = $this->fix_crlf($contents);
 
 			$this->_results_model = $this->FixKeys ( unserialize ( $fixed_data ) );
 		}
@@ -3467,7 +3498,10 @@ class SphinxConfig
 						$val = $docinfo["attrs"][$attr];
 						if ( is_array ( $val ) )
 							$val = join ( " ", $val );
-						$str .= " $attr=$val";
+						if ( is_string ( $val ) )
+							$str .= " $attr=\"$val\"";
+						else
+							$str .= " $attr=$val";
 					}
 					continue;
 				}
@@ -4117,23 +4151,23 @@ class SphinxConfig
 
 	function WriteModel ( $filename, $model )
 	{
-        $result = serialize ( $model );
+		// that's a legacy hack: we serialize model 'as is', but add a layer of indirection: we write all huge numbers
+		// which are not fit in int32 as array of strings, and then serialize again this array + original serialized
+		// model. So that test on machine with tiny int can first fixup serialized model.
         if (PHP_INT_SIZE>4)
         {
-            $keys = array();
-            $this->FixSerialize64 ( $model, $keys );
+            $allkeys = [];
+            $this->FixSerialize64 ( $model, $allkeys );
+			$keys = array_unique($allkeys);
             if ( sizeof($keys)>0 )
             {
-                $findes=array();
-                $replaces=array();
-                foreach ($keys as $key)
-                {
-                    $findes[]="i:$key";
-                    $replaces[]="s:".strlen($key).":\"$key\"";
-                }
-                $result = str_replace ( $findes, $replaces, $result );
-            }
-        }
+				$model32 = ["huge_numbers"=>$this->fix_serialized_bignums ($keys, serialize($keys))];
+				$model32["model64"] = serialize ( $model );
+				$result = serialize ($model32);
+            } else
+				$result = serialize ($model);
+        } else
+			$result = serialize ($model);
         file_put_contents ( $filename, $result );
 	}
 

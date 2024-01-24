@@ -114,7 +114,7 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
       "index": "<table name>",
       "knn":
       {
-          "field": "<field>"",
+          "field": "<field>",
           "query_vector": [<query vector>],
           "k": <k>
       }
@@ -261,12 +261,12 @@ select id, knn_dist() from test where knn ( image_vector, 5, 1 );
 ```json
 POST /search
 {
-  "index": "<table name>",
+  "index": test,
   "knn":
   {
-    "field": "<field>"",
-    "doc_id": <id>,
-    "k": <k>
+    "field": "image_vector",
+    "doc_id": 1,
+    "k": 5
   }
 }
 ```

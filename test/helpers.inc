@@ -3372,7 +3372,10 @@ class SphinxConfig
                 $str .= "Sort: expr: " . $qinfo["sortby"] . "\n";
         }
 
-		$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
+		if ( @$opts["no_time"] )
+			$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches.\n";
+		else
+			$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( @array_key_exists ( "error", $result ) && $result["error"] )
 			$str .= "Error: $result[error]\n";
 		if ( @array_key_exists ( "warning", $result ) && $result["warning"] )
@@ -3528,13 +3531,17 @@ class SphinxConfig
 			}
 
 			$cur = $_results[$nquery];
+
+			$opts = [ "no_time"=>1 ];
+			unset ( $cur["time"] );
+			unset ( $ref["time"] );
+
 			if ( $this->CompareResultSets ( $ref, $cur ) )
 			{
 				$nquery++;
 				continue;
 			}
 
-			$opts = array();
 			if ( isset($cur["attrs"]) || isset($ref["attrs"]) )
 				if ( @$cur["attrs"]!=@$ref["attrs"] )
 					$opts["format_attrs"] = 1;

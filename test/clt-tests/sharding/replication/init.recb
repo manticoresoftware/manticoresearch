@@ -1,4 +1,35 @@
 ––– input –––
+set -b +m
+––– output –––
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y git > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install strings > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+git clone -b fix/sharding -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
+––– output –––
+0
+––– input –––
+cd /workdir; echo $?
+––– output –––
+0
+––– input –––
+COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
+––– output –––
+0
+––– input –––
+cd /.clt; echo $?
+––– output –––
+0
+––– input –––
 wget -q https://repo.manticoresearch.com/repository/manticoresearch_focal_dev/dists/focal/main/binary-amd64/manticore-galera_3.37_amd64.deb
 ––– output –––
 ––– input –––

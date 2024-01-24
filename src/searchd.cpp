@@ -18555,15 +18555,12 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 			sphWarning ( "table '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
 			return false;
 		}
+		CSphString sWarning;
+		sWarning.SetSprintf ( "has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", iIndexSP );
+		if ( pWarnings )
+			pWarnings->Add(sWarning);
 		else
-		{
-			CSphString sWarning;
-			sWarning.SetSprintf ( "has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", iIndexSP );
-			if ( pWarnings )
-				pWarnings->Add(sWarning);
-			else
-				sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
-		}
+			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
 	// upgrading schema to store field lengths

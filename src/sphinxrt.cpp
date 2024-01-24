@@ -10424,7 +10424,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64", "rt_attr_float_vector" };
 	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_FLOAT_VECTOR };
 
-	for ( int iType=0; iType<iNumTypes; ++iType )
+	CSphVector<std::pair<int, CSphColumnInfo>> dOrderedColumns;
+
+	for ( int iType = 0; iType < iNumTypes; ++iType )
 	{
 		for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
 		{
@@ -10453,22 +10455,30 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 					sError.SetSprintf ( "attribute '%s': bitcount is only supported for integer types (bitcount ignored)", tCol.m_sName.cstr() );
 			}
 
-			if ( !SchemaConfigureCheckAttribute ( tSchema, tCol, sError ) )
-				return false;
+			dOrderedColumns.Add ( { v->m_iTag, tCol } );
+		}
+	}
 
-			if ( !bPQ )
-			{
-				SetColumnarFlag ( tCol, tSettings );
-				SetKNNFlag ( tCol, tSettings );
-			}
+	dOrderedColumns.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.first  <  b.first; } ) );
 
-			tSchema.AddAttr ( tCol, false );
+	for ( auto& tOrderedCol : dOrderedColumns )
+	{
+		auto& tCol = tOrderedCol.second;
+		if ( !SchemaConfigureCheckAttribute ( tSchema, tCol, sError ) )
+			return false;
 
-			if ( tCol.m_eAttrType!=SPH_ATTR_STRING && hFields.Exists ( tCol.m_sName ) && !bSkipValidation )
-			{
-				sError.SetSprintf ( "can not add attribute that shadows '%s' field", tCol.m_sName.cstr () );
-				return false;
-			}
+		if ( !bPQ )
+		{
+			SetColumnarFlag ( tCol, tSettings );
+			SetKNNFlag ( tCol, tSettings );
+		}
+
+		tSchema.AddAttr ( tCol, false );
+
+		if ( tCol.m_eAttrType != SPH_ATTR_STRING && hFields.Exists ( tCol.m_sName ) && !bSkipValidation )
+		{
+			sError.SetSprintf ( "can not add attribute that shadows '%s' field", tCol.m_sName.cstr() );
+			return false;
 		}
 	}
 

@@ -37,13 +37,13 @@ searchd
 	insert into a2 values ( 5,  'a2_tag5', 5 );
 
 	create table a2b ( title text, huge bigint, tag integer, flt float );
-	insert into a2b values ( 1, 'a2b_tag1', 1, 0.0, 0 );
-	insert into a2b values ( 10,'a2b_tag1', 1, 0.0, 0 );
-	insert into a2b values ( 11,'a2b_tag1', 1, 0.0, 0 );
-	insert into a2b values ( 2, 'a2b_tag2', 2, 0.0, 0 );
-	insert into a2b values ( 3, 'a2b_tag3', 3, 0.0, 0 );
-	insert into a2b values ( 4, 'a2b_tag4', 4, 0.0, 0 );
-	insert into a2b values ( 5, 'a2b_tag5', 5, 0.0, 0 );
+	insert into a2b values ( 1, 'a2b_tag1', 0, 1, 0.0 );
+	insert into a2b values ( 10,'a2b_tag1', 0, 1, 0.0 );
+	insert into a2b values ( 11,'a2b_tag1', 0, 1, 0.0 );
+	insert into a2b values ( 2, 'a2b_tag2', 0, 2, 0.0 );
+	insert into a2b values ( 3, 'a2b_tag3', 0, 3, 0.0 );
+	insert into a2b values ( 4, 'a2b_tag4', 0, 4, 0.0 );
+	insert into a2b values ( 5, 'a2b_tag5', 0, 5, 0.0 );
 
 	select * from a1 order by id asc;
 	select * from a2 order by id asc;

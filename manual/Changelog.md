@@ -13,6 +13,9 @@
   - Support for Filebeat versions 8.10 - 8.11
 * Many more
 
+### Deprecations
+- HTTP API endpoint aliases /json/* have been deprecated
+
 ### Bugfixing
 * Lots of
 

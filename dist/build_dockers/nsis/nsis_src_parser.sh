@@ -16,9 +16,10 @@ cp dist/build_dockers/nsis/nsisscript.nsi $NSIS_BUILD_DIR
 CI_COMMIT_SHORT_SHA=${CI_COMMIT_SHA:0:9}
 
 MANTICORE_VERSION=$(cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d'"' -f2)
-MANTICORE_DATE=$(git log -1 --date=short --format=%cd)
+MANTICORE_DATE=$(git log -1 --date=iso-strict --format=%cd)
 MANTICORE_DATE=${MANTICORE_DATE//-/}
-MANTICORE_DATE=${MANTICORE_DATE:2}
+MANTICORE_DATE=${MANTICORE_DATE//T/}
+MANTICORE_DATE=${MANTICORE_DATE:2:8}
 
 IS_RELEASE_DIGIT=$(echo "$MANTICORE_VERSION" | cut -d. -f3)
 if [[ $((IS_RELEASE_DIGIT % 2)) -eq 0 ]]; then

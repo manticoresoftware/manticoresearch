@@ -219,6 +219,7 @@ CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
 static CSphString		g_sBuddyPath;
+static CSphString		g_sPluginDir;
 static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
@@ -19767,6 +19768,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
 
+	const CSphConfigSection & hCommon = hConf["common"]["common"];
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 	sphCheckDuplicatePaths ( hConf );
 
@@ -20020,6 +20022,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	else
 		sphWarning ( "%s", sWarning.cstr() );
 
+	g_sPluginDir = hCommon.GetStr( "plugin_dir" );
 	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
@@ -21352,7 +21355,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( BuddyStop );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
-	BuddyStart ( g_sBuddyPath, ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry, g_iThreads );
+	BuddyStart ( g_sBuddyPath, g_sPluginDir, ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry, g_iThreads );
 
 	g_bJsonConfigLoadedOk = true;
 

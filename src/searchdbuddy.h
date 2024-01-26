@@ -15,7 +15,7 @@
 #include "sphinxstd.h"
 #include "searchdhttp.h"
 
-void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads );
+void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads );
 void BuddyStop ();
 
 bool HasBuddy();

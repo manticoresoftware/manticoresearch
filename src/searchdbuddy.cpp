@@ -58,7 +58,7 @@ extern CSphString g_sStatusVersion;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static CSphString BuddyGetPath ( const CSphString & sPath, bool bHasBuddyPath );
+static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath );
 
 #if _WIN32
 static CSphString g_sBuddyBind = "0.0.0.0";
@@ -393,7 +393,7 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
 }
 
 
-void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads )
+void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -405,7 +405,7 @@ void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecT
 		return;
 	}
 
-	CSphString sPath = BuddyGetPath ( sConfigPath, bHasBuddyPath );
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath );
 	if ( sPath.IsEmpty() )
 		return;
 
@@ -707,7 +707,7 @@ static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphStr
 #endif
 }
 
-CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
+CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath )
 {
 	if ( bHasBuddyPath )
 		return sConfigPath;
@@ -716,12 +716,14 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf ( "docker run --rm --publish-all -v \"%s/%s:/buddy\" -w /buddy %s /buddy/src/main.php", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sDefaultBuddyDockerImage.cstr());
-	if ( !sphFileExists ( sExecPath.cstr() ) )
-	{
-		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyDockerImage.cstr(), sExecPath.cstr() );
-		return CSphString();
-	}
+	sExecPath.SetSprintf (
+		"docker run --rm --publish-all -v \"%s/%s:/buddy\" -v \"%s:/plugins\" -e PLUGIN_DIR=/plugins -w /buddy %s /buddy/src/main.php",
+		GET_MANTICORE_MODULES(),
+		g_sDefaultBuddyName.cstr(),
+		sPluginDir.cstr(),
+		g_sDefaultBuddyDockerImage.cstr()
+	);
+	return sExecPath;
 #endif
 
 	CSphString sPathBuddy2Module;

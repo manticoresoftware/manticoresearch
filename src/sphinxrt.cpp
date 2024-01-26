@@ -1435,7 +1435,7 @@ private:
 	bool						AlterSI ( CSphString & sError ) override;
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
-	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError );
+	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						AttachSetSettings ( CSphIndex * pIndex );
 	bool						AttachSaveDiskChunk ();
 	ConstDiskChunkRefPtr_t		PopDiskChunk();
@@ -8539,7 +8539,7 @@ bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, CSphString & sError ) cons
 	return true;
 }
 
-bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError )
+bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	int iTotalKilled = 0;
 

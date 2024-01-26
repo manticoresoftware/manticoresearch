@@ -369,7 +369,7 @@ The `hostname_lookup` option defines the strategy for renewing hostnames. By def
 
 The jobs_queue_size setting defines how many "jobs" can be in the queue at the same time. It is unlimited by default.
 
-In most cases, a "job" means one query to a single local table (plain table or a disk chunk of a real-time table). For example, if you have a distributed table consisting of 2 local tables or a real-time table with 2 disk chunks, a search query to either of them will mostly put 2 jobs in the queue. Then, the thread pool (whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them. However, in some cases, if the query is too complex, more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance. 
+In most cases, a "job" means one query to a single local table (plain table or a disk chunk of a real-time table). For example, if you have a distributed table consisting of 2 local tables or a real-time table with 2 disk chunks, a search query to either of them will mostly put 2 jobs in the queue. Then, the thread pool (whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them. However, in some cases, if the query is too complex, more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance.
 
 ### listen_backlog
 
@@ -404,7 +404,7 @@ You can specify:
 * either an IP address (or hostname) and a port number
 * or just a port number
 * or a Unix socket path (not supported on Windows)
-*  or an IP address and port range
+* or an IP address and port range
 
 If you specify a port number but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Port range can be set only for the replication protocol.
 
@@ -413,6 +413,7 @@ You can also specify a protocol handler (listener) to be used for connections on
 * **Not specified** - Manticore will accept connections at this port from:
   - other Manticore agents (i.e., a remote distributed table)
   - clients via HTTP and HTTPS
+  - [Manticore Buddy](https://manticoresearch.com/blog/manticoresearch-buddy-intro/). **Ensure you have a listener of this kind (or an `http` listener, as mentioned below) to avoid limitations in Manticore functionality.**
 * `mysql` MySQL protocol for connections from MySQL clients. Note:
   - Compressed protocol is also supported.
   - If [SSL](../Security/SSL.md#SSL) is enabled, you can make an encrypted connection.
@@ -463,7 +464,7 @@ By default, Linux won't allow you to let Manticore listen on a port below 1024 (
 #### Technical details about Sphinx API protocol and TFO
 <details>
 Legacy Sphinx protocol has 2 phases: handshake exchanging and data flow. The handshake consists of a packet of 4 bytes from the client, and a packet of 4 bytes from the daemon with only one purpose - the client determines that the remote is a real Sphinx daemon, the daemon determines that the remote is a real Sphinx client. The main dataflow is quite simple: let's both sides declare their handshakes, and the opposite check them. That exchange with short packets implies using special `TCP_NODELAY` flag, which switches off Nagle's TCP algorithm and declares that the TCP connection will be performed as a dialogue of small packages.
-However, it is not strictly defined who speaks first in this negotiation. Historically, all clients that use the binary API speak first: send handshake, then read 4 bytes from a daemon, then send a request and read an answer from the daemon. 
+However, it is not strictly defined who speaks first in this negotiation. Historically, all clients that use the binary API speak first: send handshake, then read 4 bytes from a daemon, then send a request and read an answer from the daemon.
 When we improved Sphinx protocol compatibility, we considered these things:
 
 1. Usually, master-agent communication is established from a known client to a known host on a known port. So, it is quite not possible that the endpoint will provide a wrong handshake. So, we may implicitly assume that both sides are valid and really speak in Sphinx proto.
@@ -668,7 +669,7 @@ This setting is useful for extremely high query rates when just one thread is no
 
 Controls the busy loop interval of the network thread. The default is -1, and it can be set to -1, 0, or a positive integer.
 
-In cases where the server is configured as a pure master and just routes requests to agents, it is important to handle requests without delays and not allow the network thread to sleep. There is a busy loop for that. After an incoming request, the network thread uses CPU poll for `10 * net_wait_tm` milliseconds if 
+In cases where the server is configured as a pure master and just routes requests to agents, it is important to handle requests without delays and not allow the network thread to sleep. There is a busy loop for that. After an incoming request, the network thread uses CPU poll for `10 * net_wait_tm` milliseconds if
  `net_wait_tm` is a positive number or polls only with the CPU if`net_wait_tm` is `0`.  Also, the busy loop can be disabled with `net_wait_tm = -1` - in this case, the poller sets the timeout to the actual agent's timeouts on the system polling call.
 
 > **WARNING:** A CPU busy loop actually loads the CPU core, so setting this value to any non-default value will cause noticeable CPU usage even with an idle server.
@@ -896,7 +897,7 @@ After establishing a connection, Manticore will wait for a maximum of `replicati
 
 ### replication_retry_count
 
-This setting is an integer that specifies how many times Manticore will attempt to connect and query a remote node during replication before reporting a fatal query error. The default value is 3. 
+This setting is an integer that specifies how many times Manticore will attempt to connect and query a remote node during replication before reporting a fatal query error. The default value is 3.
 
 
 ### replication_retry_delay
@@ -973,7 +974,7 @@ query_log = /var/log/query.log
 
 <!-- example conf query_log_mode -->
 The query_log_mode directive allows you to set a different permission for the searchd and query log files. By default, these log files are created with 600 permission, meaning that only the user under which the server runs and root users can read the log files.
-This directive can be handy if you want to allow other users to read the log files, for example, monitoring solutions running on non-root users. 
+This directive can be handy if you want to allow other users to read the log files, for example, monitoring solutions running on non-root users.
 
 <!-- intro -->
 ##### Example:
@@ -990,7 +991,7 @@ query_log_mode  = 666
 <!-- example conf read_buffer_docs -->
 The read_buffer_docs directive controls the per-keyword read buffer size for document lists. For every keyword occurrence in every search query, there are two associated read buffers: one for the document list and one for the hit list. This setting lets you control the document list buffer size.
 
-A larger buffer size might increase per-query RAM use, but it could possibly decrease I/O time. It makes sense to set larger values for slow storage, but for storage capable of high IOPS, experimenting should be done in the low values area. 
+A larger buffer size might increase per-query RAM use, but it could possibly decrease I/O time. It makes sense to set larger values for slow storage, but for storage capable of high IOPS, experimenting should be done in the low values area.
 
 The default value is 256K, and the minimal value is 8K. You may also set [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) on a per-table basis, which will override anything set on the server's config level.
 

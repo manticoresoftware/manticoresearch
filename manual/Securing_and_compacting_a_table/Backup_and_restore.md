@@ -261,7 +261,9 @@ Manticore config
 ## Backup and restore with mysqldump
 
 <!-- example mysqldump_backup -->
-To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
+To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples. 
+
+Note, `mysqldump` is supported only in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
 
 <!-- request SQL -->
 ```bash

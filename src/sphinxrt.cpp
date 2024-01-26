@@ -8619,7 +8619,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 	if ( !m_tRtChunks.RamSegs()->IsEmpty() && !SaveDiskChunk ( true ) )
 		return false;
 
-	RtIndex_c * pSrcRtIndex = static_cast<RtIndex_c *>( pSrcIndex );
+	auto * pSrcRtIndex = static_cast<RtIndex_c *>( pSrcIndex );
 	if ( !pSrcRtIndex->AttachSaveDiskChunk() )
 		return false;
 

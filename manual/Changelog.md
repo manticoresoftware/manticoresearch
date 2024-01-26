@@ -15,6 +15,7 @@
 
 ### Deprecations
 - HTTP API endpoint aliases /json/* have been deprecated
+- idx.table/status/files -> idx.@table/@status/@files
 
 ### Bugfixing
 * Lots of

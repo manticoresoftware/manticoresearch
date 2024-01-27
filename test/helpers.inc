@@ -2989,6 +2989,7 @@ class SphinxConfig
 						{
 							$results["resarray"] = (int)@$qinfo["resarray"];
 							$results["roundoff"] = (int)@$qinfo["roundoff"];
+//							$results["time"] = "0.0001";
 						}
 					}
 					else
@@ -4765,11 +4766,11 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			$config->WriteReferenceResultsDiff ( $report );
 		}
 
-        $config->WriteModel($shadow_model_file, $config->_shadow_results_model);
-
 		$config->SubtestFinished ();
 	}
 	while ( $config->CreateNextConfig () );
+
+	$config->WriteModel($shadow_model_file, $config->_shadow_results_model);
 
 	if ( $isdemo )
 	{

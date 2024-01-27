@@ -2536,6 +2536,19 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	tQuery.m_sSortBy = tReq.GetString ();
+
+	if ( tQuery.m_eSort == SPH_SORT_ATTR_ASC )
+	{
+		tQuery.m_sSortBy = SphSprintf ( "%s asc", tQuery.m_sSortBy.cstr() );
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+	}
+
+	if ( tQuery.m_eSort == SPH_SORT_ATTR_DESC )
+	{
+		tQuery.m_sSortBy = SphSprintf ( "%s desc", tQuery.m_sSortBy.cstr() );
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+	}
+
 	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	tQuery.m_sRawQuery = tReq.GetString ();
 	{

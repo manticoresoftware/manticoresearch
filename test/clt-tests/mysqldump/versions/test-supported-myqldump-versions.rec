@@ -1,0 +1,37 @@
+––– block: ./init –––
+––– input –––
+docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker run -it -e EXTRA=1 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
+––– output –––
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+0
+––– input –––
+timeout 10 docker logs -f manticore | grep -qm1 '\[BUDDY\] started' && echo 'Buddy started!' || echo 'Timeout or failed!'
+––– output –––
+Buddy started!
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE a (id INT, content TEXT) TYPE='rt'; INSERT INTO a (id, content) VALUES (1, 'Apple'), (2, 'Dell'), (3, 'HP'), (4, 'Lenovo'), (5, 'Asus'), (6, 'Acer'), (7, 'Microsoft'), (8, 'Samsung'), (9, 'Sony'), (10, 'LG'); SELECT * FROM a";
+––– output –––
++------+-----------+
+| id   | content   |
++------+-----------+
+|    1 | Apple     |
+|    2 | Dell      |
+|    3 | HP        |
+|    4 | Lenovo    |
+|    5 | Asus      |
+|    6 | Acer      |
+|    7 | Microsoft |
+|    8 | Samsung   |
+|    9 | Sony      |
+|   10 | LG        |
++------+-----------+
+––– input –––
+docker cp /Users/pavelshilin/Desktop/WORK/issues/issue-1659/script_versions.sh manticore:/script_versions.sh
+––– output –––
+––– input –––
+docker exec -it manticore bash -c "chmod +x /script_versions.sh && /script_versions.sh"
+––– output –––

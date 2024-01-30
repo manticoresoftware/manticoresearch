@@ -8,10 +8,6 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../base/flexible/start-searchd –––
 ––– input –––
-export INSTANCE=3
-––– output –––
-––– block: ../base/flexible/start-searchd –––
-––– input –––
 export CLUSTER_NAME=c
 ––– output –––
 ––– block: ../base/flexible/create-cluster –––
@@ -20,6 +16,9 @@ export CLUSTER_NAME=c
 sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=2 rf=1;"; echo $?
 ––– output –––
 0
+––– input –––
+mysql -h0 -P1306 -e "show tables;"
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (1, 'Title 1', 'Content 1', 1);"
 ––– output –––

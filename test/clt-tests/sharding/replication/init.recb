@@ -10,11 +10,7 @@ apt-get install -y git > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install strings > /dev/null; echo $?
-––– output –––
-0
-––– input –––
-git clone -b fix/sharding -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
+git clone -b sharding/inserts -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
 ––– output –––
 0
 ––– input –––
@@ -30,16 +26,9 @@ cd /.clt; echo $?
 ––– output –––
 0
 ––– input –––
-wget -q https://repo.manticoresearch.com/repository/manticoresearch_focal_dev/dists/focal/main/binary-amd64/manticore-galera_3.37_amd64.deb
-––– output –––
-––– input –––
 wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
 ––– output –––
 ––– input –––
 dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-dpkg -i manticore-galera_3.37_amd64.deb > /dev/null; echo $?
 ––– output –––
 0

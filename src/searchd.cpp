@@ -4041,13 +4041,11 @@ struct AttrSort_fn
 
 		int iIndexA = m_tSchema.GetAttr(iA).m_iIndex;
 		int iIndexB = m_tSchema.GetAttr(iB).m_iIndex;
-		if ( iIndexA==-1 )
-			iIndexA = iA;
 
-		if ( iIndexB==-1 )
-			iIndexB = iB;
+		if ( iIndexA == -1 && iIndexB == -1 )
+			return iA < iB;
 
-		return iIndexA < iIndexB;
+		return iIndexA != -1 && ( iIndexB == -1 || iIndexA < iIndexB );
 	}
 };
 

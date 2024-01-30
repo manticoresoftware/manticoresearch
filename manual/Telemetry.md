@@ -13,13 +13,12 @@ The ⏱️ symbol indicates that the metric is collected periodically, as oppose
 | Metric | Description |
 |-|-|
 | `invocation` | Sent when Manticore Buddy is launched |
-| `show_queries` | Indicates that the `show queries` command was executed |
-| `backup` | Indicates that the `backup` query was executed |
-| `insert_query` | Indicates that the auto schema logic was executed |
+| `plugin_*` | Indicates that the plugin with a given name was executed, `plugin_backup` for backup execution, for example |
 | `command_*` | ⏱️ All metrics with this prefix are sent from the `show status` query of the Manticore daemon   |
 | `uptime` | ⏱️ The uptime of the Manticore Search daemon |
 | `workers_total` | ⏱️ The number of workers used by Manticore |
-| `cluster_*` | ⏱️ Cluster-related metrics from the `show status` results |
+| `cluster_count` | ⏱️ How many clusters this node handles |
+| `cluster_size` | ⏱️ How many nodes in all clusters |
 | `table_*_count` | ⏱️ The number of tables created for each type: plain, percolate, rt, or distributed |
 | `*_field_*_count` | ⏱️ The count for each field type for tables with rt and percolate types |
 | `columnar` | ⏱️ Indicates that the Columnar library was used |
@@ -62,7 +61,12 @@ Each metric comes with the following labels:
 |-|-|
 | `collector` | `buddy`. Indicates that this metric is collected through Manticore Buddy |
 | `os_name` | Name of the operating system |
-| `machine_id` | Server identifier (the content of `/etc/machine-id` in Linux)
+| `os_release_name` | Name from the `/etc/os-release` if presents or `unknown` |
+| `os_release_version` | Version from the `/etc/os-release` if presents or `unknown` |
+| `dockerized` | If it's run inside the Docker environment |
+| `official_docker` | In case of Docker it's flag that shows we use official image |
+| `machine_id` | Server identifier (the content of `/etc/machine-id` in Linux) |
+| `arch` | Architecture of the machin we run on |
 | `manticore_version` | Version of Manticore |
 | `columnar_version` | Version of the Columnar library if it is installed |
 | `secondary_version` | Version of the secondary library if the Columnar library is installed |

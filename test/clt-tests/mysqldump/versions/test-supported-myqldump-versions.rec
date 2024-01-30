@@ -4,7 +4,10 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– output –––
 0
 ––– input –––
-docker run -it -e EXTRA=1 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
+docker network create test_network
+––– output –––
+––– input –––
+docker run -it --network=test_network -e EXTRA=1 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
 ––– output –––
 WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
 0
@@ -30,8 +33,5 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE a (id INT, content TEXT)
 |   10 | LG        |
 +------+-----------+
 ––– input –––
-docker cp /Users/pavelshilin/Desktop/WORK/issues/issue-1659/script_versions.sh manticore:/script_versions.sh
-––– output –––
-––– input –––
-docker exec -it manticore bash -c "chmod +x /script_versions.sh && /script_versions.sh"
+bash ./test/clt-tests/mysqldump/versions/script_versions.sh
 ––– output –––

@@ -2,7 +2,7 @@
 (dockerd > /var/log/dockerd.log 2>&1 &) > /dev/null
 ––– output –––
 ––– input –––
-timeout 60 tail -n 100 -f /var/log/dockerd.log | grep -qm1 'API listen on /var/run/docker.sock' && echo 'Done' || echo 'Timeout failed'
+timeout 10 tail -n 100 -f /var/log/dockerd.log | grep -qm1 'API listen on /var/run/docker.sock' && echo 'Done' || echo 'Timeout failed'
 ––– output –––
 Done
 ––– input –––

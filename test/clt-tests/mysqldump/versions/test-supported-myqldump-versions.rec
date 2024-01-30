@@ -4,10 +4,10 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– output –––
 0
 ––– input –––
-docker network create test_network
+docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network -e EXTRA=1 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
+docker run -it --network=test_network -e EXTRA=1 --name manticore -v ./test/clt-tests/mysqldump/versions/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
 ––– output –––
 WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
 0

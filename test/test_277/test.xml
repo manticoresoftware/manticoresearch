@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>date/time functions</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query_pre 	= set time_zone='+0:00'
+	sql_query		= SELECT document_id, tag, UNIX_TIMESTAMP(time) as ts, body FROM test_table
+	sql_attr_uint	= tag
+	sql_attr_timestamp = ts
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	min_word_len	= 1
+	min_prefix_len	= 1
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`time` datetime,
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, '2007-12-01 12:00:00', 'test1' ),
+( 2, 2, '2006-05-02 12:00:00', 'test2' ),
+( 3, 2, '2005-06-03 12:00:00', 'test3' ),
+( 4, 3, '2005-07-04 12:00:00', 'test4' ),
+( 5, 3, '2003-09-05 12:00:00', 'test5' ),
+( 6, 3, '2003-09-06 12:00:00', 'test6' ),
+( 7, 4, '2007-12-01 12:00:00', 'test7' ),
+( 8, 4, '2006-05-02 12:00:00', 'test8' ),
+( 9, 4, '2005-06-03 12:00:00', 'test9' ),
+( 10, 4,'2005-07-04 12:00:00', 'test10' )
+</db_insert>
+
+<queries>
+<sphinxql>
+	set global timezone=UTC;
+	select * from test;
+	select dayofweek(ts) from test;
+	select yearweek(ts) from test;
+	select quarter(ts) from test;
+	select dayofyear(ts) from test;
+	select date(ts) from test;
+	select time(ts) from test;
+	select dayname(ts) from test;
+	select monthname(ts) from test;
+	select datediff(ts,1686485845) from test;
+	select week(ts) from test;
+	select week(ts,0) from test;
+
+	select date(ts),date(date_add(ts, interval 1 day)) from test;
+	select date(ts),date(date_add(ts, interval 1 week)) from test;
+	select date(ts),date(date_add(ts, interval 1 month)) from test;
+	select date(ts),date(date_add(ts, interval 1 quarter)) from test;
+	select date(ts),date(date_add(ts, interval 1 year)) from test;
+
+	select time(ts),time(date_add(ts, interval 1 second)) from test;
+	select time(ts),time(date_add(ts, interval 1 minute)) from test;
+	select time(ts),time(date_add(ts, interval 1 hour)) from test;
+
+	select date(ts),date(date_sub(ts, interval 5 day)) from test;
+	select date(ts),date(date_sub(ts, interval 5 week)) from test;
+	select date(ts),date(date_sub(ts, interval 5 month)) from test;
+	select date(ts),date(date_sub(ts, interval 5 quarter)) from test;
+	select date(ts),date(date_sub(ts, interval 5 year)) from test;
+
+	select time(ts),time(date_sub(ts, interval 5 second)) from test;
+	select time(ts),time(date_sub(ts, interval 5 minute)) from test;
+	select time(ts),time(date_sub(ts, interval 5 hour)) from test;
+</sphinxql>
+</queries>
+
+</test>

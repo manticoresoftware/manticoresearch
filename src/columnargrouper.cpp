@@ -10,6 +10,7 @@
 
 #include "columnargrouper.h"
 #include "sphinxsort.h"
+#include "grouper.h"
 
 
 template <typename T>

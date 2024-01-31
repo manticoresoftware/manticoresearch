@@ -31,6 +31,7 @@ set ( CPACK_GENERATOR DEB )
 
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
+set ( DEP_TZDATA_VERSION "${TZDATA_VERNUM}-${TZDATA_VERDATE}-${TZDATA_VERHASH}" )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}-${BUDDY_VERDATE}-${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}-${BACKUP_VERDATE}-${BACKUP_VERHASH}" )
 
@@ -60,7 +61,7 @@ set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_NAME "manticore-server-core" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_REPLACES "manticore-bin, sphinxsearch, ${breaks}" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_CONTROL_EXTRA "${dircore}/postinst;${dircore}/postrm" )
-seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
+seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION}), manticore-tzdata (>= ${DEP_TZDATA_VERSION}), manticore-tzdata (<< ${TZDATA_VERNUM_MAX})" )
 seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-server (= ${CPACK_PACKAGE_VERSION})" )
 #seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-galera" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_BREAKS "${breaks}" )

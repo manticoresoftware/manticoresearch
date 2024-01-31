@@ -43,37 +43,33 @@ SELECT * FROM test WHERE CONTAINS(text_field, 'NEAR((word1, word2), 3)');
 ––– output –––
 ERROR 1064 (42000): P01: syntax error, unexpected '(' near '(text_field, 'NEAR((word1, word2), 3)')'
 ––– input –––
-SELECT QUARTER(id) FROM test;
-––– output –––
-ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(', expecting $end near 'id)'
-––– input –––
 SELECT DISTINCT TABLE_SCHEMA from information_schema.TABLES;
 ––– output –––
 ERROR 1064 (42000): P01: syntax error, unexpected DISTINCT near 'DISTINCT TABLE_SCHEMA from information_schema.TABLES'
 ––– input –––
 SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND) AS date FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'SECOND) AS date FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND)'
 ––– input –––
 SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND) FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'SECOND) FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND)'
 ––– input –––
 SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date)*60 + MINUTE(date)) MINUTE) AS date FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'MINUTE) AS date FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date)*60 + MINUTE(date)) MINUTE)'
 ––– input –––
 SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date)*60*60 + MINUTE(date)*60 + SECOND(date)) SECOND) FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'SECOND) FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date)*60*60 + MINUTE(date)*60 + SECOND(date)) SECOND)'
 ––– input –––
 SELECT DATE_ADD(DATE(date), INTERVAL HOUR(date) HOUR) AS date FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'HOUR(date) HOUR) AS date FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL HOUR(date) HOUR)'
 ––– input –––
 SELECT DATE_ADD(DATE(date), INTERVAL HOUR(date) HOUR) FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'HOUR(date) HOUR) FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL HOUR(date) HOUR)'
 ––– input –––
 SELECT DATE(date) AS date FROM test;
 ––– output –––
@@ -85,16 +81,16 @@ ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(', 
 ––– input –––
 SELECT DATE(DATE_SUB(date, INTERVAL DAYOFMONTH(date)-1 DAY)) AS date FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'DAYOFMONTH(date)-1 DAY)) AS date FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFMONTH(date)-1 DAY))'
 ––– input –––
 SELECT DATE(DATE_SUB(date, INTERVAL DAYOFMONTH(date)-1 DAY)) FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'DAYOFMONTH(date)-1 DAY)) FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFMONTH(date)-1 DAY))'
 ––– input –––
 SELECT DATE(DATE_SUB(date, INTERVAL DAYOFYEAR(date)-1 DAY)) AS date FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'DAYOFYEAR(date)-1 DAY)) AS date FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFYEAR(date)-1 DAY))'
 ––– input –––
 SELECT DATE(DATE_SUB(date, INTERVAL DAYOFYEAR(date)-1 DAY)) FROM test;
 ––– output –––
-ERROR 1064 (42000): P01: syntax error, unexpected identifier, expecting ',' or ')' near 'DAYOFYEAR(date)-1 DAY)) FROM test'
+ERROR 1064 (42000): index test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFYEAR(date)-1 DAY))'

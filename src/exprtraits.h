@@ -232,5 +232,42 @@ protected:
 	}
 };
 
-#endif // _exprtraits_
+class Expr_Unary_c : public ISphExpr
+{
+public:
+				Expr_Unary_c ( const char * szClassName, ISphExpr * pFirst );
 
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+
+protected:
+	CSphRefcountedPtr<ISphExpr> m_pFirst;
+
+				Expr_Unary_c ( const Expr_Unary_c & rhs );
+
+private:
+	const char *	m_szExprName = nullptr;
+};
+
+
+class Expr_Binary_c : public ISphExpr
+{
+public:
+				Expr_Binary_c ( const char * szClassName, ISphExpr * pFirst, ISphExpr * pSecond );
+
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+
+protected:
+	CSphRefcountedPtr<ISphExpr> m_pFirst;
+	CSphRefcountedPtr<ISphExpr> m_pSecond;
+
+				Expr_Binary_c ( const Expr_Binary_c & rhs );
+
+private:
+	const char *	m_szExprName = nullptr;
+};
+
+#endif // _exprtraits_

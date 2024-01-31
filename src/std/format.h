@@ -13,6 +13,8 @@
 #pragma once
 
 #include "config.h"
+#include <limits.h>
+#include <cstring>
 
 #if __has_include(<inttypes.h>)
 #define __STDC_FORMAT_MACROS
@@ -32,4 +34,32 @@
 
 #ifndef PRIx64
 #define PRIx64 "llx"
+#endif
+
+#if __has_include( <charconv>)
+#include <charconv>
+#else
+template<typename T>
+inline static char* FormatInt ( char sBuf[32], T v )
+{
+	if ( sizeof ( T ) == 4 && v == INT_MIN )
+		return strncpy ( sBuf, "-2147483648", 32 );
+	if ( sizeof ( T ) == 8 && v == LLONG_MIN )
+		return strncpy ( sBuf, "-9223372036854775808", 32 );
+
+	bool s = ( v < 0 );
+	if ( s )
+		v = -v;
+
+	char* p = sBuf + 31;
+	*p = 0;
+	do
+	{
+		*--p = '0' + char ( v % 10 );
+		v /= 10;
+	} while ( v );
+	if ( s )
+		*--p = '-';
+	return p;
+}
 #endif

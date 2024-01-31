@@ -532,15 +532,9 @@ void MatchSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnB
 	if ( m_dTransformed.IsEmpty() )
 	{
 		// keep id as the first attribute
-		for ( int i = 0; i<pOldSchema->GetAttrsCount (); i++ )
-		{
-			const CSphColumnInfo & tAttr = pOldSchema->GetAttr(i);
-			if ( tAttr.m_sName==sphGetDocidName() )
-			{
-				tBuilder.AddAttr ( tAttr.m_sName );
-				break;
-			}
-		}
+		const CSphColumnInfo* pId = pOldSchema->GetAttr ( sphGetDocidName() );
+		if ( pId )
+			tBuilder.AddAttr ( sphGetDocidName() );
 
 		// add the rest
 		for ( int i = 0; i<pOldSchema->GetAttrsCount (); i++ )

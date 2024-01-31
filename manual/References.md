@@ -285,7 +285,7 @@
 ##### Date and time
 * [NOW()](Functions/Date_and_time_functions.md#NOW%28%29) - Returns current timestamp as an INTEGER
 * [CURTIME()](Functions/Date_and_time_functions.md#CURTIME%28%29) - Returns current time in local timezone
-* [CURDATE()](Functions/Date_and_time_functions.md#CURDARTE%28%29) - Returns current date in local timezone
+* [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Returns current date in local timezone
 * [UTC_TIME()](Functions/Date_and_time_functions.md#UTC_TIME%28%29) - Returns current time in UTC timezone
 * [UTC_TIMESTAMP()](Functions/Date_and_time_functions.md#UTC_TIMESTAMP%28%29) - Returns current date/time in UTC timezone
 * [SECOND()](Functions/Date_and_time_functions.md#SECOND%28%29) - Returns integer second from the timestamp argument

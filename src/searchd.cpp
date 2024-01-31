@@ -4924,8 +4924,7 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_tLocator = s.m_tLocator;
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
-		if ( !m_bAgent )
-			tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
 
 		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
 	}

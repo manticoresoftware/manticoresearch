@@ -874,6 +874,72 @@ CSphString RealPath ( const CSphString& sPath )
 }
 
 
+bool IsSymlink ( const CSphString & sFile )
+{
+#if _WIN32
+	DWORD uAttrs = GetFileAttributes ( sFile.cstr() );
+	if ( uAttrs==INVALID_FILE_ATTRIBUTES )
+		return false;
+
+	if ( !( uAttrs & FILE_ATTRIBUTE_REPARSE_POINT ) )
+		return false;
+
+	WIN32_FIND_DATA tFindData;
+	HANDLE hFind = FindFirstFile ( sFile.cstr(), &tFindData );
+	if ( hFind==INVALID_HANDLE_VALUE )
+		return false;
+
+	bool bSymlink = tFindData.dwReserved0==IO_REPARSE_TAG_SYMLINK;
+	FindClose(hFind);
+
+	return bSymlink;
+#else
+	struct_stat tStat = {0};
+
+	if ( lstat ( sFile.cstr(), &tStat ) )
+		return false;	// not found
+
+	return S_ISLNK(tStat.st_mode);
+#endif
+}
+
+
+bool ResolveSymlink ( const CSphString & sFile, CSphString & sResult )
+{
+	sResult = sFile;
+
+#if _WIN32
+	HANDLE hFile = CreateFile ( sFile.cstr(), 0, 0, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr );
+	if ( hFile==INVALID_HANDLE_VALUE )
+		return false;
+
+	CHAR szTargetPath[MAX_PATH];
+	DWORD uBytesRead = GetFinalPathNameByHandle ( hFile, szTargetPath, MAX_PATH, FILE_NAME_NORMALIZED );
+	if ( uBytesRead )
+	{
+		sResult.SetBinary ( szTargetPath, uBytesRead );
+		if ( sResult.Begins ( R"(\\?\)" ) )
+			sResult = sResult.SubString ( 4, sResult.Length()-4 );
+
+		return true;
+	}
+
+	CloseHandle(hFile);
+	return false;
+#else
+	char szPath[PATH_MAX];
+	ssize_t tLen = ::readlink ( sFile.cstr(), szPath, sizeof(szPath)-1 );
+	if ( tLen!=-1 )
+	{
+		sResult = CSphString ( szPath, tLen );
+		return true;
+	}
+
+	return false;
+#endif
+}
+
+
 CSphString GetExecutablePath()
 {
 #if _WIN32

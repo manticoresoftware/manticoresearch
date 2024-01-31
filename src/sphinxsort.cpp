@@ -27,6 +27,7 @@
 #include "aggregate.h"
 #include "distinct.h"
 #include "netreceive_ql.h"
+#include "grouper.h"
 #include "knnmisc.h"
 
 #include <ctime>
@@ -1619,8 +1620,6 @@ void DirectSqlQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 }
 
 //////////////////////////////////////////////////////////////////////////
-// SORTING+GROUPING QUEUE
-//////////////////////////////////////////////////////////////////////////
 
 static bool IsCount ( const CSphString & s )
 {
@@ -1638,805 +1637,6 @@ static bool IsGroupby ( const CSphString & s )
 bool IsGroupbyMagic ( const CSphString & s )
 {
 	return IsGroupby ( s ) || IsCount ( s );
-}
-
-/// groupers
-#define GROUPER_BEGIN(_name) \
-	class _name : public CSphGrouper \
-	{ \
-	protected: \
-		CSphAttrLocator m_tLocator; \
-	public: \
-		explicit _name ( const CSphAttrLocator & tLoc ) : m_tLocator ( tLoc ) {} \
-		void			GetLocator ( CSphAttrLocator & tOut ) const override { tOut = m_tLocator; } \
-		ESphAttr		GetResultType() const override  { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
-		SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
-		void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { assert(0); } \
-        CSphGrouper *	Clone() const override { return new _name (m_tLocator); } \
-		SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const override \
-		{
-// NOLINT
-
-#define GROUPER_END \
-		} \
-	};
-
-#define GROUPER_BEGIN_SPLIT(_name) \
-	GROUPER_BEGIN(_name) \
-	time_t tStamp = (time_t)uValue; \
-	struct tm tSplit; \
-	localtime_r ( &tStamp, &tSplit );
-
-GROUPER_BEGIN ( CSphGrouperAttr )
-	return uValue;
-GROUPER_END
-
-
-GROUPER_BEGIN_SPLIT ( CSphGrouperDay )
-	return (tSplit.tm_year+1900)*10000 + (1+tSplit.tm_mon)*100 + tSplit.tm_mday;
-GROUPER_END
-
-GROUPER_BEGIN_SPLIT ( CSphGrouperWeek )
-	int iPrevSunday = (1+tSplit.tm_yday) - tSplit.tm_wday; // prev Sunday day of year, base 1
-	int iYear = tSplit.tm_year+1900;
-	if ( iPrevSunday<=0 ) // check if we crossed year boundary
-	{
-		// adjust day and year
-		iPrevSunday += 365;
-		iYear--;
-
-		// adjust for leap years
-		if ( iYear%4==0 && ( iYear%100!=0 || iYear%400==0 ) )
-			iPrevSunday++;
-	}
-	return iYear*1000 + iPrevSunday;
-GROUPER_END
-
-GROUPER_BEGIN_SPLIT ( CSphGrouperMonth )
-	return (tSplit.tm_year+1900)*100 + (1+tSplit.tm_mon);
-GROUPER_END
-
-GROUPER_BEGIN_SPLIT ( CSphGrouperYear )
-	return (tSplit.tm_year+1900);
-GROUPER_END
-
-#define GROUPER_BEGIN_SPLIT_UTC( _name ) \
-    GROUPER_BEGIN(_name) \
-    time_t tStamp = (time_t)uValue; \
-    struct tm tSplit; \
-    gmtime_r ( &tStamp, &tSplit );
-
-GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperDayUtc )
-		return (tSplit.tm_year + 1900) * 10000 + (1 + tSplit.tm_mon) * 100 + tSplit.tm_mday;
-GROUPER_END
-
-GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperWeekUtc )
-		int iPrevSunday = (1 + tSplit.tm_yday) - tSplit.tm_wday; // prev Sunday day of year, base 1
-		int iYear = tSplit.tm_year + 1900;
-		if ( iPrevSunday<=0 ) // check if we crossed year boundary
-		{
-			// adjust day and year
-			iPrevSunday += 365;
-			iYear--;
-
-			// adjust for leap years
-			if ( iYear % 4==0 && (iYear % 100!=0 || iYear % 400==0) )
-				iPrevSunday++;
-		}
-		return iYear * 1000 + iPrevSunday;
-GROUPER_END
-
-GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperMonthUtc )
-		return (tSplit.tm_year + 1900) * 100 + (1 + tSplit.tm_mon);
-GROUPER_END
-
-GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperYearUtc )
-		return (tSplit.tm_year + 1900);
-GROUPER_END
-
-static bool g_bSortGroupingInUtc = false;
-
-void SetGroupingInUtcSort ( bool bGroupingInUtc )
-{
-	g_bSortGroupingInUtc = bGroupingInUtc;
-}
-
-
-static CSphGrouper * getDayGrouper ( const CSphAttrLocator &tLoc )
-{
-	return g_bSortGroupingInUtc
-			? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
-			: (CSphGrouper *) new CSphGrouperDay ( tLoc );
-}
-
-static CSphGrouper * getWeekGrouper ( const CSphAttrLocator &tLoc )
-{
-	return g_bSortGroupingInUtc
-		   ? (CSphGrouper *) new CSphGrouperWeekUtc ( tLoc )
-		   : (CSphGrouper *) new CSphGrouperWeek ( tLoc );
-}
-
-static CSphGrouper * getMonthGrouper ( const CSphAttrLocator &tLoc )
-{
-	return g_bSortGroupingInUtc
-		   ? (CSphGrouper *) new CSphGrouperMonthUtc ( tLoc )
-		   : (CSphGrouper *) new CSphGrouperMonth ( tLoc );
-}
-
-static CSphGrouper * getYearGrouper ( const CSphAttrLocator &tLoc )
-{
-	return g_bSortGroupingInUtc
-		   ? (CSphGrouper *) new CSphGrouperYearUtc ( tLoc )
-		   : (CSphGrouper *) new CSphGrouperYear ( tLoc );
-}
-
-template <class PRED>
-class CSphGrouperString final : public CSphGrouperAttr, public PRED
-{
-public:
-	explicit CSphGrouperString ( const CSphAttrLocator & tLoc )
-		: CSphGrouperAttr ( tLoc )
-	{}
-
-	ESphAttr GetResultType () const override
-	{
-		return SPH_ATTR_BIGINT;
-	}
-
-	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const override
-	{
-		auto dBlobAttr = tMatch.FetchAttrData ( m_tLocator, GetBlobPool() );
-		if ( IsEmpty ( dBlobAttr ) )
-			return 0;
-
-		return PRED::Hash ( dBlobAttr.first,dBlobAttr.second );
-	}
-
-	CSphGrouper * Clone () const final
-	{
-		return new CSphGrouperString ( m_tLocator );
-	}
-};
-
-#if __has_include( <charconv>)
-#include <charconv>
-#else
-template<typename T>
-inline static char* FormatInt ( char sBuf[32], T v )
-{
-	if ( sizeof ( T ) == 4 && v == INT_MIN )
-		return strncpy ( sBuf, "-2147483648", 32 );
-	if ( sizeof ( T ) == 8 && v == LLONG_MIN )
-		return strncpy ( sBuf, "-9223372036854775808", 32 );
-
-	bool s = ( v < 0 );
-	if ( s )
-		v = -v;
-
-	char* p = sBuf + 31;
-	*p = 0;
-	do
-	{
-		*--p = '0' + char ( v % 10 );
-		v /= 10;
-	} while ( v );
-	if ( s )
-		*--p = '-';
-	return p;
-}
-#endif
-
-/// lookup JSON key, group by looked up value (used in CSphKBufferJsonGroupSorter)
-class CSphGrouperJsonField final : public CSphGrouper
-{
-public:
-	CSphGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * pExpr )
-		: m_tLocator ( tLoc )
-		, m_pExpr ( pExpr )
-	{
-		SafeAddRef ( pExpr );
-	}
-
-	void SetBlobPool ( const BYTE * pBlobPool ) final
-	{
-		CSphGrouper::SetBlobPool ( pBlobPool );
-		if ( m_pExpr )
-			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
-	}
-
-	void GetLocator ( CSphAttrLocator & tOut ) const final
-	{
-		tOut = m_tLocator;
-	}
-
-	ESphAttr GetResultType () const final
-	{
-		return SPH_ATTR_BIGINT;
-	}
-
-	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const final
-	{
-		if ( !m_pExpr )
-			return SphGroupKey_t();
-		return m_pExpr->Int64Eval ( tMatch );
-	}
-
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
-	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
-	CSphGrouper *	Clone() const final { return new CSphGrouperJsonField (*this); }
-
-protected:
-	CSphGrouperJsonField ( const CSphGrouperJsonField& rhs )
-		: m_tLocator ( rhs.m_tLocator )
-		, m_pExpr ( SafeClone ( rhs.m_pExpr ) )
-	{}
-
-	CSphAttrLocator		m_tLocator;
-	ISphExprRefPtr_c	m_pExpr;
-};
-
-
-template <class PRED>
-class GrouperStringExpr_T final : public CSphGrouper, public PRED
-{
-public:
-	explicit GrouperStringExpr_T ( ISphExpr * pExpr )
-		: m_pExpr ( pExpr )
-	{
-		assert(m_pExpr);
-		SafeAddRef(pExpr);
-	}
-
-	void			GetLocator ( CSphAttrLocator & tOut ) const final {}
-	ESphAttr		GetResultType () const final { return SPH_ATTR_BIGINT; }
-	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
-
-	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const final
-	{
-		assert ( !m_pExpr->IsDataPtrAttr() );
-		const BYTE * pStr = nullptr;
-		int iLen = m_pExpr->StringEval ( tMatch, &pStr );
-		if ( !iLen )
-			return 0;
-
-		return PRED::Hash ( pStr, iLen );
-	}
-
-	CSphGrouper *	Clone() const final { return new GrouperStringExpr_T(*this); }
-	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final { m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
-
-protected:
-	GrouperStringExpr_T (const GrouperStringExpr_T& rhs)
-		: m_pExpr { SafeClone ( rhs.m_pExpr ) }
-	{}
-
-	ISphExprRefPtr_c	m_pExpr;
-};
-
-template <typename MVA, typename ADDER>
-static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
-{
-	VecTraits_T<MVA> dMvas {dRawMVA};
-	for ( auto & tValue : dMvas )
-		fnAdd ( sphUnalignedRead(tValue) );
-}
-
-
-template <typename PUSH>
-static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
-{
-	int iLen;
-	char szBuf[32];
-	SphGroupKey_t uGroupKey;
-
-	ESphJsonType eJson = sphJsonUnpackType ( iValue );
-	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
-
-	switch ( eJson )
-	{
-	case JSON_ROOT:
-	{
-		iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
-		bool bEmpty = iLen==5; // mask and JSON_EOF
-		uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
-		return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
-	}
-
-	case JSON_STRING:
-	case JSON_OBJECT:
-	case JSON_MIXED_VECTOR:
-		iLen = sphJsonUnpackInt ( &pValue );
-		uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
-		return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
-
-	case JSON_STRING_VECTOR:
-	{
-		bool bRes = false;
-		sphJsonUnpackInt ( &pValue );
-		iLen = sphJsonUnpackInt ( &pValue );
-		for ( int i=0;i<iLen;i++ )
-		{
-			int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
-
-			int iStrLen = sphJsonUnpackInt ( &pValue );
-			uGroupKey = sphFNV64 ( pValue, iStrLen );
-			bRes |= fnPush ( &iNewValue, uGroupKey );
-			pValue += iStrLen;
-		}
-		return bRes;
-	}
-
-	case JSON_INT32:
-#if __has_include( <charconv>)
-		*std::to_chars ( szBuf, szBuf + 32, (int)sphGetDword ( pValue ) ).ptr = '\0';
-		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
-#else
-		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword ( pValue ) ) ) );
-#endif
-
-	case JSON_INT64:
-#if __has_include( <charconv>)
-		*std::to_chars ( szBuf, szBuf + 32, sphJsonLoadBigint ( &pValue ) ).ptr = '\0';
-		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
-#else
-		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
-#endif
-
-	case JSON_DOUBLE:
-		snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-		return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
-
-	case JSON_INT32_VECTOR:
-	{
-		bool bRes = false;
-		iLen = sphJsonUnpackInt ( &pValue );
-		auto p = (const int*)pValue;
-		for ( int i=0;i<iLen;i++ )
-		{
-			int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
-			uGroupKey = *p++;
-			bRes |= fnPush ( &iPacked, uGroupKey );
-		}
-		return bRes;
-	}
-
-	case JSON_INT64_VECTOR:
-	case JSON_DOUBLE_VECTOR:
-	{
-		bool bRes = false;
-		iLen = sphJsonUnpackInt ( &pValue );
-		auto p = (const int64_t*)pValue;
-		ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
-		for ( int i=0;i<iLen;i++ )
-		{
-			int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
-			uGroupKey = *p++;
-			bRes |= fnPush ( &iPacked, uGroupKey );
-		}
-		return bRes;
-	}
-
-	case JSON_TRUE:
-	case JSON_FALSE:
-		uGroupKey = eJson;
-		return fnPush ( &iValue, uGroupKey );
-
-	default:
-		uGroupKey = 0;
-		iValue = 0;
-		return fnPush ( &iValue, uGroupKey );
-	}
-}
-
-template<typename T>
-void FetchMVAKeys ( CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
-{
-	dKeys.Resize(0);
-
-	if ( !pBlobPool )
-		return;
-
-	int iLengthBytes = 0;
-	const BYTE * pMva = sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
-	int iNumValues = iLengthBytes / sizeof(T);
-	const T * pValues = (const T*)pMva;
-
-	dKeys.Resize(iNumValues);
-	for ( int i = 0; i<iNumValues; i++ )
-		dKeys[i] = (SphGroupKey_t)pValues[i];
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-class CSphGrouperMulti final: public CSphGrouper, public PRED
-{
-	using MYTYPE = CSphGrouperMulti<PRED,HAVE_COLUMNAR>;
-
-public:
-					CSphGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation );
-
-	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const final;
-	void			SetBlobPool ( const BYTE * pBlobPool ) final;
-	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
-	CSphGrouper *	Clone() const final;
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final;
-	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
-	void			GetLocator ( CSphAttrLocator & ) const final { assert(0); }
-	ESphAttr		GetResultType() const final { return SPH_ATTR_BIGINT; }
-	bool			IsMultiValue() const final;
-
-private:
-	CSphVector<CSphColumnInfo>	m_dAttrs;
-	VecRefPtrs_t<ISphExpr *>	m_dJsonKeys;
-	ESphCollation				m_eCollation = SPH_COLLATION_DEFAULT;
-	CSphVector<CSphRefcountedPtr<CSphGrouper>> m_dSingleKeyGroupers;
-	CSphVector<CSphRefcountedPtr<CSphGrouper>> m_dMultiKeyGroupers;
-
-	SphGroupKey_t	FetchStringKey ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, SphGroupKey_t tPrevKey ) const;
-	void			SpawnColumnarGroupers();
-};
-
-template <class PRED, bool HAVE_COLUMNAR>
-CSphGrouperMulti<PRED,HAVE_COLUMNAR>::CSphGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
-	: m_dAttrs ( dAttrs )
-	, m_dJsonKeys ( std::move(dJsonKeys) )
-	, m_eCollation ( eCollation )
-{
-	assert ( dAttrs.GetLength()>1 );
-	assert ( dAttrs.GetLength()==m_dJsonKeys.GetLength() );
-	
-	if constexpr ( HAVE_COLUMNAR )
-		SpawnColumnarGroupers();
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-SphGroupKey_t CSphGrouperMulti<PRED,HAVE_COLUMNAR>::KeyFromMatch ( const CSphMatch & tMatch ) const
-{
-	auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
-
-	for ( int i=0; i<m_dAttrs.GetLength(); i++ )
-	{
-		if constexpr ( HAVE_COLUMNAR )
-		{
-			if ( m_dSingleKeyGroupers[i] )
-			{
-				// use pre-spawned grouper
-				SphGroupKey_t tColumnarKey = m_dSingleKeyGroupers[i]->KeyFromMatch(tMatch);
-				tKey = ( SphGroupKey_t ) sphFNV64 ( tColumnarKey, tKey );
-				continue;
-			}
-		}
-
-		switch ( m_dAttrs[i].m_eAttrType )
-		{
-		case SPH_ATTR_STRING:
-		case SPH_ATTR_STRINGPTR:
-			tKey = FetchStringKey ( tMatch, m_dAttrs[i].m_tLocator, tKey );
-			break;
-
-		default:
-			{
-				SphAttr_t tAttr = tMatch.GetAttr ( m_dAttrs[i].m_tLocator );
-				tKey = ( SphGroupKey_t ) sphFNV64 ( tAttr, tKey );
-			}
-			break;
-		}
-	}
-
-	return tKey;
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-void CSphGrouperMulti<PRED, HAVE_COLUMNAR>::SetBlobPool ( const BYTE * pBlobPool )
-{
-	CSphGrouper::SetBlobPool ( pBlobPool );
-	for ( auto & i : m_dJsonKeys )
-		if ( i )
-			i->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::SetColumnar ( const columnar::Columnar_i * pColumnar )
-{
-	CSphGrouper::SetColumnar ( pColumnar );
-
-	for ( auto & i : m_dSingleKeyGroupers )
-		if ( i )
-			i->SetColumnar ( pColumnar );
-
-	for ( auto & i : m_dMultiKeyGroupers )
-		if ( i )
-			i->SetColumnar ( pColumnar );
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-CSphGrouper * CSphGrouperMulti<PRED,HAVE_COLUMNAR>::Clone() const
-{
-	VecRefPtrs_t<ISphExpr *> dJsonKeys;
-	m_dJsonKeys.for_each ( [&dJsonKeys] ( ISphExpr * p ) { dJsonKeys.Add ( SafeClone ( p ) ); } );
-	return new MYTYPE ( m_dAttrs, std::move(dJsonKeys), m_eCollation );
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
-{
-	dKeys.Resize(0);
-
-	CSphFixedVector<CSphVector<SphGroupKey_t>> dAllKeys { m_dAttrs.GetLength() };
-	for ( int i=0; i<m_dAttrs.GetLength(); i++ )
-	{
-		auto & dCurKeys = dAllKeys[i];
-
-		if constexpr ( HAVE_COLUMNAR )
-		{
-			if ( m_dMultiKeyGroupers[i] )
-			{
-				// use pre-spawned grouper
-				m_dMultiKeyGroupers[i]->MultipleKeysFromMatch ( tMatch, dCurKeys );
-				continue;
-			}
-		}
-
-		switch ( m_dAttrs[i].m_eAttrType )
-		{
-		case SPH_ATTR_UINT32SET:
-			FetchMVAKeys<DWORD> ( dCurKeys, tMatch, m_dAttrs[i].m_tLocator, GetBlobPool() );
-			break;
-
-		case SPH_ATTR_INT64SET:
-			FetchMVAKeys<int64_t> ( dCurKeys, tMatch, m_dAttrs[i].m_tLocator, GetBlobPool() );
-			break;
-
-		case SPH_ATTR_JSON:
-			PushJsonField ( m_dJsonKeys[i]->Int64Eval(tMatch), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey ){ dCurKeys.Add(uMatchGroupKey); return true; } );
-			break;
-
-		case SPH_ATTR_JSON_FIELD:
-		{
-			assert ( m_dAttrs[i].m_pExpr );
-			PushJsonField ( m_dAttrs[i].m_pExpr->Int64Eval ( tMatch ), m_pBlobPool, [&dCurKeys]( SphAttr_t * pAttr, SphGroupKey_t uMatchGroupKey )
-				{
-					dCurKeys.Add ( uMatchGroupKey );
-					return true;
-				});
-		}
-		break;
-
-		case SPH_ATTR_STRING:
-		case SPH_ATTR_STRINGPTR:
-			{
-				SphGroupKey_t tStringKey = FetchStringKey ( tMatch, m_dAttrs[i].m_tLocator, SPH_FNV64_SEED );
-				if ( tStringKey!=(SphGroupKey_t)SPH_FNV64_SEED )
-					dAllKeys[i].Add ( tStringKey );
-			}
-			break;
-
-		default:
-			dAllKeys[i].Add ( tMatch.GetAttr ( m_dAttrs[i].m_tLocator ) );
-			break;
-		}
-	}
-
-	CSphFixedVector<int> dIndexes { m_dAttrs.GetLength() };
-	dIndexes.ZeroVec();
-
-	do
-	{
-		auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
-		ARRAY_FOREACH ( i, dAllKeys )
-			if ( dAllKeys[i].GetLength() )
-				tKey = (SphGroupKey_t)sphFNV64 ( dAllKeys[i][dIndexes[i]], tKey );
-
-		dKeys.Add(tKey);
-	}
-	while ( NextSet ( dIndexes, dAllKeys ) );
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-bool CSphGrouperMulti<PRED,HAVE_COLUMNAR>::IsMultiValue() const
-{
-	return m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD || tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET; } );
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-SphGroupKey_t CSphGrouperMulti<PRED,HAVE_COLUMNAR>::FetchStringKey ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, SphGroupKey_t tPrevKey ) const
-{
-	ByteBlob_t tData = tMatch.FetchAttrData ( tLocator, GetBlobPool() );
-	if ( !tData.first || !tData.second )
-		return tPrevKey;
-
-	return PRED::Hash ( tData.first, tData.second, tPrevKey );
-}
-
-template <class PRED, bool HAVE_COLUMNAR>
-void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::SpawnColumnarGroupers()
-{
-	m_dSingleKeyGroupers.Resize ( m_dAttrs.GetLength() );
-	m_dMultiKeyGroupers.Resize ( m_dAttrs.GetLength() );
-
-	ARRAY_FOREACH ( i, m_dAttrs )
-	{
-		const auto & tAttr = m_dAttrs[i];
-		if ( !tAttr.IsColumnar() && !tAttr.IsColumnarExpr() )
-			continue;
-
-		switch ( tAttr.m_eAttrType )
-		{
-		case SPH_ATTR_STRING:
-		case SPH_ATTR_STRINGPTR:
-			m_dSingleKeyGroupers[i] = CreateGrouperColumnarString ( tAttr, m_eCollation );
-			break;
-
-		case SPH_ATTR_UINT32SET:
-		case SPH_ATTR_UINT32SET_PTR:
-		case SPH_ATTR_INT64SET:
-		case SPH_ATTR_INT64SET_PTR:
-			m_dMultiKeyGroupers[i] = CreateGrouperColumnarMVA(tAttr);
-			break;
-
-		default:
-			m_dSingleKeyGroupers[i] = CreateGrouperColumnarInt(tAttr);
-			break;
-		}
-	}
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-template<typename T>
-class GrouperMVA_T : public CSphGrouper
-{
-public:
-					explicit GrouperMVA_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
-
-	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const override					{ assert(0); return SphGroupKey_t(); }
-	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override	{ assert(0); return SphGroupKey_t(); }
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override;
-	void			GetLocator ( CSphAttrLocator & tOut ) const override { tOut = m_tLocator; }
-	ESphAttr		GetResultType () const override;
-	CSphGrouper *	Clone() const override { return new GrouperMVA_T ( m_tLocator ); }
-	bool			IsMultiValue() const override { return true; }
-
-private:
-	CSphAttrLocator	m_tLocator;
-};
-
-template<>
-ESphAttr GrouperMVA_T<DWORD>::GetResultType() const
-{
-	return SPH_ATTR_INTEGER;
-}
-
-template<>
-ESphAttr GrouperMVA_T<int64_t>::GetResultType() const
-{
-	return SPH_ATTR_BIGINT;
-}
-
-template<typename T>
-void GrouperMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
-{
-	FetchMVAKeys<T> ( dKeys, tMatch, m_tLocator, GetBlobPool() );
-}
-
-
-class DistinctFetcher_c : public DistinctFetcher_i
-{
-public:
-			explicit DistinctFetcher_c ( const CSphAttrLocator & tLocator ) : m_tLocator(tLocator) {}
-
-	void	SetColumnar ( const columnar::Columnar_i * pColumnar ) override {}
-	void	SetBlobPool ( const BYTE * pBlobPool ) override { m_pBlobPool = pBlobPool; }
-	void	FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema ); }
-
-protected:
-	CSphAttrLocator m_tLocator;
-	const BYTE * m_pBlobPool = nullptr;
-};
-
-
-class DistinctFetcherPlain_c : public DistinctFetcher_c
-{
-	using DistinctFetcher_c::DistinctFetcher_c;
-
-public:
-	void	GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override { assert ( 0 && " Requesting multiple keys from plain distinct fetcher" ); }
-	bool	IsMultiValue() const override { return false; }
-};
-
-
-class DistinctFetcherMulti_c : public DistinctFetcher_c
-{
-	using DistinctFetcher_c::DistinctFetcher_c;
-
-public:
-	SphAttr_t	GetKey ( const CSphMatch & tMatch ) const override { assert ( 0 && " Requesting single keys from multi distinct fetcher" ); return 0; }
-	bool		IsMultiValue() const override { return true; }
-};
-
-
-class DistinctFetcherInt_c : public DistinctFetcherPlain_c
-{
-	using DistinctFetcherPlain_c::DistinctFetcherPlain_c;
-
-public:
-	SphAttr_t			GetKey ( const CSphMatch & tMatch ) const override { return tMatch.GetAttr(m_tLocator); }
-	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherInt_c(m_tLocator); }
-};
-
-
-class DistinctFetcherString_c : public DistinctFetcherPlain_c
-{
-	using DistinctFetcherPlain_c::DistinctFetcherPlain_c;
-
-public:
-	SphAttr_t			GetKey ( const CSphMatch & tMatch ) const override;
-	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherString_c(m_tLocator); }
-};
-
-
-SphAttr_t DistinctFetcherString_c::GetKey ( const CSphMatch & tMatch ) const
-{
-	auto dBlob = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-	return (SphAttr_t) sphFNV64 ( dBlob );
-}
-
-
-class DistinctFetcherJsonField_c : public DistinctFetcherMulti_c
-{
-	using DistinctFetcherMulti_c::DistinctFetcherMulti_c;
-
-public:
-	void				GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
-	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherJsonField_c(m_tLocator); }
-};
-
-
-void DistinctFetcherJsonField_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
-{
-	dKeys.Resize(0);
-	PushJsonField ( tMatch.GetAttr(m_tLocator), m_pBlobPool, [&dKeys]( SphAttr_t * pAttr, SphGroupKey_t uGroupKey )
-		{
-			if ( uGroupKey )
-				dKeys.Add(uGroupKey);
-
-			return true;
-		} );
-}
-
-
-template<typename T>
-class DistinctFetcherMva_T : public DistinctFetcherMulti_c
-{
-	using DistinctFetcherMulti_c::DistinctFetcherMulti_c;
-
-public:
-	void				GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
-	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherMva_T(m_tLocator); }
-};
-
-template<typename T>
-void DistinctFetcherMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
-{
-	dKeys.Resize(0);
-	AddGroupedMVA<T> ( [&dKeys]( SphAttr_t tAttr ){ dKeys.Add(tAttr); }, tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
-}
-
-
-static DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType )
-{
-	// fixme! what about json?
-	switch ( eType )
-	{
-	case SPH_ATTR_STRING:
-	case SPH_ATTR_STRINGPTR:		return new DistinctFetcherString_c(tLocator);
-	case SPH_ATTR_JSON_FIELD:		return new DistinctFetcherJsonField_c(tLocator);
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_UINT32SET_PTR:	return new DistinctFetcherMva_T<DWORD>(tLocator);
-	case SPH_ATTR_INT64SET:
-	case SPH_ATTR_INT64SET_PTR:		return new DistinctFetcherMva_T<int64_t>(tLocator);
-	default:						return new DistinctFetcherInt_c(tLocator);
-	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -5136,11 +4336,6 @@ ISphExpr * ExprGeodist_t::Clone() const
 // PUBLIC FUNCTIONS (FACTORY AND FLATTENING)
 //////////////////////////////////////////////////////////////////////////
 
-static CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation );
-static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation );
-static CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation );
-
-
 bool HasImplicitGrouping ( const CSphQuery & tQuery )
 {
 	auto fnIsImplicit = [] ( const CSphQueryItem & t )
@@ -5310,7 +4505,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 			tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 
 			ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
-			m_tGroupSorterSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tLoc, pExpr );
 			m_tGroupSorterSettings.m_bJson = true;
 		}
 		break;
@@ -5332,7 +4527,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 			bGrouperUsesAttrs = false;
 		}
 		else
-			m_tGroupSorterSettings.m_pGrouper = sphCreateGrouperString ( tLoc, m_tQuery.m_eCollation );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperString ( tLoc, m_tQuery.m_eCollation );
 		break;
 
 	case SPH_ATTR_UINT32SET:
@@ -5345,9 +4540,9 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 		}
 
 		if ( eType==SPH_ATTR_UINT32SET )
-			m_tGroupSorterSettings.m_pGrouper = new GrouperMVA_T<DWORD>(tLoc);
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMVA32(tLoc);
 		else
-			m_tGroupSorterSettings.m_pGrouper = new GrouperMVA_T<int64_t>(tLoc);
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMVA64(tLoc);
 		break;
 
 	case SPH_ATTR_UINT32SET_PTR:
@@ -5375,7 +4570,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 	}
 
 	if ( !m_tGroupSorterSettings.m_pGrouper )
-		m_tGroupSorterSettings.m_pGrouper = new CSphGrouperAttr(tLoc);
+		m_tGroupSorterSettings.m_pGrouper = CreateGrouperAttr(tLoc);
 }
 
 
@@ -5468,7 +4663,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 				dJsonKeys.Add ( nullptr );
 		}
 
-		m_tGroupSorterSettings.m_pGrouper = sphCreateGrouperMulti ( dAttrs, std::move(dJsonKeys), m_tQuery.m_eCollation );
+		m_tGroupSorterSettings.m_pGrouper = CreateGrouperMulti ( dAttrs, std::move(dJsonKeys), m_tQuery.m_eCollation );
 		return true;
 	}
 
@@ -5492,7 +4687,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 
 		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
-		m_tGroupSorterSettings.m_pGrouper = new CSphGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
+		m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		m_tGroupSorterSettings.m_bJson = true;
 		return true;
 
@@ -5516,13 +4711,13 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	switch (m_tQuery.m_eGroupFunc )
 	{
 		case SPH_GROUPBY_DAY:
-			m_tGroupSorterSettings.m_pGrouper = getDayGrouper ( tLoc ); break;
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperDay(tLoc); break;
 		case SPH_GROUPBY_WEEK:
-			m_tGroupSorterSettings.m_pGrouper = getWeekGrouper ( tLoc ); break;
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperWeek(tLoc); break;
 		case SPH_GROUPBY_MONTH:
-			m_tGroupSorterSettings.m_pGrouper = getMonthGrouper ( tLoc ); break;
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMonth(tLoc); break;
 		case SPH_GROUPBY_YEAR:
-			m_tGroupSorterSettings.m_pGrouper = getYearGrouper ( tLoc ); break;
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperYear(tLoc); break;
 		case SPH_GROUPBY_ATTR:
 			CreateGrouperByAttr ( eType, tGroupByAttr, bGrouperUsesAttrs );
 			break;
@@ -5785,68 +4980,6 @@ CSphString SortJsonInternalSet ( const CSphString& sColumnName )
 		( StringBuilder_c () << g_sIntJsonPrefix << "_" << sColumnName ).MoveTo ( sName );
 	return sName;
 }
-
-
-CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation )
-{
-	switch ( eCollation )
-	{
-	case SPH_COLLATION_UTF8_GENERAL_CI:	return new CSphGrouperString<Utf8CIHash_fn>(tLoc);
-	case SPH_COLLATION_LIBC_CI:			return new CSphGrouperString<LibcCIHash_fn>(tLoc);
-	case SPH_COLLATION_LIBC_CS:			return new CSphGrouperString<LibcCSHash_fn>(tLoc);
-	default:							return new CSphGrouperString<BinaryHash_fn>(tLoc);
-	}
-}
-
-
-static CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation )
-{
-	switch ( eCollation )
-	{
-	case SPH_COLLATION_UTF8_GENERAL_CI:	return new GrouperStringExpr_T<Utf8CIHash_fn>(pExpr);
-	case SPH_COLLATION_LIBC_CI:			return new GrouperStringExpr_T<LibcCIHash_fn>(pExpr);
-	case SPH_COLLATION_LIBC_CS:			return new GrouperStringExpr_T<LibcCSHash_fn>(pExpr);
-	default:							return new GrouperStringExpr_T<BinaryHash_fn>(pExpr);
-	}
-}
-
-
-static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
-{
-	bool bHaveColumnar = dAttrs.any_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
-	bool bAllColumnar = dAttrs.all_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
-
-	if ( bAllColumnar )
-		return CreateGrouperColumnarMulti ( dAttrs, eCollation );
-
-	switch ( eCollation )
-	{
-	case SPH_COLLATION_UTF8_GENERAL_CI:
-		if ( bHaveColumnar )
-			return new CSphGrouperMulti<Utf8CIHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
-		else
-			return new CSphGrouperMulti<Utf8CIHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
-
-	case SPH_COLLATION_LIBC_CI:
-		if ( bHaveColumnar )
-			return new CSphGrouperMulti<LibcCIHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
-		else
-			return new CSphGrouperMulti<LibcCIHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
-
-	case SPH_COLLATION_LIBC_CS:
-		if ( bHaveColumnar )
-			return new CSphGrouperMulti<LibcCSHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
-		else
-			return new CSphGrouperMulti<LibcCSHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
-
-	default:
-		if ( bHaveColumnar )
-			return new CSphGrouperMulti<BinaryHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
-		else
-			return new CSphGrouperMulti<BinaryHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
-	}
-}
-
 
 /////////////////////////
 // SORTING QUEUE FACTORY

@@ -4,12 +4,14 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– output –––
 0
 ––– input –––
+docker pull --platform linux/x86_64 mysql:5.6 > /dev/null
+––– output –––
+––– input –––
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network -e EXTRA=1 --name manticore -v ./test/clt-tests/mysqldump/versions/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
+docker run -it --network=test_network -e EXTRA=1 --platform linux/amd64 --name manticore -v ./test/clt-tests/mysqldump/versions/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
 ––– output –––
-WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
 0
 ––– input –––
 timeout 10 docker logs -f manticore | grep -qm1 '\[BUDDY\] started' && echo 'Buddy started!' || echo 'Timeout or failed!'
@@ -35,3 +37,224 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE a (id INT, content TEXT)
 ––– input –––
 bash ./test/clt-tests/mysqldump/versions/script_versions.sh
 ––– output –––
+Testing version: mariadb:10.5
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.5 completed successfully
+Testing version: mariadb:10.6
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.6 completed successfully
+Testing version: mariadb:10.7
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.7 completed successfully
+Testing version: mariadb:10.8
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.8 completed successfully
+Testing version: mariadb:10.9
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.9 completed successfully
+Testing version: mariadb:10.10
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.10 completed successfully
+Testing version: mariadb:10.11
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:10.11 completed successfully
+Testing version: mariadb:11.0
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:11.0 completed successfully
+Testing version: mariadb:11.1
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:11.1 completed successfully
+Testing version: mariadb:11.2
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:11.2 completed successfully
+Testing version: mariadb:11.3-rc
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:11.3-rc completed successfully
+Testing version: mariadb:latest
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mariadb:latest completed successfully
+Testing version: mysql:5.6
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mysql:5.6 completed successfully
+Testing version: mysql:5.7
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mysql:5.7 completed successfully
+Testing version: mysql:8.0
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mysql:8.0 completed successfully
+Testing version: mysql:8.2
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mysql:8.2 completed successfully
+Testing version: mysql:latest
+id	content
+10	LG
+9	Sony
+8	Samsung
+7	Microsoft
+6	Acer
+5	Asus
+4	Lenovo
+3	HP
+2	Dell
+1	Apple
+Dump mysql:latest completed successfully

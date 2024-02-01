@@ -488,7 +488,7 @@ function RunIndexer ( &$error, $params )
 
 function CheckSearchdLog ( $error_file, &$retval )
 {
-	$rawlog = file ( $error_file );
+	$rawlog = file ( $error_file, FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES );
 	$error = "";
 
 	foreach ( $rawlog as $line )
@@ -501,7 +501,7 @@ function CheckSearchdLog ( $error_file, &$retval )
 				// Adding an explicit check to avoid possible fails caused by the columnar library init warning
 				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: Error initializing columnar storage" )!==false )
 					continue;
-				$error .= $t;
+				$error .= $t."\n";
 				if ( $tag!="WARNING:" )
 					$retval = 1;
 			}
@@ -667,7 +667,8 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	} else
 	{
 //		print  ( "$path --config $abs_config_file $extra_params > $abs_error_file\n" );
-		system ( "$path --config $abs_config_file $extra_params > $abs_error_file", $retval );
+		exec("$path --config $abs_config_file $extra_params", $output, $retval);
+		file_put_contents($abs_error_file, implode("\n", $output));
 //		print ("started\n");
 	}
 

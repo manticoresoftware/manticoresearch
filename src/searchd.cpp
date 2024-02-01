@@ -2538,15 +2538,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	tQuery.m_sSortBy = tReq.GetString ();
 
+	// here we once eliminate SPH_SORT_ATTR_ASC in flavour of SPH_SORT_EXTENDED
 	if ( tQuery.m_eSort == SPH_SORT_ATTR_ASC )
 	{
-		tQuery.m_sSortBy = SphSprintf ( "%s asc", tQuery.m_sSortBy.cstr() );
+		tQuery.m_sSortBy = SphSprintf ( "%s ASC", tQuery.m_sSortBy.cstr() );
 		tQuery.m_eSort = SPH_SORT_EXTENDED;
 	}
 
+	// here we once eliminate SPH_SORT_ATTR_DESC in flavour of SPH_SORT_EXTENDED
 	if ( tQuery.m_eSort == SPH_SORT_ATTR_DESC )
 	{
-		tQuery.m_sSortBy = SphSprintf ( "%s desc", tQuery.m_sSortBy.cstr() );
+		tQuery.m_sSortBy = SphSprintf ( "%s DESC", tQuery.m_sSortBy.cstr() );
 		tQuery.m_eSort = SPH_SORT_EXTENDED;
 	}
 
@@ -2975,8 +2977,6 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	*pBuf << sPrefix;
 	switch ( eSort )
 	{
-	case SPH_SORT_ATTR_DESC:		*pBuf << sSubst << " DESC"; break;
-	case SPH_SORT_ATTR_ASC:			*pBuf << sSubst << " ASC"; break;
 	case SPH_SORT_TIME_SEGMENTS:	*pBuf << "TIME_SEGMENT(" << sSubst << ")"; break;
 	case SPH_SORT_EXTENDED:			*pBuf << sSubst; break;
 	case SPH_SORT_EXPR:				*pBuf << "BUILTIN_EXPR()"; break;

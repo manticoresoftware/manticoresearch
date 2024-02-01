@@ -4185,8 +4185,6 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortF
 		switch ( eMatchFunc )
 		{
 			case FUNC_REL_DESC:		pComp = new MatchRelevanceLt_fn(); break;
-			case FUNC_ATTR_DESC:	pComp = new MatchAttrLt_fn(); break;
-			case FUNC_ATTR_ASC:		pComp = new MatchAttrGt_fn(); break;
 			case FUNC_TIMESEGS:		pComp = new MatchTimeSegments_fn(); break;
 			case FUNC_GENERIC1:		pComp = new MatchGeneric1_fn(); break;
 			case FUNC_GENERIC2:		pComp = new MatchGeneric2_fn(); break;
@@ -4999,8 +4997,6 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 	switch ( eMatchFunc )
 	{
 		case FUNC_REL_DESC:		return CreatePlainSorter<MatchRelevanceLt_fn>	( bKbuffer, iMaxMatches, bFactors );
-		case FUNC_ATTR_DESC:	return CreatePlainSorter<MatchAttrLt_fn>		( bKbuffer, iMaxMatches, bFactors );
-		case FUNC_ATTR_ASC:		return CreatePlainSorter<MatchAttrGt_fn>		( bKbuffer, iMaxMatches, bFactors );
 		case FUNC_TIMESEGS:		return CreatePlainSorter<MatchTimeSegments_fn>	( bKbuffer, iMaxMatches, bFactors );
 		case FUNC_GENERIC1:		return CreatePlainSorter<MatchGeneric1_fn>		( bKbuffer, iMaxMatches, bFactors );
 		case FUNC_GENERIC2:		return CreatePlainSorter<MatchGeneric2_fn>		( bKbuffer, iMaxMatches, bFactors );
@@ -5980,8 +5976,6 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 	// find out what function to use and whether it needs attributes
 	switch (m_tQuery.m_eSort )
 	{
-		case SPH_SORT_ATTR_DESC:	m_eMatchFunc = FUNC_ATTR_DESC; break;
-		case SPH_SORT_ATTR_ASC:		m_eMatchFunc = FUNC_ATTR_ASC; break;
 		case SPH_SORT_TIME_SEGMENTS:	m_eMatchFunc = FUNC_TIMESEGS; break;
 		case SPH_SORT_RELEVANCE:	m_eMatchFunc = FUNC_REL_DESC; break;
 		default:

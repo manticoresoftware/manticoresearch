@@ -26,6 +26,7 @@ set ( CPACK_GENERATOR RPM )
 
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
+set ( DEP_TZDATA_VERSION "${TZDATA_VERNUM}_${TZDATA_VERDATE}.${TZDATA_VERHASH}" )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}_${BUDDY_VERDATE}.${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" )
 
@@ -43,7 +44,7 @@ set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 set ( CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR} )
 
 set ( CPACK_RPM_SEARCHD_PACKAGE_NAME "manticore-server-core" )
-set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}, manticore-tzdata => ${DEP_TZDATA_VERSION}, manticore-tzdata < ${TZDATA_VERNUM_MAX}" )
 set ( CPACK_RPM_SEARCHD_INSTALL_WITH_EXEC ON )
 set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx" )
 

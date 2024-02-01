@@ -21,6 +21,10 @@ on:
       artifact_name:
         required: true
         type: string
+      build_artifact_name:
+        required: false
+        type: string
+        default: build_jammy_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
       timeout:
         required: false
         type: number
@@ -40,7 +44,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263
+      image: manticoresearch/ubertests_ctest:3263_jammy
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -68,7 +72,7 @@ jobs:
       - name: Download build artifacts
         uses: manticoresoftware/download_artifact_with_retries@v2
         with:
-          name: build_bionic_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
+          name: ${{ inputs.build_artifact_name }}
           path: .
 
       - name: List files

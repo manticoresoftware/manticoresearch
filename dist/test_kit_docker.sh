@@ -60,6 +60,9 @@ do
 		mcl)
 			package="manticore-columnar-lib"
 			;;
+    tzdata)
+			package="manticore-tzdata"
+			;;
 		executor)
 			package="manticore-executor|manticore-extra"
 			;;

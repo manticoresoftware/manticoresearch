@@ -54,6 +54,8 @@
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
+#include "datetime.h"
+#include "exprdatetime.h"
 #include "pseudosharding.h"
 #include "geodist.h"
 
@@ -159,7 +161,6 @@ static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdQueueMax		= 0;
-static bool				g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
 static int				g_iServerID = 0;
@@ -14286,9 +14287,25 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 
 	if ( sName == "grouping_in_utc" )
 	{
-		g_bGroupingInUtc = !!iSetValue;
-		SetGroupingInUtcExpr ( g_bGroupingInUtc );
-		SetGroupingInUtcSort ( g_bGroupingInUtc );
+		if ( IsTimeZoneSet() )
+		{
+			sError = "grouping_in_utc=1 conflicts with 'timezone'";
+			return true;
+		}
+
+		SetGroupingInUTC ( !!iSetValue );
+		return true;
+	}
+
+	if ( sName == "timezone" )
+	{
+		if ( GetGroupingInUTC() )
+		{
+			sError = "grouping_in_utc=1 conflicts with 'timezone'";
+			return true;
+		}
+
+		SetTimeZone ( sSetValue.cstr(), sError );
 		return true;
 	}
 
@@ -15577,7 +15594,8 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
 		dTable.MatchTuplet ( "character_set_client", "utf8" );
 		dTable.MatchTuplet ( "character_set_connection", "utf8" );
-		dTable.MatchTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
+		dTable.MatchTuplet ( "grouping_in_utc", GetGroupingInUTC() ? "1" : "0" );
+		dTable.MatchTuplet ( "timezone", GetTimeZoneName().cstr() );
 		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]
 		{
 			StringBuilder_c tBuf ( "," );
@@ -19885,9 +19903,23 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	if ( hSearchd ( "grouping_in_utc" ) )
 	{
-		g_bGroupingInUtc = (hSearchd["grouping_in_utc"].intval ()!=0);
-		SetGroupingInUtcExpr ( g_bGroupingInUtc );
-		SetGroupingInUtcSort ( g_bGroupingInUtc );
+		if ( IsTimeZoneSet() )
+			sphWarning ( "grouping_in_utc=1 conflicts with 'timezone'" );
+
+		SetGroupingInUTC ( hSearchd["grouping_in_utc"].intval ()!=0 );
+	}
+
+	if ( hSearchd ( "timezone" ) )
+	{
+		if ( GetGroupingInUTC() )
+			sphWarning ( "grouping_in_utc=1 conflicts with 'timezone'" );
+
+		CSphString sWarn;
+		SetTimeZone ( hSearchd["timezone"].cstr(), sWarn );
+		if ( !sWarn.IsEmpty() )
+			sphWarning ( "%s", sWarn.cstr() );
+		else
+			sphInfo ( "Using time zone '%s'", GetTimeZoneName().cstr() );
 	}
 
 	// sha1 password hash for shutdown action
@@ -20649,6 +20681,19 @@ static void CacheCPUInfo()
 }
 
 
+static void LogTimeZoneStartup ( const CSphString & sWarning )
+{
+	// avoid writing this to stdout
+	bool bLogStdout = g_bLogStdout;
+	g_bLogStdout = false;
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "Error initializing time zones: %s", sWarning.cstr() );
+
+	sphInfo ( "Using local time zone '%s'", GetLocalTimeZoneName().cstr() );
+	g_bLogStdout = bLogStdout;
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -20720,6 +20765,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( !sError.IsEmpty() )
 		sError = "";
+
+	CSphString sTZWarning;
+	{
+		StrVec_t dWarnings;
+		InitTimeZones ( dWarnings );
+		sTZWarning = ConcatWarnings(dWarnings);
+	}
 
 	//////////////////////
 	// parse command line
@@ -21034,6 +21086,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		}
 	}
 #endif
+
+	LogTimeZoneStartup(sTZWarning);
 
 	// init before workpool, as last checks binlog
 	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );

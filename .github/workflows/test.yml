@@ -58,7 +58,7 @@ jobs:
       - name: Extract Windows bundle from Windows sysroot
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/sysroots/roots_nov22/sysroot_windows_x64.tar.xz
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_apr12/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
           mv diskc/winbundle bundle
       - name: Extract Boost to put it to the cache
@@ -527,7 +527,7 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_nov22
+      sysroot: roots_apr12
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64

@@ -1628,6 +1628,11 @@ static bool IsGroupby ( const CSphString & s )
 		|| IsSortJsonInternal(s);
 }
 
+static bool IsKnnDist ( const CSphString & sExpr )
+{
+	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
+}
+
 bool IsGroupbyMagic ( const CSphString & s )
 {
 	return IsGroupby ( s ) || IsCount ( s );
@@ -5224,6 +5229,9 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		m_bHasGroupByExpr = IsGroupby ( sExpr );
 		return true;
 	}
+
+	if ( IsKnnDist(sExpr) && m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )<0 )
+		return Err ( "KNN_DIST() is only allowed for KNN() queries" );
 
 	// not an attribute? must be an expression, and must be aliased by query parser
 	assert ( !tItem.m_sAlias.IsEmpty() );

@@ -2,7 +2,12 @@ FROM ubuntu:jammy
 ENV DEBIAN_FRONTEND noninteractive
 ENV DISTR jammy
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y wget
+
+RUN wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
+    dpkg -i manticore-dev-repo.noarch.deb && \
+    apt-get update && apt-get install -y \
+    manticore-tzdata \
     libmysqlclient-dev \
     libexpat-dev \
     libpq-dev \
@@ -13,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libjemalloc-dev \
     libssl-dev \
-    wget \
     ca-certificates \
     ninja-build \
     lsb-release \

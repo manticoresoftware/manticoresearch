@@ -9,6 +9,9 @@
 mysql -h0 -P19306 -e "create table c:t(id bigint) shards=60 rf=3"
 ––– output –––
 ––– input –––
+grep '\[error\]' /var/log/manticore-{1,2,3,4,5}/searchd.log
+––– output –––
+––– input –––
 for i in 1 2 3 4 5; do mysql -h0 -P${i}9306 -e "show tables\G"; done | grep 'Index: t' | sort -V
 ––– output –––
 Index: t

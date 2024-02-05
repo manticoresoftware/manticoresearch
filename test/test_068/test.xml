@@ -272,11 +272,11 @@ index year
 <!-- regression for wrong killlist target after rotation -->
 <sphinxql>select * from archive</sphinxql>
 <sphinxql>select * from ancient</sphinxql>
-<sphinxql>select * from year</sphinxql>
+<sphinxql>select * from `year`</sphinxql>
 <sphinxql system="run-indexer" params="--rotate archive" sleep="2"/>
 <sphinxql>select * from archive</sphinxql>
 <sphinxql>select * from ancient</sphinxql>
-<sphinxql>select * from year</sphinxql>
+<sphinxql>select * from `year`</sphinxql>
 
 </queries>
 

@@ -60,6 +60,9 @@ do
 		mcl)
 			package="manticore-columnar-lib"
 			;;
+    tzdata)
+			package="manticore-tzdata"
+			;;
 		executor)
 			package="manticore-executor|manticore-extra"
 			;;
@@ -131,5 +134,6 @@ docker import ../manticore_test_kit.img $img_url
 [ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
 	docker push $img \
 	  && echo "❗ Pushed the image to $img" \
+      && echo "Pushed test-kit to $img" >> $GITHUB_STEP_SUMMARY \
 	  || echo "❗ Couldn't push the image to $img"
 done || echo "Skipped pushing to repo, because GHCR_USER is not set"

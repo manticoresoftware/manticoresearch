@@ -28,13 +28,16 @@ DEPS_PATH="deps.txt"
 BUDDY_COMMIT_SHA=$(cat $DEPS_PATH | grep buddy | cut -d" " -f4)
 EXECUTOR_COMMIT_SHA=$(cat $DEPS_PATH | grep executor-win | cut -d" " -f4)
 MCL_COMMIT_SHA=$(cat $DEPS_PATH | grep mcl | cut -d" " -f4)
+TZDATA_COMMIT_SHA=$(cat $DEPS_PATH | grep tzdata | cut -d" " -f4)
 
 for DESTINATION in "${DESTINATION_REPOS[@]}"; do
 
   BUDDY_PACKAGE_NAME=""
   EXECUTOR_PACKAGE_NAME=""
   MCL_PACKAGE_NAME=""
+  TZDATA_PACKAGE_NAME=""
   MANTICORE_PACKAGE_NAME=""
+  TZDATA_PACKAGE_NAME=""
 
   echo "Commit: $CI_COMMIT_SHORT_SHA, Version: $MANTICORE_VERSION, Search in $DESTINATION repo"
 
@@ -45,21 +48,24 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
   BUDDY_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $BUDDY_COMMIT_SHA | grep buddy | tail -n 1 | cut -d'"' -f2)
   EXECUTOR_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $EXECUTOR_COMMIT_SHA | grep executor | tail -n 1 | cut -d'"' -f2)
   MCL_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $MCL_COMMIT_SHA | grep columnar | grep libs.zip | tail -n 1 | cut -d'"' -f2)
+  TZDATA_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $TZDATA_COMMIT_SHA | grep tzdata | tail -n 1 | cut -d'"' -f2)
   MANTICORE_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $CI_COMMIT_SHORT_SHA | grep main | tail -n 1 | cut -d'"' -f2)
+  TZDATA_PACKAGE_NAME=$(echo "$REPO_CONTENT" | grep $TZDATA_COMMIT_SHA | grep tzdata | tail -n 1 | cut -d'"' -f2)
 
-  if [ -n "$MANTICORE_PACKAGE_NAME" ] && [ -n "$BUDDY_PACKAGE_NAME" ] && [ -n "$EXECUTOR_PACKAGE_NAME" ] && [ -n "$MCL_PACKAGE_NAME" ]; then
+  if [ -n "$MANTICORE_PACKAGE_NAME" ] && [ -n "$BUDDY_PACKAGE_NAME" ] && [ -n "$EXECUTOR_PACKAGE_NAME" ] && [ -n "$MCL_PACKAGE_NAME" ] && [ -n "$TZDATA_PACKAGE_NAME" ]; then
       echo "All selected packages are found in $DESTINATION repo"
       break
   fi
 
 done
 
-if [ -z "$MANTICORE_PACKAGE_NAME" ] || [ -z "$BUDDY_PACKAGE_NAME" ] || [ -z "$EXECUTOR_PACKAGE_NAME" ] || [ -z "$MCL_PACKAGE_NAME" ]; then
+if [ -z "$MANTICORE_PACKAGE_NAME" ] || [ -z "$BUDDY_PACKAGE_NAME" ] || [ -z "$EXECUTOR_PACKAGE_NAME" ] || [ -z "$MCL_PACKAGE_NAME" ] || [ -z "$TZDATA_PACKAGE_NAME" ]; then
 
   [ -z "$MANTICORE_PACKAGE_NAME" ] && echo -e "${RED}Can't find Manticore package $CI_COMMIT_SHORT_SHA in repositories. Exiting$NC \n"
   [ -z "$BUDDY_PACKAGE_NAME" ] && echo -e "${RED}Can't find Buddy package $BUDDY_COMMIT_SHA in repositories. Exiting$NC \n"
   [ -z "$EXECUTOR_PACKAGE_NAME" ] && echo -e "${RED}Can't find Executor package $EXECUTOR_COMMIT_SHA in repositories. Exiting$NC \n"
   [ -z "$MCL_PACKAGE_NAME" ] && echo -e "${RED}Can't find Columnar package $MCL_COMMIT_SHA in repositories. Exiting$NC \n"
+  [ -z "$TZDATA_PACKAGE_NAME" ] && echo -e "${RED}Can't find TZDATA package $TZDATA_COMMIT_SHA in repositories. Exiting$NC \n"
 
   exit 1
 fi
@@ -70,6 +76,7 @@ echo -n "$WIN_REPO$MANTICORE_PACKAGE_NAME" >"${NSIS_BUILD_DIR}/manticore_src.txt
 echo -n "$WIN_REPO$BUDDY_PACKAGE_NAME" >"${NSIS_BUILD_DIR}/buddy_src.txt"
 echo -n "$WIN_REPO$EXECUTOR_PACKAGE_NAME" >"${NSIS_BUILD_DIR}/executor_src.txt"
 echo -n "$WIN_REPO$MCL_PACKAGE_NAME" >"${NSIS_BUILD_DIR}/mcl_src.txt"
+echo -n "$WIN_REPO$TZDATA_PACKAGE_NAME" >"${NSIS_BUILD_DIR}/tzdata_src.txt"
 
 echo -e "${GREEN}Run nsis build$NC"
 makensis "$NSIS_BUILD_DIR/nsisscript.nsi"

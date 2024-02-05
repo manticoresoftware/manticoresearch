@@ -1,8 +1,13 @@
-FROM ubuntu:bionic
+FROM ubuntu:jammy
 ENV DEBIAN_FRONTEND noninteractive
-ENV DISTR bionic
+ENV DISTR jammy
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y wget
+
+RUN wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
+    dpkg -i manticore-dev-repo.noarch.deb && \
+    apt-get update && apt-get install -y \
+    manticore-tzdata \
     libmysqlclient-dev \
     libexpat-dev \
     libpq-dev \
@@ -13,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libjemalloc-dev \
     libssl-dev \
-    wget \
     ca-certificates \
     ninja-build \
     lsb-release \
@@ -23,12 +27,12 @@ RUN apt-get update && apt-get install -y \
     php-curl \
     php-xml \
     php-dompdf \
-    python \
+    python3 \
     ssh \
     mysql-server \
     xsltproc \
     openssl \
-    python-dev
+    python3-dev
 
 RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
     && chmod +x mc && \
@@ -37,7 +41,9 @@ RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
 
 # boost
 ARG boostminorver=75
-RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.${boostminorver}.0/source/boost_1_${boostminorver}_0.tar.gz \
+
+# boost*tar.gz originates from https://boostorg.jfrog.io/artifactory/main/release/1.${boostminorver}.0/source/boost_1_${boostminorver}_0.tar.gz
+RUN wget https://repo.manticoresearch.com/repository/misc/boost_1_${boostminorver}_0.tar.gz \
     && tar -zxf boost_1_${boostminorver}_0.tar.gz && rm boost_1_${boostminorver}_0.tar.gz \
     && cd boost_1_${boostminorver}_0 \
     && ./bootstrap.sh \
@@ -87,6 +93,7 @@ rm *.tar.xz
 RUN rm -rf /var/lib/apt/lists/*
 
 ADD sphinx /root/.sphinx
+RUN git config --global --add safe.directory '*'
 ADD entry_point.sh /
 VOLUME [ "/work" ]
 WORKDIR /work
@@ -95,7 +102,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263 .
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_jammy .
 
 # deprecated:
 # docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263 .

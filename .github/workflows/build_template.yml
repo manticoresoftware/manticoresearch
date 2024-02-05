@@ -10,7 +10,7 @@ on:
       DISTR:
         required: false
         type: string
-        default: bionic
+        default: jammy
       CTEST_CMAKE_GENERATOR:
         required: false
         type: string
@@ -43,6 +43,9 @@ on:
         required: false
         type: string
         default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+      artifact_name:
+        required: false
+        type: string
       HOMEBREW_PREFIX:
         required: false
         type: string
@@ -89,6 +92,12 @@ jobs:
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           git config --global core.abbrev 9
 
+      - name: Set output artifact name
+        id: artifact_name
+        run: |
+          USER_INPUT=${{ inputs.artifact_name }}
+          echo "value=${USER_INPUT:-"build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}"}" >> "$GITHUB_OUTPUT"
+
       - name: Check out cache before building
         uses: actions/cache@v3.3.1
         with:
@@ -103,5 +112,5 @@ jobs:
         if: success()
         uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
-          name: build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}
+          name: ${{ steps.artifact_name.outputs.value }}
           path: ${{ inputs.artifact_list }}

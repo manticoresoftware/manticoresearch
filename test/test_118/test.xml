@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
   <Name>RT: order vs ram chanks</Name>
-
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <Config>
-indexer
-{
-	mem_limit			= 16M
-}
-
 searchd
 {
 <Searchd_Settings/>

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1255,6 +1255,7 @@ public:
 	virtual const DWORD *			GetRawAttrs() const { return nullptr; }
 	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
+	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id
@@ -1285,6 +1286,7 @@ protected:
 	TokenizerRefPtr_c		m_pQueryTokenizer;
 	TokenizerRefPtr_c		m_pQueryTokenizerJson;
 	DictRefPtr_c			m_pDict;
+	CSphBitvec				m_tMorphFields;
 
 	int							m_iMaxCachedDocs = 0;
 	int							m_iMaxCachedHits = 0;

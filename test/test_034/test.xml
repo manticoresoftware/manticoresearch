@@ -64,6 +64,7 @@ index dist
 	select jsn from dist where id=3;
 
 	<!-- control show everything -->
+	desc idx;
 	select * from idx;
 	select * from dist;
 </sphinxql>

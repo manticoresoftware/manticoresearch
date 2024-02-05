@@ -63,7 +63,7 @@ manticore-backup --config=path/to/manticore.conf --backup-dir=backupdir
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: all tables
@@ -102,7 +102,7 @@ manticore-backup --backup-dir=/mnt/backup/ --tables=products
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: products
@@ -206,7 +206,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -237,7 +237,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore=backup-20221007104044
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -261,7 +261,9 @@ Manticore config
 ## Backup and restore with mysqldump
 
 <!-- example mysqldump_backup -->
-To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
+To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples. 
+
+Note, `mysqldump` is supported only in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
 
 <!-- request SQL -->
 ```bash

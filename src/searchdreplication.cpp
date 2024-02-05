@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -76,7 +76,7 @@ struct ReplicationCluster_t final : public ClusterDesc_t, Wsrep::Cluster_i
 {
 public:
 	// replicator
-	Wsrep::Provider_c* m_pProvider = nullptr;
+	Wsrep::Provider_i* m_pProvider = nullptr;
 
 	// serializer for replicator - guards for only one replication Op a time
 	Threads::Coro::Mutex_c m_tReplicationMutex;
@@ -237,6 +237,9 @@ private:
 
 using ReplicationClusterRefPtr_c = CSphRefcountedPtr<ReplicationCluster_t>;
 
+// serializer for cluster management operations - only one cluster operation a time
+static Threads::Coro::Mutex_c g_tClusterOpsLock;
+
 // cluster list
 static Threads::Coro::RWLock_c g_tClustersLock;
 static SmallStringHash_T<ReplicationClusterRefPtr_c> g_hClusters GUARDED_BY ( g_tClustersLock );
@@ -312,7 +315,6 @@ ClusterState_e ReplicationCluster_t::WaitReady()
 
 bool ReplicationCluster_t::IsHealthy() const
 {
-
 	if ( !IsPrimary() )
 		return TlsMsg::Err ( "cluster '%s' is not ready, not primary state (%s)", m_sName.cstr(), szState() );
 
@@ -579,7 +581,7 @@ DEFINE_RENDER ( RPLRep_t )
 
 // repl version
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_c& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
+static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
 {
 	TRACE_CONN ( "conn", "Replicate" );
 
@@ -624,7 +626,7 @@ static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BY
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_c & tWriteSet, CommitMonitor_c & tMonitor )
+static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c & tMonitor )
 {
 	bool bOk = tWriteSet.ToExecuteStart ( dKeys, tQueries );
 	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, tWriteSet.LastSeqno() );
@@ -1045,15 +1047,15 @@ static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSph
 	}
 	END_CONN ( "conn" );
 
-	auto tWriteSet = pCluster->m_pProvider->MakeWriteSet();
+	auto pWriteSet = pCluster->m_pProvider->MakeWriteSet();
 
 	BEGIN_CONN ( "conn", "HandleCmdReplicate.cluster_lock" );
 	Threads::ScopedCoroMutex_t tClusterLock { pCluster->m_tReplicationMutex };
 	END_CONN ( "conn" );
 
 	if ( !bTOI )
-		return Replicate ( dBufKeys, dBufQueries, tWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
-	return ReplicateTOI ( dBufKeys, dBufQueries, tWriteSet, tMonitor );
+		return Replicate ( dBufKeys, dBufQueries, *pWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
+	return ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, tMonitor );
 }
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc )
@@ -1501,6 +1503,7 @@ static std::optional<ClusterDesc_t> ClusterDescFromSphinxqlStatement ( const CSp
 /////////////////////////////////////////////////////////////////////////////
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes ) EXCLUDES ( g_tClustersLock )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	auto tDesc = ClusterDescFromSphinxqlStatement ( sCluster, dNames, dValues, MAKE_E::JOIN );
 	if ( !tDesc )
@@ -1540,7 +1543,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		TlsMsg::Err ( pCluster->m_sError.cstr() );
 	}
 
-	sphLogFatal ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
+	sphWarning ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
 	// need to wait recv thread to complete in case of error after worker started
 	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 	Threads::SccWL_t wLock ( g_tClustersLock );
@@ -1554,6 +1557,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 /////////////////////////////////////////////////////////////////////////////
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues ) EXCLUDES ( g_tClustersLock )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	if ( !g_bReplicationStarted )
 		return TlsMsg::Err ( "cluster '%s' is not ready, starting", sCluster.cstr() );
@@ -1608,12 +1612,12 @@ StrVec_t ReplicationCluster_t::GetIndexes() const noexcept
 	return dIndexes;
 }
 
-void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * szClient, int iCmd )
+void ReportClusterError ( const CSphString & sCluster, const CSphString & sError, const char * szClient, E_CLUSTER eCmd )
 {
 	if ( sError.IsEmpty() )
 		return;
 
-	sphLogFatal ( "'%s' cluster [%s], cmd: %d, error: %s", sCluster.cstr(), szClient, iCmd, sError.cstr() );
+	sphWarning ( "'%s' cluster [%s], cmd: %s(%d), error: %s", sCluster.cstr(), szClient, szClusterCmd ( eCmd ), (int)eCmd, sError.cstr() );
 
 	auto pCluster = ClusterByName ( sCluster, nullptr );
 	if ( !pCluster )
@@ -1760,6 +1764,7 @@ static bool ClusterAddCheckDistLocals ( const StrVec_t & dLocals, const CSphStri
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	{
 		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		bool bMutable = ServedDesc_t::IsMutable ( pServed );
@@ -1986,7 +1991,15 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster || !pCluster->IsHealthy() )
+	{
+		// node in the joining state should skip the command
+		if ( pCluster && pCluster->GetState()==ClusterState_e::JOINING )
+		{
+			TlsMsg::ResetErr();
+			return true;
+		}
 		return false;
+	}
 
 	auto fnNodesHash = [](const StrVec_t dNodes) {
 		uint64_t uRes = SPH_FNV64_SEED;

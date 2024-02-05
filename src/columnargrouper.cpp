@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -10,6 +10,7 @@
 
 #include "columnargrouper.h"
 #include "sphinxsort.h"
+#include "grouper.h"
 
 
 template <typename T>

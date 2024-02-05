@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -389,6 +389,14 @@ void SendAPICommandGetfieldAnswer ( ISphOutputBuffer & tOut, FieldRequest_t& tRe
 	tOut.SendArray ( tRes.m_dBlob );
 }
 
+int GetDocIDOffset ( const AggrResult_t& tRes )
+{
+	const CSphColumnInfo* pId = tRes.m_tSchema.GetAttr ( sphGetDocidName() );
+	if ( pId )
+		return pId->m_tLocator.m_iBitOffset >> ROWITEM_SHIFT;
+	return 0;
+}
+
 // fill vec of ResLoc_t with remote matches from tRes, sorted by DocID
 int CollectUntaggedDocs ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes, const VecTraits_T<CSphMatch> & dMatches )
 {
@@ -399,11 +407,12 @@ int CollectUntaggedDocs ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes,
 
 	DocID_t iLastDocID = DOCID_MIN;
 	bool bNeedSort = false;
+	auto iIdOffset = GetDocIDOffset ( tRes );
 	ARRAY_CONSTFOREACH( i, dMatches )
 	{
 		const CSphMatch & tMatch = dMatches[i];
 		ResLoc_t & tDoc = dIds.Add ();
-		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic );
+		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic + iIdOffset );
 		tDoc.m_iIndex = i;
 		if ( bNeedSort )
 			continue;
@@ -426,13 +435,14 @@ void CollectTaggedDocs ( CSphVector<ResLoc_t> & dIds, const AggrResult_t & tRes,
 {
 	assert ( tRes.m_bTagsAssigned );
 	assert ( tRes.m_bSingle );
+	auto iIdOffset = GetDocIDOffset ( tRes );
 	ARRAY_CONSTFOREACH( i, dMatches )
 	{
 		const CSphMatch & tMatch = dMatches[i];
 		if ( !tRes.m_dResults[tMatch.m_iTag].m_bTag ) // process only matches came from remotes
 			continue;
 		ResLoc_t & tDoc = dIds.Add ();
-		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic );
+		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic + iIdOffset );
 		tDoc.m_iIndex = i;
 	}
 	dIds.Sort ( Lesser ( [&dMatches] ( const ResLoc_t & a, const ResLoc_t & b )

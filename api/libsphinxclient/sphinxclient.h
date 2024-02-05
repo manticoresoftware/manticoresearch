@@ -8,9 +8,9 @@
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License. You should
-// have received a copy of the LGPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org/
+// it under the terms of the GNU Library General Public License version 3 or later.
+// You should have received a copy of the LGPL license along with this program;
+// if you did not, you can find it at http://www.gnu.org/
 //
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

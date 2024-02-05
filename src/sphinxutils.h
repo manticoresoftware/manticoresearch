@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -441,6 +441,7 @@ class CSphDynamicLibrary : public ISphNoncopyable
 
 public:
 	explicit CSphDynamicLibrary ( const char* sPath, bool bGlobal=true );
+	void CSphDynamicLibraryAlternative ( const char* sPath, bool bGlobal = true );
 
 	// We are suppose, that library is loaded once when necessary, and will alive whole lifetime of utility.
 	// So, no need to explicitly desctruct it, this is intended leak.

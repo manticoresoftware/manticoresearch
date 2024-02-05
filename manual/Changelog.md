@@ -13,6 +13,10 @@
   - Support for Filebeat versions 8.10 - 8.11
 * Many more
 
+### Deprecations
+- HTTP API endpoint aliases /json/* have been deprecated
+- idx.table/status/files -> idx.@table/@status/@files
+
 ### Bugfixing
 * Lots of
 

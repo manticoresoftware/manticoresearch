@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -158,12 +158,12 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	assert ( eClusterCmd != E_CLUSTER::FILE_SEND );
 
 	auto szError = TlsMsg::szError();
-	sphLogDebugRpl ( "remote cluster '%s' command %d, client %s - %s", sCluster.scstr(), (int)eClusterCmd, szClient, szError );
+	sphLogDebugRpl ( "remote cluster '%s' command %s(%d), client %s - %s", sCluster.scstr(), szClusterCmd ( eClusterCmd ), (int)eClusterCmd, szClient, szError );
 
 	auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
 	tOut.SendString ( SphSprintf ( "[%s] %s", szIncomingIP(), szError ).cstr() );
 
-	ReportClusterError ( sCluster, szError, szClient, (int)eClusterCmd );
+	ReportClusterError ( sCluster, szError, szClient, eClusterCmd );
 }
 
 // 200 msec is ok as we do not need to any missed nodes in cluster node list

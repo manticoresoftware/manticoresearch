@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -454,7 +454,7 @@ void CSphDictSettings::Setup ( const CSphConfigSection & hIndex, FilenameBuilder
 }
 
 
-void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
+void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	m_sMorphology = tReader.GetString();
 	m_sMorphFields = tReader.GetString();
@@ -476,7 +476,7 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 	tEmbeddedFiles.m_dStopwordFiles.Resize ( nFiles );
 	for ( int i = 0; i < nFiles; i++ )
 	{
-		sFile = tReader.GetString ();
+		sFile = FormatPath ( tReader.GetString (), pFilenameBuilder );
 		tEmbeddedFiles.m_dStopwordFiles[i].Read ( tReader, sFile.cstr(), true, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	}
 
@@ -496,7 +496,8 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 	ARRAY_FOREACH ( i, m_dWordforms )
 	{
 		m_dWordforms[i] = tReader.GetString();
-		tEmbeddedFiles.m_dWordformFiles[i].Read ( tReader, m_dWordforms[i].cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
+		sFile = FormatPath ( m_dWordforms[i], pFilenameBuilder );
+		tEmbeddedFiles.m_dWordformFiles[i].Read ( tReader, sFile.cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
 	}
 
 	m_iMinStemmingLen = tReader.GetDword ();
@@ -508,8 +509,9 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 }
 
 
-void CSphDictSettings::Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning )
+void CSphDictSettings::Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString& sWarning )
 {
+	CSphString sFile;
 	using namespace bson;
 	m_sMorphology = String ( tNode.ChildByName ( "morphology" ) );
 	m_sMorphFields = String ( tNode.ChildByName ( "morph_fields" ) );
@@ -533,18 +535,22 @@ void CSphDictSettings::Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmb
 
 	auto tStopwordsNode = tNode.ChildByName ( "stopwords_file_infos" );
 	if ( !IsNullNode ( tStopwordsNode ) )
-		Bson_c ( tStopwordsNode ).ForEach ( [&tEmbeddedFiles,&sWarning] ( const NodeHandle_t& tNode ) {
-			auto& tStopwordsFile = tEmbeddedFiles.m_dStopwordFiles.Add();
-			tStopwordsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), String ( Bson_c ( tNode ).ChildByName ( "name" ) ).cstr(), true, tEmbeddedFiles.m_bEmbeddedStopwords ? nullptr : &sWarning );
+		Bson_c ( tStopwordsNode ).ForEach ( [ &tEmbeddedFiles, &sWarning, &sFile, &pFilenameBuilder ] ( const NodeHandle_t& tNode )
+		{
+			auto & tStopwordsFile = tEmbeddedFiles.m_dStopwordFiles.Add();
+			sFile = FormatPath ( String ( Bson_c ( tNode ).ChildByName ( "name" ) ), pFilenameBuilder );
+			tStopwordsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), sFile.cstr(), true, tEmbeddedFiles.m_bEmbeddedStopwords ? nullptr : &sWarning );
 		} );
 
 	auto tWordformsFiles = tNode.ChildByName ( "wordforms_file_infos" );
 	if ( !IsNullNode ( tWordformsFiles ) )
-		Bson_c ( tWordformsFiles ).ForEach ( [&tEmbeddedFiles, &sWarning,this] ( const NodeHandle_t& tNode ) {
-			auto& dWordformsFileName = m_dWordforms.Add();
-			auto& tWordformsFile = tEmbeddedFiles.m_dWordformFiles.Add();
-			dWordformsFileName = String ( Bson_c ( tNode ).ChildByName ( "name" ) );
-			tWordformsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), dWordformsFileName.cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? nullptr : &sWarning );
+		Bson_c ( tWordformsFiles ).ForEach ( [ &tEmbeddedFiles, &sWarning, this, &sFile, &pFilenameBuilder ] ( const NodeHandle_t& tNode )
+		{
+			auto & sWordformsFileName = m_dWordforms.Add();
+			auto & tWordformsFile = tEmbeddedFiles.m_dWordformFiles.Add();
+			sWordformsFileName = String ( Bson_c ( tNode ).ChildByName ( "name" ) );
+			sFile = FormatPath ( sWordformsFileName, pFilenameBuilder );
+			tWordformsFile.Read ( Bson_c ( tNode ).ChildByName ( "info" ), sFile.cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? nullptr : &sWarning );
 		} );
 
 	m_iMinStemmingLen = (int)Int ( tNode.ChildByName ( "min_stemming_len" ), 1 );
@@ -1803,8 +1809,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		dWarnings.Add ( "no morphology, index_exact_words=1 has no effect, ignoring" );
 	}
 
-	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
-		( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen || !pDict->GetSettings().m_sMorphFields.IsEmpty() ) && !tSettings.m_bIndexExactWords )
+	if ( !tSettings.m_bIndexExactWords && ForceExactWords ( pDict->GetSettings().m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 	{
 		tSettings.m_bIndexExactWords = true;
 		pIndex->Setup ( tSettings );
@@ -1815,6 +1820,10 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	return true;
 }
 
+bool ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty )
+{
+	return ( bWordDict && bHasMorphology && ( iMinPrefixLen || iMinInfixLen || !bMorphFieldsEmpty ) );
+}
 
 static RtTypedAttr_t g_dTypeNames[] =
 {

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -54,6 +54,8 @@
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
+#include "datetime.h"
+#include "exprdatetime.h"
 #include "pseudosharding.h"
 #include "geodist.h"
 
@@ -159,7 +161,6 @@ static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdQueueMax		= 0;
-static bool				g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
 static int				g_iServerID = 0;
@@ -385,6 +386,12 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 	}
 }
 
+const int LOG_BUF_SIZE = 1024;
+int GetDaemonLogBufSize ()
+{
+	return LOG_BUF_SIZE;
+}
+
 /// log entry (with log levels, dupe catching, etc)
 /// call with NULL format for dupe flushing
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
@@ -425,7 +432,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
 	if ( eLevel==SPH_LOG_RPL_DEBUG ) sBanner = "RPL: ";
 
-	char sBuf [ 1024 ];
+	char sBuf [ LOG_BUF_SIZE ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%d] ", sTimeBuf, GetOsThreadId() );
 
 	char * sTtyBuf = sBuf + strlen(sBuf);
@@ -2530,6 +2537,21 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	tQuery.m_sSortBy = tReq.GetString ();
+
+	// here we once eliminate SPH_SORT_ATTR_ASC in flavour of SPH_SORT_EXTENDED
+	if ( tQuery.m_eSort == SPH_SORT_ATTR_ASC )
+	{
+		tQuery.m_sSortBy = SphSprintf ( "%s ASC", tQuery.m_sSortBy.cstr() );
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+	}
+
+	// here we once eliminate SPH_SORT_ATTR_DESC in flavour of SPH_SORT_EXTENDED
+	if ( tQuery.m_eSort == SPH_SORT_ATTR_DESC )
+	{
+		tQuery.m_sSortBy = SphSprintf ( "%s DESC", tQuery.m_sSortBy.cstr() );
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+	}
+
 	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	tQuery.m_sRawQuery = tReq.GetString ();
 	{
@@ -2955,8 +2977,6 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	*pBuf << sPrefix;
 	switch ( eSort )
 	{
-	case SPH_SORT_ATTR_DESC:		*pBuf << sSubst << " DESC"; break;
-	case SPH_SORT_ATTR_ASC:			*pBuf << sSubst << " ASC"; break;
 	case SPH_SORT_TIME_SEGMENTS:	*pBuf << "TIME_SEGMENT(" << sSubst << ")"; break;
 	case SPH_SORT_EXTENDED:			*pBuf << sSubst; break;
 	case SPH_SORT_EXPR:				*pBuf << "BUILTIN_EXPR()"; break;
@@ -4035,13 +4055,11 @@ struct AttrSort_fn
 
 		int iIndexA = m_tSchema.GetAttr(iA).m_iIndex;
 		int iIndexB = m_tSchema.GetAttr(iB).m_iIndex;
-		if ( iIndexA==-1 )
-			iIndexA = iA;
 
-		if ( iIndexB==-1 )
-			iIndexB = iB;
+		if ( iIndexA == -1 && iIndexB == -1 )
+			return iA < iB;
 
-		return iIndexA < iIndexB;
+		return iIndexA != -1 && ( iIndexB == -1 || iIndexA < iIndexB );
 	}
 };
 
@@ -4907,8 +4925,7 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_tLocator = s.m_tLocator;
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
-		if ( !m_bAgent )
-			tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
 
 		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
 	}
@@ -5713,7 +5730,7 @@ void SearchHandler_c::RunQueries()
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	}
-	OnRunFinished();
+	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
 
 
@@ -7494,6 +7511,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+		tRes.m_iMatches = tRes.m_iCount;
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
@@ -7873,6 +7891,25 @@ public:
 		return 0;
 	}
 
+	static bool ConvertBool ( const SqlInsert_t & tVal, SphAttr_t & tAttr )
+	{
+		if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+			return false;
+
+		if ( tVal.m_sVal.EqN ( "true" ) )
+		{
+			tAttr = 1;
+			return true;
+		}
+		if ( tVal.m_sVal.EqN ( "false" ) )
+		{
+			tAttr = 0;
+			return true;
+		}
+
+		return false;
+	}
+
 	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
@@ -7881,9 +7918,13 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
-		case SPH_ATTR_BOOL:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
+			break;
+
+		case SPH_ATTR_BOOL:
+			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
+				tAttr = ToInt ( tVal );
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -14246,9 +14287,25 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 
 	if ( sName == "grouping_in_utc" )
 	{
-		g_bGroupingInUtc = !!iSetValue;
-		SetGroupingInUtcExpr ( g_bGroupingInUtc );
-		SetGroupingInUtcSort ( g_bGroupingInUtc );
+		if ( IsTimeZoneSet() )
+		{
+			sError = "grouping_in_utc=1 conflicts with 'timezone'";
+			return true;
+		}
+
+		SetGroupingInUTC ( !!iSetValue );
+		return true;
+	}
+
+	if ( sName == "timezone" )
+	{
+		if ( GetGroupingInUTC() )
+		{
+			sError = "grouping_in_utc=1 conflicts with 'timezone'";
+			return true;
+		}
+
+		SetTimeZone ( sSetValue.cstr(), sError );
 		return true;
 	}
 
@@ -14519,50 +14576,77 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
 	bool bTruncate = ( tStmt.m_iIntParam==1 );
-	CSphString sError;
+
+	if ( sFrom==sTo )
+	{
+		tOut.ErrorEx ( "can not ATTACH table '%s' to itself", sFrom.cstr() );
+		return;
+	}
 
 	auto pServedFrom = GetServed ( sFrom );
 	auto pServedTo = GetServed ( sTo );
 
-	bool bOk = false;
 	if ( !pServedFrom )
+	{
 		tOut.ErrorEx ( "no such table '%s'", sFrom.cstr() );
-	else if ( pServedFrom->m_eType != IndexType_e::PLAIN )
-		tOut.Error ( "1st argument to ATTACH must be a plain table" );
-	else if ( !pServedTo )
-		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
-	else if ( pServedTo->m_eType!=IndexType_e::RT )
-		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
-	else
-		bOk = true;
-	if (!bOk)
 		return;
+
+	} else if ( pServedFrom->m_eType!=IndexType_e::PLAIN && pServedFrom->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "1st argument to ATTACH must be a plain or a RT table" );
+		return;
+
+	} else if ( !pServedTo )
+	{
+		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
+		return;
+
+	} else if ( pServedTo->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
+		return;
+	}
 
 	// cluster does not implement ATTACH for now
-	auto tCluster = IsPartOfCluster ( pServedTo );
-	if ( tCluster )
+	auto tClusterTo = IsPartOfCluster ( pServedTo );
+	auto tClusterFrom = IsPartOfCluster ( pServedFrom );
+	if ( tClusterTo || tClusterFrom )
 	{
-		tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tCluster->cstr(), sError.cstr () );
+		if ( tClusterTo )
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tClusterTo->cstr() );
+		else 
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sFrom.cstr(), tClusterFrom->cstr() );
 		return;
 	}
 
-	WIdx_T<RtIndex_i*> pRtTo { pServedTo };
-	WIdx_c pPlainFrom { pServedFrom };
-
 	bool bFatal = false;
-	StrVec_t dWarnings;
-	auto bAttached = pRtTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, dWarnings, sError );
+	bool bAttached = false;
+	CSphString sError;
+	WIdx_T<RtIndex_i *> pTo { pServedTo };
 
-	sWarning = ConcatWarnings(dWarnings);
-	if ( bAttached || bFatal )
-		g_pLocalIndexes->Delete ( sFrom );
+	if ( pServedFrom->m_eType==IndexType_e::PLAIN )
+	{
+		WIdx_c pPlainFrom { pServedFrom };
+		bAttached = pTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, sError );
+
+		if ( bAttached || bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+
+		if ( bAttached )
+			pServedFrom->ReleaseIdx(); // since index no more belong to us
+
+	} else
+	{
+		WIdx_T<RtIndex_i*> pFrom { pServedFrom };
+		bAttached = pTo->AttachRtIndex ( pFrom, bTruncate, bFatal, sError );
+
+		if ( bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+	}
 
 	if ( bAttached )
-	{
-		pServedFrom->ReleaseIdx(); // since index no more belong to us
 		tOut.Ok();
-	}
-	else
+	 else
 		tOut.Error ( sError.cstr() );
 }
 
@@ -15510,7 +15594,8 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
 		dTable.MatchTuplet ( "character_set_client", "utf8" );
 		dTable.MatchTuplet ( "character_set_connection", "utf8" );
-		dTable.MatchTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
+		dTable.MatchTuplet ( "grouping_in_utc", GetGroupingInUTC() ? "1" : "0" );
+		dTable.MatchTuplet ( "timezone", GetTimeZoneName().cstr() );
 		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]
 		{
 			StringBuilder_c tBuf ( "," );
@@ -18498,15 +18583,12 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 			sphWarning ( "table '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
 			return false;
 		}
+		CSphString sWarning;
+		sWarning.SetSprintf ( "has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", iIndexSP );
+		if ( pWarnings )
+			pWarnings->Add(sWarning);
 		else
-		{
-			CSphString sWarning;
-			sWarning.SetSprintf ( "has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", iIndexSP );
-			if ( pWarnings )
-				pWarnings->Add(sWarning);
-			else
-				sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
-		}
+			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
 	// upgrading schema to store field lengths
@@ -19821,9 +19903,23 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	if ( hSearchd ( "grouping_in_utc" ) )
 	{
-		g_bGroupingInUtc = (hSearchd["grouping_in_utc"].intval ()!=0);
-		SetGroupingInUtcExpr ( g_bGroupingInUtc );
-		SetGroupingInUtcSort ( g_bGroupingInUtc );
+		if ( IsTimeZoneSet() )
+			sphWarning ( "grouping_in_utc=1 conflicts with 'timezone'" );
+
+		SetGroupingInUTC ( hSearchd["grouping_in_utc"].intval ()!=0 );
+	}
+
+	if ( hSearchd ( "timezone" ) )
+	{
+		if ( GetGroupingInUTC() )
+			sphWarning ( "grouping_in_utc=1 conflicts with 'timezone'" );
+
+		CSphString sWarn;
+		SetTimeZone ( hSearchd["timezone"].cstr(), sWarn );
+		if ( !sWarn.IsEmpty() )
+			sphWarning ( "%s", sWarn.cstr() );
+		else
+			sphInfo ( "Using time zone '%s'", GetTimeZoneName().cstr() );
 	}
 
 	// sha1 password hash for shutdown action
@@ -20585,6 +20681,19 @@ static void CacheCPUInfo()
 }
 
 
+static void LogTimeZoneStartup ( const CSphString & sWarning )
+{
+	// avoid writing this to stdout
+	bool bLogStdout = g_bLogStdout;
+	g_bLogStdout = false;
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "Error initializing time zones: %s", sWarning.cstr() );
+
+	sphInfo ( "Using local time zone '%s'", GetLocalTimeZoneName().cstr() );
+	g_bLogStdout = bLogStdout;
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -20656,6 +20765,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( !sError.IsEmpty() )
 		sError = "";
+
+	CSphString sTZWarning;
+	{
+		StrVec_t dWarnings;
+		InitTimeZones ( dWarnings );
+		sTZWarning = ConcatWarnings(dWarnings);
+	}
 
 	//////////////////////
 	// parse command line
@@ -20970,6 +21086,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		}
 	}
 #endif
+
+	LogTimeZoneStartup(sTZWarning);
 
 	// init before workpool, as last checks binlog
 	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );

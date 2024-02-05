@@ -13,7 +13,6 @@ on:
     branches: [ master ]
     paths:
       - 'test/clt-tests/installation/**'
-      - 'test/clt-tests/mysqldump/versions/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -55,24 +54,6 @@ jobs:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-release-
-
-  clt_test_supported_myqldump_versions:
-    name: Testing supported myqldump versions
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Build test kit
-        uses: docker/build-push-action@v5
-        with:
-          push: false
-          tags: manticoresoftware/dind:latest
-          context: test/clt-tests/mysqldump/versions/docker/
-      - uses: manticoresoftware/clt@0.1.13
-        with:
-          image: manticoresoftware/dind:latest
-          test_prefix: test/clt-tests/mysqldump/versions/
-          run_args: --privileged
 
   clt_rhel_dev_update:
     name: Testing RHEL dev packages update

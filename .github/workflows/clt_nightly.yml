@@ -50,3 +50,21 @@ jobs:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-release-
+
+  clt_test_supported_myqldump_versions:
+    name: Testing supported myqldump versions
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build test kit
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+          tags: manticoresoftware/dind:latest
+          context: ./test/clt-tests/mysqldump/versions/docker/
+      - uses: manticoresoftware/clt@0.1.9
+        with:
+          image: manticoresoftware/dind:latest
+          test_prefix: clt_tests/tests/mysqldump/versions/
+          run_args: --privileged

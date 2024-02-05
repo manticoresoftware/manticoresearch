@@ -10,7 +10,7 @@ docker pull --platform linux/x86_64 mysql:5.6 > /dev/null
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network -e EXTRA=1 --platform linux/amd64 --name manticore -v ./test/clt-tests/mysqldump/versions/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd --nodetach > /dev/null; echo $?
+docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––

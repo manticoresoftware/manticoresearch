@@ -4,11 +4,6 @@ run-name: CLT testing of supported versions of mysqldump ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
-  push:
-    paths:
-      - 'test/clt-tests/**'
-    branches:
-      - manticore-6.2.12
   pull_request:
     branches: [ master ]
     paths:
@@ -16,7 +11,7 @@ on:
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
-  group: clt_nightly_${{ github.ref }}
+  group: nightly_dumps_${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

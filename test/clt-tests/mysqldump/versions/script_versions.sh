@@ -23,18 +23,17 @@ for version in "${versions[@]}"; do
     # Waiting for start-up
     sleep 15
 
+	# Check if the mariadb executable file exists
+    if docker exec db-test which mariadb &>/dev/null; then
+        image="mariadb"
+    else
+        image="mysql"
+    fi
 
     # Executing mysqldump
     docker exec db-test $image -hmanticore -P9306 manticore a > dump.sql
 
-	# Check if the mariadb executable file exists
-if docker exec db-test which mariadb &>/dev/null; then
-    image="mariadb"
-else
-    image="mysql"
-fi
-
-# Next, we use $dump_command for mysqldump and mysql
+    # Next, we use $dump_command for mysqldump and mysql
     docker exec db-test $image -hmanticore -P9306 manticore < dump.sql
     docker exec db-test $image -hmanticore -P9306 -e "SELECT * FROM a ORDER BY id DESC LIMIT 10;" manticore
 

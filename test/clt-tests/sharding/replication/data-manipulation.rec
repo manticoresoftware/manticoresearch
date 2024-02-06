@@ -19,6 +19,15 @@ sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, conte
 ––– input –––
 mysql -h0 -P1306 -e "show tables;"
 ––– output –––
++----------------+-------------+
+| Index          | Type        |
++----------------+-------------+
+| sharding_queue | rt          |
+| sharding_state | rt          |
+| sharding_table | rt          |
+| testrt         | distributed |
+| testrt_s%{NUMBER}      | rt          |
++----------------+-------------+
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (1, 'Title 1', 'Content 1', 1), (2, 'Title 2', 'Content 2', 2);"; echo $?
 ––– output –––
@@ -30,4 +39,19 @@ mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (3, '
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (4, 'Title 4', 'Content 4', 4);"; echo $?
 ––– output –––
-- 0
+0
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM c:testrt WHERE id IN (1, 2, 3, 4);"
+––– output –––
++------+---------+-----------+------+
+| id   | title   | content   | gid  |
++------+---------+-----------+------+
+|    4 | Title 4 | Content 4 |    4 |
+|    3 | Title 3 | Content 3 |    3 |
+|    2 | Title 2 | Content 2 |    2 |
+|    1 | Title 1 | Content 1 |    1 |
++------+---------+-----------+------+
+––– input –––
+mysql -h0 -P1306 -e "DELETE CLUSTER c;"; echo $?
+––– output –––
+0

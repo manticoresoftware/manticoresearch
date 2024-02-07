@@ -220,6 +220,7 @@ id	content
 1	Apple
 Dump mysql:5.7 completed successfully
 Testing version: mysql:8.0
+-- Warning: column statistics not supported by the server.
 id	content
 10	LG
 9	Sony
@@ -233,6 +234,7 @@ id	content
 1	Apple
 Dump mysql:8.0 completed successfully
 Testing version: mysql:8.2
+-- Warning: column statistics not supported by the server.
 id	content
 10	LG
 9	Sony
@@ -246,6 +248,7 @@ id	content
 1	Apple
 Dump mysql:8.2 completed successfully
 Testing version: mysql:latest
+-- Warning: column statistics not supported by the server.
 id	content
 10	LG
 9	Sony

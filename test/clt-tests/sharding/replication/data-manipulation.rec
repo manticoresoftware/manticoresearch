@@ -2,16 +2,68 @@
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/sharding/base/config/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+tail -n 100 -f /var/log/manticore-${INSTANCE}/searchd.log | grep -qm1 'started v' && echo "Buddy started!"
+––– output –––
+Buddy started!
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/sharding/base/config/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+tail -n 100 -f /var/log/manticore-${INSTANCE}/searchd.log | grep -qm1 'started v' && echo "Buddy started!"
+––– output –––
+Buddy started!
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––
-––– block: ../base/flexible/create-cluster –––
-––– block: ../base/flexible/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
 ––– input –––
 sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=2 rf=1;"; echo $?
 ––– output –––

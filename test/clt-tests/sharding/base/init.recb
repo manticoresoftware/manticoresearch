@@ -10,7 +10,7 @@ apt-get install -y git > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-git clone -b fix/sharding -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
+git clone -b sharding/inserts -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
 ––– output –––
 0
 ––– input –––

@@ -2,7 +2,7 @@
 set -e
 
 # MariaDB and MySQL versions
-versions=("mariadb:11.3-rc" "mysql:8.0")
+versions=("mariadb:10.5" "mariadb:10.6" "mariadb:10.7" "mariadb:10.8" "mariadb:10.9" "mariadb:10.10" "mariadb:10.11" "mariadb:11.0" "mariadb:11.1" "mariadb:11.2" "mariadb:11.3-rc" "mariadb:latest" "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do
@@ -28,7 +28,7 @@ for version in "${versions[@]}"; do
 
     # Next, we use $dump_command for mysqldump and mysql
     docker exec -i db-test $db_type -hmanticore -P9306 manticore < dump.sql
-    docker exec db-test $db_type -hmanticore -P9306 -e "select * from t order by id asc limit 20;" manticore
+    docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
 
     # Checking for errors
     if [ -s dump.sql ]; then

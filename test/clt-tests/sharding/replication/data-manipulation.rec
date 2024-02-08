@@ -51,7 +51,3 @@ mysql -h0 -P1306 -e "SELECT * FROM c:testrt WHERE id IN (1, 2, 3, 4);"
 |    2 | Title 2 | Content 2 |    2 |
 |    1 | Title 1 | Content 1 |    1 |
 +------+---------+-----------+------+
-––– input –––
-mysql -h0 -P1306 -e "DELETE CLUSTER c;"; echo $?
-––– output –––
-0

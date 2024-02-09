@@ -233,6 +233,7 @@ endif ()
 with_get ( icu "ICU" "International Components for Unicode" )
 
 include ( GetCCTZ )
+target_link_libraries ( lextra INTERFACE cctz::cctz )
 
 # Support for OpenSSL
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )

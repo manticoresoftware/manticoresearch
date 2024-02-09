@@ -10140,11 +10140,7 @@ static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tRes
 	bool bQuery = tRes.m_bGetQuery;
 
 	// result set header packet. We will attach EOF manually at the end.
-	int iColumns = bDumpDocs ? 2 : 1;
-	if ( bQuery )
-		iColumns += 3;
-	tOut.HeadBegin ( iColumns );
-
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG );
 	if ( bDumpDocs )
 		tOut.HeadColumn ( "documents" );
@@ -11582,9 +11578,9 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	}
 
 	// result set header packet
-	tOut.HeadBegin(1);
+	tOut.HeadBegin ();
 	tOut.HeadColumn("snippet");
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// data
 	for ( auto & i : dQueries )
@@ -11767,7 +11763,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 
 
 	// result set header packet
-	tOut.HeadBegin ( tSettings.m_bStats ? 5 : 3 );
+	tOut.HeadBegin();
 	tOut.HeadColumn("qpos");
 	tOut.HeadColumn("tokenized");
 	tOut.HeadColumn("normalized");
@@ -12002,7 +11998,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		tRes.m_dMatched.Sort ( tCmp );
 
 		// result set header packet
-		tOut.HeadBegin ( 2 );
+		tOut.HeadBegin ();
 		tOut.HeadColumn ( "name" );
 		tOut.HeadColumn ( "value" );
 		tOut.HeadEnd ();
@@ -12037,7 +12033,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	} else
 	{
 		// result set header packet
-		tOut.HeadBegin ( tArgs.m_bResultStats ? 3 : 1 );
+		tOut.HeadBegin ();
 		tOut.HeadColumn ( "suggest" );
 		if ( tArgs.m_bResultStats )
 		{
@@ -12588,7 +12584,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 // MySQL Workbench (and maybe other clients) crashes without it
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
-	tOut.HeadBegin ( 1 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Databases" );
 	tOut.HeadEnd();
 	tOut.PutString ( g_sDbName );
@@ -12602,7 +12598,7 @@ void HandleMysqlShowPlugins ( RowBuffer_i & tOut, SqlStmt_t & )
 	CSphVector<PluginInfo_t> dPlugins;
 	sphPluginList ( dPlugins );
 
-	tOut.HeadBegin ( 5 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Type" );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Library" );
@@ -12667,13 +12663,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 10;
-	if ( bAll )
-		iColCount += 1;
-	if ( g_bCpuStats )
-		iColCount += 1;
-
-	tOut.HeadBegin ( iColCount ); // 15 with chain
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "TID", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
@@ -12772,7 +12762,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	tOut.HeadBegin ( bAll ? 6 : 5 ); // 6 with chain
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
@@ -13441,20 +13431,14 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	assert ( bReturnZeroCount || tRes.m_tSchema.GetAttrsCount() );
 	sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
+	dRows.HeadBegin ();
+	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
 	{
-		int iAttrsToSend = tAttrsToSend.BitCount();
-		if ( bAddQueryColumn )
-			++iAttrsToSend;
+		if ( !tAttrsToSend.BitGet(i) )
+			continue;
 
-		dRows.HeadBegin ( iAttrsToSend );
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
-		{
-			if ( !tAttrsToSend.BitGet(i) )
-				continue;
-
-			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
-		}
+		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+		dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
 	}
 
 	if ( bAddQueryColumn )
@@ -13621,7 +13605,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & d
 	}
 
 	// result set header packet
-	dRows.HeadBegin(3);
+	dRows.HeadBegin ();
 	dRows.HeadColumn ( "Level" );
 	dRows.HeadColumn ( "Code", MYSQL_COL_DECIMAL );
 	dRows.HeadColumn ( "Message" );
@@ -14704,9 +14688,9 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 {
 	int iTag = CommandFlush();
-	tOut.HeadBegin(1);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "tag", MYSQL_COL_LONG );
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// data packet, var value
 	tOut.PutNumAsString ( iTag );
@@ -14906,7 +14890,7 @@ void HandleMysqlclose ( RowBuffer_i & tOut )
 // same for select ... from index.files
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 3 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
 	tOut.HeadColumn ( "size", MYSQL_COL_LONGLONG );
@@ -15452,7 +15436,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	}
 
 	// fill header
-	tOut.HeadBegin ( dColumns.GetLength() );
+	tOut.HeadBegin ();
 	for ( const auto& dColumn : dColumns )
 		tOut.HeadColumn ( dColumn.m_szAlias, dColumn.m_eTypeMysql );
 
@@ -15516,7 +15500,7 @@ void HandleMysqlShowCollations ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
-	tOut.HeadBegin(6);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Collation" );
 	tOut.HeadColumn ( "Charset" );
 	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG );
@@ -15542,7 +15526,7 @@ void HandleMysqlShowCharacterSet ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
-	tOut.HeadBegin(4);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Charset" );
 	tOut.HeadColumn ( "Description" );
 	tOut.HeadColumn ( "Default collation" );
@@ -15976,7 +15960,7 @@ void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 13 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "chunk_id", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "base_name" );
 	tOut.HeadColumn ( "indexed_documents", MYSQL_COL_LONG );
@@ -16075,7 +16059,7 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
 	#undef SPH_QUERY_STATES
 
-	tOut.HeadBegin ( 4 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Status" );
 	tOut.HeadColumn ( "Duration" );
 	tOut.HeadColumn ( "Switches" );
@@ -16593,7 +16577,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 // STMT_SHOW_PLAN: SHOW PLAN
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot )
 {
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
 	tOut.HeadEnd ( bMoreResultsFollow );
@@ -16757,7 +16741,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 	StringBuilder_c sRes;
 	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), bDot );
 
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
 	tOut.HeadEnd ();
@@ -16850,7 +16834,7 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 		++iWarnings;
 	}
 
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
 	tOut.HeadEnd();
@@ -20247,10 +20231,10 @@ static void DumpCommonSection ( const CSphConfig & hConf, RowBuffer_i & tOut )
 
 void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 {
-	tOut.HeadBegin( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Setting_name" );
 	tOut.HeadColumn ( "Value" );
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// configuration file path
 	tOut.PutString ( "configuration_file" );

@@ -9574,6 +9574,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 	// count commands
 	StatCountCommand ( eCommand );
 	myinfo::SetCommand ( g_dApiCommands[eCommand] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	sphLogDebugv ( "conn %s(%d): got command %d, handling", tSess.szClientName(), tSess.GetConnID(), eCommand );
 	switch ( eCommand )
@@ -12770,6 +12771,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 	tOut.HeadColumn ( "Killed" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
+	tOut.HeadColumn ( "Last cmd time" );
 	tOut.HeadColumn ( "Last cmd" );
 	if ( !tOut.HeadEnd() )
 		return;
@@ -12799,6 +12801,10 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		tOut.PutNumAsString ( dThd.m_bKilled ? 1 : 0);
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
+		if ( dThd.m_tmLastJobDoneTimeUS==-1 ) // not yet finished
+			tOut.PutTimestampAsString ( dThd.m_tmLastJobStartTimeUS );
+		else
+			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS );
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
 		if ( iCols >= 0 && iCols < sInfo.second )
 			sInfo.second = iCols;
@@ -13951,6 +13957,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
 	myinfo::SetCommand ( g_dSqlStmts[STMT_SELECT] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
@@ -14014,6 +14021,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 		myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
 		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
@@ -16994,6 +17002,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	LogStmtGuard_t tLogGuard ( sQuery, eStmt, dStmt.GetLength()>1 );
 

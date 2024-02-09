@@ -152,6 +152,7 @@ static CSphBitvec		g_tLogStatements;
 
 int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
+bool					g_bTimeoutEachPacket = true;
 int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
 static int				g_iMaxConnection	= 0; // unlimited
@@ -14384,6 +14385,16 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 		return true;
 	}
 
+	if ( sName == "reset_network_timeout_on_packet" )
+	{
+		if ( tSess.GetVip() )
+		{
+			g_bTimeoutEachPacket = !!iSetValue;
+		} else
+			sError = "Only VIP connections can change global reset_network_timeout_on_packet value";
+		return true;
+	}
+
 	if ( sName == "throttling_period" )
 	{
 		if ( tSess.GetVip() )
@@ -19856,6 +19867,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	// network_timeout overrides read_timeout
 	g_iReadTimeoutS = hSearchd.GetSTimeS ( "network_timeout", g_iReadTimeoutS );
 	g_iWriteTimeoutS = g_iReadTimeoutS;
+	g_bTimeoutEachPacket = hSearchd.GetBool( "reset_network_timeout_on_packet" );
 
 	g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout", 900);
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );

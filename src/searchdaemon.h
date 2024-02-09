@@ -117,6 +117,7 @@ volatile bool& sphGetGotSigusr2() noexcept;
 // these are in searchd.cpp
 extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
+extern bool g_bTimeoutEachPacket;
 
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 

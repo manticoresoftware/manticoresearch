@@ -1270,13 +1270,7 @@ void CollectQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 
 void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
-	int iCount = 0;
-	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
-		if ( !sphIsInternalAttr ( tSchema.GetAttr ( i ) ) )
-			++iCount;
-
-	assert ( iCount == dOrder.GetLength() );
-	pRows->HeadBegin ( iCount );
+	pRows->HeadBegin ();
 	for ( int i : dOrder )
 	{
 		const CSphColumnInfo& tCol = tSchema.GetAttr ( i );

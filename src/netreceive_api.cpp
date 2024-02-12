@@ -38,7 +38,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
 
-	// SphinxSE - legacy client, waits first handshake from us to be send, and answers only when it is done.
+	// SphinxSE - legacy client, waits first handshake from us to send, and answers only when it is done.
 	if ( bClientWaitsHandshake && !tOut.Flush () )
 	{
 		sphLogDebugv ( "conn %s(%d): legacy client timeout when sending handshake", sClientIP, iCID );

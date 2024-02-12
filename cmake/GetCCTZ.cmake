@@ -1,38 +1,26 @@
-cmake_minimum_required ( VERSION 3.1 FATAL_ERROR )
+cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
-set ( CCTZ_LIBDIR "${MANTICORE_BINARY_DIR}/cctz" )
-set ( CCTZ_SRC "${MANTICORE_BINARY_DIR}/cctz-src" )
-mark_as_advanced ( CCTZ_SRC CCTZ_LIBDIR )
+set ( CCTZ_REPO "https://github.com/manticoresoftware/cctz" )
+set ( CCTZ_REV "46dd2396" )
+set ( CCTZ_SRC_MD5 "d923bcd1f5450b1acd1ae53c4210994f" )
 
-include ( FetchContent )
-# check whether we have local copy (to not disturb network)
+set ( CCTZ_GITHUB "${CCTZ_REPO}/archive/${CCTZ_REV}.zip" )
+set ( CCTZ_BUNDLE "${LIBS_BUNDLE}/cctz-${CCTZ_REV}.zip" )
 
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW)
-endif()
+include ( update_bundle )
 
-set ( CCTZ_URL_GITHUB "https://github.com/manticoresoftware/cctz/archive/refs/heads/master.zip" )
+# try to find quietly (will work most time
+find_package ( cctz QUIET CONFIG )
+return_if_target_found ( cctz::cctz "found ready (no need to build)" )
 
-set ( CCTZ_BUILD_TESTING OFF CACHE BOOL "" FORCE )
-set ( CCTZ_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE )
-set ( CCTZ_BUILD_TOOLS OFF CACHE BOOL "" FORCE )
-set ( CCTZ_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE )
-message ( STATUS "Use cctz from github ${CCTZ_URL_GITHUB}" )
-FetchContent_Declare ( cctz
-		SOURCE_DIR "${CCTZ_SRC}"
-		BINARY_DIR "${CCTZ_LIBDIR}"
-		URL ${CCTZ_URL_GITHUB}
-		GIT_TAG cmake-3.x-5.7
-		GIT_SHALLOW TRUE
-		)
+# not found. Populate and prepare sources
+select_nearest_url ( CCTZ_PLACE cctz ${CCTZ_BUNDLE} ${CCTZ_GITHUB} )
+fetch_and_check ( cctz ${CCTZ_PLACE} ${CCTZ_SRC_MD5} CCTZ_SRC )
 
-FetchContent_GetProperties ( cctz )
-if ( NOT cctz_POPULATED )
-	FetchContent_Populate ( cctz )
-	add_subdirectory ( ${cctz_SOURCE_DIR} ${cctz_BINARY_DIR} )
-endif ()
+# build external project
+get_build ( CCTZ_BUILD cctz )
+external_build ( cctz CCTZ_SRC CCTZ_BUILD CCTZ_BUILD_TOOLS=0 CCTZ_BUILD_EXAMPLES=0 CCTZ_BUILD_BENCHMARK=0 CCTZ_BUILD_TESTING=0 )
 
-include_directories ( "${cctz_SOURCE_DIR}/include" )
-target_link_libraries ( lextra INTERFACE cctz )
-
-mark_as_advanced ( FETCHCONTENT_FULLY_DISCONNECTED FETCHCONTENT_QUIET FETCHCONTENT_UPDATES_DISCONNECTED FETCHCONTENT_SOURCE_DIR_CCTZ FETCHCONTENT_UPDATES_DISCONNECTED_CCTZ )
+# now it should find
+find_package ( cctz REQUIRED CONFIG )
+return_if_target_found ( cctz::cctz "was built and saved" )

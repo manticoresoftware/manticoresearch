@@ -32,8 +32,6 @@ bool LoadExFunctions ();
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
 
-extern int				g_iReadTimeoutS; // defined in searchd.cpp
-
 extern int64_t			g_iPingIntervalUs;
 extern DWORD			g_uHAPeriodKarmaS;		// by default use the last 1 minute statistic to determine the best HA agent
 extern int				g_iPersistentPoolSize;
@@ -580,6 +578,7 @@ private:
 	int			m_iDelay { g_iAgentRetryDelayMs };	///< delay between retries
 
 	// active timeout (directly used by poller)
+	int64_t			m_iPoolerTimeoutPeriodUS = -1;
 	int64_t			m_iPoolerTimeoutUS = -1;	///< m.b. query, or connect+query when TCP_FASTOPEN
 	ETimeoutKind 	m_eTimeoutKind { TIMEOUT_UNKNOWN };
 
@@ -623,8 +622,8 @@ private:
 
 	bool StartNextRetry ();
 
-	void LazyTask ( int64_t iTimeoutMS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
-	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1 );
+	void LazyTask ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
+	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1, int64_t iTimeoutPeriodUS = -1 );
 	void ScheduleCallbacks ();
 	void DisableWrite();
 

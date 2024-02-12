@@ -4,7 +4,7 @@ srand(1024);
 
 $id=0;
 echo "create table t(f text, a int, b float, j json, m multi, s string);\n";
-for ($i = 0; $i < 1000000; $i++) {
+for ($i = 0; $i < $argv[1]; $i++) {
   if ($i % 10000 === 0) {
     if ($i !== 0) {
       echo ";\n";

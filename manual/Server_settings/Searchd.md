@@ -192,7 +192,29 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 ### buddy_path
 
 <!-- example conf buddy_path -->
-This setting determines the path to the Manticore Buddy binary. It is optional, with a default value being the build-time configured path, which varies across different operating systems. Typically, you don't need to modify this setting. However, it may be useful if you wish to run Manticore Buddy in debug mode, make changes to Manticore Buddy, or implement a new plugin. In the latter case, you can `git clone` Buddy from https://github.com/manticoresoftware/manticoresearch-buddy, add a new plugin to the directory `./plugins/`, and run <HERE I DON'T KNOW WHAT TO DO NEXT: composer install and daemon update don't seem to help>
+This setting determines the path to the Manticore Buddy binary. It is optional, with a default value being the build-time configured path, which varies across different operating systems. Typically, you don't need to modify this setting. However, it may be useful if you wish to run Manticore Buddy in debug mode, make changes to Manticore Buddy, or implement a new plugin. In the latter case, you can `git clone` Buddy from https://github.com/manticoresoftware/manticoresearch-buddy, add a new plugin to the directory `./plugins/`, and run `composer install --prefer-source` for easier development after you change the directory to the Buddy source.
+
+To ensure you can run `composer`, your machine must have PHP 8.2 or higher installed with the following extensions:
+
+```
+--enable-dom
+--with-libxml
+--enable-tokenizer
+--enable-xml
+--enable-xmlwriter
+--enable-xmlreader
+--enable-simplexml
+--enable-phar
+--enable-bcmath
+--with-gmp
+--enable-debug
+--with-mysqli
+--enable-mysqlnd
+```
+
+You can also opt for the special `manticore-executor-dev` version for Linux amd64 available in the releases, for example: https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
+
+If you go this route, remember to link the dev version of the manticore executor to `/usr/bin/php`.
 
 <!-- intro -->
 ##### Example:

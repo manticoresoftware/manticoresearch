@@ -65,7 +65,7 @@ SHOW BUDDY PLUGINS;
 | manticoresoftware/buddy-plugin-show             | show             | dev-main | core     | Various "show" queries handlers, for example, `show queries`, `show fields`, `show full tables`, etc |
 | manticoresoftware/buddy-plugin-cli-table        | cli-table        | dev-main | core     | /cli endpoint based on /cli_json - outputs query result as a table |
 | manticoresoftware/buddy-plugin-plugin           | plugin           | dev-main | core     | Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins` |
-| manticoresoftware/buddy-plugin-test             | test             | dev-main | core     | Test plugin, used exclusively for tests.                                                 |
+| manticoresoftware/buddy-plugin-test             | test             | dev-main | core     | Test plugin, used exclusively for tests                                                 |
 | manticoresoftware/buddy-plugin-show-hostname    | show-hostname    | dev-main | external|                                                                                            |
 +-------------------------------------------------+------------------+----------+----------+
 14 rows in set (0.006 sec)

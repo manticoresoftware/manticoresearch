@@ -93,6 +93,10 @@ SELECT * FROM test4 WHERE MATCH('=run') order by id asc;
 SELECT * FROM test4 WHERE MATCH('=runs') order by id asc;
 SELECT * FROM test4 WHERE MATCH('=running') order by id asc;
 
+<!-- transform into =term for query into morphology_skip_fields field -->
+SELECT * FROM test1 WHERE MATCH('@text3 run') order by id asc; show meta;
+SELECT * FROM test1 WHERE MATCH('@text3 runs') order by id asc; show meta;
+
 </sphinxql></queries>
 
 <db_create>

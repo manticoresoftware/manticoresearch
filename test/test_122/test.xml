@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>RT: string attrs</name>
-
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <config>
-indexer
-{
-	mem_limit = 16M
-}
-
 searchd
 {
 	<searchd_settings/>

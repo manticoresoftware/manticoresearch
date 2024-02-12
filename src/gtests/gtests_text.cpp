@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -93,7 +93,8 @@ static int ProxyLevenshtein ( const char * sA, const char * sB )
 {
 	auto iLenA = (int) strlen ( sA );
 	auto iLenB = (int) strlen ( sB );
-	return sphLevenshtein ( sA, iLenA, sB, iLenB );
+	CSphVector<int> dTmp;
+	return sphLevenshtein ( sA, iLenA, sB, iLenB, dTmp );
 }
 
 TEST ( Text, Levenshtein )

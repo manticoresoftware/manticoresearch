@@ -38,6 +38,24 @@ select CURTIME();
 ```
 <!-- end -->
 
+### CURDATE()
+<!-- example CURDATE -->
+Returns the current date in the local timezone in `YYYY-MM-DD` format.
+
+<!-- request SQL -->
+```sql
+select curdate();
+```
+<!-- response SQL -->
+```sql
++------------+
+| curdate()  |
++------------+
+| 2023-08-02 |
++------------+
+```
+<!-- end -->
+
 ### UTC_TIME()
 <!-- example UTC_TIME -->
 Returns the current time in UTC timezone in `hh:ii:ss` format.
@@ -164,6 +182,24 @@ select month(now());
 ```
 <!-- end -->
 
+### QUARTER()
+<!-- example QUARTER -->
+Returns the integer quarter of the year (in 1..4 range) from a timestamp argument, according to the current timezone.
+
+<!-- request SQL -->
+```sql
+select quarter(now());
+```
+<!-- response SQL -->
+```sql
++--------------+
+| quarter(now()) |
++--------------+
+| 2            |
++--------------+
+```
+<!-- end -->
+
 ### YEAR()
 <!-- example YEAR -->
 Returns the integer year (in 1969..2038 range) from a timestamp argument, according to the current timezone.
@@ -179,6 +215,97 @@ select year(now());
 +-------------+
 | 2021        |
 +-------------+
+```
+<!-- end -->
+
+### DAYNAME()
+<!-- example DAYNAME -->
+Returns the weekday name for a given timestamp argument, according to the current timezone.
+
+<!-- request SQL -->
+```sql
+select dayname(now());
+```
+<!-- response SQL -->
+```sql
++----------------+
+| dayname(now()) |
++----------------+
+| Wednesday      |
++----------------+
+```
+<!-- end -->
+
+### MONTHNAME()
+<!-- example MONTHNAME -->
+Returns the name of the month for a given timestamp argument, according to the current timezone.
+
+<!-- request SQL -->
+```sql
+select monthname(now());
+```
+<!-- response SQL -->
+```sql
++------------------+
+| monthname(now()) |
++------------------+
+| August           |
++------------------+
+```
+<!-- end -->
+
+### DAYOFWEEK()
+<!-- example DAYOFWEEK -->
+Returns the integer weekday index (in 1..7 range) for a given timestamp argument, according to the current timezone.
+Note that the week starts on Sunday.
+
+<!-- request SQL -->
+```sql
+select dayofweek(now());
+```
+<!-- response SQL -->
+```sql
++------------------+
+| dayofweek(now()) |
++------------------+
+| 5                |
++------------------+
+```
+<!-- end -->
+
+### DAYOFYEAR()
+<!-- example DAYOFYEAR -->
+Returns the integer day of the year (in 1..366 range) for a given timestamp argument, according to the current timezone.
+
+<!-- request SQL -->
+```sql
+select dayofyear(now());
+```
+<!-- response SQL -->
+```sql
++------------------+
+| dayofyear(now()) |
++------------------+
+|              214 |
++------------------+
+```
+<!-- end -->
+
+### YEARWEEK()
+<!-- example YEARWEEK -->
+Returns the integer year and the day code of the first day of current week (in 1969001..2038366 range) for a given timestamp argument, according to the current timezone.
+
+<!-- request SQL -->
+```sql
+select yearweek(now());
+```
+<!-- response SQL -->
+```sql
++-----------------+
+| yearweek(now()) |
++-----------------+
+|         2023211 |
++-----------------+
 ```
 <!-- end -->
 
@@ -202,7 +329,7 @@ select yearmonth(now());
 
 ### YEARMONTHDAY()
 <!-- example YEARMONTHDAY -->
-Returns the integer year, month, and date code (ranging from 19691231 to 20380119) based on the current timezone.   
+Returns the integer year, month, and date code (ranging from 19691231 to 20380119) based on the current timezone.
 
 <!-- request SQL -->
 ```sql
@@ -233,6 +360,60 @@ select timediff(1615787586, 1613787583);
 +----------------------------------+
 | 555:33:23                        |
 +----------------------------------+
+```
+<!-- end -->
+
+### DATEDIFF()
+<!-- example DATEDIFF -->
+Calculates the number of days between two given timestamps.
+
+<!-- request SQL -->
+```sql
+select datediff(1615787586, 1613787583);
+```
+<!-- response SQL -->
+```sql
++----------------------------------+
+| datediff(1615787586, 1613787583) |
++----------------------------------+
+|                               23 |
++----------------------------------+
+```
+<!-- end -->
+
+### DATE()
+<!-- example DATE -->
+Formats the date part from a timestamp argument as a string in `YYYY-MM-DD` format.
+
+<!-- request SQL -->
+```sql
+select date(now());
+```
+<!-- response SQL -->
+```sql
++-------------+
+| date(now()) |
++-------------+
+| 2023-08-02  |
++-------------+
+```
+<!-- end -->
+
+### TIME()
+<!-- example TIME -->
+Formats the time part from a timestamp argument as a string in `HH:MM:SS` format.
+
+<!-- request SQL -->
+```sql
+select time(now());
+```
+<!-- response SQL -->
+```sql
++-------------+
+| time(now()) |
++-------------+
+| 15:21:27    |
++-------------+
 ```
 <!-- end -->
 

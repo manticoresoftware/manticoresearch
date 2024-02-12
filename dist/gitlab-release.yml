@@ -8,6 +8,7 @@ variables:
   VERBOSE: 1
   DIAGNOSTIC: 1
   PACK_ICUDATA: 0
+  PACK_GALERA: 0
 
 # ==================== .helper generic build ======================
 

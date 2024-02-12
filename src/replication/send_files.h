@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -26,7 +26,7 @@ struct FileChunks_t
 
 	// count of chunks for file size
 	[[nodiscard]] int GetChunksCount () const noexcept;
-	[[nodiscard]] int GetChunkFileLength ( int iChunk ) const noexcept;
+	[[nodiscard]] int64_t GetChunkFileLength ( int iChunk ) const noexcept;
 	[[nodiscard]] int64_t GetChunkFileOffset ( int iChunk ) const noexcept;
 };
 

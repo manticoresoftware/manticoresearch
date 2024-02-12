@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -176,6 +176,8 @@ void MiniTaskInfo_t::RenderWithoutChain ( PublicThreadDesc_t& dDst )
 {
 	if ( !dDst.m_tmStart )
 		dDst.m_tmStart.emplace ( m_tmStart );
+	dDst.m_tmLastJobStartTimeUS = m_tmLastJobStartTimeUS;
+	dDst.m_tmLastJobDoneTimeUS = m_tmLastJobDoneTimeUS;
 	dDst.m_szCommand = m_szCommand;
 	hazard::Guard_c tGuard;
 	auto pDescription = tGuard.Protect ( m_pHazardDescription );
@@ -231,8 +233,22 @@ void myinfo::SetCommand ( const char * szCommand )
 {
 	auto pNode = HazardGetMini ();
 	if ( pNode )
+	{
 		pNode->m_szCommand = szCommand;
+		pNode->m_tmLastJobStartTimeUS = sphMicroTimer();
+		pNode->m_tmLastJobDoneTimeUS = -1;
+	}
 	else
+		sphWarning ( "internal error: myinfo::SetCommand () invoked with empty tls!" );
+}
+
+void myinfo::SetCommandDone()
+{
+	auto pNode = HazardGetMini();
+	if ( pNode )
+	{
+		pNode->m_tmLastJobDoneTimeUS = sphMicroTimer();
+	} else
 		sphWarning ( "internal error: myinfo::SetCommand () invoked with empty tls!" );
 }
 
@@ -294,6 +310,7 @@ MiniTaskInfo_t * MakeSystemInfo ( const char * sDescription )
 {
 	auto pInfo = new MiniTaskInfo_t;
 	pInfo->m_szCommand = "SYSTEM";
+	pInfo->m_tmLastJobStartTimeUS = sphMicroTimer();
 	SetMiniDescription( pInfo, "SYSTEM %s", sDescription );
 	return pInfo;
 }

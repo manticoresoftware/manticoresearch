@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -100,7 +100,7 @@ enum ESphExprCommand
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
 /// can sometimes be evaluated in integers using IntEval(), depending on type as returned from sphExprParse()
-struct ISphExpr : public ISphRefcountedMT
+class ISphExpr : public ISphRefcountedMT
 {
 public:
 	/// evaluate this expression for that match
@@ -197,11 +197,6 @@ inline void FreeDataPtr ( const ISphExpr * pExpr, const void * pData )
 	if ( pExpr )
 		FreeDataPtr ( *pExpr, pData );
 }
-
-/// set global behavior of grouping by day/week/month/year functions:
-/// if invoked true, params treated as UTC timestamps,
-/// and as local timestamps otherwise (default)
-void SetGroupingInUtcExpr ( bool bGroupingInUtc );
 
 /// named int/string variant
 /// used for named expression function arguments block

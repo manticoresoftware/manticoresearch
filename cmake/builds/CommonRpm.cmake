@@ -26,6 +26,7 @@ set ( CPACK_GENERATOR RPM )
 
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
+set ( DEP_TZDATA_VERSION "${TZDATA_VERNUM}_${TZDATA_VERDATE}.${TZDATA_VERHASH}" )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}_${BUDDY_VERDATE}.${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" )
 
@@ -43,7 +44,7 @@ set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 set ( CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR} )
 
 set ( CPACK_RPM_SEARCHD_PACKAGE_NAME "manticore-server-core" )
-set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}, manticore-tzdata => ${DEP_TZDATA_VERSION}, manticore-tzdata < ${TZDATA_VERNUM_MAX}" )
 set ( CPACK_RPM_SEARCHD_INSTALL_WITH_EXEC ON )
 set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx" )
 
@@ -60,7 +61,7 @@ set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
-set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata.rpm" )
+set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata-65l.rpm" )
 set ( CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_COMMON_PACKAGE_NAME "manticore-common" )
@@ -189,7 +190,7 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 install ( FILES doc/indexer.1 doc/indextool.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
 install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common RENAME manticore.conf.dist )
-install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES LICENSE INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore

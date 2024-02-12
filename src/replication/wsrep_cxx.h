@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -78,27 +78,21 @@ struct ViewInfo_t
 	MemberInfo_t	m_tMemInfo;
 };
 
-class Writeset_c
+class Writeset_i
 {
-	class Impl_c;
-	std::unique_ptr<Impl_c> m_pImpl;
-
-	explicit Writeset_c ( void* pProvider );
-	friend class Provider_c;
-
 public:
-	[[nodiscard]] int64_t LastSeqno () const noexcept;
-	[[nodiscard]] bool LastOk () const noexcept;
-	[[nodiscard]] bool AppendKeys ( const VecTraits_T<uint64_t> & dBufKeys, bool bSharedKeys );
-	[[nodiscard]] bool AppendData ( const VecTraits_T<BYTE> & dData );
-	[[nodiscard]] bool Replicate ();
-	[[nodiscard]] bool PreCommit ();
-	void AbortPreCommit ();
-	void InterimCommit ();
-	void PostCommit ();
-	[[nodiscard]] bool ToExecuteStart ( const VecTraits_T<uint64_t> & dBufKeys, const VecTraits_T<BYTE> & dData );
-	void ToExecuteEnd ();
-	~Writeset_c();
+	[[nodiscard]] virtual int64_t LastSeqno () const noexcept = 0;
+	[[nodiscard]] virtual bool LastOk () const noexcept = 0;
+	[[nodiscard]] virtual bool AppendKeys ( const VecTraits_T<uint64_t> & dBufKeys, bool bSharedKeys ) = 0;
+	[[nodiscard]] virtual bool AppendData ( const VecTraits_T<BYTE> & dData ) = 0;
+	[[nodiscard]] virtual bool Replicate () = 0;
+	[[nodiscard]] virtual bool PreCommit () = 0;
+	virtual void AbortPreCommit () = 0;
+	virtual void InterimCommit () = 0;
+	virtual void PostCommit () = 0;
+	[[nodiscard]] virtual bool ToExecuteStart ( const VecTraits_T<uint64_t> & dBufKeys, const VecTraits_T<BYTE> & dData ) = 0;
+	virtual void ToExecuteEnd () = 0;
+	virtual ~Writeset_i() = default;
 };
 
 class Cluster_i : public ISphRefcountedMT
@@ -141,31 +135,30 @@ public:
 
 using ReceiverRefPtr_c = CSphRefcountedPtr<Receiver_i>;
 
-class Provider_c
+class Applier_i
 {
-	class Impl_c;
-	std::unique_ptr<Impl_c> m_pImpl;
-	friend Provider_c* MakeProvider ( Cluster_i*, CSphString, const char*, const char*, const char*, const char* );
-	Provider_c() = default;
-
 public:
-	void ApplierPreCommit ( const void * );
-	void ApplierInterimPostCommit ( const void * );
-	void SstReceived ( const GlobalTid_t & tGtid, int iRes );
-	void SstSent ( const GlobalTid_t & tGtid, bool bOk );
-	void Disconnect ();
-	[[nodiscard]] bool OptionsSet ( const CSphString & sName, const CSphString & sValue );
-	bool EnumFindStatsVar ( StatsVarsIteratorFN&& fnCondition );
-	void EnumStatsVars ( StatsVarsVisitorFN&& fnVisitor );
-	[[nodiscard]] bool Connect ( const char * szName, const char * szNodes, bool bBootStrap );
-	void StartListen ( Wsrep::Receiver_i * pReceiver );
-	~Provider_c();
-
-public:
-	Writeset_c MakeWriteSet();
+	virtual void ApplierPreCommit ( const void* ) = 0;
+	virtual void ApplierInterimPostCommit ( const void* ) = 0;
 };
 
-Provider_c * MakeProvider ( Cluster_i * pCluster, CSphString sName, const char * szListenAddr, const char * szIncoming, const char * szPath, const char * szOptions );
+class Provider_i : ISphNoncopyable
+{
+public:
+	virtual ~Provider_i() = default;
+	virtual void SstReceived ( const GlobalTid_t & tGtid, int iRes ) = 0;
+	virtual void SstSent ( const GlobalTid_t & tGtid, bool bOk ) = 0;
+	virtual void Disconnect () = 0;
+	[[nodiscard]] virtual bool OptionsSet ( const CSphString & sName, const CSphString & sValue ) = 0;
+	virtual bool EnumFindStatsVar ( StatsVarsIteratorFN&& fnCondition ) = 0;
+	virtual void EnumStatsVars ( StatsVarsVisitorFN&& fnVisitor ) = 0;
+	[[nodiscard]] virtual bool Connect ( const char * szName, const char * szNodes, bool bBootStrap ) = 0;
+	virtual void StartListen ( Wsrep::Receiver_i * pReceiver ) = 0;
+	virtual std::unique_ptr<Writeset_i> MakeWriteSet() = 0;
+	virtual Applier_i* GetApplier() = 0;
+};
+
+Provider_i * MakeProvider ( Cluster_i * pCluster, CSphString sName, const char * szListenAddr, const char * szIncoming, const char * szPath, const char * szOptions );
 
 // these guys tested in gtests_wsrep.cpp
 CSphString Uuid2Str ( const UUID_t& tUuid );

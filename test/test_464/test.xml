@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ATTACH with source index RT</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries><sphinxql>
+create table test1 ( title text, tag integer );
+insert into test1 (id, title, tag) values
+(1,'test1 1 abc', 11),
+(2,'test1 2 abc', 12);
+create table test2 ( title text, tag integer );
+insert into test1 (id, title, tag) values
+(11,'test2 11 abc', 21),
+(12,'test2 12 abc', 22);
+
+ATTACH TABLE test1 TO TABLE test2;
+SELECT * FROM test2 ORDER BY id asc;
+SELECT * FROM test1 ORDER BY id asc;
+
+create table test3 like test1;
+insert into test1 (id, title, tag) values
+(1,'test1 1 abc', 11);
+insert into test3 (id, title, tag) values
+(1,'test3 1 abc', 11);
+
+SELECT * FROM test3 ORDER BY id asc;
+ATTACH TABLE test1 TO TABLE test3;
+SELECT * FROM test3 ORDER BY id asc;
+
+insert into test1 (id, title, tag) values
+(101,'test1 101 abc', 101);
+ATTACH TABLE test1 TO TABLE test3 WITH TRUNCATE;
+SELECT * FROM test3 ORDER BY id asc;
+
+create table test10 ( title text, gids multi );
+insert into test10 (id, title, gids) values
+(301,'test10 301 abc', (301, 399) );
+
+<!-- shema got replaced on truncate -->
+ATTACH TABLE test10 TO TABLE test3 WITH TRUNCATE;
+SELECT * FROM test3 ORDER BY id asc;
+DESC test3;
+
+drop table test1;
+drop table test2;
+drop table test3;
+drop table test10;
+</sphinxql></queries>
+
+</test>

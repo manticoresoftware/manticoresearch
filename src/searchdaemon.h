@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -117,6 +117,7 @@ volatile bool& sphGetGotSigusr2() noexcept;
 // these are in searchd.cpp
 extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
+extern bool g_bTimeoutEachPacket;
 
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
@@ -169,7 +170,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x124, // 1.36
+	VER_COMMAND_SEARCH		= 0x125, // 1.37
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x101,
@@ -1445,6 +1446,7 @@ namespace session
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+int GetDaemonLogBufSize ();
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );
@@ -1560,8 +1562,8 @@ public:
 
 	virtual void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, int64_t iLastInsertId=0 ) = 0;
 
-	// Header of the table with defined num of columns
-	virtual void HeadBegin ( int iColumns ) = 0;
+	// Header of the table
+	virtual void HeadBegin () = 0;
 
 	virtual bool HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
 
@@ -1667,10 +1669,10 @@ public:
 		return Commit();
 	}
 
-	// Fire he header for table with iSize string columns
+	// Fire the header for table with given string columns
 	bool HeadOfStrings ( std::initializer_list<const char*> dNames )
 	{
-		HeadBegin ( (int) dNames.size() );
+		HeadBegin ();
 		for ( const char* szCol : dNames )
 			HeadColumn ( szCol );
 		return HeadEnd ();
@@ -1678,7 +1680,7 @@ public:
 
 	bool HeadOfStrings ( const VecTraits_T<CSphString>& sNames )
 	{
-		HeadBegin ( (int) sNames.GetLength() );
+		HeadBegin ();
 		for ( const auto& sName : sNames )
 			HeadColumn ( sName.cstr() );
 		return HeadEnd ();
@@ -1687,7 +1689,7 @@ public:
 	// table of 2 columns (we really often use them!)
 	bool HeadTuplet ( const char * pLeft, const char * pRight )
 	{
-		HeadBegin ( 2 );
+		HeadBegin ();
 		HeadColumn ( pLeft );
 		HeadColumn ( pRight );
 		return HeadEnd();

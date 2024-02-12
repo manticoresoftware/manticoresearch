@@ -255,6 +255,8 @@ deploy_hook:
   stage: hooks
   trigger:
     include: dist/gitlab-release.yml
+    forward:
+      pipeline_variables: true
   needs:
     - job: simple_tests
       artifacts: false

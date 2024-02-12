@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -32,6 +32,7 @@ struct ClusterOptions_t
 
 	void						Parse ( const CSphString & sOptions );
 	[[nodiscard]] CSphString	AsStr () const;
+	[[nodiscard]] bool			IsEmpty() const noexcept;
 };
 
 // cluster data that gets stored and loaded

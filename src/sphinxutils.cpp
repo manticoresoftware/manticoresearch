@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -910,6 +910,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "access_dict",			0, nullptr },
 	{ "stored_fields",			0, nullptr },
 	{ "stored_only_fields",		0, nullptr },
 	{ "docstore_block_size",	0, nullptr },
@@ -957,6 +958,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_timeout",			KEY_DEPRECATED, "network_timeout" },
 	{ "network_timeout",		0, NULL },
 	{ "client_timeout",			0, NULL },
+	{ "reset_network_timeout_on_packet",			0, NULL },
 	{ "max_children",			KEY_REMOVED, NULL },
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			KEY_REMOVED, NULL },
@@ -1023,10 +1025,11 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "qcache_thresh_msec",		0, NULL },
 	{ "sphinxql_timeout",		0, NULL },
 	{ "hostname_lookup",		0, NULL },
-	{ "grouping_in_utc",		0, NULL },
+	{ "grouping_in_utc",		KEY_DEPRECATED, "timezone" },
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
+	{ "timezone",				0, NULL },
 	{ "data_dir",				0, NULL },
 	{ "node_address",			0, NULL },
 	{ "server_id",				0, NULL },
@@ -1034,7 +1037,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "access_dict",			0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
+	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },
 	{ "ssl_key",				0, nullptr },
 	{ "ssl_ca",					0, nullptr },
@@ -1054,6 +1059,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
 	{ "engine",					0, nullptr },
+	{ "replication_connect_timeout",	0, NULL },
+	{ "replication_query_timeout",		0, NULL },
+	{ "replication_retry_delay",		0, NULL },
+	{ "replication_retry_count",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3196,15 +3205,23 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 
 #if HAVE_DLOPEN
 
+void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char* szPath, bool bGlobal )
+{
+	if ( m_bReady || m_pLibrary )
+		return;
+
+	m_pLibrary = dlopen ( szPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
+	if ( !m_pLibrary )
+		sphLogDebug ( "dlopen(%s) failed", szPath );
+	else
+		sphLogDebug ( "dlopen(%s)=%p", szPath, m_pLibrary );
+}
+
 CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath, bool bGlobal )
 	: m_bReady ( false )
 	, m_pLibrary ( nullptr )
 {
-	m_pLibrary = dlopen ( sPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
-	if ( !m_pLibrary )
-		sphLogDebug ( "dlopen(%s) failed", sPath );
-	else
-		sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
+	CSphDynamicLibraryAlternative ( sPath, bGlobal );
 }
 
 CSphDynamicLibrary::~CSphDynamicLibrary()
@@ -3243,7 +3260,8 @@ bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, in
 
 #else
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * ) {};
+void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char *, bool ) {};
+CSphDynamicLibrary::CSphDynamicLibrary ( const char *, bool ) {};
 bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return false; }
 CSphDynamicLibrary::~CSphDynamicLibrary() = default;
 
@@ -3472,21 +3490,38 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-static std::atomic<int64_t> g_iUID { 1 };
-static int64_t g_iUidBase = 0;
+struct UUID_t
+{
+	std::atomic<int64_t> m_iUID { 1 };
+	int64_t m_iUidBase = 0;
+
+	int64_t Get ()
+	{
+		int64_t iVal = m_iUID.fetch_add (1, std::memory_order_relaxed);
+		int64_t iUID = m_iUidBase + iVal;
+		return iUID;
+	}
+};
+
+static UUID_t g_tUidShort;
+static UUID_t g_tIndexUid;
 
 int64_t UidShort()
 {
-	int64_t iVal = g_iUID.fetch_add (1, std::memory_order_relaxed);
-	int64_t iUID = g_iUidBase + iVal;
-	return iUID;
+	return g_tUidShort.Get();
+}
+
+int64_t GetIndexUid()
+{
+	return g_tIndexUid.Get();
 }
 
 void UidShortSetup ( int iServer, int iStarted )
 {
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
-	g_iUidBase = iSeed;
+	g_tUidShort.m_iUidBase = iSeed;
+	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
 }
 
@@ -3534,17 +3569,5 @@ int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
 		return -1;
 
 	return std::mktime ( &tTM );
-}
-
-static std::atomic<long> g_tIndexId { 0 };
-
-int64_t GenerateIndexId()
-{
-	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
-}
-
-void SetIndexId ( int64_t iId )
-{
-	g_tIndexId.store ( iId );
 }
 

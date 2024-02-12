@@ -26,6 +26,12 @@ This setting sets instance-wide defaults for [access_hitlists](../Creating_a_tab
 
 The `access_hitlists` directive allows you to define the default value of [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
 
+### access_dict
+
+This setting sets instance-wide defaults for [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `mmap_preread`.
+
+The `access_dict` directive allows you to define the default value of [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
 ### agent_connect_timeout
 
 This setting sets instance-wide defaults for the [agent_connect_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) parameter.
@@ -183,6 +189,45 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 <!-- end -->    
 
 
+### buddy_path
+
+<!-- example conf buddy_path -->
+This setting determines the path to the Manticore Buddy binary. It is optional, with a default value being the build-time configured path, which varies across different operating systems. Typically, you don't need to modify this setting. However, it may be useful if you wish to run Manticore Buddy in debug mode, make changes to Manticore Buddy, or implement a new plugin. In the latter case, you can `git clone` Buddy from https://github.com/manticoresoftware/manticoresearch-buddy, add a new plugin to the directory `./plugins/`, and run `composer install --prefer-source` for easier development after you change the directory to the Buddy source.
+
+To ensure you can run `composer`, your machine must have PHP 8.2 or higher installed with the following extensions:
+
+```
+--enable-dom
+--with-libxml
+--enable-tokenizer
+--enable-xml
+--enable-xmlwriter
+--enable-xmlreader
+--enable-simplexml
+--enable-phar
+--enable-bcmath
+--with-gmp
+--enable-debug
+--with-mysqli
+--enable-mysqlnd
+```
+
+You can also opt for the special `manticore-executor-dev` version for Linux amd64 available in the releases, for example: https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
+
+If you go this route, remember to link the dev version of the manticore executor to `/usr/bin/php`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in Linux, but run it in debug mode
+buddy_path = manticore-executor -n /opt/homebrew/share/manticore/modules/manticore-buddy/bin/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in MacOS arm64, but run it in debug mode
+buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debug # use Manticore Buddy from a non-default location
+```
+<!-- end -->    
+
 ### client_timeout
 
 <!-- example conf client_timeout -->
@@ -313,6 +358,17 @@ This setting specifies whether timed grouping in API and SQL will be calculated 
 By default, all 'group by time' expressions (like group by day, week, month, and year in API, also group by day, month, year, yearmonth, yearmonthday in SQL) are done using local time. For example, if you have documents with attributes timed `13:00 utc` and `15:00 utc`, in the case of grouping, they both will fall into facility groups according to your local timezone setting. If you live in `utc`, it will be one day, but if you live in `utc+10`, then these documents will be matched into different `group by day` facility groups (since 13:00 utc in UTC+10 timezone is 23:00 local time, but 15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to make time grouping not dependent on timezone. You can run the server with a defined global TZ environment variable, but it will affect not only grouping but also timestamping in the logs, which may be undesirable as well. Switching 'on' this option (either in config or using [SET global](../Server_settings/Setting_variables_online.md#SET) statement in SQL) will cause all time grouping expressions to be calculated in UTC, leaving the rest of time-depentend functions (i.e. logging of the server) in local TZ.
 
 
+### timezone
+
+This setting specifies the timezone to be used by date/time-related functions. By default, the local timezone is used, but you can specify a different timezone in IANA format (e.g., `Europe/Amsterdam`).
+
+Note that this setting has no impact on logging, which always operates in the local timezone.
+
+Also, note that if `grouping_in_utc` is used, the 'group by time' function will still use UTC, while other date/time-related functions will use the specified timezone. Overall, it is not recommended to mix `grouping_in_utc` and `timezone`.
+
+You can configure this option either in the config or by using the [SET global](../Server_settings/Setting_variables_online.md#SET) statement in SQL.
+
+
 ### ha_period_karma
 
 <!-- example conf ha_period_karma -->
@@ -357,13 +413,13 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-The hostname_lookup setting determines the hostnames renew strategy. By default, IP addresses of agent host names are cached at server start to avoid extra load on the DNS. In some cases, the IP can change dynamically (e.g. cloud hosting) t' disables the caching and queries the DNS at each query. The IP addresses can also be manually renewed with the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
 
 ### jobs_queue_size
 
 The jobs_queue_size setting defines how many "jobs" can be in the queue at the same time. It is unlimited by default.
 
-In most cases, a "job" means one query to a single local table (plain table or a disk chunk of a real-time table). For example, if you have a distributed table consisting of 2 local tables or a real-time table with 2 disk chunks, a search query to either of them will mostly put 2 jobs in the queue. Then, the thread pool (whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them. However, in some cases, if the query is too complex, more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance. 
+In most cases, a "job" means one query to a single local table (plain table or a disk chunk of a real-time table). For example, if you have a distributed table consisting of 2 local tables or a real-time table with 2 disk chunks, a search query to either of them will mostly put 2 jobs in the queue. Then, the thread pool (whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them. However, in some cases, if the query is too complex, more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance.
 
 ### listen_backlog
 
@@ -398,7 +454,7 @@ You can specify:
 * either an IP address (or hostname) and a port number
 * or just a port number
 * or a Unix socket path (not supported on Windows)
-*  or an IP address and port range
+* or an IP address and port range
 
 If you specify a port number but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Port range can be set only for the replication protocol.
 
@@ -407,6 +463,7 @@ You can also specify a protocol handler (listener) to be used for connections on
 * **Not specified** - Manticore will accept connections at this port from:
   - other Manticore agents (i.e., a remote distributed table)
   - clients via HTTP and HTTPS
+  - [Manticore Buddy](https://manticoresearch.com/blog/manticoresearch-buddy-intro/). **Ensure you have a listener of this kind (or an `http` listener, as mentioned below) to avoid limitations in Manticore functionality.**
 * `mysql` MySQL protocol for connections from MySQL clients. Note:
   - Compressed protocol is also supported.
   - If [SSL](../Security/SSL.md#SSL) is enabled, you can make an encrypted connection.
@@ -457,7 +514,7 @@ By default, Linux won't allow you to let Manticore listen on a port below 1024 (
 #### Technical details about Sphinx API protocol and TFO
 <details>
 Legacy Sphinx protocol has 2 phases: handshake exchanging and data flow. The handshake consists of a packet of 4 bytes from the client, and a packet of 4 bytes from the daemon with only one purpose - the client determines that the remote is a real Sphinx daemon, the daemon determines that the remote is a real Sphinx client. The main dataflow is quite simple: let's both sides declare their handshakes, and the opposite check them. That exchange with short packets implies using special `TCP_NODELAY` flag, which switches off Nagle's TCP algorithm and declares that the TCP connection will be performed as a dialogue of small packages.
-However, it is not strictly defined who speaks first in this negotiation. Historically, all clients that use the binary API speak first: send handshake, then read 4 bytes from a daemon, then send a request and read an answer from the daemon. 
+However, it is not strictly defined who speaks first in this negotiation. Historically, all clients that use the binary API speak first: send handshake, then read 4 bytes from a daemon, then send a request and read an answer from the daemon.
 When we improved Sphinx protocol compatibility, we considered these things:
 
 1. Usually, master-agent communication is established from a known client to a known host on a known port. So, it is quite not possible that the endpoint will provide a wrong handshake. So, we may implicitly assume that both sides are valid and really speak in Sphinx proto.
@@ -662,7 +719,7 @@ This setting is useful for extremely high query rates when just one thread is no
 
 Controls the busy loop interval of the network thread. The default is -1, and it can be set to -1, 0, or a positive integer.
 
-In cases where the server is configured as a pure master and just routes requests to agents, it is important to handle requests without delays and not allow the network thread to sleep. There is a busy loop for that. After an incoming request, the network thread uses CPU poll for `10 * net_wait_tm` milliseconds if 
+In cases where the server is configured as a pure master and just routes requests to agents, it is important to handle requests without delays and not allow the network thread to sleep. There is a busy loop for that. After an incoming request, the network thread uses CPU poll for `10 * net_wait_tm` milliseconds if
  `net_wait_tm` is a positive number or polls only with the CPU if`net_wait_tm` is `0`.  Also, the busy loop can be disabled with `net_wait_tm = -1` - in this case, the poller sets the timeout to the actual agent's timeouts on the system polling call.
 
 > **WARNING:** A CPU busy loop actually loads the CPU core, so setting this value to any non-default value will cause noticeable CPU usage even with an idle server.
@@ -681,6 +738,9 @@ Defines how many requests are processed on each iteration of the network loop. T
 
 <!-- example conf network_timeout -->
 Network client request read/write timeout, in seconds (or  [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, the default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
+
+Notice also [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). This param switches behaviour of `network_timeout` between whole `query` or `result`, and individual packets. Usually query/result fits in one-two packets, but sometimes when
+you need a large amount of data, this param will help you to keep work alive.
 
 <!-- request Example -->
 
@@ -873,6 +933,30 @@ pseudo_sharding = 0
 ```
 <!-- end -->
 
+
+### replication_connect_timeout
+
+The `replication_connect_timeout` directive defines the timeout for connecting to a remote node. By default, the value is assumed to be in milliseconds, but it can have [another suffix](../../Server_settings/Special_suffixes.md). The default value is 1000 (1 second).
+
+When connecting to a remote node, Manticore will wait for this amount of time at most to complete the connection successfully. If the timeout is reached but the connection has not been established, and `retries` are enabled, a retry will be initiated.
+
+
+### replication_query_timeout
+
+The `replication_query_timeout` sets the amount of time that searchd will wait for a remote node to complete a query. The default value is 3000 milliseconds (3 seconds), but can be `suffixed` to indicate a different unit of time.
+
+After establishing a connection, Manticore will wait for a maximum of `replication_query_timeout` for the remote node to complete. Note that this timeout is separate from the `replication_connect_timeout`, and the total possible delay caused by a remote node will be the sum of both values.
+
+
+### replication_retry_count
+
+This setting is an integer that specifies how many times Manticore will attempt to connect and query a remote node during replication before reporting a fatal query error. The default value is 3.
+
+
+### replication_retry_delay
+
+This setting is an integer in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)) that specifies the delay before Manticore retries querying a remote node in case of failure during replication. This value is only relevant when a non-zero value is specified. The default value is 500.
+
 ### qcache_max_bytes
 
 <!-- example conf qcache_max_bytes -->
@@ -943,7 +1027,7 @@ query_log = /var/log/query.log
 
 <!-- example conf query_log_mode -->
 The query_log_mode directive allows you to set a different permission for the searchd and query log files. By default, these log files are created with 600 permission, meaning that only the user under which the server runs and root users can read the log files.
-This directive can be handy if you want to allow other users to read the log files, for example, monitoring solutions running on non-root users. 
+This directive can be handy if you want to allow other users to read the log files, for example, monitoring solutions running on non-root users.
 
 <!-- intro -->
 ##### Example:
@@ -960,7 +1044,7 @@ query_log_mode  = 666
 <!-- example conf read_buffer_docs -->
 The read_buffer_docs directive controls the per-keyword read buffer size for document lists. For every keyword occurrence in every search query, there are two associated read buffers: one for the document list and one for the hit list. This setting lets you control the document list buffer size.
 
-A larger buffer size might increase per-query RAM use, but it could possibly decrease I/O time. It makes sense to set larger values for slow storage, but for storage capable of high IOPS, experimenting should be done in the low values area. 
+A larger buffer size might increase per-query RAM use, but it could possibly decrease I/O time. It makes sense to set larger values for slow storage, but for storage capable of high IOPS, experimenting should be done in the low values area.
 
 The default value is 256K, and the minimal value is 8K. You may also set [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) on a per-table basis, which will override anything set on the server's config level.
 
@@ -1009,6 +1093,38 @@ When querying, some reads know in advance exactly how much data is there to be r
 ```ini
 read_unhinted = 32K
 ```
+<!-- end -->
+
+### reset_network_timeout_on_packet
+
+<!-- example conf reset_network_timeout_on_packet -->
+Refines behaviour of networking timeouts (like `network_timeout`, `read_timeout`, and `agent_query_timeout`).
+
+When set to 0 - timeouts limit max time for sending whole request/query.
+When set to 1 (default) timeouts limit max time between network activities.
+
+With replication, a node might need to send large (say, 100Gig) file to another node.
+Say, network provides ability to send 1Gig/s - with serie of packets 4-5Mb each.
+So, to transfer whole file you need 100s. Default timeout of 5s will allow you to transfer only 5Gig, then 
+connection will be dropped. You can increase timeout, but that is still not scalable (because next file may 
+be 150Gig - and you're failed again). But having default `reset_network_timeout_on_packet` set to 1, timeout will be
+applied not to whole transfer, but to individual packets. As long, as transfer in progress (and something really came
+over network during timeout, it is kept alive). If transfer stuck, so that timeout happened between packets -
+it will be dropped.
+
+Notice, that if you set up distributed table, each node - master and agent(s) should be tuned. On master side
+`agent_query_timeout` is affected, on agents - `network_timeout`.
+
+<!-- intro -->
+
+##### Example:
+
+<!-- request Example -->
+
+```ini
+reset_network_timeout_on_packet = 0
+```
+
 <!-- end -->
 
 

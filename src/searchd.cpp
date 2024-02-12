@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -54,6 +54,8 @@
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
+#include "datetime.h"
+#include "exprdatetime.h"
 #include "pseudosharding.h"
 #include "geodist.h"
 
@@ -150,6 +152,7 @@ static CSphBitvec		g_tLogStatements;
 
 int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
+bool					g_bTimeoutEachPacket = true;
 int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
 static int				g_iMaxConnection	= 0; // unlimited
@@ -159,7 +162,6 @@ static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdQueueMax		= 0;
-static bool				g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
 static int				g_iServerID = 0;
@@ -189,14 +191,22 @@ static int64_t			g_iDocstoreCache = 0;
 static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
-int				g_iAgentConnectTimeoutMs = 1000;
-int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
-const int	MAX_RETRY_COUNT		= 8;
-const int	MAX_RETRY_DELAY		= 1000;
+const int DAEMON_DEFAULT_CONNECT_TIMEOUT	= 1000;
+const int DAEMON_DEFAULT_QUERY_TIMEOUT		= 3000;
+const int DAEMON_MAX_RETRY_COUNT			= 8;
+const int DAEMON_MAX_RETRY_DELAY			= 1000;
 
-int						g_iAgentRetryCount = 0;
-int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+int g_iAgentConnectTimeoutMs		= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+int g_iAgentQueryTimeoutMs			= DAEMON_DEFAULT_QUERY_TIMEOUT;	// global (default). May be override by index-scope values, if one specified
+int g_iAgentRetryCount				= 0;
+int g_iAgentRetryDelayMs			= DAEMON_MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+
+static int g_iReplConnectTimeoutMs	= DAEMON_DEFAULT_CONNECT_TIMEOUT;
+static int g_iReplQueryTimeoutMs	= DAEMON_DEFAULT_QUERY_TIMEOUT;
+static int g_iReplRetryCount		= 3;
+static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
+
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 CSphString				g_sDbName = "Manticore";
@@ -377,6 +387,12 @@ static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 	}
 }
 
+const int LOG_BUF_SIZE = 1024;
+int GetDaemonLogBufSize ()
+{
+	return LOG_BUF_SIZE;
+}
+
 /// log entry (with log levels, dupe catching, etc)
 /// call with NULL format for dupe flushing
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
@@ -417,7 +433,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
 	if ( eLevel==SPH_LOG_RPL_DEBUG ) sBanner = "RPL: ";
 
-	char sBuf [ 1024 ];
+	char sBuf [ LOG_BUF_SIZE ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%d] ", sTimeBuf, GetOsThreadId() );
 
 	char * sTtyBuf = sBuf + strlen(sBuf);
@@ -1693,7 +1709,8 @@ enum
 	QFLAG_FACET					= 1UL << 9,
 	QFLAG_FACET_HEAD			= 1UL << 10,
 	QFLAG_JSON_QUERY			= 1UL << 11,
-	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12
+	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
+	QFLAG_LOCAL_DF_SET			= 1UL << 13
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -1720,11 +1737,12 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
-	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
+	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF.value_or ( false );
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	uFlags |= QFLAG_FACET * q.m_bFacet;
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
+	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -2309,10 +2327,10 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCa
 	if ( tQuery.m_iCutoff<-1 )
 		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
-	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
 		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
 		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
@@ -2520,6 +2538,21 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	tQuery.m_sSortBy = tReq.GetString ();
+
+	// here we once eliminate SPH_SORT_ATTR_ASC in flavour of SPH_SORT_EXTENDED
+	if ( tQuery.m_eSort == SPH_SORT_ATTR_ASC )
+	{
+		tQuery.m_sSortBy = SphSprintf ( "%s ASC", tQuery.m_sSortBy.cstr() );
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+	}
+
+	// here we once eliminate SPH_SORT_ATTR_DESC in flavour of SPH_SORT_EXTENDED
+	if ( tQuery.m_eSort == SPH_SORT_ATTR_DESC )
+	{
+		tQuery.m_sSortBy = SphSprintf ( "%s DESC", tQuery.m_sSortBy.cstr() );
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+	}
+
 	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	tQuery.m_sRawQuery = tReq.GetString ();
 	{
@@ -2643,7 +2676,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
-		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
+		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )
+			tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
 		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
@@ -2944,8 +2978,6 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	*pBuf << sPrefix;
 	switch ( eSort )
 	{
-	case SPH_SORT_ATTR_DESC:		*pBuf << sSubst << " DESC"; break;
-	case SPH_SORT_ATTR_ASC:			*pBuf << sSubst << " ASC"; break;
 	case SPH_SORT_TIME_SEGMENTS:	*pBuf << "TIME_SEGMENT(" << sSubst << ")"; break;
 	case SPH_SORT_EXTENDED:			*pBuf << sSubst; break;
 	case SPH_SORT_EXPR:				*pBuf << "BUILTIN_EXPR()"; break;
@@ -3010,8 +3042,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		tBuf.FinishBlock ();
 	}
 
-	if ( tQuery.m_bLocalDF!=g_tDefaultQuery.m_bLocalDF )
-		tBuf << "local_df=1";
+	if ( tQuery.m_bLocalDF.has_value() )
+		tBuf.Appendf ( "local_df=%d", tQuery.m_bLocalDF.value() ? 1 : 0 );
 
 	if ( tQuery.m_dIndexWeights.GetLength() )
 	{
@@ -4024,13 +4056,11 @@ struct AttrSort_fn
 
 		int iIndexA = m_tSchema.GetAttr(iA).m_iIndex;
 		int iIndexB = m_tSchema.GetAttr(iB).m_iIndex;
-		if ( iIndexA==-1 )
-			iIndexA = iA;
 
-		if ( iIndexB==-1 )
-			iIndexB = iB;
+		if ( iIndexA == -1 && iIndexB == -1 )
+			return iA < iB;
 
-		return iIndexA < iIndexB;
+		return iIndexA != -1 && ( iIndexB == -1 || iIndexA < iIndexB );
 	}
 };
 
@@ -4896,8 +4926,7 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_tLocator = s.m_tLocator;
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
-		if ( !m_bAgent )
-			tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
 
 		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
 	}
@@ -4990,6 +5019,9 @@ void FrontendSchemaBuilder_c::RemapFacets()
 		if ( !pGroupByCol )
 			return;
 	}
+
+	if ( m_tQuery.m_sGroupBy.IsEmpty() )
+		return;
 
 	for ( auto & tFrontend : m_dFrontend )
 	{
@@ -5279,7 +5311,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	tFrontendBuilder.RemapGroupBy();
-	tFrontendBuilder.RemapFacets();
+	// agent should provide raw attributes into master without any remapping
+	if ( bMaster )
+		tFrontendBuilder.RemapFacets();
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
@@ -5697,7 +5731,7 @@ void SearchHandler_c::RunQueries()
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	}
-	OnRunFinished();
+	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
 
 
@@ -6523,8 +6557,9 @@ void SearchHandler_c::SetupLocalDF ()
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
 		bOnlyFullScan &= tQuery.m_sQuery.IsEmpty();
-		bHasLocalDF |= tQuery.m_bLocalDF;
-		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF )
+		
+		bHasLocalDF |= tQuery.m_bLocalDF.value_or ( false );
+		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF.value_or ( false ) )
 			bOnlyNoneRanker &= ( tQuery.m_eRanker==SPH_RANK_NONE );
 	}
 	// bail out queries: full-scan, ranker=none, local_idf=0
@@ -6535,7 +6570,7 @@ void SearchHandler_c::SetupLocalDF ()
 	dQuery.Resize ( 0 );
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
-		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF || tQuery.m_eRanker==SPH_RANK_NONE )
+		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF.value_or ( false ) || tQuery.m_eRanker==SPH_RANK_NONE )
 			continue;
 
 		int iLen = tQuery.m_sQuery.Length();
@@ -7477,6 +7512,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+		tRes.m_iMatches = tRes.m_iCount;
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
@@ -7856,6 +7892,25 @@ public:
 		return 0;
 	}
 
+	static bool ConvertBool ( const SqlInsert_t & tVal, SphAttr_t & tAttr )
+	{
+		if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+			return false;
+
+		if ( tVal.m_sVal.EqN ( "true" ) )
+		{
+			tAttr = 1;
+			return true;
+		}
+		if ( tVal.m_sVal.EqN ( "false" ) )
+		{
+			tAttr = 0;
+			return true;
+		}
+
+		return false;
+	}
+
 	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
@@ -7864,9 +7919,13 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
-		case SPH_ATTR_BOOL:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
+			break;
+
+		case SPH_ATTR_BOOL:
+			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
+				tAttr = ToInt ( tVal );
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -9515,6 +9574,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 	// count commands
 	StatCountCommand ( eCommand );
 	myinfo::SetCommand ( g_dApiCommands[eCommand] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	sphLogDebugv ( "conn %s(%d): got command %d, handling", tSess.szClientName(), tSess.GetConnID(), eCommand );
 	switch ( eCommand )
@@ -10081,11 +10141,7 @@ static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tRes
 	bool bQuery = tRes.m_bGetQuery;
 
 	// result set header packet. We will attach EOF manually at the end.
-	int iColumns = bDumpDocs ? 2 : 1;
-	if ( bQuery )
-		iColumns += 3;
-	tOut.HeadBegin ( iColumns );
-
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG );
 	if ( bDumpDocs )
 		tOut.HeadColumn ( "documents" );
@@ -11523,9 +11579,9 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	}
 
 	// result set header packet
-	tOut.HeadBegin(1);
+	tOut.HeadBegin ();
 	tOut.HeadColumn("snippet");
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// data
 	for ( auto & i : dQueries )
@@ -11708,7 +11764,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 
 
 	// result set header packet
-	tOut.HeadBegin ( tSettings.m_bStats ? 5 : 3 );
+	tOut.HeadBegin();
 	tOut.HeadColumn("qpos");
 	tOut.HeadColumn("tokenized");
 	tOut.HeadColumn("normalized");
@@ -11943,7 +11999,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		tRes.m_dMatched.Sort ( tCmp );
 
 		// result set header packet
-		tOut.HeadBegin ( 2 );
+		tOut.HeadBegin ();
 		tOut.HeadColumn ( "name" );
 		tOut.HeadColumn ( "value" );
 		tOut.HeadEnd ();
@@ -11978,7 +12034,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	} else
 	{
 		// result set header packet
-		tOut.HeadBegin ( tArgs.m_bResultStats ? 3 : 1 );
+		tOut.HeadBegin ();
 		tOut.HeadColumn ( "suggest" );
 		if ( tArgs.m_bResultStats )
 		{
@@ -12529,7 +12585,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 // MySQL Workbench (and maybe other clients) crashes without it
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
-	tOut.HeadBegin ( 1 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Databases" );
 	tOut.HeadEnd();
 	tOut.PutString ( g_sDbName );
@@ -12543,7 +12599,7 @@ void HandleMysqlShowPlugins ( RowBuffer_i & tOut, SqlStmt_t & )
 	CSphVector<PluginInfo_t> dPlugins;
 	sphPluginList ( dPlugins );
 
-	tOut.HeadBegin ( 5 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Type" );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Library" );
@@ -12608,13 +12664,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 10;
-	if ( bAll )
-		iColCount += 1;
-	if ( g_bCpuStats )
-		iColCount += 1;
-
-	tOut.HeadBegin ( iColCount ); // 15 with chain
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "TID", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
@@ -12713,7 +12763,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	tOut.HeadBegin ( bAll ? 6 : 5 ); // 6 with chain
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
@@ -12721,6 +12771,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 	tOut.HeadColumn ( "Killed" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
+	tOut.HeadColumn ( "Last cmd time" );
 	tOut.HeadColumn ( "Last cmd" );
 	if ( !tOut.HeadEnd() )
 		return;
@@ -12750,6 +12801,10 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		tOut.PutNumAsString ( dThd.m_bKilled ? 1 : 0);
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
+		if ( dThd.m_tmLastJobDoneTimeUS==-1 ) // not yet finished
+			tOut.PutTimestampAsString ( dThd.m_tmLastJobStartTimeUS );
+		else
+			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS );
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
 		if ( iCols >= 0 && iCols < sInfo.second )
 			sInfo.second = iCols;
@@ -13382,20 +13437,14 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	assert ( bReturnZeroCount || tRes.m_tSchema.GetAttrsCount() );
 	sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
+	dRows.HeadBegin ();
+	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
 	{
-		int iAttrsToSend = tAttrsToSend.BitCount();
-		if ( bAddQueryColumn )
-			++iAttrsToSend;
+		if ( !tAttrsToSend.BitGet(i) )
+			continue;
 
-		dRows.HeadBegin ( iAttrsToSend );
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
-		{
-			if ( !tAttrsToSend.BitGet(i) )
-				continue;
-
-			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
-		}
+		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+		dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
 	}
 
 	if ( bAddQueryColumn )
@@ -13562,7 +13611,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & d
 	}
 
 	// result set header packet
-	dRows.HeadBegin(3);
+	dRows.HeadBegin ();
 	dRows.HeadColumn ( "Level" );
 	dRows.HeadColumn ( "Code", MYSQL_COL_DECIMAL );
 	dRows.HeadColumn ( "Message" );
@@ -13908,6 +13957,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
 	myinfo::SetCommand ( g_dSqlStmts[STMT_SELECT] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
@@ -13971,6 +14021,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 		myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
 		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
@@ -14229,9 +14280,25 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 
 	if ( sName == "grouping_in_utc" )
 	{
-		g_bGroupingInUtc = !!iSetValue;
-		SetGroupingInUtcExpr ( g_bGroupingInUtc );
-		SetGroupingInUtcSort ( g_bGroupingInUtc );
+		if ( IsTimeZoneSet() )
+		{
+			sError = "grouping_in_utc=1 conflicts with 'timezone'";
+			return true;
+		}
+
+		SetGroupingInUTC ( !!iSetValue );
+		return true;
+	}
+
+	if ( sName == "timezone" )
+	{
+		if ( GetGroupingInUTC() )
+		{
+			sError = "grouping_in_utc=1 conflicts with 'timezone'";
+			return true;
+		}
+
+		SetTimeZone ( sSetValue.cstr(), sError );
 		return true;
 	}
 
@@ -14307,6 +14374,16 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 		}
 		else
 			sError = "Only VIP connections can change global network_timeout value";
+		return true;
+	}
+
+	if ( sName == "reset_network_timeout_on_packet" )
+	{
+		if ( tSess.GetVip() )
+		{
+			g_bTimeoutEachPacket = !!iSetValue;
+		} else
+			sError = "Only VIP connections can change global reset_network_timeout_on_packet value";
 		return true;
 	}
 
@@ -14502,50 +14579,77 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
 	bool bTruncate = ( tStmt.m_iIntParam==1 );
-	CSphString sError;
+
+	if ( sFrom==sTo )
+	{
+		tOut.ErrorEx ( "can not ATTACH table '%s' to itself", sFrom.cstr() );
+		return;
+	}
 
 	auto pServedFrom = GetServed ( sFrom );
 	auto pServedTo = GetServed ( sTo );
 
-	bool bOk = false;
 	if ( !pServedFrom )
+	{
 		tOut.ErrorEx ( "no such table '%s'", sFrom.cstr() );
-	else if ( pServedFrom->m_eType != IndexType_e::PLAIN )
-		tOut.Error ( "1st argument to ATTACH must be a plain table" );
-	else if ( !pServedTo )
-		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
-	else if ( pServedTo->m_eType!=IndexType_e::RT )
-		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
-	else
-		bOk = true;
-	if (!bOk)
 		return;
+
+	} else if ( pServedFrom->m_eType!=IndexType_e::PLAIN && pServedFrom->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "1st argument to ATTACH must be a plain or a RT table" );
+		return;
+
+	} else if ( !pServedTo )
+	{
+		tOut.ErrorEx ( "no such table '%s'", sTo.cstr() );
+		return;
+
+	} else if ( pServedTo->m_eType!=IndexType_e::RT )
+	{
+		tOut.Error ( "2nd argument to ATTACH must be a RT table" );
+		return;
+	}
 
 	// cluster does not implement ATTACH for now
-	auto tCluster = IsPartOfCluster ( pServedTo );
-	if ( tCluster )
+	auto tClusterTo = IsPartOfCluster ( pServedTo );
+	auto tClusterFrom = IsPartOfCluster ( pServedFrom );
+	if ( tClusterTo || tClusterFrom )
 	{
-		tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tCluster->cstr(), sError.cstr () );
+		if ( tClusterTo )
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tClusterTo->cstr() );
+		else 
+			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sFrom.cstr(), tClusterFrom->cstr() );
 		return;
 	}
 
-	WIdx_T<RtIndex_i*> pRtTo { pServedTo };
-	WIdx_c pPlainFrom { pServedFrom };
-
 	bool bFatal = false;
-	StrVec_t dWarnings;
-	auto bAttached = pRtTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, dWarnings, sError );
+	bool bAttached = false;
+	CSphString sError;
+	WIdx_T<RtIndex_i *> pTo { pServedTo };
 
-	sWarning = ConcatWarnings(dWarnings);
-	if ( bAttached || bFatal )
-		g_pLocalIndexes->Delete ( sFrom );
+	if ( pServedFrom->m_eType==IndexType_e::PLAIN )
+	{
+		WIdx_c pPlainFrom { pServedFrom };
+		bAttached = pTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, sError );
+
+		if ( bAttached || bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+
+		if ( bAttached )
+			pServedFrom->ReleaseIdx(); // since index no more belong to us
+
+	} else
+	{
+		WIdx_T<RtIndex_i*> pFrom { pServedFrom };
+		bAttached = pTo->AttachRtIndex ( pFrom, bTruncate, bFatal, sError );
+
+		if ( bFatal )
+			g_pLocalIndexes->Delete ( sFrom );
+	}
 
 	if ( bAttached )
-	{
-		pServedFrom->ReleaseIdx(); // since index no more belong to us
 		tOut.Ok();
-	}
-	else
+	 else
 		tOut.Error ( sError.cstr() );
 }
 
@@ -14592,9 +14696,9 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 {
 	int iTag = CommandFlush();
-	tOut.HeadBegin(1);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "tag", MYSQL_COL_LONG );
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// data packet, var value
 	tOut.PutNumAsString ( iTag );
@@ -14794,7 +14898,7 @@ void HandleMysqlclose ( RowBuffer_i & tOut )
 // same for select ... from index.files
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 3 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
 	tOut.HeadColumn ( "size", MYSQL_COL_LONGLONG );
@@ -15340,7 +15444,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	}
 
 	// fill header
-	tOut.HeadBegin ( dColumns.GetLength() );
+	tOut.HeadBegin ();
 	for ( const auto& dColumn : dColumns )
 		tOut.HeadColumn ( dColumn.m_szAlias, dColumn.m_eTypeMysql );
 
@@ -15404,7 +15508,7 @@ void HandleMysqlShowCollations ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
-	tOut.HeadBegin(6);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Collation" );
 	tOut.HeadColumn ( "Charset" );
 	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG );
@@ -15430,7 +15534,7 @@ void HandleMysqlShowCharacterSet ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
-	tOut.HeadBegin(4);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Charset" );
 	tOut.HeadColumn ( "Description" );
 	tOut.HeadColumn ( "Default collation" );
@@ -15493,7 +15597,8 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
 		dTable.MatchTuplet ( "character_set_client", "utf8" );
 		dTable.MatchTuplet ( "character_set_connection", "utf8" );
-		dTable.MatchTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
+		dTable.MatchTuplet ( "grouping_in_utc", GetGroupingInUTC() ? "1" : "0" );
+		dTable.MatchTuplet ( "timezone", GetTimeZoneName().cstr() );
 		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]
 		{
 			StringBuilder_c tBuf ( "," );
@@ -15863,7 +15968,7 @@ void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 13 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "chunk_id", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "base_name" );
 	tOut.HeadColumn ( "indexed_documents", MYSQL_COL_LONG );
@@ -15962,7 +16067,7 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
 	#undef SPH_QUERY_STATES
 
-	tOut.HeadBegin ( 4 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Status" );
 	tOut.HeadColumn ( "Duration" );
 	tOut.HeadColumn ( "Switches" );
@@ -16480,7 +16585,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 // STMT_SHOW_PLAN: SHOW PLAN
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot )
 {
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
 	tOut.HeadEnd ( bMoreResultsFollow );
@@ -16644,7 +16749,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 	StringBuilder_c sRes;
 	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), bDot );
 
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
 	tOut.HeadEnd ();
@@ -16737,7 +16842,7 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 		++iWarnings;
 	}
 
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
 	tOut.HeadEnd();
@@ -16897,6 +17002,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	LogStmtGuard_t tLogGuard ( sQuery, eStmt, dStmt.GetLength()>1 );
 
@@ -17650,7 +17756,7 @@ bool ApplyKillListsTo ( CSphIndex* pKillListTarget, CSphString & sError )
 
 				// kill all the docids present in this index
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )
-					pKillListTarget->KillExistingDocids ( pIndexWithKillList );
+					pIndexWithKillList->KillExistingDocids ( pKillListTarget );
 			}
 	}
 
@@ -18481,15 +18587,12 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 			sphWarning ( "table '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
 			return false;
 		}
+		CSphString sWarning;
+		sWarning.SetSprintf ( "has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", iIndexSP );
+		if ( pWarnings )
+			pWarnings->Add(sWarning);
 		else
-		{
-			CSphString sWarning;
-			sWarning.SetSprintf ( "has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", iIndexSP );
-			if ( pWarnings )
-				pWarnings->Add(sWarning);
-			else
-				sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
-		}
+			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
 	// upgrading schema to store field lengths
@@ -19757,6 +19860,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	// network_timeout overrides read_timeout
 	g_iReadTimeoutS = hSearchd.GetSTimeS ( "network_timeout", g_iReadTimeoutS );
 	g_iWriteTimeoutS = g_iReadTimeoutS;
+	g_bTimeoutEachPacket = hSearchd.GetBool( "reset_network_timeout_on_packet" );
 
 	g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout", 900);
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
@@ -19785,6 +19889,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
 	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+	tDefaultFA.m_eDict = GetFileAccess( hSearchd, "access_dict", false, tDefaultFA.m_eDict );
 
 	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
 	tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
@@ -19803,9 +19908,23 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	if ( hSearchd ( "grouping_in_utc" ) )
 	{
-		g_bGroupingInUtc = (hSearchd["grouping_in_utc"].intval ()!=0);
-		SetGroupingInUtcExpr ( g_bGroupingInUtc );
-		SetGroupingInUtcSort ( g_bGroupingInUtc );
+		if ( IsTimeZoneSet() )
+			sphWarning ( "grouping_in_utc=1 conflicts with 'timezone'" );
+
+		SetGroupingInUTC ( hSearchd["grouping_in_utc"].intval ()!=0 );
+	}
+
+	if ( hSearchd ( "timezone" ) )
+	{
+		if ( GetGroupingInUTC() )
+			sphWarning ( "grouping_in_utc=1 conflicts with 'timezone'" );
+
+		CSphString sWarn;
+		SetTimeZone ( hSearchd["timezone"].cstr(), sWarn );
+		if ( !sWarn.IsEmpty() )
+			sphWarning ( "%s", sWarn.cstr() );
+		else
+			sphInfo ( "Using time zone '%s'", GetTimeZoneName().cstr() );
 	}
 
 	// sha1 password hash for shutdown action
@@ -19824,14 +19943,22 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iPingIntervalUs = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
 	g_uHAPeriodKarmaS = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
 	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
+
 	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
 	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
 	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
-	if ( g_iAgentRetryDelayMs > MAX_RETRY_DELAY )
-		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, MAX_RETRY_DELAY );
+	if ( g_iAgentRetryDelayMs > DAEMON_MAX_RETRY_DELAY )
+		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, DAEMON_MAX_RETRY_DELAY );
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
-	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
-		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
+	if ( g_iAgentRetryCount > DAEMON_MAX_RETRY_COUNT )
+		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, DAEMON_MAX_RETRY_COUNT );
+
+	g_iReplConnectTimeoutMs = hSearchd.GetMsTimeMs ( "replication_connect_timeout", g_iReplConnectTimeoutMs );
+	g_iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	g_iReplRetryCount = hSearchd.GetInt ( "replication_retry_count", g_iReplRetryCount );
+	g_iReplRetryDelayMs = hSearchd.GetMsTimeMs ( "replication_retry_delay", g_iReplRetryDelayMs );
+	ReplicationSetTimeouts ( g_iReplConnectTimeoutMs, g_iReplQueryTimeoutMs, g_iReplRetryCount, g_iReplRetryDelayMs );
+
 	g_tmWaitUS = hSearchd.GetUsTime64Ms ( "net_wait_tm", g_tmWaitUS );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
@@ -20113,10 +20240,10 @@ static void DumpCommonSection ( const CSphConfig & hConf, RowBuffer_i & tOut )
 
 void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 {
-	tOut.HeadBegin( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Setting_name" );
 	tOut.HeadColumn ( "Value" );
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// configuration file path
 	tOut.PutString ( "configuration_file" );
@@ -20228,7 +20355,6 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 	InitPersistentPool();
 
-	int64_t iIndexId = -1;
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto& tIt : *hLocal )
 	{
@@ -20242,14 +20368,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 			if ( sWarning.Length() )
 				sphWarning ( "%s", sWarning.cstr() );
-
-			iIndexId = Max ( iIndexId, pIdx->GetIndexId() );
 		}
 	}
-
-	// set index_id to max of existed indexes after all indexes were loaded
-	if ( iIndexId!=-1 )
-		SetIndexId ( iIndexId + 1 );
 
 	// set index cluster name for check
 	for ( const ClusterDesc_t & tClusterDesc : GetClustersInt() )
@@ -20566,6 +20686,19 @@ static void CacheCPUInfo()
 }
 
 
+static void LogTimeZoneStartup ( const CSphString & sWarning )
+{
+	// avoid writing this to stdout
+	bool bLogStdout = g_bLogStdout;
+	g_bLogStdout = false;
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "Error initializing time zones: %s", sWarning.cstr() );
+
+	sphInfo ( "Using local time zone '%s'", GetLocalTimeZoneName().cstr() );
+	g_bLogStdout = bLogStdout;
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -20637,6 +20770,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( !sError.IsEmpty() )
 		sError = "";
+
+	CSphString sTZWarning;
+	{
+		StrVec_t dWarnings;
+		InitTimeZones ( dWarnings );
+		sTZWarning = ConcatWarnings(dWarnings);
+	}
 
 	//////////////////////
 	// parse command line
@@ -20951,6 +21091,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		}
 	}
 #endif
+
+	LogTimeZoneStartup(sTZWarning);
 
 	// init before workpool, as last checks binlog
 	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );

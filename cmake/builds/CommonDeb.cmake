@@ -31,6 +31,7 @@ set ( CPACK_GENERATOR DEB )
 
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
+set ( DEP_TZDATA_VERSION "${TZDATA_VERNUM}-${TZDATA_VERDATE}-${TZDATA_VERHASH}" )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}-${BUDDY_VERDATE}-${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}-${BACKUP_VERDATE}-${BACKUP_VERHASH}" )
 
@@ -60,8 +61,9 @@ set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_NAME "manticore-server-core" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_REPLACES "manticore-bin, sphinxsearch, ${breaks}" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_CONTROL_EXTRA "${dircore}/postinst;${dircore}/postrm" )
-seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
+seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION}), manticore-tzdata (>= ${DEP_TZDATA_VERSION}), manticore-tzdata (<< ${TZDATA_VERNUM_MAX})" )
 seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-server (= ${CPACK_PACKAGE_VERSION})" )
+#seta ( CPACK_DEBIAN_SEARCHD_PACKAGE_SUGGESTS "manticore-galera" )
 set ( CPACK_DEBIAN_SEARCHD_PACKAGE_BREAKS "${breaks}" )
 
 set ( CPACK_DEBIAN_SERVER_PACKAGE_NAME "manticore-server" )
@@ -131,7 +133,6 @@ configure_file ( "dist/deb/conffiles-server.in" "${dirserver}/conffiles" @ONLY )
 configure_file ( "dist/deb/conffiles-tools.in" "${dirtools}/conffiles" @ONLY )
 
 configure_file ( "dist/deb/manticore.default.in" "${dirserver}/manticore" @ONLY )
-configure_file ( "dist/deb/manticore.init.in" "${dirserver}/manticore.init" @ONLY )
 configure_file ( "dist/deb/manticore.service.in" "${dirserver}/manticore.service" @ONLY )
 
 configure_file ( "dist/deb/manticore-indexer.service.in" "${dirtools}/manticore-indexer.service" @ONLY )
@@ -160,8 +161,6 @@ configure_file ( "${dirserver}/postrm.in" "${dirserver}/postrm" @ONLY )
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
 install ( FILES "${dirserver}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT server )
-install ( FILES "${dirserver}/manticore.init" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
-		PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ COMPONENT server RENAME manticore )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT searchd RENAME manticore )
 install ( FILES ${dirtools}/manticore-indexer_global DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT tools )
 
@@ -190,7 +189,7 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
 install ( FILES doc/indexer.1 doc/indextool.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
 install ( FILES "${MANTICORE_BINARY_DIR}/README.Debian" DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
-install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES LICENSE INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore

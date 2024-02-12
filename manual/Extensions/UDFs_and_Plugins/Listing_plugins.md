@@ -57,7 +57,7 @@ SHOW BUDDY PLUGINS;
 +-------------------------------------------------+------------------+----------+----------+
 | manticoresoftware/buddy-plugin-empty-string     | empty-string     | dev-main | core     | Handles empty queries, which can occur when trimming comments or dealing with specific SQL protocol instructions in comments that are not supported |
 | manticoresoftware/buddy-plugin-backup           | backup           | dev-main | core     | BACKUP sql statement                                 |
-| manticoresoftware/buddy-plugin-emulate-elastic  | emulate-elastic  | dev-main | core     | Attempts to emulate Elastic queries and generate responses as if they were made by ES |
+| manticoresoftware/buddy-plugin-emulate-elastic  | emulate-elastic  | dev-main | core     | Emulates some Elastic queries and generates responses as if they were made by ES |
 | manticoresoftware/buddy-plugin-insert           | insert           | dev-main | core     | Auto schema support. When an insert operation is performed and the table does not exist, it creates it with data types auto-detection |
 | manticoresoftware/buddy-plugin-lock-tables      | lock-tables      | dev-main | core     | LOCK functionality based on the FREEZE command                   |
 | manticoresoftware/buddy-plugin-unlock-tables    | unlock-tables    | dev-main | core     | UNLOCK functionality which uses the UNFREEZE command                   |

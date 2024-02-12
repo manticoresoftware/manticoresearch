@@ -25,10 +25,4 @@ COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
 cd /.clt; echo $?
 ––– output –––
 0
-––– input –––
-wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
-––– output –––
-––– input –––
-dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb > /dev/null 2>&1; echo $?
-––– output –––
-0
+

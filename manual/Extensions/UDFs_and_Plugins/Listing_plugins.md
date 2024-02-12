@@ -55,17 +55,17 @@ SHOW BUDDY PLUGINS;
 +-------------------------------------------------+------------------+----------+----------+
 | Package                                         | Plugin           | Version  | Type     | Info                                                                                      |
 +-------------------------------------------------+------------------+----------+----------+
-| manticoresoftware/buddy-plugin-empty-string     | empty-string     | dev-main | core     | This plugin handles empty queries, which can occur when trimming comments or dealing with specific SQL protocol instructions in comments that are not supported. |
-| manticoresoftware/buddy-plugin-backup           | backup           | dev-main | core     | Handles backup logic using the Manticore backup library.                                 |
-| manticoresoftware/buddy-plugin-emulate-elastic  | emulate-elastic  | dev-main | core     | This plugin attempts to emulate Elastic queries and generate responses as if they were made by Elasticsearch. |
-| manticoresoftware/buddy-plugin-insert           | insert           | dev-main | core     | Introduces auto schema support. When an insert operation is performed and the table does not exist, it creates it. |
-| manticoresoftware/buddy-plugin-lock-tables      | lock-tables      | dev-main | core     | Implementation of lock tables that uses an internal freeze table query.                   |
-| manticoresoftware/buddy-plugin-unlock-tables    | unlock-tables    | dev-main | core     | Implementation of unlock tables that uses an internal unfreeze command.                   |
-| manticoresoftware/buddy-plugin-select           | select           | dev-main | core     | Handles various selects needed for mysqldump and various software support, aiming to work similarly to MySQL. |
-| manticoresoftware/buddy-plugin-show             | show             | dev-main | core     | Handles various "show" queries, for example, introducing `show queries`, `show fields`, `show full tables`, etc. |
-| manticoresoftware/buddy-plugin-cli-table        | cli-table        | dev-main | core     | Used to support rendering outputs as a table in CLI, similar to MySQL responses.          |
-| manticoresoftware/buddy-plugin-plugin           | plugin           | dev-main | core     | Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins`. |
-| manticoresoftware/buddy-plugin-test             | test             | dev-main | core     | A test plugin, used exclusively for tests.                                                 |
+| manticoresoftware/buddy-plugin-empty-string     | empty-string     | dev-main | core     | Handles empty queries, which can occur when trimming comments or dealing with specific SQL protocol instructions in comments that are not supported |
+| manticoresoftware/buddy-plugin-backup           | backup           | dev-main | core     | BACKUP sql statement                                 |
+| manticoresoftware/buddy-plugin-emulate-elastic  | emulate-elastic  | dev-main | core     | Attempts to emulate Elastic queries and generate responses as if they were made by ES |
+| manticoresoftware/buddy-plugin-insert           | insert           | dev-main | core     | Auto schema support. When an insert operation is performed and the table does not exist, it creates it with data types auto-detection |
+| manticoresoftware/buddy-plugin-lock-tables      | lock-tables      | dev-main | core     | Lock table functionality based on the FREEZE command                   |
+| manticoresoftware/buddy-plugin-unlock-tables    | unlock-tables    | dev-main | core     | Unlock table functionality which uses the UNFREEZE command                   |
+| manticoresoftware/buddy-plugin-select           | select           | dev-main | core     | Various SELECTs handlers needed for mysqldump and other software support, mostly aiming to work similarly to MySQL |
+| manticoresoftware/buddy-plugin-show             | show             | dev-main | core     | Various "show" queries handlers, for example, `show queries`, `show fields`, `show full tables`, etc |
+| manticoresoftware/buddy-plugin-cli-table        | cli-table        | dev-main | core     | /cli endpoint based on /cli_json - outputs query result as a table |
+| manticoresoftware/buddy-plugin-plugin           | plugin           | dev-main | core     | Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins` |
+| manticoresoftware/buddy-plugin-test             | test             | dev-main | core     | Test plugin, used exclusively for tests.                                                 |
 | manticoresoftware/buddy-plugin-show-hostname    | show-hostname    | dev-main | external|                                                                                            |
 +-------------------------------------------------+------------------+----------+----------+
 14 rows in set (0.006 sec)

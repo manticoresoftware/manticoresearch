@@ -484,7 +484,7 @@ jobs:
           image: test-kit:img
           test_prefix: test/clt-tests/expected-errors/
 
-  clt_data-manipulation:
+  clt_data_manipulation:
     name: CLT data manipulation test
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04

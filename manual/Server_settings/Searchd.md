@@ -189,6 +189,45 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 <!-- end -->    
 
 
+### buddy_path
+
+<!-- example conf buddy_path -->
+This setting determines the path to the Manticore Buddy binary. It is optional, with a default value being the build-time configured path, which varies across different operating systems. Typically, you don't need to modify this setting. However, it may be useful if you wish to run Manticore Buddy in debug mode, make changes to Manticore Buddy, or implement a new plugin. In the latter case, you can `git clone` Buddy from https://github.com/manticoresoftware/manticoresearch-buddy, add a new plugin to the directory `./plugins/`, and run `composer install --prefer-source` for easier development after you change the directory to the Buddy source.
+
+To ensure you can run `composer`, your machine must have PHP 8.2 or higher installed with the following extensions:
+
+```
+--enable-dom
+--with-libxml
+--enable-tokenizer
+--enable-xml
+--enable-xmlwriter
+--enable-xmlreader
+--enable-simplexml
+--enable-phar
+--enable-bcmath
+--with-gmp
+--enable-debug
+--with-mysqli
+--enable-mysqlnd
+```
+
+You can also opt for the special `manticore-executor-dev` version for Linux amd64 available in the releases, for example: https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
+
+If you go this route, remember to link the dev version of the manticore executor to `/usr/bin/php`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in Linux, but run it in debug mode
+buddy_path = manticore-executor -n /opt/homebrew/share/manticore/modules/manticore-buddy/bin/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in MacOS arm64, but run it in debug mode
+buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debug # use Manticore Buddy from a non-default location
+```
+<!-- end -->    
+
 ### client_timeout
 
 <!-- example conf client_timeout -->
@@ -700,6 +739,9 @@ Defines how many requests are processed on each iteration of the network loop. T
 <!-- example conf network_timeout -->
 Network client request read/write timeout, in seconds (or  [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, the default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
 
+Notice also [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). This param switches behaviour of `network_timeout` between whole `query` or `result`, and individual packets. Usually query/result fits in one-two packets, but sometimes when
+you need a large amount of data, this param will help you to keep work alive.
+
 <!-- request Example -->
 
 ```ini
@@ -1051,6 +1093,38 @@ When querying, some reads know in advance exactly how much data is there to be r
 ```ini
 read_unhinted = 32K
 ```
+<!-- end -->
+
+### reset_network_timeout_on_packet
+
+<!-- example conf reset_network_timeout_on_packet -->
+Refines behaviour of networking timeouts (like `network_timeout`, `read_timeout`, and `agent_query_timeout`).
+
+When set to 0 - timeouts limit max time for sending whole request/query.
+When set to 1 (default) timeouts limit max time between network activities.
+
+With replication, a node might need to send large (say, 100Gig) file to another node.
+Say, network provides ability to send 1Gig/s - with serie of packets 4-5Mb each.
+So, to transfer whole file you need 100s. Default timeout of 5s will allow you to transfer only 5Gig, then 
+connection will be dropped. You can increase timeout, but that is still not scalable (because next file may 
+be 150Gig - and you're failed again). But having default `reset_network_timeout_on_packet` set to 1, timeout will be
+applied not to whole transfer, but to individual packets. As long, as transfer in progress (and something really came
+over network during timeout, it is kept alive). If transfer stuck, so that timeout happened between packets -
+it will be dropped.
+
+Notice, that if you set up distributed table, each node - master and agent(s) should be tuned. On master side
+`agent_query_timeout` is affected, on agents - `network_timeout`.
+
+<!-- intro -->
+
+##### Example:
+
+<!-- request Example -->
+
+```ini
+reset_network_timeout_on_packet = 0
+```
+
 <!-- end -->
 
 

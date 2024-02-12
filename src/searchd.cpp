@@ -152,6 +152,7 @@ static CSphBitvec		g_tLogStatements;
 
 int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
+bool					g_bTimeoutEachPacket = true;
 int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
 static int				g_iMaxConnection	= 0; // unlimited
@@ -9573,6 +9574,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 	// count commands
 	StatCountCommand ( eCommand );
 	myinfo::SetCommand ( g_dApiCommands[eCommand] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	sphLogDebugv ( "conn %s(%d): got command %d, handling", tSess.szClientName(), tSess.GetConnID(), eCommand );
 	switch ( eCommand )
@@ -10139,11 +10141,7 @@ static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tRes
 	bool bQuery = tRes.m_bGetQuery;
 
 	// result set header packet. We will attach EOF manually at the end.
-	int iColumns = bDumpDocs ? 2 : 1;
-	if ( bQuery )
-		iColumns += 3;
-	tOut.HeadBegin ( iColumns );
-
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG );
 	if ( bDumpDocs )
 		tOut.HeadColumn ( "documents" );
@@ -11581,9 +11579,9 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	}
 
 	// result set header packet
-	tOut.HeadBegin(1);
+	tOut.HeadBegin ();
 	tOut.HeadColumn("snippet");
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// data
 	for ( auto & i : dQueries )
@@ -11766,7 +11764,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 
 
 	// result set header packet
-	tOut.HeadBegin ( tSettings.m_bStats ? 5 : 3 );
+	tOut.HeadBegin();
 	tOut.HeadColumn("qpos");
 	tOut.HeadColumn("tokenized");
 	tOut.HeadColumn("normalized");
@@ -12001,7 +11999,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		tRes.m_dMatched.Sort ( tCmp );
 
 		// result set header packet
-		tOut.HeadBegin ( 2 );
+		tOut.HeadBegin ();
 		tOut.HeadColumn ( "name" );
 		tOut.HeadColumn ( "value" );
 		tOut.HeadEnd ();
@@ -12036,7 +12034,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	} else
 	{
 		// result set header packet
-		tOut.HeadBegin ( tArgs.m_bResultStats ? 3 : 1 );
+		tOut.HeadBegin ();
 		tOut.HeadColumn ( "suggest" );
 		if ( tArgs.m_bResultStats )
 		{
@@ -12587,7 +12585,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 // MySQL Workbench (and maybe other clients) crashes without it
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
-	tOut.HeadBegin ( 1 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Databases" );
 	tOut.HeadEnd();
 	tOut.PutString ( g_sDbName );
@@ -12601,7 +12599,7 @@ void HandleMysqlShowPlugins ( RowBuffer_i & tOut, SqlStmt_t & )
 	CSphVector<PluginInfo_t> dPlugins;
 	sphPluginList ( dPlugins );
 
-	tOut.HeadBegin ( 5 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Type" );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Library" );
@@ -12666,13 +12664,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	int iColCount = 10;
-	if ( bAll )
-		iColCount += 1;
-	if ( g_bCpuStats )
-		iColCount += 1;
-
-	tOut.HeadBegin ( iColCount ); // 15 with chain
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "TID", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
@@ -12771,7 +12763,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		iCols = pStmt->m_iThreadsCols;
 	}
 
-	tOut.HeadBegin ( bAll ? 6 : 5 ); // 6 with chain
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
@@ -12779,6 +12771,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 	tOut.HeadColumn ( "Killed" );
 	if ( bAll )
 		tOut.HeadColumn ( "Chain" );
+	tOut.HeadColumn ( "Last cmd time" );
 	tOut.HeadColumn ( "Last cmd" );
 	if ( !tOut.HeadEnd() )
 		return;
@@ -12808,6 +12801,10 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		tOut.PutNumAsString ( dThd.m_bKilled ? 1 : 0);
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
+		if ( dThd.m_tmLastJobDoneTimeUS==-1 ) // not yet finished
+			tOut.PutTimestampAsString ( dThd.m_tmLastJobStartTimeUS );
+		else
+			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS );
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
 		if ( iCols >= 0 && iCols < sInfo.second )
 			sInfo.second = iCols;
@@ -13440,20 +13437,14 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	assert ( bReturnZeroCount || tRes.m_tSchema.GetAttrsCount() );
 	sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
+	dRows.HeadBegin ();
+	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
 	{
-		int iAttrsToSend = tAttrsToSend.BitCount();
-		if ( bAddQueryColumn )
-			++iAttrsToSend;
+		if ( !tAttrsToSend.BitGet(i) )
+			continue;
 
-		dRows.HeadBegin ( iAttrsToSend );
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
-		{
-			if ( !tAttrsToSend.BitGet(i) )
-				continue;
-
-			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
-		}
+		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+		dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
 	}
 
 	if ( bAddQueryColumn )
@@ -13620,7 +13611,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & d
 	}
 
 	// result set header packet
-	dRows.HeadBegin(3);
+	dRows.HeadBegin ();
 	dRows.HeadColumn ( "Level" );
 	dRows.HeadColumn ( "Code", MYSQL_COL_DECIMAL );
 	dRows.HeadColumn ( "Message" );
@@ -13966,6 +13957,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
 	myinfo::SetCommand ( g_dSqlStmts[STMT_SELECT] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
@@ -14029,6 +14021,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 		myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
 		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
@@ -14384,6 +14377,16 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 		return true;
 	}
 
+	if ( sName == "reset_network_timeout_on_packet" )
+	{
+		if ( tSess.GetVip() )
+		{
+			g_bTimeoutEachPacket = !!iSetValue;
+		} else
+			sError = "Only VIP connections can change global reset_network_timeout_on_packet value";
+		return true;
+	}
+
 	if ( sName == "throttling_period" )
 	{
 		if ( tSess.GetVip() )
@@ -14693,9 +14696,9 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 {
 	int iTag = CommandFlush();
-	tOut.HeadBegin(1);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "tag", MYSQL_COL_LONG );
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// data packet, var value
 	tOut.PutNumAsString ( iTag );
@@ -14895,7 +14898,7 @@ void HandleMysqlclose ( RowBuffer_i & tOut )
 // same for select ... from index.files
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 3 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
 	tOut.HeadColumn ( "size", MYSQL_COL_LONGLONG );
@@ -15441,7 +15444,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	}
 
 	// fill header
-	tOut.HeadBegin ( dColumns.GetLength() );
+	tOut.HeadBegin ();
 	for ( const auto& dColumn : dColumns )
 		tOut.HeadColumn ( dColumn.m_szAlias, dColumn.m_eTypeMysql );
 
@@ -15505,7 +15508,7 @@ void HandleMysqlShowCollations ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
-	tOut.HeadBegin(6);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Collation" );
 	tOut.HeadColumn ( "Charset" );
 	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG );
@@ -15531,7 +15534,7 @@ void HandleMysqlShowCharacterSet ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
-	tOut.HeadBegin(4);
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Charset" );
 	tOut.HeadColumn ( "Description" );
 	tOut.HeadColumn ( "Default collation" );
@@ -15965,7 +15968,7 @@ void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	tOut.HeadBegin ( 13 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "chunk_id", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "base_name" );
 	tOut.HeadColumn ( "indexed_documents", MYSQL_COL_LONG );
@@ -16064,7 +16067,7 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
 	#undef SPH_QUERY_STATES
 
-	tOut.HeadBegin ( 4 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Status" );
 	tOut.HeadColumn ( "Duration" );
 	tOut.HeadColumn ( "Switches" );
@@ -16582,7 +16585,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 // STMT_SHOW_PLAN: SHOW PLAN
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot )
 {
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
 	tOut.HeadEnd ( bMoreResultsFollow );
@@ -16746,7 +16749,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot
 	StringBuilder_c sRes;
 	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), bDot );
 
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
 	tOut.HeadEnd ();
@@ -16839,7 +16842,7 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 		++iWarnings;
 	}
 
-	tOut.HeadBegin ( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
 	tOut.HeadEnd();
@@ -16999,6 +17002,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	LogStmtGuard_t tLogGuard ( sQuery, eStmt, dStmt.GetLength()>1 );
 
@@ -19856,6 +19860,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	// network_timeout overrides read_timeout
 	g_iReadTimeoutS = hSearchd.GetSTimeS ( "network_timeout", g_iReadTimeoutS );
 	g_iWriteTimeoutS = g_iReadTimeoutS;
+	g_bTimeoutEachPacket = hSearchd.GetBool( "reset_network_timeout_on_packet" );
 
 	g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout", 900);
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
@@ -20235,10 +20240,10 @@ static void DumpCommonSection ( const CSphConfig & hConf, RowBuffer_i & tOut )
 
 void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 {
-	tOut.HeadBegin( 2 );
+	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Setting_name" );
 	tOut.HeadColumn ( "Value" );
-	tOut.HeadEnd();
+	tOut.HeadEnd ();
 
 	// configuration file path
 	tOut.PutString ( "configuration_file" );

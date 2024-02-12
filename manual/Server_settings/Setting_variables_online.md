@@ -69,6 +69,7 @@ Known global server variables are:
 * `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding).
 * `SECONDARY_INDEXES = {1|0}` Turns on/off [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) for search queries.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).
+* `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` changes [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) param. Only clients with VIP connections can change this variable.
 
 Examples:
 

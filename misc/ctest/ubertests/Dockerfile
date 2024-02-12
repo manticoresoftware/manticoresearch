@@ -76,8 +76,13 @@ RUN wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Dow
     && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
     && mysqladmin shutdown
 
-# Note: for mysql 8 change url above to https://dev.mysql.com/get/Downloads/Connector-ODBC/8.0/mysql-connector-odbc-8.0.27-linux-glibc2.12-x86-64bit.tar.gz,
-# and 'odbc_driver'=>'/mysql-connector-odbc-8.0.21-linux-glibc2.12-x86-64bit/lib/libmyodbc8w.so;CHARSET=utf8' line in file 'sphinx'
+# Note: for mysql 8 on x86-64 change url above to https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit.tar.gz,
+# and 'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit/lib/libmyodbc8w.so;CHARSET=utf8' line in file 'sphinx'
+
+# Note: for mysql 8 on ARM64 change url above to https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-aarch64.tar.gz,
+# and 'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-aarch64/lib/libmyodbc8w.so;CHARSET=utf8' line in file 'sphinx'
+
+# Note for both: if test 228 fails with broken encoding - try to remove ';CHARSET=utf8' ending in the odbc_driver line above. M.b. better is to probe once on local instance before pushing to dockerhub
 
 # AOT
 RUN mkdir -p /work/aot && cd /work/aot && \

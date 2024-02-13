@@ -1,0 +1,4 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' ); insert into test values ( 1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406) ); flush ramchunk test; select * from test.@files;"
+––– output –––

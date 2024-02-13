@@ -1,4 +1,25 @@
-––– block: ../base/start-searchd –––
+/Users/pavelshilin/Desktop/WORK/clt/clt test -d -t ./test/clt-tests/core/query_testing.rec ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+Replaying data from the file: ./test/clt-tests/core/query_testing.rec
+The replay result will be stored to the file: ./test/clt-tests/core/query_testing.rep
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+––– input –––
+searchd
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+––– input –––
+timeout 10 tail -n 100 -f /var/log/manticore/searchd.log | grep -qm1 '\[BUDDY\] started' && echo 'Buddy started!' || echo 'Timeout or failed!'
+––– output –––
+Buddy started!
 ––– input –––
 ./test/clt-tests/mysqldump/scripts/generate-records.sh 1000000 | mysql -h0 -P9306
 ––– output –––
@@ -146,26 +167,26 @@ mysql -h0 -P9306 -e "SELECT s, COUNT(*) FROM t GROUP BY s;"
 +------+----------+
 | s    | count(*) |
 +------+----------+
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |       %{NUMBER} |
+| njK  |       33 |
+| lrh  |       21 |
+| lIG  |       16 |
+| SEv  |       28 |
+| Klt  |       38 |
+| ShK  |       12 |
+| Yhb  |       18 |
+| EYO  |       23 |
+| Idx  |       10 |
+| GAC  |       29 |
+| YvK  |        5 |
+| UzU  |        7 |
+| IAb  |        9 |
+| rYK  |        7 |
+| Sht  |       27 |
+| bME  |       18 |
+| GGA  |       15 |
+| MUv  |       28 |
+| vKS  |       38 |
+| AfU  |       22 |
 +------+----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT a, COUNT(*) FROM t WHERE a > 100000 GROUP BY a HAVING COUNT(*) > 10;"
@@ -200,29 +221,31 @@ mysql -h0 -P9306 -e "SELECT s, SUM(b) as total_b FROM t GROUP BY s HAVING total_
 ––– input –––
 mysql -h0 -P9306 -e "SELECT s, COUNT(*) FROM t GROUP BY s HAVING COUNT(*) < 10;"
 ––– output –––
+-
 +------+----------+
+-
 | s    | count(*) |
 +------+----------+
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
-| #!/[a-zA-Z]+/!#  |        %{NUMBER} |
+| IAb  |        9 |
+| rYK  |        7 |
+| YvK  |        5 |
+| UzU  |        7 |
+| xxx  |        8 |
+| bYb  |        7 |
+| jCK  |        4 |
+| tzt  |        2 |
+| EYU  |        2 |
+| zlt  |        5 |
+| Inh  |        4 |
+| CbY  |        2 |
+| rbn  |        2 |
+| SMI  |        5 |
+| xjj  |        6 |
+| tvv  |        6 |
+| EEb  |        4 |
+| xlC  |        8 |
+| nIt  |        6 |
+| Whj  |        4 |
 +------+----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT s, AVG(b) as avg_b FROM t GROUP BY s HAVING avg_b > 1000000;"
@@ -363,6 +386,18 @@ mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE a > 50000 AND b < 1000000 O
 | 785157 | aaaaaaaaa | 147749 | 992617.000000 |
 +--------+-----------+--------+---------------+
 ––– input –––
+mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE a BETWEEN 100000 AND 200000 ORDER BY RAND() LIMIT 5;"
+––– output –––
++--------+---------+--------+-------------------+
+| id     | f       | a      | b                 |
++--------+---------+--------+-------------------+
+| 820967 | a       | 125205 | 1322666496.000000 |
+| 854628 | a       | 168405 | 1456088448.000000 |
+| 758129 | aaaaaaa | 188258 | 1976528128.000000 |
+| 119351 | aaaa    | 196287 | 1015082368.000000 |
+| 922956 | a       | 140140 | 1014706368.000000 |
++--------+---------+--------+-------------------+
+––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE b > 1000000000 AND a < 200000;"
 ––– output –––
 +--------+-----------+--------+-------------------+----------------------------------------------+----------------------------------+------+
@@ -482,6 +517,18 @@ mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE a > 50000 AND b < 1000000 O
 | 790600 | aaaa      |  77389 | 994697.000000 |
 | 785157 | aaaaaaaaa | 147749 | 992617.000000 |
 +--------+-----------+--------+---------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE a BETWEEN 100000 AND 200000 ORDER BY RAND() LIMIT 5;"
+––– output –––
++--------+----------+--------+-------------------+
+| id     | f        | a      | b                 |
++--------+----------+--------+-------------------+
+| 953679 | aaaaaaa  | 117115 |  802860224.000000 |
+| 439131 | aaaaaa   | 123432 | 1989658880.000000 |
+| 919692 | aaaaaa   | 116445 |  616479680.000000 |
+| 500720 | aaaaaaa  | 110904 | 1781780224.000000 |
+| 259003 | aaaaaaaa | 110660 |  903311680.000000 |
++--------+----------+--------+-------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE b > 1000000000 AND a < 200000;"
 ––– output –––
@@ -1014,6 +1061,7 @@ mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE (a > 100000 AND b < 50000) 
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE (a > 100000 OR b < 50000) AND (s = 'SEv' OR s = 'Klt' OR s = 'MUv');"
 ––– output –––
+-
 +--------+-----------+--------+-------------------+
 | id     | f         | a      | b                 |
 +--------+-----------+--------+-------------------+
@@ -1171,6 +1219,9 @@ mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE id NOT IN (1000, 2000, 3000
 | 430010 | aa        |   6449 | 1561141120.000000 |
 |  10010 | a         |  18830 | 1197473920.000000 |
 +--------+-----------+--------+-------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE id = ANY (1000, 2000, 3000);"
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id, f, a, b FROM t WHERE id BETWEEN 1000 AND 2000;"
 ––– output –––

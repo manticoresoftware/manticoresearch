@@ -6,6 +6,8 @@ Highlighting enables you to obtain highlighted text fragments (referred to as sn
 
 The SQL `HIGHLIGHT()` function, the `"highlight"` property in JSON queries via HTTP, and the `highlight()` function in the PHP client all utilize the built-in document storage to retrieve the original field contents (enabled by default).
 
+test
+
 <!-- intro -->
 ##### SQL:
 

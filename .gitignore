@@ -78,3 +78,4 @@
 /test/clt-tests/**/*.rep
 /clt
 /test/clt-tests/**/*.deb
+/test/clt-tests/*repo.noarch.deb.*

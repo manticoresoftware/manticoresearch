@@ -250,14 +250,14 @@ mysql> DESC rt;
 An optional LIKE clause is supported. Refer to
 [SHOW META](Node_info_and_management/SHOW_META.md) for its syntax details.
 
-### SELECT FROM name.table
+### SELECT FROM name.@table
 
 <!-- example name_table -->
-You can also view the table schema by executing the query `select * from <table_name>.table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
+You can also view the table schema by executing the query `select * from <table_name>.@table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
 
 <!-- request SQL -->
 ```sql
-select * from tbl.table where type='text';
+select * from tbl.@table where type='text';
 ```
 
 <!-- response SQL -->
@@ -274,14 +274,14 @@ select * from tbl.table where type='text';
 
 <!-- example name_table2 -->
 
-You can also perform many other actions on `<your_table_name>.table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
+You can also perform many other actions on `<your_table_name>.@table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
 
 <!-- request SQL -->
 
 ```sql
-select field from tbl.table;
-select field, properties from tbl.table where type in ('text', 'uint');
-select * from tbl.table where properties any ('stored');
+select field from tbl.@table;
+select field, properties from tbl.@table where type in ('text', 'uint');
+select * from tbl.@table where properties any ('stored');
 ```
 
 <!-- end -->

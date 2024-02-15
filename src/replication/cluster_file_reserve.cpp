@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -321,5 +321,5 @@ bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents )
 		return false;
 
 	ClusterFileReserve_c tReq;
-	return PerformRemoteTasksWrap ( dAgents, tReq, tReq );
+	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

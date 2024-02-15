@@ -119,6 +119,9 @@ SELECT *, price AS aprice FROM facetdemo LIMIT 10 FACET price LIMIT 10 FACET bra
 +----------+----------+
 5 rows in set (0.00 sec)
 ```
+<!-- intro -->
+##### JSON:
+
 <!-- request JSON -->
 
 ```json
@@ -231,6 +234,10 @@ POST /search -d '
   }
 }
 ```
+
+<!-- intro -->
+##### PHP:
+
 <!-- request PHP -->
 ```php
 $index->setName('facetdemo');
@@ -308,6 +315,10 @@ Array
         )
 )
 ```
+
+<!-- intro -->
+##### Python:
+
 <!-- request Python -->
 ```python
 res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}})
@@ -381,6 +392,10 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"a
  'took': 4}
 
 ```
+
+<!-- intro -->
+##### Javascript:
+
 <!-- request Javascript -->
 ```javascript
 res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}});
@@ -390,6 +405,10 @@ res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"lim
 {"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
 
 ```
+
+<!-- intro -->
+##### Java:
+
 <!-- request Java -->
 ```java
 aggs = new HashMap<String,Object>(){{
@@ -434,6 +453,9 @@ class SearchResponse {
 }
 ```
 
+<!-- intro -->
+##### C#:
+
 <!-- request C# -->
 ```clike
 var agg1 = new Aggregation("group_property", "price");
@@ -460,8 +482,6 @@ class SearchResponse {
 }
 ```
 <!-- end -->
-
-
 
 <!-- example Another_attribute -->
 
@@ -1021,6 +1041,108 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC;
 | Brand Nine  |      944 |
 +-------------+----------+
 10 rows in set (0.01 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+   "index":"table_name",
+   "aggs":{
+      "group_property":{
+         "terms":{
+            "field":"a"
+         },
+         "sort":[
+            {
+               "count(*)":{
+                  "order":"desc"
+               }
+            }
+         ]
+      }
+   }
+}'
+
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 6,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": "1515697460415037554",
+        "_score": 1,
+        "_source": {
+          "a": 1
+        }
+      },
+      {
+        "_id": "1515697460415037555",
+        "_score": 1,
+        "_source": {
+          "a": 2
+        }
+      },
+      {
+        "_id": "1515697460415037556",
+        "_score": 1,
+        "_source": {
+          "a": 2
+        }
+      },
+      {
+        "_id": "1515697460415037557",
+        "_score": 1,
+        "_source": {
+          "a": 3
+        }
+      },
+      {
+        "_id": "1515697460415037558",
+        "_score": 1,
+        "_source": {
+          "a": 3
+        }
+      },
+      {
+        "_id": "1515697460415037559",
+        "_score": 1,
+        "_source": {
+          "a": 3
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "group_property": {
+      "buckets": [
+        {
+          "key": 3,
+          "doc_count": 3
+        },
+        {
+          "key": 2,
+          "doc_count": 2
+        },
+        {
+          "key": 1,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
 ```
 
 <!-- end -->

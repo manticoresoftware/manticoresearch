@@ -23,7 +23,7 @@ CREATE TABLE products(title text, price float) morphology='stem_en';
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-<!-- intro-->
+<!-- intro -->
 ##### Creating a real-time table via JSON over HTTP:
 <!-- request JSON -->
 

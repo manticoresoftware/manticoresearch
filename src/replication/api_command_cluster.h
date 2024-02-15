@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -20,9 +20,6 @@
 #include "send_files.h"
 
 #include <memory>
-
-// FIXME!!! take these timeout from config
-const int g_iRemoteTimeoutMs = 120 * 1000; // 2 minutes in msec
 
 // API commands that not get replicated via Galera, cluster management
 enum class E_CLUSTER : WORD
@@ -187,7 +184,19 @@ public:
 	}
 };
 
-bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply );
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry );
 
 // handle all API incoming.
 void HandleAPICommandCluster ( ISphOutputBuffer& tOut, WORD uCommandVer, InputBuffer_c& tBuf, const char* szClient );
+
+void ReplicationSetTimeouts ( int iConnectTimeoutMs, int iQueryTimeoutMs, int iRetryCount, int iRetryDelayMs );
+
+int64_t ReplicationTimeoutQuery ( int64_t iTimeout = 0 ); // 2 minutes in msec
+int ReplicationTimeoutConnect ();
+int ReplicationRetryCount ();
+int ReplicationRetryDelay ();
+int ReplicationTimeoutAnyNode ();
+int ReplicationFileRetryCount ();
+int ReplicationFileRetryDelay ();
+void ReportClusterError ( const CSphString& sCluster, const CSphString& sError, const char* szClient, E_CLUSTER eCmd );
+

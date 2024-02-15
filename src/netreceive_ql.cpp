@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -385,9 +385,7 @@ class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 	ClientSession_c* m_pSession = nullptr;
 	size_t m_iTotalSent = 0;
 	bool m_bWasFlushed = false;
-#ifndef NDEBUG
-	size_t m_iColumns = 0; // used for head/data columns num sanitize check
-#endif
+	CSphVector<std::pair<CSphString, MysqlColumnType_e>> m_dHead;
 
 	// how many bytes this string will occupy in proto mysql
 	static int SqlStrlen ( const char * sStr )
@@ -641,28 +639,31 @@ public:
 	}
 
 	// Header of the table with defined num of columns
-	inline void HeadBegin ( int iColumns ) override
+	inline void HeadBegin ( ) override
 	{
-		SQLPacketHeader_c dHead { m_tOut, m_uPacketID++ };
-		SendSqlInt ( iColumns );
-#ifndef NDEBUG
-		m_iColumns = iColumns;
-#endif
+		m_dHead.Reset();
 	}
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
 	{
+		{
+			SQLPacketHeader_c dHead { m_tOut, m_uPacketID++ };
+			SendSqlInt ( m_dHead.GetLength() );
+		}
+		for ( const auto& dCol : m_dHead )
+			SendSqlFieldPacket ( dCol.first.cstr(), dCol.second );
+
 		if ( !OmitEof() )
-		Eof ( bMoreResults, iWarns );
+			Eof ( bMoreResults, iWarns );
 		Resize(0);
+		m_dHead.Reset();
 		return true;
 	}
 
 	// add the next column. The EOF after the tull set will be fired automatically
 	void HeadColumn ( const char * sName, MysqlColumnType_e uType ) override
 	{
-		assert ( m_iColumns-->0 && "you try to send more mysql columns than declared in InitHead" );
-		SendSqlFieldPacket ( sName, uType );
+		m_dHead.Add ( { sName, uType } );
 	}
 
 	void Add ( BYTE uVal ) override
@@ -690,9 +691,6 @@ public:
 		m_pSession = session::GetClientSession();
 		m_iTotalSent = 0;
 		m_bWasFlushed = false;
-#ifndef NDEBUG
-		m_iColumns = 0; // used for head/data columns num sanitize check
-#endif
 
 		// rewind stream and packetID
 		assert ( !m_bError );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -16,8 +16,6 @@
 // Update nodes list at cluster from actual nodes list
 enum class NODES_E : bool { VIEW, BOTH };
 bool ClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, StrVec_t* pNodes = nullptr );
-
-void ReportClusterError ( const CSphString& sCluster, const CSphString& sError, const char* szClient, int iCmd );
 
 // command at remote node for CLUSTER_DELETE to delete cluster
 bool ClusterDelete ( const CSphString& sCluster );

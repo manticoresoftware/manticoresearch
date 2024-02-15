@@ -63,7 +63,7 @@ manticore-backup --config=path/to/manticore.conf --backup-dir=backupdir
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: all tables
@@ -102,7 +102,7 @@ manticore-backup --backup-dir=/mnt/backup/ --tables=products
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: products
@@ -206,7 +206,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -237,7 +237,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore=backup-20221007104044
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -263,9 +263,12 @@ Manticore config
 <!-- example mysqldump_backup -->
 To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
 
+Note, `mysqldump` is supported only in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
+
 <!-- request SQL -->
 ```bash
 mysqldump -h0 -P9306 manticore > manticore_backup.sql
+mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 ```
 
 Executing this command will produce a backup file named `manticore_backup.sql`. This file will hold all data and table schemas.
@@ -280,6 +283,7 @@ If you're looking to restore a Manticore Search database from a backup file, the
 <!-- request SQL -->
 ```bash
 mysql -h0 -P9306 < manticore_backup.sql
+mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
 This command enables you to restore everything from the `manticore_backup.sql` file.
@@ -297,8 +301,7 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 
 ### Notes
 
-We recommend specifying the `manticore` database explicitly when you plan to back up all databases, rather than using the `--all-databases` option. 
+We recommend specifying the `manticore` database explicitly when you plan to back up all databases, rather than using the `--all-databases` option.
 
-Keep in mind that `mysqldump` currently lacks support for backing up distributed indexes.
-
+Keep in mind that `mysqldump` does not support backing up distributed tables. Additionally, it cannot back up tables that contain non-stored fields (consider using `manticore-backup` or the `BACKUP` SQL command).
 <!-- proofread -->

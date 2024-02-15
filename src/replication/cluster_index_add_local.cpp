@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const ClusterIndexAddLocalR
 {
 	tOut << (const ClusterRequest_t&)tReq;
 	tOut << "index:" << tReq.m_sIndex;
-	tOut << "eindex:" << (BYTE)tReq.m_eIndex;
+	tOut << "type:" << (BYTE)tReq.m_eIndex;
 	tOut << "SendFilesSuccess:" << tReq.m_bSendFilesSuccess;
 	return tOut;
 }

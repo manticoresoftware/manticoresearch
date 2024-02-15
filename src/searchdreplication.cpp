@@ -1684,17 +1684,24 @@ bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError ) 
 {
 	TlsMsg::Err();
 	if ( !g_bReplicationStarted )
-		return TlsMsg::Err ( "cluster '%s' is not ready, replication wasn't started", sCluster.cstr() );
+	{
+		sError.SetSprintf ( "cluster '%s' is not ready, replication wasn't started", sCluster.cstr() );
+		return false;
+	}
 
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster )
+	{
+		TlsMsg::MoveError ( sError );
 		return false;
+	}
 
 	auto dNodes = pCluster->FilterViewNodesByProto();
 	SendClusterDeleteToNodes ( dNodes, sCluster );
 	bool bOk = ClusterDelete ( sCluster );
 	bOk &= SaveConfigInt ( sError );
 
+	TlsMsg::MoveError ( sError );
 	return bOk;
 }
 

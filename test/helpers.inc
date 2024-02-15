@@ -4524,7 +4524,7 @@ function CheckConfig ( $config, $path )
 
 	if ( $config->Requires("tzdata") && !$g_tzdata_loaded)
 	{
-		printf ( "SKIPPING %s, %s - manticore-tzdata library not loaded\n", $path, $config->Name () );
+		printf ( "SKIPPING %s, %s - timezone data is not available\n", $path, $config->Name () );
 		return false;
 	}
 

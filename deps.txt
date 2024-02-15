@@ -1,8 +1,9 @@
-backup 1.3.3 24011510 32d8e8b
-buddy 2.1.1 24011913 5910a9f
+backup 1.3.5 24020911 2ffbd02
+buddy 2.1.7 24021308 f975242
 mcl 2.2.5 240115 214ce90
 executor 1.0.13 23122917 fa7313e
 executor-win 0.3.5 221125 a40554c
+tzdata 0.9.9 230720 daeb8a8
 ---
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.

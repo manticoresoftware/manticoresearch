@@ -58,7 +58,7 @@ jobs:
       - name: Extract Windows bundle from Windows sysroot
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/sysroots/roots_nov22/sysroot_windows_x64.tar.xz
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_apr12/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
           mv diskc/winbundle bundle
       - name: Extract Boost to put it to the cache
@@ -75,6 +75,7 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
+      artifact_name: debug_build
 
   test_linux_debug:
     name: Linux debug mode tests
@@ -122,6 +123,7 @@ jobs:
       CTEST_CONFIGURATION_TYPE: "Debug"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      build_artifact_name: debug_build
       artifact_name: debug_test_${{ matrix.name }}
       xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
       timeout: 10
@@ -223,6 +225,8 @@ jobs:
       (github.event_name == 'push')
       || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
+    with:
+      artifact_name: release_build
 
   test_linux_release:
     name: Linux release mode tests
@@ -270,6 +274,7 @@ jobs:
       CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      build_artifact_name: release_build
       artifact_name: release_test_${{ matrix.name }}
       xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
       timeout: 10
@@ -499,7 +504,7 @@ jobs:
     with:
       arch: aarch64
       cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
-      cache_key: build_bionic_aarch64
+      cache_key: build_jammy_aarch64
 
   build_freebsd:
     name: FreeBSD x86_64 build
@@ -562,7 +567,7 @@ jobs:
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: manticoresearch/ubertests_ctest:3263
+      image: manticoresearch/ubertests_ctest:3263_jammy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

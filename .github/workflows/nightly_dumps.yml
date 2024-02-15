@@ -1,0 +1,42 @@
+name: CLT testing of supported versions of mysqldump
+run-name: CLT testing of supported versions of mysqldump ${{ github.sha }}
+
+on:
+  schedule:
+    - cron: '00 20 * * *'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'test/clt-tests/mysqldump/versions/**'
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: nightly_dumps_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit_info:
+    name: Commit info
+    runs-on: ubuntu-22.04
+    steps:
+      - run: |
+          echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
+
+  clt_test_supported_myqldump_versions:
+    name: Testing supported myqldump versions
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build test kit
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+          tags: manticoresoftware/dind:latest
+          context: test/clt-tests/mysqldump/versions/docker/
+      - uses: manticoresoftware/clt@0.1.13
+        with:
+          image: manticoresoftware/dind:latest
+          test_prefix: test/clt-tests/mysqldump/versions/
+          run_args: --privileged

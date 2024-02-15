@@ -31,7 +31,7 @@ source src_delta
 	type = mysql
 	<sql_settings/>
 
-	sql_query = SELECT id, b, a, c, text FROM test_table WHERE idx = 'delta';
+	sql_query = SELECT id, a, b, c, text FROM test_table WHERE idx = 'delta';
 
 	sql_attr_uint = a
 	sql_attr_uint = b

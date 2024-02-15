@@ -1433,9 +1433,8 @@ public:
 		DataFinish ( iAffectedRows, nullptr, sMessage );
 	}
 
-	void HeadBegin ( int iCols ) override
+	void HeadBegin () override
 	{
-		m_iExpectedColumns = iCols;
 		m_iTotalRows = 0;
 		m_dBuf.ObjectWBlock();
 		m_dBuf.Named ( "columns" );
@@ -1444,7 +1443,6 @@ public:
 
 	bool HeadEnd ( bool , int ) override
 	{
-		assert ( m_iExpectedColumns == 0 );
 		m_dBuf.FinishBlock(false);
 		m_dBuf.Named ( "data" );
 		m_dBuf.ArrayWBlock();
@@ -1462,7 +1460,6 @@ public:
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
 		m_dColumns.Add ( tCol );
-		--m_iExpectedColumns;
 	}
 
 	void Add ( BYTE ) override {}
@@ -1476,7 +1473,6 @@ public:
 private:
 	JsonEscapedBuilder m_dBuf;
 	CSphVector<ColumnNameType_t> m_dColumns;
-	int m_iExpectedColumns = 0;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
 
@@ -1554,7 +1550,7 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 		// fill headers
 		if ( !dSqlColumns.IsEmpty() )
 		{
-			tOut.HeadBegin ( dSqlColumns.GetLength() );
+			tOut.HeadBegin ();
 			dSqlColumns.for_each ( [&] ( const auto& tColumn ) { tOut.HeadColumn ( tColumn.first.cstr(), tColumn.second ); } );
 			tOut.HeadEnd();
 		} else

@@ -51,19 +51,6 @@ static const bool LOG_LEVEL_RPL_TNX = val_from_env ( "MANTICORE_LOG_RPL_TNX", fa
 #define LOG_COMPONENT_RPL_TNX ""
 #define RPL_TNX LOGMSG ( RPL_DEBUG, RPL_TNX, RPL_TNX )
 
-// cluster state this node sees
-enum class ClusterState_e
-{
-	// stop terminal states
-	CLOSED,				// node shut well or not started
-	DESTROYED,			// node closed with error
-	// transaction states
-	JOINING,			// node joining cluster
-	DONOR,				// node is donor for another node joining cluster
-	// ready terminal state 
-	SYNCED				// node works as usual
-};
-
 inline static bool IsSyncedOrDonor ( ClusterState_e eState ) noexcept
 {
 	return ( eState == ClusterState_e::DONOR || eState == ClusterState_e::SYNCED );
@@ -76,7 +63,7 @@ struct ReplicationCluster_t final : public ClusterDesc_t, Wsrep::Cluster_i
 {
 public:
 	// replicator
-	Wsrep::Provider_c* m_pProvider = nullptr;
+	Wsrep::Provider_i* m_pProvider = nullptr;
 
 	// serializer for replicator - guards for only one replication Op a time
 	Threads::Coro::Mutex_c m_tReplicationMutex;
@@ -130,6 +117,7 @@ public:
 	StrVec_t GetViewNodes() const EXCLUDES ( m_tViewNodesLock );
 	void SetViewNodes ( StrVec_t&& dNodes );
 	StrVec_t GetIndexes() const noexcept EXCLUDES ( m_tIndexLock );
+	const CSphString & GetNodeName () const { return m_sNodeName; }
 
 	template<typename ACTION>
 	void FilterViewNodes ( ACTION&& Verb ) const
@@ -193,10 +181,17 @@ public:
 	}
 
 	template<typename VISITOR>
+	auto WithRlockedAllIndexes ( VISITOR fnVisitor ) const noexcept EXCLUDES ( m_tIndexLock )
+	{
+		Threads::SccRL_t tIndexRLock ( m_tIndexLock );
+		return fnVisitor ( m_hIndexes, m_hIndexesLoaded );
+	}
+
+	template<typename VISITOR>
 	auto WithWlockedIndexes ( VISITOR fnVisitor ) EXCLUDES ( m_tIndexLock )
 	{
 		Threads::SccWL_t tIndexWLock ( m_tIndexLock );
-		return fnVisitor ( m_hIndexes );
+		return fnVisitor ( m_hIndexes, m_hIndexesLoaded );
 	}
 
 	template<typename VISITOR>
@@ -224,6 +219,7 @@ private:
 
 	mutable Threads::Coro::RWLock_c m_tOptsLock;
 	mutable Threads::Coro::RWLock_c m_tIndexLock;
+	sph::StringSet m_hIndexesLoaded;	// list of index name loaded into daemon but not yet in cluster used for donor to send indexes into joiner
 
 #ifndef NDEBUG
 	// it is impossible to attach 'GUARDED_BY to 'using ClusterDesc_t::m_tOptions', so use reference for it debug build
@@ -233,9 +229,14 @@ private:
 	using ClusterDesc_t::m_tOptions;
 	using ClusterDesc_t::m_hIndexes;
 #endif
+
+	CSphString m_sNodeName;
 };
 
 using ReplicationClusterRefPtr_c = CSphRefcountedPtr<ReplicationCluster_t>;
+
+// serializer for cluster management operations - only one cluster operation a time
+static Threads::Coro::Mutex_c g_tClusterOpsLock;
 
 // cluster list
 static Threads::Coro::RWLock_c g_tClustersLock;
@@ -273,6 +274,7 @@ static bool IsUpdateCommand ( const RtAccum_t & tAcc );
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd );
 
 static bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, NODES_E eUpdate );
+static bool IsSameVector ( StrVec_t & dSrc, StrVec_t & dDst );
 
 static bool g_bReplicationStarted = false;
 
@@ -335,13 +337,13 @@ static int GetClusterMemLimitMB ( int iMemLimit, int iIndexes )
 bool ReplicationCluster_t::Init()
 {
 	assert ( ReplicationEnabled() );
-	CSphString sMyNodeName, sListenAddr, sIncoming, sFullClusterPath;
-	sMyNodeName.SetSprintf ( "node_%s_%s_%d", szIncomingIP(), m_sName.cstr(), GetOsThreadId() );
+	CSphString sListenAddr, sIncoming, sFullClusterPath;
+	m_sNodeName.SetSprintf ( "node_%s_%s_%d", szIncomingIP(), m_sName.cstr(), GetOsThreadId() );
 	sListenAddr.SetSprintf ( "%s:%d", szListenReplicationIP(), int ( m_tPort ) );
 	sIncoming.SetSprintf ( "%s,%s:%d:replication", szIncomingProto(), szIncomingIP(), int ( m_tPort ) );
 	sFullClusterPath = GetDatadirPath ( m_sPath );
 
-	sphLogDebugRpl ( "node incoming '%s', listen '%s', name '%s'", sIncoming.cstr(), sListenAddr.cstr(), sMyNodeName.cstr() );
+	sphLogDebugRpl ( "node incoming '%s', listen '%s', name '%s'", sIncoming.cstr(), sListenAddr.cstr(), m_sNodeName.cstr() );
 	StringBuilder_c sOptions ( ";" );
 	WithRlockedOptions ( [&sOptions] ( const auto& tOptions ) { sOptions << tOptions.AsStr(); } );
 
@@ -377,7 +379,7 @@ bool ReplicationCluster_t::Init()
 	if ( g_eLogLevel >= SPH_LOG_RPL_DEBUG )
 		sOptions += g_sDebugOptions;
 
-	m_pProvider = Wsrep::MakeProvider ( this, std::move ( sMyNodeName ), sListenAddr.cstr(), sIncoming.cstr(), sFullClusterPath.cstr(), sOptions.cstr() );
+	m_pProvider = Wsrep::MakeProvider ( this, m_sNodeName, sListenAddr.cstr(), sIncoming.cstr(), sFullClusterPath.cstr(), sOptions.cstr() );
 	return bool ( m_pProvider );
 }
 
@@ -578,7 +580,7 @@ DEFINE_RENDER ( RPLRep_t )
 
 // repl version
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_c& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
+static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
 {
 	TRACE_CONN ( "conn", "Replicate" );
 
@@ -623,7 +625,7 @@ static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BY
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_c & tWriteSet, CommitMonitor_c & tMonitor )
+static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c & tMonitor )
 {
 	bool bOk = tWriteSet.ToExecuteStart ( dKeys, tQueries );
 	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, tWriteSet.LastSeqno() );
@@ -1044,15 +1046,15 @@ static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSph
 	}
 	END_CONN ( "conn" );
 
-	auto tWriteSet = pCluster->m_pProvider->MakeWriteSet();
+	auto pWriteSet = pCluster->m_pProvider->MakeWriteSet();
 
 	BEGIN_CONN ( "conn", "HandleCmdReplicate.cluster_lock" );
 	Threads::ScopedCoroMutex_t tClusterLock { pCluster->m_tReplicationMutex };
 	END_CONN ( "conn" );
 
 	if ( !bTOI )
-		return Replicate ( dBufKeys, dBufQueries, tWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
-	return ReplicateTOI ( dBufKeys, dBufQueries, tWriteSet, tMonitor );
+		return Replicate ( dBufKeys, dBufQueries, *pWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
+	return ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, tMonitor );
 }
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc )
@@ -1093,14 +1095,18 @@ bool SetIndexClusterTOI ( const ReplicationCommand_t * pCmd )
 		if ( !AssignClusterToIndex ( tCmd.m_sIndex, tCmd.m_sCluster ) )
 			return false;
 
-		pCluster->WithWlockedIndexes ( [&] ( auto & hIndexes ) { hIndexes.Add ( tCmd.m_sIndex ); } );
+		pCluster->WithWlockedIndexes ( [&] ( auto & hIndexes, auto & hIndexesLoaded )
+		{
+			hIndexes.Add ( tCmd.m_sIndex );
+			hIndexesLoaded.Delete ( tCmd.m_sIndex );
+		});
 
 	} else
 	{
 		if ( !AssignClusterToIndex ( tCmd.m_sIndex, "" ) )
 			return false;
 
-		pCluster->WithWlockedIndexes ( [&] ( auto & hIndexes ) { hIndexes.Delete ( tCmd.m_sIndex ); } );
+		pCluster->WithWlockedIndexes ( [&] ( auto & hIndexes, auto & hIndexesLoaded ) { hIndexes.Delete ( tCmd.m_sIndex ); } );
 	}
 
 	TLS_MSG_STRING ( sError );
@@ -1125,17 +1131,14 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 {
 	assert ( ReplicationEnabled() );
 
-	sph::StringSet hIndexes;
-	for ( const CSphString& sIndex : dIndexes )
-	{
-		if ( !CheckIndexExists ( sIndex ) )
-			return false;
-		hIndexes.Add ( sIndex );
-	}
+	if ( !dIndexes.all_of ( [] ( const CSphString & sIndex ) { return CheckIndexExists ( sIndex ); } ) )
+		return false;
 
 	auto pCluster = ClusterByName( sCluster );
 	if ( !pCluster )
 		return false;
+
+	sph::StringSet hIndexes ( dIndexes );
 
 	// scope for check of cluster data
 	{
@@ -1147,13 +1150,18 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 			const ReplicationCluster_t * pOrigCluster = tCluster.second;
 			if ( pOrigCluster==pCluster.CPtr() )
 				continue;
-
-			if (!pOrigCluster->WithRlockedIndexes([&hIndexes,pOrigCluster](const auto& hOrigIndexes) {
-				for ( const auto& tIndex : hOrigIndexes )
+			
+			bool bHasCluster = pOrigCluster->WithRlockedIndexes([&hIndexes,pOrigCluster]( const auto & hOrigIndexes )
+			{
+				for ( const auto & tIndex : hOrigIndexes )
+				{
 					if ( hIndexes[tIndex.first] )
 						return TlsMsg::Err ( "table '%s' is already a part of cluster '%s'", tIndex.first.cstr(), pOrigCluster->m_sName.cstr() );
+				}
+
 				return true;
-				}))
+			});
+			if ( !bHasCluster )
 				return false;
 		}
 	}
@@ -1169,9 +1177,14 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 	if ( !bOk )
 		return false;
 
-	pCluster->WithWlockedIndexes([&dIndexes](auto& hIndexes){
+	pCluster->WithWlockedIndexes([&dIndexes] ( auto & hIndexes, auto & hIndexesLoaded )
+	{
 		hIndexes.Reset();
-		dIndexes.for_each ( [&hIndexes] ( const auto& sIndex ) { hIndexes.Add ( sIndex ); } );
+		dIndexes.for_each ( [&hIndexes, &hIndexesLoaded] ( const auto & sIndex )
+		{
+			hIndexes.Add ( sIndex );
+			hIndexesLoaded.Delete ( sIndex );
+		});
 	});
 
 	TLS_MSG_STRING ( sError );
@@ -1373,14 +1386,19 @@ static void CoPrepareClustersOnStartup ( bool bForce ) EXCLUDES ( g_tClustersLoc
 			if ( bFinallyCleanup )
 				for_each ( tDesc.m_hIndexes, [&] ( auto& tIndex ) { if (!AssignClusterToIndex ( tIndex.first, "" )) sphWarning ( "%s on removal table '%s' from a cluster", TlsMsg::szError(), tIndex.first.cstr() ); } );
 		} );
-		for ( const auto& hIndex : tDesc.m_hIndexes )
+		for ( const auto & tIndex : tDesc.m_hIndexes )
 		{
-			if ( !AssignClusterToIndex ( hIndex.first, pNewCluster->m_sName ) )
+			const CSphString & sIndex = tIndex.first;
+			if ( !AssignClusterToIndex ( sIndex, pNewCluster->m_sName ) )
 			{
 				sphWarning ( "%s, removed from cluster '%s'", TlsMsg::szError(), pNewCluster->m_sName.cstr() );
 				continue;
 			}
-			pNewCluster->WithWlockedIndexes ( [&hIndex] ( auto& hIndexes ) { hIndexes.Add ( hIndex.first ); } );
+			pNewCluster->WithWlockedIndexes ( [&sIndex] ( auto & hIndexes, auto & hIndexesLoaded )
+			{
+				hIndexes.Add ( sIndex );
+				hIndexesLoaded.Delete ( sIndex );
+			});
 		}
 
 		if ( !hClusters.Add ( pNewCluster, pNewCluster->m_sName ) )
@@ -1500,6 +1518,7 @@ static std::optional<ClusterDesc_t> ClusterDescFromSphinxqlStatement ( const CSp
 /////////////////////////////////////////////////////////////////////////////
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes ) EXCLUDES ( g_tClustersLock )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	auto tDesc = ClusterDescFromSphinxqlStatement ( sCluster, dNames, dValues, MAKE_E::JOIN );
 	if ( !tDesc )
@@ -1553,6 +1572,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 /////////////////////////////////////////////////////////////////////////////
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues ) EXCLUDES ( g_tClustersLock )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	if ( !g_bReplicationStarted )
 		return TlsMsg::Err ( "cluster '%s' is not ready, starting", sCluster.cstr() );
@@ -1603,7 +1623,16 @@ void ReplicationCluster_t::SetViewNodes ( StrVec_t&& dNodes )
 StrVec_t ReplicationCluster_t::GetIndexes() const noexcept
 {
 	StrVec_t dIndexes;
-	WithRlockedIndexes ( [&dIndexes] ( const auto& hIndexes ) { for_each ( hIndexes, [&] ( const auto& tIndex ) { dIndexes.Add ( tIndex.first ); } ); } );
+	WithRlockedAllIndexes ( [&dIndexes] ( const auto & hIndexes, auto & hIndexesLoaded )
+	{
+		for ( const auto & tIndex : hIndexes )
+			dIndexes.Add ( tIndex.first );
+		for ( const auto & tIndex : hIndexesLoaded )
+		{
+			assert ( !hIndexes[tIndex.first] );
+			dIndexes.Add ( tIndex.first );
+		}
+	});
 	return dIndexes;
 }
 
@@ -1655,18 +1684,46 @@ bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError ) 
 {
 	TlsMsg::Err();
 	if ( !g_bReplicationStarted )
-		return TlsMsg::Err ( "cluster '%s' is not ready, replication wasn't started", sCluster.cstr() );
+	{
+		sError.SetSprintf ( "cluster '%s' is not ready, replication wasn't started", sCluster.cstr() );
+		return false;
+	}
 
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster )
+	{
+		TlsMsg::MoveError ( sError );
 		return false;
+	}
 
 	auto dNodes = pCluster->FilterViewNodesByProto();
 	SendClusterDeleteToNodes ( dNodes, sCluster );
 	bool bOk = ClusterDelete ( sCluster );
 	bOk &= SaveConfigInt ( sError );
 
+	TlsMsg::MoveError ( sError );
 	return bOk;
+}
+
+bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState ) EXCLUDES ( g_tClustersLock )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+		return false;
+
+	tState.m_eState = pCluster->GetState();
+	tState.m_sNode = pCluster->GetNodeName();
+	return true;
+}
+
+static bool HasNotReadyNodes ( ReplicationClusterRefPtr_c pCluster )
+{
+	ClusterState_e eState = pCluster->GetState();
+	if ( eState==ClusterState_e::DONOR || eState==ClusterState_e::JOINING )
+		return true;
+
+	const auto dStates = GetStatesFromRemotes ( *pCluster );
+	return dStates.any_of ( []( auto & tState ) { return ( tState.m_eState==ClusterState_e::DONOR || tState.m_eState==ClusterState_e::JOINING ); });
 }
 
 // cluster ALTER statement that removes index from cluster but keep it at daemon
@@ -1695,26 +1752,66 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	if ( !bMutable && !bDist )
 		return TlsMsg::Err ( "unknown or wrong table '%s'", sIndex.cstr() );
 
-	auto dNodes = pCluster->GetViewNodes();
-	// ok for just created cluster (wo nodes) to add existed index
-	if ( !dNodes.IsEmpty() )
+	int iAttempt = 0;
+	// should wait a bit longer during join
+	// FIXME!!! fetch progress delta time and continue to wait while there is a progress
+	const int iRetryCount = ReplicationRetryCount() * 2;
+	const int iRetryDelay = ReplicationRetryDelay() * 2;
+	int64_t tmStart = sphMicroTimer();
+	while ( true )
 	{
-		VecAgentDesc_t dDesc = GetDescAPINodes ( dNodes, Resolve_e::QUICK );
-		if ( TlsMsg::HasErr() )
-			return false;
-
-		if ( dDesc.GetLength() )
+		if ( HasNotReadyNodes ( pCluster ) )
 		{
-			bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( sCluster, sIndex, dDesc, pServed ) : ReplicateDistIndexToNodes ( sCluster, sIndex, dDesc ) );
-			if ( !bReplicated )
+			iAttempt++;
+			if ( iAttempt>=iRetryCount )
 			{
-				if ( TlsMsg::HasErr() )
-					sphWarning ( "%s", TlsMsg::szError() );
+				int64_t tmEnd = sphMicroTimer();
+				return TlsMsg::Err ( "alter '%s' has some nodes not ready for %.3f seconds", pCluster->m_sName.cstr(), (float)(tmEnd - tmStart)/1000000.0f );
+			}
+
+			// FIXME!!! send index only into new node in case of next try happens
+			sphLogDebugRpl ( "alter '%s' has some nodes not ready, will wait for %d seconds before retry %d", pCluster->m_sName.cstr(), iRetryDelay / 1000, iAttempt );
+			Threads::Coro::SleepMsec ( iRetryDelay );
+			continue;
+		}
+
+		auto dNodes = pCluster->GetViewNodes();
+		sphLogDebugRpl ( "alter '%s' SST index '%s' to nodes %d", pCluster->m_sName.cstr(), sIndex.cstr(), dNodes.GetLength() );
+
+		// ok for just created cluster (wo nodes) to add existed index
+		if ( !dNodes.IsEmpty() )
+		{
+			VecAgentDesc_t dDesc = GetDescAPINodes ( dNodes, Resolve_e::SLOW );
+			if ( TlsMsg::HasErr() )
 				return false;
+
+			sphLogDebugRpl ( "alter '%s' SST index '%s' to resolved nodes %d", pCluster->m_sName.cstr(), sIndex.cstr(), dDesc.GetLength() );
+
+			if ( dDesc.GetLength() )
+			{
+				bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( sCluster, sIndex, dDesc, pServed ) : ReplicateDistIndexToNodes ( sCluster, sIndex, dDesc ) );
+				if ( !bReplicated )
+				{
+					if ( TlsMsg::HasErr() )
+						sphWarning ( "%s", TlsMsg::szError() );
+					return false;
+				}
 			}
 		}
+
+		// nodes list might change during alter at the other node
+		auto dNewNodes = pCluster->GetViewNodes();
+
+		// passed fine no join during the alter and the cluster remains same
+		if ( !HasNotReadyNodes ( pCluster ) && IsSameVector ( dNodes, dNewNodes ) )
+			break;
+
+		sphLogDebugRpl ( "nodes not ready during alter '%s', wait for %d sec before retry %d", pCluster->m_sName.cstr(), iRetryDelay / 1000, iAttempt );
+		Threads::Coro::SleepMsec ( iRetryDelay );
+		// no need to increase attempt count here as it will be checked on next try
 	}
 
+	sphLogDebugRpl ( "alter '%s' adding index '%s'", pCluster->m_sName.cstr(), sIndex.cstr() );
 	RtAccum_t tAcc;
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
@@ -1759,6 +1856,7 @@ static bool ClusterAddCheckDistLocals ( const StrVec_t & dLocals, const CSphStri
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	{
 		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		bool bMutable = ServedDesc_t::IsMutable ( pServed );
@@ -1812,6 +1910,33 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 // SST
 /////////////////////////////////////////////////////////////////////////////
 
+bool IsSameVector ( StrVec_t & dSrc, StrVec_t & dDst )
+{
+	if ( dSrc.GetLength()!=dDst.GetLength() )
+		return false;
+
+	dSrc.Sort();
+	dDst.Sort();
+
+	ARRAY_FOREACH ( i, dSrc )
+	{
+		if ( dSrc[i]!=dDst[i] )
+			return false;
+	}
+
+	return true;
+}
+
+bool AddLoadedIndexIntoCluster ( const CSphString & sCluster, const CSphString & sIndex )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+		return false;
+
+	pCluster->WithWlockedIndexes ( [&sIndex] ( auto & hIndexes, auto & hIndexesLoaded ) { hIndexesLoaded.Add ( sIndex ); });
+	return true;
+}
+
 // send local indexes to remote nodes via API
 bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID )
 {
@@ -1830,36 +1955,54 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	ClusterSyncedRequest_t tSyncedRequest;
 	tSyncedRequest.m_sCluster = pCluster->m_sName;
 	tSyncedRequest.m_tGtid = tStateID;
-	tSyncedRequest.m_dIndexes.Append ( dIndexes );
+	tSyncedRequest.m_dIndexes = dIndexes;
 
 	if ( bBypass )
 		return SendClusterSynced ( dDesc, tSyncedRequest );
 
 	bool bSentOk = true;
-	for ( const CSphString & sIndex : dIndexes )
+	while ( true )
 	{
-		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
-		bool bMutable = ServedDesc_t::IsMutable ( pServed );
-		cDistributedIndexRefPtr_t pDist ( !bMutable ? GetDistr ( sIndex ) : nullptr );
-		if ( !bMutable && !pDist )
+		sphLogDebugRpl ( "sending cluster '%s' indexes %d '%s'...'%s'", pCluster->m_sName.cstr(), dIndexes.GetLength(), ( dIndexes.GetLength() ? dIndexes.First().cstr() : "" ), ( dIndexes.GetLength() ? dIndexes.Last().cstr() : "" ) );
+
+		for ( const CSphString & sIndex : dIndexes )
 		{
-			bSentOk = false;
-			sphWarning ( "unknown or wrong table '%s'", sIndex.cstr() );
-			continue;
+			cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+			bool bMutable = ServedDesc_t::IsMutable ( pServed );
+			cDistributedIndexRefPtr_t pDist ( !bMutable ? GetDistr ( sIndex ) : nullptr );
+			if ( !bMutable && !pDist )
+			{
+				bSentOk = false;
+				sphWarning ( "unknown or wrong table '%s'", sIndex.cstr() );
+				continue;
+			}
+
+			bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( pCluster->m_sName, sIndex, dDesc, pServed ) : ReplicateDistIndexToNodes ( pCluster->m_sName, sIndex, dDesc ) );
+			if ( !bReplicated )
+			{
+				sphWarning ( "%s", TlsMsg::szError() );
+				bSentOk = false;
+				break;
+			}
+
+			if ( TlsMsg::HasErr() )
+				sphWarning ( "%s", TlsMsg::szError() );
 		}
 
-		bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( pCluster->m_sName, sIndex, dDesc, pServed ) : ReplicateDistIndexToNodes ( pCluster->m_sName, sIndex, dDesc ) );
-		if ( !bReplicated )
-		{
-			sphWarning ( "%s", TlsMsg::szError() );
-			bSentOk = false;
+		// index list could have changed due to alter at the other node
+		auto dNewIndexes = pCluster->GetIndexes();
+		if ( dNewIndexes.GetLength() )
+			sphLogDebugRpl ( "sent cluster '%s' indexes %d '%s'...'%s'", pCluster->m_sName.cstr(), dNewIndexes.GetLength(), dNewIndexes.First().cstr(), dNewIndexes.Last().cstr() );
+
+		if ( IsSameVector ( dIndexes, dNewIndexes ) )
 			break;
-		}
 
-		if ( TlsMsg::HasErr() )
-			sphWarning ( "%s", TlsMsg::szError() );
+		sphLogDebugRpl ( "index list changed during donate '%s' to '%s'", pCluster->m_sName.cstr(), sNode.cstr() );
+		// FIXME!!! send only new indexes but loads all cluster indexes
+		dIndexes = dNewIndexes;
 	}
 
+	tSyncedRequest.m_dIndexes = dIndexes;
 	tSyncedRequest.m_bSendFilesSuccess = bSentOk;
 	tSyncedRequest.m_sMsg = TlsMsg::MoveToString();
 	bool bSyncOk = SendClusterSynced ( dDesc, tSyncedRequest );

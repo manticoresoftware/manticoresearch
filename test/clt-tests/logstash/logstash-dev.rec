@@ -75,7 +75,7 @@ filebeat -c filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log & pid=$!
 ––– output –––
 [1] #!/[0-9]+/!#
 ––– input –––
-timeout 60 tail -n 100 -f /var/log/filebeat.log | grep -qm1 'Non-zero metrics in the last 30s' && echo 'Done' || ( echo 'Timeout or failed' && cat /var/log/filebeat.log && cat /var/log/manticore/searchd.log )
+if timeout 60 grep -qm1 'Non-zero metrics in the last 30s' <(tail -n 0 -f /var/log/filebeat.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/filebeat.log; cat /var/log/manticore/searchd.log; fi
 ––– output –––
 Done
 ––– input –––

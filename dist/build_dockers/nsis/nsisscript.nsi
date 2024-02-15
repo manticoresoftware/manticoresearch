@@ -13,7 +13,7 @@ Unicode True
 ; The default installation directory
 InstallDir $PROGRAMFILES\Manticore
 
-; Registry key to check for directory (so if you install again, it will 
+; Registry key to check for directory (so if you install again, it will
 ; overwrite the old one automatically)
 InstallDirRegKey HKLM "SOFTWARE\Manticore Software LTD" "manticore"
 
@@ -83,7 +83,7 @@ Function createConfig
 Fail1:
   MessageBox MB_OK "Error! Unable to write to $R0!"
   Abort
-  
+
 Ok:
 FunctionEnd
 
@@ -96,22 +96,27 @@ Section "Manticore Search"
   Push "manticore_src.txt"
   Call unpackInstall
 
+  File "tzdata_src.txt"
+  Push "tzdata.zip"
+  Push "tzdata_src.txt"
+  Call unpackInstall
+
   CreateDirectory "$INSTDIR\var\data"
   CreateDirectory "$INSTDIR\var\log\manticore"
   CreateDirectory "$INSTDIR\var\run\manticore"
 
   Call createConfig
-  
+
   ; Write the installation path into the registry
   WriteRegStr HKLM "SOFTWARE\Manticore Software LTD" "manticore" "$INSTDIR"
-  
+
   ; Write the uninstall keys for Windows
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "DisplayName" "Manticore Search"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoRepair" 1
 
-  WriteUninstaller "$INSTDIR\uninstall.exe"  
+  WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
 
 Section "Manticore Executor"
@@ -138,7 +143,7 @@ SectionEnd
 ; Uninstaller
 
 Section "Uninstall"
-  
+
   ; Remove registry keys
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore"
   DeleteRegKey HKLM "SOFTWARE\Manticore Software LTD"

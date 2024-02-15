@@ -50,62 +50,6 @@ public:
 };
 
 
-class MatchAttrLt_fn : public ISphMatchComparator
-{
-public:
-	static FORCE_INLINE bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
-	{
-		if ( t.m_eKeypart[0]!=SPH_KEYPART_STRING )
-		{
-			SphAttr_t aa = a.GetAttr ( t.m_tLocator[0] );
-			SphAttr_t bb = b.GetAttr ( t.m_tLocator[0] );
-			if ( aa!=bb )
-				return aa<bb;
-		} else
-		{
-			int iCmp = t.CmpStrings ( a, b, 0 );
-			if ( iCmp!=0 )
-				return iCmp<0;
-		}
-
-		if ( a.m_iWeight!=b.m_iWeight )
-			return a.m_iWeight < b.m_iWeight;
-
-		return a.m_tRowID > b.m_tRowID;
-	}
-
-	MatchAttrLt_fn() : ISphMatchComparator (IsLess) {}
-};
-
-
-class MatchAttrGt_fn : public ISphMatchComparator
-{
-public:
-	static FORCE_INLINE bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
-	{
-		if ( t.m_eKeypart[0]!=SPH_KEYPART_STRING )
-		{
-			SphAttr_t aa = a.GetAttr ( t.m_tLocator[0] );
-			SphAttr_t bb = b.GetAttr ( t.m_tLocator[0] );
-			if ( aa!=bb )
-				return aa>bb;
-		} else
-		{
-			int iCmp = t.CmpStrings ( a, b, 0 );
-			if ( iCmp!=0 )
-				return iCmp>0;
-		}
-
-		if ( a.m_iWeight!=b.m_iWeight )
-			return a.m_iWeight < b.m_iWeight;
-
-		return a.m_tRowID > b.m_tRowID;
-	}
-
-	MatchAttrGt_fn() : ISphMatchComparator (IsLess) {}
-};
-
-
 class MatchTimeSegments_fn : public ISphMatchComparator
 {
 public:

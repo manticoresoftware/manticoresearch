@@ -958,6 +958,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_timeout",			KEY_DEPRECATED, "network_timeout" },
 	{ "network_timeout",		0, NULL },
 	{ "client_timeout",			0, NULL },
+	{ "reset_network_timeout_on_packet",			0, NULL },
 	{ "max_children",			KEY_REMOVED, NULL },
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			KEY_REMOVED, NULL },
@@ -1024,10 +1025,11 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "qcache_thresh_msec",		0, NULL },
 	{ "sphinxql_timeout",		0, NULL },
 	{ "hostname_lookup",		0, NULL },
-	{ "grouping_in_utc",		0, NULL },
+	{ "grouping_in_utc",		KEY_DEPRECATED, "timezone" },
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
+	{ "timezone",				0, NULL },
 	{ "data_dir",				0, NULL },
 	{ "node_address",			0, NULL },
 	{ "server_id",				0, NULL },
@@ -3203,15 +3205,23 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 
 #if HAVE_DLOPEN
 
+void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char* szPath, bool bGlobal )
+{
+	if ( m_bReady || m_pLibrary )
+		return;
+
+	m_pLibrary = dlopen ( szPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
+	if ( !m_pLibrary )
+		sphLogDebug ( "dlopen(%s) failed", szPath );
+	else
+		sphLogDebug ( "dlopen(%s)=%p", szPath, m_pLibrary );
+}
+
 CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath, bool bGlobal )
 	: m_bReady ( false )
 	, m_pLibrary ( nullptr )
 {
-	m_pLibrary = dlopen ( sPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
-	if ( !m_pLibrary )
-		sphLogDebug ( "dlopen(%s) failed", sPath );
-	else
-		sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
+	CSphDynamicLibraryAlternative ( sPath, bGlobal );
 }
 
 CSphDynamicLibrary::~CSphDynamicLibrary()
@@ -3250,7 +3260,8 @@ bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, in
 
 #else
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * ) {};
+void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char *, bool ) {};
+CSphDynamicLibrary::CSphDynamicLibrary ( const char *, bool ) {};
 bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return false; }
 CSphDynamicLibrary::~CSphDynamicLibrary() = default;
 

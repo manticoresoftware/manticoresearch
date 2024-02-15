@@ -13,7 +13,7 @@
 #ifndef _distinct_
 #define _distinct_
 
-#include "sphinxsort.h"
+#include "grouper.h"
 #include "std/openhash.h"
 
 #include "hyperloglog.h"

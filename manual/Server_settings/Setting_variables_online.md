@@ -57,6 +57,7 @@ Known global server variables are:
 * `QCACHE_TTL_SEC = <value>` Changes the [query_cache](../Searching/Query_cache.md) TTL for a cached result to a given value.
 * `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with VIP connections can execute queries in this mode. All new non-VIP incoming connections are refused. Existing connections are left intact.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, causes timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in UTC. Read the doc for [grouping_in_utc](../Server_settings/Searchd.md) config params for more details.
+* `TIMEZONE = <value>` Specifies the timezone used by date/time-related functions. Read the doc for [timezone](../Server_settings/Searchd.md) config param for more details.
 * `QUERY_LOG_MIN_MSEC = <value>` Changes the [query_log_min_msec](../Server_settings/Searchd.md#query_log_min_msec) searchd settings value. In this case, it expects the value exactly in milliseconds and doesn't parse time suffixes, as in config.
   > Warning: this is a very specific and 'hard' variable; filtered out messages will be just dropped and not written into the log at all. Better just filter your log with something like 'grep', in this case, you'll have at least the full original log as a backup.
 * `LOG_DEBUG_FILTER = <string value>` Filters out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they start with the given value.
@@ -68,6 +69,7 @@ Known global server variables are:
 * `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding).
 * `SECONDARY_INDEXES = {1|0}` Turns on/off [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) for search queries.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).
+* `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` changes [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) param. Only clients with VIP connections can change this variable.
 
 Examples:
 

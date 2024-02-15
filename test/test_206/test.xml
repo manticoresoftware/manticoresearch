@@ -577,7 +577,7 @@ select min(bigint(json1.floatkey)) from json_attr;
 select min(bigint(json1.year)) from json_attr;
 select max(double(json1.floatkey)) from json_attr;
 select max(integer(json1.floatkey)) from json_attr;
-select double(json1.year) as year from json_attr where year>=2002.0;
+select double(json1.year) as `year` from json_attr where `year`>=2002.0;
 select integer(json1.floatkey) as floatkey from json_attr where floatkey>=2;
 <!-- multiple conditions -->
 select * from json_attr where json1.year=2000 and json1.floatkey>=1.01;

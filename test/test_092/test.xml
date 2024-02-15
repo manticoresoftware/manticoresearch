@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>RT: re-insert deleted row, keyword weights vs different insert scenarios</Name>
-
+<Name>RT: re-insert deleted row, keyword weights vs different insert scenarios</Name>
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <Config>
-indexer
-{
-	mem_limit			= 16M
-}
-
 searchd
 {
 <Searchd_Settings/>

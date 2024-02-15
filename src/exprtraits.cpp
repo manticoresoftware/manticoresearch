@@ -123,3 +123,84 @@ void ConstList_c::Add ( float fValue )
 
 	m_dFloats.Add ( fValue );
 }
+
+/////////////////////////////////////////////////////////////////////
+
+Expr_Unary_c::Expr_Unary_c ( const char * szClassName, ISphExpr * pFirst )
+	: m_pFirst ( pFirst )
+	, m_szExprName ( szClassName )
+{
+	SafeAddRef ( pFirst );
+}
+
+
+void Expr_Unary_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	if ( m_pFirst )
+		m_pFirst->FixupLocator ( pOldSchema, pNewSchema );
+}
+
+
+void Expr_Unary_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	if ( m_pFirst )
+		m_pFirst->Command ( eCmd, pArg );
+}
+
+
+uint64_t Expr_Unary_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME_NOCHECK(m_szExprName);
+	CALC_CHILD_HASH(m_pFirst);
+	return CALC_DEP_HASHES();
+}
+
+
+Expr_Unary_c::Expr_Unary_c ( const Expr_Unary_c & rhs )
+	: m_pFirst ( SafeClone (rhs.m_pFirst) )
+	, m_szExprName ( rhs.m_szExprName )
+{}
+
+
+Expr_Binary_c::Expr_Binary_c ( const char * szClassName, ISphExpr * pFirst, ISphExpr * pSecond )
+	: m_pFirst ( pFirst )
+	, m_pSecond ( pSecond )
+	, m_szExprName ( szClassName )
+{
+	SafeAddRef ( pFirst );
+	SafeAddRef ( pSecond );
+}
+
+
+void Expr_Binary_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	m_pFirst->FixupLocator ( pOldSchema, pNewSchema );
+
+	if ( m_pSecond )
+		m_pSecond->FixupLocator ( pOldSchema, pNewSchema );
+}
+
+
+void Expr_Binary_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	m_pFirst->Command ( eCmd, pArg );
+
+	if ( m_pSecond )
+		m_pSecond->Command ( eCmd, pArg );
+}
+
+
+uint64_t Expr_Binary_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME_NOCHECK(m_szExprName);
+	CALC_CHILD_HASH(m_pFirst);
+	CALC_CHILD_HASH(m_pSecond);
+	return CALC_DEP_HASHES();
+}
+
+
+Expr_Binary_c::Expr_Binary_c ( const Expr_Binary_c & rhs )
+	: m_pFirst ( SafeClone (rhs.m_pFirst) )
+	, m_pSecond ( SafeClone (rhs.m_pSecond) )
+	, m_szExprName ( rhs.m_szExprName )
+{}

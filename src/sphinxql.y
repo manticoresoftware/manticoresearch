@@ -52,6 +52,9 @@
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
+%token	TOK_DAY
+%token	TOK_DATEADD
+%token	TOK_DATESUB
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -80,6 +83,7 @@
 %token	TOK_HINT_NO_COLUMNAR
 %token	TOK_HINT_OPEN
 %token	TOK_HOSTNAMES
+%token	TOK_HOUR
 %token	TOK_IGNORE
 %token	TOK_IN
 %token	TOK_INDEX
@@ -87,6 +91,7 @@
 %token	TOK_INDEXOF
 %token	TOK_INSERT
 %token	TOK_INT
+%token	TOK_INTERVAL
 %token	TOK_INTEGER
 %token	TOK_INTO
 %token	TOK_IS
@@ -99,7 +104,9 @@
 %token	TOK_MAX
 %token	TOK_META
 %token	TOK_MIN
+%token	TOK_MINUTE
 %token	TOK_MOD
+%token	TOK_MONTH
 %token	TOK_MULTI
 %token	TOK_MULTI64
 %token	TOK_NAMES
@@ -112,6 +119,7 @@
 %token	TOK_PLAN
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
+%token	TOK_QUARTER
 %token	TOK_QUERY
 %token	TOK_RAND
 %token	TOK_REBUILD
@@ -120,6 +128,7 @@
 %token	TOK_REPLACE
 %token	TOK_REMAP
 %token	TOK_ROLLBACK
+%token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
 %token	TOK_SET
@@ -143,9 +152,11 @@
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
+%token	TOK_WEEK
 %token	TOK_WEIGHT
 %token	TOK_WHERE
 %token	TOK_WITHIN
+%token	TOK_YEAR
 
 %token	TOK_LTE "<="
 %token	TOK_GTE ">="
@@ -1194,6 +1205,16 @@ hint_item:
 		}
 	;
 
+time_unit:
+	TOK_SECOND
+	| TOK_MINUTE
+	| TOK_HOUR
+	| TOK_DAY
+	| TOK_WEEK
+	| TOK_MONTH
+	| TOK_QUARTER
+	| TOK_YEAR
+	;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1232,14 +1253,27 @@ expr:
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
+accepted_funcs:
+	TOK_INTEGER
+	| TOK_BIGINT
+	| TOK_FLOAT
+	| TOK_DOUBLE
+	| TOK_REGEX
+	| TOK_IN
+	| TOK_INTERVAL
+	| TOK_SECOND
+	| TOK_MINUTE
+	| TOK_HOUR
+	| TOK_DAY
+	| TOK_WEEK
+	| TOK_MONTH
+	| TOK_QUARTER
+	| TOK_YEAR
+	;
+
 function:
 	TOK_IDENT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_IN '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); } // handle exception from 'ident' rule
 	| json_field TOK_IN '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $5 ); } // handle exception from 'ident' rule
-	| TOK_INTEGER '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_BIGINT '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_FLOAT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_DOUBLE '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_IDENT '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_QUERY '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
@@ -1248,8 +1282,10 @@ function:
 	| json_aggr '(' expr TOK_FOR identcol TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
-	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_REGEX '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_RAND '(' arglist ')' 		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_DATEADD '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_DATESUB '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| accepted_funcs '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 arglist:

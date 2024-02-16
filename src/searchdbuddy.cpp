@@ -505,8 +505,8 @@ struct BuddyReply_t
 	bson::Bson_c m_tBJSON;
 
 	bson::NodeHandle_t m_tType { bson::nullnode };
-	bson::NodeHandle_t m_tError { bson::nullnode };
 	bson::NodeHandle_t m_tMessage { bson::nullnode };
+	int m_iReplyHttpCode = 0;
 };
 
 bson::NodeHandle_t GetNode ( const bson::Bson_c & tReply, const char * sName, CSphString & sError )
@@ -549,13 +549,17 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 
 	tParsed.m_tType = GetNode ( tParsed.m_tBJSON, "type", sError );
 	tParsed.m_tMessage = GetNode ( tParsed.m_tBJSON, "message", sError );
-
-	if ( !bson::IsNullNode ( tParsed.m_tError ) )
-	{
-		sError.SetSprintf ( "wrong budy reply version (%d), daemon version (%d), upgrade buddy", iVer, g_iBuddyVersion );
+	bson::NodeHandle_t tReplyHttpCode = GetNode ( tParsed.m_tBJSON, "error_code", sError );
+	if ( bson::IsNullNode ( tReplyHttpCode ) )
 		return false;
-	}
+	tParsed.m_iReplyHttpCode = bson::Int ( tReplyHttpCode );
+
 	return !( bson::IsNullNode ( tParsed.m_tType ) || bson::IsNullNode ( tParsed.m_tMessage ) );
+}
+
+static ESphHttpStatus GetHttpStatusCode ( int iBuddyHttpCode, ESphHttpStatus eReqHttpCode )
+{
+	return ( iBuddyHttpCode>0 ? HttpGetStatusCodes ( iBuddyHttpCode ) : eReqHttpCode );
 }
 
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
@@ -598,9 +602,10 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	CSphString sDump;
 	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
+	ESphHttpStatus eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
-	ReplyBuf ( FromStr ( sDump ), SPH_HTTP_STATUS_200, bNeedHttpResponse, dResult );
+	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
 	return true;
 }
 

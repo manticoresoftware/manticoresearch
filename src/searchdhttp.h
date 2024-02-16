@@ -112,6 +112,7 @@ public:
 struct HttpProcessResult_t
 {
 	ESphHttpEndpoint m_eEndpoint { SPH_HTTP_ENDPOINT_TOTAL };
+	ESphHttpStatus m_eReplyHttpCode = SPH_HTTP_STATUS_200;
 	bool m_bOk { false };
 	CSphString m_sError;
 };
@@ -140,11 +141,13 @@ public:
 	void SetErrorFormat ( bool bNeedHttpResponse );
 	CSphVector<BYTE> & GetResult();
 	const CSphString & GetError () const;
+	ESphHttpStatus GetStatusCode () const;
 
 protected:
 	bool				m_bNeedHttpResponse {false};
 	CSphVector<BYTE>	m_dData;
 	CSphString			m_sError;
+	ESphHttpStatus		m_eHttpCode = SPH_HTTP_STATUS_200;
 
 	void ReportError ( const char * szError, ESphHttpStatus eStatus );
 	void ReportError ( ESphHttpStatus eStatus );

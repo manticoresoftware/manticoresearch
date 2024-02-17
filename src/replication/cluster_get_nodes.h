@@ -12,9 +12,20 @@
 
 #include "std/string.h"
 #include "searchdaemon.h"
+#include "common.h"
 
 // command to all remote nodes at cluster to get actual nodes list
 StrVec_t GetNodeListFromRemotes ( const ClusterDesc_t& tDesc );
 
+struct RemoteNodeClusterState_t
+{
+	CSphString m_sNode;
+	ClusterState_e m_eState;
+	CSphString m_sHash;
+};
 
+using ClusterNodesStatesVec_t = CSphVector<RemoteNodeClusterState_t>;
 
+// command to all remote nodes at cluster to get actual nodes states
+ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc );
+bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState );

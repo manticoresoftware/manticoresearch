@@ -2,7 +2,7 @@ FROM ubuntu:focal
 ENV DEBIAN_FRONTEND noninteractive
 
 # 1-st layer, basic toolchain stuff
-ENV llvm=15
+ENV llvm=16
 RUN apt-get update && apt-get install -y \
     make \
     ninja-build \
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 && rm -rf /var/lib/apt/lists/*
 
 # 2-nd layer, llvm
-ENV llvm=15
+ENV llvm=16
 RUN curl -L https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
 && add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-$llvm main" \
 && apt-get install -y \
@@ -58,7 +58,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/external_toolchain:clang15_cmake3263 .
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/external_toolchain:clang16_cmake3263 .
 
 # deprecated:
 # on amd:

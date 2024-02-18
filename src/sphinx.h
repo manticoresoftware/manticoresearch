@@ -461,6 +461,21 @@ struct IndexHint_t
 	bool					m_bForce = true;
 };
 
+struct OnFilter_t
+{
+	CSphString	m_sIdx1;
+	CSphString	m_sAttr1;
+	CSphString	m_sIdx2;
+	CSphString	m_sAttr2;
+};
+
+enum class JoinType_e
+{
+	NONE,
+	INNER,
+	LEFT
+};
+
 const int DEFAULT_MAX_MATCHES = 1000;
 const int DEFAULT_QUERY_TIMEOUT = 0;
 const int DEFAULT_QUERY_RETRY = -1;
@@ -511,10 +526,15 @@ struct CSphQuery
 
 	int				m_iMaxMatchThresh = 16384;
 
-	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
+	CSphVector<CSphFilterSettings>	m_dFilters;		///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
-	CSphVector<IndexHint_t>			m_dIndexHints; ///< secondary index hints
+	CSphVector<IndexHint_t>			m_dIndexHints;	///< secondary index hints
+
+	JoinType_e		m_eJoinType = JoinType_e::NONE;	///< JOIN type
+	CSphString		m_sJoinIdx;						///< index to perform join on
+	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
+	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
@@ -1382,6 +1402,7 @@ struct SphQueueSettings_t
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
 	StrVec_t 					m_dCreateSchema;
+	std::unique_ptr<JoinArgs_t>	m_pJoinArgs;
 	RowBuffer_i*				m_pSqlRowBuffer;
 	void **						m_ppOpaque1 = nullptr;
 	void **						m_ppOpaque2 = nullptr;
@@ -1397,9 +1418,10 @@ struct SphQueueSettings_t
 
 struct SphQueueRes_t : public ISphNoncopyable
 {
-	DWORD m_uPackedFactorFlags {SPH_FACTOR_DISABLE};
-	bool						m_bZonespanlist = false;
-	bool						m_bAlowMulti = true;
+	DWORD	m_uPackedFactorFlags = SPH_FACTOR_DISABLE;
+	bool	m_bZonespanlist = false;
+	bool	m_bAlowMulti = true;
+	bool	m_bJoinedGroupSort = false;
 };
 
 /////////////////////////////////////////////////////////////////////////////

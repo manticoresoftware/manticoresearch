@@ -727,7 +727,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		if ( iUpdAttrId<0 )
 		{
 			CSphString sJsonCol;
-			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), &sJsonCol ) )
+			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), nullptr, &sJsonCol ) )
 				iUpdAttrId = tSchema.GetAttrIndex ( sJsonCol.cstr() );
 		}
 
@@ -811,13 +811,13 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		if ( iUpdAttrId<0 )
 		{
 			CSphString sJsonCol;
-			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), &sJsonCol ) )
+			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), nullptr, &sJsonCol ) )
 			{
 				iUpdAttrId = m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
 				if ( iUpdAttrId>=0 )
 				{
 					ExprParseArgs_t tExprArgs;
-					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, sError, tExprArgs );
+					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, nullptr, sError, tExprArgs );
 				}
 			}
 		}
@@ -7866,7 +7866,10 @@ bool RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQuer
 	bool bHasFilter = !!tCtx.m_pFilter;
 	bool bHasTimer = tmMaxTimer>0;
 	bool bHasCutoff = iCutoff!=-1;
-	bool bSingleSorter = dSorters.GetLength()==1;
+
+	// when we have join query with multiple sorters, the first sorter does all the work (including pushing to all other sorters)
+	// we can avoid pushing to other sorters to improve performance
+	bool bSingleSorter = dSorters.GetLength()==1 || dSorters[0]->IsJoin();
 	int iIndex = bSingleSorter*64 + bHasFilterCalc*32 + bHasSortCalc*16 + bHasFilter*8 + bRandomize*4 + bHasTimer*2 + bHasCutoff;
 
 	switch ( iIndex )
@@ -8186,6 +8189,14 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 		return { nullptr, false };
 	}
 
+	// using g_iPseudoShardingThresh==0 check so that iterators are still spawned in test suite (when g_iPseudoShardingThresh=0)
+	const int64_t SMALL_INDEX_THRESH = 8192;
+	if ( m_iDocinfo < SMALL_INDEX_THRESH && g_iPseudoShardingThresh > 0 )
+	{
+		dModifiedFilters = dFilters;
+		return { nullptr, false };
+	}
+
 	CSphVector<SecondaryIndexInfo_t> dSIInfo;
 	if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker ) )
 		return { nullptr, false };
@@ -8351,6 +8362,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	tFlx.m_pHistograms = m_pHistograms;
 	tFlx.m_pSI = m_pSIdx.get();
 	tFlx.m_iTotalDocs = m_iDocinfo;
+	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 	
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	if ( !TransformFilters ( tFlx, dTransformedFilters, tMeta.m_sError ) )
@@ -8450,6 +8462,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	tMeta.m_bTotalMatchesApprox = bCutoffHit && !bAllPrecalc;
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE );
+
+	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
@@ -11135,8 +11149,13 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
 
-	MiniTimer_c dTimerGuard;
-	int64_t	tmMaxTimer = dTimerGuard.Engage ( tQuery.m_uMaxQueryMsec ); // max_query_time
+	int64_t	tmMaxTimer = 0;
+	std::unique_ptr<MiniTimer_c> pTimerGuard;
+	if ( tQuery.m_uMaxQueryMsec> 0 )
+	{
+		pTimerGuard = std::make_unique<MiniTimer_c>();
+		tmMaxTimer = pTimerGuard->Engage ( tQuery.m_uMaxQueryMsec ); // max_query_time
+	}
 
 	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
@@ -11153,7 +11172,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		return false;
 
 	// non-random at the start, random at the end
-	dSorters.Sort ( CmpPSortersByRandom_fn() );
+	if ( dSorters.any_of ( []( ISphMatchSorter * p) { return p->IsRandom(); } ) )
+		dSorters.Sort ( CmpPSortersByRandom_fn() );
 
 	// fast path for scans
 	if ( pQueryParser->IsFullscan ( tQuery ) )
@@ -11683,6 +11703,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		pIterator->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 	}
+
+	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
 
 	// adjust result sets
 	if ( bFinalPass )

@@ -411,8 +411,8 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 /// find value by index in SphinxBSON blob, return associated type
 ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );
 
-/// extract object part from the name; return false if not JSON name
-bool sphJsonNameSplit ( const char * sName, CSphString * sColumn=nullptr );
+/// extract object part from the name; return false if not JSON name. szIndex is the possible name of joined index
+bool sphJsonNameSplit ( const char * szName, const char * szIndex = nullptr, CSphString * pColumn = nullptr );
 
 /// compute node size, in bytes
 /// returns -1 when data itself is required to compute the size, but pData is NULL
@@ -835,6 +835,7 @@ public:
 int sphJsonUnescape ( char ** pEscaped, int iLen );
 int sphJsonUnescape1 ( char ** pEscaped, int iLen );
 int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen );
+CSphString FormatJsonAsSortStr ( const BYTE * pVal, ESphJsonType eJson );
 
 template <typename PUSH>
 static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )

@@ -57,6 +57,7 @@
 %token <iNode>			TOK_HOOK_IDENT
 %token <iNode>			TOK_HOOK_FUNC
 %token <sIdent>			TOK_IDENT
+%token <sIdent>			TOK_TABLE_NAME
 %token <iAttrLocator>	TOK_ATTR_JSON
 %token <iAttrLocator>	TOK_FIELD
 %token <iAttrLocator>	TOK_COLUMNAR_INT
@@ -99,6 +100,7 @@
 %type <iNode>			stringlist
 %type <iNode>			json_field
 %type <iNode>			json_expr
+%type <iAttrLocator>	json_attr_name
 %type <iNode>			subkey
 %type <iNode>			subscript
 %type <iNode>			for_loop
@@ -146,6 +148,7 @@ attr:
 	| TOK_COLUMNAR_FLOATVEC			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_FLOATVEC, $1 ); }
 	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
+	| TOK_TABLE_NAME TOK_SUBKEY		{ $$ = pParser->AddNodeWithTable ( $1, $2 ); }
 	;
 
 expr:
@@ -278,8 +281,14 @@ json_field:
 	| attr
 	;
 
+json_attr_name:
+	TOK_TABLE_NAME TOK_SUBKEY       {  $$ = pParser->ParseAttrWithTable ( $1, $2 ); }
+	| TOK_ATTR_JSON
+	;
+
 json_expr:
-	TOK_ATTR_JSON subscript { $$ = pParser->AddNodeJsonField ( $1, $2 ); }
+	json_attr_name subscript 		{ $$ = pParser->AddNodeJsonField ( $1, $2 ); }
+	;
 
 subscript:
 	subkey

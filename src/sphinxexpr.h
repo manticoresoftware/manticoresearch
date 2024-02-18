@@ -328,8 +328,17 @@ struct ExprParseArgs_t
 	bool *				m_pNeedDocIds = nullptr;
 };
 
-ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
+struct JoinArgs_t
+{
+	const ISphSchema &	m_tJoinedSchema;
+	CSphString 			m_sIndex1;
+	CSphString 			m_sIndex2;
 
+	JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sIndex1, const CSphString & sIndex2 );
+};
+
+
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const JoinArgs_t * pJoinArgs, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );

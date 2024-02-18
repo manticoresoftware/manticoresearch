@@ -1,0 +1,19 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW SETTINGS;"
+––– output –––
++---------------------+-------------------------------------+
+| Setting_name        | Value                               |
++---------------------+-------------------------------------+
+| configuration_file  | /etc/manticoresearch/manticore.conf |
+| worker_pid          | %{NUMBER}                                  |
+| searchd.listen      | %{IPADDR}:9312                      |
+| searchd.listen      | %{IPADDR}:9306:mysql                |
+| searchd.listen      | %{IPADDR}:9308:http                 |
+| searchd.log         | /var/log/manticore/searchd.log      |
+| searchd.query_log   | /var/log/manticore/query.log        |
+| searchd.pid_file    | /var/run/manticore/searchd.pid      |
+| searchd.data_dir    | /var/lib/manticore                  |
+| searchd.binlog_path | /var/lib/manticore/binlog           |
+| common.plugin_dir   | /usr/local/lib/manticore            |
++---------------------+-------------------------------------+

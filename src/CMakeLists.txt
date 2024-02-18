@@ -66,8 +66,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sph
 		indexfiles.cpp indexfilebase.cpp attrindex_builder.cpp queryfilter.cpp aggregate.cpp secondarylib.cpp costestimate.cpp
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
 		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
-		aggrexpr.cpp
-		)
+		aggrexpr.cpp joinsorter.cpp )
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
 target_link_libraries ( lstem PUBLIC lextra )
@@ -156,9 +155,9 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
 		chunksearchctx.h indexfilebase.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
 		costestimate.h docidlookup.h tracer.h attrindex_merge.h columnarmisc.h distinct.h hyperloglog.h pseudosharding.h datetime.h
-		grouper.h exprdatetime.h geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h
-		aggrexpr.h
-		)
+		grouper.h exprdatetime.h geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h match_impl.h std/string_impl.h
+		aggrexpr.h joinsorter.h )
+
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskoptimize.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h

@@ -3837,7 +3837,7 @@ public:
 	}
 
 							~ExprParser_t ();
-	ISphExpr *				Parse ( const char * szExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
+	ISphExpr *				Parse ( const char * szExpr, const ISphSchema & tSchema, const JoinArgs_t * pJoinArgs, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
 
 protected:
 	int						m_iParsed = 0;	///< filled by yyparse() at the very end
@@ -3884,10 +3884,14 @@ protected:
 	int						AddNodeDotNumber ( int64_t iValue );
 	int						AddNodeIdent ( const char * sKey, int iLeft );
 
+	int						AddNodeWithTable ( const char * szTable, uint64_t uOffset );
+	uint64_t				ParseAttrWithTable ( const char * szTable, uint64_t uOffset );
+
 private:
 	void *					m_pScanner = nullptr;
 	Str_t					m_sExpr;
 	const ISphSchema *		m_pSchema = nullptr;
+	const JoinArgs_t *		m_pJoinArgs = nullptr;
 	CSphVector<ExprNode_t>	m_dNodes;
 	StrVec_t				m_dUservars;
 	CSphVector<char*>		m_dIdents;
@@ -3921,6 +3925,7 @@ private:
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
 	static int				ParseField ( int iField, const char* sTok, YYSTYPE * lvalp );
 	int						ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp );
+	int						ParseJoinAttr ( const char * szTable, uint64_t uOffset );
 
 	template < typename T >
 	void					WalkTree ( int iRoot, T & FUNCTOR );
@@ -4160,6 +4165,7 @@ int ExprParser_t::ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp )
 	iCol = m_pSchema->GetFieldIndex ( szTok );
 	if ( iCol>=0 )
 		return ParseField ( iCol, szTok, lvalp );
+
 	return -1;
 }
 
@@ -4225,6 +4231,16 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	CSphString sTok;
 	sTok.SetBinary ( sToken, iLen );
 	sTok.ToLower ();
+
+	// check for table name
+	if ( m_pJoinArgs && ( m_pJoinArgs->m_sIndex1==sTok || m_pJoinArgs->m_sIndex2==sTok ) )
+	{
+		CSphString sTokMixed { sToken, iLen };
+		m_dIdents.Add ( sTokMixed.Leak() );
+		lvalp->sIdent = m_dIdents.Last();
+		return TOK_TABLE_NAME;
+	}
+
 	// check for attributes and fields
 	iRes = ParseAttrsAndFields ( sTok.cstr(), lvalp );
 	if ( iRes>=0 )
@@ -9735,6 +9751,44 @@ int ExprParser_t::AddNodeIdent ( const char * sKey, int iLeft )
 	return m_dNodes.GetLength()-1;
 }
 
+
+int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
+{
+	CSphString sAttrName;
+	sAttrName.SetBinary ( m_sExpr.first + GetConstStrOffset(uOffset), GetConstStrLength(uOffset) );
+
+	CSphString sAttrWithTable;
+	sAttrWithTable.SetSprintf ( "%s.%s", szTable, sAttrName.cstr() );	
+	int iAttr = m_pSchema->GetAttrIndex ( sAttrWithTable.cstr() );
+	if ( iAttr==-1 )
+		m_sParserError.SetSprintf ( "unknown attribute '%s'", sAttrWithTable.cstr() );
+
+	return iAttr;
+}
+
+
+int	ExprParser_t::AddNodeWithTable ( const char * szTable, uint64_t uOffset )
+{
+	int iAttr = ParseJoinAttr ( szTable, uOffset );
+	if ( iAttr==-1 )
+		return -1;
+
+	YYSTYPE yylval;
+	int iType = ParseAttr ( iAttr, m_pSchema->GetAttr(iAttr).m_sName.cstr(), &yylval );
+	return AddNodeAttr ( iType, yylval.iAttrLocator );
+}
+
+
+uint64_t ExprParser_t::ParseAttrWithTable ( const char * szTable, uint64_t uOffset )
+{
+	int iAttr = ParseJoinAttr ( szTable, uOffset );
+	if ( iAttr==-1 )
+		return 0;
+
+	// lvalp->iAttrLocator 
+	return sphPackAttrLocator ( m_pSchema->GetAttr(iAttr).m_tLocator, iAttr );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 // performs simple semantic analysis
@@ -9851,7 +9905,7 @@ void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize )
 }
 
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema, const JoinArgs_t * pJoinArgs, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	const char* szExpr = sExpr;
 
@@ -9865,6 +9919,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// setup lexer
 	m_sExpr = { szExpr, (int)strlen (szExpr) };
 	m_pSchema = &tSchema;
+	m_pJoinArgs = pJoinArgs;
 
 	// setup constant functions
 	m_iConstNow = (int) time ( nullptr );
@@ -10000,12 +10055,18 @@ ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 // PUBLIC STUFF
 //////////////////////////////////////////////////////////////////////////
 
+JoinArgs_t::JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sIndex1, const CSphString & sIndex2 )
+	: m_tJoinedSchema ( tJoinedSchema )
+	, m_sIndex1 ( sIndex1 )
+	, m_sIndex2 ( sIndex2 )
+{}
+
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs )
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const JoinArgs_t * pJoinArgs, CSphString & sError, ExprParseArgs_t & tArgs )
 {
 	// parse into opcodes
 	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation );
-	ISphExpr * pRes = tParser.Parse ( sExpr, tSchema, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );
+	ISphExpr * pRes = tParser.Parse ( szExpr, tSchema, pJoinArgs, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );
 	if ( tArgs.m_pZonespanlist )
 		*tArgs.m_pZonespanlist = tParser.m_bHasZonespanlist;
 	if ( tArgs.m_pEvalStage )

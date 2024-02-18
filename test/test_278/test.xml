@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>JOIN</name>
+
+<requires><force-rt/></requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path/>
+	binlog_path = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+<!-- populate tables -->
+create table join1 ( id bigint, title text, string_id integer, tmp string attribute, j json );
+insert into join1 values ( 1, 'doc1', 1, 'tmp1',    '{"str_id":1}' );
+insert into join1 values ( 2, 'doc2', 1, 'tmp2',    '{"str_id":1}' );
+insert into join1 values ( 3, 'doc3', 2, 'tmp3',    '{"str_id":2}' );
+insert into join1 values ( 4, 'doc4', 2, 'tmp4',    '{"str_id":2}' );
+insert into join1 values ( 5, 'doc5', 3, 'tmp5',    '{"str_id":3}' );
+insert into join1 values ( 6, 'doc6', 3, 'tmp6',    '{"str_id":3}' );
+insert into join1 values ( 7, 'doc7', 4, 'tmp7',    '{"str_id":4}' );
+insert into join1 values ( 8, 'doc8', 4, 'tmp8',    '{"str_id":4}' );
+insert into join1 values ( 9, 'doc9', 5, 'tmp9',    '{"str_id":5}' );
+insert into join1 values ( 10, 'doc10', 5, 'tmp10', '{"str_id":5}' );
+select * from join1 order by id asc;
+
+create table join2 ( id bigint, title text, name string attribute, j json );
+insert into join2 values ( 1, 'str1', 'string1', '{"a":1,"c":2}' );
+insert into join2 values ( 2, 'str2', 'string2', '{"a":2,"b":1,"d":2}' );
+insert into join2 values ( 3, 'str3', 'string3', '{"b":2,"x":1,"y":2}' );
+insert into join2 values ( 4, 'str4', 'string4', '{}' );
+select * from join2 order by id asc;
+
+<!-- plain join -->
+select id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- plain join -->
+select id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- join with group by joined plain attr -->
+select count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.id order by groupby() asc;
+
+<!-- join with groupby by joined attr and a string in select list -->
+select join2.name, count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.id order by groupby() asc;
+
+<!-- joined json in select list -->
+select id,join2.j.a from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- join with group by joined json -->
+select count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.j.a;
+
+<!-- star syntax -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- group by string -->
+select id, count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.name order by id asc;
+
+<!-- order by string -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc, id asc;
+
+<!-- order by json ASC -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by join2.j.a asc, id asc;
+
+<!-- order by json DESC -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by join2.j.a desc, id asc;
+
+<!-- join expressions -->
+select join2.j.a, join2.j.a+1 from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- FIXME! DOES NOT WORK CORRECTLY -->
+select join2.j.a*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- join expression alias DOES NOT WORK
+select id, join2.j.a x, x*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+-->
+
+<!-- join expression alias -->
+select id, integer(join2.j.a) x, x*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- FIXME! does not work for now; returns error  -->
+select id, join2.id, (join2.j.a+50)*string_id from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc;
+
+<!-- join expression alias -->
+select id, join2.j.a, string_id, (join2.j.a+50) x, x*string_id from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc;
+
+<!-- filter over left table -->
+select * from join1 inner join join2 on join1.string_id=join2.id where string_id>2 order by id asc;
+
+<!-- filter over right table -->
+select * from join1 inner join join2 on join1.string_id=join2.id where join2.id>2 order by id asc;
+
+<!-- json filter over right table -->
+select * from join1 inner join join2 on join1.string_id=join2.id where join2.j.a=1 order by id asc;
+
+<!-- default join = inner join -->
+select * from join1 join join2 on join1.string_id=join2.id where join2.j.a=1 order by id asc;
+
+<!-- join on json attr -->
+select * from join1 join join2 on join1.j.str_id=join2.id order by id asc;
+
+<!-- join on json attr -->
+select * from join1 join join2 on join2.id=join1.j.str_id order by id asc;
+
+<!-- join on json attr -->
+select * from join1 join join2 on join1.id=join2.j.a order by id asc;
+
+<!-- left join on json attr -->
+select * from join1 left join join2 on join1.id=join2.j.a order by id asc;
+
+<!-- inner join vs facet -->
+select id from join1 inner join join2 on join1.id=join2.j.a facet join2.id;;
+
+<!-- left join vs facet -->
+select id from join1 left join join2 on join1.id=join2.j.a facet join2.id;;
+
+<!-- join on nonexistent index -->
+select id from join1 inner join join2 on non_existent.id=join2.j.a;
+
+<!-- join with match on left table -->
+select id from join1 inner join join2 on join1.string_id=join2.id where match('doc2') order by id asc;
+
+<!-- join with match on left table -->
+select id from join1 inner join join2 on join1.string_id=join2.id where match('doc2',join1) order by id asc;
+
+<!-- join with match on right table -->
+select id,join2.id from join1 inner join join2 on join1.string_id=join2.id where match('str2',join2) order by id asc;
+
+<!-- clean up -->
+drop table join2;
+drop table join1;
+</sphinxql>
+</queries>
+
+</test>

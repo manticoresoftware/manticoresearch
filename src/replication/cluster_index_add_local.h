@@ -29,4 +29,4 @@ void operator>> ( MemInputBuffer_c& tOut, ClusterIndexAddLocalRequest_t& tReq );
 
 using ClusterIndexAddLocal_c = ClusterCommand_T<E_CLUSTER::INDEX_ADD_LOCAL, ClusterIndexAddLocalRequest_t>;
 
-
+bool AddLoadedIndexIntoCluster ( const CSphString & sCluster, const CSphString & sIndex );

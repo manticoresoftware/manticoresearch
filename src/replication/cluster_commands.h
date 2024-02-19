@@ -20,6 +20,7 @@ void ReceiveClusterGetNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphS
 void ReceiveClusterIndexAddLocal ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterSynced ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
+void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );
 
 // sending doesn't include cluster name
 void ReceiveClusterFileSend ( ISphOutputBuffer& tOutb, InputBuffer_c& tBuf );

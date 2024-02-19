@@ -17,8 +17,15 @@ Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.
 SELECT * FROM index WHERE MATCH('cats|birds');
 ```
 
-[SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause for performing full-text searches. It accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
+The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. MATCH accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
 
+<!-- example Example_2 -->
+
+```sql
+SELECT * FROM index WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
+```
+
+An example of a more complex query using MATCH with WHERE filters.
 
 <!-- intro -->
 ##### SQL:
@@ -131,7 +138,7 @@ Examples:
 ```json
 POST /search
 -d
-'{   
+'{
     "index" : "hn_small",
     "query":
     {
@@ -170,7 +177,7 @@ POST /search
 ```json
 POST /search
 -d
-'{   
+'{
     "index" : "hn_small",
     "query":
     {

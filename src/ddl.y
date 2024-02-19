@@ -102,10 +102,15 @@ tablename:
 	| TOK_MODIFY
 	;
 
-ident:
-	tablename
+ident_without_modify:
+	TOK_TABLEIDENT
 	| TOK_IDENT
-	| TOK_TYPE
+    | TOK_TYPE
+    ;
+
+ident:
+	ident_without_modify
+	| TOK_MODIFY
 	;
 
 text_or_string:
@@ -337,7 +342,7 @@ create_table_items:
 	;
 
 create_table_option:
-	ident '=' TOK_QUOTED_STRING			{ pParser->AddCreateTableOption ( $1, $3 ); }
+	ident_without_modify '=' TOK_QUOTED_STRING			{ pParser->AddCreateTableOption ( $1, $3 ); }
 	| TOK_ENGINE '=' TOK_QUOTED_STRING	{ pParser->AddCreateTableOption ( $1, $3 ); }
 	;
 

@@ -14,7 +14,7 @@
   <a href="https://slack.manticoresearch.com">Slack</a> •
   <a href="https://t.me/manticoresearch_en">Telegram (En)</a> •
   <a href="https://t.me/manticore_chat">Telegram (Ru)</a> •
-  <a href="https://twitter.com/manticoresearch">Twitter</a>
+  <a href="https://twitter.com/manticoresearch">Twitter</a> •
   <a href="https://github.com/manticoresoftware/manticoresearch/discussions/categories/feedback">User feedback</a>
 </h3>
 
@@ -47,7 +47,7 @@ Manticore Search is an easy to use open source fast database for search. Good al
 * Performant secondary indexes are automatically created, saving you time and effort.
 * The cost-based query optimizer optimizes search queries for optimal performance.
 * Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
-* With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/go-sdk), integration with Manticore Search becomes easy.
+* With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/manticoresearch-go), integration with Manticore Search becomes easy.
 * Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management.
 * Built in C++, Manticore Search starts quickly and uses minimal RAM, with low-level optimizations contributing to its impressive performance.
 * With real-time inserts, newly added documents are immediately accessible.

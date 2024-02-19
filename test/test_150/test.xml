@@ -173,9 +173,10 @@ create table test_table
 <db_insert>insert into test_table values ( 8, 1, 'functic is not place.' );</db_insert>
 
 <queries>
-	<query index="test" mode="extended2">fu*</query>
-	<query index="test" mode="extended2">func*</query>
-<sphinxql>
+	<query index="test" mode="extended2" sortmode="attr_asc" sortby="id">fu*</query>
+	<query index="test" mode="extended2" sortmode="attr_asc" sortby="id">func*</query>
+
+	<sphinxql>
 	insert into rt values ( 1, 'the test is going there', 11 );
 	insert into rt values ( 2, 'a sojmething is going here', 12 );
 	insert into rt values ( 3, 'testing is going not here', 13 );

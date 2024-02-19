@@ -34,7 +34,7 @@ class ReceiverCtx_c final: public Wsrep::Receiver_i
 	RtAccum_t m_tAcc; // apply fn, commit fn
 	CSphQuery m_tQuery;
 	CSphString m_sName; // name of serving cluster
-	Wsrep::Provider_c* m_pProvider = nullptr;
+	Wsrep::Provider_i* m_pProvider = nullptr;
 	std::function<void()> m_fnOnClean;
 
 private:
@@ -42,7 +42,7 @@ private:
 	~ReceiverCtx_c() final;
 
 public:
-	ReceiverCtx_c ( CSphString sName, Wsrep::Provider_c* pProvider, std::function<void()> fnOnClean );
+	ReceiverCtx_c ( CSphString sName, Wsrep::Provider_i* pProvider, std::function<void()> fnOnClean );
 	ReceiverCtx_c ( const ReceiverCtx_c& ) = delete;
 	ReceiverCtx_c ( ReceiverCtx_c&& ) = delete;
 	ReceiverCtx_c& operator= ( const ReceiverCtx_c& ) = delete;
@@ -57,12 +57,12 @@ private:
 	static bool PQAdd ( ReplicationCommand_t* pCmd, ByteBlob_t tReq );
 };
 
-Wsrep::Receiver_i* MakeReceiverCtx ( CSphString sName, Wsrep::Provider_c* pProvider, std::function<void()> fnOnClean )
+Wsrep::Receiver_i* MakeReceiverCtx ( CSphString sName, Wsrep::Provider_i* pProvider, std::function<void()> fnOnClean )
 {
 	return new ReceiverCtx_c ( std::move ( sName ), pProvider, std::move(fnOnClean) );
 }
 
-ReceiverCtx_c::ReceiverCtx_c ( CSphString sName, Wsrep::Provider_c * pProvider, std::function<void()> fnOnClean )
+ReceiverCtx_c::ReceiverCtx_c ( CSphString sName, Wsrep::Provider_i * pProvider, std::function<void()> fnOnClean )
 	: m_sName {std::move ( sName )}
 	, m_pProvider ( pProvider )
 	, m_fnOnClean { std::move ( fnOnClean ) }
@@ -224,13 +224,13 @@ bool ReceiverCtx_c::Commit ( const void* pHndTrx, uint32_t uFlags, const Wsrep::
 	bool bOk = true;
 	bool bIsolated = ( m_tAcc.m_dCmd[0]->m_bIsolated );
 
-	if ( bIsolated ) {
+	if ( bIsolated || !m_pProvider->GetApplier() ) {
 		bOk = HandleCmdReplicated ( m_tAcc );
 	} else
 	{
-		m_pProvider->ApplierPreCommit ( pHndTrx );
+		m_pProvider->GetApplier()->ApplierPreCommit ( pHndTrx );
 		bOk = HandleCmdReplicated ( m_tAcc );
-		m_pProvider->ApplierInterimPostCommit ( pHndTrx );
+		m_pProvider->GetApplier()->ApplierInterimPostCommit ( pHndTrx );
 	}
 	if ( TlsMsg::HasErr ())
 		sphWarning ( "%s", TlsMsg::szError ());

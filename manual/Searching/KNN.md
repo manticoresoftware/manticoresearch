@@ -114,7 +114,7 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
       "index": "<table name>",
       "knn":
       {
-          "field": "<field>"",
+          "field": "<field>",
           "query_vector": [<query vector>],
           "k": <k>
       }
@@ -208,10 +208,9 @@ POST /search
 <!-- Example knn_similar_docs -->
 
 
-### Search KNN similar docs
+### Find similar docs by id
 
-The ManticoreSearch algorithm excels in identifying analogous KNN documents already existing within your table.
-
+Finding documents similar to a specific one based on its unique ID is a common task. For instance, when a user views a particular item, Manticore Search can efficiently identify and display a list of items that are most similar to it in the vector space. Here's how you can do it:
 
 - SQL: `select ... from <table name> where knn ( <field>, <k>, <document id> )`
 - JSON:
@@ -231,7 +230,7 @@ The ManticoreSearch algorithm excels in identifying analogous KNN documents alre
 The parameters are:
 * `field`: This is the name of the float vector attribute containing vector data.
 * `k`: This represents the number of documents to return. It indicates how many documents a single Hierarchical Navigable Small World (HNSW) index will return. The actual result may include more documents than `k` (e.g., if each disk chunk in a real-time table returns `k` documents, the total would be `num_chunks * k` documents). Conversely, the result might contain fewer than `k` documents if, for example, you request `k` documents and subsequently filter them by some attribute.
-* `document id`: Document ID for KNN similarity search:
+* `document id`: Document ID for KNN similarity search.
 
 
 <!-- intro -->
@@ -261,12 +260,12 @@ select id, knn_dist() from test where knn ( image_vector, 5, 1 );
 ```json
 POST /search
 {
-  "index": "<table name>",
+  "index": "test",
   "knn":
   {
-    "field": "<field>"",
-    "doc_id": <id>,
-    "k": <k>
+    "field": "image_vector",
+    "doc_id": 1,
+    "k": 5
   }
 }
 ```

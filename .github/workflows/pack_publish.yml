@@ -148,7 +148,7 @@ jobs:
         cd build
         cmake -DPACK=1 ..
         cmake --build . --target package
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      cache_key: pack_windows_x64
       artifact_list: "build/manticore*exe build/manticore*zip"
 
   # virtual job to simplify the CI

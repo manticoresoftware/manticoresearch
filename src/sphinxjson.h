@@ -15,8 +15,9 @@
 
 #include "sphinxutils.h"
 #include "sphinxdefs.h"
+#include "grouper.h"
 
-struct ISphExpr;
+class ISphExpr;
 
 /// supported JSON value types
 enum ESphJsonType : BYTE
@@ -834,6 +835,112 @@ public:
 int sphJsonUnescape ( char ** pEscaped, int iLen );
 int sphJsonUnescape1 ( char ** pEscaped, int iLen );
 int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen );
+
+template <typename PUSH>
+static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
+{
+	int iLen;
+	char szBuf[32];
+	SphGroupKey_t uGroupKey;
+
+	ESphJsonType eJson = sphJsonUnpackType ( iValue );
+	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
+
+	switch ( eJson )
+	{
+	case JSON_ROOT:
+	{
+		iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
+		bool bEmpty = iLen==5; // mask and JSON_EOF
+		uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
+		return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
+	}
+
+	case JSON_STRING:
+	case JSON_OBJECT:
+	case JSON_MIXED_VECTOR:
+		iLen = sphJsonUnpackInt ( &pValue );
+		uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
+		return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
+
+	case JSON_STRING_VECTOR:
+	{
+		bool bRes = false;
+		sphJsonUnpackInt ( &pValue );
+		iLen = sphJsonUnpackInt ( &pValue );
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
+
+			int iStrLen = sphJsonUnpackInt ( &pValue );
+			uGroupKey = sphFNV64 ( pValue, iStrLen );
+			bRes |= fnPush ( &iNewValue, uGroupKey );
+			pValue += iStrLen;
+		}
+		return bRes;
+	}
+
+	case JSON_INT32:
+#if __has_include( <charconv>)
+		*std::to_chars ( szBuf, szBuf + 32, (int)sphGetDword ( pValue ) ).ptr = '\0';
+		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
+#else
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword ( pValue ) ) ) );
+#endif
+
+	case JSON_INT64:
+#if __has_include( <charconv>)
+		*std::to_chars ( szBuf, szBuf + 32, sphJsonLoadBigint ( &pValue ) ).ptr = '\0';
+		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
+#else
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
+#endif
+
+	case JSON_DOUBLE:
+		snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+		return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
+
+	case JSON_INT32_VECTOR:
+	{
+		bool bRes = false;
+		iLen = sphJsonUnpackInt ( &pValue );
+		auto p = (const int*)pValue;
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
+			uGroupKey = *p++;
+			bRes |= fnPush ( &iPacked, uGroupKey );
+		}
+		return bRes;
+	}
+
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		bool bRes = false;
+		iLen = sphJsonUnpackInt ( &pValue );
+		auto p = (const int64_t*)pValue;
+		ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
+			uGroupKey = *p++;
+			bRes |= fnPush ( &iPacked, uGroupKey );
+		}
+		return bRes;
+	}
+
+	case JSON_TRUE:
+	case JSON_FALSE:
+		uGroupKey = eJson;
+		return fnPush ( &iValue, uGroupKey );
+
+	default:
+		uGroupKey = 0;
+		iValue = 0;
+		return fnPush ( &iValue, uGroupKey );
+	}
+}
 
 #endif // _sphinxjson_
 

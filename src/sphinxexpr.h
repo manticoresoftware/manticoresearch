@@ -100,7 +100,7 @@ enum ESphExprCommand
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
 /// can sometimes be evaluated in integers using IntEval(), depending on type as returned from sphExprParse()
-struct ISphExpr : public ISphRefcountedMT
+class ISphExpr : public ISphRefcountedMT
 {
 public:
 	/// evaluate this expression for that match
@@ -198,19 +198,27 @@ inline void FreeDataPtr ( const ISphExpr * pExpr, const void * pData )
 		FreeDataPtr ( *pExpr, pData );
 }
 
-/// set global behavior of grouping by day/week/month/year functions:
-/// if invoked true, params treated as UTC timestamps,
-/// and as local timestamps otherwise (default)
-void SetGroupingInUtcExpr ( bool bGroupingInUtc );
-
 /// named int/string variant
 /// used for named expression function arguments block
 /// ie. {..} part in, for example, BM25F(1.2, 0.8, {title=3}) call
+
+enum class VariantType_e
+{
+	EMPTY,
+	IDENT,
+	STRING,
+	BIGINT,
+	FLOAT
+};
+
 struct CSphNamedVariant
 {
 	CSphString		m_sKey;		///< key
 	CSphString		m_sValue;	///< value for strings, empty for ints
-	int				m_iValue;	///< value for ints
+	int64_t			m_iValue;	///< value for ints
+	float			m_fValue;
+
+	VariantType_e   m_eType = VariantType_e::EMPTY; 
 };
 
 

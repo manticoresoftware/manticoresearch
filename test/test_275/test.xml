@@ -52,6 +52,7 @@ searchd
 	select * from t;
 	flush ramchunk t;
 	select * from t;
+	select id, knn_dist() from t;
 	drop table t;
 </sphinxql>
 </queries>

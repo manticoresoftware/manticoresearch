@@ -143,55 +143,11 @@ struct CmpPSortersByRandom_fn
 };
 
 
-class BlobPool_c
-{
-public:
-	virtual			~BlobPool_c() = default;
-	virtual void	SetBlobPool ( const BYTE * pBlobPool ) { m_pBlobPool = pBlobPool; }
-	const BYTE *	GetBlobPool () const { return m_pBlobPool; }
-
-protected:
-	const BYTE *	m_pBlobPool {nullptr};
-};
-
-/// groupby key type
-typedef int64_t SphGroupKey_t;
-
-/// base grouper (class that computes groupby key)
-class CSphGrouper : public BlobPool_c, public ISphRefcountedMT
-{
-public:
-	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
-	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
-	virtual void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const = 0;
-	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
-	virtual ESphAttr		GetResultType () const = 0;
-	virtual CSphGrouper *	Clone() const = 0;
-	virtual bool			IsMultiValue() const { return false; }
-	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
-
-protected:
-							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy
-};
-
-class DistinctFetcher_i : public ISphRefcountedMT
-{
-public:
-	virtual SphAttr_t		GetKey ( const CSphMatch & tMatch ) const = 0;
-	virtual void			GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const = 0;
-	virtual void			SetBlobPool ( const BYTE * pBlobPool ) = 0;
-	virtual void			SetColumnar ( const columnar::Columnar_i * pColumnar ) = 0;
-	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
-	virtual bool			IsMultiValue() const = 0;
-	virtual DistinctFetcher_i *	Clone() const = 0;
-};
-
 const char *	GetInternalAttrPrefix();
 int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
 bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
-void			SetGroupingInUtcSort ( bool bGroupingInUtc );
 int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema );
 
 void			SetAccurateAggregationDefault ( bool bEnabled );

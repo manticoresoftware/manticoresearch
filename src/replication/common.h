@@ -23,3 +23,16 @@ bool ClusterDelete ( const CSphString& sCluster );
 // command at remote node for CLUSTER_SYNCED to pick up received indexes and notify Galera that sst received
 struct ClusterSyncedRequest_t;
 bool ClusterSynced ( const ClusterSyncedRequest_t& tCmd );
+
+// cluster state this node sees
+enum class ClusterState_e
+{
+	// stop terminal states
+	CLOSED,				// node shut well or not started
+	DESTROYED,			// node closed with error
+	// transaction states
+	JOINING,			// node joining cluster
+	DONOR,				// node is donor for another node joining cluster
+	// ready terminal state 
+	SYNCED				// node works as usual
+};

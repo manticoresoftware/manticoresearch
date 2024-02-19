@@ -21,7 +21,7 @@ These files are distributed here to have more granular control over the metadata
 
 * `packaging.cmake` is the main entry point. It is included from the Galera build.
 * `metainfo.cmake` provides metadata for all the packages.
-* `description.cmake` is part of the metadata; some packages need it in a separate file, not inlined.
+* `description.txt` is part of the metadata; some packages need it in a separate file, not inlined.
 * `CommonDeb.cmake` provides Debian-specific stuff.
 * `CommonRpm.cmake` provides RPM-specific stuff.
 * `build_*.cmake` provides individual distribution environments.

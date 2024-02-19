@@ -24,6 +24,7 @@
 #include "client_session.h"
 #include "tracer.h"
 #include "searchdbuddy.h"
+#include "aggrexpr.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
@@ -1051,6 +1052,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 	}
 
 	tQuery.m_dRefItems = tQuery.m_dItems;
+	// FIXME!!! no need to add count for AggrFunc aggregates
 	CSphQueryItem & tCountItem = tQuery.m_dItems.Add();
 	tCountItem.m_sExpr = "count(*)";
 	tCountItem.m_sAlias = "count(*)";
@@ -1059,25 +1061,34 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 	for ( const auto & tItem : tQuery.m_dItems )
 		hAttrs.Add ( tItem.m_sAlias );
 
-	for ( const JsonAggr_t & tBucket : tQuery.m_dAggs )
+	ARRAY_FOREACH ( i, tQuery.m_dAggs )
 	{
+		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
+
 		// add only new items
 		if ( hAttrs[tBucket.m_sCol] )
 			continue;
 
 		CSphQueryItem & tItem = tQuery.m_dItems.Add();
-		tItem.m_sExpr = tBucket.m_sCol;
-		tItem.m_sAlias = tBucket.m_sCol;
+		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+		{
+			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+
+		} else
+		{
+			tItem.m_sExpr = tBucket.m_sCol;
+			tItem.m_sAlias = tBucket.m_sCol;
+		}
 
 		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
 		{
-			if ( tBucket.m_dNested[iNested].m_eAggrFunc==SPH_AGGR_NONE )
+			if ( tBucket.m_dNested[iNested].m_eAggrFunc==Aggr_e::NONE )
 				continue;
 
 			CSphQueryItem & tItem = tQuery.m_dItems.Add();
 			tItem.m_sExpr = tBucket.m_dNested[iNested].m_sCol;
 			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
-			tItem.m_eAggrFunc = tBucket.m_dNested[iNested].m_eAggrFunc;
 		}
 	}
 
@@ -1102,28 +1113,47 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		// ref items to facet query
 		tQuery.m_dRefItems.Resize ( 0 );
 		CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
-		tItem.m_sExpr = tBucket.m_sCol;
-		tItem.m_sAlias = tBucket.m_sCol;
+		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+		{
+			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+
+		} else
+		{
+			tItem.m_sExpr = tBucket.m_sCol;
+			tItem.m_sAlias = tBucket.m_sCol;
+		}
+
+		// FIXME!!! no need to add count for AggrFunc aggregates
 		CSphQueryItem & tAggCountItem = tQuery.m_dRefItems.Add();
 		tAggCountItem.m_sExpr = "count(*)";
 		tAggCountItem.m_sAlias = "count(*)";
 		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
 		{
-			if ( tBucket.m_dNested[iNested].m_eAggrFunc==SPH_AGGR_NONE )
+			if ( tBucket.m_dNested[iNested].m_eAggrFunc==Aggr_e::NONE )
 				continue;
 
 			CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 			tItem.m_sExpr = tBucket.m_dNested[iNested].m_sCol;
 			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
-			tItem.m_eAggrFunc = tBucket.m_dNested[iNested].m_eAggrFunc;
 		}
 
-		tQuery.m_sGroupBy = tBucket.m_sCol;
-		tQuery.m_sFacetBy = tBucket.m_sCol;
+		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+		{
+			tQuery.m_sFacetBy = tQuery.m_sGroupBy = GetAggrName ( i, tBucket.m_sCol );
+		} else
+		{
+			tQuery.m_sGroupBy = tBucket.m_sCol;
+			tQuery.m_sFacetBy = tBucket.m_sCol;
+		}
 		tQuery.m_sOrderBy = "@weight desc";
+
 		if ( tBucket.m_sSort.IsEmpty() )
 		{
-			tQuery.m_sGroupSortBy = "@groupby desc";
+			if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+				tQuery.m_sGroupSortBy = "@groupby asc";
+			else
+				tQuery.m_sGroupSortBy = "@groupby desc";
 		} else
 		{
 			tQuery.m_sGroupSortBy = tBucket.m_sSort;
@@ -1433,9 +1463,8 @@ public:
 		DataFinish ( iAffectedRows, nullptr, sMessage );
 	}
 
-	void HeadBegin ( int iCols ) override
+	void HeadBegin () override
 	{
-		m_iExpectedColumns = iCols;
 		m_iTotalRows = 0;
 		m_dBuf.ObjectWBlock();
 		m_dBuf.Named ( "columns" );
@@ -1444,7 +1473,6 @@ public:
 
 	bool HeadEnd ( bool , int ) override
 	{
-		assert ( m_iExpectedColumns == 0 );
 		m_dBuf.FinishBlock(false);
 		m_dBuf.Named ( "data" );
 		m_dBuf.ArrayWBlock();
@@ -1462,7 +1490,6 @@ public:
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
 		m_dColumns.Add ( tCol );
-		--m_iExpectedColumns;
 	}
 
 	void Add ( BYTE ) override {}
@@ -1476,7 +1503,6 @@ public:
 private:
 	JsonEscapedBuilder m_dBuf;
 	CSphVector<ColumnNameType_t> m_dColumns;
-	int m_iExpectedColumns = 0;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
 
@@ -1554,7 +1580,7 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 		// fill headers
 		if ( !dSqlColumns.IsEmpty() )
 		{
-			tOut.HeadBegin ( dSqlColumns.GetLength() );
+			tOut.HeadBegin ();
 			dSqlColumns.for_each ( [&] ( const auto& tColumn ) { tOut.HeadColumn ( tColumn.first.cstr(), tColumn.second ); } );
 			tOut.HeadEnd();
 		} else

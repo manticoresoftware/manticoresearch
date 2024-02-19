@@ -29,6 +29,11 @@ inline int sphIsAlpha ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
 }
 
+inline int sphIsAlphaOnly ( int c )
+{
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );
+}
+
 inline bool sphIsInteger ( char c )
 {
 	return ( c>='0' && c<='9' ) || c=='+' || c=='-';
@@ -166,6 +171,16 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDe
 int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
 
 int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat );
+bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime );
+
+enum class DateUnit_e
+{
+	ms, sec, minute, hour, day, week, month, year,
+	total_units
+};
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
+DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError );
+
 //////////////////////////////////////////////////////////////////////////
 
 namespace sph
@@ -441,6 +456,7 @@ class CSphDynamicLibrary : public ISphNoncopyable
 
 public:
 	explicit CSphDynamicLibrary ( const char* sPath, bool bGlobal=true );
+	void CSphDynamicLibraryAlternative ( const char* sPath, bool bGlobal = true );
 
 	// We are suppose, that library is loaded once when necessary, and will alive whole lifetime of utility.
 	// So, no need to explicitly desctruct it, this is intended leak.

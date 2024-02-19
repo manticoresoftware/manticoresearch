@@ -1,4 +1,45 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' ); insert into test values ( 1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406) ); flush ramchunk test; select * from test.@files;"
+mysql -h0 -P9306 -e "drop table if exists test; create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' ); insert into test values ( 1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406) ); flush ramchunk test; select * from test.@files;"
 ––– output –––
++------+---------------------------------------+---------------------------------------+--------+
+| id   | file                                  | normalized                            | size   |
++------+---------------------------------------+---------------------------------------+--------+
+|    2 | /var/lib/manticore/test/test.settings | /var/lib/manticore/test/test.settings |      3 |
+|    3 | /var/lib/manticore/test/test.0.sph    | /var/lib/manticore/test/test.0.sph    |    715 |
+|    4 | /var/lib/manticore/test/test.0.spd    | /var/lib/manticore/test/test.0.spd    |     20 |
+|    5 | /var/lib/manticore/test/test.0.spp    | /var/lib/manticore/test/test.0.spp    |      1 |
+|    6 | /var/lib/manticore/test/test.0.spe    | /var/lib/manticore/test/test.0.spe    |      1 |
+|    7 | /var/lib/manticore/test/test.0.spi    | /var/lib/manticore/test/test.0.spi    |     59 |
+|    8 | /var/lib/manticore/test/test.0.spm    | /var/lib/manticore/test/test.0.spm    |      4 |
+|    9 | /var/lib/manticore/test/test.0.sphi   | /var/lib/manticore/test/test.0.sphi   |     82 |
+|   10 | /var/lib/manticore/test/test.0.spds   | /var/lib/manticore/test/test.0.spds   |     64 |
+|   11 | /var/lib/manticore/test/test.0.spknn  | /var/lib/manticore/test/test.0.spknn  |    456 |
+|   12 | /var/lib/manticore/test/test.0.spt    | /var/lib/manticore/test/test.0.spt    |     41 |
+|   13 | /var/lib/manticore/test/test.0.spidx  | /var/lib/manticore/test/test.0.spidx  |    313 |
+|   14 | /var/lib/manticore/test/test.0.spa    | /var/lib/manticore/test/test.0.spa    |     96 |
+|   15 | /var/lib/manticore/test/test.0.spb    | /var/lib/manticore/test/test.0.spb    | 131116 |
+|    1 | /var/lib/manticore/test/test.meta     | /var/lib/manticore/test/test.meta     |    741 |
++------+---------------------------------------+---------------------------------------+--------+
+––– input –––
+manticore-backup --backup-dir=/tmp/ > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+ls -1 /tmp/backup-*/data/test/
+––– output –––
+test.0.spa
+test.0.spb
+test.0.spd
+test.0.spds
+test.0.spe
+test.0.sph
+test.0.sphi
+test.0.spi
+test.0.spidx
+test.0.spknn
+test.0.spm
+test.0.spp
+test.0.spt
+test.meta
+test.settings

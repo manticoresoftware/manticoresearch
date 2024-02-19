@@ -67,6 +67,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sph
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
 		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
 		aggrexpr.cpp joinsorter.cpp )
+
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
 target_link_libraries ( lstem PUBLIC lextra )

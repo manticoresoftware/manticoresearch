@@ -185,13 +185,15 @@ expr:
 	;
 
 maparg:
-													{ $$ = pParser->AddNodeMapArg ( NULL, NULL, 0 ); }
-	| map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3 ); }
-	| map_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeMapArg ( $1, $3, 0 ); }
-	| map_key TOK_EQ TOK_CONST_STRING				{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3, true ); }
-	| maparg ',' map_key TOK_EQ TOK_CONST_INT		{ pParser->AppendToMapArg ( $$, $3, NULL, $5 ); }
-	| maparg ',' map_key TOK_EQ TOK_IDENT			{ pParser->AppendToMapArg ( $$, $3, $5, 0 ); }
-	| maparg ',' map_key TOK_EQ	TOK_CONST_STRING	{ pParser->AppendToMapArg ( $$, $3, NULL, $5, true ); }
+													{ $$ = pParser->AddNodeMapArg ( NULL, NULL, 0,  0.0f, VariantType_e::EMPTY ); }
+	| map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL,   $3, 0.0f, VariantType_e::BIGINT ); }
+	| map_key TOK_EQ TOK_CONST_FLOAT				{ $$ = pParser->AddNodeMapArg ( $1, NULL,   0,  $3,   VariantType_e::FLOAT ); }
+	| map_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeMapArg ( $1, $3,     0,  0.0f, VariantType_e::IDENT ); }
+	| map_key TOK_EQ TOK_CONST_STRING				{ $$ = pParser->AddNodeMapArg ( $1, NULL,   $3, 0.0f, VariantType_e::STRING ); }
+	| maparg ',' map_key TOK_EQ TOK_CONST_INT		{ pParser->AppendToMapArg ( $$, $3, NULL,   $5, 0.0f, VariantType_e::BIGINT ); }
+	| maparg ',' map_key TOK_EQ TOK_CONST_FLOAT		{ pParser->AppendToMapArg ( $$, $3, NULL,   0,  $5,   VariantType_e::FLOAT ); }
+	| maparg ',' map_key TOK_EQ TOK_IDENT			{ pParser->AppendToMapArg ( $$, $3, $5,     0,  0.0f, VariantType_e::IDENT ); }
+	| maparg ',' map_key TOK_EQ	TOK_CONST_STRING	{ pParser->AppendToMapArg ( $$, $3, NULL,   $5, 0.0f, VariantType_e::STRING ); }
 	;
 
 map_key:

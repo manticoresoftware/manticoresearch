@@ -32,6 +32,7 @@ enum class E_CLUSTER : WORD
 	GET_NODES			= 6,
 	UPDATE_NODES		= 7,
 	INDEX_ADD_DIST		= 8,
+	GET_NODE_STATE		= 9,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -46,6 +47,7 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::GET_NODES: return "get_nodes";
 	case E_CLUSTER::UPDATE_NODES: return "update_nodes";
 	case E_CLUSTER::INDEX_ADD_DIST: return "index_add_distributed";
+	case E_CLUSTER::GET_NODE_STATE: return "get_node_state";
 	default: return "unknown";
 	}
 }

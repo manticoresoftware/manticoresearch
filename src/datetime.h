@@ -62,4 +62,6 @@ FORCE_INLINE cctz::civil_second ConvertGroupbyTime ( time_t tTime )
 		return ConvertTime(tTime);
 }
 
+const CSphString & CompatDateFormat();
+
 #endif // _datetime_

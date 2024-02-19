@@ -13,6 +13,7 @@
 #include "sphinxint.h"
 #include "geodist.h"
 #include <time.h>
+#include "datetime.h"
 
 static const char * g_szFilter = "_@filter_";
 

@@ -1,8 +1,8 @@
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
 set ( XXH_REPO "https://github.com/manticoresoftware/xxHash" )
-set ( XXH_REV "f215aa0" )
-set ( XXH_SRC_MD5 "7893f4c9e35d535533918398ec2e9492" )
+set ( XXH_REV "15ba9e4" )
+set ( XXH_SRC_MD5 "fbe492d51138081e8789cd1e7e16f59b" )
 
 set ( XXH_GITHUB "${XXH_REPO}/archive/${XXH_REV}.zip" )
 set ( XXH_BUNDLE "${LIBS_BUNDLE}/xxHash-${XXH_REV}.zip" )

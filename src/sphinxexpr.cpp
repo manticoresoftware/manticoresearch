@@ -3235,6 +3235,11 @@ enum Tokh_e : BYTE
 	FUNC_USER,
 	FUNC_VERSION,
 
+	FUNC_RANGE,
+	FUNC_HISTOGRAM,
+	FUNC_DATE_RANGE,
+	FUNC_DATE_HISTOGRAM,
+
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
 	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
 
@@ -3380,6 +3385,11 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "user",			FUNC_USER			 },
 	{ "version",		FUNC_VERSION		 },
 
+	{ "range",			FUNC_RANGE			},
+	{ "histogram",		FUNC_HISTOGRAM		},
+	{ "date_range",		FUNC_DATE_RANGE		},
+	{ "date_histogram",	FUNC_DATE_HISTOGRAM	},
+
 	// other reserved (operators, columns, etc.)
 	{ "count",			TOKH_COUNT			},
 	{ "weight",			TOKH_WEIGHT			},
@@ -3430,52 +3440,53 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] =
 	{
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 5, 4,
-		15, 1, 11, 0, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 35, 76, 4, 1, 0,
-		23, 27, 42, 25, 160, 52, 18, 21, 0, 26,
-		3, 30, 11, 4, 0, 38, 38, 39, 44, 25,
-		9, 160, 160, 160, 160, 42, 160, 35, 76, 4,
-		1, 0, 23, 27, 42, 25, 160, 52, 18, 21,
-		0, 26, 3, 30, 11, 4, 0, 38, 38, 39,
-		44, 25, 9, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160, 160, 160, 160, 160,
-		160, 160, 160, 160, 160, 160
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 10, 10,
+		27, 49, 8, 6, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 29, 64, 14, 5, 5,
+		31, 25, 64, 6, 167, 14, 41, 7, 7, 38,
+		16, 16, 20, 13, 6, 36, 75, 58, 35, 32,
+		15, 167, 167, 167, 167, 49, 167, 29, 64, 14,
+		5, 5, 31, 25, 64, 6, 167, 14, 41, 7,
+		7, 38, 16, 16, 20, 13, 6, 36, 75, 58,
+		35, 32, 15, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
+		167, 167, 167, 167, 167, 167
 	};
 
 	const static short dIndexes[] =
 	{
-		-1, -1, -1, 97, -1, 63, -1, 4, 12, 9,
-		70, -1, 87, 94, 46, 5, 44, 80, 73, 10,
-		6, 45, 60, 61, 29, 62, 99, 37, 34, 13,
-		65, 101, 69, 64, 41, -1, -1, 85, 50, 96,
-		95, 25, 57, 52, 88, 35, 1, 91, 100, 72,
-		33, 36, 68, 42, 16, 58, 76, 83, 102, 8,
-		90, 40, 55, -1, 89, 24, 43, 86, 18, 2,
-		56, 59, 27, 84, 74, 39, 49, 77, 48, 7,
-		98, 0, 47, 38, 31, 71, 19, 81, 75, -1,
-		79, 3, 66, 54, 28, -1, 78, 92, -1, -1,
-		67, -1, 15, -1, -1, -1, 23, -1, 21, -1,
-		-1, -1, 30, 26, -1, -1, -1, -1, -1, 51,
-		-1, 53, 20, 93, -1, -1, -1, -1, -1, -1,
-		32, 22, -1, -1, 11, -1, -1, -1, -1, -1,
-		-1, -1, -1, 82, -1, -1, -1, 17, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, 14
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, 37, -1, -1, -1, -1,
+		103, 105, 101, -1, 29, 63, 34, 62, -1, 70,
+		4, 93, -1, 87, 65, 41, 12, 94, 98, 33,
+		9, 80, 99, 5, 52, 45, 73, 46, 44, 10,
+		6, 61, 60, 88, 76, 69, 64, 68, 1, 57,
+		100, 24, 91, 58, -1, 48, 36, -1, 95, -1,
+		49, 50, 16, 56, 104, -1, 25, 39, 59, 85,
+		30, 40, 83, 77, 15, 89, 72, 38, 71, 18,
+		81, 8, 28, 43, 55, 17, 75, 79, 26, 92,
+		42, 96, 47, 22, 27, 19, 2, 11, -1, 13,
+		-1, -1, 66, -1, 74, -1, 53, -1, -1, 78,
+		-1, -1, 90, -1, 7, 21, 0, -1, 67, 84,
+		-1, -1, 3, 51, 106, 31, -1, -1, 97, 86,
+		82, -1, -1, 54, 23, -1, -1, -1, 14, -1,
+		35, -1, -1, -1, 20, -1, -1, -1, 102, -1,
+		-1, -1, -1, -1, -1, -1, 32,
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -3660,6 +3671,11 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"database", */			0,	TOK_FUNC,		/*FUNC_DATABASE,		*/	SPH_ATTR_STRINGPTR },
 	{ /*"user", */				0,	TOK_FUNC,		/*FUNC_USER,			*/	SPH_ATTR_STRINGPTR },
 	{ /*"version", */			0,	TOK_FUNC,		/*FUNC_VERSION,			*/	SPH_ATTR_STRINGPTR },
+
+	{ /*"range",	*/			-2,	TOK_FUNC,		/*FUNC_RANGE,			*/	SPH_ATTR_INTEGER },
+	{ /*"histogram",*/			2,	TOK_FUNC,		/*FUNC_HISTOGRAM,		*/	SPH_ATTR_INTEGER },
+	{ /*"date_range",	*/		-2,	TOK_FUNC,		/*FUNC_DATE_RANGE,		*/	SPH_ATTR_INTEGER },
+	{ /*"date_histogram",*/		2,	TOK_FUNC,		/*FUNC_DATE_HISTOGRAM,	*/	SPH_ATTR_INTEGER },
 };
 
 
@@ -3753,14 +3769,18 @@ public:
 	CSphVector<CSphNamedVariant> m_dPairs;
 
 public:
-	void Add ( CSphString sKey, const char * sValue, int64_t iValue )
+	void Add ( CSphString sKey, const char * sValue, int64_t iValue, float fValue, VariantType_e eType )
 	{
 		CSphNamedVariant & t = m_dPairs.Add();
 		t.m_sKey = std::move(sKey);
-		if ( sValue )
-			t.m_sValue = sValue;
-		else
-			t.m_iValue = (int)iValue;
+		t.m_eType = eType;
+		switch ( eType )
+		{
+		case VariantType_e::BIGINT: t.m_iValue = iValue; break;
+		case VariantType_e::FLOAT: t.m_fValue = fValue; break;
+		case VariantType_e::STRING:
+		default: t.m_sValue = sValue;
+		};
 	}
 };
 
@@ -3855,8 +3875,8 @@ protected:
 	int						AddNodeHookIdent ( int iID );
 	int						AddNodeHookFunc ( int iID, int iLeft );
 	int						AddNodeHookFunc ( int iID );
-	int						AddNodeMapArg ( const char * szKey, const char * szValue, int64_t iValue, bool bConstStr = false );
-	void					AppendToMapArg ( int iNode, const char * szKey, const char * szValue, int64_t iValue, bool bConstStr = false );
+	int						AddNodeMapArg ( const char * szKey, const char * szValue, int64_t iValue, float fValue, VariantType_e eType );
+	void					AppendToMapArg ( int iNode, const char * szKey, const char * szValue, int64_t iValue, float fValue, VariantType_e eType );
 	const char *			Attr2Ident ( uint64_t uAttrLoc );
 	const char *			Field2Ident ( uint64_t uAttrLoc );
 	int						AddNodeJsonField ( uint64_t uAttrLocator, int iLeft );
@@ -3884,7 +3904,6 @@ public:
 	bool					m_bNeedDocIds = false;
 
 private:
-	int						GetToken ( YYSTYPE * lvalp );
 	bool					CheckGeodist ( YYSTYPE * lvalp );
 	void					AddUservar (  const char * sBegin, int iLen, YYSTYPE * lvalp );
 	int						ProcessRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
@@ -6505,6 +6524,51 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_DATE_FORMAT: return CreateExprDateFormat ( dArgs[0], dArgs[1] );
 	case FUNC_DATABASE: return new Expr_GetStrConst_c ( FROMS ( "Manticore" ), false ) ;
 	case FUNC_VERSION: return new Expr_GetStrConst_c ( FromStr ( sphinxexpr::MySQLVersion() ), false );
+	
+	case FUNC_RANGE:
+	case FUNC_DATE_RANGE:
+	{
+		CSphRefcountedPtr<ISphExpr> pVal ( nullptr );
+		CSphVector<VecTraits_T < CSphNamedVariant > > dSrcRanges;
+		GatherArgFN ( tNode.m_iLeft, [&] ( int i )
+		{
+			if ( m_dNodes[i].m_eRetType==SPH_ATTR_MAPARG )
+				dSrcRanges.Add ( m_dNodes[i].m_pMapArg->m_dPairs );
+			else
+				pVal = CreateTree ( i );
+		});
+		AggrRangeSetting_t tRanges;
+		if ( !ParseAggrRange ( dSrcRanges, ( eFunc==FUNC_DATE_RANGE ), m_iConstNow, tRanges, m_sCreateError ) )
+			return nullptr;
+		return CreateExprRange ( pVal, tRanges );
+	}
+
+	case FUNC_HISTOGRAM:
+	case FUNC_DATE_HISTOGRAM:
+	{
+		CSphRefcountedPtr<ISphExpr> pVal;
+		VecTraits_T < CSphNamedVariant > dSrcOpt;
+		GatherArgFN ( tNode.m_iLeft, [&] ( int i )
+		{
+			if ( m_dNodes[i].m_eRetType==SPH_ATTR_MAPARG )
+				dSrcOpt = m_dNodes[i].m_pMapArg->m_dPairs;
+			else
+				pVal = CreateTree ( i );
+		});
+		if ( eFunc==FUNC_HISTOGRAM )
+		{
+			AggrHistSetting_t tHist;
+			if ( !ParseAggrHistogram ( dSrcOpt, tHist, m_sCreateError ) )
+				return nullptr;
+			return CreateExprHistogram ( pVal, tHist );
+		} else
+		{
+			AggrDateHistSetting_t tHist;
+			if ( !ParseAggrDateHistogram ( dSrcOpt, tHist, m_sCreateError ) )
+				return nullptr;
+			return CreateExprDateHistogram ( pVal, tHist );
+		}
+	}
 
 	default: // just make gcc happy
 		assert ( 0 && "unhandled function id" );
@@ -6558,6 +6622,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_USER:
 		case FUNC_VERSION:
 		case FUNC_KNN_DIST:
+		case FUNC_RANGE:
+		case FUNC_HISTOGRAM:
+		case FUNC_DATE_RANGE:
+		case FUNC_DATE_HISTOGRAM:
 			bSkipChildren = true;
 			break;
 		default:
@@ -9116,6 +9184,52 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		break;
 	}
 
+	case FUNC_RANGE:
+	case FUNC_DATE_RANGE:
+	{
+		if ( dRetTypes.GetLength()<2 )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, but at least 2 args expected", sFuncName, dRetTypes.GetLength () );
+			return -1;
+		}
+
+		if ( dRetTypes[0]!=SPH_ATTR_INTEGER && dRetTypes[0]!=SPH_ATTR_BIGINT && dRetTypes[0]!=SPH_ATTR_FLOAT )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 1 must be number", sFuncName );
+			return -1;
+		}
+
+		GatherArgFN ( iArg, [&] ( int i )
+		{
+			if ( i!=0 && m_dNodes[i].m_eRetType!=SPH_ATTR_MAPARG )
+				m_sParserError.SetSprintf ( "%s() arguments %d must be a map", sFuncName, i+1 );
+		} );
+	}
+	break;
+
+	case FUNC_HISTOGRAM:
+	case FUNC_DATE_HISTOGRAM:
+	{
+		if ( dRetTypes.GetLength()!=2 )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, but at 2 args expected", sFuncName, dRetTypes.GetLength () );
+			return -1;
+		}
+
+		if ( dRetTypes[0]!=SPH_ATTR_INTEGER && dRetTypes[0]!=SPH_ATTR_BIGINT && dRetTypes[0]!=SPH_ATTR_FLOAT )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 1 must be number", sFuncName );
+			return -1;
+		}
+
+		if ( dRetTypes[1]!=SPH_ATTR_MAPARG )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 2 must be map", sFuncName );
+			return -1;
+		}
+	}
+	break;
+
 	default:;
 	}
 
@@ -9525,7 +9639,7 @@ int ExprParser_t::AddNodeHookFunc ( int iID )
 }
 
 
-int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int64_t iValue, bool bConstStr )
+int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int64_t iValue, float fValue, VariantType_e eType )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = TOK_MAP_ARG;
@@ -9534,13 +9648,13 @@ int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int6
 	CSphString sValue;
 	if ( szKey )
 	{
-		if ( bConstStr )
+		if ( eType==VariantType_e::STRING )
 		{
 			sValue = SqlUnescape ( m_sExpr.first + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
 			szValue = sValue.cstr();
 		}
 
-		tNode.m_pMapArg->Add ( szKey, szValue, iValue );
+		tNode.m_pMapArg->Add ( szKey, szValue, iValue, fValue, eType );
 	}
 
 	tNode.m_eRetType = SPH_ATTR_MAPARG;
@@ -9548,16 +9662,16 @@ int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int6
 }
 
 
-void ExprParser_t::AppendToMapArg ( int iNode, const char * szKey, const char * szValue, int64_t iValue, bool bConstStr )
+void ExprParser_t::AppendToMapArg ( int iNode, const char * szKey, const char * szValue, int64_t iValue, float fValue, VariantType_e eType )
 {
 	CSphString sValue;
-	if ( bConstStr )
+	if ( eType==VariantType_e::STRING )
 	{
 		sValue = SqlUnescape ( m_sExpr.first + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
 		szValue = sValue.cstr();
 	}
 
-	m_dNodes[iNode].m_pMapArg->Add ( szKey, szValue, iValue );
+	m_dNodes[iNode].m_pMapArg->Add ( szKey, szValue, iValue, fValue, eType );
 }
 
 

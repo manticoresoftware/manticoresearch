@@ -9,7 +9,7 @@ mysql -h0 -P1306 -e "SHOW SETTINGS;"
 | Setting_name               | Value                                                      |
 +----------------------------+------------------------------------------------------------+
 | configuration_file         | /.clt/test/clt-tests/base/searchd-with-flexible-ports.conf |
-| worker_pid                 | 60                                                         |
+| worker_pid                 | %{NUMBER}                                                         |
 | searchd.listen             | 1306:mysql41                                               |
 | searchd.listen             | 1312                                                       |
 | searchd.listen             | 1308:http                                                  |

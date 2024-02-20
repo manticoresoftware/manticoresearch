@@ -1096,15 +1096,8 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 			SqlInsert_t & tNewValue = tStmt.m_dInsertValues.Add();
 			if ( tItem.IsStr() )
 			{
-				if ( bCompat && StrEq ( tItem.Name(), "@timestamp" ) )
-				{
-					tNewValue.m_iType = SqlInsert_t::CONST_INT;
-					tNewValue.SetValueInt ( GetUTC ( tItem.StrVal(), CompatDateFormat() ) );
-				} else
-				{
-					tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
-					tNewValue.m_sVal = tItem.StrVal();
-				}
+				tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+				tNewValue.m_sVal = tItem.StrVal();
 			} else if ( tItem.IsDbl() )
 			{
 				tNewValue.m_iType = SqlInsert_t::CONST_FLOAT;

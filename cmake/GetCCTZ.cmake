@@ -19,10 +19,7 @@ fetch_and_check ( cctz ${CCTZ_PLACE} ${CCTZ_SRC_MD5} CCTZ_SRC )
 
 # build external project
 get_build ( CCTZ_BUILD cctz )
-set ( CCTZ_BUILD_TESTING OFF CACHE BOOL "" FORCE )
-set ( CCTZ_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE )
-set ( CCTZ_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE )
-external_build ( cctz CCTZ_SRC CCTZ_BUILD CCTZ_BUILD_TOOLS=0 )
+external_build ( cctz CCTZ_SRC CCTZ_BUILD CCTZ_BUILD_TOOLS=0 CCTZ_BUILD_EXAMPLES=0 CCTZ_BUILD_BENCHMARK=0 CCTZ_BUILD_TESTING=0 )
 
 # now it should find
 find_package ( cctz REQUIRED CONFIG )

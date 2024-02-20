@@ -11,16 +11,16 @@ include ( update_bundle )
 
 # determine destination folder where we expect pre-built xxhash
 find_package ( xxHash QUIET CONFIG )
-return_if_target_found ( xxHash::xxHash "found ready (no need to build)" )
+return_if_target_found ( xxHash::xxhash "found ready (no need to build)" )
 
 # not found. Populate and prepare sources
-select_nearest_url ( XXH_PLACE xxHash ${XXH_BUNDLE} ${XXH_GITHUB} )
-fetch_and_check ( xxHash ${XXH_PLACE} ${XXH_SRC_MD5} XXH_SRC )
+select_nearest_url ( XXH_PLACE xxhash ${XXH_BUNDLE} ${XXH_GITHUB} )
+fetch_and_check ( xxhash ${XXH_PLACE} ${XXH_SRC_MD5} XXH_SRC )
 
 # build external project
-get_build ( XXH_BUILD xxHash )
-external_build ( xxHash XXH_SRC XXH_BUILD )
+get_build ( XXH_BUILD xxhash )
+external_build ( xxhash XXH_SRC XXH_BUILD BUILD_SHARED_LIBS=0 XXHASH_BUILD_XXHSUM=0 )
 
 # now it should find
 find_package ( xxHash REQUIRED CONFIG )
-return_if_target_found ( xxHash::xxHash "was built and saved" )
+return_if_target_found ( xxHash::xxhash "was built and saved" )

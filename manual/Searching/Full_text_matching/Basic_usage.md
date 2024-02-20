@@ -14,11 +14,10 @@ Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.
 <!-- example Example_1 -->
 
 ```sql
-SELECT * FROM index WHERE MATCH('cats|birds');
+SELECT * FROM myindex WHERE MATCH('cats|birds');
 ```
 
-[SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause for performing full-text searches. It accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
-
+The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. `MATCH()` accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
 
 <!-- intro -->
 ##### SQL:
@@ -38,8 +37,13 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 |    2 |   12 | second find me |
 +------+------+----------------+
 2 rows in set (0.00 sec)
+```
 
+<!-- request MATCH with filters -->
+An example of a more complex query using MATCH with WHERE filters.
 
+```sql
+SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
 ```
 
 <!-- end -->
@@ -131,7 +135,7 @@ Examples:
 ```json
 POST /search
 -d
-'{   
+'{
     "index" : "hn_small",
     "query":
     {
@@ -170,7 +174,7 @@ POST /search
 ```json
 POST /search
 -d
-'{   
+'{
     "index" : "hn_small",
     "query":
     {

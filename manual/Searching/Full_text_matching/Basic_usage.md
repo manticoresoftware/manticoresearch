@@ -118,6 +118,17 @@ By default, keywords are combined using the OR operator. However, you can change
 }
 ```
 
+### match_all
+
+"match_all" accepts an empty object and returns documents from the index without any text matching. It is similar to the same query used in Elasticsearch. Alternatively, you can just omit the `query` clause in the request which will have the same effect. 
+
+```json
+"query":
+{
+  "match_all": {}
+}
+```
+
 
 ### Combining full-text filtering with other filters
 
@@ -370,6 +381,70 @@ class SearchResponse {
     }
     profile: null
     warning: null
+}
+```
+
+<!-- intro -->
+typescript
+<!-- request typescript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: "test document 1" },
+  "_source": ["content", "title"], 
+  limit: 1
+});
+```
+<!-- response typescript -->
+```json
+{
+  took: 1,
+  timed_out: false,
+  hits:
+   exports {
+     total: 5,
+     total_relation: 'eq',
+     hits:
+      [ { _id: '1',
+          _score: 2566,
+          _source: { content: 'This is a test document 1', title: 'Doc 1' }
+        }
+      ]
+   }
+}
+```
+
+<!-- intro -->
+go
+<!-- request go -->
+
+```go
+searchRequest := openapiclient.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "test document 1"}
+searchReq.SetSource([]string{"content", "title"})
+searchReq.SetLimit(1)
+resp, httpRes, err := search.SearchRequest(*searchRequest).Execute()
+```
+<!-- response go -->
+```json
+{
+  "hits": {
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 2566,
+        "_source": {
+          "content": "This is a test document 1",
+          "title": "Doc 1"
+        }
+      }
+    ],
+    "total": 5,
+    "total_relation": "eq"
+  },
+  "timed_out": false,
+  "took": 0
 }
 ```
 <!-- end -->

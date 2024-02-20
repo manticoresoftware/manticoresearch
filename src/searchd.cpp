@@ -8056,14 +8056,13 @@ public:
 		return false;
 	}
 
-	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
+	static bool ConvertPlainAttr ( const SqlInsert_t & tVal, ESphAttr eTargetType, const CSphString * pName, SphAttr_t & tAttr, bool bDocID, CSphString & sError )
 	{
 		tAttr = 0;
 
 		switch ( eTargetType )
 		{
 		case SPH_ATTR_INTEGER:
-		case SPH_ATTR_TIMESTAMP:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
 			break;
@@ -8100,6 +8099,15 @@ public:
 		case SPH_ATTR_STRINGPTR:
 			break;
 
+		case SPH_ATTR_TIMESTAMP:
+		{
+			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING && StrEq ( pName->cstr(), "@timestamp" ) )
+				tAttr = GetUTC ( tVal.m_sVal, CompatDateFormat() );
+			else
+				tAttr = ToInt(tVal);
+		}
+		break;
+
 		default:
 			return false;
 		};
@@ -8107,10 +8115,10 @@ public:
 		return true;
 	}
 
-	inline static bool SetAttr ( CSphMatch & tMatch, const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, ESphAttr eTargetType, bool bDocID, CSphString & sError )
+	inline static bool SetAttr ( CSphMatch & tMatch, const CSphAttrLocator & tLoc, const CSphString * pName, const SqlInsert_t & tVal, ESphAttr eTargetType, bool bDocID, CSphString & sError )
 	{
 		SphAttr_t tAttr;
-		if ( ConvertPlainAttr ( tVal, eTargetType, tAttr, bDocID, sError ) )
+		if ( ConvertPlainAttr ( tVal, eTargetType, pName, tAttr, bDocID, sError ) )
 		{
 			tMatch.SetAttr ( tLoc, tAttr );
 			return true;
@@ -8125,7 +8133,7 @@ public:
 		tVal.m_iType = SqlInsert_t::CONST_INT;
 		tVal.SetValueInt(0);
 		CSphString sError;
-		SetAttr ( tMatch, tLoc, tVal, eTargetType, false, sError );
+		SetAttr ( tMatch, tLoc, nullptr, tVal, eTargetType, false, sError );
 	}
 };
 
@@ -9948,7 +9956,7 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE> & dDoc, const SchemaItem
 			} else
 			{
 				BsonToSqlInsert ( dChild, tAttr );
-				CSphMatchVariant::SetAttr ( tDoc, pItem->m_tLoc, tAttr, pItem->m_eType, false, sError );
+				CSphMatchVariant::SetAttr ( tDoc, pItem->m_tLoc, &sName, tAttr, pItem->m_eType, false, sError );
 				if ( pId==pItem )
 					tDoc.SetAttr ( tIdLoc, (DocID_t)dChild.Int() );
 
@@ -11217,7 +11225,7 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 
 	SphAttr_t tAttr;
 	CSphString sError;
-	if ( CSphMatchVariant::ConvertPlainAttr ( tDefaultVal, tCol.m_eAttrType, tAttr, false, sError ) )
+	if ( CSphMatchVariant::ConvertPlainAttr ( tDefaultVal, tCol.m_eAttrType, &tCol.m_sName, tAttr, false, sError ) )
 	{
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
@@ -11238,7 +11246,7 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 		return false;
 
 	SphAttr_t tAttr;
-	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, tAttr, bDocId, sError ) )
+	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, &tCol.m_sName, tAttr, bDocId, sError ) )
 	{
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;

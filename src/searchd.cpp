@@ -7918,7 +7918,6 @@ public:
 		switch ( eTargetType )
 		{
 		case SPH_ATTR_INTEGER:
-		case SPH_ATTR_TIMESTAMP:
 		case SPH_ATTR_TOKENCOUNT:
 			tAttr = ToInt(tVal);
 			break;
@@ -7954,6 +7953,15 @@ public:
 
 		case SPH_ATTR_STRINGPTR:
 			break;
+
+		case SPH_ATTR_TIMESTAMP:
+		{
+			if ( tVal.m_iType==SqlInsert_t::QUOTED_STRING )
+				tAttr = GetUTC ( tVal.m_sVal, CompatDateFormat() );
+			else
+				tAttr = ToInt(tVal);
+		}
+		break;
 
 		default:
 			return false;

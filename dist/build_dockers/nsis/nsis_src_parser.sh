@@ -41,7 +41,6 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
   MCL_PACKAGE_NAME=""
   TZDATA_PACKAGE_NAME=""
   MANTICORE_PACKAGE_NAME=""
-  TZDATA_PACKAGE_NAME=""
 
   echo "Commit: $CI_COMMIT_SHORT_SHA, Version: $MANTICORE_VERSION, Search in $DESTINATION repo"
 
@@ -50,6 +49,7 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
   BUDDY_PACKAGE_NAME="manticore-buddy_${BUDDY_VERSION}_${BUDDY_DATE}.${BUDDY_COMMIT_SHA}.zip"
   MCL_PACKAGE_NAME="manticore-columnar-lib-${MCL_VERSION}-${MCL_DATE}-${MCL_COMMIT_SHA}-x64-libs.zip"
   MANTICORE_PACKAGE_NAME="manticore-${MANTICORE_VERSION}-${MANTICORE_DATE}-${CI_COMMIT_SHORT_SHA}-x64-main.zip"
+  TZDATA_PACKAGE_NAME="manticore-tzdata-${TZDATA_VERSION}-${TZDATA_DATE}-${TZDATA_COMMIT_SHA}-x64.zip"
 
   if [ -n "$MANTICORE_PACKAGE_NAME" ] && [ -n "$BUDDY_PACKAGE_NAME" ] && [ -n "$EXECUTOR_VERSION" ] && [ -n "$MCL_PACKAGE_NAME" ] && [ -n "$TZDATA_PACKAGE_NAME" ]; then
       echo "All selected packages are found in $DESTINATION repo"

@@ -14,18 +14,10 @@ Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.
 <!-- example Example_1 -->
 
 ```sql
-SELECT * FROM index WHERE MATCH('cats|birds');
+SELECT * FROM myindex WHERE MATCH('cats|birds');
 ```
 
-The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. MATCH accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
-
-<!-- example Example_2 -->
-
-```sql
-SELECT * FROM index WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
-```
-
-An example of a more complex query using MATCH with WHERE filters.
+The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. `MATCH()` accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
 
 <!-- intro -->
 ##### SQL:
@@ -45,8 +37,13 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 |    2 |   12 | second find me |
 +------+------+----------------+
 2 rows in set (0.00 sec)
+```
 
+<!-- request MATCH with filters -->
+An example of a more complex query using MATCH with WHERE filters.
 
+```sql
+SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
 ```
 
 <!-- end -->

@@ -440,7 +440,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		( bTelemetry ? "" : "--disable-telemetry" ),
 		iThreads );
 
-	sphLogDebug ( "[BUDDY] start args: %s", g_sStartArgs );
+	sphLogDebug ( "[BUDDY] start args: %s", g_sStartArgs.cstr() );
 
 	CSphString sErorr;
 	BuddyState_e eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );

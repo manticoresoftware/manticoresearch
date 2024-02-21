@@ -104,6 +104,7 @@ Section "Manticore Search"
 	CreateDirectory "$INSTDIR\var\data"
 	CreateDirectory "$INSTDIR\var\log\manticore"
 	CreateDirectory "$INSTDIR\var\run\manticore"
+	CreateDirectory "$INSTDIR\usr\local\lib\manticore"
 
 	Call createConfig
 
@@ -196,6 +197,7 @@ Section "Uninstall"
 	RmDir /r $INSTDIR\etc
 	RmDir /r $INSTDIR\include
 	RmDir /r $INSTDIR\share
+	RmDir /r $INSTDIR\usr
 	RmDir /r $INSTDIR\__MACOSX
 	Delete $INSTDIR\uninstall.exe
 

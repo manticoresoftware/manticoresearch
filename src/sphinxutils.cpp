@@ -3130,7 +3130,10 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !hConf("common") || !hConf["common"]("common") )
+	{
+		sphPluginInit ( nullptr );
 		return;
+	}
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	if ( hCommon ( "lemmatizer_base" ) )

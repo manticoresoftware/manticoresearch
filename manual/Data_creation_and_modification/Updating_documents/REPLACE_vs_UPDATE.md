@@ -6,4 +6,6 @@ You can modify existing data in an RT or PQ table by either updating or replacin
 
 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) works similarly to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) except that if an old document has the same ID as the new document, the old document is marked as deleted before the new document is inserted. Note that the old document does not get physically deleted from the table. The deletion can only happen when chunks are merged in a table, e.g., as a result of an [OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
+[REPLACE + SET](../../Data_creation_and_modification/Updating_documents/UPDATE.md) replaces attribute values of existing **single** document with new values
+
 <!-- proofread -->

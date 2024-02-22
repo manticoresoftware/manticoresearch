@@ -2,7 +2,7 @@
 mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
 ––– output –––
 ––– input –––
-stdbuf -oL searchd -c test/clt-tests/sharding/base/config/searchd-with-flexible-ports.conf | grep -v precach
+stdbuf -oL searchd -c test/clt-tests/sharding/base/config/data-manipulation.conf | grep -v precach
 ––– output –––
 Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff

@@ -127,6 +127,7 @@ static void SetTimeZoneLocal ( StrVec_t & dWarnings )
 	}
 #endif
 
+	g_hTimeZoneLocal = cctz::local_time_zone();
 	g_hTimeZone = g_hTimeZoneLocal;
 	CheckForUTC();
 }
@@ -361,4 +362,11 @@ int CalcWeekNumber ( const cctz::civil_second & tTime, uint32_t uFlags )
 	}
 
 	return iDays/7 + 1;
+}
+
+static CSphString g_sCompatDateFormat ( "%Y-%m-%dT%H:%M:%S" ); // YYYY-mm-dd'T'HH:mm:ss.SSS'Z'
+
+const CSphString & CompatDateFormat()
+{
+	return g_sCompatDateFormat;
 }

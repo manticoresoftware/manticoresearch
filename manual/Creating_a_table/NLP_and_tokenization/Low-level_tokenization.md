@@ -1915,13 +1915,13 @@ regexp_filter = (blue|red) => color
 ```
 
 <!-- example regexp_filter -->
-Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regexps.
+Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regular expressions. The regular expressions engine used by Manticore Search is Google's RE2, which is known for its speed and safety. For detailed information on the syntax supported by RE2, you can visit the [RE2 syntax guide](https://github.com/google/re2/wiki/Syntax).
 
 In certain applications such as product search, there can be many ways to refer to a product, model, or property. For example, `iPhone 3gs` and `iPhone 3 gs` (or even `iPhone3 gs`) are very likely to refer to the same product. Another example could be different ways to express a laptop screen size, such as `13-inch`, `13 inch`, `13"`, or `13in`.
 
 Regexps provide a mechanism to specify rules tailored to handle such cases. In the first example, you could possibly use a wordforms file to handle a handful of iPhone models, but in the second example, it's better to specify rules that would normalize "13-inch" and "13in" to something identical.
 
-Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing, even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
+Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing (including [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)), even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
 
 <!-- request SQL -->
 

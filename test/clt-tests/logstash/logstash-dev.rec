@@ -66,7 +66,7 @@ Done
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
-[{"Field":"@timestamp","Type":"text","Properties":"indexed stored"},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
 ––– input –––
 printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_2"\n  allow_older_versions: true\n  compression_level: 0\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_2"\n  pattern: "testlog_2"\n\nseccomp:\n  default_action: allow\n  syscalls:\n  - action: allow\n    names:\n    - rseq' > filebeat.yml
 ––– output –––
@@ -75,7 +75,7 @@ filebeat -c filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log & pid=$!
 ––– output –––
 [1] #!/[0-9]+/!#
 ––– input –––
-timeout 60 tail -n 100 -f /var/log/filebeat.log | grep -qm1 'Non-zero metrics in the last 30s' && echo 'Done' || ( echo 'Timeout or failed' && cat /var/log/filebeat.log && cat /var/log/manticore/searchd.log )
+if timeout 60 grep -qm1 'Non-zero metrics in the last 30s' <(tail -n 0 -f /var/log/filebeat.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/filebeat.log; cat /var/log/manticore/searchd.log; fi
 ––– output –––
 Done
 ––– input –––
@@ -88,4 +88,4 @@ wait 2>&1 >/dev/null
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe testlog_2' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
-[{"Field":"@timestamp","Type":"text","Properties":"indexed stored"},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]

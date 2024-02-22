@@ -510,6 +510,7 @@ struct CSphQuery
 	bool			m_bExplicitDistinctThresh = false;	///< whether thresh was set via options
 
 	int				m_iMaxMatchThresh = 16384;
+	int				m_iNow = 0;	///< timestamp on query receive for all 'now' expressions to have the same base
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;

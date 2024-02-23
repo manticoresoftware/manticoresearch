@@ -120,7 +120,7 @@ By default, keywords are combined using the OR operator. However, you can change
 
 ### match_all
 
-"match_all" accepts an empty object and returns documents from the index without any text matching. It is similar to the same query used in Elasticsearch. Alternatively, you can just omit the `query` clause in the request which will have the same effect. 
+"match_all" accepts an empty object and returns documents from the table without performing any attribute filtering or full-text matching. Alternatively, you can just omit the `query` clause in the request which will have the same effect. 
 
 ```json
 "query":
@@ -420,7 +420,7 @@ go
 <!-- request go -->
 
 ```go
-searchRequest := openapiclient.NewSearchRequest("test")
+searchRequest := manticoresearch.NewSearchRequest("test")
 query := map[string]interface{} {"query_string": "test document 1"}
 searchReq.SetSource([]string{"content", "title"})
 searchReq.SetLimit(1)

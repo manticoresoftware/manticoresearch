@@ -80,7 +80,7 @@ POST /delete -d '
     }'
 ```
 
-* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
+* `query` for JSON contains a clause for a full-text search; it has the same syntax as in the [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 
 <!-- response JSON -->
 
@@ -208,7 +208,7 @@ res = await indexApi.delete({
 
 <!-- request go -->
 ```go
-deleteRequest := openapiclient.NewDeleteDocumentRequest("test")
+deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 matchExpr := map[string]interface{} {"*": "test document"}
 deleteQuery := map[string]interface{} {"match": matchExpr }
 deleteRequest.SetQuery(deleteQuery)
@@ -371,7 +371,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- request go -->
 ```go
-deleteRequest := openapiclient.NewDeleteDocumentRequest("test")
+deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 deleteRequest.SetId(1)
 ```
 
@@ -482,7 +482,7 @@ Query OK, 4 rows affected (0.00 sec)
 <!-- end -->
 
 <!-- example delete 6 -->
-Here is an example of deleting documents in cluster `cluster`'s table `test`.  Note that we must provide the cluster name property along with table property to delete a row from a table which is inside a replication cluster:
+Here is an example of deleting documents in cluster `cluster`'s table `test`.  Note that we must provide the cluster name property along with table property to delete a row from a table within a replication cluster:
 
 
 <!-- intro -->
@@ -613,7 +613,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- request go -->
 ```go
-deleteRequest := openapiclient.NewDeleteDocumentRequest("test")
+deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 deleteRequest.SetCluster("cluster_1")
 deleteRequest.SetId(1)
 ```

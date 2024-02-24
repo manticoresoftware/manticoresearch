@@ -101,6 +101,7 @@ void SetReplicationListener ( const VecTraits_T<ListenerDesc_t> & dListeners )
 	if ( !g_bHasIncoming )
 		g_sIncomingIP = g_sListenReplicationIP;
 
+	sphLogDebugRpl ( "listens: Gelara '%s', own '%s:%d'", g_sListenReplicationIP.cstr(), g_sIncomingIP.cstr(), dListeners[iAPIPort].m_iPort );
 	g_sIncomingApiPoint.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iAPIPort].m_iPort );
 	g_bReplicationEnabled = IsConfigless();
 }

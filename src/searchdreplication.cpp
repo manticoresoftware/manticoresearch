@@ -416,7 +416,7 @@ void ReplicationCluster_t::UpdateGroupView ( const Wsrep::ViewInfo_t* pView )
 	for ( int i = 0; i < pView->m_iNMembers; ++i )
 		dNodes.Append ( ParseNodesFromString ( pBoxes[i].m_sIncoming ) );
 
-	sphLogDebugRpl ( "view nodes changed: %s > %s", StrVec2Str ( GetViewNodes() ).cstr(), StrVec2Str ( dNodes ).cstr() );
+	sphLogDebugRpl ( "cluster '%s' view nodes changed: %s > %s", m_sName.cstr(), StrVec2Str ( GetViewNodes() ).cstr(), StrVec2Str ( dNodes ).cstr() );
 	SetViewNodes ( std::move ( dNodes ) );
 }
 
@@ -861,7 +861,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	if ( bCmdCluster )
 	{
 		if ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD && !CheckIndexExists ( tCmd.m_sIndex ) )
-			return TlsMsg::Err ( "replication error: %s, command %d", TlsMsg::szError(), (int)tCmd.m_eCommand );
+			return TlsMsg::Err ( "replication error: %s, command %d, cluster %s", TlsMsg::szError(), (int)tCmd.m_eCommand, tCmd.m_sCluster.cstr() );
 
 		CommitMonitor_c tCommit ( tAcc );
 		return tCommit.CommitTOI();
@@ -1524,7 +1524,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( !tDesc )
 		return false;
 
-	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( dNames ).cstr() );
+	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( tDesc->m_dClusterNodes ).cstr() );
 
 	// need to clean up Galera system files left from previous cluster
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
@@ -1776,7 +1776,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 		}
 
 		auto dNodes = pCluster->GetViewNodes();
-		sphLogDebugRpl ( "alter '%s' SST index '%s' to nodes %d", pCluster->m_sName.cstr(), sIndex.cstr(), dNodes.GetLength() );
+		sphLogDebugRpl ( "alter '%s' SST index '%s' to nodes %d: '%s'", pCluster->m_sName.cstr(), sIndex.cstr(), dNodes.GetLength(), StrVec2Str ( dNodes ).cstr() );
 
 		// ok for just created cluster (wo nodes) to add existed index
 		if ( !dNodes.IsEmpty() )
@@ -1811,11 +1811,22 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 		// no need to increase attempt count here as it will be checked on next try
 	}
 
+	bool bAdded = false;
+	pCluster->WithWlockedIndexes ( [&sIndex] ( auto & hIndexes, auto & hIndexesLoaded ) { hIndexesLoaded.Add ( sIndex ); });
+	AT_SCOPE_EXIT ([&]
+	{
+		if ( !bAdded )
+			pCluster->WithWlockedIndexes ( [&sIndex] ( auto & hIndexes, auto & hIndexesLoaded ) { hIndexesLoaded.Delete ( sIndex ); });
+	});
+
 	sphLogDebugRpl ( "alter '%s' adding index '%s'", pCluster->m_sName.cstr(), sIndex.cstr() );
 	RtAccum_t tAcc;
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, sIndex, sCluster );
 	pAddCmd->m_bCheckIndex = false;
-	return HandleCmdReplicateImpl ( tAcc, nullptr, nullptr, nullptr );
+	
+	bAdded = HandleCmdReplicateImpl ( tAcc, nullptr, nullptr, nullptr );
+	sphLogDebugRpl ( "alter '%s' %s index '%s'", pCluster->m_sName.cstr(), ( bAdded ? "added" : "failed to add" ), sIndex.cstr() );
+	return bAdded;
 }
 
 static bool ClusterAddCheckDistLocals ( const StrVec_t & dLocals, const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )

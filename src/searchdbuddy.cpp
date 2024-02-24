@@ -718,10 +718,9 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	// check executor first
 #ifdef _WIN32
 	sExecPath.SetSprintf (
-		"docker run --rm --publish-all -v \"%s/%s:/buddy\" -v \"%s:/plugins\" -e PLUGIN_DIR=/plugins -w /buddy %s /buddy/src/main.php",
+		"docker run --rm --publish-all -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy %s /buddy/src/main.php",
 		GET_MANTICORE_MODULES(),
 		g_sDefaultBuddyName.cstr(),
-		sPluginDir.cstr(),
 		g_sDefaultBuddyDockerImage.cstr()
 	);
 	return sExecPath;

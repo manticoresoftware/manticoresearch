@@ -920,6 +920,14 @@ const char * sphGetBlobLocatorName()
 	return BLOB_LOCATOR_ATTR;
 }
 
+
+const char * GetNullMaskAttrName()
+{
+	static const char * szNullMaskAttrName = "$_null_mask";
+	return szNullMaskAttrName;
+}
+
+
 static const CSphString g_sDocidName { "id" };
 
 const char * sphGetDocidName()
@@ -1087,7 +1095,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 
 bool sphIsInternalAttr ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetBlobLocatorName();
+	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName();
 }
 
 

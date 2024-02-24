@@ -4232,6 +4232,11 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	sTok.SetBinary ( sToken, iLen );
 	sTok.ToLower ();
 
+	// check for attributes and fields
+	iRes = ParseAttrsAndFields ( sTok.cstr(), lvalp );
+	if ( iRes>=0 )
+		return iRes;
+
 	// check for table name
 	if ( m_pJoinArgs && ( m_pJoinArgs->m_sIndex1==sTok || m_pJoinArgs->m_sIndex2==sTok ) )
 	{
@@ -4240,11 +4245,6 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 		lvalp->sIdent = m_dIdents.Last();
 		return TOK_TABLE_NAME;
 	}
-
-	// check for attributes and fields
-	iRes = ParseAttrsAndFields ( sTok.cstr(), lvalp );
-	if ( iRes>=0 )
-		return iRes;
 
 	if ( sToken[0]=='@' )
 		return ProcessAtRawToken ( sToken, iLen, lvalp );

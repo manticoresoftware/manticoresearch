@@ -120,14 +120,27 @@ int GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrc
 	return iMaps;
 }
 
+
+static ESphAttr DetermineNullMaskType ( int iNumAttrs )
+{
+	if ( iNumAttrs<=32 )
+		return SPH_ATTR_INTEGER;
+
+	if ( iNumAttrs<=64 )
+		return SPH_ATTR_BIGINT;
+
+	return SPH_ATTR_STRINGPTR;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class TransformedSchemaBuilder_c
 {
 public:
-	TransformedSchemaBuilder_c ( const ISphSchema & tOldSchema, CSphSchema & tNewSchema );
+			TransformedSchemaBuilder_c ( const ISphSchema & tOldSchema, CSphSchema & tNewSchema );
 
 	void	AddAttr ( const CSphString & sName );
+	void	Finalize();
 
 private:
 	const ISphSchema &	m_tOldSchema;
@@ -162,6 +175,20 @@ void TransformedSchemaBuilder_c::AddAttr ( const CSphString & sName )
 	tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
 
 	m_tNewSchema.AddAttr ( tAttr, true );
+}
+
+
+void TransformedSchemaBuilder_c::Finalize()
+{
+	const CSphColumnInfo * pOld = m_tOldSchema.GetAttr ( GetNullMaskAttrName() );
+	if ( !pOld )
+		return;
+
+	const CSphColumnInfo * pNew = m_tNewSchema.GetAttr ( GetNullMaskAttrName() );
+	assert(!pNew);
+
+	CSphColumnInfo tAttr ( GetNullMaskAttrName(), DetermineNullMaskType ( m_tNewSchema.GetAttrsCount() ) );
+	m_tNewSchema.AddAttr ( tAttr,  true );
 }
 
 
@@ -206,14 +233,18 @@ private:
 		// what is to do with current position
 		enum Action_e
 		{
-			SETZERO,		// set default (0)
-			COPY,			// copy as is (plain attribute)
-			COPYBLOB,		// deep copy (unpack/pack) the blob
-			COPYJSONFIELD,	// json field (packed blob with type)
-			EVALEXPR_INT,	// evaluate the expression for the recently added int attribute
-			EVALEXPR_BIGINT,// evaluate the expression for the recently added bigint attribute
-			EVALEXPR_STR,	// evaluate the expression for the recently added string attribute
-			EVALEXPR_MVA	// evaluate the expression for the recently added mva attribute
+			SETZERO,			// set default (0)
+			COPY,				// copy as is (plain attribute)
+			COPYBLOB,			// deep copy (unpack/pack) the blob
+			COPYJSONFIELD,		// json field (packed blob with type)
+			EVALEXPR_INT,		// evaluate the expression for the recently added int attribute
+			EVALEXPR_BIGINT,	// evaluate the expression for the recently added bigint attribute
+			EVALEXPR_STR,		// evaluate the expression for the recently added string attribute
+			EVALEXPR_MVA,		// evaluate the expression for the recently added mva attribute
+			NULLMASK_INT2INT,	// repack null attribute mask for the new schema
+			NULLMASK_STR2INT,	// repack null attribute mask for the new schema
+			NULLMASK_INT2STR,	// repack null attribute mask for the new schema
+			NULLMASK_STR2STR	// repack null attribute mask for the new schema
 		};
 
 		const CSphAttrLocator *	m_pFrom;
@@ -230,16 +261,19 @@ private:
 	};
 
 	int						m_iDynamicSize;		// target dynamic size, from schema
+	int						m_iNumDstAttrs = 0;	// num attrs in dst schema
 	CSphVector<MapAction_t>	m_dActions;			// the recipe
 	CSphVector<std::pair<CSphAttrLocator, CSphAttrLocator>> m_dRemapCmp;	// remap @int_attr_ATTR -> ATTR
+	CSphVector<int>			m_dNullRemap;		// attr remap for null bitmaps
 	CSphVector<int>			m_dDataPtrAttrs;	// orphaned attrs we have to free before swap to new attr
 	GetBlobPoolFromMatch_fn	m_fnGetBlobPool;	// provides base for pool copying
 	GetColumnarFromMatch_fn	m_fnGetColumnar;	// columnar storage getter
 
-	static void SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction );
-	inline void	ProcessMatch ( CSphMatch * pMatch );
+	static void			SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction );
 
-	inline static void PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar );
+	void				SetupNullMaskRemap ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
+	FORCE_INLINE void	ProcessMatch ( CSphMatch * pMatch );
+	FORCE_INLINE void	PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar );
 };
 
 
@@ -283,12 +317,42 @@ MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, cons
 		{
 			m_dRemapCmp.Add ( { pNewSchema->GetAttr(iSrc).m_tLocator, pNewSchema->GetAttr(iDst).m_tLocator } );
 		} );
+
+	SetupNullMaskRemap ( pOldSchema, pNewSchema );
+	m_iNumDstAttrs = pNewSchema->GetAttrsCount();
+}
+
+
+void MatchesToNewSchema_c::SetupNullMaskRemap ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	if ( !pOldSchema->GetAttr ( GetNullMaskAttrName() ) )
+		return;
+
+	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tOldAttr = pOldSchema->GetAttr(i);
+		if ( tOldAttr.m_tLocator.m_bDynamic )
+			m_dNullRemap.Add ( pNewSchema->GetAttrIndex ( tOldAttr.m_sName.cstr() ) );
+	}
 }
 
 
 void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction )
 {
 	tAction.m_pFrom = &tOld.m_tLocator;
+
+	if ( tOld.m_sName==GetNullMaskAttrName() )
+	{
+		bool bOldInt = tOld.m_eAttrType==SPH_ATTR_INTEGER || tOld.m_eAttrType==SPH_ATTR_BIGINT;
+		bool bNewInt = tNew.m_eAttrType==SPH_ATTR_INTEGER || tNew.m_eAttrType==SPH_ATTR_BIGINT;
+
+		if ( bOldInt )
+			tAction.m_eAction = bNewInt ? MapAction_t::NULLMASK_INT2INT : MapAction_t::NULLMASK_INT2STR;
+		else
+			tAction.m_eAction = bNewInt ? MapAction_t::NULLMASK_STR2INT : MapAction_t::NULLMASK_STR2STR;
+
+		return;
+	}
 
 	// columnar attr replaced by an expression
 	// we now need to create an expression that fetches data from columnar storage
@@ -350,7 +414,7 @@ void MatchesToNewSchema_c::ProcessMatch ( CSphMatch * pMatch )
 }
 
 
-inline void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
+void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
 {
 	// try to minimize columnar switches inside the expression as this leads to recreating iterators
 	if ( tAction.IsExprEval() && pColumnar!=tAction.m_pPrevColumnar )
@@ -410,6 +474,52 @@ inline void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, C
 	case MapAction_t::EVALEXPR_MVA:
 		uValue = (SphAttr_t)tAction.m_pExpr->Int64Eval(*pMatch);
 		break;
+
+	case MapAction_t::NULLMASK_INT2INT:
+	{
+		SphAttr_t uSrcValue = pMatch->GetAttr ( *tAction.m_pFrom );
+		for ( int i = 0; i < m_dNullRemap.GetLength(); i++ )
+			if ( ( uSrcValue & ( 1ULL << i ) ) && m_dNullRemap[i]!=-1 )
+				uValue |= 1ULL << m_dNullRemap[i];
+	}
+	break;
+
+	case MapAction_t::NULLMASK_STR2INT:
+	{
+		ByteBlob_t dUnpacked = sphUnpackPtrAttr ( (const BYTE*)pMatch->GetAttr ( *tAction.m_pFrom ) );
+		int iNumElements = dUnpacked.second*8;
+		BitVec_T<BYTE> tSrcMask ( (BYTE*)dUnpacked.first, iNumElements );
+		for ( int i = 0; i < iNumElements; i++ )
+			if ( tSrcMask.BitGet(i) && m_dNullRemap[i]!=-1 )
+				uValue |= 1ULL << m_dNullRemap[i];
+	}
+	break;
+
+	case MapAction_t::NULLMASK_INT2STR:
+	{
+		SphAttr_t uSrcValue = pMatch->GetAttr ( *tAction.m_pFrom );
+		BitVec_T<BYTE> tDstMask ( m_iNumDstAttrs );
+		for ( int i = 0; i < m_dNullRemap.GetLength(); i++ )
+			if ( ( uSrcValue & ( 1ULL << i ) ) && m_dNullRemap[i]!=-1 )
+				tDstMask.BitSet ( m_dNullRemap[i] );
+
+		uValue = (SphAttr_t)sphPackPtrAttr ( { tDstMask.Begin(), tDstMask.GetSizeBytes() } );
+	}
+	break;
+
+	case MapAction_t::NULLMASK_STR2STR:
+	{
+		ByteBlob_t dUnpacked = sphUnpackPtrAttr ( (const BYTE*)pMatch->GetAttr ( *tAction.m_pFrom ) );
+		int iNumElements = dUnpacked.second*8;
+		BitVec_T<BYTE> tSrcMask ( (BYTE*)dUnpacked.first, iNumElements );
+		BitVec_T<BYTE> tDstMask ( m_iNumDstAttrs );
+		for ( int i = 0; i < iNumElements; i++ )
+			if ( tSrcMask.BitGet(i) && m_dNullRemap[i]!=-1 )
+				tDstMask.BitSet ( m_dNullRemap[i] );
+
+		uValue = (SphAttr_t)sphPackPtrAttr ( { tDstMask.Begin(), tDstMask.GetSizeBytes() } );
+	}
+	break;
 
 	default:
 		assert(false && "Unknown state");
@@ -542,7 +652,7 @@ void MatchSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnB
 		for ( int i = 0; i<pOldSchema->GetAttrsCount (); i++ )
 		{
 			const CSphColumnInfo & tAttr = pOldSchema->GetAttr(i);
-			if ( tAttr.m_sName!=sphGetDocidName() )
+			if ( tAttr.m_sName!=sphGetDocidName() && tAttr.m_sName!=GetNullMaskAttrName() )
 				tBuilder.AddAttr ( tAttr.m_sName );
 		}
 	}
@@ -550,7 +660,7 @@ void MatchSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnB
 	{
 		// keep id as the first attribute, then the rest.
 		m_dTransformed.any_of ( [&tBuilder] ( const auto& sName ) { auto bID = ( sName==sphGetDocidName() ); if ( bID ) tBuilder.AddAttr(sName); return bID; } );
-		m_dTransformed.for_each ( [&tBuilder] ( const auto& sName ) { if ( sName!=sphGetDocidName() ) tBuilder.AddAttr(sName); } );
+		m_dTransformed.for_each ( [&tBuilder] ( const auto& sName ) { if ( sName!=sphGetDocidName() && sName!=GetNullMaskAttrName() ) tBuilder.AddAttr(sName); } );
 	}
 
 	for ( int i = 0; i <pNewSchema->GetAttrsCount(); ++i )
@@ -559,6 +669,8 @@ void MatchSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnB
 		if ( pExpr )
 			pExpr->FixupLocator ( pOldSchema, pNewSchema );
 	}
+
+	tBuilder.Finalize();
 
 	MatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, std::move ( fnBlobPoolFromMatch ), std::move ( fnGetColumnarFromMatch ) );
 	Finalize ( fnFinal, false, bFinalizeSorters );
@@ -4411,12 +4523,14 @@ private:
 	bool	AddJoinAttrs();
 	bool	AddJoinFilterAttrs();
 	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 );
+	bool	AddNullBitmask();
 	bool	AddColumnarJoinOnFilter ( const CSphString & sAttr );
 	bool	CheckHavingConstraints() const;
 	bool	SetupGroupbySettings ( bool bHasImplicitGrouping );
 	void	AssignOrderByToPresortStage ( const int * pAttrs, int iAttrCount );
 	void	AddAttrsFromSchema ( const ISphSchema & tSchema, const CSphString & sPrefix );
 	void	ModifyJsonFieldExprForJoin ( CSphColumnInfo & tExprCol, const CSphString & sExpr );
+	void	SelectExprEvalStage ( CSphColumnInfo & tExprCol );
 
 	void	ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, int iNumOldAttrs );
 	void	ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & tState );
@@ -5185,6 +5299,44 @@ void QueueCreator_c::ModifyJsonFieldExprForJoin ( CSphColumnInfo & tExprCol, con
 }
 
 
+void QueueCreator_c::SelectExprEvalStage ( CSphColumnInfo & tExprCol )
+{
+	// is this expression used in filter?
+	// OPTIMIZE? hash filters and do hash lookups?
+	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
+		return;
+
+	// no expr? looks like a joined attr
+	if ( !tExprCol.m_pExpr )
+		return;
+
+	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
+		if ( m_tQuery.m_dFilters[i].m_sAttrName==tExprCol.m_sName )
+		{
+			// is this a hack?
+			// m_bWeight is computed after EarlyReject() get called
+			// that means we can't evaluate expressions with WEIGHT() in prefilter phase
+			if ( tExprCol.m_bWeight )
+			{
+				tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter ( short cut )
+				break;
+			}
+
+			// so we are about to add a filter condition,
+			// but it might depend on some preceding columns (e.g. SELECT 1+attr f1 ... WHERE f1>5)
+			// lets detect those and move them to prefilter \ presort phase too
+			CSphVector<int> dDependentCols;
+			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+
+			SelectStageForColumnarExpr(tExprCol);
+			FetchDependencyChains ( dDependentCols );
+			PropagateEvalStage ( tExprCol, dDependentCols );
+
+			break;
+		}
+}
+
+
 bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 {
 	assert ( m_pSorterSchema );
@@ -5320,39 +5472,14 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	// postpone aggregates, add non-aggregates
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 	{
-		// is this expression used in filter?
-		// OPTIMIZE? hash filters and do hash lookups?
-		if ( tExprCol.m_eAttrType!=SPH_ATTR_JSON_FIELD )
-			ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
-			if ( m_tQuery.m_dFilters[i].m_sAttrName==tExprCol.m_sName )
-			{
-				// is this a hack?
-				// m_bWeight is computed after EarlyReject() get called
-				// that means we can't evaluate expressions with WEIGHT() in prefilter phase
-				if ( tExprCol.m_bWeight )
-				{
-					tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter ( short cut )
-					break;
-				}
-
-				// so we are about to add a filter condition,
-				// but it might depend on some preceding columns (e.g. SELECT 1+attr f1 ... WHERE f1>5)
-				// lets detect those and move them to prefilter \ presort phase too
-				CSphVector<int> dDependentCols;
-				tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
-
-				SelectStageForColumnarExpr(tExprCol);
-				FetchDependencyChains ( dDependentCols );
-				PropagateEvalStage ( tExprCol, dDependentCols );
-
-				break;
-			}
+		SelectExprEvalStage(tExprCol);
 
 		// add it!
 		// NOTE, "final" stage might need to be fixed up later
 		// we'll do that when parsing sorting clause
 		m_pSorterSchema->AddAttr ( tExprCol, true );
-	} else // some aggregate
+	}
+	else // some aggregate
 	{
 		bool bColumnarAggregate = SetupColumnarAggregates(tExprCol);
 
@@ -5479,10 +5606,7 @@ bool QueueCreator_c::AddStoredFieldExpressions()
 
 		CSphQueryItem tItem;
 		tItem.m_sExpr = tField.m_sName;
-		if ( m_tSettings.m_pJoinArgs )
-			tItem.m_sAlias.SetSprintf ( "join1.%s", tField.m_sName.cstr() );
-		else
-			tItem.m_sAlias = tField.m_sName;
+		tItem.m_sAlias = tField.m_sName;
 
 		if ( !ParseQueryItem ( tItem ) )
 			return false;
@@ -5737,7 +5861,7 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 
 	if ( !sphJsonNameSplit ( sAttr1.cstr(), nullptr ) )
 	{
-		m_sError.SetSprintf ( "'%s' is not a json attr", sAttr1.cstr() );
+		m_sError.SetSprintf ( "Unable to perform join on '%s'", sAttr1.cstr() );
 		return false;
 	}
 
@@ -5821,16 +5945,6 @@ bool QueueCreator_c::AddJoinAttrs()
 			m_hQueryColumns.Add ( tAttr.m_sName );
 		}
 
-	if ( m_tQuery.m_eJoinType==JoinType_e::LEFT )
-	{
-		CSphColumnInfo tAttr ( GetRightNullAttrName(), SPH_ATTR_INTEGER );
-		tAttr.m_eStage = SPH_EVAL_SORTER;
-		m_pSorterSchema->AddAttr ( tAttr, true );
-
-		m_hQueryDups.Add ( tAttr.m_sName );
-		m_hQueryColumns.Add ( tAttr.m_sName );
-	}
-
 	return true;
 }
 
@@ -5851,10 +5965,39 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 
 		if ( i.m_sIdx2==sLeftIndex )
 		{
-			if  ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1 ) )	return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1 ) )	return false;
 			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )			return false;
 		}
 	}
+
+	return true;
+}
+
+
+bool QueueCreator_c::AddNullBitmask()
+{
+	if ( !m_tSettings.m_pJoinArgs || m_tQuery.m_eJoinType!=JoinType_e::LEFT )
+		return true;
+
+	int iNumJoinAttrs = 0;
+	int iDynamic = 0;
+	for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
+	{
+		const auto & tAttr = m_pSorterSchema->GetAttr(i);
+		if ( !tAttr.m_tLocator.m_bDynamic )
+			continue;
+
+		iDynamic++;
+		if ( GetJoinAttrName ( tAttr.m_sName, m_tSettings.m_pJoinArgs->m_sIndex2 ) )
+			iNumJoinAttrs = Max ( iNumJoinAttrs, iDynamic );
+	}
+
+	CSphColumnInfo tAttr ( GetNullMaskAttrName(), DetermineNullMaskType(iNumJoinAttrs) );
+	tAttr.m_eStage = SPH_EVAL_SORTER;
+	m_pSorterSchema->AddAttr ( tAttr, true );
+
+	m_hQueryDups.Add ( tAttr.m_sName );
+	m_hQueryColumns.Add ( tAttr.m_sName );
 
 	return true;
 }
@@ -6455,7 +6598,8 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates()
-		&& AddJoinFilterAttrs();
+		&& AddJoinFilterAttrs()
+		&& AddNullBitmask();
 }
 
 bool QueueCreator_c::SetupGroupQueue ()

@@ -132,6 +132,15 @@ select id from join1 inner join join2 on join1.string_id=join2.id where match('d
 <!-- join with match on right table -->
 select id,join2.id from join1 inner join join2 on join1.string_id=join2.id where match('str2',join2) order by id asc;
 
+<!-- regression for a crash when joined json is present in select list and filters -->
+select *,join2.j.a from join1 left join join2 on join1.string_id=join2.j.c where join2.j.a=1 order by id asc;
+
+<!-- join over fulltext (error) table -->
+select * from join1 join join2 on join1.title=join2.title order by id asc;
+
+<!-- join over fulltext (error) table -->
+select id,join2.id from join1 join join2 on join1.title=join2.title order by id asc;
+
 <!-- clean up -->
 drop table join2;
 drop table join1;

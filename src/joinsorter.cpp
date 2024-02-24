@@ -19,13 +19,6 @@
 static int64_t g_iJoinCacheSize = 20971520;
 
 
-const char * GetRightNullAttrName()
-{
-	static const char * szRightNullAttrName = "@right_null";
-	return szRightNullAttrName;
-}
-
-
 void SetJoinCacheSize ( int64_t iSize )
 {
 	g_iJoinCacheSize = iSize;
@@ -35,6 +28,49 @@ void SetJoinCacheSize ( int64_t iSize )
 int64_t GetJoinCacheSize()
 {
 	return g_iJoinCacheSize;
+}
+
+
+bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, CSphString * pModified )
+{
+	CSphString sPrefix;
+	sPrefix.SetSprintf ( "%s.", sJoinedIndex.cstr() );
+	int iPrefixLen = sPrefix.Length();
+
+	bool bRightTable = false;
+	CSphString sMod = sAttr;
+	const char * szStart = sMod.cstr();
+	while ( true )
+	{
+		const char * szFound = strstr ( sMod.cstr(), sPrefix.cstr() );
+		if ( !szFound )
+			break;
+
+		if ( szFound > szStart )
+		{
+			char c = *(szFound-1);
+			if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' )
+				continue;		
+		}
+
+		bRightTable = true;
+		int iStart = szFound-sMod.cstr();
+		CSphString sNewExprPre = iStart > 0 ? sMod.SubString ( 0, iStart ) : "";
+
+		int iPostLen = sMod.Length()-iStart-iPrefixLen;
+		CSphString sNewExprPost = iPostLen > 0 ? sMod.SubString ( iStart + iPrefixLen, sMod.Length()-iStart-iPrefixLen ) : "";
+		sMod.SetSprintf ( "%s%s", sNewExprPre.cstr(), sNewExprPost.cstr() );
+	}
+
+	if ( bRightTable )
+	{
+		if ( pModified )
+			*pModified = sMod;
+
+		return true;
+	}
+
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -262,7 +298,7 @@ private:
 	std::unique_ptr<ISphMatchSorter> m_pRightSorter;
 	std::unique_ptr<ISphSchema>		m_pRightSorterSchema;
 	const BYTE *					m_pBlobPool = nullptr;
-	const CSphColumnInfo *			m_pAttrRightNull = nullptr;
+	const CSphColumnInfo *			m_pAttrNullBitmask = nullptr;
 	CSphSwapVector<CSphMatch>		m_dMatches;
 	SmallStringHash_T<CSphString>	m_hAttrRemap;
 	CSphVector<JoinAttrRemap_t>		m_dJoinRemap;
@@ -275,6 +311,9 @@ private:
 	MatchCache_c					m_tCache;
 	bool							m_bCacheOk = true;
 
+	std::unique_ptr<BYTE[]>			m_pNullMask;
+	uint64_t						m_uNullMask = 0;
+
 	bool							m_bErrorFlag = false;
 	CSphString						m_sErrorMessage;
 
@@ -282,10 +321,10 @@ private:
 	bool		SetupJoinSorter ( CSphString & sError );
 	void		SetupJoinAttrRemap();
 	void		SetupSorterSchema();
+	void		SetupNullMask();
 	FORCE_INLINE uint64_t SetupJoinFilters ( const CSphMatch & tEntry );
 	void		SetupRightFilters();
-	void		SetupOnFilters();
-	bool		GetJoinAttrName ( const CSphString & sExpr, CSphString & sModified ) const;
+	bool		SetupOnFilters ( CSphString & sError );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias );
 	void		SetupJoinSelectList();
 	void		RepackJsonFieldAsStr ( const CSphMatch & tSrcMatch, const CSphAttrLocator & tLocSrc, const CSphAttrLocator & tLocDst );
@@ -328,7 +367,65 @@ void JoinSorter_c::SetupSorterSchema()
 {
 	m_pSorterSchema = m_pSorter->GetSchema();
 	assert ( m_pSorterSchema );
-	m_pAttrRightNull = m_pSorterSchema->GetAttr ( GetRightNullAttrName() );
+	m_pAttrNullBitmask = m_pSorterSchema->GetAttr ( GetNullMaskAttrName() );
+}
+
+
+void JoinSorter_c::SetupNullMask()
+{
+	if ( !m_pAttrNullBitmask )
+		return;
+
+	if ( m_pAttrNullBitmask->m_eAttrType==SPH_ATTR_STRINGPTR )
+	{
+		int iNumJoinAttrs = 0;
+		int iDynamic = 0;
+		for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
+		{
+			const auto & tAttr = m_pSorterSchema->GetAttr(i);
+			if ( !tAttr.m_tLocator.m_bDynamic )
+				continue;
+
+			iDynamic++;
+			if ( GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+				iNumJoinAttrs = Max ( iNumJoinAttrs, iDynamic );
+		}
+
+		BitVec_T<BYTE> tMask(iNumJoinAttrs);
+
+		iDynamic = 0;
+		for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
+		{
+			const auto & tAttr = m_pSorterSchema->GetAttr(i);
+			if ( !tAttr.m_tLocator.m_bDynamic )
+				continue;
+
+			if ( GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+				tMask.BitSet(iDynamic);
+
+			iDynamic++;
+		}
+
+		m_pNullMask = std::unique_ptr<BYTE[]>( sphPackPtrAttr ( { tMask.Begin(), tMask.GetSizeBytes() } ) );
+		m_uNullMask = (uint64_t)m_pNullMask.get();
+		return;
+	}
+
+	// we keep null flags only for attributes with a dynamic locator
+	// and these attributes need to be from the right table
+	m_uNullMask = 0;
+	int iDynamic = 0;
+	for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
+	{
+		const auto & tAttr = m_pSorterSchema->GetAttr(i);
+		if ( !tAttr.m_tLocator.m_bDynamic )
+			continue;
+
+		if ( GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+			m_uNullMask |= 1ULL << iDynamic;
+
+		iDynamic++;
+	}
 }
 
 
@@ -343,8 +440,11 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 
 	m_tJoinQuery.m_dFilters.Resize(0);
 	SetupRightFilters();
-	SetupOnFilters();
+	if ( !SetupOnFilters(sError) )
+		return false;
+
 	SetupSorterSchema();
+	SetupNullMask();
 	m_iDynamicSize = iDynamicSize;
 
 	return true;
@@ -469,6 +569,14 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 		}
 
 		fnPush(m_tMatch);
+
+		// clear repacked json
+		for ( auto & i : m_dJoinRemap )
+			if ( i.m_bJsonRepack )
+			{
+				auto pValue = (BYTE *)m_tMatch.GetAttr(i.m_tLocDst);
+				SafeDeleteArray(pValue);
+			}
 	}
 
 	if ( bInCache )
@@ -487,11 +595,11 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 
 	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT )
 	{
-		assert(m_pAttrRightNull);
-
-		// set NULL flag
 		memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
-		m_tMatch.SetAttr ( m_pAttrRightNull->m_tLocator, 1 );
+
+		// set NULL bitmask
+		assert(m_pAttrNullBitmask);
+		m_tMatch.SetAttr ( m_pAttrNullBitmask->m_tLocator, m_uNullMask );
 		return fnPush(m_tMatch);
 	}
 
@@ -564,7 +672,7 @@ void JoinSorter_c::SetupRightFilters()
 }
 
 
-void JoinSorter_c::SetupOnFilters()
+bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 {
 	for ( auto & tOnFilter : m_tQuery.m_dOnFilters )
 	{
@@ -574,16 +682,33 @@ void JoinSorter_c::SetupOnFilters()
 
 		CSphString sAttrIdx1 = tOnFilter.m_sAttr1;
 		CSphString sAttrIdx2 = tOnFilter.m_sAttr2;
+		CSphString sIdx1 = tOnFilter.m_sIdx1;
+		CSphString sIdx2 = tOnFilter.m_sIdx2;
 
 		if ( tOnFilter.m_sIdx1==m_pJoinedIndex->GetName() )
 		{
 			assert ( tOnFilter.m_sIdx2==m_pIndex->GetName() );
 			Swap ( sAttrIdx1, sAttrIdx2 );
+			Swap ( sIdx1, sIdx2 );
 		}
 
 		// FIXME! handle compound names for left table (e.g. 'table1.id')
 		const CSphColumnInfo * pAttr1 = m_pSorter->GetSchema()->GetAttr ( sAttrIdx1.cstr() );
 		assert(pAttr1);
+
+		// maybe it is a stored field?
+		if ( pAttr1->m_eAttrType==SPH_ATTR_STRINGPTR && pAttr1->m_eStage==SPH_EVAL_POSTLIMIT )
+		{
+			sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", sIdx1.cstr(), pAttr1->m_sName.cstr() );
+			return false;
+		}
+
+		const CSphColumnInfo * pAttr2 = m_pJoinedIndex->GetMatchSchema().GetAttr ( sAttrIdx2.cstr() );
+		if ( pAttr2 && pAttr2->m_eAttrType==SPH_ATTR_STRINGPTR && pAttr2->m_eStage==SPH_EVAL_POSTLIMIT )
+		{
+			sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", sIdx2.cstr(), pAttr2->m_sName.cstr() );
+			return false;
+		}
 
 		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING;
 
@@ -597,6 +722,8 @@ void JoinSorter_c::SetupOnFilters()
 		else
 			tFilter.m_dValues.Resize(1);
 	}
+
+	return true;
 }
 
 
@@ -627,47 +754,6 @@ uint64_t JoinSorter_c::SetupJoinFilters ( const CSphMatch & tEntry )
 }
 
 
-bool JoinSorter_c::GetJoinAttrName ( const CSphString & sExpr, CSphString & sModified ) const
-{
-	CSphString sPrefix;
-	sPrefix.SetSprintf ( "%s.", m_pJoinedIndex->GetName() );
-	int iPrefixLen = sPrefix.Length();
-
-	bool bRightTable = false;
-	CSphString sMod = sExpr;
-	const char * szStart = sMod.cstr();
-	while ( true )
-	{
-		const char * szFound = strstr ( sMod.cstr(), sPrefix.cstr() );
-		if ( !szFound )
-			break;
-
-		if ( szFound > szStart )
-		{
-			char c = *(szFound-1);
-			if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' )
-				continue;		
-		}
-
-		bRightTable = true;
-		int iStart = szFound-sMod.cstr();
-		CSphString sNewExprPre = iStart > 0 ? sMod.SubString ( 0, iStart ) : "";
-
-		int iPostLen = sMod.Length()-iStart-iPrefixLen;
-		CSphString sNewExprPost = iPostLen > 0 ? sMod.SubString ( iStart + iPrefixLen, sMod.Length()-iStart-iPrefixLen ) : "";
-		sMod.SetSprintf ( "%s%s", sNewExprPre.cstr(), sNewExprPost.cstr() );
-	}
-
-	if ( bRightTable )
-	{
-		sModified = sMod;
-		return true;
-	}
-
-	return false;
-}
-
-
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias )
 {
 	if ( sExpr=="*" || sAlias=="*" )
@@ -677,7 +763,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 	assert(pSorterSchema);
 
 	CSphString sJoinExpr;
-	if ( !GetJoinAttrName ( sExpr, sJoinExpr ) )
+	if ( !GetJoinAttrName ( sExpr, CSphString ( m_pJoinedIndex->GetName() ), &sJoinExpr ) )
 		return;
 
 	int iSorterAttrId = pSorterSchema->GetAttrIndex ( sExpr.cstr() );

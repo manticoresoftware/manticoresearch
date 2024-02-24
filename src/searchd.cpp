@@ -13572,6 +13572,154 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 }
 
 
+static bool IsNullSet ( const CSphMatch	& tMatch, int iAttr, SphAttr_t tNullMask, const CSphColumnInfo * pNullBitmaskAttr )
+{
+	if ( !pNullBitmaskAttr )
+		return false;
+
+	if ( pNullBitmaskAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
+	{
+		ByteBlob_t tBlob = sphUnpackPtrAttr ( (const BYTE*)tNullMask );
+		BitVec_T<const BYTE> tVec ( tBlob.first, tBlob.second*8 );
+		return tVec.BitGet(iAttr);
+	}
+
+	assert ( iAttr < 64 );
+	return !!( tNullMask & ( 1 << iAttr ) );
+}
+
+
+static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrsToSend, const ISphSchema & tSchema, RowBuffer_i & dRows, const CSphColumnInfo * pNullBitmaskAttr )
+{
+	SphAttr_t tNullMask = pNullBitmaskAttr ? tMatch.GetAttr ( pNullBitmaskAttr->m_tLocator ) : 0;
+
+	for ( int i=0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		if ( !tAttrsToSend.BitGet(i) )
+			continue;
+
+		if ( IsNullSet ( tMatch, i, tNullMask, pNullBitmaskAttr ) )
+		{
+			dRows.PutString("NULL");
+			continue;
+		}
+
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		const CSphAttrLocator & tLoc = tAttr.m_tLocator;
+		ESphAttr eAttrType = tAttr.m_eAttrType;
+
+		assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
+
+		switch ( eAttrType )
+		{
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_TOKENCOUNT:
+			dRows.PutNumAsString ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
+			break;
+
+		case SPH_ATTR_BIGINT:
+			dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
+			break;
+
+		case SPH_ATTR_UINT64:
+			dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
+			break;
+
+		case SPH_ATTR_FLOAT:
+			dRows.PutFloatAsString ( tMatch.GetAttrFloat(tLoc) );
+			break;
+
+		case SPH_ATTR_DOUBLE:
+			dRows.PutDoubleAsString ( tMatch.GetAttrDouble(tLoc) );
+			break;
+
+		case SPH_ATTR_INT64SET_PTR:
+		case SPH_ATTR_UINT32SET_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_STRINGPTR:
+		{
+			auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+			auto dString = sphUnpackPtrAttr ( pString );
+			if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
+				dString.second -= 2;
+			dRows.PutArray ( dString );
+		}
+		break;
+
+		case SPH_ATTR_JSON_PTR:
+		{
+			auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
+			JsonEscapedBuilder sTmp;
+			if ( pString )
+			{
+				auto dJson = sphUnpackPtrAttr ( pString );
+				sphJsonFormat ( sTmp, dJson.first );
+			}
+			dRows.PutArray ( sTmp );
+		}
+		break;
+
+		case SPH_ATTR_FACTORS:
+		case SPH_ATTR_FACTORS_JSON:
+		{
+			auto dFactors = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tLoc ));
+			StringBuilder_c sTmp;
+			if ( !IsEmpty ( dFactors ))
+				sphFormatFactors ( sTmp, (const unsigned int *)dFactors.first, eAttrType==SPH_ATTR_FACTORS_JSON );
+			dRows.PutArray ( sTmp, false );
+		}
+		break;
+
+		case SPH_ATTR_JSON_FIELD_PTR:
+		{
+			const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
+			if ( !pField )
+			{
+				dRows.PutNULL();
+				break;
+			}
+
+			auto dField = sphUnpackPtrAttr ( pField );
+			auto eJson = ESphJsonType ( *dField.first++ );
+
+			if ( eJson==JSON_NULL )
+			{
+				dRows.PutNULL();
+				break;
+			}
+
+			// send string to client
+			JsonEscapedBuilder sTmp;
+			sphJsonFieldFormat ( sTmp, dField.first, eJson, false );
+			dRows.PutArray ( sTmp, false );
+		}
+		break;
+
+		default:
+			dRows.Add(1);
+			dRows.Add('-');
+			break;
+		}
+	}
+}
+
+
 void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
@@ -13609,129 +13757,13 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 	// FIXME!!! replace that vector relocations by SqlRowBuffer
 
-	// rows
-	const CSphSchema &tSchema = tRes.m_tSchema;
+	const CSphColumnInfo * pNullBitmaskAttr = tRes.m_tSchema.GetAttr ( GetNullMaskAttrName() );
+
 	assert ( tRes.m_bSingle );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto& tMatch : dMatches )
+	for ( const auto & tMatch : dMatches )
 	{
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
-		{
-			if ( !tAttrsToSend.BitGet(i) )
-				continue;
-
-			const CSphColumnInfo & dAttr = tSchema.GetAttr(i);
-			CSphAttrLocator tLoc = dAttr.m_tLocator;
-			ESphAttr eAttrType = dAttr.m_eAttrType;
-
-			assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
-
-			switch ( eAttrType )
-			{
-			case SPH_ATTR_INTEGER:
-			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:
-			case SPH_ATTR_TOKENCOUNT:
-				dRows.PutNumAsString ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
-				break;
-
-			case SPH_ATTR_BIGINT:
-				dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
-				break;
-
-			case SPH_ATTR_UINT64:
-				dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
-				break;
-
-			case SPH_ATTR_FLOAT:
-				dRows.PutFloatAsString ( tMatch.GetAttrFloat(tLoc) );
-				break;
-
-			case SPH_ATTR_DOUBLE:
-				dRows.PutDoubleAsString ( tMatch.GetAttrDouble(tLoc) );
-				break;
-
-			case SPH_ATTR_INT64SET_PTR:
-			case SPH_ATTR_UINT32SET_PTR:
-				{
-					StringBuilder_c dStr;
-					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dRows.PutArray ( dStr, false );
-					break;
-				}
-
-			case SPH_ATTR_FLOAT_VECTOR_PTR:
-			{
-				StringBuilder_c dStr;
-				sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
-				dRows.PutArray ( dStr, false );
-				break;
-			}
-
-			case SPH_ATTR_STRINGPTR:
-				{
-					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-					auto dString = sphUnpackPtrAttr ( pString );
-					if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
-						dString.second -= 2;
-					dRows.PutArray ( dString );
-				}
-				break;
-			case SPH_ATTR_JSON_PTR:
-				{
-					auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
-					JsonEscapedBuilder sTmp;
-					if ( pString )
-					{
-						auto dJson = sphUnpackPtrAttr ( pString );
-						sphJsonFormat ( sTmp, dJson.first );
-					}
-					dRows.PutArray ( sTmp );
-				}
-				break;
-
-			case SPH_ATTR_FACTORS:
-			case SPH_ATTR_FACTORS_JSON:
-				{
-					auto dFactors = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tLoc ));
-					StringBuilder_c sTmp;
-					if ( !IsEmpty ( dFactors ))
-						sphFormatFactors ( sTmp, (const unsigned int *)dFactors.first, eAttrType==SPH_ATTR_FACTORS_JSON );
-					dRows.PutArray ( sTmp, false );
-					break;
-				}
-
-			case SPH_ATTR_JSON_FIELD_PTR:
-				{
-					const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
-					if ( !pField )
-					{
-						dRows.PutNULL();
-						break;
-					}
-
-					auto dField = sphUnpackPtrAttr ( pField );
-					auto eJson = ESphJsonType ( *dField.first++ );
-
-					if ( eJson==JSON_NULL )
-					{
-						dRows.PutNULL();
-						break;
-					}
-
-					// send string to client
-					JsonEscapedBuilder sTmp;
-					sphJsonFieldFormat ( sTmp, dField.first, eJson, false );
-					dRows.PutArray ( sTmp, false );
-					break;
-				}
-
-			default:
-				dRows.Add(1);
-				dRows.Add('-');
-				break;
-			}
-		}
+		SendMysqlMatch ( tMatch, tAttrsToSend, tRes.m_tSchema, dRows, pNullBitmaskAttr );
 
 		if ( bAddQueryColumn )
 		{

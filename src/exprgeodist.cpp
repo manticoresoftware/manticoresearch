@@ -15,6 +15,8 @@
 #include "sphinx.h"
 #include "exprtraits.h"
 
+#include <cmath>
+
 
 class ExprGeodist_c : public ISphExpr
 {

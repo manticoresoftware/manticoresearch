@@ -20,7 +20,6 @@
 #include "sortergroup.h"
 
 #include <ctime>
-#include <cmath>
 
 #if !_WIN32
 #include <unistd.h>

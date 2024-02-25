@@ -1,5 +1,8 @@
 ––– block: ./init –––
 ––– input –––
+export EXTRA_SECTION="manticore-executor /workdir/src/main.php"
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../base/flexible/start-searchd –––

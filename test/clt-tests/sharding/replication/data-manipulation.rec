@@ -1,6 +1,6 @@
 ––– block: ./init –––
 ––– input –––
-export EXTRA_SECTION="manticore-executor /workdir/src/main.php"
+export EXTRA_SECTION="buddy_path = manticore-executor /workdir/src/main.php"
 ––– output –––
 ––– input –––
 export INSTANCE=1

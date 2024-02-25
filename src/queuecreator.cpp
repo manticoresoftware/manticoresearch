@@ -2128,7 +2128,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 			m_pProfile->m_iMaxMatches = m_tGroupSorterSettings.m_iMaxMatches;
 
 		PrecalculatedSorterResults_t tPrecalc = FetchPrecalculatedValues();
-		return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates(), tPrecalc );
+		return CreateSorter ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates(), tPrecalc );
 	}
 
 	if ( m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer )

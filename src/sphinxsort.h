@@ -147,15 +147,13 @@ struct CmpPSortersByRandom_fn
 };
 
 
-int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
+void	SetAccurateAggregationDefault ( bool bEnabled );
+bool	GetAccurateAggregationDefault();
 
-void			SetAccurateAggregationDefault ( bool bEnabled );
-bool			GetAccurateAggregationDefault();
+void	SetDistinctThreshDefault ( int iThresh );
+int 	GetDistinctThreshDefault();
 
-void			SetDistinctThreshDefault ( int iThresh );
-int 			GetDistinctThreshDefault();
-
-int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT );
+int		ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT );
 
 ISphMatchSorter *	CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tCollection );
 ISphMatchSorter *	CreateDirectSqlQueue ( RowBuffer_i * pOutput, void ** ppOpaque1, void ** ppOpaque2, const StrVec_t & dColumns );
@@ -163,6 +161,6 @@ ISphMatchSorter *	CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, in
 
 struct CSphGroupSorterSettings;
 struct PrecalculatedSorterResults_t;
-ISphMatchSorter *	sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, const PrecalculatedSorterResults_t & tPrecalc );
+ISphMatchSorter *	CreateSorter ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, const PrecalculatedSorterResults_t & tPrecalc );
 
 #endif // _sphinxsort_

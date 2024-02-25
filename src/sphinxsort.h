@@ -14,6 +14,7 @@
 #define _sphinxsort_
 
 #include "sortsetup.h"
+#include "queuecreator.h"
 
 namespace columnar
 {
@@ -146,13 +147,7 @@ struct CmpPSortersByRandom_fn
 };
 
 
-const char *	GetInternalAttrPrefix();
-const char *	GetInternalJsonPrefix();
 int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
-bool			IsSortStringInternal ( const CSphString & sColumnName );
-bool			IsSortJsonInternal ( const CSphString & sColumnName );
-CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
-int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema );
 
 void			SetAccurateAggregationDefault ( bool bEnabled );
 bool			GetAccurateAggregationDefault();
@@ -161,14 +156,13 @@ void			SetDistinctThreshDefault ( int iThresh );
 int 			GetDistinctThreshDefault();
 
 int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT );
-bool			HasImplicitGrouping ( const CSphQuery & tQuery );
 
-/// creates proper queue for given query
-/// may return NULL on error; in this case, error message is placed in sError
-/// if the pUpdate is given, creates the updater's queue and perform the index update
-/// instead of searching
-ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra = nullptr, QueryProfile_c * pProfile = nullptr );
+ISphMatchSorter *	CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tCollection );
+ISphMatchSorter *	CreateDirectSqlQueue ( RowBuffer_i * pOutput, void ** ppOpaque1, void ** ppOpaque2, const StrVec_t & dColumns );
+ISphMatchSorter *	CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, int iMaxMatches, bool bFactors );
 
-void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile );
+struct CSphGroupSorterSettings;
+struct PrecalculatedSorterResults_t;
+ISphMatchSorter *	sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, const PrecalculatedSorterResults_t & tPrecalc );
 
 #endif // _sphinxsort_

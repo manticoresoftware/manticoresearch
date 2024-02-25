@@ -1443,9 +1443,6 @@ void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesT
 void				SetUnhintedBuffer ( int iReadUnhinted );
 int					GetUnhintedBuffer();
 
-/// check query for expressions
-bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
-
 void				SetPseudoSharding ( bool bSet );
 bool				GetPseudoSharding();
 void				SetPseudoShardingThresh ( int iThresh );

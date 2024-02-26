@@ -124,9 +124,7 @@ mysql -h0 -P9306 -e "SELECT s, SUM(b) as total_b FROM t GROUP BY s HAVING total_
 +------+-------------------+
 | Mxx  | 1536477568.000000 |
 | ESS  | 9981575168.000000 |
-| phj  | 5487047680.000000 |
 | QGv  | 3897420544.000000 |
-| rWW  | 4573302272.000000 |
 | xWr  | 3388768768.000000 |
 | lUr  | 4598664192.000000 |
 | UAY  | 2777427968.000000 |
@@ -142,6 +140,8 @@ mysql -h0 -P9306 -e "SELECT s, SUM(b) as total_b FROM t GROUP BY s HAVING total_
 | jSA  | 2590193920.000000 |
 | KQr  | 4746381312.000000 |
 | txG  | 3261792768.000000 |
+| SME  | 2223047680.000000 |
+| bAC  | 1554145664.000000 |
 +------+-------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT s, AVG(b) as avg_b FROM t GROUP BY s HAVING avg_b > 1000000 ORDER BY id ASC;"
@@ -151,9 +151,7 @@ mysql -h0 -P9306 -e "SELECT s, AVG(b) as avg_b FROM t GROUP BY s HAVING avg_b > 
 +------+---------------------+
 | Mxx  |   1536477568.000000 |
 | ESS  | 1425939405.71428561 |
-| phj  |   1371761936.000000 |
 | QGv  |    974355154.000000 |
-| rWW  |    914660433.600000 |
 | xWr  | 1129589610.66666675 |
 | lUr  |   1149666096.000000 |
 | UAY  |    694357008.000000 |
@@ -169,6 +167,8 @@ mysql -h0 -P9306 -e "SELECT s, AVG(b) as avg_b FROM t GROUP BY s HAVING avg_b > 
 | jSA  |    647548466.000000 |
 | KQr  |   1186595296.000000 |
 | txG  |   1630896320.000000 |
+| SME  |    555761911.500000 |
+| bAC  |    777072856.000000 |
 +------+---------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT f, COUNT(*) FROM t GROUP BY f HAVING COUNT(*) > 100;"

@@ -1,0 +1,7 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW VERSION"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, a int); insert into t values(1, 'abc', 123); select * from t; replace into t set f='newtext', a=123455 where id=1; select * from t;"
+––– output –––

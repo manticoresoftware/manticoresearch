@@ -25,11 +25,29 @@ Index: t_s4
 Index: t_s5
 Index: t_s5
 ––– input –––
-for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show create table t\G" | grep 'Create Table'; done
+for i in 1 2 3; do echo "#{$i}"; mysql -h0 -P${i}9306 -e "show create table t\G" | grep 'Create Table' | grep -o "t_s[0-9]*" | sort -uV; done
 ––– output –––
-Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
-Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
-Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
+#{1}
+t_s0
+t_s1
+t_s2
+t_s3
+t_s4
+t_s5
+#{2}
+t_s0
+t_s1
+t_s2
+t_s3
+t_s4
+t_s5
+#{3}
+t_s0
+t_s1
+t_s2
+t_s3
+t_s4
+t_s5
 ––– input –––
 for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show tables\G" | grep 'Index: t_' | wc -l; done
 ––– output –––

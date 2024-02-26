@@ -1,16 +1,24 @@
 # Sorting and ranking
 
+Query results can be sorted by full-text ranking weight, one or more attributes or expressions.
+
 **Full-text** queries return matches sorted by default. If nothing is specified, they are sorted by relevance, which is equivalent to `ORDER BY weight() DESC` in SQL format.
 
 **Non-full-text** queries do not perform any sorting by default.
 
-## Extended mode
-
-```sql
-ORDER BY weight() DESC, price ASC, id DESC
-```
+## Advanced sorting
 
 Extended mode is automatically enabled when you explicitly provide sorting rules by adding the `ORDER BY` clause in SQL format or using the `sort` option via HTTP JSON.
+
+### Sorting via SQL
+
+General syntax:
+```sql
+SELECT ... ORDER BY
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC],
+...
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC]
+```
 
 <!-- example alias -->
 
@@ -32,14 +40,10 @@ select *, a + b alias from test order by alias desc;
 
 <!-- end -->
 
-### HTTP
-
-**Sorting by attributes**
+## Sorting via JSON
 
 <!-- example sorting 1 -->
-Query results can be sorted by one or more attributes.
-
-`"sort"` specifies an array where each element can be an attribute name or `"_score"` if you want to sort by match weights. In that case, the sort order defaults to ascending for attributes and descending for `_score`.
+`"sort"` specifies an array where each element can be an attribute name or `_score` if you want to sort by match weights. In that case, the sort order defaults to ascending for attributes and descending for `_score`.
 
 <!-- intro -->
 
@@ -134,7 +138,7 @@ searchRequest.sort = ['_score', 'id'];
 searchRequest.setIndex("test");
 QueryFilter queryFilter = new QueryFilter();
 queryFilter.setQueryString("Test document");
-searchRequest.setFulltextFilter(queryFilter);	
+searchRequest.setFulltextFilter(queryFilter);
 List<Object> sort = new ArrayList<Object>( Arrays.asList("_score", "id") );
 searchRequest.setSort(sort);
 
@@ -200,7 +204,7 @@ You can also specify the sort order explicitly:
   {
     "match": { "title": "Test document" }
   },
-  "sort": 
+  "sort":
   [
     { "id": "desc" },
     "_score"
@@ -288,7 +292,7 @@ searchRequest.sort = [sortById, 'id'];
 searchRequest.setIndex("test");
 QueryFilter queryFilter = new QueryFilter();
 queryFilter.setQueryString("Test document");
-searchRequest.setFulltextFilter(queryFilter);	
+searchRequest.setFulltextFilter(queryFilter);
 List<Object> sort = new ArrayList<Object>();
 SortOrder sortById = new SortOrder();
 sortById.setAttr("id");
@@ -360,7 +364,7 @@ You can also use another syntax and specify the sort order via the `order` prope
   {
     "match": { "title": "Test document" }
   },
-  "sort": 
+  "sort":
   [
     { "id": { "order":"desc" } }
   ],
@@ -447,7 +451,7 @@ searchRequest.sort = [sortById];
 searchRequest.setIndex("test");
 QueryFilter queryFilter = new QueryFilter();
 queryFilter.setQueryString("Test document");
-searchRequest.setFulltextFilter(queryFilter);	
+searchRequest.setFulltextFilter(queryFilter);
 List<Object> sort = new ArrayList<Object>();
 SortOrder sortById = new SortOrder();
 sortById.setAttr("id");
@@ -518,7 +522,7 @@ Sorting by MVA attributes is also supported in JSON queries. Sorting mode can be
   {
     "match": { "title": "Test document" }
   },
-  "sort": 
+  "sort":
   [
     { "attr_mva": { "order":"desc", "mode":"max" } }
   ],
@@ -609,7 +613,7 @@ searchRequest.setFulltextFilter(queryFilter);
 SortMVA sort = new SortMVA();
 sort.setAttr("attr_mva");
 sort.setOrder(SortMVA.OrderEnum.DESC);
-sort.setMode(SortMVA.ModeEnum.MAX);	
+sort.setMode(SortMVA.ModeEnum.MAX);
 searchRequest.setSort(sort);
 
 ```
@@ -657,7 +661,7 @@ searchRequest.SetSort(sort)
 <!-- end -->
 
 <!-- example sorting 5 -->
-When sorting on an attribute, match weight (score) calculation is disabled by default (no ranker is used). You can enable weight calculation by setting the `track_scores` property to true:
+When sorting on an attribute, match weight (score) calculation is disabled by default (no ranker is used). You can enable weight calculation by setting the `track_scores` property to `true`:
 
 <!-- intro -->
 
@@ -671,7 +675,7 @@ When sorting on an attribute, match weight (score) calculation is disabled by de
   {
     "match": { "title": "Test document" }
   },
-  "sort": 
+  "sort":
   [
     { "attr_mva": { "order":"desc", "mode":"max" } }
   ],
@@ -765,7 +769,7 @@ searchRequest.setFulltextFilter(queryFilter);
 SortMVA sort = new SortMVA();
 sort.setAttr("attr_mva");
 sort.setOrder(SortMVA.OrderEnum.DESC);
-sort.setMode(SortMVA.ModeEnum.MAX);	
+sort.setMode(SortMVA.ModeEnum.MAX);
 searchRequest.setSort(sort);
 
 ```

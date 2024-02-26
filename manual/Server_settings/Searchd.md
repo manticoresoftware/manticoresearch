@@ -1104,7 +1104,7 @@ When set to 1 (default), timeouts limit the maximum time between network activit
 
 With replication, a node may need to send a large file (for example, 100GB) to another node. Assume the network can transfer data at 1GB/s, with a series of packets of 4-5MB each. To transfer the entire file, you would need 100 seconds. A default timeout of 5 seconds would only allow the transfer of 5GB before the connection is dropped. Increasing the timeout could be a workaround, but it is not scalable (for instance, the next file might be 150GB, leading to failure again). However, with the default `reset_network_timeout_on_packet` set to 1, the timeout is applied not to the entire transfer but to individual packets. As long as the transfer is in progress (and data is actually being received over the network during the timeout period), it is kept alive. If the transfer gets stuck, such that a timeout occurs between packets, it will be dropped.
 
-Note that if you set up a distributed table, each node—both master and agents—should be tuned. On the master side, `agent_query_timeout` is affected; on agents, `network_timeout` is relevant.
+Note that if you set up a distributed table, each node — both master and agents — should be tuned. On the master side, `agent_query_timeout` is affected; on agents, `network_timeout` is relevant.
 
 <!-- intro -->
 

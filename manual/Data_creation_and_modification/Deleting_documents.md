@@ -1,25 +1,25 @@
 # Deleting documents
 
-Deleting documents is only supported for the following table types:
-* [Real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables,
-* [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables,
-* Distributed tables that only contain RT tables a local or remote agents.
+Deleting documents is only supported in [RT mode](../../Read_this_first.md#Real-time-mode-vs-plain-mode) for the following table types:
+* [Real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables
+* [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables
+* Distributed tables that only contain RT tables as local or remote agents.
 
 You can delete existing documents from a table based on either their ID or certain conditions.
 
 Also, [bulk deletion](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) is available to delete multiple documents.
 
-Deletion of documents can be accomplished via both SQL and HTTP interfaces.
+Deletion of documents can be accomplished via both SQL and JSON interfaces.
 
 For SQL, the response for a successful operation will indicate the number of rows deleted.
 
-For HTTP, the `json/delete` endpoint is used. The server will respond with a JSON object indicating whether the operation was successful and the number of rows deleted.
+For JSON, the `json/delete` endpoint is used. The server will respond with a JSON object indicating whether the operation was successful and the number of rows deleted.
 
 It is recommended to use [table truncation](../Emptying_a_table.md) instead of deletion to delete all documents from a table, as it is a much faster operation.
 
 
 <!-- example delete 2 -->
-In this example we deleted all documents that match full-text query `test document` from the table named `test`:
+In this example we delete all documents that match full-text query `test document` from the table named `test`:
 
 
 <!-- intro -->
@@ -28,16 +28,7 @@ In this example we deleted all documents that match full-text query `test docume
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM TEST;
-
-DELETE FROM TEST WHERE MATCH ('test document');
-
-SELECT * FROM TEST;
-```
-
-<!-- response SQL -->
-
-```sql
+mysql> SELECT * FROM TEST;
 +------+------+-------------+------+
 | id   | gid  | mva1        | mva2 |
 +------+------+-------------+------+
@@ -52,8 +43,10 @@ SELECT * FROM TEST;
 +------+------+-------------+------+
 8 rows in set (0.00 sec)
 
+mysql> DELETE FROM TEST WHERE MATCH ('test document');
 Query OK, 2 rows affected (0.00 sec)
 
+mysql> SELECT * FROM TEST;
 +------+------+-------------+------+
 | id   | gid  | mva1        | mva2 |
 +------+------+-------------+------+
@@ -80,15 +73,15 @@ POST /delete -d '
     }'
 ```
 
-* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
+* `query` for JSON contains a clause for a full-text search; it has the same syntax as in the [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 
 <!-- response JSON -->
 
 ``` json
-    {
-        "_index":"test",
-        "deleted":2,
-    }
+{
+    "_index":"test",
+    "deleted":2,
+}
 ```    
 <!-- intro -->
 ##### PHP:
@@ -166,9 +159,9 @@ class DeleteResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+Dictionary<string, Object> match = new Dictionary<string, Object>();
 match.Add("*", "test document");
-Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+Dictionary<string, Object> query = new Dictionary<string, Object>();
 query.Add("match", match);
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest(index: "test", query: query);
 indexApi.Delete(deleteRequest);
@@ -208,7 +201,7 @@ res = await indexApi.delete({
 
 <!-- request go -->
 ```go
-deleteRequest := openapiclient.NewDeleteDocumentRequest("test")
+deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 matchExpr := map[string]interface{} {"*": "test document"}
 deleteQuery := map[string]interface{} {"match": matchExpr }
 deleteRequest.SetQuery(deleteQuery)
@@ -222,7 +215,7 @@ deleteRequest.SetQuery(deleteQuery)
 <!-- end -->
 
 <!-- example delete 3 -->
-Here - deleting a document with `id` 1 from table named `test`:
+Here - deleting a document with `id` equalling 1 from the table named `test`:
 
 
 <!-- intro -->
@@ -231,15 +224,8 @@ Here - deleting a document with `id` 1 from table named `test`:
 <!-- request SQL -->
 
 ```sql
-DELETE FROM TEST WHERE id=1;
-
-```
-
-<!-- response SQL -->
-
-```sql
+mysql> DELETE FROM TEST WHERE id=1;
 Query OK, 1 rows affected (0.00 sec)
-
 ```
 
 <!-- request JSON -->
@@ -247,7 +233,7 @@ Query OK, 1 rows affected (0.00 sec)
 ``` json
 POST /delete -d '
     {
-        "index":"test",
+        "index": "test",
         "id": 1
     }'
 ```
@@ -257,12 +243,12 @@ POST /delete -d '
 <!-- response JSON -->
 
 ``` json
-    {
-        "_index":"test",
-        "_id":1,
-        "found":true,
-        "result":"deleted"      
-    }
+{
+    "_index": "test",
+    "_id": 1,
+    "found": true,
+    "result": "deleted"      
+}
 ```    
 <!-- intro -->
 ##### PHP:
@@ -371,7 +357,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- request go -->
 ```go
-deleteRequest := openapiclient.NewDeleteDocumentRequest("test")
+deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 deleteRequest.SetId(1)
 ```
 
@@ -482,7 +468,7 @@ Query OK, 4 rows affected (0.00 sec)
 <!-- end -->
 
 <!-- example delete 6 -->
-Here is an example of deleting documents in cluster `cluster`'s table `test`.  Note that we must provide the cluster name property along with table property to delete a row from a table which is inside a replication cluster:
+Here is an example of deleting documents in cluster `cluster`'s table `test`.  Note that we must provide the cluster name property along with table property to delete a row from a table within a replication cluster:
 
 
 <!-- intro -->
@@ -498,12 +484,12 @@ delete from cluster:test where id=100;
 ``` json
 POST /delete -d '
     {
-      "cluster":"cluster",
-      "index":"test",
+      "cluster": "cluster",
+      "index": "test",
       "id": 100
     }'
 ```
-* `cluster` for JSON is the name of the [replication cluster](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster). which contains the needed table 
+* `cluster` for JSON is the name of the [replication cluster](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster). which contains the needed table
 
 <!-- intro -->
 ##### PHP:
@@ -613,7 +599,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- request go -->
 ```go
-deleteRequest := openapiclient.NewDeleteDocumentRequest("test")
+deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 deleteRequest.SetCluster("cluster_1")
 deleteRequest.SetId(1)
 ```
@@ -716,8 +702,8 @@ Array(
 
     [current_line] => 3
     [skipped_lines] => 0
-    [errors] => 
-    [error] => 
+    [errors] =>
+    [error] =>
 )
 
 ```
@@ -804,7 +790,7 @@ class BulkResponse {
 ``` typescript
 docs = [
   { "delete" : { "index" : "test", "id": 1 } },
-  { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } } 
+  { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }
 ];
 body = await indexApi.bulk(
   docs.map((e) => JSON.stringify(e)).join("\n")
@@ -826,7 +812,7 @@ res = await indexApi.bulk(body);
 ```go
 docs = []string {
   `{ "delete" : { "index" : "test", "id": 1 } }`,
-  `{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }` 
+  `{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }`
 ]
 body = strings.Join(docs, "\n")
 resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(body).Execute()

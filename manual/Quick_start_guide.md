@@ -91,7 +91,7 @@ mysql -h0 -P9306
 ##### Connect via JSON over HTTP
 
 <!-- request HTTP -->
-HTTP is a stateless protocol, so it doesn't require any special connection phase. You can simply send a HTTP request to the server and receive the response. To communicate with Manticore using the HTTP interface, you can use any HTTP client library in your programming language of choice to send GET or POST requests to the server and parse the JSON responses:
+HTTP is a stateless protocol, so it doesn't require any special connection phase. You can simply send an HTTP request to the server and receive the response. To communicate with Manticore using the JSON interface, you can use any HTTP client library in your programming language of choice to send GET or POST requests to the server and parse the JSON responses:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -425,19 +425,19 @@ indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title","Crossbody Bag with Tassel");
 doc.Add("price",19.85);
 InsertDocumentRequest insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
 sqlresult = indexApi.Insert(insertDocumentRequest);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title","microfiber sheet set");
 doc.Add("price",19.99);
 insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
 sqlresult = indexApi.Insert(insertDocumentRequest);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title","Pet Hair Remover Glove");
 doc.Add("price",7.99);
 insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);

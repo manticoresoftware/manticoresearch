@@ -136,14 +136,14 @@ POST /search -d '
          {
             "terms" :
              {
-              "field":"price",
+              "field":"price"
              }
          },
         "group_brand_id" :
          {
             "terms" :
              {
-              "field":"brand_id",
+              "field":"brand_id"
              }
          }
      }

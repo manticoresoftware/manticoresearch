@@ -4419,7 +4419,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded;
+	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4519,6 +4519,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("knn") && !$g_knn_loaded)
 	{
 		printf ( "SKIPPING %s, %s - knn library not loaded\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("tzdata") && !$g_tzdata_loaded)
+	{
+		printf ( "SKIPPING %s, %s - timezone data is not available\n", $path, $config->Name () );
 		return false;
 	}
 

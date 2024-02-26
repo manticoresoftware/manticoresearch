@@ -828,6 +828,30 @@ static void FixupFilterType ( const CSphSchema & tSchema, nljson & tVal )
 	}
 }
 
+static void FixupValues ( const nljson::json_pointer & tQueryFilter, const CSphSchema & tSchema, nljson & tFullQuery )
+{
+	if ( !tFullQuery.contains ( tQueryFilter ) || !tFullQuery[tQueryFilter].size() )
+		return;
+
+	for ( auto & tVal : tFullQuery[tQueryFilter].items() )
+	{
+		if ( !tVal.value().is_object() )
+			continue;
+
+		if ( tVal.value().cbegin().key()=="match_phrase" )
+		{
+			FixupFilterMatchPhrase ( tSchema, tVal.value() );
+			continue;
+		}
+
+		if ( tVal.value().cbegin().key()=="equals" )
+		{
+			FixupFilterType ( tSchema, tVal.value().begin().value() );
+			continue;
+		}
+	}
+}
+
 static void FixupFilter ( const StrVec_t & dIndexes, nljson & tFullQuery )
 {
 	CSphSchema tSchema;
@@ -856,26 +880,9 @@ static void FixupFilter ( const StrVec_t & dIndexes, nljson & tFullQuery )
 
 	// FIXME!!! move into FixupFilterFeilds
 	nljson::json_pointer tQueryFilter ( "/query/bool/filter" );
-	if ( !tFullQuery.contains ( tQueryFilter ) )
-		return;
-
-	for ( auto & tVal : tFullQuery[tQueryFilter].items() )
-	{
-		if ( !tVal.value().is_object() )
-			continue;
-
-		if ( tVal.value().cbegin().key()=="match_phrase" )
-		{
-			FixupFilterMatchPhrase ( tSchema, tVal.value() );
-			continue;
-		}
-
-		if ( tVal.value().cbegin().key()=="equals" )
-		{
-			FixupFilterType ( tSchema, tVal.value().begin().value() );
-			continue;
-		}
-	}
+	FixupValues ( tQueryFilter, tSchema, tFullQuery );
+	nljson::json_pointer tQueryMustNot ( "/query/bool/must_not" );
+	FixupValues ( tQueryMustNot, tSchema, tFullQuery );
 }
 
 template<class T_FN>
@@ -1070,6 +1077,78 @@ static StrVec_t ExpandIndexes ( const CSphString & sSrcIndexes, CSphString & sRe
 	return dLocalIndexes;
 }
 
+static bool Ends ( const char * sSrc, const char * sSuffix )
+{
+	if ( !sSrc || !sSuffix )
+		return false;
+
+	auto iVal = (int)strlen ( sSrc );
+	auto iSuffix = (int)strlen ( sSuffix );
+	if ( iVal < iSuffix )
+		return false;
+	return strncmp ( sSrc + iVal - iSuffix, sSuffix, iSuffix ) == 0;
+}
+
+static const char g_sReplaceKw[] = ".keyword";
+
+static void FixupAggs ( const StrVec_t & dIndexes, nljson & tFullQuery )
+{
+	nljson::json_pointer tPathAggs ( "/aggs" );
+	if ( !tFullQuery.contains ( tPathAggs ) )
+		return;
+
+	CSphVector<nljson::json_pointer> dReplace;
+
+	for ( const auto & tAggItem : tFullQuery[tPathAggs].items() )
+	{
+		if ( !tAggItem.value().size() || !tAggItem.value().front().size() )
+			continue;
+
+		const auto & tVal = tAggItem.value().front().front();
+		if ( !tVal.is_string() )
+			continue;
+
+		const char * sVal = tVal.get_ptr<const nljson::string_t *>()->c_str();
+		if ( !Ends ( sVal, g_sReplaceKw ) )
+			continue;
+
+		nljson::json_pointer tPath = tPathAggs / tAggItem.key() / tAggItem.value().cbegin().key() / tAggItem.value().front().cbegin().key();
+		dReplace.Add ( tPath );
+	}
+
+	if ( dReplace.IsEmpty() )
+		return;
+
+	CSphSchema tSchema;
+	for ( const CSphString & sName : dIndexes )
+	{
+		auto tIndex ( GetServed ( sName ) );
+		if ( tIndex )
+		{
+			tSchema = RIdx_c( tIndex )->GetMatchSchema();
+			break;
+		}
+	}
+
+	if ( !tSchema.GetAttrsCount() )
+		return;
+
+	for ( const auto & tPath : dReplace )
+	{
+		const char * sAttr = tFullQuery[tPath].get_ptr<const nljson::string_t *>()->c_str();;
+		if ( tSchema.GetAttr ( sAttr ) )
+			continue;
+
+		int iLen = strlen ( sAttr );
+		CSphString sNameReplace;
+		sNameReplace.SetBinary ( sAttr, iLen - sizeof(g_sReplaceKw) + 1 );
+
+		const CSphColumnInfo * pCol = tSchema.GetAttr ( sNameReplace.cstr() );
+		if ( pCol && pCol->m_eAttrType==SPH_ATTR_STRING )
+			tFullQuery[tPath] = sNameReplace.cstr();
+	}
+}
+
 static CSphString g_sEmptySearch = R"(
 {
   "took": 0,
@@ -1133,6 +1212,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	EscapeKibanaColumnNames ( dIndexes, tReq );
 	FixupKibana ( dIndexes, tReq );
 	FixupFilter ( dIndexes, tReq );
+	FixupAggs ( dIndexes, tReq );
 
 	JsonQuery_c tQuery;
 	tQuery.m_eQueryType = QUERY_JSON;

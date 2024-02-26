@@ -17,6 +17,7 @@
 #include "attribute.h"
 #include "searchdsql.h"
 #include "knnmisc.h"
+#include "datetime.h"
 
 #include "json/cJSON.h"
 
@@ -1641,11 +1642,43 @@ static void EncodeFields ( const StrVec_t & dFields, const AggrResult_t & tRes, 
 	tOut.FinishBlock ( false ); // close obj
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, const AggrResult_t & tRes, bool bCompat, JsonEscapedBuilder & tOut )
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, int iNow, JsonEscapedBuilder & tOut )
 {
+	const CSphColumnInfo* pKey = nullptr;
+	const CSphColumnInfo* pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 
-	const CSphColumnInfo * pKey = tRes.m_tSchema.GetAttr ( tAggr.m_sCol.cstr() );
-	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+	bool bKeyed = false;
+	RangeNameHash_t tRangeNames;
+	if ( tAggr.m_eAggrFunc==Aggr_e::NONE )
+		pKey = tRes.m_tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	else
+	{
+		pKey = tRes.m_tSchema.GetAttr ( GetAggrName ( iAggrItem, tAggr.m_sCol ).cstr() );
+		switch ( tAggr.m_eAggrFunc )
+		{
+		case Aggr_e::RANGE:
+			GetRangeKeyNames ( tAggr.m_tRange, tRangeNames );
+			bKeyed = tAggr.m_tRange.m_bKeyed;
+			break;
+
+		case Aggr_e::DATE_RANGE:
+			GetRangeKeyNames ( tAggr.m_tDateRange, iNow, tRangeNames );
+			bKeyed = tAggr.m_tDateRange.m_bKeyed;
+			break;
+
+		case Aggr_e::HISTOGRAM:
+			bKeyed = tAggr.m_tHist.m_bKeyed;
+			break;
+
+		case Aggr_e::DATE_HISTOGRAM:
+			bKeyed = tAggr.m_tDateHist.m_bKeyed;
+			break;
+
+		default:
+			break;
+		}
+	}
+
 	// might be null for empty result set
 
 	CSphFixedVector<std::pair<const CSphColumnInfo *, const char *>> dNested ( tAggr.m_dNested.GetLength() );
@@ -1656,38 +1689,134 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, const AggrResult_t & tRes, bo
 		assert ( dNested[i].first );
 	}
 
-	JsonEscapedBuilder tKeyStr;
-	tKeyStr.Clear();
-	tKeyStr.Appendf ( R"("%s":{"buckets":[)", tAggr.m_sBucketName.cstr() );
-	tOut.StartBlock ( ",", tKeyStr.cstr(), "]}");
+	StringBuilder_c tPrefixBucketName;
+	tPrefixBucketName.Appendf ( R"("%s":{)", tAggr.m_sBucketName.cstr() );
+	switch ( tAggr.m_eAggrFunc )
+	{
+	case Aggr_e::SIGNIFICANT: // FIXME!!! add support
+		tPrefixBucketName.Sprintf ( "\"doc_count\":" INT64_FMT ",", tRes.m_iTotalMatches  );
+		tPrefixBucketName.Sprintf ( "\"bg_count\":" INT64_FMT ",", tRes.m_iTotalMatches  );
+		break;
+	default: break;
+	}
+	if ( !bKeyed )
+		tPrefixBucketName.Appendf ( "\"buckets\":[" );
+	else
+		tPrefixBucketName.Appendf ( "\"buckets\":{" );
+	const char * sTermBucketName = ( bKeyed ? "}}" : "]}" );
+	tOut.StartBlock ( ",", tPrefixBucketName.cstr(), sTermBucketName );
 
 	// might be null for empty result set
 	if ( pKey && pCount )
 	{
-		auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
+		JsonEscapedBuilder tPrefixBucketBlock;
+		JsonEscapedBuilder tBuf;
+
+		auto dMatches = tRes.m_dResults.First().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 		for ( const CSphMatch & tMatch : dMatches )
 		{
-			ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
-
-			JsonObjAddAttr ( tOut, pKey->m_eAttrType, "key", tMatch, pKey->m_tLocator );
-		
-			tKeyStr.Clear();
-			JsonObjAddAttr ( tKeyStr, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
-			if ( bCompat )
+			RangeKeyDesc_t * pRange = nullptr;
+			if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
 			{
+				int iBucket = tMatch.GetAttr ( pKey->m_tLocator );
+				pRange = tRangeNames ( iBucket );
+				// lets skip bucket with out of ranges index, ie _all
+				if ( !pRange )
+					continue;
+			}
+
+			// bucket item is array item or dict item
+			const char * sBucketPrefix = "{";
+			if ( bKeyed )
+			{
+				switch ( tAggr.m_eAggrFunc )
+				{
+				case Aggr_e::RANGE:
+				case Aggr_e::DATE_RANGE:
+				{
+					tPrefixBucketBlock.Clear();
+					tPrefixBucketBlock.Appendf ( "\"%s\":{", pRange->m_sKey.cstr() );
+					sBucketPrefix = tPrefixBucketBlock.cstr();
+				}
+				break;
+
+				case Aggr_e::HISTOGRAM:
+				{
+					tPrefixBucketBlock.Clear();
+					tPrefixBucketBlock.Appendf ( "\"");
+					JsonObjAddAttr ( tPrefixBucketBlock, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
+					tPrefixBucketBlock.Appendf ( "\":{" );
+					sBucketPrefix = tPrefixBucketBlock.cstr();
+				}
+				break;
+
+				case Aggr_e::DATE_HISTOGRAM:
+				{
+					tPrefixBucketBlock.Clear();
+					tPrefixBucketBlock.Appendf ( "\"");
+					time_t tSrcTime = tMatch.GetAttr ( pKey->m_tLocator );
+					FormatDate ( tSrcTime, tPrefixBucketBlock );
+					tPrefixBucketBlock.Appendf ( "\":{" );
+					sBucketPrefix = tPrefixBucketBlock.cstr();
+				}
+				break;
+
+				default: break;
+				}
+			}
+			ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
+
+			if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
+			{
+				if ( !bKeyed )
+					tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
+				if ( !pRange->m_sFrom.IsEmpty() )
+					tOut.Sprintf ( R"("from":"%s")", pRange->m_sFrom.cstr() );
+				if ( !pRange->m_sTo.IsEmpty() )
+					tOut.Sprintf ( R"("to":"%s")", pRange->m_sTo.cstr() );
+
+			} else if ( tAggr.m_eAggrFunc==Aggr_e::DATE_HISTOGRAM )
+			{
+				tBuf.Clear();
+				JsonObjAddAttr ( tBuf, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
+				tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
+
+				tBuf.Clear();
+				time_t tSrcTime = tMatch.GetAttr ( pKey->m_tLocator );
+				FormatDate ( tSrcTime, tBuf );
+				tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+
+			} else if ( !bCompat )
+			{
+				JsonObjAddAttr ( tOut, pKey->m_eAttrType, "key", tMatch, pKey->m_tLocator );
+
+			} else
+			{
+				tBuf.Clear();
+				JsonObjAddAttr ( tBuf, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
+				tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
+
 				if ( pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
-					tOut.Sprintf ( R"("key_as_string":%s)", tKeyStr.cstr() );
+					tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 				else
-					tOut.Sprintf ( R"("key_as_string":"%s")", tKeyStr.cstr() );
+					tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 			}
 
 			JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
+			switch ( tAggr.m_eAggrFunc )
+			{
+			case Aggr_e::SIGNIFICANT: // FIXME!!! add support
+				tOut.Sprintf ( R"("score":0.001)" );
+				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
+				break;
+			default: break;
+			}
 
 			for ( const auto & tNested : dNested )
 			{
-				tKeyStr.Clear();
-				tKeyStr.Appendf ( R"("%s":{"value":)",  tNested.second );
-				tOut.StartBlock ( ",", tKeyStr.cstr(), "}");
+				tBuf.Clear();
+				tBuf.Appendf ( R"("%s":{"value":)",  tNested.second );
+				tOut.StartBlock ( ",", tBuf.cstr(), "}");
 
 				JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
 
@@ -2006,7 +2135,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			EncodeAggr ( tQuery.m_dAggs[i], *dRes[i+1], bCompat, tOut );
+			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], bCompat, tQuery.m_iNow, tOut );
 		tOut.FinishBlock ( false ); // aggregations obj
 	}
 	if ( bCompat )
@@ -2412,8 +2541,14 @@ static void FormatSortBy ( const CSphVector<SortField_t> & dSort, JsonQuery_c & 
 			sTmp.MoveTo ( tQuery.m_sSelect );
 		} else if ( tItem.m_sMode.IsEmpty() )
 		{
+			const char * sName = tItem.m_sName.cstr();
+			if ( tItem.m_sName=="_score" )
+				sName = "@weight";
+			else if ( tItem.m_sName=="_count" )
+				sName = "count(*)";
+
 			// sort by attribute or weight
-			sSortBuf << sComma << ( tItem.m_sName=="_score" ? "@weight" : tItem.m_sName ) << sSort;
+			sSortBuf << sComma << sName << sSort;
 			bGotWeight |= ( tItem.m_sName=="_score" );
 		} else
 		{
@@ -2446,6 +2581,104 @@ static void FormatSortBy ( const CSphVector<SortField_t> & dSort, JsonQuery_c & 
 	sSortBuf.MoveTo ( tQuery.m_sSortBy );
 }
 
+static bool ParseSortObj ( const JsonObj_c & tSortItem, CSphVector<SortField_t> & dSort, CSphString & sError, CSphString & sWarning )
+{
+	bool bSortString = tSortItem.IsStr();
+	bool bSortObj = tSortItem.IsObj();
+
+	CSphString sSortName = tSortItem.Name();
+	if ( ( !bSortString && !bSortObj ) || !tSortItem.Name() || ( bSortString && !tSortItem.SzVal() ) )
+	{
+		sError.SetSprintf ( R"("sort" property 0("%s") should be %s)", sSortName.scstr(), ( bSortObj ? "a string" : "an object" ) );
+		return false;
+	}
+
+	// [ { "attr_name" : "sort_mode" } ]
+	if ( bSortString )
+	{
+		CSphString sOrder = tSortItem.StrVal();
+		if ( sOrder!="asc" && sOrder!="desc" )
+		{
+			sError.SetSprintf ( R"("sort" property "%s" order is invalid %s)", sSortName.scstr(), sOrder.cstr() );
+			return false;
+		}
+
+		SortField_t & tAscItem = dSort.Add();
+		tAscItem.m_sName = sSortName;
+		tAscItem.m_bAsc = ( sOrder=="asc" );
+		return true;
+	}
+
+	// [ { "attr_name" : { "order" : "sort_mode" } } ]
+	SortField_t & tSortField = dSort.Add();
+	tSortField.m_sName = sSortName;
+
+	JsonObj_c tAttrItems = tSortItem.GetItem("order");
+	if ( tAttrItems )
+	{
+		if ( !tAttrItems.IsStr() )
+		{
+			sError.SetSprintf ( R"("sort" property "%s" order is invalid)", tAttrItems.Name() );
+			return false;
+		}
+
+		CSphString sOrder = tAttrItems.StrVal();
+		tSortField.m_bAsc = ( sOrder=="asc" );
+	}
+
+	JsonObj_c tMode = tSortItem.GetItem("mode");
+	if ( tMode )
+	{
+		if ( tAttrItems && !tMode.IsStr() )
+		{
+			sError.SetSprintf ( R"("mode" property "%s" order is invalid)", tAttrItems.Name() );
+			return false;
+		}
+
+		CSphString sMode = tMode.StrVal();
+		if ( sMode!="min" && sMode!="max" )
+		{
+			sError.SetSprintf ( R"("mode" supported are "min" and "max", got "%s", not supported)", sMode.cstr() );
+			return false;
+		}
+
+		tSortField.m_sMode = sMode;
+	}
+
+	// geodist
+	if ( tSortField.m_sName=="_geo_distance" )
+	{
+		if ( tMode )
+		{
+			sError = R"("mode" property not supported with "_geo_distance")";
+			return false;
+		}
+
+		if ( tSortItem.HasItem("unit") )
+		{
+			sError = R"("unit" property not supported with "_geo_distance")";
+			return false;
+		}
+
+		if ( !tSortField.Parse ( tSortItem, false, sError, sWarning ) )
+			return false;
+	}
+
+	// FXIME!!! "unmapped_type" should be replaced with expression EXIST
+	// unsupported options
+	const char * dUnsupported[] = { "missing", "nested_path", "nested_filter"};
+	for ( auto szOption : dUnsupported )
+	{
+		if ( tSortItem.HasItem(szOption) )
+		{
+			sError.SetSprintf ( R"("%s" property not supported)", szOption );
+			return false;
+		}
+	}
+
+	return true;
+}
+
 
 static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bGotWeight, CSphString & sError, CSphString & sWarning )
 {
@@ -2461,131 +2694,50 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 	CSphVector<SortField_t> dSort;
 	dSort.Reserve ( tSort.Size() );
 
-	for ( const auto & tItem : tSort )
+	if ( tSort.IsObj() )
 	{
-		CSphString sName = tItem.Name();
-
-		bool bString = tItem.IsStr();
-		bool bObj = tItem.IsObj();
-		if ( !bString && !bObj )
-		{
-			sError.SetSprintf ( R"("sort" property "%s" should be a string or an object)", sName.scstr() );
+		if ( !ParseSortObj ( tSort[0], dSort, sError, sWarning ) )
 			return false;
-		}
-
-		if ( bObj && tItem.Size()!=1 )
+	} else
+	{
+		for ( const auto & tItem : tSort )
 		{
-			sError.SetSprintf ( R"("sort" property "%s" should be an object)", sName.scstr() );
-			return false;
-		}
+			CSphString sName = tItem.Name();
 
-		// [ "attr_name" ]
-		if ( bString )
-		{
-			SortField_t & tSortField = dSort.Add();
-			tSortField.m_sName = tItem.StrVal();
-			// order defaults to desc when sorting on the _score, and defaults to asc when sorting on anything else
-			tSortField.m_bAsc = ( tSortField.m_sName!="_score" );
-			continue;
-		}
-
-		JsonObj_c tSortItem = tItem[0];
-		if ( !tSortItem )
-		{
-			sError = R"(invalid "sort" property item)";
-			return false;
-		}
-
-		bool bSortString = tSortItem.IsStr();
-		bool bSortObj = tSortItem.IsObj();
-
-		CSphString sSortName = tSortItem.Name();
-		if ( ( !bSortString && !bSortObj ) || !tSortItem.Name() || ( bSortString && !tSortItem.SzVal() ) )
-		{
-			sError.SetSprintf ( R"("sort" property 0("%s") should be %s)", sSortName.scstr(), ( bSortObj ? "a string" : "an object" ) );
-			return false;
-		}
-
-		// [ { "attr_name" : "sort_mode" } ]
-		if ( bSortString )
-		{
-			CSphString sOrder = tSortItem.StrVal();
-			if ( sOrder!="asc" && sOrder!="desc" )
+			bool bString = tItem.IsStr();
+			bool bObj = tItem.IsObj();
+			if ( !bString && !bObj )
 			{
-				sError.SetSprintf ( R"("sort" property "%s" order is invalid %s)", sSortName.scstr(), sOrder.cstr() );
+				sError.SetSprintf ( R"("sort" property "%s" should be a string or an object)", sName.scstr() );
 				return false;
 			}
 
-			SortField_t & tAscItem = dSort.Add();
-			tAscItem.m_sName = sSortName;
-			tAscItem.m_bAsc = ( sOrder=="asc" );
-			continue;
-		}
-
-		// [ { "attr_name" : { "order" : "sort_mode" } } ]
-		SortField_t & tSortField = dSort.Add();
-		tSortField.m_sName = sSortName;
-
-		JsonObj_c tAttrItems = tSortItem.GetItem("order");
-		if ( tAttrItems )
-		{
-			if ( !tAttrItems.IsStr() )
+			if ( bObj && tItem.Size()!=1 )
 			{
-				sError.SetSprintf ( R"("sort" property "%s" order is invalid)", tAttrItems.Name() );
+				sError.SetSprintf ( R"("sort" property "%s" should be an object)", sName.scstr() );
 				return false;
 			}
 
-			CSphString sOrder = tAttrItems.StrVal();
-			tSortField.m_bAsc = ( sOrder=="asc" );
-		}
-
-		JsonObj_c tMode = tSortItem.GetItem("mode");
-		if ( tMode )
-		{
-			if ( tAttrItems && !tMode.IsStr() )
+			// [ "attr_name" ]
+			if ( bString )
 			{
-				sError.SetSprintf ( R"("mode" property "%s" order is invalid)", tAttrItems.Name() );
+				SortField_t & tSortField = dSort.Add();
+				tSortField.m_sName = tItem.StrVal();
+				// order defaults to desc when sorting on the _score, and defaults to asc when sorting on anything else
+				tSortField.m_bAsc = ( tSortField.m_sName!="_score" );
+				continue;
+			}
+
+			JsonObj_c tSortItem = tItem[0];
+			if ( !tSortItem )
+			{
+				sError = R"(invalid "sort" property item)";
 				return false;
 			}
 
-			CSphString sMode = tMode.StrVal();
-			if ( sMode!="min" && sMode!="max" )
-			{
-				sError.SetSprintf ( R"("mode" supported are "min" and "max", got "%s", not supported)", sMode.cstr() );
-				return false;
-			}
-
-			tSortField.m_sMode = sMode;
-		}
-
-		// geodist
-		if ( tSortField.m_sName=="_geo_distance" )
-		{
-			if ( tMode )
-			{
-				sError = R"("mode" property not supported with "_geo_distance")";
-				return false;
-			}
-
-			if ( tSortItem.HasItem("unit") )
-			{
-				sError = R"("unit" property not supported with "_geo_distance")";
-				return false;
-			}
-
-			if ( !tSortField.Parse ( tSortItem, false, sError, sWarning ) )
+			if ( !ParseSortObj ( tSortItem, dSort, sError, sWarning ) )
 				return false;
 		}
-
-		// FXIME!!! "unmapped_type" should be replaced with expression EXIST
-		// unsupported options
-		const char * dUnsupported[] = { "missing", "nested_path", "nested_filter"};
-		for ( auto szOption : dUnsupported )
-			if ( tSortItem.HasItem(szOption) )
-			{
-				sError.SetSprintf ( R"("%s" property not supported)", szOption );
-				return false;
-			}
 	}
 
 	FormatSortBy ( dSort, tQuery, bGotWeight );
@@ -2769,13 +2921,6 @@ static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSph
 	return true;
 }
 
-static CSphString g_sCompatDateFormat ( "%Y-%m-%dT%H:%M:%S." ); // YYYY-mm-dd'T'HH:mm:ss.SSS'Z'
-
-const CSphString & CompatDateFormat()
-{
-	return g_sCompatDateFormat;
-}
-
 //////////////////////////////////////////////////////////////////////////
 // docvalue_fields
 
@@ -2812,21 +2957,264 @@ bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphSt
 	return true;
 }
 
-static ESphAggrFunc GetAggrFunc ( const JsonObj_c & tBucket, bool bCheckAggType )
+static Aggr_e GetAggrFunc ( const JsonObj_c & tBucket, bool bCheckAggType )
 {
-	if ( StrEq ( tBucket.Name(), "avg" ) )
-		return SPH_AGGR_AVG;
-	if ( StrEq ( tBucket.Name(), "min" ) )
-		return SPH_AGGR_MIN;
-	if ( StrEq ( tBucket.Name(), "max" ) )
-		return SPH_AGGR_MAX;
-	if ( StrEq ( tBucket.Name(), "sum" ) )
-		return SPH_AGGR_SUM;
+	if ( StrEq ( tBucket.Name(), "significant_terms" ) )
+		return Aggr_e::SIGNIFICANT;
+	if ( StrEq ( tBucket.Name(), "histogram" ) )
+		return Aggr_e::HISTOGRAM;
+	if ( StrEq ( tBucket.Name(), "date_histogram" ) )
+		return Aggr_e::DATE_HISTOGRAM;
+	if ( StrEq ( tBucket.Name(), "range") )
+		return Aggr_e::RANGE;
+	if ( StrEq ( tBucket.Name(), "date_range") )
+		return Aggr_e::DATE_RANGE;
 
 	if ( bCheckAggType )
 		sphWarning ( "unsupported aggregate type '%s'", tBucket.Name() );
 
-	return SPH_AGGR_NONE;
+	return Aggr_e::NONE;
+}
+
+static void SetRangeFrom ( const JsonObj_c & tSrc, bool bForceFloat, RangeSetting_t & tItem )
+{
+	if ( tSrc.IsDbl() )
+		tItem.m_fFrom = tSrc.DblVal();
+	else if ( bForceFloat )
+		tItem.m_fFrom = tSrc.IntVal();
+	else
+		tItem.m_iFrom = tSrc.IntVal();
+}
+
+static void SetRangeTo ( const JsonObj_c & tSrc, bool bForceFloat, RangeSetting_t & tItem )
+{
+	if ( tSrc.IsDbl() )
+		tItem.m_fTo = tSrc.DblVal();
+	else if ( bForceFloat )
+		tItem.m_fTo = tSrc.IntVal();
+	else
+		tItem.m_iTo = tSrc.IntVal();
+}
+
+static bool GetKeyed ( const JsonObj_c & tBucket, bool & bKeyed, CSphString & sError )
+{
+	if ( !tBucket.HasItem ( "keyed" ) )
+		return true;
+
+	const auto tKeyed = tBucket.GetBoolItem ( "keyed", sError, false );
+	if ( !tKeyed )
+		return false;
+
+	bKeyed = tKeyed.BoolVal();
+	return true;
+}
+
+static bool ParseAggrRange ( const JsonObj_c & tRanges, const CSphString & sCol, AggrRangeSetting_t & dRanges, CSphString & sError );
+static bool ParseAggrRange ( const JsonObj_c & tRanges, const CSphString & sCol, AggrDateRangeSetting_t & dRanges, CSphString & sError );
+
+static bool ParseAggrRange ( const JsonObj_c & tBucket, JsonAggr_t & tItem, bool bDate, CSphString & sError )
+{
+	JsonObj_c tRanges = tBucket.GetItem( "ranges" );
+	if ( !tRanges || !tRanges.IsArray() )
+	{
+		if ( !tRanges )
+			sError.SetSprintf ( "\"%s\" missed \"ranges\" property", tItem.m_sCol.cstr() );
+		else
+			sError.SetSprintf ( "\"%s\" \"ranges\" should be an array", tItem.m_sCol.cstr() );
+		return false;
+	}
+
+	int iCount = tRanges.Size();
+	if ( !iCount )
+	{
+		sError.SetSprintf ( "\"%s\" empty \"ranges\" property", tItem.m_sCol.cstr() );
+		return false;
+	}
+
+	bool bKeyed = false;
+	if ( !GetKeyed ( tBucket, bKeyed, sError ) )
+		return false;
+
+	if ( !bDate )
+	{
+		auto & dRanges = tItem.m_tRange;
+		dRanges.Resize ( iCount );
+		dRanges.m_bKeyed = bKeyed;
+		return ParseAggrRange ( tRanges, tItem.m_sCol, dRanges, sError );
+	} else
+	{
+		auto & dRanges = tItem.m_tDateRange;
+		dRanges.Resize ( iCount );
+		dRanges.m_bKeyed = bKeyed;
+		return ParseAggrRange ( tRanges, tItem.m_sCol, dRanges, sError );
+	}
+}
+
+
+bool ParseAggrRange ( const JsonObj_c & tRanges, const CSphString & sCol, AggrRangeSetting_t & dRanges, CSphString & sError )
+{
+	int iFloatStart = -1;
+	for ( int i=0; i<dRanges.GetLength(); i++ )
+	{
+		const auto tRangeItem = tRanges[i];
+		const auto tFrom = tRangeItem.GetItem ( "from" );
+		const auto tTo = tRangeItem.GetItem ( "to" );
+		const bool bHasFrom = tFrom;
+		const bool bHasTo = tTo;
+
+		if ( !bHasFrom && i!=0 )
+		{
+			sError.SetSprintf ( "\"%s\" ranges[%d] \"from\" empty", sCol.cstr(), i );
+			return false;
+		}
+		if ( !bHasTo && i!=dRanges.GetLength()-1 )
+		{
+			sError.SetSprintf ( "\"%s\" ranges[%d] \"to\" empty", sCol.cstr(), i );
+			return false;
+		}
+
+		if ( ( bHasFrom && tFrom.IsDbl() ) || ( bHasTo && tTo.IsDbl() ) )
+		{
+			dRanges.m_bFloat = true;
+			if ( iFloatStart!=-1 )
+				iFloatStart = i;
+		}
+		if ( bHasFrom )
+			SetRangeFrom ( tFrom, ( iFloatStart!=-1 ), dRanges[i] );
+		else
+			dRanges.m_bOpenLeft = true;
+
+		if ( bHasTo )
+			SetRangeTo ( tTo, ( iFloatStart!=-1 ), dRanges[i] );
+		else
+			dRanges.m_bOpenRight = true;
+	}
+
+	// convert int to float values for head of array values
+	if ( iFloatStart>0 )
+	{
+		for ( int i=iFloatStart; i<dRanges.GetLength(); i++ )
+		{
+			dRanges[i].m_fFrom = dRanges[i].m_iFrom;
+			dRanges[i].m_fTo = dRanges[i].m_iTo;
+		}
+	}
+	if ( dRanges.m_bOpenLeft )
+	{
+		if ( dRanges.m_bFloat )
+			dRanges[0].m_fFrom = -FLT_MAX;
+		else
+			dRanges[0].m_iFrom = -LLONG_MAX;
+	}
+	if ( dRanges.m_bOpenRight )
+	{
+		if ( dRanges.m_bFloat )
+			dRanges.Last().m_fTo = FLT_MAX;
+		else
+			dRanges.Last().m_iTo = LLONG_MAX;
+	}
+
+ 	return true;
+}
+
+bool ParseAggrRange ( const JsonObj_c & tRanges, const CSphString & sCol, AggrDateRangeSetting_t & dRanges, CSphString & sError )
+{
+	for ( int i=0; i<dRanges.GetLength(); i++ )
+	{
+		const auto tRangeItem = tRanges[i];
+		const auto tFrom = tRangeItem.GetItem ( "from" );
+		const auto tTo = tRangeItem.GetItem ( "to" );
+		const bool bHasFrom = tFrom;
+		const bool bHasTo = tTo;
+
+		if ( !bHasFrom && i!=0 )
+		{
+			sError.SetSprintf ( "\"%s\" ranges[%d] \"from\" empty", sCol.cstr(), i );
+			return false;
+		}
+		if ( !bHasTo && i!=dRanges.GetLength()-1 )
+		{
+			sError.SetSprintf ( "\"%s\" ranges[%d] \"to\" empty", sCol.cstr(), i );
+			return false;
+		}
+
+		if ( bHasFrom )
+			dRanges[i].m_sFrom = tFrom.StrVal();
+
+		if ( bHasTo )
+			dRanges[i].m_sTo = tTo.StrVal();
+	}
+
+ 	return true;
+}
+
+static bool ParseAggrHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError )
+{
+	AggrHistSetting_t & tHist = tItem.m_tHist;
+
+	JsonObj_c tInterval = tBucket.GetItem ( "interval" );
+	if ( tInterval.Empty() )
+	{
+		sError.SetSprintf ( "\"%s\" interval missed", tItem.m_sCol.cstr() );
+		return false;
+	}
+	if ( !tInterval.IsNum() )
+	{
+		sError.SetSprintf ( "\"%s\" interval should be numeric", tItem.m_sCol.cstr() );
+		return false;
+	}
+	if ( tInterval.IsInt() )
+		tHist.m_tInterval = tInterval.IntVal();
+	else
+		tHist.m_tInterval = tInterval.FltVal();
+
+	JsonObj_c tOffset = tBucket.GetItem ( "offset" );
+	if ( !tOffset.Empty() )
+	{
+		if ( !tOffset.IsNum() )
+		{
+			sError.SetSprintf ( "\"%s\" offset should be numeric", tItem.m_sCol.cstr() );
+			return false;
+		}
+		if ( tOffset.IsInt() )
+			tHist.m_tOffset = tOffset.IntVal();
+		else
+			tHist.m_tOffset = tOffset.FltVal();
+
+	} else
+	{
+			tHist.m_tOffset = INT64_C ( 0 );
+	}
+
+	if ( !GetKeyed ( tBucket, tHist.m_bKeyed, sError ) )
+		return false;
+
+	FixFloat ( tHist );
+
+ 	return true;
+}
+
+static bool ParseAggrDateHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError )
+{
+	AggrDateHistSetting_t & tHist = tItem.m_tDateHist;
+
+	JsonObj_c tInterval = tBucket.GetItem ( "calendar_interval" );
+	if ( tInterval.Empty() )
+	{
+		sError.SetSprintf ( "\"%s\" calendar_interval missed", tItem.m_sCol.cstr() );
+		return false;
+	}
+	if ( !tInterval.IsStr() )
+	{
+		sError.SetSprintf ( "\"%s\" calendar_interval should be string", tItem.m_sCol.cstr() );
+		return false;
+	}
+	tHist.m_sInterval = tInterval.StrVal();
+
+	if ( !GetKeyed ( tBucket, tHist.m_bKeyed, sError ) )
+		return false;
+
+ 	return true;
 }
 
 static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<JsonAggr_t> & dParentItems, CSphString & sError )
@@ -2875,11 +3263,46 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 		tBucket.FetchIntItem ( iShardSize, "shard_size", sError, true );
 		tItem.m_iSize = Max ( tItem.m_iSize, iShardSize ); // FIXME!!! use (size * 1.5 + 10) for shard size
 		tItem.m_eAggrFunc = GetAggrFunc ( tBucket, !bRoot );
+		switch ( tItem.m_eAggrFunc )
+		{
+		case Aggr_e::DATE_HISTOGRAM:
+			if ( !ParseAggrDateHistogram ( tBucket, tItem, sError ) )
+				return false;
+			tItem.m_iSize = Max ( tItem.m_iSize, 1000 ); // set max_matches to min\max / interval
+		break;
 
+		case Aggr_e::HISTOGRAM:
+			if ( !ParseAggrHistogram ( tBucket, tItem, sError ) )
+				return false;
+			tItem.m_iSize = Max ( tItem.m_iSize, 1000 ); // set max_matches to min\max / interval
+		break;
+
+		case Aggr_e::RANGE:
+			if ( !ParseAggrRange ( tBucket, tItem, false, sError ) )
+				return false;
+			tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
+			break;
+
+		case Aggr_e::DATE_RANGE:
+			if ( !ParseAggrRange ( tBucket, tItem, true, sError ) )
+				return false;
+			tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tDateRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
+			break;
+			
+		default: break;
+		}
+
+		// could be a sort object at the aggs item or order object at the bucket
+		bool bOrder = false;
 		JsonObj_c tSort = tJsonItem.GetItem("sort");
+		if ( !tSort && tBucket.HasItem ( "order" ) )
+		{
+			tSort = tBucket.GetItem("order");
+			bOrder = true;
+		}
 		if ( tSort && !( tSort.IsArray() || tSort.IsObj() ) )
 		{
-			sError = "\"sort\" property value should be an array or an object";
+			sError.SetSprintf ( "\"%s\" property value should be an array or an object", ( bOrder ? "order" : "sort" ) );
 			return false;
 		}
 		if ( tSort )
@@ -2894,7 +3317,7 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			tItem.m_sSort = tTmpQuery.m_sSortBy;
 		}
 
-		if ( tItem.m_eAggrFunc==SPH_AGGR_NONE && !bRoot )
+		if ( tItem.m_eAggrFunc==Aggr_e::NONE && !bRoot )
 		{
 			sError.SetSprintf ( R"(bucket '%s' without aggregate items, item type is '%s')", tItem.m_sBucketName.cstr(), tBucket.Name() );
 			return false;
@@ -2920,6 +3343,10 @@ bool ParseAggregates ( const JsonObj_c & tAggs, JsonQuery_c & tQuery, CSphString
 	if ( !AddSubAggregate ( tAggs, true, tQuery.m_dAggs, sError ) )
 		return false;
 
+	// set query now for any date aggregate to make sure they will have the same now timestamp
+	if ( tQuery.m_dAggs.any_of ( [] ( const JsonAggr_t & tAggr ) { return !tAggr.m_tDateRange.IsEmpty(); } ) )
+		tQuery.m_iNow = time ( nullptr );
+
 	return true;
 }
 
@@ -2929,21 +3356,4 @@ CSphString JsonAggr_t::GetAliasName () const
 	sName.SetSprintf ( "%s_%s", m_sCol.cstr(), m_sBucketName.cstr() );
 
 	return sName;
-}
-
-CSphString JsonAggr_t::GetExpr () const
-{
-	CSphString sName;
-	switch ( m_eAggrFunc )
-	{
-	case SPH_AGGR_AVG: sName.SetSprintf ( "avg(%s)", m_sCol.cstr() ); return sName;
-	case SPH_AGGR_MIN: sName.SetSprintf ( "min(%s)", m_sCol.cstr() ); return sName;
-	case SPH_AGGR_MAX: sName.SetSprintf ( "max(%s)", m_sCol.cstr() ); return sName;
-	case SPH_AGGR_SUM: sName.SetSprintf ( "sum(%s)", m_sCol.cstr() ); return sName;
-	case SPH_AGGR_CAT: sName.SetSprintf ( "cat(%s)", m_sCol.cstr() ); return sName;
-
-	case SPH_AGGR_NONE:
-	default:
-		return m_sCol;
-	}
 }

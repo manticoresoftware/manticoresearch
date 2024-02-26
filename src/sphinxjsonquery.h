@@ -13,6 +13,7 @@
 
 #include "sphinx.h"
 #include "sphinxjson.h"
+#include "aggrexpr.h"
 
 class QueryParser_i;
 class StmtErrorReporter_i;
@@ -21,17 +22,15 @@ struct cJSON;
 struct XQNode_t;
 struct SqlStmt_t;
 
-struct JsonAggr_t
+struct JsonAggr_t : public AggrSettings_t
 {
 	CSphString	m_sBucketName;
 	CSphString	m_sCol;
 	int			m_iSize = 0;
-	ESphAggrFunc m_eAggrFunc { SPH_AGGR_NONE };
 	CSphVector<JsonAggr_t> m_dNested;
 	CSphString	m_sSort;
 
 	CSphString GetAliasName () const;
-	CSphString GetExpr () const;
 };
 
 /// search query. Pure struct, no member functions
@@ -41,7 +40,6 @@ struct JsonQuery_c : public CSphQuery
 	StrVec_t m_dDocFields;
 	CSphVector<JsonAggr_t> m_dAggs;
 };
-
 
 std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();
 bool			sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning );
@@ -61,8 +59,6 @@ JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIn
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
-
-const CSphString & CompatDateFormat();
 
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus );
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus, const char * sIndex );

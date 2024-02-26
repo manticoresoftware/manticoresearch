@@ -9,7 +9,7 @@ You can delete existing documents from a table based on either their ID or certa
 
 Also, [bulk deletion](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) is available to delete multiple documents.
 
-Deletion of documents can be accomplished via both SQL and HTTP interfaces.
+Deletion of documents can be accomplished via both SQL and JSON interfaces.
 
 For SQL, the response for a successful operation will indicate the number of rows deleted.
 
@@ -166,9 +166,9 @@ class DeleteResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+Dictionary<string, Object> match = new Dictionary<string, Object>();
 match.Add("*", "test document");
-Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+Dictionary<string, Object> query = new Dictionary<string, Object>();
 query.Add("match", match);
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest(index: "test", query: query);
 indexApi.Delete(deleteRequest);
@@ -503,7 +503,7 @@ POST /delete -d '
       "id": 100
     }'
 ```
-* `cluster` for JSON is the name of the [replication cluster](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster). which contains the needed table 
+* `cluster` for JSON is the name of the [replication cluster](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster). which contains the needed table
 
 <!-- intro -->
 ##### PHP:
@@ -716,8 +716,8 @@ Array(
 
     [current_line] => 3
     [skipped_lines] => 0
-    [errors] => 
-    [error] => 
+    [errors] =>
+    [error] =>
 )
 
 ```
@@ -804,7 +804,7 @@ class BulkResponse {
 ``` typescript
 docs = [
   { "delete" : { "index" : "test", "id": 1 } },
-  { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } } 
+  { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }
 ];
 body = await indexApi.bulk(
   docs.map((e) => JSON.stringify(e)).join("\n")
@@ -826,7 +826,7 @@ res = await indexApi.bulk(body);
 ```go
 docs = []string {
   `{ "delete" : { "index" : "test", "id": 1 } }`,
-  `{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }` 
+  `{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }`
 ]
 body = strings.Join(docs, "\n")
 resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(body).Execute()

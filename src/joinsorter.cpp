@@ -341,9 +341,6 @@ JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoined
 {
 	assert ( pIndex && pJoinedIndex );
 
-	m_pJoinQueryParser = sphCreatePlainQueryParser();
-	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
-	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
 	m_bFinalCalcOnly = !bJoinedGroupSort && tQuery.m_eJoinType==JoinType_e::LEFT;
 	m_bErrorFlag = !SetupJoinQuery ( m_pSorter->GetSchema()->GetDynamicSize(), m_sErrorMessage );
 }
@@ -431,6 +428,10 @@ void JoinSorter_c::SetupNullMask()
 
 bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 {
+	m_pJoinQueryParser = sphCreatePlainQueryParser();
+	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
+	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
+	m_tJoinQuery.m_iCutoff = 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;
 
 	m_tMatch.Reset ( iDynamicSize );
@@ -555,6 +556,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
 	m_tMatch.m_pDynamic = pDynamic;
 
+	bool bAnythingPushed = false;
 	ARRAY_FOREACH ( iMatch, m_dMatches )
 	{
 		memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
@@ -568,7 +570,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 				m_tMatch.SetAttr ( i.m_tLocDst, tMatchFromRset.GetAttr ( i.m_tLocSrc ) );
 		}
 
-		fnPush(m_tMatch);
+		bAnythingPushed |= fnPush(m_tMatch);
 
 		// clear repacked json
 		for ( auto & i : m_dJoinRemap )
@@ -603,7 +605,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 		return fnPush(m_tMatch);
 	}
 
-	return true;
+	return bAnythingPushed;
 }
 
 

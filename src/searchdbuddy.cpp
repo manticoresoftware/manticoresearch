@@ -61,7 +61,7 @@ static CSphString GetUrl ( const ListenerDesc_t & tDesc );
 static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath );
 
 #if _WIN32
-static CSphString g_sBuddyBind = "0.0.0.0";
+static CSphString g_sBuddyBind = "0.0.0.0:9999"; // It does not matter for docker
 #else
 static CSphString g_sBuddyBind = "127.0.0.1";
 #endif
@@ -718,7 +718,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	// check executor first
 #ifdef _WIN32
 	sExecPath.SetSprintf (
-		"docker run --rm --publish-all -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy %s /buddy/src/main.php",
+		"docker run --rm -p 9999:9999 -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy %s /buddy/src/main.php",
 		GET_MANTICORE_MODULES(),
 		g_sDefaultBuddyName.cstr(),
 		g_sDefaultBuddyDockerImage.cstr()

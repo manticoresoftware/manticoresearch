@@ -34,5 +34,11 @@ mysql -h0 -P9306 -e "INSERT INTO t (id, model, storage_capacity, color, release_
 |   10 | iPhone 6s        | space gray |               64 |         2015 |  449.989990 |    0 | 3429330544 | 27,28,29      | 1423456764345678976,9223372036854775807 | {"features":["A9 chip","Retina HD display","3D Touch"]}                            |
 +------+------------------+------------+------------------+--------------+-------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "REPLACE INTO t SET model ='iPhone 15 PRO' WHERE id = 6;"
+mysql -h0 -P9306 -e "REPLACE INTO t SET model ='iPhone 15 PRO' WHERE id = 6; select * from t WHERE id = 6;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO t SET model ='iPhone 15 PRO', color='red'  WHERE id = 6; select * from t WHERE id = 6;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO t SET storage_capacity =512, release_year =2024 WHERE id = 5; select * from t WHERE id = 5;"
 ––– output –––

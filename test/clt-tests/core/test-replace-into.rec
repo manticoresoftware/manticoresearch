@@ -1,7 +1,16 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists t; CREATE TABLE t (id BIGINT, model TEXT, storage_capacity INTEGER, color TEXT, release_year INTEGER, price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON); SHOW TABLES;"
+mysql -h0 -P9306 -e "show version; drop table if exists t; CREATE TABLE t (id BIGINT, model TEXT, storage_capacity INTEGER, color TEXT, release_year INTEGER, price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON); SHOW TABLES;"
 ––– output –––
++-----------+--------------------------------+
+| Component | Version                        |
++-----------+--------------------------------+
+| Daemon    | 6.2.13 210ff810b@24022702 dev  |
+| Columnar  | columnar 2.2.5 a5342a1@240217  |
+| Secondary | secondary 2.2.5 a5342a1@240217 |
+| KNN       | knn 2.2.5 a5342a1@240217       |
+| Buddy     | buddy v2.1.7                   |
++-----------+--------------------------------+
 +-------+------+
 | Index | Type |
 +-------+------+
@@ -24,3 +33,6 @@ mysql -h0 -P9306 -e "INSERT INTO t (id, model, storage_capacity, color, release_
 |    9 | iPhone SE (2016) | silver     |               16 |         2016 |  399.989990 |    1 | 4074261360 | 24,25,26      | 1323456764345678976,9223372036854775807 | {"features":["A9 chip","Retina display","Touch ID"]}                               |
 |   10 | iPhone 6s        | space gray |               64 |         2015 |  449.989990 |    0 | 3429330544 | 27,28,29      | 1423456764345678976,9223372036854775807 | {"features":["A9 chip","Retina HD display","3D Touch"]}                            |
 +------+------------------+------------+------------------+--------------+-------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO t SET model ='iPhone 15 PRO' WHERE id = 6;"
+––– output –––

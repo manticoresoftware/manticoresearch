@@ -98,6 +98,103 @@ table products {
 ```
 <!-- end -->
 
+## Importing a table from Elasticsearch
+
+You can use the `/tbl_name/_mapping` endpoint to create a new table with a schema copied from the Elasticsearch index.
+
+The request body must have the following structure:
+
+"properties"
+{
+  "FIELD_NAME_1":
+  {
+    "type": "FIELD_TYPE_1"
+  },
+  "FIELD_NAME_2":
+  {
+    "type": "FIELD_TYPE_1"
+  },
+  
+  ...
+  
+  "FIELD_NAME_N":
+  {
+    "type": "FIELD_TYPE_1"
+  }
+}
+
+<!-- example _mapping -->
+
+<!-- intro -->
+##### Importing a table from Elasticsearch:
+<!-- request JSON -->
+
+```JSON
+POST /test_table/_mapping -d "
+{
+  "properties":
+  {
+    "title":
+    {
+      "type":"text"
+    },
+    "price":
+    {
+      "type":"float"
+    }
+  }
+}"
+```
+
+<!-- response JSON -->
+
+```json
+{
+"total":0,
+"error":"",
+"warning":""
+}
+```
+
+<!-- end -->
+
+Here is the full list of supported Elasticsearch data types that can be used in the `_mapping` request and the corresponding Manticore types they are converted to when necessary:
+
+```
+'aggregate_metric' => 'json',
+'binary' => 'string',
+'boolean' => 'bool',
+'completion' => 'string',
+'date' => 'timestamp',
+'date_nanos' => 'bigint',
+'dense_vector' => 'json',
+'flattened' => 'json',
+'geo_point' => 'json',
+'geo_shape' => 'json',
+'histogram' => 'json',
+'ip' => 'string',
+'long' => 'bigint',
+'integer' => 'int',
+'short' => 'int',
+'byte' => 'int',
+'float' => 'float',
+'half_float' => 'float',
+'scaled_float' => 'float',
+'unsigned_long' => 'int',
+'object' => 'json',
+'point' => 'json',
+'integer_range' => 'json',
+'float_range' => 'json',
+'long_range' => 'json',
+'date_range' => 'json',
+'ip_range' => 'json',
+'search_as_you_type' => 'text',
+'shape' => 'json',
+'text' => 'text',
+'match_only_text' => 'text',
+'version' => 'string'
+```
+
 ### 👍 What you can do with a real-time table:
 * Add documents using the [Add](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) feature.
 * Update attributes and full-text fields through the [Update](../../Quick_start_guide.md#Update) process.

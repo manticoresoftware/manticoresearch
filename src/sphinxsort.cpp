@@ -5856,7 +5856,8 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 
 bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 )
 {
-	if ( m_pSorterSchema->GetAttr ( sAttr1.cstr() ) )
+	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr1.cstr() );
+	if ( pAttr )
 		return true;
 
 	if ( !sphJsonNameSplit ( sAttr1.cstr(), nullptr ) )
@@ -5908,20 +5909,14 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 
 bool QueueCreator_c::AddColumnarJoinOnFilter ( const CSphString & sAttr )
 {
-	const auto * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
-	if ( !pAttr )
+	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+	if ( pAttr && pAttr->m_pExpr && !pAttr->m_pExpr->UsesDocstore() )
+	{
+		const_cast<CSphColumnInfo *>(pAttr)->m_eStage = Min ( pAttr->m_eStage, SPH_EVAL_PRESORT );
 		return true;
+	}
 
-	if ( !pAttr->IsColumnar() )
-		return true;
-
-	CSphColumnInfo tExprCol;
-	if ( !ParseJoinExpr ( tExprCol, sAttr, sAttr ) )
-		return false;
-
-	m_pSorterSchema->RemoveStaticAttr ( m_pSorterSchema->GetAttrIndex ( sAttr.cstr() ) );
-	m_pSorterSchema->AddAttr ( tExprCol, true );
-	return true;
+	return ReplaceWithColumnarItem ( sAttr, SPH_EVAL_PRESORT );
 }
 
 

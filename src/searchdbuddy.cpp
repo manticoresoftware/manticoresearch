@@ -20,6 +20,7 @@
 #if _WIN32
 #include <boost/winapi/process.hpp>
 #endif
+#include "replication/portrange.h"
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
@@ -56,9 +57,14 @@ static int g_iBuddyVersion = 2;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
 
+// windows docker needs port XXX:9999 port mapping
+static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
+ScopedPort_c g_tBuddyPort;
+
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath );
+static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort );
+static void BuddyStop ();
 
 #if _WIN32
 static CSphString g_sBuddyBind = "0.0.0.0:9999"; // It does not matter for docker
@@ -242,6 +248,9 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	}
 
 	// buddy really started and ready to serve queries
+#ifdef _WIN32
+	tListen.m_iPort = g_tBuddyPort;
+#endif
 	g_sUrlBuddy = GetUrl( tListen );
 	g_eBuddy = BuddyState_e::WORK;
 	g_iRestartCount = 0;
@@ -405,15 +414,15 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath );
-	if ( sPath.IsEmpty() )
-		return;
-
 	ARRAY_FOREACH ( i, dListeners )
 	{
 		const ListenerDesc_t & tDesc = dListeners[i];
 		if ( tDesc.m_eProto==Proto_e::SPHINX || tDesc.m_eProto==Proto_e::HTTP )
 		{
+#ifdef _WIN32
+			g_pBuddyPortList.reset ( PortRange::Create ( "127.0.0.1", tDesc.m_iPort+100, 20 ) );
+			g_tBuddyPort = g_pBuddyPortList->AcquirePort();
+#endif
 			g_sListener4Buddy = GetUrl ( tDesc );
 			break;
 		}
@@ -429,6 +438,10 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		sphWarning ( "[BUDDY] no curl found, disabled" );
 		return;
 	}
+
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort );
+	if ( sPath.IsEmpty() )
+		return;
 
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
@@ -470,6 +483,14 @@ void BuddyStop ()
 	g_eBuddy = BuddyState_e::STOPPED;
 	g_pBuddy.reset();
 }
+
+void BuddyShutdown ()
+{
+	BuddyStop();
+	g_tBuddyPort = ScopedPort_c();
+	g_pBuddyPortList.reset();
+}
+
 
 bool HasBuddy()
 {
@@ -708,7 +729,7 @@ static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphStr
 #endif
 }
 
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath )
+CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort )
 {
 	if ( bHasBuddyPath )
 		return sConfigPath;
@@ -718,7 +739,8 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	// check executor first
 #ifdef _WIN32
 	sExecPath.SetSprintf (
-		"docker run --rm -p 9999:9999 -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy %s /buddy/src/main.php",
+		"docker run --rm -p %d:9999 -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy %s /buddy/src/main.php",
+		iHostPort,
 		GET_MANTICORE_MODULES(),
 		g_sDefaultBuddyName.cstr(),
 		g_sDefaultBuddyDockerImage.cstr()

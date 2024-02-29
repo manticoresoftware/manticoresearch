@@ -30,6 +30,7 @@
 #include "grouper.h"
 #include "knnmisc.h"
 #include "joinsorter.h"
+#include "querycontext.h"
 
 #include <ctime>
 #include <cmath>
@@ -4529,7 +4530,7 @@ private:
 	bool	SetupGroupbySettings ( bool bHasImplicitGrouping );
 	void	AssignOrderByToPresortStage ( const int * pAttrs, int iAttrCount );
 	void	AddAttrsFromSchema ( const ISphSchema & tSchema, const CSphString & sPrefix );
-	void	ModifyJsonFieldExprForJoin ( CSphColumnInfo & tExprCol, const CSphString & sExpr );
+	void	ModifyExprForJoin ( CSphColumnInfo & tExprCol, const CSphString & sExpr );
 	void	SelectExprEvalStage ( CSphColumnInfo & tExprCol );
 
 	void	ReplaceGroupbyStrWithExprs ( CSphMatchComparatorState & tState, int iNumOldAttrs );
@@ -5267,7 +5268,8 @@ void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
 	ARRAY_FOREACH ( j, dDependentCols )
 	{
 		auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( dDependentCols[j] ) );
-		if ( tDep.m_eStage>tExprCol.m_eStage )
+		bool bJoinedAttr = ExprHasJoinPrefix ( tDep.m_sName, m_tSettings.m_pJoinArgs.get() ) && tDep.m_eStage==SPH_EVAL_SORTER && tDep.m_tLocator.m_bDynamic && !tDep.m_pExpr;
+		if ( tDep.m_eStage>tExprCol.m_eStage && !bJoinedAttr )
 			tDep.m_eStage = tExprCol.m_eStage;
 	}
 }
@@ -5285,8 +5287,12 @@ void QueueCreator_c::AddAttrsFromSchema ( const ISphSchema & tSchema, const CSph
 }
 
 
-void QueueCreator_c::ModifyJsonFieldExprForJoin ( CSphColumnInfo & tExprCol, const CSphString & sExpr )
+void QueueCreator_c::ModifyExprForJoin ( CSphColumnInfo & tExprCol, const CSphString & sExpr )
 {
+	// even if it's over a join expr, it references another attr, so don't remove the expression
+	if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE )
+		return;
+
 	// check expr and its alias
 	if ( !ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() ) && !ExprHasJoinPrefix ( sExpr, m_tSettings.m_pJoinArgs.get() ) )
 		return;
@@ -5296,6 +5302,7 @@ void QueueCreator_c::ModifyJsonFieldExprForJoin ( CSphColumnInfo & tExprCol, con
 	tExprCol.m_eAttrType = sphPlainAttrToPtrAttr ( tExprCol.m_eAttrType );
 	tExprCol.m_pExpr = nullptr;
 	tExprCol.m_eStage = SPH_EVAL_SORTER;
+	tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 }
 
 
@@ -5306,8 +5313,7 @@ void QueueCreator_c::SelectExprEvalStage ( CSphColumnInfo & tExprCol )
 	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 		return;
 
-	// no expr? looks like a joined attr
-	if ( !tExprCol.m_pExpr )
+	if ( tExprCol.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
 		return;
 
 	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
@@ -5467,7 +5473,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( !SetupAggregateExpr ( tExprCol, tItem.m_sExpr, uQueryPackedFactorFlags ) )
 		return false;
 
-	ModifyJsonFieldExprForJoin ( tExprCol, tItem.m_sExpr );
+	ModifyExprForJoin ( tExprCol, tItem.m_sExpr );
 
 	// postpone aggregates, add non-aggregates
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
@@ -5482,9 +5488,11 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	else // some aggregate
 	{
 		bool bColumnarAggregate = SetupColumnarAggregates(tExprCol);
+		bool bJoinAggregate = ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() );
 
 		// columnar aggregates have their own code path; no need to calculate them in presort
-		tExprCol.m_eStage = bColumnarAggregate ? SPH_EVAL_SORTER : SPH_EVAL_PRESORT;
+		// and aggregates over joined attrs are calculated in the join sorter
+		tExprCol.m_eStage = ( bColumnarAggregate || bJoinAggregate ) ? SPH_EVAL_SORTER : SPH_EVAL_PRESORT;
 
 		m_pSorterSchema->AddAttr ( tExprCol, true );
 		m_hExtra.Add ( tExprCol.m_sName );
@@ -5850,6 +5858,7 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 	tExprParseArgs.m_eCollation = m_tQuery.m_eCollation;
 	tExprCol.m_eStage = SPH_EVAL_PRESORT;
 	tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprParseArgs );
+	tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 	return !!tExprCol.m_pExpr;
 }
 
@@ -5934,6 +5943,7 @@ bool QueueCreator_c::AddJoinAttrs()
 			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
 			tAttr.m_tLocator.Reset();
 			tAttr.m_eStage = SPH_EVAL_SORTER;
+			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 			m_pSorterSchema->AddAttr ( tAttr, true );
 
 			m_hQueryDups.Add ( tAttr.m_sName );
@@ -5983,7 +5993,7 @@ bool QueueCreator_c::AddNullBitmask()
 			continue;
 
 		iDynamic++;
-		if ( GetJoinAttrName ( tAttr.m_sName, m_tSettings.m_pJoinArgs->m_sIndex2 ) )
+		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
 			iNumJoinAttrs = Max ( iNumJoinAttrs, iDynamic );
 	}
 

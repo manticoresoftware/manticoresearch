@@ -609,7 +609,28 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	return true;
 }
 
-void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE& uPacketID, GenericOutputBuffer_c& tOut )
+static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const bson::Bson_c & tMessage, GenericOutputBuffer_c & tOut )
+{
+	if ( !bson::IsAssoc ( tMessage ) )
+		return false;
+
+	CSphString sError = bson::String ( tMessage.ChildByName ( "error" ) );
+	if ( sError.IsEmpty() )
+		return false;
+
+	// reset back out buff and packet
+	uPacketID = tSavedPos.second;
+	tOut.Rewind ( tSavedPos.first );
+	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
+
+	LogSphinxqlError ( sStmt, FromStr ( sError ) );
+	session::GetClientSession()->m_sError = sError;
+	session::GetClientSession()->m_tLastMeta.m_sError = sError;
+	tBuddyRows->Error ( sError.cstr() );
+	return true;
+}
+
+void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
 {
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery );
 	if ( !tReplyRaw.first )
@@ -636,6 +657,9 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
 	{
+		if ( ConvertErrorMessage ( sSrcQuery.first, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
+			return;
+
 		LogSphinxqlError ( sSrcQuery.first, tError );
 		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
 		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );

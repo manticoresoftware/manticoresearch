@@ -116,6 +116,8 @@ void RtAccum_t::Cleanup()
 	m_uAccumDocs = 0;
 	m_iAccumBytes = 0;
 	m_dAccumKlist.Reset();
+	m_sIndexName = CSphString();
+	m_iIndexId = 0;
 
 	m_dCmd.Reset();
 }
@@ -481,12 +483,14 @@ void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 }
 
 
-void RtAccum_t::SetIndex ( RtIndex_i* pIndex )
+void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	assert ( pIndex );
 	m_iIndexGeneration = pIndex->GetAlterGeneration();
 	m_pIndex = pIndex;
 	m_pBlobWriter.reset();
+	m_sIndexName = pIndex->GetName();
+	m_iIndexId = pIndex->GetIndexId();
 
 	const CSphSchema& tSchema = pIndex->GetInternalSchema();
 	if ( tSchema.HasBlobAttrs() )

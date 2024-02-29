@@ -11190,6 +11190,28 @@ static bool InsertToPQ ( const SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t 
 	return true;
 }
 
+static bool CleanupAcc ( bool bMissed, RtAccum_t * pAccum, CSphString & sError )
+{
+	assert ( pAccum );
+	sError.SetSprintf ( "can not finish transaction, table %s '%s'", ( bMissed ? "missed" : "changed" ), pAccum->GetIndexName().cstr() );
+	pAccum->Cleanup();
+	return false;
+}
+
+static bool CheckAccIndex ( CSphSessionAccum & tSession, CSphString & sError )
+{
+	RtAccum_t * pAccum = tSession.GetAcc();
+	assert ( pAccum );
+	auto pServed = GetServed ( pAccum->GetIndexName() );
+	if ( !pServed )
+		return CleanupAcc ( true, pAccum, sError );
+
+	if ( pAccum->GetIndexId()!=RIdx_T<RtIndex_i*>( pServed )->GetIndexId() )
+		return CleanupAcc ( false, pAccum, sError );
+
+	return true;
+}
+
 void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 {
 	auto* pSession = session::GetClientSession();
@@ -11197,10 +11219,16 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
-	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc() ) )
+	if ( tAcc.GetIndex() )
 	{
-		TlsMsg::MoveError ( sError );
-		return tOut.Error ( "%s", sError.cstr() );
+		if ( !CheckAccIndex ( tAcc, sError ) )
+			return tOut.Error ( "%s", sError.cstr() );
+
+		if ( !HandleCmdReplicate ( *tAcc.GetAcc() ) )
+		{
+			TlsMsg::MoveError ( sError );
+			return tOut.Error ( "%s", sError.cstr() );
+		}
 	}
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
@@ -11220,8 +11248,12 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	int iDeleted = 0;
 	if ( pIndex )
 	{
-		tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
-		RtAccum_t* pAccum = tAcc.GetAcc ();
+		RtAccum_t * pAccum = tAcc.GetAcc();
+		tCrashQuery.m_dIndex = FromStr ( pAccum->GetIndexName() );
+
+		if ( !CheckAccIndex ( tAcc, sError ) )
+			return tOut.Error ( "%s", sError.cstr() );
+
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );

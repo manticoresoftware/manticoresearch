@@ -160,6 +160,9 @@ INSERT INTO sales (product_id, sale_date, quantity) VALUES (1, '2023-01-01', 3),
 <!-- filter on aliased joined attr -->
 select *, sales.quantity * 10 al from products inner join sales on products.id = sales.product_id where al > 20;
 
+<!-- error on unknown index in MATCH() -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet', wrong_table); 
+
 <!-- clean up -->
 drop table sales;
 drop table products;

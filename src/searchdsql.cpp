@@ -1214,8 +1214,8 @@ bool SqlParser_c::SetMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 	else
 	{
 		CSphString sError;
-		sError.SetSprintf ( "Unknown index '%s' found in MATCH() clause", sMatchIndex.cstr() );
-		yyerror ( this, "too many MATCH() clauses" );
+		sError.SetSprintf ( "Unknown table '%s' found in MATCH() clause", sMatchIndex.cstr() );
+		yyerror ( this, sError.cstr() );
 		return false;
 	}
 

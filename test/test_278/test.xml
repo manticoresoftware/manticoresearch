@@ -151,14 +151,38 @@ drop table join1;
 
 <!-- create new tables -->
 CREATE TABLE products ( product_name text, price int );
-CREATE TABLE sales ( product_id int, sale_date string, quantity int );
+CREATE TABLE sales ( comment text, product_id int, sale_date string, quantity int );
 
 <!-- populate tables -->
 INSERT INTO products (id, product_name, price) VALUES (1, 'Laptop', 1200), (2, 'Phone', 800), (3, 'Tablet', 450);
-INSERT INTO sales (product_id, sale_date, quantity) VALUES (1, '2023-01-01', 3), (2, '2023-01-02', 2), (1, '2023-01-03', 1), (3, '2023-01-04', 2);
+INSERT INTO sales VALUES (1, 'sale1', 1, '2023-01-01', 3), (2, 'sale2', 2, '2023-01-02', 2), (3, 'sale3', 1, '2023-01-03', 1), (4, 'sale4', 3, '2023-01-04', 2);
 
 <!-- filter on aliased joined attr -->
 select *, sales.quantity * 10 al from products inner join sales on products.id = sales.product_id where al > 20;
+
+<!-- error on unknown index in MATCH() -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet', wrong_table);
+
+<!-- MATCH() for left and right tables (no left match) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products)
+
+<!-- MATCH() for left and right tables (left match1) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products) and match('sale2',sales);
+
+<!-- MATCH() for left and right tables (left match2) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products) and match('sale4',sales);
+
+<!-- MATCH() for left and right tables (alternate syntax) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products) and match('sale2');
+
+<!-- MATCH() for left and right tables and filter -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone|laptop', products) and match('sale2|sale4') and id>2;
+
+<!-- MATCH() for right and right tables (error) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone|laptop', products) and match('sale2|sale4', products);
+
+<!-- MATCH() syntax error -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone|laptop', products) and match('sale2', sales) and match('sale4', sales);
 
 <!-- clean up -->
 drop table sales;

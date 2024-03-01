@@ -1483,6 +1483,7 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( ESphHttpStatus eStatus );
+ESphHttpStatus HttpGetStatusCodes ( int iStatus );
 void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );

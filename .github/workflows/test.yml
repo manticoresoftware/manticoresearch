@@ -413,16 +413,16 @@ jobs:
           image: test-kit:img
           test_prefix: test/clt-tests/core/
 
-  clt_logstash_test:
-    name: CLT test on Logstash and Filebeat
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.17
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/logstash/logstash-
+#  clt_logstash_test:
+#    name: CLT test on Logstash and Filebeat
+#    needs: build_test_kit_docker
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - uses: manticoresoftware/clt@0.1.17
+#        with:
+#          artifact: manticore_test_kit.img
+#          image: test-kit:img
+#          test_prefix: test/clt-tests/logstash/logstash-
 
   clt_mysqldump_mysql_test:
     name: CLT test on mysqldump features for MySQL

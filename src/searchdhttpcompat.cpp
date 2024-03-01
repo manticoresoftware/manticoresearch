@@ -3687,6 +3687,7 @@ void HttpCompatHandler_c::SetLogFilter ( const CSphString & sVal )
 
 void HttpCompatBaseHandler_c::BuildReplyHead ( Str_t sRes, ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	HttpBuildReplyHead ( GetResult(), eStatus, sRes.first, sRes.second, IsHead() );
 }
 

@@ -12,7 +12,7 @@
 
 #include "sphinxsearch.h"
 #include "searchnode.h"
-#include "sphinxint.h"
+#include "querycontext.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "attribute.h"

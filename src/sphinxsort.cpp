@@ -18,6 +18,7 @@
 #include "queuecreator.h"
 #include "sortertraits.h"
 #include "sortergroup.h"
+#include "querycontext.h"
 
 #include <ctime>
 

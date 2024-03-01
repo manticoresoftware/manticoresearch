@@ -115,6 +115,10 @@ insert into test_table values
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "limits_per_field":0 } }</query>
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "limits_per_field":false } }</query>
 
+<!-- crash at daemon with error on parsing query with highlight -->
+<query endpoint="json/search">{ "index": "test1", "highlight":{"fields":["content"],"html_strip_mode":"strip"},"query":{"bool":{"must":[{"query_string":"error"}]}} }</query>
+<query endpoint="json/search">{ "index": "test1", "highlight":{"fields":["content"],"html_strip_mode":"strip123"},"query":{"bool":{"must":[{"query_string":"error"}]}} }</query>
+
 </httpqueries>
 
 </test>

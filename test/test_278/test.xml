@@ -141,9 +141,29 @@ select * from join1 join join2 on join1.title=join2.title order by id asc;
 <!-- join over fulltext (error) table -->
 select id,join2.id from join1 join join2 on join1.title=join2.title order by id asc;
 
+<!-- join vs aggregates -->
+select id, join2.id from join1 join join2 on join1.string_id=join2.id order by id asc;
+select sum(join2.id) from join1 join join2 on join1.string_id=join2.id;
+
 <!-- clean up -->
 drop table join2;
 drop table join1;
+
+<!-- create new tables -->
+CREATE TABLE products ( product_name text, price int );
+CREATE TABLE sales ( product_id int, sale_date string, quantity int );
+
+<!-- populate tables -->
+INSERT INTO products (id, product_name, price) VALUES (1, 'Laptop', 1200), (2, 'Phone', 800), (3, 'Tablet', 450);
+INSERT INTO sales (product_id, sale_date, quantity) VALUES (1, '2023-01-01', 3), (2, '2023-01-02', 2), (1, '2023-01-03', 1), (3, '2023-01-04', 2);
+
+<!-- filter on aliased joined attr -->
+select *, sales.quantity * 10 al from products inner join sales on products.id = sales.product_id where al > 20;
+
+<!-- clean up -->
+drop table sales;
+drop table products;
+
 </sphinxql>
 </queries>
 

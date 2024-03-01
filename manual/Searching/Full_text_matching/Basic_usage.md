@@ -124,7 +124,7 @@ By default, keywords are combined using the OR operator. However, you can change
 
 ### match_all
 
-"match_all" accepts an empty object and returns documents from the index without any text matching. It is similar to the same query used in Elasticsearch. Alternatively, you can just omit the `query` clause in the request which will have the same effect. 
+"match_all" accepts an empty object and returns documents from the table without performing any attribute filtering or full-text matching. Alternatively, you can just omit the `query` clause in the request which will have the same effect.
 
 ```json
 "query":
@@ -136,7 +136,7 @@ By default, keywords are combined using the OR operator. However, you can change
 
 ### Combining full-text filtering with other filters
 
-All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of an [HTTP `bool` query](../../Searching/Filters.md#bool-query).
+All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of a [JSON `bool` query](../../Searching/Filters.md#bool-query).
 
 <!-- intro -->
 Examples:
@@ -396,7 +396,7 @@ typescript
 res = await searchApi.search({
   index: 'test',
   query: { query_string: "test document 1" },
-  "_source": ["content", "title"], 
+  "_source": ["content", "title"],
   limit: 1
 });
 ```
@@ -424,7 +424,7 @@ go
 <!-- request go -->
 
 ```go
-searchRequest := openapiclient.NewSearchRequest("test")
+searchRequest := manticoresearch.NewSearchRequest("test")
 query := map[string]interface{} {"query_string": "test document 1"}
 searchReq.SetSource([]string{"content", "title"})
 searchReq.SetLimit(1)

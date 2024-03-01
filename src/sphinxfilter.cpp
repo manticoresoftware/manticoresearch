@@ -1605,6 +1605,28 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 }
 
 
+static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified )
+{
+	if ( tCtx.m_sJoinIdx.IsEmpty() )
+		return;
+
+	CSphString sPrefix;
+	sPrefix.SetSprintf ( "%s.", tCtx.m_sJoinIdx.cstr() );
+	for ( int i = dModified.GetLength()-1; i>=0; i-- )
+	{
+		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
+		bool bRemove = false;
+		if ( pAttr )
+			bRemove = pAttr->m_uAttrFlags & CSphColumnInfo::ATTR_JOINED;
+		else
+			bRemove = dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
+
+		if ( bRemove )
+			dModified.Remove(i);		
+	}
+}
+
+
 bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
@@ -1623,17 +1645,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 		return true;
 
-	if ( !tCtx.m_sJoinIdx.IsEmpty() )
-	{
-		// remove all right table filters from the query
-		CSphString sPrefix;
-		sPrefix.SetSprintf ( "%s.", tCtx.m_sJoinIdx.cstr() );
-		for ( int i = dModified.GetLength()-1; i>=0; i-- )
-		{
-			if ( dModified[i].m_sAttrName.Begins ( sPrefix.cstr() ) )
-				dModified.Remove(i);		
-		}
-	}
+	RemoveJoinFilters ( tCtx, dModified );
 
 	int iNumModified = dModified.GetLength();
 	for ( int i = 0; i < iNumModified; i++ )

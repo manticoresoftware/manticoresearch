@@ -13,6 +13,7 @@
 #include "sphinxquery.h"
 #include "sphinxsort.h"
 #include "sphinxjson.h"
+#include "querycontext.h"
 #include "std/hash.h"
 #include "std/openhash.h"
 
@@ -31,7 +32,7 @@ int64_t GetJoinCacheSize()
 }
 
 
-bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, CSphString * pModified )
+static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, CSphString * pModified = nullptr )
 {
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", sJoinedIndex.cstr() );
@@ -307,6 +308,7 @@ private:
 	int								m_iDynamicSize = 0;
 	bool							m_bFinalCalcOnly = false;
 	const ISphSchema *				m_pSorterSchema = nullptr;
+	CSphVector<ContextCalcItem_t>	m_dAggregates;
 
 	MatchCache_c					m_tCache;
 	bool							m_bCacheOk = true;
@@ -322,6 +324,7 @@ private:
 	void		SetupJoinAttrRemap();
 	void		SetupSorterSchema();
 	void		SetupNullMask();
+	void		SetupAggregates();
 	FORCE_INLINE uint64_t SetupJoinFilters ( const CSphMatch & tEntry );
 	void		SetupRightFilters();
 	bool		SetupOnFilters ( CSphString & sError );
@@ -341,9 +344,6 @@ JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoined
 {
 	assert ( pIndex && pJoinedIndex );
 
-	m_pJoinQueryParser = sphCreatePlainQueryParser();
-	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
-	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
 	m_bFinalCalcOnly = !bJoinedGroupSort && tQuery.m_eJoinType==JoinType_e::LEFT;
 	m_bErrorFlag = !SetupJoinQuery ( m_pSorter->GetSchema()->GetDynamicSize(), m_sErrorMessage );
 }
@@ -387,7 +387,7 @@ void JoinSorter_c::SetupNullMask()
 				continue;
 
 			iDynamic++;
-			if ( GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+			if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
 				iNumJoinAttrs = Max ( iNumJoinAttrs, iDynamic );
 		}
 
@@ -400,7 +400,7 @@ void JoinSorter_c::SetupNullMask()
 			if ( !tAttr.m_tLocator.m_bDynamic )
 				continue;
 
-			if ( GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+			if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
 				tMask.BitSet(iDynamic);
 
 			iDynamic++;
@@ -421,7 +421,7 @@ void JoinSorter_c::SetupNullMask()
 		if ( !tAttr.m_tLocator.m_bDynamic )
 			continue;
 
-		if ( GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
 			m_uNullMask |= 1ULL << iDynamic;
 
 		iDynamic++;
@@ -429,22 +429,37 @@ void JoinSorter_c::SetupNullMask()
 }
 
 
+void JoinSorter_c::SetupAggregates()
+{
+	for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
+	{
+		const auto & tAttr = m_pSorterSchema->GetAttr(i);
+		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+			m_dAggregates.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
+	}
+}
+
+
 bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 {
+	m_pJoinQueryParser = sphCreatePlainQueryParser();
+	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
+	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
+	m_tJoinQuery.m_iCutoff = 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;
 
 	m_tMatch.Reset ( iDynamicSize );
 	SetupJoinSelectList();
-	if ( !SetupJoinSorter(sError) )
-		return false;
-
-	m_tJoinQuery.m_dFilters.Resize(0);
+	SetupSorterSchema();
 	SetupRightFilters();
 	if ( !SetupOnFilters(sError) )
 		return false;
 
-	SetupSorterSchema();
+	if ( !SetupJoinSorter(sError) )
+		return false;
+
 	SetupNullMask();
+	SetupAggregates();
 	m_iDynamicSize = iDynamicSize;
 
 	return true;
@@ -555,6 +570,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
 	m_tMatch.m_pDynamic = pDynamic;
 
+	bool bAnythingPushed = false;
 	ARRAY_FOREACH ( iMatch, m_dMatches )
 	{
 		memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
@@ -568,7 +584,8 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 				m_tMatch.SetAttr ( i.m_tLocDst, tMatchFromRset.GetAttr ( i.m_tLocSrc ) );
 		}
 
-		fnPush(m_tMatch);
+		CalcContextItems ( m_tMatch, m_dAggregates );
+		bAnythingPushed |= fnPush(m_tMatch);
 
 		// clear repacked json
 		for ( auto & i : m_dJoinRemap )
@@ -596,6 +613,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT )
 	{
 		memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
+		CalcContextItems ( m_tMatch, m_dAggregates );
 
 		// set NULL bitmask
 		assert(m_pAttrNullBitmask);
@@ -603,7 +621,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 		return fnPush(m_tMatch);
 	}
 
-	return true;
+	return bAnythingPushed;
 }
 
 
@@ -654,20 +672,35 @@ void JoinSorter_c::FinalizeJoin ( CSphString & sWarning )
 
 void JoinSorter_c::SetupRightFilters()
 {
+	m_tJoinQuery.m_dFilters.Resize(0);
+
 	// add rhs filters that we removed in TransformFilters
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", m_pJoinedIndex->GetName() );
 	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
 	{
 		auto & tFilter = m_tQuery.m_dFilters[i];
-		if ( !tFilter.m_sAttrName.Begins ( sPrefix.cstr() ) )
-			continue;
+		bool bHasPrefix = tFilter.m_sAttrName.Begins ( sPrefix.cstr() );
+		const CSphColumnInfo * pFilterAttr = m_pSorterSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
+		if ( pFilterAttr )
+		{
+			if ( !(pFilterAttr->m_uAttrFlags & CSphColumnInfo::ATTR_JOINED ) )
+				continue;
+		}
+		else
+		{
+			if ( !bHasPrefix )
+				continue;
+		}
 
 		m_tJoinQuery.m_dFilters.Add(tFilter);
 
 		// remove table name prefix
-		int iPrefixLen = sPrefix.Length();
-		m_tJoinQuery.m_dFilters.Last().m_sAttrName = tFilter.m_sAttrName.SubString ( iPrefixLen, tFilter.m_sAttrName.Length() - iPrefixLen );
+		if ( bHasPrefix )
+		{
+			int iPrefixLen = sPrefix.Length();
+			m_tJoinQuery.m_dFilters.Last().m_sAttrName = tFilter.m_sAttrName.SubString ( iPrefixLen, tFilter.m_sAttrName.Length() - iPrefixLen );
+		}
 	}
 }
 
@@ -790,11 +823,12 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 	}
 
 	assert ( iSorterAttrId!=-1 );
-
-	m_hAttrRemap.Add ( pSorterSchema->GetAttr(iSorterAttrId).m_sName, sJoinExpr );
+	CSphString sJoinAlias = sExpr==sAlias ? sJoinExpr : sAlias;
+	m_hAttrRemap.Add ( pSorterSchema->GetAttr(iSorterAttrId).m_sName, sJoinAlias );
 
 	auto & tItem = m_tJoinQuery.m_dItems.Add();
-	tItem.m_sExpr = tItem.m_sAlias = sJoinExpr;
+	tItem.m_sExpr = sJoinExpr;
+	tItem.m_sAlias = sJoinAlias;
 }
 
 

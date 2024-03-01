@@ -1,0 +1,10 @@
+––– block: ../base/start-searchd –––
+––– input –––
+./test/clt-tests/core/test-join.rec 100 | mysql -h0 -P9306
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM t; SELECT * FROM t ORDER BY id ASC LIMIT 50;"
+––– output –––

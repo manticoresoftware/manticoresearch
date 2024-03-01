@@ -38,7 +38,7 @@ searchd {
 ...
 }
 ```
-<!-- end --> 
+<!-- end -->
 
 ### VIP Connection
 <!-- example VIP -->
@@ -219,7 +219,7 @@ POST /cli -d "desc test"
 
 ### /cli_json
 
-The `/cli_json` endpoint provides the same functionality as `/cli` , but returns the response in JSON format. 
+The `/cli_json` endpoint provides the same functionality as `/cli` , but returns the response in JSON format.
 
 
 <!-- request HTTP -->

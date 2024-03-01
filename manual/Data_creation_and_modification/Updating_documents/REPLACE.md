@@ -4,7 +4,66 @@
 
 `REPLACE` works similarly to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the previous document with the same ID as deleted before inserting a new one.
 
-For HTTP JSON protocol, two request formats are available: Manticore and Elasticsearch-like. You can find both examples in the provided examples.
+If you are looking for in-place updates, please see [this section](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
+
+## SQL REPLACE
+
+The syntax of the SQL `REPLACE` statement is as follows:
+
+**To replace the whole document:**
+```sql
+REPLACE INTO table [(column1, column2, ...)]
+    VALUES (value1, value2, ...)
+    [, (...)]
+```
+
+**To replace only selected fields:**
+```sql
+REPLACE INTO table
+    SET field1=value1[, ..., fieldN=valueN]
+    WHERE id = <id>
+```
+Note, you can filter only by id in this mode.
+
+See the examples for more details.
+
+## JSON REPLACE
+
+* `/replace`:
+  ```
+  POST /replace
+  {
+    "index": "<table name>",
+    "id": <document id>,
+    "doc":
+    {
+      "<field1>": <value1>,
+      ...
+      "<fieldN>": <valueN>
+    }
+  }
+  ```
+  `/index` is an alias endpoint and works the same.
+* Elasticsearch-like endpoint `<table>/_doc/<id>`:
+  ```
+  PUT/POST /<table name>/_doc/<id>
+  {
+    "<field1>": <value1>,
+    ...
+    "<fieldN>": <valueN>
+  }
+  ```
+* Partial replace:
+```
+POST /<table name>/_update/<id>
+{
+  "<field1>": <value1>,
+  ...
+  "<fieldN>": <valueN>
+}
+```
+
+See the examples for more details.
 
 <!-- intro -->
 ##### SQL:
@@ -14,7 +73,21 @@ For HTTP JSON protocol, two request formats are available: Manticore and Elastic
 REPLACE INTO products VALUES(1, "document one", 10);
 ```
 
-<!-- response -->
+<!-- response SQL -->
+
+```sql
+Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### REPLACE ... SET:
+<!-- request REPLACE ... SET -->
+
+```sql
+REPLACE INTO products SET description='HUAWEI Matebook 15', price=10 WHERE id = 55;
+```
+
+<!-- response REPLACE ... SET -->
 
 ```sql
 Query OK, 1 row affected (0.00 sec)
@@ -54,9 +127,9 @@ POST /replace
 ```
 
 <!-- intro -->
-##### Elasticsearch
+##### Elasticsearch-like
 
-<!-- request Elasticsearch -->
+<!-- request Elasticsearch-like -->
 
 ```json
 PUT /products/_doc/2
@@ -72,7 +145,7 @@ POST /products/_doc/3
 }
 ```
 
-<!-- response Elasticsearch -->
+<!-- response Elasticsearch-like -->
 ```json
 {
 "_id":2,
@@ -104,6 +177,38 @@ POST /products/_doc/3
 "result":"updated"
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch-like partial replace:
+
+<!-- request Elasticsearch-like partial -->
+
+```json
+POST /products/_update/55
+{
+  "description": "HUAWEI Matebook 15",
+  "price": 10
+}
+```
+
+<!-- response Elasticsearch-like partial -->
+```json
+{
+"_id":55,
+"_index":"products",
+"_primary_term":1,
+"_seq_no":0,
+"_shards":{
+    "failed":0,
+    "successful":1,
+    "total":1
+},
+"_type":"_doc",
+"_version":1,
+"result":"updated"
+}
+```
+
 
 <!-- intro -->
 ##### PHP:
@@ -211,19 +316,9 @@ class SuccessResponse {
 ```
 <!-- end -->
 
-`REPLACE` is available for both RT and PQ tables.
+`REPLACE` is available for real-time and percolate tables. You can't replace data in a plain table.
 
-When you run a `REPLACE`, the previous document is not removed, but it's marked as deleted, so the table size grows until chunk merging happens, and the marked documents won't be included. To force a chunk merge, use the [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
-
-The syntax of the `REPLACE` statement is the same as the [INSERT statement syntax](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
-
-```sql
-REPLACE INTO table [(column1, column2, ...)]
-    VALUES (value1, value2, ...)
-    [, (...)]
-```
-
-To use the HTTP JSON interface with `REPLACE`, use the `/replace` endpoint. There's also a synonym endpoint, `/index`.
+When you run a `REPLACE`, the previous document is not removed, but it's marked as deleted, so the table size grows until chunk merging happens. To force a chunk merge, use the [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
 ## Bulk replace
 

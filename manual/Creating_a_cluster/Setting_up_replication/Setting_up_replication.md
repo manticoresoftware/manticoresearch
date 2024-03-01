@@ -50,7 +50,7 @@ The `options` option allows you to pass additional options directly to the Galer
 <!-- example write statements 1 -->
 When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:index_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
 
-In the HTTP interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
+In the JSON interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
 
 The [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for a table in a cluster should be valid as long as the [server_id](../../Server_settings/Searchd.md#server_id) is correctly configured.
 

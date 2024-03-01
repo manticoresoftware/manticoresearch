@@ -624,6 +624,10 @@ where_expr:
 	where_item
 	| filter_expr
 	| where_item TOK_AND filter_expr
+	| where_item TOK_AND where_item
+	| where_item TOK_AND filter_expr TOK_AND where_item
+	| where_item TOK_AND where_item TOK_AND filter_expr
+	| filter_expr TOK_AND where_item TOK_AND where_item
     | filter_expr TOK_AND where_item
 	| filter_expr TOK_AND where_item TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
 	;
@@ -636,7 +640,7 @@ where_item:
 		}
 	| TOK_MATCH '(' TOK_QUOTED_STRING ',' idxname ')'
 		{
-			if ( !pParser->SetMatch($3,$5) )
+			if ( !pParser->AddMatch($3,$5) )
 				YYERROR;
 		}
 	| '(' TOK_MATCH '(' TOK_QUOTED_STRING ')' ')'
@@ -646,7 +650,7 @@ where_item:
 		}
 	| '(' TOK_MATCH '(' TOK_QUOTED_STRING  ',' idxname ')' ')'
 		{
-			if ( !pParser->SetMatch($4,$6) )
+			if ( !pParser->AddMatch($4,$6) )
 				YYERROR;
 		}
 	;

@@ -292,7 +292,7 @@ public:
 	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL );
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
-	bool			SetMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
+	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
 	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
@@ -354,7 +354,8 @@ public:
 	void			AddComment ( const SqlNode_t* tNode );
 
 private:
-	bool						m_bGotQuery = false;
+	bool						m_bMatchClause = false;
+	bool						m_bJoinMatchClause = false;
 	BYTE						m_uSyntaxFlags = 0;
 	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedInt>	m_dNamedVec;
@@ -431,7 +432,7 @@ void SqlParser_c::PushQuery ()
 	m_pQuery = &m_pStmt->m_tQuery;
 	m_pQuery->m_eCollation = m_eCollation;
 
-	m_bGotQuery = false;
+	m_bMatchClause = false;
 }
 
 
@@ -1173,29 +1174,21 @@ bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
 
 bool SqlParser_c::SetMatch ( const YYSTYPE & tValue )
 {
-	if ( m_bGotQuery )
+	if ( m_bMatchClause )
 	{
 		yyerror ( this, "too many MATCH() clauses" );
 		return false;
 	}
 
-	m_bGotQuery = true;
+	m_bMatchClause = true;
 	m_pQuery->m_sQuery = ToStringUnescape ( tValue );
 	m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
 	return true;
 }
 
 
-bool SqlParser_c::SetMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex )
+bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex )
 {
-	if ( m_bGotQuery )
-	{
-		yyerror ( this, "too many MATCH() clauses" );
-		return false;
-	}
-
-	m_bGotQuery = true;
-
 	// so the index from tIndex is either in m_pQuery->m_sIndexes OR equal to m_pQuery->m_sJoinIdx\
 	// check it!
 	StrVec_t dQueryIndexes;
@@ -1203,17 +1196,37 @@ bool SqlParser_c::SetMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 	CSphString sMatchIndex;
 	ToString ( sMatchIndex, tIndex );
 
+	CSphString sError;
 	if ( dQueryIndexes.any_of ( [&sMatchIndex]( const CSphString & sIndex ){ return sIndex==sMatchIndex; } ) )
 	{
+		if ( m_bMatchClause )
+		{
+			sError.SetSprintf ( "Multiple MATCH() clauses for table '%s' found", sMatchIndex.cstr() );
+			yyerror ( this, sError.cstr() );
+			return false;
+		}
+
 		// it's a plain match() on othe left index
 		m_pQuery->m_sQuery = ToStringUnescape(tValue);
 		m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
+
+		m_bMatchClause = true;
 	}
 	else if ( m_pQuery->m_sJoinIdx.Length() && m_pQuery->m_sJoinIdx==sMatchIndex )
+	{
+		if ( m_bJoinMatchClause )
+		{
+			sError.SetSprintf ( "Multiple MATCH() clauses for table '%s' found", sMatchIndex.cstr() );
+			yyerror ( this, sError.cstr() );
+			return false;
+		}
+
 		m_pQuery->m_sJoinQuery = ToStringUnescape(tValue);
+
+		m_bJoinMatchClause = true;
+	}
 	else
 	{
-		CSphString sError;
 		sError.SetSprintf ( "Unknown table '%s' found in MATCH() clause", sMatchIndex.cstr() );
 		yyerror ( this, sError.cstr() );
 		return false;

@@ -37,7 +37,7 @@ jobs:
           echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
           echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
-
+          
   win_bundle:
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
@@ -403,7 +403,7 @@ jobs:
 
 
   clt_core_test:
-    name: CLT test of core logic of Manticore Search
+    name: CLT test core logic
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:

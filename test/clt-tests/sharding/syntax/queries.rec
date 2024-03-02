@@ -1,0 +1,178 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=6
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=7
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=8
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=9
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=10
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE a"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+a
+––– input –––
+mysql -h0 -P1306 -e "create table e(id bigint) shards=10 rf=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+a
+e
+e_s0
+e_s1
+e_s2
+e_s3
+e_s4
+e_s5
+e_s6
+e_s7
+e_s8
+e_s9
+sharding_queue
+sharding_state
+sharding_table
+––– input –––
+mysql -h0 -P1306 -e "create table s SHARDS='10' RF='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table k(id bigint) SHARDS='10' RF='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+a
+e
+e_s0
+e_s1
+e_s2
+e_s3
+e_s4
+e_s5
+e_s6
+e_s7
+e_s8
+e_s9
+k
+s
+sharding_queue
+sharding_state
+sharding_table
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– block: ../base/flexible/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
+––– output –––
++-------------------+-------+
+| Counter           | Value |
++-------------------+-------+
+| cluster_c_indexes |       |
++-------------------+-------+
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:m(id bigint) shards=10 rf=2"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:j(id bigint) SHARDS=10 RF=3"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:x(id bigint) SHARDS=10 RF=10"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P4306 -e "create table u(id bigint) shards=10 rf=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P4306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+sharding_queue
+sharding_state
+sharding_table
+u
+u_s0
+u_s1
+u_s2
+u_s3
+u_s4
+u_s5
+u_s6
+u_s7
+u_s8
+u_s9
+––– input –––
+mysql -h0 -P5306 -e "create table t(id bigint) rf=1 shards=10"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––
+sharding_queue
+sharding_state
+sharding_table
+t
+t_s0
+t_s1
+t_s2
+t_s3
+t_s4
+t_s5
+t_s6
+t_s7
+t_s8
+t_s9
+––– input –––
+mysql -h0 -P5306 -e "create table ${CLUSTER_NAME}:d(id bigint) shards=1 rf=10"
+––– output –––
+––– input –––
+mysql -h0 -P5306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
+––– output –––

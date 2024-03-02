@@ -424,18 +424,18 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::SpawnColumnarGroupers()
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_STRINGPTR:
-			m_dSingleKeyGroupers[i] = CreateGrouperColumnarString ( tAttr, m_eCollation );
+			m_dSingleKeyGroupers[i] = CreateGrouperColumnarString ( tAttr.m_sName, m_eCollation );
 			break;
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_UINT32SET_PTR:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_INT64SET_PTR:
-			m_dMultiKeyGroupers[i] = CreateGrouperColumnarMVA(tAttr);
+			m_dMultiKeyGroupers[i] = CreateGrouperColumnarMVA ( tAttr.m_sName, tAttr.m_eAttrType );
 			break;
 
 		default:
-			m_dSingleKeyGroupers[i] = CreateGrouperColumnarInt(tAttr);
+			m_dSingleKeyGroupers[i] = CreateGrouperColumnarInt ( tAttr.m_sName, tAttr.m_eAttrType );
 			break;
 		}
 	}

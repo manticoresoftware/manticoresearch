@@ -185,6 +185,8 @@ show meta;
 select groupby(), count(*) from META:all group by price,brand_id;
 
 select groupby(), count(*) from META:all group by coeff;
+
+select brand_id as b, count(*) FROM META:all GROUP BY b;
 </sphinxql></queries>
 
 </test>

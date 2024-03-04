@@ -44,7 +44,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263_jammy
+      image: manticoresearch/ubertests_ctest:3263_mar_2024
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache

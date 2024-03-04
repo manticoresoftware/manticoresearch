@@ -393,7 +393,6 @@ searchRequest.SetSource(source)
 searchReq.SetLimit(1)
 searchReq.SetProfile(true)
 res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
-
 ```
 <!-- response Go -->
 ``` Go
@@ -939,6 +938,110 @@ class SearchResponse {
     profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
 }
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: '@content 1'},
+  _source: { excludes: ["*"] },
+  limit:1,
+  profile":true
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": "1",
+            "_score": 1480,
+            "_source": {}
+        }],
+        "total": 1
+    },
+ 	"profile": 
+ 	{
+ 		"query": 
+ 		{
+ 			"children": 
+ 			[{
+ 				"children": 
+ 				[{
+ 					"expanded": True,
+                    "querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "1*"
+                }],
+                "description": "AND(fields=(content), KEYWORD(1*, querypos=1, expanded))",
+                "fields": ["content"],
+                "type": "AND"
+            }],
+            "description": "AND(fields=(content), KEYWORD(1*, querypos=1))",
+            "type": "AND"
+        }},
+	"timed_out": False,
+	"took": 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoresearch.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "1*"}
+source := map[string]interface{} { "excludes": []string {"*"} }
+searchRequest.SetQuery(query)
+searchRequest.SetSource(source)
+searchReq.SetLimit(1)
+searchReq.SetProfile(true)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": "1",
+            "_score": 1480,
+            "_source": {}
+        }],
+        "total": 1
+    },
+ 	"profile": 
+ 	{
+ 		"query": 
+ 		{
+ 			"children": 
+ 			[{
+ 				"children": 
+ 				[{
+ 					"expanded": True,
+                    "querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "1*"
+                }],
+                "description": "AND(fields=(content), KEYWORD(1*, querypos=1, expanded))",
+                "fields": ["content"],
+                "type": "AND"
+            }],
+            "description": "AND(fields=(content), KEYWORD(1*, querypos=1))",
+            "type": "AND"
+        }},
+	"timed_out": False,
+	"took": 0
+}
+```
+
 <!-- end -->
 
 

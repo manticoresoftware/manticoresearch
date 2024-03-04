@@ -351,6 +351,81 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  limit: 0,
+  aggs: {
+    cat_id: {
+      terms: { field: "cat", size: 1 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"cat_id":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":1
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":5,
+		"hits":[]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("cat")
+aggTerms.SetSize(1)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"cat_id":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":1
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":5,
+		"hits":[]
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example sort1 -->
@@ -788,6 +863,87 @@ class SearchResponse {
 
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  aggs: {
+    mva_agg: {
+      terms: { field: "mva_field", size: 2 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"mva_agg":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":4
+			},
+			{
+				"key":2,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":4,
+		"hits":[]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("mva_field")
+aggTerms.SetSize(2)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"mva_agg":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":4
+			},
+			{
+				"key":2,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":5,
+		"hits":[]
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example json -->
@@ -988,6 +1144,88 @@ class SearchResponse {
 }
 
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  aggs: {
+    json_agg: {
+      terms: { field: "json_field.year", size: 1 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"json_agg":
+		{
+			"buckets":
+			[{
+				"key":2000,
+				"doc_count":2
+			},
+			{
+				"key":2001,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":4,
+		"hits":[]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("json_field.year")
+aggTerms.SetSize(2)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"json_agg":
+		{
+			"buckets":
+			[{
+				"key":2000,
+				"doc_count":2
+			},
+			{
+				"key":2001,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":4,
+		"hits":[]
+	}
+}
+```
+
 <!-- end -->
 
 ## Aggregation functions

@@ -389,8 +389,8 @@ class SearchResponse {
 ```
 
 <!-- intro -->
-typescript
-<!-- request typescript -->
+TypeScript
+<!-- request TypeScript -->
 
 ```typescript
 res = await searchApi.search({
@@ -400,7 +400,7 @@ res = await searchApi.search({
   limit: 1
 });
 ```
-<!-- response typescript -->
+<!-- response TypeScript -->
 ```json
 {
   took: 1,
@@ -420,8 +420,8 @@ res = await searchApi.search({
 ```
 
 <!-- intro -->
-go
-<!-- request go -->
+Go
+<!-- request Go -->
 
 ```go
 searchRequest := manticoresearch.NewSearchRequest("test")
@@ -430,7 +430,7 @@ searchReq.SetSource([]string{"content", "title"})
 searchReq.SetLimit(1)
 resp, httpRes, err := search.SearchRequest(*searchRequest).Execute()
 ```
-<!-- response go -->
+<!-- response Go -->
 ```json
 {
   "hits": {

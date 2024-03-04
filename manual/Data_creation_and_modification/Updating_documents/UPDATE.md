@@ -140,6 +140,43 @@ class UpdateResponse {
 }
 ```
 
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"cat":10}
+updateRequest = openapiclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
 <!-- end -->
 
 <!-- example update multiple attributes -->
@@ -305,6 +342,43 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: "10" } });
+```
+
+<!-- response TypeScript -->
+```go
+{
+  "_index":"test",
+  "_id":1,
+  "result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"name":"Doc 21", "cat":10}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "_index":"test",
+  "_id":1,
+  "result":"updated"
 }
 ```
 
@@ -481,6 +555,39 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({"index" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
+```
+
+<!-- response TypeScript -->
+```typescript
+{"_index":"test","_id":1,"result":"updated"}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"meta.tags[0]":100}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
 }
 ```
 
@@ -700,6 +807,68 @@ class UpdateResponse {
 }
 ```
 
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.insert({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 1', name: 'Doc 1', meta: { tags:[1,2,3] } }
+})
+res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','two','three'] } } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"_index":"test",
+	"_id":1,
+	"created":true,
+	"result":"created"
+}
+
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request Go -->
+``` go
+metaField := map[string]interface{} {"tags": []int{1, 2, 3}}
+insertDoc := map[string]interface{} {"name": "Doc 1", "meta": metaField}}
+insertRequest := manticoreclient.NewInsertDocumentRequest("test", insertDoc)
+insertRequest.SetId(1)
+res, _, _ := apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*insertRequest).Execute();
+
+metaField = map[string]interface{} {"tags": []string{"one", "two", "three"}}
+updateDoc := map[string]interface{} {"meta": metaField}
+updateRequest := manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"created":true,
+	"result":"created"
+}
+
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
 <!-- end -->
 
 <!-- example cluster update -->
@@ -784,16 +953,6 @@ indexApi.update(updatedoc);
 
 ```
 
-<!-- response Java -->
-```java
-class UpdateResponse {
-    index: products
-    updated: null
-    id: 1
-    result: updated
-}
-```
-
 <!-- intro -->
 ##### C#:
 
@@ -805,14 +964,24 @@ UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", c
 indexApi.Update(updatedoc);
 ```
 
-<!-- response C# -->
-```clike
-class UpdateResponse {
-    index: products
-    updated: null
-    id: 1
-    result: updated
-}
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = wait indexApi.update( {cluster: 'test_cluster', index : 'test', id : 1, doc : {name : 'Doc 11'}} );
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"name":"Doc 11"}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetCluster("test_cluster")
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
 ```
 
 <!-- end -->
@@ -965,6 +1134,44 @@ class UpdateResponse {
     result: updated
 }
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"cat":10}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
 <!-- end -->
 
 
@@ -1305,6 +1512,88 @@ class BulkResponse {
 }
 ```
 
+<!-- request TypeScript -->
+
+``` typescript
+updateDocs = [
+  {
+    update: {
+      index: 'test',
+      id: 1,
+      doc: { content: 'Text 11', cat: 1, name: 'Doc 11' },
+    },
+  },
+  {
+    update: {
+      index: 'test',
+      id: 2,
+      doc: { content: 'Text 22', cat: 9, name: 'Doc 22' },
+    },
+  },
+];
+
+res = await indexApi.bulk(
+  updateDocs.map((e) => JSON.stringify(e)).join("\n")
+);
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    },
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+<!-- request Go -->
+
+``` go
+body := "{\"update\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
+	"{\"update\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    },
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+
 <!-- end -->
 
 
@@ -1374,7 +1663,7 @@ utilsApi.sql('create table products(title text, price float) attr_update_reserve
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'');
 ```
 
@@ -1391,6 +1680,25 @@ utilsApi.sql("create table products(title text, price float) attr_update_reserve
 ```clike
 utilsApi.Sql("create table products(title text, price float) attr_update_reserve = '1M'");
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+utilsApi.sql("create table test(content text, name string, cat int) attr_update_reserve = '1M'");
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("create table test(content text, name string, cat int) attr_update_reserve = '1M'").Execute()
+```
+
 <!-- request CONFIG -->
 
 ```ini

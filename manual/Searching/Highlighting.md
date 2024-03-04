@@ -199,6 +199,84 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1"
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1"
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 When using SQL for highlighting search results, you will receive snippets from various fields combined into a single string due to the limitations of the MySQL protocol. You can adjust the concatenation separators with the `field_separator` and `snippet_separator` options, as detailed below.
@@ -520,6 +598,117 @@ class SearchResponse {
     profile: null
 }
 ```
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { match: { *: 'Text } },
+  highlight: { limit: 2}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		},
+		{
+			"_id":"2",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 2",
+				"name":"Doc 2",
+				"cat":2
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 2</b>"
+				]
+			}
+		}]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		},
+		{
+			"_id":"2",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 2",
+				"name":"Doc 2",
+				"cat":2
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 2</b>"
+				]
+			}
+		}]
+	}
+}
+```
+
 
 <!-- end -->
 
@@ -905,6 +1094,87 @@ class SearchResponse {
 
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Text 9'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Text 9"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight JSON all field  -->
@@ -1089,6 +1359,96 @@ class SearchResponse {
 }
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Doc 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				],
+				"name":
+				[
+					"<b>Doc 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Doc 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				],
+				"name":
+				[
+					"<b>Doc 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+
 <!-- end -->
 
 In addition to common highlighting options, several synonyms are available for JSON queries via HTTP:
@@ -1223,6 +1583,99 @@ highlight.HighlightQuery = highlightQuery;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: ['content'],
+    highlight_query: {
+      match: {*: 'Text'}
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b> 1"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+queryMatchClause := map[string]interface{} {"*": "Text"};
+highlightQuery := map[string]interface{} {"match": queryMatchClause};
+highlight.SetHighlightQuery(highlightQuery)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b> 1"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example pre_tags  -->
@@ -1357,6 +1810,93 @@ highlight.PostTags = "_after";
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    pre_tags: 'before_',
+    post_tags: '_after'
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"before_Text 1_after"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"}
+query := map[string]interface{} {"match": matchClause}
+searchRequest.SetQuery(query)
+highlight := manticoreclient.NewHighlight()
+highlight.SetPreTags("before_")
+highlight.SetPostTags("_after")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"before_Text 1_after"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example no_match_size  -->
@@ -1486,6 +2026,89 @@ highlight.NoMatchSize = 0;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {no_match_size: 0}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNoMatchSize(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example order  -->
@@ -1614,6 +2237,89 @@ searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { order: 'score' }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetOrder("score")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+
 <!-- end -->
 
 <!-- example fragment_size -->
@@ -1736,6 +2442,89 @@ highlight.FragmentSize = 100;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { fragment_size: 4}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetFragmentSize(4)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example number_of_fragments -->
@@ -1862,6 +2651,88 @@ highlight.Fieldnames = new List<string> {"content", "title"};
 highlight.NumberOfFragments = 10;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { number_of_fragments: 1}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNumberOfFragments(1)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
 ```
 
 <!-- end -->
@@ -1994,6 +2865,96 @@ highlight.Fields = new List<Object> {highlightField};
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: {
+      content: { limit:1 }
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightField.SetLimit(1);
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id":"1",
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight json global limits -->
@@ -2124,6 +3085,29 @@ searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { limits_per_field: 0 }
+});
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetLimitsPerField(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
 <!-- end -->
 
 # CALL SNIPPETS

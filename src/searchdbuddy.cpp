@@ -56,6 +56,7 @@ static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 
 static int g_iBuddyVersion = 2;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
+static CSphString g_sContainerName;
 
 // windows docker needs port XXX:9999 port mapping
 static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
@@ -401,8 +402,23 @@ CSphString GetUrl ( const ListenerDesc_t & tDesc )
     return sURI;
 }
 
+static void SetContainerName ( const CSphString & sConfigPath )
+{
+	DWORD uName = sphCRC32 ( sConfigPath.cstr() );
+	g_sContainerName.SetSprintf ( "buddy_%u", uName );
+}
 
-void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads )
+static void BuddyStopContainer()
+{
+#ifdef _WIN32
+	CSphString sCmd;
+	sCmd.SetSprintf ( "docker kill %s", g_sContainerName.cstr() );
+	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles );
+	tStop.wait();
+#endif
+}
+
+void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -439,6 +455,8 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
+	SetContainerName ( sConfigFilePath );
+	BuddyStopContainer();
 	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort );
 	if ( sPath.IsEmpty() )
 		return;
@@ -478,6 +496,7 @@ void BuddyStop ()
 		g_pBuddy->terminate ( tErrorCode );
 		if ( tErrorCode )
 			sphWarning ( "[BUDDY] stopped, exit code: %d", tErrorCode.value() );
+		BuddyStopContainer();
 	}
 
 	g_eBuddy = BuddyState_e::STOPPED;
@@ -738,13 +757,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 	// check executor first
 #ifdef _WIN32
-	sExecPath.SetSprintf (
-		"docker run --rm -p %d:9999 -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy %s /buddy/src/main.php",
-		iHostPort,
-		GET_MANTICORE_MODULES(),
-		g_sDefaultBuddyName.cstr(),
-		g_sDefaultBuddyDockerImage.cstr()
-	);
+	sExecPath.SetSprintf ( "docker run --rm -p %d:9999 -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy --name %s %s /buddy/src/main.php", iHostPort, GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sContainerName.cstr(), g_sDefaultBuddyDockerImage.cstr() );
 	return sExecPath;
 #endif
 

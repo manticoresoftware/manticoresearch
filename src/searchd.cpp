@@ -21352,7 +21352,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
-	BuddyStart ( g_sBuddyPath, PluginGetDir(), ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry, g_iThreads );
+	BuddyStart ( g_sBuddyPath, PluginGetDir(), ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry, g_iThreads, g_sConfigFile );
 
 	g_bJsonConfigLoadedOk = true;
 

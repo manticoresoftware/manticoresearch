@@ -88,9 +88,12 @@ RUN wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Dow
     && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
     && mysqladmin shutdown
 
-# Note: for mysql 5 check an older version of this file
-
-# ODBC-related note: if test 228 fails with broken encoding - try to remove ';CHARSET=utf8' ending in the odbc_driver line above. M.b. better is to probe once on local instance before pushing to dockerhub
+# ODBC notes:
+# * Urls for various odbc mysql driver versions:
+#   - https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit.tar.gz
+#   - https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-aarch64.tar.gz
+#   - https://dev.mysql.com/get/Downloads/Connector-ODBC/5.3/mysql-connector-odbc-5.3.9-linux-ubuntu16.04-x86-64bit.tar.gz
+# * If test 228 fails with broken encoding - try to remove ';CHARSET=utf8' ending in the odbc_driver line above. M.b. better is to probe once on local instance before pushing to dockerhub
 
 # AOT
 RUN mkdir -p /work/aot && cd /work/aot && \

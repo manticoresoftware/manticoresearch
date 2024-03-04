@@ -67,17 +67,6 @@ chmod +x llvm.sh && \
 ENV CC clang-13
 ENV CXX clang++-13
 
-# ODBC and mysql
-RUN wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit.tar.gz \
-    && tar -zxf /odbc.tar.gz \
-    && rm /odbc.tar.gz \
-    && mkdir -p /var/run/mysqld && chmod a+rwX /var/run/mysqld \
-    && { mysqld & } && sleep 30 \
-    && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
-    && mysqladmin shutdown
-
-# Note: for mysql 5 check an older version of this file
-
 # Ubertests settings file
 ARG TARGETPLATFORM
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=aarch64; else ARCHITECTURE=x86-64bit; fi \
@@ -89,6 +78,17 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=aarch64; else AR
     'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}/lib/libmyodbc8w.so;CHARSET=utf8'
 )
 EOF
+
+# ODBC and mysql
+RUN wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}.tar.gz \
+    && tar -zxf /odbc.tar.gz \
+    && rm /odbc.tar.gz \
+    && mkdir -p /var/run/mysqld && chmod a+rwX /var/run/mysqld \
+    && { mysqld & } && sleep 30 \
+    && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
+    && mysqladmin shutdown
+
+# Note: for mysql 5 check an older version of this file
 
 # ODBC-related note: if test 228 fails with broken encoding - try to remove ';CHARSET=utf8' ending in the odbc_driver line above. M.b. better is to probe once on local instance before pushing to dockerhub
 

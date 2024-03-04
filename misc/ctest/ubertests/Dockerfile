@@ -70,6 +70,13 @@ ENV CXX clang++-13
 # Ubertests settings file
 ARG TARGETPLATFORM
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=aarch64; else ARCHITECTURE=x86-64bit; fi \
+&& wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}.tar.gz \
+    && tar -zxf /odbc.tar.gz \
+    && rm /odbc.tar.gz \
+    && mkdir -p /var/run/mysqld && chmod a+rwX /var/run/mysqld \
+    && { mysqld & } && sleep 30 \
+    && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
+    && mysqladmin shutdown \
 && <<EOF cat > /root/.sphinx
 (
     "db-host"=>"127.0.0.1",
@@ -78,15 +85,6 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=aarch64; else AR
     'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}/lib/libmyodbc8w.so;CHARSET=utf8'
 )
 EOF
-
-# ODBC and mysql
-RUN wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}.tar.gz \
-    && tar -zxf /odbc.tar.gz \
-    && rm /odbc.tar.gz \
-    && mkdir -p /var/run/mysqld && chmod a+rwX /var/run/mysqld \
-    && { mysqld & } && sleep 30 \
-    && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
-    && mysqladmin shutdown
 
 # ODBC notes:
 # * Urls for various odbc mysql driver versions:

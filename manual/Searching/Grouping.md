@@ -1261,7 +1261,7 @@ There can be at most one `COUNT(DISTINCT)` per query.
 
 Actually, some of them are exact, while others are approximate. More on that below.
 
-Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain index. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
+Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain table. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
 
 The other algorithm (enabled by default) loads counts into a hash table and returns its size. If the hash table becomes too large, its contents are moved into a `HyperLogLog`. This is where the counts become approximate since `HyperLogLog` is a probabilistic algorithm. The advantage is that the maximum memory usage per group is fixed and depends on the accuracy of the `HyperLogLog`. The overall memory usage also depends on the [max_matches](../Searching/Options.md#max_matches) setting, which reflects the number of groups.
 
@@ -1343,11 +1343,11 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 
 Grouping is done in fixed memory, which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If `max_matches` allows for storage of all found groups, the results will be 100% accurate. However, if the value of `max_matches` is lower, the results will be less accurate.
 
-When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT index with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
+When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT table with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
 
 Manticore will try to increase `max_matches` up to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) if it detects that groupby may return inaccurate results. Detection is based on the number of unique values of the groupby attribute, which is retrieved from secondary indexes (if present).
 
-To ensure accurate aggregates and/or group counts when using RT indexes or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
+To ensure accurate aggregates and/or group counts when using RT tables or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
 
 <!-- intro -->
 ##### Example:

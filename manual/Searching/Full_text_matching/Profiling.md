@@ -321,6 +321,126 @@ class SearchResponse {
 }
 ```
 
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: 'Text' }, 
+  _source: { excludes: ['*'] },
+  limit: 1,
+  profile: true
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": "1",
+			"_score": 1480,
+			"_source": {}
+		}],
+        "total": 1
+	},
+	"profile":
+	{
+		"query": {
+			"children": 
+			[{
+				"children": 
+				[{
+					"querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "i"
+                }],
+				"description": "AND(KEYWORD(i, querypos=1))",
+				"type": "AND"
+			},
+            {
+            	"children": 
+            	[{
+            		"querypos": 2,
+                    "type": "KEYWORD",
+                    "word": "me"
+                }],
+                "description": "AND(KEYWORD(me, querypos=2))",
+				"type": "AND"
+			}],
+            "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
+            "type": "AND"
+		}
+	},
+	"timed_out": False,
+	"took": 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoresearch.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "Text"}
+source := map[string]interface{} { "excludes": []string {"*"} }
+searchRequest.SetQuery(query)
+searchRequest.SetSource(source)
+searchReq.SetLimit(1)
+searchReq.SetProfile(true)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+
+```
+<!-- response Go -->
+``` Go
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": "1",
+			"_score": 1480,
+			"_source": {}
+		}],
+        "total": 1
+	},
+	"profile":
+	{
+		"query": {
+			"children": 
+			[{
+				"children": 
+				[{
+					"querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "i"
+                }],
+				"description": "AND(KEYWORD(i, querypos=1))",
+				"type": "AND"
+			},
+            {
+            	"children": 
+            	[{
+            		"querypos": 2,
+                    "type": "KEYWORD",
+                    "word": "me"
+                }],
+                "description": "AND(KEYWORD(me, querypos=2))",
+				"type": "AND"
+			}],
+            "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
+            "type": "AND"
+		}
+	},
+	"timed_out": False,
+	"took": 0
+}
+```
+
 <!-- end -->
 
 

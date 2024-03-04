@@ -63,7 +63,7 @@ jobs:
         shell: bash
     timeout-minutes: 30
     container:
-      image: manticoresearch/external_toolchain:clang16_cmake3263_mar_2024
+      image: manticoresearch/external_toolchain:clang16_cmake3263
       env:
         CACHEB: "../cache"
         DIAGNOSTIC: 1

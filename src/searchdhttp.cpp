@@ -2412,7 +2412,7 @@ void sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, HTTP_GET );
-	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false );
+	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, HTTP_GET );
 }
 
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
@@ -2437,7 +2437,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	Str_t sSrcQuery;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
-	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true );
+	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )

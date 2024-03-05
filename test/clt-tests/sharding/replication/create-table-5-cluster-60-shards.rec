@@ -6,12 +6,849 @@
 ––– block: ../base/start-searchd-5 –––
 ––– block: ../base/create-cluster-5 –––
 ––– input –––
+apt-get install -y jq 1> /dev/null 2>&1 ; echo $?
+––– output –––
+0
+––– input –––
 mysql -h0 -P19306 -e "create table c:t(id bigint) shards=60 rf=3" >/dev/null
 ––– output –––
 ––– input –––
 grep 'started v' /var/log/manticore-{1,2,3,4,5}/searchd.log | cut -d\' -f3 | cut -d: -f3 | wc -l
 ––– output –––
 5
+––– input –––
+for i in 1 2 3 4 5; do echo "#{$i}"; cat /var/lib/manticore-$i/manticore.json | jq -M '.indexes.t'; done
+––– output –––
+#{1}
+{
+"type": "distributed",
+"locals": [
+"t_s0",
+"t_s1",
+"t_s10",
+"t_s12",
+"t_s13",
+"t_s15",
+"t_s16",
+"t_s19",
+"t_s20",
+"t_s22",
+"t_s23",
+"t_s25",
+"t_s28",
+"t_s29",
+"t_s3",
+"t_s30",
+"t_s31",
+"t_s34",
+"t_s35",
+"t_s38",
+"t_s39",
+"t_s40",
+"t_s42",
+"t_s43",
+"t_s45",
+"t_s46",
+"t_s49",
+"t_s5",
+"t_s50",
+"t_s52",
+"t_s54",
+"t_s55",
+"t_s58",
+"t_s59",
+"t_s8",
+"t_s9"
+],
+"agents": [
+{
+"config": "127.0.0.1:29312:t_s11|127.0.0.1:39312:t_s11|127.0.0.1:49312:t_s11",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s14|127.0.0.1:49312:t_s14|127.0.0.1:59312:t_s14",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s17|127.0.0.1:39312:t_s17|127.0.0.1:59312:t_s17",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s21|127.0.0.1:49312:t_s21|127.0.0.1:59312:t_s21",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s24|127.0.0.1:39312:t_s24|127.0.0.1:59312:t_s24",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s26|127.0.0.1:39312:t_s26|127.0.0.1:59312:t_s26",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s2|127.0.0.1:39312:t_s2|127.0.0.1:49312:t_s2",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s32|127.0.0.1:39312:t_s32|127.0.0.1:49312:t_s32",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s37|127.0.0.1:39312:t_s37|127.0.0.1:59312:t_s37",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s41|127.0.0.1:49312:t_s41|127.0.0.1:59312:t_s41",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s47|127.0.0.1:49312:t_s47|127.0.0.1:59312:t_s47",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s48|127.0.0.1:39312:t_s48|127.0.0.1:59312:t_s48",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s4|127.0.0.1:39312:t_s4|127.0.0.1:59312:t_s4",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s51|127.0.0.1:49312:t_s51|127.0.0.1:59312:t_s51",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s53|127.0.0.1:39312:t_s53|127.0.0.1:49312:t_s53",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s56|127.0.0.1:49312:t_s56|127.0.0.1:59312:t_s56",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s6|127.0.0.1:49312:t_s6|127.0.0.1:59312:t_s6",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s7|127.0.0.1:39312:t_s7|127.0.0.1:59312:t_s7",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s18|127.0.0.1:49312:t_s18|127.0.0.1:59312:t_s18",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s27|127.0.0.1:49312:t_s27|127.0.0.1:59312:t_s27",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s33|127.0.0.1:49312:t_s33|127.0.0.1:59312:t_s33",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s36|127.0.0.1:49312:t_s36|127.0.0.1:59312:t_s36",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s44|127.0.0.1:49312:t_s44|127.0.0.1:59312:t_s44",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s57|127.0.0.1:49312:t_s57|127.0.0.1:59312:t_s57",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{2}
+{
+"type": "distributed",
+"locals": [
+"t_s1",
+"t_s10",
+"t_s11",
+"t_s14",
+"t_s15",
+"t_s17",
+"t_s19",
+"t_s2",
+"t_s21",
+"t_s23",
+"t_s24",
+"t_s25",
+"t_s26",
+"t_s28",
+"t_s31",
+"t_s32",
+"t_s34",
+"t_s35",
+"t_s37",
+"t_s39",
+"t_s4",
+"t_s40",
+"t_s41",
+"t_s43",
+"t_s46",
+"t_s47",
+"t_s48",
+"t_s51",
+"t_s52",
+"t_s53",
+"t_s55",
+"t_s56",
+"t_s58",
+"t_s6",
+"t_s7",
+"t_s9"
+],
+"agents": [
+{
+"config": "127.0.0.1:19312:t_s0|127.0.0.1:39312:t_s0|127.0.0.1:59312:t_s0",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s12|127.0.0.1:39312:t_s12|127.0.0.1:49312:t_s12",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s13|127.0.0.1:39312:t_s13|127.0.0.1:59312:t_s13",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s16|127.0.0.1:39312:t_s16|127.0.0.1:49312:t_s16",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s20|127.0.0.1:39312:t_s20|127.0.0.1:49312:t_s20",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s22|127.0.0.1:39312:t_s22|127.0.0.1:59312:t_s22",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s29|127.0.0.1:49312:t_s29|127.0.0.1:59312:t_s29",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s30|127.0.0.1:49312:t_s30|127.0.0.1:59312:t_s30",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s38|127.0.0.1:39312:t_s38|127.0.0.1:59312:t_s38",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s3|127.0.0.1:49312:t_s3|127.0.0.1:59312:t_s3",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s42|127.0.0.1:39312:t_s42|127.0.0.1:49312:t_s42",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s45|127.0.0.1:49312:t_s45|127.0.0.1:59312:t_s45",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s49|127.0.0.1:39312:t_s49|127.0.0.1:49312:t_s49",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s50|127.0.0.1:39312:t_s50|127.0.0.1:59312:t_s50",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s54|127.0.0.1:39312:t_s54|127.0.0.1:59312:t_s54",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s59|127.0.0.1:39312:t_s59|127.0.0.1:49312:t_s59",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s5|127.0.0.1:39312:t_s5|127.0.0.1:49312:t_s5",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s8|127.0.0.1:39312:t_s8|127.0.0.1:49312:t_s8",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s18|127.0.0.1:49312:t_s18|127.0.0.1:59312:t_s18",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s27|127.0.0.1:49312:t_s27|127.0.0.1:59312:t_s27",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s33|127.0.0.1:49312:t_s33|127.0.0.1:59312:t_s33",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s36|127.0.0.1:49312:t_s36|127.0.0.1:59312:t_s36",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s44|127.0.0.1:49312:t_s44|127.0.0.1:59312:t_s44",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:39312:t_s57|127.0.0.1:49312:t_s57|127.0.0.1:59312:t_s57",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{3}
+{
+"type": "distributed",
+"locals": [
+"t_s0",
+"t_s11",
+"t_s12",
+"t_s13",
+"t_s16",
+"t_s17",
+"t_s18",
+"t_s2",
+"t_s20",
+"t_s22",
+"t_s24",
+"t_s26",
+"t_s27",
+"t_s28",
+"t_s31",
+"t_s32",
+"t_s33",
+"t_s36",
+"t_s37",
+"t_s38",
+"t_s4",
+"t_s40",
+"t_s42",
+"t_s44",
+"t_s46",
+"t_s48",
+"t_s49",
+"t_s5",
+"t_s50",
+"t_s53",
+"t_s54",
+"t_s55",
+"t_s57",
+"t_s59",
+"t_s7",
+"t_s8"
+],
+"agents": [
+{
+"config": "127.0.0.1:19312:t_s10|127.0.0.1:29312:t_s10|127.0.0.1:59312:t_s10",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s15|127.0.0.1:29312:t_s15|127.0.0.1:59312:t_s15",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s19|127.0.0.1:29312:t_s19|127.0.0.1:49312:t_s19",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s1|127.0.0.1:29312:t_s1|127.0.0.1:49312:t_s1",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s23|127.0.0.1:29312:t_s23|127.0.0.1:49312:t_s23",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s25|127.0.0.1:29312:t_s25|127.0.0.1:49312:t_s25",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s29|127.0.0.1:49312:t_s29|127.0.0.1:59312:t_s29",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s30|127.0.0.1:49312:t_s30|127.0.0.1:59312:t_s30",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s34|127.0.0.1:29312:t_s34|127.0.0.1:59312:t_s34",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s35|127.0.0.1:29312:t_s35|127.0.0.1:49312:t_s35",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s39|127.0.0.1:29312:t_s39|127.0.0.1:49312:t_s39",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s3|127.0.0.1:49312:t_s3|127.0.0.1:59312:t_s3",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s43|127.0.0.1:29312:t_s43|127.0.0.1:59312:t_s43",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s45|127.0.0.1:49312:t_s45|127.0.0.1:59312:t_s45",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s52|127.0.0.1:29312:t_s52|127.0.0.1:49312:t_s52",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s58|127.0.0.1:29312:t_s58|127.0.0.1:59312:t_s58",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s9|127.0.0.1:29312:t_s9|127.0.0.1:59312:t_s9",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s14|127.0.0.1:49312:t_s14|127.0.0.1:59312:t_s14",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s21|127.0.0.1:49312:t_s21|127.0.0.1:59312:t_s21",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s41|127.0.0.1:49312:t_s41|127.0.0.1:59312:t_s41",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s47|127.0.0.1:49312:t_s47|127.0.0.1:59312:t_s47",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s51|127.0.0.1:49312:t_s51|127.0.0.1:59312:t_s51",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s56|127.0.0.1:49312:t_s56|127.0.0.1:59312:t_s56",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s6|127.0.0.1:49312:t_s6|127.0.0.1:59312:t_s6",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{4}
+{
+"type": "distributed",
+"locals": [
+"t_s1",
+"t_s11",
+"t_s12",
+"t_s14",
+"t_s16",
+"t_s18",
+"t_s19",
+"t_s2",
+"t_s20",
+"t_s21",
+"t_s23",
+"t_s25",
+"t_s27",
+"t_s29",
+"t_s3",
+"t_s30",
+"t_s32",
+"t_s33",
+"t_s35",
+"t_s36",
+"t_s39",
+"t_s41",
+"t_s42",
+"t_s44",
+"t_s45",
+"t_s47",
+"t_s49",
+"t_s5",
+"t_s51",
+"t_s52",
+"t_s53",
+"t_s56",
+"t_s57",
+"t_s59",
+"t_s6",
+"t_s8"
+],
+"agents": [
+{
+"config": "127.0.0.1:19312:t_s0|127.0.0.1:39312:t_s0|127.0.0.1:59312:t_s0",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s10|127.0.0.1:29312:t_s10|127.0.0.1:59312:t_s10",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s13|127.0.0.1:39312:t_s13|127.0.0.1:59312:t_s13",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s15|127.0.0.1:29312:t_s15|127.0.0.1:59312:t_s15",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s22|127.0.0.1:39312:t_s22|127.0.0.1:59312:t_s22",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s28|127.0.0.1:29312:t_s28|127.0.0.1:39312:t_s28",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s31|127.0.0.1:29312:t_s31|127.0.0.1:39312:t_s31",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s34|127.0.0.1:29312:t_s34|127.0.0.1:59312:t_s34",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s38|127.0.0.1:39312:t_s38|127.0.0.1:59312:t_s38",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s40|127.0.0.1:29312:t_s40|127.0.0.1:39312:t_s40",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s43|127.0.0.1:29312:t_s43|127.0.0.1:59312:t_s43",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s46|127.0.0.1:29312:t_s46|127.0.0.1:39312:t_s46",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s50|127.0.0.1:39312:t_s50|127.0.0.1:59312:t_s50",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s54|127.0.0.1:39312:t_s54|127.0.0.1:59312:t_s54",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s55|127.0.0.1:29312:t_s55|127.0.0.1:39312:t_s55",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s58|127.0.0.1:29312:t_s58|127.0.0.1:59312:t_s58",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s9|127.0.0.1:29312:t_s9|127.0.0.1:59312:t_s9",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s17|127.0.0.1:39312:t_s17|127.0.0.1:59312:t_s17",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s24|127.0.0.1:39312:t_s24|127.0.0.1:59312:t_s24",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s26|127.0.0.1:39312:t_s26|127.0.0.1:59312:t_s26",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s37|127.0.0.1:39312:t_s37|127.0.0.1:59312:t_s37",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s48|127.0.0.1:39312:t_s48|127.0.0.1:59312:t_s48",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s4|127.0.0.1:39312:t_s4|127.0.0.1:59312:t_s4",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s7|127.0.0.1:39312:t_s7|127.0.0.1:59312:t_s7",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{5}
+{
+"type": "distributed",
+"locals": [
+"t_s0",
+"t_s10",
+"t_s13",
+"t_s14",
+"t_s15",
+"t_s17",
+"t_s18",
+"t_s21",
+"t_s22",
+"t_s24",
+"t_s26",
+"t_s27",
+"t_s29",
+"t_s3",
+"t_s30",
+"t_s33",
+"t_s34",
+"t_s36",
+"t_s37",
+"t_s38",
+"t_s4",
+"t_s41",
+"t_s43",
+"t_s44",
+"t_s45",
+"t_s47",
+"t_s48",
+"t_s50",
+"t_s51",
+"t_s54",
+"t_s56",
+"t_s57",
+"t_s58",
+"t_s6",
+"t_s7",
+"t_s9"
+],
+"agents": [
+{
+"config": "127.0.0.1:19312:t_s12|127.0.0.1:39312:t_s12|127.0.0.1:49312:t_s12",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s16|127.0.0.1:39312:t_s16|127.0.0.1:49312:t_s16",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s19|127.0.0.1:29312:t_s19|127.0.0.1:49312:t_s19",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s1|127.0.0.1:29312:t_s1|127.0.0.1:49312:t_s1",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s20|127.0.0.1:39312:t_s20|127.0.0.1:49312:t_s20",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s23|127.0.0.1:29312:t_s23|127.0.0.1:49312:t_s23",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s25|127.0.0.1:29312:t_s25|127.0.0.1:49312:t_s25",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s28|127.0.0.1:29312:t_s28|127.0.0.1:39312:t_s28",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s31|127.0.0.1:29312:t_s31|127.0.0.1:39312:t_s31",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s35|127.0.0.1:29312:t_s35|127.0.0.1:49312:t_s35",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s39|127.0.0.1:29312:t_s39|127.0.0.1:49312:t_s39",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s40|127.0.0.1:29312:t_s40|127.0.0.1:39312:t_s40",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s42|127.0.0.1:39312:t_s42|127.0.0.1:49312:t_s42",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s46|127.0.0.1:29312:t_s46|127.0.0.1:39312:t_s46",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s49|127.0.0.1:39312:t_s49|127.0.0.1:49312:t_s49",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s52|127.0.0.1:29312:t_s52|127.0.0.1:49312:t_s52",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s55|127.0.0.1:29312:t_s55|127.0.0.1:39312:t_s55",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s59|127.0.0.1:39312:t_s59|127.0.0.1:49312:t_s59",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s5|127.0.0.1:39312:t_s5|127.0.0.1:49312:t_s5",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:19312:t_s8|127.0.0.1:39312:t_s8|127.0.0.1:49312:t_s8",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s11|127.0.0.1:39312:t_s11|127.0.0.1:49312:t_s11",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s2|127.0.0.1:39312:t_s2|127.0.0.1:49312:t_s2",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s32|127.0.0.1:39312:t_s32|127.0.0.1:49312:t_s32",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:29312:t_s53|127.0.0.1:39312:t_s53|127.0.0.1:49312:t_s53",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
 ––– input –––
 grep "type='distributed'" /var/log/manticore-{1,2,3,4,5}/query.log
 ––– output –––

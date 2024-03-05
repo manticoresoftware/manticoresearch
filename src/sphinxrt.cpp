@@ -6856,7 +6856,7 @@ public:
 	bool HasSegments () const							{ return ( m_iSeg==0 || m_dSegments.BitCount()>0 );	}
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch ( pMatch ); }
 	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
-	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const CSphQueryContext::CalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );	}
+	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );	}
 
 private:
 	const CSphQueryContext &	m_tCtx;
@@ -7134,8 +7134,10 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 }
 
 
-void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, VecTraits_T<ISphMatchSorter *> & dSorters, bool bFinalizeSorters )
+void FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, VecTraits_T<ISphMatchSorter *> & dSorters, bool bFinalizeSorters, CSphQueryResultMeta & tMeta )
 {
+	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
+
 	if ( tCtx.m_dCalcFinal.IsEmpty() )
 		return;
 
@@ -7206,7 +7208,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 }
 
 
-bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphString & sError, CSphString & sWarning )
+static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphString & sError, CSphString & sWarning )
 {
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
@@ -7214,6 +7216,12 @@ bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool b
 	tFlx.m_pSchema = pSchema;
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = bFullscan;
+	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
+
+	if ( !TransformFilters ( tFlx, dTransformedFilters, sError ) )
+		return false;
+
+	tFlx.m_pFilters = &dTransformedFilters;
 
 	return tCtx.CreateFilters ( tFlx, sError, sWarning );
 }
@@ -7318,7 +7326,8 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
 	if ( !dRamChunks.IsEmpty () )
 	{
-		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, true, tCtx, tMeta.m_sError, tMeta.m_sWarning ) )
+		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
+		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, true, tCtx, dTransformedFilters, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
@@ -7326,7 +7335,7 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 		tMeta.m_bTotalMatchesApprox |= PerformFullscan ( dRamChunks, tMaxSorterSchema.GetDynamicSize(), tArgs.m_iIndexWeight, iStride, iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta.m_sWarning );
 	}
 
-	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters );
+	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters, tMeta );
 	return true;
 }
 
@@ -7468,7 +7477,8 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
 	if ( !dRamChunks.IsEmpty () )
 	{
-		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, false, tCtx, tMeta.m_sError, tMeta.m_sWarning ) )
+		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
+		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, false, tCtx, dTransformedFilters, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
@@ -7477,7 +7487,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
 	}
 
-	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters );
+	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters, tMeta );
 
 	//////////////////////
 	// copying match's attributes to external storage in result set

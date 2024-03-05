@@ -1263,7 +1263,7 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 
 static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, CSphString & sError )
 {
-	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, sError, tExprArgs );
 	if ( pExpr && pExpr->UsesDocstore() )
 	{
 		sError.SetSprintf ( "unsupported filter on field '%s' (filters are supported only on attributes, not stored fields)", sAttrName.cstr() );
@@ -1464,7 +1464,7 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
 			tExprArgs.m_eCollation = tCtx.m_eCollation;
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, sError, tExprArgs );
 		}
 		pFilter = CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tCtx.m_eCollation, tAttr.m_eAttrType );
 	} else
@@ -1605,6 +1605,28 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 }
 
 
+static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified )
+{
+	if ( tCtx.m_sJoinIdx.IsEmpty() )
+		return;
+
+	CSphString sPrefix;
+	sPrefix.SetSprintf ( "%s.", tCtx.m_sJoinIdx.cstr() );
+	for ( int i = dModified.GetLength()-1; i>=0; i-- )
+	{
+		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
+		bool bRemove = false;
+		if ( pAttr )
+			bRemove = pAttr->m_uAttrFlags & CSphColumnInfo::ATTR_JOINED;
+		else
+			bRemove = dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
+
+		if ( bRemove )
+			dModified.Remove(i);		
+	}
+}
+
+
 bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
@@ -1622,6 +1644,8 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 		return true;
+
+	RemoveJoinFilters ( tCtx, dModified );
 
 	int iNumModified = dModified.GetLength();
 	for ( int i = 0; i < iNumModified; i++ )
@@ -2099,6 +2123,9 @@ inline bool operator<( const FilterInfo_t& tA, const FilterInfo_t& tB )
 
 static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> dFilters )
 {
+	if ( dFilters.GetLength()==1 )
+		return std::unique_ptr<ISphFilter> { dFilters.Begin()->m_pFilter };
+
 	std::unique_ptr<ISphFilter> pCombinedFilter = nullptr;
 
 	dFilters.Sort ();

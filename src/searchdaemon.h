@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 20
+	VER_COMMAND_SEARCH_MASTER = 21
 };
 
 
@@ -841,6 +841,11 @@ public:
 		assert ( pServed );
 		m_tRunningIndex.m_tLock.ReadLock();
 	}
+
+	RIdx_T ( RIdx_T && rhs )
+		: m_pServedKeeper ( std::move(rhs.m_pServedKeeper) )
+		, m_tRunningIndex ( std::move(rhs.m_tRunningIndex) )
+	{}
 
 	~RIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
 

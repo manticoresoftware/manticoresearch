@@ -18,6 +18,7 @@
 #include "sphinxql_debug.h"
 #include "sphinxql_second.h"
 #include "sphinxql_extra.h"
+#include "searchdha.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -291,6 +292,7 @@ public:
 	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL );
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
+	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
 	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
@@ -311,9 +313,14 @@ public:
 	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
 
+	bool			SetJoin ( const SqlNode_t & tIdx );
+	void			SetJoinType ( JoinType_e eType );
+	bool			AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2 );
+
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddDistinct ( SqlNode_t * pNewExpr );
 	bool			MaybeAddFacetDistinct();
+	bool			SetupFacetStmt();
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
@@ -347,7 +354,8 @@ public:
 	void			AddComment ( const SqlNode_t* tNode );
 
 private:
-	bool						m_bGotQuery = false;
+	bool						m_bMatchClause = false;
+	bool						m_bJoinMatchClause = false;
 	BYTE						m_uSyntaxFlags = 0;
 	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedInt>	m_dNamedVec;
@@ -424,7 +432,7 @@ void SqlParser_c::PushQuery ()
 	m_pQuery = &m_pStmt->m_tQuery;
 	m_pQuery->m_eCollation = m_eCollation;
 
-	m_bGotQuery = false;
+	m_bMatchClause = false;
 }
 
 
@@ -1141,6 +1149,20 @@ bool SqlParser_c::MaybeAddFacetDistinct()
 	return SetNewSyntax();
 }
 
+
+bool SqlParser_c::SetupFacetStmt()
+{
+	m_pStmt->m_eStmt = STMT_FACET;
+	if ( m_pQuery->m_sFacetBy.IsEmpty() )
+	{
+		m_pQuery->m_sFacetBy = m_pQuery->m_sGroupBy;
+		AddCount();
+	}
+
+	return MaybeAddFacetDistinct();
+}
+
+
 bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
 {
 	assert ( m_pStmt );
@@ -1149,23 +1171,72 @@ bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
 	return m_pStmt->AddSchemaItem ( sItem.cstr() );
 }
 
+
 bool SqlParser_c::SetMatch ( const YYSTYPE & tValue )
 {
-	if ( m_bGotQuery )
+	if ( m_bMatchClause )
 	{
 		yyerror ( this, "too many MATCH() clauses" );
 		return false;
-	};
+	}
 
+	m_bMatchClause = true;
 	m_pQuery->m_sQuery = ToStringUnescape ( tValue );
 	m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
-	return m_bGotQuery = true;
+	return true;
 }
 
 
+bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex )
+{
+	// so the index from tIndex is either in m_pQuery->m_sIndexes OR equal to m_pQuery->m_sJoinIdx\
+	// check it!
+	StrVec_t dQueryIndexes;
+	ParseIndexList ( m_pQuery->m_sIndexes, dQueryIndexes );
+	CSphString sMatchIndex;
+	ToString ( sMatchIndex, tIndex );
+
+	CSphString sError;
+	if ( dQueryIndexes.any_of ( [&sMatchIndex]( const CSphString & sIndex ){ return sIndex==sMatchIndex; } ) )
+	{
+		if ( m_bMatchClause )
+		{
+			sError.SetSprintf ( "Multiple MATCH() clauses for table '%s' found", sMatchIndex.cstr() );
+			yyerror ( this, sError.cstr() );
+			return false;
+		}
+
+		// it's a plain match() on othe left index
+		m_pQuery->m_sQuery = ToStringUnescape(tValue);
+		m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
+
+		m_bMatchClause = true;
+	}
+	else if ( m_pQuery->m_sJoinIdx.Length() && m_pQuery->m_sJoinIdx==sMatchIndex )
+	{
+		if ( m_bJoinMatchClause )
+		{
+			sError.SetSprintf ( "Multiple MATCH() clauses for table '%s' found", sMatchIndex.cstr() );
+			yyerror ( this, sError.cstr() );
+			return false;
+		}
+
+		m_pQuery->m_sJoinQuery = ToStringUnescape(tValue);
+
+		m_bJoinMatchClause = true;
+	}
+	else
+	{
+		sError.SetSprintf ( "Unknown table '%s' found in MATCH() clause", sMatchIndex.cstr() );
+		yyerror ( this, sError.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues )
 {
-	CSphString sAttr;
 	ToString ( m_pQuery->m_sKNNAttr, tAttr );
 	m_pQuery->m_iKNNK = tK.GetValueInt();
 	auto pValues = tValues.m_pValues;
@@ -1491,6 +1562,44 @@ void SqlParser_c::AddHaving ()
 }
 
 
+bool SqlParser_c::SetJoin ( const SqlNode_t & tIdx )
+{
+	// set default join mode
+	if ( m_pQuery->m_eJoinType==JoinType_e::NONE )
+		m_pQuery->m_eJoinType = JoinType_e::INNER;
+
+	ToString ( m_pQuery->m_sJoinIdx, tIdx );
+	return true;
+}
+
+
+bool SqlParser_c::AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2 )
+{
+	auto & tOn = m_pQuery->m_dOnFilters.Add();
+	ToString ( tOn.m_sIdx1, tIdx1 );
+	ToString ( tOn.m_sIdx2, tIdx2 );
+	ToString ( tOn.m_sAttr1, tAttr1 );
+	ToString ( tOn.m_sAttr2, tAttr2 );
+
+	if ( tOn.m_sAttr1.Begins(".") )
+		tOn.m_sAttr1 = tOn.m_sAttr1.SubString( 1, tOn.m_sAttr1.Length()-1 );
+
+	if ( tOn.m_sAttr2.Begins(".") )
+		tOn.m_sAttr2 = tOn.m_sAttr2.SubString( 1, tOn.m_sAttr2.Length()-1 );
+
+	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr1.cstr() ) );
+	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr2.cstr() ) );
+
+	return true;
+}
+
+
+void SqlParser_c::SetJoinType ( JoinType_e eType )
+{
+	m_pQuery->m_eJoinType = eType;
+}
+
+
 bool SqlParser_c::IsGoodSyntax()
 {
 	if ( ( m_uSyntaxFlags & 3 )!=3 )
@@ -1691,6 +1800,119 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 }
 
 
+static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
+{
+	bool bGotFacet = false;
+	ARRAY_FOREACH ( i, dStmt )
+	{
+		const SqlStmt_t & tHeadStmt = dStmt[i];
+		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
+		if ( dStmt[i].m_eStmt!=STMT_SELECT )
+			continue;
+
+		++i;
+		if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
+		{
+			bGotFacet = true;
+			const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
+		}
+
+		for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; ++i )
+		{
+			SqlStmt_t & tStmt = dStmt[i];
+			tStmt.m_tQuery.m_bFacet = true;
+
+			tStmt.m_eStmt = STMT_SELECT;
+			tStmt.m_tQuery.m_sIndexes	= tHeadQuery.m_sIndexes;
+			tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
+			tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
+			tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
+			tStmt.m_tQuery.m_sKNNAttr	= tHeadQuery.m_sKNNAttr;
+			tStmt.m_tQuery.m_dKNNVec	= tHeadQuery.m_dKNNVec;
+			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
+			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
+			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;
+
+			// append filters
+			ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
+				tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
+			ARRAY_FOREACH ( k, tHeadQuery.m_dFilterTree )
+				tStmt.m_tQuery.m_dFilterTree.Add ( tHeadQuery.m_dFilterTree[k] );
+		}
+	}
+
+	return bGotFacet;
+}
+
+
+static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	CSphString sDistinct;
+
+	// need to keep order of query items same as at select list however do not duplicate items
+	// that is why raw Vector.Uniq does not work here
+	CSphVector<QueryItemProxy_t> dSelectItems;
+	ARRAY_FOREACH ( i, dStmt )
+	{
+		CSphQuery & tQuery = dStmt[i].m_tQuery;
+		ARRAY_FOREACH ( k, tQuery.m_dItems )
+		{
+			QueryItemProxy_t & tItem = dSelectItems.Add();
+			tItem.m_pItem = tQuery.m_dItems.Begin() + k;
+			tItem.m_iIndex = dSelectItems.GetLength() - 1;
+			tItem.QueryItemHash();
+		}
+
+		if ( !tQuery.m_sGroupDistinct.IsEmpty() )
+		{
+			if ( !sDistinct.IsEmpty() && sDistinct!=tQuery.m_sGroupDistinct )
+			{
+				sError.SetSprintf ( "distinct field for all FACET queries should be the same '%s', query %d got '%s'", sDistinct.cstr(), i, tQuery.m_sGroupDistinct.cstr() );
+				return false;
+			}
+			if ( sDistinct.IsEmpty() )
+				sDistinct = tQuery.m_sGroupDistinct;
+		}
+	}
+	// got rid of duplicates
+	dSelectItems.Uniq();
+	// sort back to select list appearance order
+	dSelectItems.Sort ( bind ( &QueryItemProxy_t::m_iIndex ) );
+	// get merged select list
+	CSphVector<CSphQueryItem> dItems ( dSelectItems.GetLength() );
+	ARRAY_FOREACH ( i, dSelectItems )
+	{
+		dItems[i] = *dSelectItems[i].m_pItem;
+	}
+
+	for ( SqlStmt_t& tStmt : dStmt )
+	{
+		// keep original items
+		tStmt.m_tQuery.m_dItems.SwapData ( tStmt.m_tQuery.m_dRefItems );
+		tStmt.m_tQuery.m_dItems = dItems;
+
+		// for FACET strip off group by expression items
+		// these come after count(*)
+		if ( tStmt.m_tQuery.m_bFacet )
+		{
+			ARRAY_FOREACH ( j, tStmt.m_tQuery.m_dRefItems )
+			{
+				if ( tStmt.m_tQuery.m_dRefItems[j].m_sAlias=="count(*)" )
+				{
+					tStmt.m_tQuery.m_dRefItems.Resize ( j+1 );
+					break;
+				}
+			}
+		}
+
+		tStmt.m_tQuery.m_sGroupDistinct = sDistinct;
+	}
+
+	return true;
+}
+
+
+
 bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	if ( !IsFilled ( sQuery ) )
@@ -1813,113 +2035,20 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		return false;
 	}
 
-	// facets
-	bool bGotFacet = false;
-	ARRAY_FOREACH ( i, dStmt )
+	if ( SetupFacets(dStmt) )
 	{
-		const SqlStmt_t & tHeadStmt = dStmt[i];
-		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
-		if ( dStmt[i].m_eStmt==STMT_SELECT )
-		{
-			++i;
-			if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
-			{
-				bGotFacet = true;
-				const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
-			}
-
-			for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; ++i )
-			{
-				SqlStmt_t & tStmt = dStmt[i];
-				tStmt.m_tQuery.m_bFacet = true;
-
-				tStmt.m_eStmt = STMT_SELECT;
-				tStmt.m_tQuery.m_sIndexes	= tHeadQuery.m_sIndexes;
-				tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
-				tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
-				tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
-				tStmt.m_tQuery.m_sKNNAttr	= tHeadQuery.m_sKNNAttr;
-				tStmt.m_tQuery.m_dKNNVec	= tHeadQuery.m_dKNNVec;
-
-				// append filters
-				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
-					tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
-				ARRAY_FOREACH ( k, tHeadQuery.m_dFilterTree )
-					tStmt.m_tQuery.m_dFilterTree.Add ( tHeadQuery.m_dFilterTree[k] );
-			}
-		}
+		if ( !SetupFacetDistinct ( dStmt, sError ) )
+			return false;
 	}
-
-	if ( bGotFacet )
+	else
 	{
-		CSphString sDistinct;
-
-		// need to keep order of query items same as at select list however do not duplicate items
-		// that is why raw Vector.Uniq does not work here
-		CSphVector<QueryItemProxy_t> dSelectItems;
-		ARRAY_FOREACH ( i, dStmt )
+		// need to keep same wide result set schema
+		if ( dStmt.GetLength()>1 )
 		{
-			CSphQuery & tQuery = dStmt[i].m_tQuery;
-			ARRAY_FOREACH ( k, tQuery.m_dItems )
-			{
-				QueryItemProxy_t & tItem = dSelectItems.Add();
-				tItem.m_pItem = tQuery.m_dItems.Begin() + k;
-				tItem.m_iIndex = dSelectItems.GetLength() - 1;
-				tItem.QueryItemHash();
-			}
-
-			if ( !tQuery.m_sGroupDistinct.IsEmpty() )
-			{
-				if ( !sDistinct.IsEmpty() && sDistinct!=tQuery.m_sGroupDistinct )
-				{
-					sError.SetSprintf ( "distinct field for all FACET queries should be the same '%s', query %d got '%s'", sDistinct.cstr(), i, tQuery.m_sGroupDistinct.cstr() );
-					return false;
-				}
-				if ( sDistinct.IsEmpty() )
-					sDistinct = tQuery.m_sGroupDistinct;
-			}
+			const CSphString & sDistinct = dStmt[0].m_tQuery.m_sGroupDistinct;
+			for ( int i=1; i<dStmt.GetLength(); i++ )
+				dStmt[i].m_tQuery.m_sGroupDistinct = sDistinct;
 		}
-		// got rid of duplicates
-		dSelectItems.Uniq();
-		// sort back to select list appearance order
-		dSelectItems.Sort ( bind ( &QueryItemProxy_t::m_iIndex ) );
-		// get merged select list
-		CSphVector<CSphQueryItem> dItems ( dSelectItems.GetLength() );
-		ARRAY_FOREACH ( i, dSelectItems )
-		{
-			dItems[i] = *dSelectItems[i].m_pItem;
-		}
-
-		for ( SqlStmt_t& tStmt : dStmt )
-		{
-			// keep original items
-			tStmt.m_tQuery.m_dItems.SwapData ( tStmt.m_tQuery.m_dRefItems );
-			tStmt.m_tQuery.m_dItems = dItems;
-
-			// for FACET strip off group by expression items
-			// these come after count(*)
-			if ( tStmt.m_tQuery.m_bFacet )
-			{
-				ARRAY_FOREACH ( j, tStmt.m_tQuery.m_dRefItems )
-				{
-					if ( tStmt.m_tQuery.m_dRefItems[j].m_sAlias=="count(*)" )
-					{
-						tStmt.m_tQuery.m_dRefItems.Resize ( j+1 );
-						break;
-					}
-				}
-			}
-
-			tStmt.m_tQuery.m_sGroupDistinct = sDistinct;
-		}
-	}
-
-	// need to keep same wide result set schema
-	if ( !bGotFacet && dStmt.GetLength()>1 )
-	{
-		const CSphString & sDistinct = dStmt[0].m_tQuery.m_sGroupDistinct;
-		for ( int i=1; i<dStmt.GetLength(); i++ )
-			dStmt[i].m_tQuery.m_sGroupDistinct = sDistinct;
 	}
 
 	return true;
@@ -2048,7 +2177,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_pAttrType = &eAttrType;
 		tExprArgs.m_eCollation = eCollation;
-		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, nullptr, sError, tExprArgs ) };
 		if ( pExpr )
 		{
 			sError = "";

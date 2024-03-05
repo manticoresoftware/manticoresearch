@@ -12,7 +12,7 @@
 
 #include "sphinxsearch.h"
 #include "searchnode.h"
-#include "sphinxint.h"
+#include "querycontext.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "attribute.h"
@@ -3460,7 +3460,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	tExprArgs.m_pUsesWeight = &bUsesWeight;
 	tExprArgs.m_pHook = &tHook;
 
-	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, sError, tExprArgs ); // FIXME!!! profile UDF here too
+	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, nullptr, sError, tExprArgs ); // FIXME!!! profile UDF here too
 	if ( !m_pExpr )
 		return false;
 	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )

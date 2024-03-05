@@ -129,6 +129,9 @@ public:
 
 	/// is it a sorter that uses precalculated data and does not require real matches?
 	virtual bool		IsPrecalc() const { return false; }
+
+	virtual bool		IsJoin() const { return false; }
+	virtual void		FinalizeJoin ( CSphString & sWarning ) {}
 };
 
 
@@ -144,6 +147,7 @@ struct CmpPSortersByRandom_fn
 
 
 const char *	GetInternalAttrPrefix();
+const char *	GetInternalJsonPrefix();
 int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
 bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );

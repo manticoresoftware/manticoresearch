@@ -12,6 +12,7 @@
 
 #include "dynamic_idx.h"
 #include "sphinxsort.h"
+#include "querycontext.h"
 
 using namespace Threads;
 

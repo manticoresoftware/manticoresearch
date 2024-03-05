@@ -86,6 +86,9 @@ bool				sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphS
 // return blob locator attribute name
 const char *		sphGetBlobLocatorName();
 
+// return null mask attribute name
+const char *		GetNullMaskAttrName();
+
 // current docid attribute name
 const char *		sphGetDocidName();
 const CSphString &	sphGetDocidStr();

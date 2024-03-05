@@ -1317,8 +1317,6 @@ struct RemapXSV_t
 	int m_iTag {-1};
 };
 
-void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-
 // internals attributes are last no need to send them
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );
 
@@ -1418,7 +1416,5 @@ int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
 void sphFormatCurrentTime ( StringBuilder_c& sOut );
 
 CSphString sphCurrentUtcTime ( );
-
-bool IsGroupbyMagic ( const CSphString & s );
 
 #endif // _sphinxint_

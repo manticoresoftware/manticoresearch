@@ -31,6 +31,7 @@
 #include "uni_algo/case.h"
 #include "datetime.h"
 #include "exprdatetime.h"
+#include "exprdocstore.h"
 
 #if WITH_RE2
 #include <re2/re2.h>

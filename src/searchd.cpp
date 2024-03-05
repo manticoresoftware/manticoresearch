@@ -59,6 +59,7 @@
 #include "pseudosharding.h"
 #include "geodist.h"
 #include "joinsorter.h"
+#include "schematransform.h"
 
 // services
 #include "taskping.h"

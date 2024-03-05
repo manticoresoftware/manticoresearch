@@ -106,13 +106,13 @@ Supported options are:
 ### accurate_aggregation
 Integer. Enables or disables guaranteed aggregate accuracy when running groupby queries in multiple threads. Default is 0.
 
-When running a groupby query, it can be run in parallel on a plain index with several pseudo shards (if `pseudo_sharding` is on). A similar approach works on RT indexes. Each shard/chunk executes the query, but the number of groups is limited by `max_matches`. If the result sets from different shards/chunks have different groups, the group counts and aggregates may be inaccurate. Note that Manticore tries to increase `max_matches` up to [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) based on the number of unique values of the groupby attribute (retrieved from secondary indexes). If it succeeds, there will be no loss in accuracy.
+When running a groupby query, it can be run in parallel on a plain table with several pseudo shards (if `pseudo_sharding` is on). A similar approach works on RT tables. Each shard/chunk executes the query, but the number of groups is limited by `max_matches`. If the result sets from different shards/chunks have different groups, the group counts and aggregates may be inaccurate. Note that Manticore tries to increase `max_matches` up to [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) based on the number of unique values of the groupby attribute (retrieved from secondary indexes). If it succeeds, there will be no loss in accuracy.
 
 However, if the number of unique values of the groupby attribute is high, further increasing `max_matches` may not be a good strategy because it can lead to a loss in performance and higher memory usage. Setting `accurate_aggregation` to 1 forces groupby searches to run in a single thread, which fixes the accuracy issue. Note that running in a single thread is only enforced when `max_matches` cannot be set high enough; otherwise, searches with `accurate_aggregation=1` will still run in multiple threads.
 
 Overall, setting `accurate_aggregation` to 1 ensures group count and aggregate accuracy in RT tables and plain tables with `pseudo_sharding=1`. The drawback is that searches will run slower since they will be forced to operate in a single thread.
 
-However, if we have an RT table and a plain table containing the same data, and we run a query with `accurate_aggregation=1`, we might still receive different results. This occurs because the daemon might choose different `max_matches` settings for the RT and plain index due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
+However, if we have an RT table and a plain table containing the same data, and we run a query with `accurate_aggregation=1`, we might still receive different results. This occurs because the daemon might choose different `max_matches` settings for the RT and plain table due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
 
 ### agent_query_timeout
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout).
@@ -133,7 +133,7 @@ Integer. Max found matches threshold. The value is selected automatically if not
 In case Manticore cannot calculate the exact matching documents count, you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise, you'll get `total_relation: eq`.
 
 ### distinct_precision_threshold
-Integer. Default is `3500`. This option sets the threshold below which counts returned by `count distinct` are guaranteed to be exact within a plain index.
+Integer. Default is `3500`. This option sets the threshold below which counts returned by `count distinct` are guaranteed to be exact within a plain table.
 
 Accepted values range from `500` to `15500`. Values outside this range will be clamped.
 

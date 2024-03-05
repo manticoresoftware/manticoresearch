@@ -86,7 +86,7 @@ $results[] = $client->Query ( "", "idx" );
 	
 // final fixup; we don't want to compare times
 for ( $i=0; $i<count($results); $i++ )
-	CompareResultSetFixup ( $results[$i], 0, true, false );
+	$this->CompareResultSetFixup ( $results[$i], 0, true, false );
 ]]></custom_test>
 
 <db_create>

@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 20
+	VER_COMMAND_SEARCH_MASTER = 21
 };
 
 
@@ -842,6 +842,11 @@ public:
 		m_tRunningIndex.m_tLock.ReadLock();
 	}
 
+	RIdx_T ( RIdx_T && rhs )
+		: m_pServedKeeper ( std::move(rhs.m_pServedKeeper) )
+		, m_tRunningIndex ( std::move(rhs.m_tRunningIndex) )
+	{}
+
 	~RIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
 
 	PIDX Ptr () const NO_THREAD_SAFETY_ANALYSIS { return static_cast<PIDX> ( m_tRunningIndex.m_pIndex.get() ); }
@@ -1478,6 +1483,7 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( ESphHttpStatus eStatus );
+ESphHttpStatus HttpGetStatusCodes ( int iStatus );
 void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );

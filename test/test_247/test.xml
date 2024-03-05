@@ -20,6 +20,21 @@ searchd
     commit;
     drop table test;
 </sphinxql>
+
+<!-- regression crash of daemon inside the TNX after index gog recreated -->
+<sphinxql>
+    drop table if exists t;
+    create table t;
+    insert into t (id) values (10);
+    begin;
+    delete from t where id = 1;
+    drop table if exists t;
+    create table t;
+    commit;
+    insert into t (id) values (20);
+    select * from t;
+    drop table t;
+</sphinxql>
 </queries>
 
 </test>

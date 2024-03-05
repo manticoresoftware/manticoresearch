@@ -124,6 +124,9 @@ public:
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
 	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
+	const CSphString & GetIndexName() const { return m_sIndexName; }
+	int64_t			GetIndexId() const { return m_iIndexId; }
+
 	ReplicationCommand_t * AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
 	void			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer );
@@ -149,6 +152,8 @@ private:
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
 	RtIndex_i *							m_pIndex = nullptr;		///< my current owner in this thread
 	int									m_iIndexGeneration = 0;
+	CSphString							m_sIndexName;
+	int64_t								m_iIndexId = 0;
 
 	void			ResetDict();
 	void			SetupDocstore();

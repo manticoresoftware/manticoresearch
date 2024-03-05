@@ -314,6 +314,54 @@ class SuccessResponse {
 }
 
 ```
+
+<!-- intro -->
+
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.replace({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 11', name: 'Doc 11', cat: 3 },
+});
+```
+
+<!-- response TypeScript -->
+```json
+{
+    "_index":"test",
+    "_id":1,
+    "created":false
+    "result":"updated"
+    "status":200
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request Go -->
+``` go
+replaceDoc := map[string]interface{} {"content": "Text 11", "name": "Doc 11", "cat": 3}
+replaceRequest := manticoreclient.NewInsertDocumentRequest("test", replaceDoc)
+replaceRequest.SetId(1)
+res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequest(*replaceRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+    "_index":"test",
+    "_id":1,
+    "created":false
+    "result":"updated"
+    "status":200
+}
+```
+
 <!-- end -->
 
 `REPLACE` is available for real-time and percolate tables. You can't replace data in a plain table.
@@ -497,6 +545,100 @@ class BulkResponse {
     additionalProperties: {errors=false}
 }
 ```
+
+<!-- request TypeScript -->
+
+``` typescript
+replaceDocs = [
+  {
+    replace: {
+      index: 'test',
+      id: 1,
+      doc: { content: 'Text 11', cat: 1, name: 'Doc 11' },
+    },
+  },
+  {
+    replace: {
+      index: 'test',
+      id: 2,
+      doc: { content: 'Text 22', cat: 9, name: 'Doc 22' },
+    },
+  },
+];
+
+res = await indexApi.bulk(
+  replaceDocs.map((e) => JSON.stringify(e)).join("\n")
+);
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "items":
+  [
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":1,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    },
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":2,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+<!-- request Go -->
+
+``` go
+body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
+	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "items":
+  [
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":1,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    },
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":2,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
 <!-- end -->
 
 <!-- proofread -->

@@ -44,7 +44,8 @@ struct CSphColumnInfo
 		ATTR_COLUMNAR			= 1 << 0,
 		ATTR_COLUMNAR_HASHES	= 1 << 1,
 		ATTR_STORED				= 1 << 2,
-		ATTR_INDEXED_KNN		= 1 << 3
+		ATTR_INDEXED_KNN		= 1 << 3,
+		ATTR_JOINED				= 1 << 4
 	};
 
 	CSphString		m_sName;							///< column name

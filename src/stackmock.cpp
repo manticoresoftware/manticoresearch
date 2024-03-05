@@ -16,6 +16,7 @@
 #include "coroutine.h"
 #include "searchdsql.h"
 #include "attribute.h"
+#include "querycontext.h"
 
 // hard-coded definitions to avoid probing (that is - to avoid confusing memcheck programs)
 // run searchd with --logdebug --console once, read values, then write them here and uncomment these lines
@@ -137,7 +138,7 @@ class CreateExprStackSize_c : public StackMeasurer_c
 		tParams.m_sExpr = m_sExpr.cstr();
 
 		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
-			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
 		} );
 
 		tParams.m_bSuccess = !!tParams.m_pExprBase;
@@ -193,7 +194,7 @@ class EvalExprStackSize_c : public CreateExprStackSize_c
 		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
 		CSphFixedVector<BYTE> dSafeStack { m_iComplexity * 100 * 1024 };
 		Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
-			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
 		});
 		}
 

@@ -419,7 +419,7 @@ TEST ( Text, expression_parser )
 	{
 		CSphString sError;
 		ExprParseArgs_t tExprArgs;
-		ISphExprRefPtr_c pExpr ( sphExprParse ( dTest.m_sExpr, tSchema, sError, tExprArgs ) );
+		ISphExprRefPtr_c pExpr ( sphExprParse ( dTest.m_sExpr, tSchema, nullptr, sError, tExprArgs ) );
 		ASSERT_TRUE ( pExpr.Ptr () ) << "parsing " << dTest.m_sExpr << ":" << sError.cstr ();
 		ASSERT_FLOAT_EQ ( dTest.m_fValue, pExpr->Eval ( tMatch ) );
 	}
@@ -511,7 +511,7 @@ TEST ( Text, expression_parser_many )
 	{
 		CSphString sError;
 		ExprParseArgs_t tExprArgs;
-		ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
+		ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, nullptr, sError, tExprArgs ) );
 		ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr () << ": " << sTest.cstr();
 	}
 

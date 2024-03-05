@@ -129,8 +129,5 @@ class DebugCheckError_i;
 class CSphAutoreader;
 bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
 
-ISphExpr *			CreateExpr_GetStoredField ( const CSphString & sName );
-ISphExpr *			CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr );
-
 #endif
 

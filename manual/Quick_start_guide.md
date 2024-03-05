@@ -91,7 +91,7 @@ mysql -h0 -P9306
 ##### Connect via JSON over HTTP
 
 <!-- request HTTP -->
-HTTP is a stateless protocol, so it doesn't require any special connection phase. You can simply send a HTTP request to the server and receive the response. To communicate with Manticore using the HTTP interface, you can use any HTTP client library in your programming language of choice to send GET or POST requests to the server and parse the JSON responses:
+HTTP is a stateless protocol, so it doesn't require any special connection phase. You can simply send an HTTP request to the server and receive the response. To communicate with Manticore using the JSON interface, you can use any HTTP client library in your programming language of choice to send GET or POST requests to the server and parse the JSON responses:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -175,6 +175,41 @@ httpClientHandler = new HttpClientHandler();
 var indexApi = new IndexApi(httpClient, config, httpClientHandler);
 var searchApi = new SearchApi(httpClient, config, httpClientHandler);
 var utilsApi = new UtilsApi(httpClient, config, httpClientHandler);
+```
+
+<!-- intro -->
+##### Connect via [TypeScript client](https://github.com/manticoresoftware/manticoresearch-typescript):
+
+<!-- request Typescript -->
+```typescript
+import {
+  Configuration,
+  IndexApi,
+  SearchApi,
+  UtilsApi
+} from "manticoresearch-ts";
+...
+const config = new Configuration({
+  basePath: 'http://localhost:9308',
+})
+const indexApi = new IndexApi(config);
+const searchApi = new SearchApi(config);
+const utilsApi = new UtilsApi(config);
+```
+
+<!-- intro -->
+##### Connect via [Go client](https://github.com/manticoresoftware/manticoresearch-go):
+
+<!-- request Go -->
+```go
+import (
+	"context"
+	manticoreclient "github.com/manticoresoftware/manticoresearch-go"
+)
+...
+configuration := manticoreclient.NewConfiguration()
+configuration.Servers[0].URL = "http://localhost:9308"
+apiClient := manticoreclient.NewAPIClient(configuration)
 ```
 
 <!-- end -->
@@ -268,6 +303,22 @@ utilsApi.sql("create table products(title text, price float) morphology='stem_en
 utilsApi.Sql("create table products(title text, price float) morphology='stem_en'");
 
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+```typescript
+res = await utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+res := apiClient.UtilsAPI.Sql(context.Background()).Body("create table products(title text, price float) morphology='stem_en'").Execute();
+
 <!-- end -->
 
 <!-- example insert -->
@@ -420,29 +471,75 @@ indexApi.insert(newdoc);
 ```
 
 <!-- intro -->
-##### java:
+##### C#:
 
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title","Crossbody Bag with Tassel");
 doc.Add("price",19.85);
 InsertDocumentRequest insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
 sqlresult = indexApi.Insert(insertDocumentRequest);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title","microfiber sheet set");
 doc.Add("price",19.99);
 insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
 sqlresult = indexApi.Insert(insertDocumentRequest);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title","Pet Hair Remover Glove");
 doc.Add("price",7.99);
 insertDocumentRequest = new InsertDocumentRequest(index: "products", doc: doc);
 sqlresult = indexApi.Insert(insertDocumentRequest);
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+``` typescript
+res = await indexApi.insert({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 1', name: 'Doc 1', cat: 1 },
+});
+res = await indexApi.insert({
+  index: 'test',
+  id: 2,
+  doc: { content: 'Text 2', name: 'Doc 2', cat: 2 },
+});
+res = await indexApi.insert({
+  index: 'test',
+  id: 3,
+  doc: { content: 'Text 3', name: 'Doc 3', cat: 7 },
+});
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+``` go
+indexDoc := map[string]interface{} {"content": "Text 1", "name": "Doc 1", "cat": 1 }
+indexReq := manticoreclient.NewInsertDocumentRequest("products", indexDoc)
+indexReq.SetId(1)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
+
+indexDoc = map[string]interface{} {"content": "Text 2", "name": "Doc 3", "cat": 2 }
+indexReq = manticoreclient.NewInsertDocumentRequest("products", indexDoc)
+indexReq.SetId(2)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
+
+indexDoc = map[string]interface{} {"content": "Text 3", "name": "Doc 3", "cat": 7 }    	
+indexReq = manticoreclient.NewInsertDocumentRequest("products", indexDoc)
+indexReq.SetId(3)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
+```
+
 <!-- end -->
 
 <!-- example search -->
@@ -650,8 +747,74 @@ class SearchResponse {
     }
     profile: null
 }
+```
 
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
 
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: {'text 1'} },
+  highlight: {'fields': ['content'] }
+});
+```
+<!-- response typescript -->
+```typescript
+{
+    "hits": 
+    {
+        "hits": 
+        [{
+            "_id": "1",
+            "_score": 1400,
+            "_source": {"content":"Text 1","name":"Doc 1","cat":1},
+            "highlight": {"content":["<b>Text 1</b>"]}
+        }],
+        "total": 1
+    },
+    "profile": None,
+    "timed_out": False,
+    "took": 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoreclient.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "text 1"};
+searchRequest.SetQuery(query);
+
+highlightField := manticoreclient.NewHighlightField("content")
+fields := []interface{}{ highlightField }
+highlight := manticoreclient.NewHighlight()
+highlight.SetFields(fields)
+searchRequest.SetHighlight(highlight);
+
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+```go
+{
+    "hits": 
+    {
+        "hits": 
+        [{
+            "_id": "1",
+            "_score": 1400,
+            "_source": {"content":"Text 1","name":"Doc 1","cat":1},
+            "highlight": {"content":["<b>Text 1</b>"]}
+        }],
+        "total": 1
+    },
+    "profile": None,
+    "timed_out": False,
+    "took": 0
+}
 ```
 <!-- end -->
 
@@ -759,6 +922,26 @@ doc.Add("price", 18.5);
 UpdateDocumentRequest updateDocumentRequest = new UpdateDocumentRequest(index: "products", id: 1513686608316989452L, doc: doc);
 indexApi.Update(updateDocumentRequest);
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updDoc = map[string]interface{} {"cat": 10}
+updRequest = manticoreclient.NewUpdateDocumentRequest("test", updDoc)
+updRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updRequest).Execute()
+```
+
 <!-- end -->
 
 <!-- example delete -->
@@ -879,5 +1062,31 @@ range.Add("price", price);
 DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", range: range);
 indexApi.Delete(deleteDocumentRequest);
 ```
+
+<!-- intro -->
+
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.delete({
+  index: 'test',
+  query: { match: { '*': 'Text 1' } },
+});
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request Go -->
+``` go
+delRequest := manticoreclient.NewDeleteDocumentRequest("test")
+matchExpr := map[string]interface{} {"*": "Text 1t"}
+delQuery := map[string]interface{} {"match": matchExpr }
+delRequest.SetQuery(delQuery)
+res, _, _ := apiClient.IndexAPI.Delete(context.Background()).DeleteDocumentRequest(*delRequest).Execute();
+```
+
 <!-- end -->
 <!-- proofread -->

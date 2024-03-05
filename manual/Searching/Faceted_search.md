@@ -43,7 +43,7 @@ where:
 * `group name` is an alias assigned to the aggregation
 * `field` value must contain the name of the attribute or expression being faceted
 * optional `size` specifies the maximum number of buckets to include in the result. When not specified, it inherits the main query's limit. More details can be found in the [Size of facet result](../Searching/Faceted_search.md#Size-of-facet-result) section.
-* optional `sort` specifies an array of attributes and/or additional properties using the same syntax as the ["sort" parameter in the main query](../Searching/Sorting_and_ranking.md#HTTP).
+* optional `sort` specifies an array of attributes and/or additional properties using the same syntax as the ["sort" parameter in the main query](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 
@@ -481,6 +481,159 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+```typescript
+res =  await searchApi.search({
+  index: 'test',
+  query: { match_all:{} },
+  aggs: {
+    name_group: {
+      terms: { field : 'name' }
+    },
+    cat_group: {
+      terms: { field: 'cat' }
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+```typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "content": "Text 1",
+          "name": "Doc 1",
+          "cat": 1
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "content": "Text 5",
+          "name": "Doc 5",
+          "cat": 4
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "name_group": {
+      "buckets": [
+        {
+          "key": "Doc 1",
+          "doc_count": 1
+        },
+...
+        {
+          "key": "Doc 5",
+          "doc_count": 1
+        }
+      ]
+    },
+    "cat_group": {
+      "buckets": [
+        {
+          "key": 1,
+          "doc_count": 2
+        },
+...        
+        {
+          "key": 4,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- request Go -->
+```go
+query := map[string]interface{} {}
+searchRequest.SetQuery(query)
+
+aggByName := manticoreclient.NewAggregation()
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("name")
+aggByName.SetTerms(aggTerms)
+aggByCat := manticoreclient.NewAggregation()
+aggTerms.SetField("cat")
+aggByCat.SetTerms(aggTerms)
+aggs := map[string]Aggregation{} { "name_group": aggByName, "cat_group": aggByCat }
+searchRequest.SetAggs(aggs)
+
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+```go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "content": "Text 1",
+          "name": "Doc 1",
+          "cat": 1
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "content": "Text 5",
+          "name": "Doc 5",
+          "cat": 4
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "name_group": {
+      "buckets": [
+        {
+          "key": "Doc 1",
+          "doc_count": 1
+        },
+...
+        {
+          "key": "Doc 5",
+          "doc_count": 1
+        }
+      ]
+    },
+    "cat_group": {
+      "buckets": [
+        {
+          "key": 1,
+          "doc_count": 2
+        },
+...        
+        {
+          "key": 4,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example Another_attribute -->
@@ -920,6 +1073,143 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+```typecript
+res =  await searchApi.search({
+  index: 'test',
+  query: { match_all:{} },
+  expressions: { cat_range: "INTERVAL(cat,1,3)" }
+  aggs: {
+    expr_group: {
+      terms: { field : 'cat_range' }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "content": "Text 1",
+          "name": "Doc 1",
+          "cat": 1,
+          "cat_range": 1
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "content": "Text 5",
+          "name": "Doc 5",
+          "cat": 4,
+          "cat_range": 2,
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "expr_group": {
+      "buckets": [
+        {
+          "key": 0,
+          "doc_count": 0
+        },
+		{
+          "key": 1,
+          "doc_count": 3
+        },
+        {
+          "key": 2,
+          "doc_count": 2
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- request Go -->
+```go
+query := map[string]interface{} {}
+searchRequest.SetQuery(query)
+
+exprs := map[string]string{} { "cat_range": "INTERVAL(cat,1,3)" }
+searchRequest.SetExpressions(exprs)
+
+aggByExpr := manticoreclient.NewAggregation()
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("cat_range")
+aggByExpr.SetTerms(aggTerms)
+aggs := map[string]Aggregation{} { "expr_group": aggByExpr }
+searchRequest.SetAggs(aggs)
+
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "content": "Text 1",
+          "name": "Doc 1",
+          "cat": 1,
+          "cat_range": 1
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "content": "Text 5",
+          "name": "Doc 5",
+          "cat": 4,
+          "cat_range": 2
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "expr_group": {
+      "buckets": [
+        {
+          "key": 0,
+          "doc_count": 0
+        },
+		{
+          "key": 1,
+          "doc_count": 3
+        },
+        {
+          "key": 2,
+          "doc_count": 2
+        }
+      ]
+    }
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example Multi-level -->
@@ -1491,6 +1781,150 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+```typescript
+res =  await searchApi.search({
+  index: 'test',
+  query: { match_all:{} },
+  aggs: {
+    name_group: {
+      terms: { field : 'name', size: 1 }
+    },
+    cat_group: {
+      terms: { field: 'cat' }
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+```typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "content": "Text 1",
+          "name": "Doc 1",
+          "cat": 1
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "content": "Text 5",
+          "name": "Doc 5",
+          "cat": 4
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "name_group": {
+      "buckets": [
+        {
+          "key": "Doc 1",
+          "doc_count": 1
+        }
+      ]
+    },
+    "cat_group": {
+      "buckets": [
+        {
+          "key": 1,
+          "doc_count": 2
+        },
+...        
+        {
+          "key": 4,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- request Go -->
+```go
+query := map[string]interface{} {}
+searchRequest.SetQuery(query)
+
+aggByName := manticoreclient.NewAggregation()
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("name")
+aggByName.SetTerms(aggTerms)
+aggByName.SetSize(1)
+aggByCat := manticoreclient.NewAggregation()
+aggTerms.SetField("cat")
+aggByCat.SetTerms(aggTerms)
+aggs := map[string]Aggregation{} { "name_group": aggByName, "cat_group": aggByCat }
+searchRequest.SetAggs(aggs)
+
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+```go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "content": "Text 1",
+          "name": "Doc 1",
+          "cat": 1
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "content": "Text 5",
+          "name": "Doc 5",
+          "cat": 4
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "name_group": {
+      "buckets": [
+        {
+          "key": "Doc 1",
+          "doc_count": 1
+        }
+      ]
+    },
+    "cat_group": {
+      "buckets": [
+        {
+          "key": 1,
+          "doc_count": 2
+        },
+...        
+        {
+          "key": 4,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+
 <!-- end -->
 ### Returned result set
 

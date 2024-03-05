@@ -20,8 +20,8 @@
 #include "sphinxsearch.h"
 #include "sphinxrt.h"
 #include "searchdha.h"
-//#include "binlog.h"
 #include "accumulator.h"
+#include "querycontext.h"
 
 // stuff moved here from sphinxrt.h
 

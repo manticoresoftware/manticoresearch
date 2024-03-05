@@ -64,6 +64,28 @@ int HttpGetStatusCodes ( ESphHttpStatus eStatus )
 	};
 };
 
+ESphHttpStatus HttpGetStatusCodes ( int iStatus )
+{
+	switch ( iStatus )
+	{
+	case 100: return SPH_HTTP_STATUS_100;
+	case 200: return SPH_HTTP_STATUS_200;
+	case 206: return SPH_HTTP_STATUS_206;
+	case 400: return SPH_HTTP_STATUS_400;
+	case 403: return SPH_HTTP_STATUS_403;
+	case 404: return SPH_HTTP_STATUS_404;
+	case 405: return SPH_HTTP_STATUS_405;
+	case 409: return SPH_HTTP_STATUS_409;
+	case 413: return SPH_HTTP_STATUS_413;
+	case 500: return SPH_HTTP_STATUS_500;
+	case 501: return SPH_HTTP_STATUS_501;
+	case 503: return SPH_HTTP_STATUS_503;
+	case 526: return SPH_HTTP_STATUS_526;
+
+	default: return SPH_HTTP_STATUS_503;
+	};
+}
+
 extern CSphString g_sMySQLVersion;
 
 static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml, bool bHeadReply )
@@ -967,6 +989,11 @@ const CSphString & HttpHandler_c::GetError () const
 	return m_sError;
 }
 
+ESphHttpStatus HttpHandler_c::GetStatusCode() const
+{
+	return m_eHttpCode;
+}
+
 void HttpHandler_c::ReportError ( const char * szError, ESphHttpStatus eStatus )
 {
 	m_sError = szError;
@@ -975,6 +1002,7 @@ void HttpHandler_c::ReportError ( const char * szError, ESphHttpStatus eStatus )
 
 void HttpHandler_c::ReportError ( ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	if ( m_bNeedHttpResponse )
 		sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
 	else
@@ -991,6 +1019,7 @@ void HttpHandler_c::FormatError ( ESphHttpStatus eStatus, const char * sError, .
 	m_sError.SetSprintfVa ( sError, ap );
 	va_end ( ap );
 
+	m_eHttpCode = eStatus;
 	if ( m_bNeedHttpResponse )
 		sphHttpErrorReply ( m_dData, eStatus, m_sError.cstr() );
 	else
@@ -1004,21 +1033,25 @@ void HttpHandler_c::FormatError ( ESphHttpStatus eStatus, const char * sError, .
 
 void HttpHandler_c::BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const char* szResult, ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( Str_t sResult, ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	ReplyBuf ( sResult, eStatus, m_bNeedHttpResponse, m_dData );
 }
 
@@ -2344,17 +2377,17 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 		} else
 		{
 			DumpHttp ( eRequestType, sEndpoint, tSource.ReadAll() );
-			ESphHttpStatus eErrorCode = SPH_HTTP_STATUS_501;
+			tRes.m_eReplyHttpCode = SPH_HTTP_STATUS_501;
 			if ( tSource.GetError() )
 			{
 				tRes.m_sError = tSource.GetErrorMessage();
 				if ( tRes.m_sError.Begins ( "length out of bounds" ) )
-					eErrorCode = SPH_HTTP_STATUS_413;
+					tRes.m_eReplyHttpCode = SPH_HTTP_STATUS_413;
 			} else
 			{
 				tRes.m_sError.SetSprintf ( "/%s - unsupported endpoint", sEndpoint.cstr() );
 			}
-			sphHttpErrorReply ( dResult, eErrorCode, tRes.m_sError.cstr() );
+			sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
 		}
 		return tRes;
 	}
@@ -2365,6 +2398,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
+	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
@@ -2378,7 +2412,7 @@ void sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, HTTP_GET );
-	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false );
+	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, HTTP_GET );
 }
 
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
@@ -2403,7 +2437,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	Str_t sSrcQuery;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
-	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true );
+	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )

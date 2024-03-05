@@ -52,7 +52,7 @@ static const int g_iBuddyLoopSleep = 15;
 static const int g_iRestartMax = 3;
 static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
 
-static int g_iBuddyVersion = 1;
+static int g_iBuddyVersion = 2;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
 
@@ -462,7 +462,7 @@ bool HasBuddy()
 	return ( g_eBuddy==BuddyState_e::WORK );
 }
 
-static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery )
+static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType )
 {
 	if ( !HasBuddy() )
 		return { false, {} };
@@ -481,6 +481,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 			auto tMessageRoot = tBuddyQuery.Object();
 			tBuddyQuery.NamedString ( "path_query", sPathQuery );
 			tBuddyQuery.NamedString ( "body", sQuery );
+			tBuddyQuery.NamedString ( "http_method", ( bHttp ? http_method_str ( eRequestType ) : "" ) );
 		}
 	}
 
@@ -505,8 +506,8 @@ struct BuddyReply_t
 	bson::Bson_c m_tBJSON;
 
 	bson::NodeHandle_t m_tType { bson::nullnode };
-	bson::NodeHandle_t m_tError { bson::nullnode };
 	bson::NodeHandle_t m_tMessage { bson::nullnode };
+	int m_iReplyHttpCode = 0;
 };
 
 bson::NodeHandle_t GetNode ( const bson::Bson_c & tReply, const char * sName, CSphString & sError )
@@ -549,17 +550,21 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 
 	tParsed.m_tType = GetNode ( tParsed.m_tBJSON, "type", sError );
 	tParsed.m_tMessage = GetNode ( tParsed.m_tBJSON, "message", sError );
-
-	if ( !bson::IsNullNode ( tParsed.m_tError ) )
-	{
-		sError.SetSprintf ( "wrong budy reply version (%d), daemon version (%d), upgrade buddy", iVer, g_iBuddyVersion );
+	bson::NodeHandle_t tReplyHttpCode = GetNode ( tParsed.m_tBJSON, "error_code", sError );
+	if ( bson::IsNullNode ( tReplyHttpCode ) )
 		return false;
-	}
+	tParsed.m_iReplyHttpCode = bson::Int ( tReplyHttpCode );
+
 	return !( bson::IsNullNode ( tParsed.m_tType ) || bson::IsNullNode ( tParsed.m_tMessage ) );
 }
 
+static ESphHttpStatus GetHttpStatusCode ( int iBuddyHttpCode, ESphHttpStatus eReqHttpCode )
+{
+	return ( iBuddyHttpCode>0 ? HttpGetStatusCodes ( iBuddyHttpCode ) : eReqHttpCode );
+}
+
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
-bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse )
+bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) )
 	{
@@ -576,7 +581,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		return tRes.m_bOk;
 	}
 
-	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery );
+	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
@@ -598,15 +603,37 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	CSphString sDump;
 	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
+	ESphHttpStatus eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
-	ReplyBuf ( FromStr ( sDump ), SPH_HTTP_STATUS_200, bNeedHttpResponse, dResult );
+	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
 	return true;
 }
 
-void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE& uPacketID, GenericOutputBuffer_c& tOut )
+static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const bson::Bson_c & tMessage, GenericOutputBuffer_c & tOut )
 {
-	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery );
+	if ( !bson::IsAssoc ( tMessage ) )
+		return false;
+
+	CSphString sError = bson::String ( tMessage.ChildByName ( "error" ) );
+	if ( sError.IsEmpty() )
+		return false;
+
+	// reset back out buff and packet
+	uPacketID = tSavedPos.second;
+	tOut.Rewind ( tSavedPos.first );
+	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
+
+	LogSphinxqlError ( sStmt, FromStr ( sError ) );
+	session::GetClientSession()->m_sError = sError;
+	session::GetClientSession()->m_tLastMeta.m_sError = sError;
+	tBuddyRows->Error ( sError.cstr() );
+	return true;
+}
+
+void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
+{
+	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET );
 	if ( !tReplyRaw.first )
 	{
 		LogSphinxqlError ( sSrcQuery.first, tError );
@@ -631,6 +658,9 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
 	{
+		if ( ConvertErrorMessage ( sSrcQuery.first, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
+			return;
+
 		LogSphinxqlError ( sSrcQuery.first, tError );
 		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
 		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );

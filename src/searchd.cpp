@@ -58,6 +58,8 @@
 #include "exprdatetime.h"
 #include "pseudosharding.h"
 #include "geodist.h"
+#include "joinsorter.h"
+#include "schematransform.h"
 
 // services
 #include "taskping.h"
@@ -1927,6 +1929,18 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendDword ( (DWORD)i.m_eType );
 		tOut.SendDword ( (DWORD)i.m_bForce );
 	}
+
+	tOut.SendInt ( (int)q.m_eJoinType );
+	tOut.SendString ( q.m_sJoinIdx.cstr() );
+	tOut.SendString ( q.m_sJoinQuery.cstr() );
+	tOut.SendInt ( q.m_dOnFilters.GetLength() );
+	for ( const auto & i : q.m_dOnFilters)
+	{
+		tOut.SendString ( i.m_sIdx1.cstr() );
+		tOut.SendString ( i.m_sAttr1.cstr() );
+		tOut.SendString ( i.m_sIdx2.cstr() );
+		tOut.SendString ( i.m_sAttr2.cstr() );
+	}
 }
 
 
@@ -2777,6 +2791,22 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		}
 	}
 
+	if ( uMasterVer>=21 )
+	{
+		tQuery.m_eJoinType	= (JoinType_e)tReq.GetDword();
+		tQuery.m_sJoinIdx	= tReq.GetString();
+		tQuery.m_sJoinQuery	= tReq.GetString();
+
+		tQuery.m_dOnFilters.Resize ( tReq.GetDword() );
+		for ( auto & i : tQuery.m_dOnFilters )
+		{
+			i.m_sIdx1	= tReq.GetString();
+			i.m_sAttr1	= tReq.GetString();
+			i.m_sIdx2	= tReq.GetString();
+			i.m_sAttr2	= tReq.GetString();
+		}
+	}
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -3364,7 +3394,7 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 
 	// report only first indexes up to 4
 	int iEndReport = ( iSpanLen>4 ) ? iSpanStart+3 : iSpandEnd;
-	sOut.StartBlock ( ",", "index " );
+	sOut.StartBlock ( ",", "table " );
 	for ( int j = iSpanStart; j<iEndReport; ++j )
 		sOut << dLog[j].m_sIndex;
 	sOut.FinishBlock ();
@@ -5143,7 +5173,7 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	GenericMatchSort_fn tReorder;
 	CSphVector<ExtraSortExpr_t> dExtraExprs;
 
-	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, tRes.m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, nullptr, tRes.m_sError );
 	if ( eRes==SORT_CLAUSE_RANDOM )
 		tRes.m_sError = "order by rand() not supported in outer select";
 
@@ -5447,6 +5477,12 @@ private:
 	StringBuilder_c						m_sError;
 
 private:
+	struct JoinedServedIndex_t
+	{
+		cServedIndexRefPtr_c	m_pServed;
+		int						m_iDupeId = -1;
+	};
+
 	bool							ParseSysVar();
 	bool							ParseIdxSubkeys();
 	bool							CheckMultiQuery() const;
@@ -5457,13 +5493,15 @@ private:
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
-	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
-	int								CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
-	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
+	int								CreateSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
+	int								CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
+	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
-	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const;
+	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const;
 	cServedIndexRefPtr_c			CheckIndexSelectable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
-	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
+	bool							PopulateJoinedIndexes ( CSphVector<JoinedServedIndex_t> & dJoinedServed, VecTraits_T<SearchFailuresLog_c> & dFailuresSet ) const;
+	CSphVector<const CSphIndex*>	GetRlockedJoinedIndexes ( const CSphVector<JoinedServedIndex_t> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const;
+	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 
 	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const;
 	int								CalcMaxThreadsPerIndex ( int iConcurrency ) const;
@@ -5773,9 +5811,10 @@ static StrVec_t GetDefaultSchema ( const CSphIndex* pIndex )
 	return dRes;
 }
 
-SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
+SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
 	auto& tSess = session::Info();
+
 	SphQueueSettings_t tQS ( pIndex->GetMatchSchema (), m_pProfile, tSess.m_pSqlRowBuffer, &tSess.m_pSessionOpaque1, &tSess.m_pSessionOpaque2 );
 	tQS.m_bComputeItems = true;
 	tQS.m_pCollection = m_pCollectedDocs;
@@ -5788,15 +5827,18 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
 	tQS.m_dCreateSchema = GetDefaultSchema ( pIndex );
+	if ( pJoinedIndex )
+		tQS.m_pJoinArgs = std::make_unique<JoinArgs_t> ( pJoinedIndex->GetMatchSchema(), pIndex->GetName(), pJoinedIndex->GetName() );
+
 	return tQS;
 }
 
 
-int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
 {
 	int iValidSorters = 0;
 
-	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dNQueries.First ().m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
+	auto tQueueSettings = MakeQueueSettings ( pIndex, dJoinedIndexes[0], m_dNQueries.First ().m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
 	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra, m_pProfile );
 
 	m_dNQueries.First().m_bZSlist = tQueueRes.m_bZonespanlist;
@@ -5809,11 +5851,18 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
 	}
+
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries.First(), dSorters, tQueueRes.m_bJoinedGroupSort, dErrors[0] ) )
+	{
+		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
+		return 0;
+	}
+
 	return iValidSorters;
 }
 
 
-int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
 {
 	int iValidSorters = 0;
 	tQueueRes.m_bAlowMulti = false;
@@ -5823,8 +5872,13 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 		CSphQuery & tQuery = m_dNQueries[iQuery];
 
 		// create queue
-		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
+		auto tQueueSettings = MakeQueueSettings ( pIndex, dJoinedIndexes[iQuery], tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
 		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile );
+		if ( !pSorter )
+			continue;
+
+		// possibly create a wrapper (if we have JOIN)
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -5836,11 +5890,12 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 }
 
 
-int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
 {
 	if ( m_bMultiQueue || m_bFacetQueue )
-		return CreateMultiQueryOrFacetSorters ( pIndex, dSorters, dErrors, pExtra, tQueueRes, pHook );
-	return CreateSingleSorters ( pIndex, dSorters, dErrors, pExtra, tQueueRes, pHook );
+		return CreateMultiQueryOrFacetSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook );
+
+	return CreateSingleSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook );
 }
 
 struct LocalSearchRef_t
@@ -5976,7 +6031,50 @@ cServedIndexRefPtr_c SearchHandler_c::CheckIndexSelectable ( const CSphString & 
 }
 
 
-bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex * pIndex, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
+bool SearchHandler_c::PopulateJoinedIndexes ( CSphVector<JoinedServedIndex_t> & dJoinedServed, VecTraits_T<SearchFailuresLog_c> & dFailuresSet ) const
+{
+	dJoinedServed.Resize ( m_dNQueries.GetLength() );
+	ARRAY_FOREACH ( i, m_dNQueries )
+	{
+		const auto & tQuery = m_dNQueries[i];
+		if ( tQuery.m_sJoinIdx.IsEmpty() )
+			continue;
+
+		const auto & pServed = m_dAcquired.Get ( tQuery.m_sJoinIdx );
+		if ( !pServed )
+		{
+			for ( auto & dFailureSet : dFailuresSet )
+				dFailureSet.SubmitEx ( tQuery.m_sJoinIdx, nullptr, "%s", "table not found" );
+
+			return false;
+		}
+
+		if ( !ServedDesc_t::IsSelectable ( pServed ) )
+		{
+			for ( auto & dFailureSet : dFailuresSet )
+				dFailureSet.SubmitEx ( tQuery.m_sJoinIdx, nullptr, "%s", "table is not suitable for select" );
+
+			return false;
+		}
+
+		dJoinedServed[i] = { pServed, -1 };
+	}
+
+	ARRAY_FOREACH ( i, dJoinedServed )
+	{
+		for ( int j = i+1; j < dJoinedServed.GetLength(); j++ )
+			if ( dJoinedServed[j].m_pServed == dJoinedServed[i].m_pServed )
+			{
+				dJoinedServed[j].m_iDupeId = i;
+				break;
+			}
+	}
+
+	return true;
+}
+
+
+bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
 {
 	auto iQueries = dSrt.GetLength();
 	#if PARANOID
@@ -5985,7 +6083,7 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 	#endif
 
 	CSphFixedVector<CSphString> dErrors ( iQueries );
-	int iValidSorters = CreateSorters ( pIndex, dSrt, dErrors, pExtra, *pQueueRes, pHook );
+	int iValidSorters = CreateSorters ( pIndex, dJoinedIndexes, dSrt, dErrors, pExtra, *pQueueRes, pHook );
 	if ( iValidSorters<dSrt.GetLength() )
 	{
 		ARRAY_FOREACH ( i, dErrors )
@@ -6239,6 +6337,31 @@ private:
 	bool									m_bNeedGlobalSorters = false;
 };
 
+
+CSphVector<const CSphIndex*> SearchHandler_c::GetRlockedJoinedIndexes ( const CSphVector<JoinedServedIndex_t> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const
+{
+	CSphVector<const CSphIndex*> dJoinedIndexes;
+	for ( auto & i : dJoinedServed )
+	{
+		if ( !i.m_pServed )
+		{
+			dJoinedIndexes.Add(nullptr);
+			continue;
+		}
+
+		if ( i.m_iDupeId!=-1 )
+			dJoinedIndexes.Add ( dJoinedIndexes[i.m_iDupeId] );
+		else
+		{
+			dRLockedJoined.emplace_back ( i.m_pServed );
+			dJoinedIndexes.Add ( dRLockedJoined.back() );
+		}
+	}
+
+	return dJoinedIndexes;
+}
+
+
 void SearchHandler_c::RunLocalSearches ()
 {
 	int64_t tmLocal = sphMicroTimer ();
@@ -6356,6 +6479,10 @@ void SearchHandler_c::RunLocalSearches ()
 			if ( !pServed )
 				continue;
 
+			CSphVector<JoinedServedIndex_t> dJoinedServed;
+			if ( !PopulateJoinedIndexes ( dJoinedServed, dNFailuresSet ) )
+				continue;
+
 			bool bResult = false;
 			CSphQueryResultMeta tMqMeta;
 			CSphQueryResult tMqRes;
@@ -6367,9 +6494,12 @@ void SearchHandler_c::RunLocalSearches ()
 				tCtx.m_tHook.SetIndex ( pIndex );
 				tCtx.m_tHook.SetQueryType ( m_eQueryType );
 
+				std::vector<RIdx_c> dRLockedJoined;
+				CSphVector<const CSphIndex*> dJoinedIndexes = GetRlockedJoinedIndexes ( dJoinedServed, dRLockedJoined );
+
 				// create sorters
 				SphQueueRes_t tQueueRes;
-				if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pIndex, sLocal, szParent, &tCtx.m_tHook ) )
+				if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pIndex, dJoinedIndexes, sLocal, szParent, &tCtx.m_tHook ) )
 					continue;
 
 				// do the query
@@ -6848,6 +6978,22 @@ bool SearchHandler_c::CheckMultiQuery() const
 // Fails if an index is absent and this is not allowed
 bool SearchHandler_c::AcquireInvokedIndexes()
 {
+	// add indexes required by JOIN
+	// but don't try to acquire local indexes if query is issued only for remote distributed
+	if ( m_dLocal.GetLength() )
+	{
+		StringBuilder_c sFailed (", ");
+		for ( const auto & tQuery : m_dNQueries )
+			if ( !tQuery.m_sJoinIdx.IsEmpty() && !m_dAcquired.AddUniqIndex ( tQuery.m_sJoinIdx ) )
+				sFailed << tQuery.m_sJoinIdx;
+
+		if ( !sFailed.IsEmpty() )
+		{
+			m_sError << "unknown local table(s) '" << sFailed << "' in search request";
+			return false;
+		}
+	}
+
 	// if unexistent allowed, short flow
 	if ( m_dNQueries.First().m_bIgnoreNonexistentIndexes )
 	{
@@ -11190,6 +11336,28 @@ static bool InsertToPQ ( const SqlStmt_t & tStmt, RtIndex_i * pIndex, RtAccum_t 
 	return true;
 }
 
+static bool CleanupAcc ( bool bMissed, RtAccum_t * pAccum, CSphString & sError )
+{
+	assert ( pAccum );
+	sError.SetSprintf ( "can not finish transaction, table %s '%s'", ( bMissed ? "missed" : "changed" ), pAccum->GetIndexName().cstr() );
+	pAccum->Cleanup();
+	return false;
+}
+
+static bool CheckAccIndex ( CSphSessionAccum & tSession, CSphString & sError )
+{
+	RtAccum_t * pAccum = tSession.GetAcc();
+	assert ( pAccum );
+	auto pServed = GetServed ( pAccum->GetIndexName() );
+	if ( !pServed )
+		return CleanupAcc ( true, pAccum, sError );
+
+	if ( pAccum->GetIndexId()!=RIdx_T<RtIndex_i*>( pServed )->GetIndexId() )
+		return CleanupAcc ( false, pAccum, sError );
+
+	return true;
+}
+
 void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 {
 	auto* pSession = session::GetClientSession();
@@ -11197,10 +11365,16 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
-	if ( tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc() ) )
+	if ( tAcc.GetIndex() )
 	{
-		TlsMsg::MoveError ( sError );
-		return tOut.Error ( "%s", sError.cstr() );
+		if ( !CheckAccIndex ( tAcc, sError ) )
+			return tOut.Error ( "%s", sError.cstr() );
+
+		if ( !HandleCmdReplicate ( *tAcc.GetAcc() ) )
+		{
+			TlsMsg::MoveError ( sError );
+			return tOut.Error ( "%s", sError.cstr() );
+		}
 	}
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
@@ -11220,8 +11394,12 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	int iDeleted = 0;
 	if ( pIndex )
 	{
-		tCrashQuery.m_dIndex = FromStr ( pIndex->GetName() );
-		RtAccum_t* pAccum = tAcc.GetAcc ();
+		RtAccum_t * pAccum = tAcc.GetAcc();
+		tCrashQuery.m_dIndex = FromStr ( pAccum->GetIndexName() );
+
+		if ( !CheckAccIndex ( tAcc, sError ) )
+			return tOut.Error ( "%s", sError.cstr() );
+
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
@@ -13385,7 +13563,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			CSphString sError;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
-			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, sError, tExprArgs )};
+			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, nullptr, sError, tExprArgs )};
 
 			if ( !pExpr || !pExpr->IsConst() )
 				eAttrType = SPH_ATTR_NONE;
@@ -13427,6 +13605,154 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 }
 
 
+static bool IsNullSet ( const CSphMatch	& tMatch, int iAttr, SphAttr_t tNullMask, const CSphColumnInfo * pNullBitmaskAttr )
+{
+	if ( !pNullBitmaskAttr )
+		return false;
+
+	if ( pNullBitmaskAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
+	{
+		ByteBlob_t tBlob = sphUnpackPtrAttr ( (const BYTE*)tNullMask );
+		BitVec_T<const BYTE> tVec ( tBlob.first, tBlob.second*8 );
+		return tVec.BitGet(iAttr);
+	}
+
+	assert ( iAttr < 64 );
+	return !!( tNullMask & ( 1 << iAttr ) );
+}
+
+
+static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrsToSend, const ISphSchema & tSchema, RowBuffer_i & dRows, const CSphColumnInfo * pNullBitmaskAttr )
+{
+	SphAttr_t tNullMask = pNullBitmaskAttr ? tMatch.GetAttr ( pNullBitmaskAttr->m_tLocator ) : 0;
+
+	for ( int i=0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		if ( !tAttrsToSend.BitGet(i) )
+			continue;
+
+		if ( IsNullSet ( tMatch, i, tNullMask, pNullBitmaskAttr ) )
+		{
+			dRows.PutString("NULL");
+			continue;
+		}
+
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		const CSphAttrLocator & tLoc = tAttr.m_tLocator;
+		ESphAttr eAttrType = tAttr.m_eAttrType;
+
+		assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
+
+		switch ( eAttrType )
+		{
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_TOKENCOUNT:
+			dRows.PutNumAsString ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
+			break;
+
+		case SPH_ATTR_BIGINT:
+			dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
+			break;
+
+		case SPH_ATTR_UINT64:
+			dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
+			break;
+
+		case SPH_ATTR_FLOAT:
+			dRows.PutFloatAsString ( tMatch.GetAttrFloat(tLoc) );
+			break;
+
+		case SPH_ATTR_DOUBLE:
+			dRows.PutDoubleAsString ( tMatch.GetAttrDouble(tLoc) );
+			break;
+
+		case SPH_ATTR_INT64SET_PTR:
+		case SPH_ATTR_UINT32SET_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_STRINGPTR:
+		{
+			auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+			auto dString = sphUnpackPtrAttr ( pString );
+			if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
+				dString.second -= 2;
+			dRows.PutArray ( dString );
+		}
+		break;
+
+		case SPH_ATTR_JSON_PTR:
+		{
+			auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
+			JsonEscapedBuilder sTmp;
+			if ( pString )
+			{
+				auto dJson = sphUnpackPtrAttr ( pString );
+				sphJsonFormat ( sTmp, dJson.first );
+			}
+			dRows.PutArray ( sTmp );
+		}
+		break;
+
+		case SPH_ATTR_FACTORS:
+		case SPH_ATTR_FACTORS_JSON:
+		{
+			auto dFactors = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tLoc ));
+			StringBuilder_c sTmp;
+			if ( !IsEmpty ( dFactors ))
+				sphFormatFactors ( sTmp, (const unsigned int *)dFactors.first, eAttrType==SPH_ATTR_FACTORS_JSON );
+			dRows.PutArray ( sTmp, false );
+		}
+		break;
+
+		case SPH_ATTR_JSON_FIELD_PTR:
+		{
+			const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
+			if ( !pField )
+			{
+				dRows.PutNULL();
+				break;
+			}
+
+			auto dField = sphUnpackPtrAttr ( pField );
+			auto eJson = ESphJsonType ( *dField.first++ );
+
+			if ( eJson==JSON_NULL )
+			{
+				dRows.PutNULL();
+				break;
+			}
+
+			// send string to client
+			JsonEscapedBuilder sTmp;
+			sphJsonFieldFormat ( sTmp, dField.first, eJson, false );
+			dRows.PutArray ( sTmp, false );
+		}
+		break;
+
+		default:
+			dRows.Add(1);
+			dRows.Add('-');
+			break;
+		}
+	}
+}
+
+
 void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
@@ -13464,129 +13790,13 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 	// FIXME!!! replace that vector relocations by SqlRowBuffer
 
-	// rows
-	const CSphSchema &tSchema = tRes.m_tSchema;
+	const CSphColumnInfo * pNullBitmaskAttr = tRes.m_tSchema.GetAttr ( GetNullMaskAttrName() );
+
 	assert ( tRes.m_bSingle );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto& tMatch : dMatches )
+	for ( const auto & tMatch : dMatches )
 	{
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
-		{
-			if ( !tAttrsToSend.BitGet(i) )
-				continue;
-
-			const CSphColumnInfo & dAttr = tSchema.GetAttr(i);
-			CSphAttrLocator tLoc = dAttr.m_tLocator;
-			ESphAttr eAttrType = dAttr.m_eAttrType;
-
-			assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
-
-			switch ( eAttrType )
-			{
-			case SPH_ATTR_INTEGER:
-			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:
-			case SPH_ATTR_TOKENCOUNT:
-				dRows.PutNumAsString ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
-				break;
-
-			case SPH_ATTR_BIGINT:
-				dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
-				break;
-
-			case SPH_ATTR_UINT64:
-				dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
-				break;
-
-			case SPH_ATTR_FLOAT:
-				dRows.PutFloatAsString ( tMatch.GetAttrFloat(tLoc) );
-				break;
-
-			case SPH_ATTR_DOUBLE:
-				dRows.PutDoubleAsString ( tMatch.GetAttrDouble(tLoc) );
-				break;
-
-			case SPH_ATTR_INT64SET_PTR:
-			case SPH_ATTR_UINT32SET_PTR:
-				{
-					StringBuilder_c dStr;
-					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dRows.PutArray ( dStr, false );
-					break;
-				}
-
-			case SPH_ATTR_FLOAT_VECTOR_PTR:
-			{
-				StringBuilder_c dStr;
-				sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
-				dRows.PutArray ( dStr, false );
-				break;
-			}
-
-			case SPH_ATTR_STRINGPTR:
-				{
-					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-					auto dString = sphUnpackPtrAttr ( pString );
-					if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
-						dString.second -= 2;
-					dRows.PutArray ( dString );
-				}
-				break;
-			case SPH_ATTR_JSON_PTR:
-				{
-					auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
-					JsonEscapedBuilder sTmp;
-					if ( pString )
-					{
-						auto dJson = sphUnpackPtrAttr ( pString );
-						sphJsonFormat ( sTmp, dJson.first );
-					}
-					dRows.PutArray ( sTmp );
-				}
-				break;
-
-			case SPH_ATTR_FACTORS:
-			case SPH_ATTR_FACTORS_JSON:
-				{
-					auto dFactors = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tLoc ));
-					StringBuilder_c sTmp;
-					if ( !IsEmpty ( dFactors ))
-						sphFormatFactors ( sTmp, (const unsigned int *)dFactors.first, eAttrType==SPH_ATTR_FACTORS_JSON );
-					dRows.PutArray ( sTmp, false );
-					break;
-				}
-
-			case SPH_ATTR_JSON_FIELD_PTR:
-				{
-					const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
-					if ( !pField )
-					{
-						dRows.PutNULL();
-						break;
-					}
-
-					auto dField = sphUnpackPtrAttr ( pField );
-					auto eJson = ESphJsonType ( *dField.first++ );
-
-					if ( eJson==JSON_NULL )
-					{
-						dRows.PutNULL();
-						break;
-					}
-
-					// send string to client
-					JsonEscapedBuilder sTmp;
-					sphJsonFieldFormat ( sTmp, dField.first, eJson, false );
-					dRows.PutArray ( sTmp, false );
-					break;
-				}
-
-			default:
-				dRows.Add(1);
-				dRows.Add('-');
-				break;
-			}
-		}
+		SendMysqlMatch ( tMatch, tAttrsToSend, tRes.m_tSchema, dRows, pNullBitmaskAttr );
 
 		if ( bAddQueryColumn )
 		{
@@ -15428,7 +15638,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			ESphAttr eAttrType;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
-			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, sError, tExprArgs ) };
+			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, nullptr, sError, tExprArgs ) };
 			if ( pExpr )
 			{
 				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, dItem.m_sAlias.cstr() } );
@@ -19934,6 +20144,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 		else
 			sphInfo ( "Using time zone '%s'", GetTimeZoneName().cstr() );
 	}
+
+	if ( hSearchd("join_cache_size") )
+		SetJoinCacheSize ( hSearchd.GetSize64 ( "join_cache_size", GetJoinCacheSize() ) );
 
 	// sha1 password hash for shutdown action
 	g_sShutdownToken = hSearchd.GetStr ("shutdown_token");

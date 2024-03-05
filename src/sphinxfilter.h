@@ -83,6 +83,7 @@ struct CreateFilterContext_t
 	const HistogramContainer_c * m_pHistograms = nullptr;
 	const SI::Index_i *			m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
+	CSphString					m_sJoinIdx;
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
 		: m_pSchema ( pSchema ) {}

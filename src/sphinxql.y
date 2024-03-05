@@ -89,14 +89,17 @@
 %token	TOK_INDEX
 %token	TOK_INDEXES
 %token	TOK_INDEXOF
+%token	TOK_INNER
 %token	TOK_INSERT
 %token	TOK_INT
 %token	TOK_INTERVAL
 %token	TOK_INTEGER
 %token	TOK_INTO
 %token	TOK_IS
+%token	TOK_JOIN
 %token	TOK_KILL
 %token	TOK_KNN
+%token	TOK_LEFT
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
@@ -113,6 +116,7 @@
 %token	TOK_NOT
 %token	TOK_NULL
 %token	TOK_OFFSET
+%token	TOK_ON
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
@@ -567,6 +571,7 @@ opt_outer_limit:
 select_from:
 	TOK_SELECT select_items_list
 	TOK_FROM from_target { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	opt_join_clause
 	opt_where_clause
 	opt_group_clause
 	opt_group_order_clause
@@ -619,6 +624,10 @@ where_expr:
 	where_item
 	| filter_expr
 	| where_item TOK_AND filter_expr
+	| where_item TOK_AND where_item
+	| where_item TOK_AND filter_expr TOK_AND where_item
+	| where_item TOK_AND where_item TOK_AND filter_expr
+	| filter_expr TOK_AND where_item TOK_AND where_item
     | filter_expr TOK_AND where_item
 	| filter_expr TOK_AND where_item TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
 	;
@@ -629,11 +638,50 @@ where_item:
 			if ( !pParser->SetMatch($3) )
 				YYERROR;
 		}
+	| TOK_MATCH '(' TOK_QUOTED_STRING ',' idxname ')'
+		{
+			if ( !pParser->AddMatch($3,$5) )
+				YYERROR;
+		}
 	| '(' TOK_MATCH '(' TOK_QUOTED_STRING ')' ')'
 		{
 			if ( !pParser->SetMatch($4) )
 				YYERROR;
 		}
+	| '(' TOK_MATCH '(' TOK_QUOTED_STRING  ',' idxname ')' ')'
+		{
+			if ( !pParser->AddMatch($4,$6) )
+				YYERROR;
+		}
+	;
+
+opt_join_clause:
+	// empty
+	| join_clause
+	;
+
+join_type:
+	// empty
+	| TOK_INNER	{ pParser->SetJoinType ( JoinType_e::INNER ); }
+	| TOK_LEFT	{ pParser->SetJoinType ( JoinType_e::LEFT ); }
+	;
+
+join_clause:
+	join_type TOK_JOIN idxname TOK_ON on_clause
+		{
+			if ( !pParser->SetJoin($3) )
+				YYERROR;
+		}
+	;
+
+on_clause_attr:
+	TOK_SUBKEY
+	| on_clause_attr TOK_SUBKEY			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+on_clause:
+	idxname on_clause_attr '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $1, $2, $4, $5 ); }
+	| on_clause TOK_AND on_clause
 	;
 
 knn_item:
@@ -1796,13 +1844,7 @@ facet_items_list:
 facet_stmt:
 	TOK_FACET facet_items_list opt_facet_by_items_list opt_distinct_item opt_order_clause opt_limit_clause
 		{
-			pParser->m_pStmt->m_eStmt = STMT_FACET;
-			if ( pParser->m_pQuery->m_sFacetBy.IsEmpty() )
-			{
-				pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
-				pParser->AddCount ();
-			}
-			if ( !pParser->MaybeAddFacetDistinct() )
+			if ( !pParser->SetupFacetStmt() )
 				YYERROR;
 		}
 	;

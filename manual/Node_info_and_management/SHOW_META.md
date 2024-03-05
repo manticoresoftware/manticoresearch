@@ -313,7 +313,7 @@ SHOW META LIKE 'multiplier';
 
 When the [cost-based query optimizer](../Searching/Cost_based_optimizer.md) chooses to use `DocidIndex`, `ColumnarScan`, or `SecondaryIndex` instead of a plain filter, this is reflected in the `SHOW META` command.
 
-The `index` variable displays the names and types of secondary indexes used during query execution. The percentage indicates how many disk chunks (in the case of an RT index) or pseudo shards (in the case of a plain index) utilized the secondary index.
+The `index` variable displays the names and types of secondary indexes used during query execution. The percentage indicates how many disk chunks (in the case of an RT table) or pseudo shards (in the case of a plain table) utilized the secondary index.
 
 <!-- intro -->
 ##### SQL:

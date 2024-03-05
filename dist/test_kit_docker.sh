@@ -112,7 +112,7 @@ docker exec manticore-test-kit bash -c \
   'ls -la /build/'
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	"apt-get -y update && apt-get -y install manticore-galera && apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
+	"apt-get -y update && apt-get -y install manticore-galera && apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
 docker exec manticore-test-kit bash -c \
 	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
 

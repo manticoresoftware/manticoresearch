@@ -979,13 +979,13 @@ bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedInd
 	{
 		if ( i.m_sIdx1!=pIndex->GetName() && i.m_sIdx1!=pJoinedIndex->GetName() )
 		{
-			sError.SetSprintf ( "JOIN ON index '%s' not found", i.m_sIdx1.cstr() );
+			sError.SetSprintf ( "JOIN ON table '%s' not found", i.m_sIdx1.cstr() );
 			return false;
 		}
 
 		if ( i.m_sIdx2!=pIndex->GetName() && i.m_sIdx2!=pJoinedIndex->GetName() )
 		{
-			sError.SetSprintf ( "JOIN ON index '%s' not found", i.m_sIdx2.cstr() );
+			sError.SetSprintf ( "JOIN ON table '%s' not found", i.m_sIdx2.cstr() );
 			return false;
 		}
 	}

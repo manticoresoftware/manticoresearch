@@ -180,9 +180,9 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### Typescript:
+##### TypeScript:
 
-<!-- request typescript -->
+<!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({
   index: 'test',
@@ -190,7 +190,7 @@ res = await indexApi.delete({
 });
 ```
 
-<!-- response typescript -->
+<!-- response TypeScript -->
 ```json
 {"_index":"test","deleted":5}
 ```
@@ -199,7 +199,7 @@ res = await indexApi.delete({
 
 ##### Go:
 
-<!-- request go -->
+<!-- request Go -->
 ```go
 deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 matchExpr := map[string]interface{} {"*": "test document"}
@@ -207,7 +207,7 @@ deleteQuery := map[string]interface{} {"match": matchExpr }
 deleteRequest.SetQuery(deleteQuery)
 ```
 
-<!-- response go -->
+<!-- response Go -->
 ```json
 {"_index":"test","deleted":5}
 ```
@@ -339,14 +339,14 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### Typescript:
+##### TypeScript:
 
-<!-- request typescript -->
+<!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({ index: 'test', id: 1 });
 ```
 
-<!-- response typescript -->
+<!-- response TypeScript -->
 ```json
 {"_index":"test","_id":1,"result":"deleted"}
 ```
@@ -355,13 +355,13 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 ##### Go:
 
-<!-- request go -->
+<!-- request Go -->
 ```go
 deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 deleteRequest.SetId(1)
 ```
 
-<!-- response go -->
+<!-- response Go -->
 ```json
 {"_index":"test","_id":1,"result":"deleted"}
 ```
@@ -581,14 +581,14 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### Typescript:
+##### TypeScript:
 
-<!-- request typescript -->
+<!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 ```
 
-<!-- response typescript -->
+<!-- response TypeScript -->
 ```json
 {"_index":"test","_id":1,"result":"deleted"}
 ```
@@ -597,14 +597,14 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 ##### Go:
 
-<!-- request go -->
+<!-- request Go -->
 ```go
 deleteRequest := manticoresearch.NewDeleteDocumentRequest("test")
 deleteRequest.SetCluster("cluster_1")
 deleteRequest.SetId(1)
 ```
 
-<!-- response go -->
+<!-- response Go -->
 ```json
 {"_index":"test","_id":1,"result":"deleted"}
 ```
@@ -784,9 +784,9 @@ class BulkResponse {
 ```
 
 <!-- intro -->
-##### Typescript:
+##### TypeScript:
 
-<!-- request typescript -->
+<!-- request TypeScript -->
 ``` typescript
 docs = [
   { "delete" : { "index" : "test", "id": 1 } },
@@ -798,7 +798,7 @@ body = await indexApi.bulk(
 res = await indexApi.bulk(body);
 ```
 
-<!-- response typescript -->
+<!-- response TypeScript -->
 ```json
 {"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
 
@@ -808,7 +808,7 @@ res = await indexApi.bulk(body);
 
 ##### Go:
 
-<!-- request go -->
+<!-- request Go -->
 ```go
 docs = []string {
   `{ "delete" : { "index" : "test", "id": 1 } }`,
@@ -818,7 +818,7 @@ body = strings.Join(docs, "\n")
 resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 ```
 
-<!-- response go -->
+<!-- response Go -->
 ```json
 {"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
 ```

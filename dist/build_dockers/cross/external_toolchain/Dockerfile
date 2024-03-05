@@ -1,4 +1,6 @@
 FROM ubuntu:focal
+# Note, bison in Jammy leads to some updated error messages and some of them look wrong, e.g.
+# "expecting end of file" instead of "expecting $end"
 ENV DEBIAN_FRONTEND noninteractive
 
 # 1-st layer, basic toolchain stuff

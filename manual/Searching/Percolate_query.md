@@ -341,6 +341,87 @@ class SuccessResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+```typescript
+res = await utilsApi.sql("create table test_pq(title text, color string) type='pq'");
+res = indexApi.insert({
+  index: 'test_pq',
+  doc: { query : '@title bag' }
+});
+res = indexApi.insert(
+  index: 'test_pq',
+  doc: { query: '@title shoes', filters: "color='red'" }
+});
+res = indexApi.insert({
+  index: 'test_pq',
+  doc: { query : '@title shoes', filters: "color IN ('blue', 'green')" }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"_index":"test_pq",
+	"_id":1657852401006149661,
+	"created":true,
+	"result":"created"
+}
+{
+	"_index":"test_pq",
+	"_id":1657852401006149662,
+	"created":true,
+	"result":"created"
+}
+{
+	"_index":"test_pq",
+	"_id":1657852401006149663,
+	"created":true,
+	"result":"created"
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("create table test_pq(title text, color string) type='pq'").Execute()
+
+indexDoc := map[string]interface{} {"query": "@title bag"}
+indexReq := manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+
+indexDoc = map[string]interface{} {"query": "@title shoes", "filters": "color='red'"}
+indexReq = manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+
+indexDoc = map[string]interface{} {"query": "@title shoes", "filters": "color IN ('blue', 'green')"}
+indexReq = manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+```
+<!-- response Go -->
+``` go
+{
+	"_index":"test_pq",
+	"_id":1657852401006149661,
+	"created":true,
+	"result":"created"
+}
+{
+	"_index":"test_pq",
+	"_id":1657852401006149662,
+	"created":true,
+	"result":"created"
+}
+{
+	"_index":"test_pq",
+	"_id":1657852401006149663,
+	"created":true,
+	"result":"created"
+}
+```
+
 <!-- end -->
 
 <!-- example single -->
@@ -596,6 +677,83 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.percolate('test_pq', { query: { percolate: { document : { title : 'What a nice bag' } } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {"title": "what a nice bag"}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example pq_rules -->
@@ -839,6 +997,83 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.percolate('test_pq', { query: { percolate: { document : { title : 'What a nice bag' } } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {"title": "what a nice bag"}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example multiple -->
@@ -1186,6 +1421,118 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149662",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "What a nice bag"}
+doc2 := map[string]interface{} {"title": "Really nice shoes"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149662",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example docs_1 -->
@@ -1509,6 +1856,118 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149662",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "What a nice bag"}
+doc2 := map[string]interface{} {"title": "Really nice shoes"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149662",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example docs_id -->
@@ -1838,6 +2297,94 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({"index":"test_pq","query":{"match_all":{}}});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	'hits':
+	{
+		'hits': 
+		[{
+			'_id': '2811025403043381501',
+            '_score': 1,
+            '_source': 
+            {
+            	'filters': "gid>=10",
+                'query': 'filter test',
+                'tags': ''
+            }
+        },
+        {
+         	'_id': 
+         	'2811025403043381502',
+            '_score': 1,
+            '_source': 
+            {
+            	'filters': "gid>=10 OR gid<=3",
+                 'query': 'angry',
+                 'tags': ''
+            }
+        }],
+    	'total': 2
+	},
+	'profile': None,
+	'timed_out': False,
+	'took': 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {}
+percolateRequestQuery := manticoreclient.NewPercolateRequestQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery) 
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	'hits':
+	{
+		'hits': 
+		[{
+			'_id': '2811025403043381501',
+            '_score': 1,
+            '_source': 
+            {
+            	'filters': "gid>=10",
+                'query': 'filter test',
+                'tags': ''
+            }
+        },
+        {
+         	'_id': 
+         	'2811025403043381502',
+            '_score': 1,
+            '_source': 
+            {
+            	'filters': "gid>=10 OR gid<=3",
+                 'query': 'angry',
+                 'tags': ''
+            }
+        }],
+    	'total': 2
+	},
+	'profile': None,
+	'timed_out': False,
+	'took': 0
+}
+```
+
 <!-- end -->
 
 
@@ -2124,6 +2671,118 @@ class SearchResponse {
 }
 
 ```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149662",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "What a nice bag"}
+doc2 := map[string]interface{} {"title": "Really nice shoes"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149661",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "_index": "test_pq",
+        "_type": "doc",
+        "_id": "1657852401006149662",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 In the previous example, we used the default **sparse** mode. To demonstrate the **sharded** mode, let's create a distributed PQ table consisting of 2 local PQ tables and add 2 documents to "products1" and 1 document to "products2":

@@ -1202,6 +1202,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 
 static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * pIndex )
 {
+	SetIndexFilenameBuilder ( CreateFilenameBuilder );
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.get(), dWarnings ) )
@@ -1593,7 +1594,7 @@ int main ( int argc, char ** argv )
 			fprintf ( stdout, "checking table '%s'...\n", sIndex.cstr() );
 			{
 			std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout, ( g_eCommand == IndextoolCmd_e::CHECK ? nullptr : &iExtractDocid ) ) };
-				iCheckErrno = pIndex->DebugCheck ( *pReporter );
+				iCheckErrno = pIndex->DebugCheck ( *pReporter, nullptr );
 			}
 			if ( iCheckErrno )
 				return iCheckErrno;

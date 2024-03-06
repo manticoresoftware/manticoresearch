@@ -1228,7 +1228,7 @@ public:
 	bool				AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) final;
 	bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError ) final;
 
-	int					DebugCheck ( DebugCheckError_i& ) final;
+	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 #if _WIN32
 #pragma warning(pop)
 #endif
@@ -5140,7 +5140,7 @@ struct MemoryDebugCheckReader_c : public DebugCheckReader_i
 	const BYTE * m_pCur = nullptr;
 };
 
-int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter )
+int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter, FilenameBuilder_i * )
 {
 	// FIXME! remove copypasted code from CSphIndex_VLN::DebugCheck
 
@@ -5857,7 +5857,7 @@ int RtIndex_c::DebugCheckDisk ( DebugCheckError_i & tReporter )
 		auto pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.get(), dWarnings, m_sLastError );
 		if ( pIndex )
 		{
-			iFailsPlain += pIndex->DebugCheck ( tReporter );
+			iFailsPlain += pIndex->DebugCheck ( tReporter, pFilenameBuilder.get() );
 		} else
 		{
 			tReporter.Fail ( "%s", m_sLastError.cstr() );

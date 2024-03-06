@@ -1210,7 +1210,7 @@ public:
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
 	void				DebugDumpDict ( FILE * fp ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
-	int					DebugCheck ( DebugCheckError_i& ) final;
+	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
@@ -11473,7 +11473,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 #endif
 
 
-int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
+int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i * pFilenameBuilder )
 {
 	auto pIndexChecker = std::make_unique<DiskIndexChecker_c> ( *this, tReporter );
 
@@ -11492,8 +11492,15 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 	CSphSavedFile tStat;
 	CSphString sError;
 	const CSphTokenizerSettings & tTokenizerSettings = m_pTokenizer->GetSettings ();
-	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() && !tStat.Collect ( tTokenizerSettings.m_sSynonymsFile.cstr(), &sError ) )
-		tReporter.Fail ( "unable to open exceptions '%s': %s", tTokenizerSettings.m_sSynonymsFile.cstr(), sError.cstr() );
+	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() )
+	{
+		CSphString sSynonymsFile = tTokenizerSettings.m_sSynonymsFile;
+		if ( pFilenameBuilder )
+			sSynonymsFile = pFilenameBuilder->GetFullPath ( sSynonymsFile );
+
+		if ( !tStat.Collect ( sSynonymsFile.cstr(), &sError ) )
+			tReporter.Fail ( "unable to open exceptions '%s': %s", sSynonymsFile.cstr(), sError.cstr() );
+	}
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings ();
 	const char * pStop = tDictSettings.m_sStopwords.cstr();
@@ -11510,6 +11517,8 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 
 		CSphString sStopFile;
 		sStopFile.SetBinary ( sNameStart, int ( pStop-sNameStart ) );
+		if ( pFilenameBuilder )
+			sStopFile = pFilenameBuilder->GetFullPath ( sStopFile );
 
 		if ( !tStat.Collect ( sStopFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open stopwords '%s': %s", sStopFile.cstr(), sError.cstr() );
@@ -11519,8 +11528,12 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 	{
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 		{
-			if ( !tStat.Collect ( tDictSettings.m_dWordforms[i].cstr(), &sError ) )
-				tReporter.Fail ( "unable to open wordforms '%s': %s", tDictSettings.m_dWordforms[i].cstr(), sError.cstr() );
+			CSphString sWordforms = tDictSettings.m_dWordforms[i];
+			if ( pFilenameBuilder )
+				sWordforms = pFilenameBuilder->GetFullPath ( sWordforms );
+
+			if ( !tStat.Collect ( sWordforms.cstr(), &sError ) )
+				tReporter.Fail ( "unable to open wordforms '%s': %s", sWordforms.cstr(), sError.cstr() );
 		}
 	}
 

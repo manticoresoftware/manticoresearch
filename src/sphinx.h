@@ -1246,7 +1246,7 @@ public:
 	virtual void				DebugDumpDict ( FILE * fp ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual int					DebugCheck ( DebugCheckError_i& ) = 0;
+	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
@@ -1356,7 +1356,7 @@ public:
 	void				DebugDumpHeader ( FILE *, const CSphString&, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
-	int					DebugCheck ( DebugCheckError_i& ) override { return 0; }
+	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) override { return 0; }
 	void				DebugDumpDict ( FILE * ) override {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
 

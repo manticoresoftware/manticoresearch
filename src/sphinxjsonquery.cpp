@@ -262,6 +262,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
+	tParsed.m_bSingleWord = ( pRoot && pRoot->m_dChildren.IsEmpty() && pRoot->m_dWords.GetLength() == 1 );
 	tParsed.m_pRoot = pRoot;
 	return true;
 }

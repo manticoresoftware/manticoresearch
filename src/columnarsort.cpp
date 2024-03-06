@@ -1115,6 +1115,9 @@ static bool CanCreateColumnarSorter ( const ISphSchema & tSchema, const CSphMatc
 		if ( sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
 			return false;
 
+		if ( tAttr.IsJoined() )
+			return false;
+
 		// all sorter-related columnar attrs should be replaced by expressions at this point
 		assert ( !tAttr.IsColumnar() );
 		if ( tAttr.IsColumnarExpr() )

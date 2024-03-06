@@ -357,7 +357,7 @@ bool SortStateSetup_c::SetupColumnar ( CSphString & sError )
 		return true;
 
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr(m_iAttr);
-	if ( !tAttr.IsColumnar() )
+	if ( !tAttr.IsColumnar() || tAttr.IsJoined() )
 		return true;
 
 	ExprParseArgs_t tExprArgs;

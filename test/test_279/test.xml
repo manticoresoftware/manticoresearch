@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>JOIN vs columnar attributes</name>
+
+<requires>
+<force-rt/>
+<columnar/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path/>
+	binlog_path = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+CREATE TABLE users (id bigint, name text, surname text, email text, reg_date timestamp) engine='columnar';
+CREATE TABLE orders (id bigint, user_id bigint, name text, description text, price float, order_date timestamp, attr json, region_id int, confirm bool, analogs multi) engine='columnar';
+INSERT INTO users (id, name, surname, email, reg_date) VALUES (1, 'Fedor', 'Zaycev', '1@1.com', 1708865549);
+INSERT INTO orders (id, user_id, name, description, price, order_date, attr, region_id, confirm, analogs) VALUES (0, 1, 'iPhone', '14Pro', 1500.50, 1708866233, '{"color":"black","size":14}', 178, 'TRUE', (9,11,15));
+
+SELECT id, name FROM users INNER JOIN orders ON users.id=orders.user_id ORDER BY orders.id ASC;
+
+DROP TABLE users;
+DROP TABLE orders;
+</sphinxql>
+</queries>
+
+</test>

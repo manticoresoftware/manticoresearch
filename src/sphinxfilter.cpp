@@ -1615,12 +1615,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	for ( int i = dModified.GetLength()-1; i>=0; i-- )
 	{
 		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
-		bool bRemove = false;
-		if ( pAttr )
-			bRemove = pAttr->m_uAttrFlags & CSphColumnInfo::ATTR_JOINED;
-		else
-			bRemove = dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
-
+		bool bRemove = pAttr ? pAttr->IsJoined() : dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
 		if ( bRemove )
 			dModified.Remove(i);		
 	}

@@ -9776,7 +9776,9 @@ int	ExprParser_t::AddNodeWithTable ( const char * szTable, uint64_t uOffset )
 
 	YYSTYPE yylval;
 	int iType = ParseAttr ( iAttr, m_pSchema->GetAttr(iAttr).m_sName.cstr(), &yylval );
-	return AddNodeAttr ( iType, yylval.iAttrLocator );
+
+	bool bColumnar = iType==TOK_COLUMNAR_INT || iType==SPH_ATTR_TIMESTAMP || iType==TOK_COLUMNAR_TIMESTAMP || iType==SPH_ATTR_FLOAT || iType==TOK_COLUMNAR_FLOAT || iType==TOK_COLUMNAR_BIGINT || iType==TOK_COLUMNAR_BOOL || iType==TOK_COLUMNAR_STRING || iType==TOK_COLUMNAR_UINT32SET || iType==TOK_COLUMNAR_INT64SET || iType==TOK_COLUMNAR_FLOATVEC;
+	return bColumnar ? AddNodeColumnar ( iType, yylval.iAttrLocator ) : AddNodeAttr ( iType, yylval.iAttrLocator );
 }
 
 

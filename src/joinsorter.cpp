@@ -387,7 +387,7 @@ void JoinSorter_c::SetupNullMask()
 				continue;
 
 			iDynamic++;
-			if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
+			if ( tAttr.IsJoined() )
 				iNumJoinAttrs = Max ( iNumJoinAttrs, iDynamic );
 		}
 
@@ -400,7 +400,7 @@ void JoinSorter_c::SetupNullMask()
 			if ( !tAttr.m_tLocator.m_bDynamic )
 				continue;
 
-			if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
+			if ( tAttr.IsJoined() )
 				tMask.BitSet(iDynamic);
 
 			iDynamic++;
@@ -421,7 +421,7 @@ void JoinSorter_c::SetupNullMask()
 		if ( !tAttr.m_tLocator.m_bDynamic )
 			continue;
 
-		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
+		if ( tAttr.IsJoined() )
 			m_uNullMask |= 1ULL << iDynamic;
 
 		iDynamic++;
@@ -684,7 +684,7 @@ void JoinSorter_c::SetupRightFilters()
 		const CSphColumnInfo * pFilterAttr = m_pSorterSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
 		if ( pFilterAttr )
 		{
-			if ( !(pFilterAttr->m_uAttrFlags & CSphColumnInfo::ATTR_JOINED ) )
+			if ( !pFilterAttr->IsJoined() )
 				continue;
 		}
 		else

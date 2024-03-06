@@ -873,7 +873,7 @@ void QueueCreator_c::SelectExprEvalStage ( CSphColumnInfo & tExprCol )
 	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 		return;
 
-	if ( tExprCol.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
+	if ( tExprCol.IsJoined() )
 		return;
 
 	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
@@ -1500,6 +1500,7 @@ bool QueueCreator_c::AddJoinAttrs()
 			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
 			tAttr.m_tLocator.Reset();
 			tAttr.m_eStage = SPH_EVAL_SORTER;
+			tAttr.m_uAttrFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR | CSphColumnInfo::ATTR_COLUMNAR_HASHES );
 			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 			m_pSorterSchema->AddAttr ( tAttr, true );
 
@@ -1550,7 +1551,7 @@ bool QueueCreator_c::AddNullBitmask()
 			continue;
 
 		iDynamic++;
-		if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED )
+		if ( tAttr.IsJoined() )
 			iNumJoinAttrs = Max ( iNumJoinAttrs, iDynamic );
 	}
 

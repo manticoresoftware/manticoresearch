@@ -1649,6 +1649,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)g_eCommand );
 	}
 
+	pIndex = nullptr; // need to reset index prior to release of the libraries
 	ShutdownColumnar();
 	ShutdownSecondary();
 	ShutdownKNN();

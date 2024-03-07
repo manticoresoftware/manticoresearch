@@ -642,6 +642,11 @@ struct IteratorStats_t
 	void	Merge ( const IteratorStats_t & tSrc );
 };
 
+struct ExpansionStats_t
+{
+	int m_iTerms = 0;
+	int	m_iMerged = 0;
+};
 
 /// search query meta-info
 class CSphQueryResultMeta
@@ -678,9 +683,11 @@ public:
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
+	ExpansionStats_t		m_tExpansionStats;		///< full text query statistics for expanded and merged terms
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
+	void					AddStat ( const ExpansionStats_t & tExpansionStats );
 
 	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
 	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;

@@ -214,6 +214,8 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 				iTotalDocs += iDocs;
 				iTotalHits += tCur.m_iHits;
 			}
+
+			tArgs.m_tExpansionStats.m_iTerms += m_dWordExpand.GetLength();
 		}
 
 		if ( m_dWordPayload.GetLength() )
@@ -238,6 +240,7 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 			pPayload->m_iTotalDocs = iTotalDocs;
 			pPayload->m_iTotalHits = iTotalHits;
 			tArgs.m_pPayload = std::move ( pPayload );
+			tArgs.m_tExpansionStats.m_iMerged += m_dWordPayload.GetLength();
 		}
 		tArgs.m_iTotalDocs = iTotalDocs;
 		tArgs.m_iTotalHits = iTotalHits;
@@ -767,4 +770,22 @@ bool KeywordsBlockReader_c::UnpackWord()
 
 	assert ( m_iLen>0 );
 	return true;
+}
+
+static int g_iExpandMergeDocs = 32;
+static int g_iExpandMergeHits = 256;
+
+bool sphIsExpandedPayload ( int iDocs, int iHits )
+{
+	return ( iHits<g_iExpandMergeHits || iDocs<g_iExpandMergeDocs );
+}
+
+void ExpandedMergeThdDocs ( int iDocs )
+{
+	g_iExpandMergeDocs = iDocs;
+}
+
+void ExpandedMergeThdHits ( int iHits )
+{
+	g_iExpandMergeHits = iHits;
 }

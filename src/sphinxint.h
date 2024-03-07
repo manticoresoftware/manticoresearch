@@ -1087,26 +1087,32 @@ public:
 
 void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
 
+struct ExpansionTrait_t
+{
+	int				m_iExpansionLimit = 0;
+	bool			m_bHasExactForms = false;
+	ESphHitless		m_eHitless = SPH_HITLESS_NONE;
+	cRefCountedRefPtrGeneric_t	m_pIndexData;
+};
+
 using RegexTerm_t = std::pair <CSphString, XQNode_t *>;
 class DictTerm2Expanded_i;
+struct ExpansionContext_t;
 
 class ISphWordlist
 {
 public:
-	struct Args_t : public ISphNoncopyable
+	struct Args_t : public ExpansionTrait_t, ISphNoncopyable
 	{
 		CSphVector<SphExpanded_t>	m_dExpanded;
 		const bool					m_bPayload;
-		int							m_iExpansionLimit;
-		const bool					m_bHasExactForms;
-		const ESphHitless			m_eHitless;
 
 		std::unique_ptr<ISphSubstringPayload> m_pPayload { nullptr };
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
-		cRefCountedRefPtrGeneric_t	m_pIndexData;
+		ExpansionStats_t &			m_tExpansionStats;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData );
+		Args_t ( bool bPayload, ExpansionContext_t & tCtx );
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
 
@@ -1145,24 +1151,22 @@ private:
 	CSphVector<ISphSubstringPayload *> m_dPayloads;
 };
 
-
-struct ExpansionContext_t
+struct ExpansionContext_t : public ExpansionTrait_t
 {
 	const ISphWordlist * m_pWordlist	= nullptr;
 	BYTE * m_pBuf						= nullptr;
 	CSphQueryResultMeta * m_pResult		= nullptr;
 	int m_iMinPrefixLen					= 0;
 	int m_iMinInfixLen					= 0;
-	int m_iExpansionLimit				= 0;
-	bool m_bHasExactForms				= false;
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
-	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
 	int m_iCutoff = -1;
-	cRefCountedRefPtrGeneric_t m_pIndexData;
+	ExpansionStats_t m_tExpansionStats;
 
 	bool								m_bOnlyTreeFix = false;
 	CSphVector<RegexTerm_t>				m_dRegexTerms;
+	
+	void AggregateStats ();
 };
 
 struct GetKeywordsSettings_t
@@ -1183,13 +1187,12 @@ inline int sphGetExpansionMagic ( int iDocs, int iHits )
 {
 	return ( iHits<=256 ? 1 : iDocs + 1 ); // magic threshold; mb make this configurable?
 }
-inline bool sphIsExpandedPayload ( int iDocs, int iHits )
-{
-	return ( iHits<=256 || iDocs<32 ); // magic threshold; mb make this configurable?
-}
+bool sphIsExpandedPayload ( int iDocs, int iHits );
 bool sphHasExpandableWildcards ( const char * sWord );
 bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tWordlist );
-bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError );
+bool ExpandRegex ( ExpansionContext_t & tCtx, CSphString & sError );
+void ExpandedMergeThdDocs ( int iDocs );
+void ExpandedMergeThdHits ( int iHits );
 
 template<typename T>
 struct ExpandedOrderDesc_T

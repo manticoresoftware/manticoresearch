@@ -604,8 +604,10 @@ CSphString sph::RenderBsonPlanBrief ( const bson::NodeHandle_t& dBson )
 Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	CSphVector<BYTE> dPlan;
-	bson::Root_c tPlan ( dPlan );
-	::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
+	{
+		bson::Root_c tPlan ( dPlan );
+		::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
+	}
 	return dPlan;
 }
 

@@ -6411,6 +6411,7 @@ struct DictEntryRtPayload_t : public DictTerm2Expanded_i
 				iTotalDocs += pCur->m_iDocs;
 				iTotalHits += pCur->m_iHits;
 			}
+			tArgs.m_tExpansionStats.m_iTerms += m_dWordExpand.GetLength();
 		}
 
 		if ( m_dWordPayload.GetLength() )
@@ -6462,6 +6463,7 @@ struct DictEntryRtPayload_t : public DictTerm2Expanded_i
 			pPayload->m_iTotalDocs = iTotalDocs;
 			pPayload->m_iTotalHits = iTotalHits;
 			tArgs.m_pPayload = std::move ( pPayload );
+			tArgs.m_tExpansionStats.m_iMerged += iPayloads;
 		}
 
 		tArgs.m_iTotalDocs = iTotalDocs;
@@ -7202,6 +7204,8 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx ); // here magics happens
 		if ( !ExpandRegex ( tExpCtx, tMeta.m_sError ) )
 			return 0;
+
+		tExpCtx.AggregateStats();
 	}
 
 	return ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );

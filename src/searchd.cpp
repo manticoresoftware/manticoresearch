@@ -3236,7 +3236,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 		// all we have is an error
 		tBuf.Appendf ( "error=%s", tMeta.m_sError.cstr() );
 
-	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tMeta.m_sWarning.IsEmpty() )
+	} else
 	{
 		// performance counters
 		if ( g_bIOStats || g_bCpuStats )
@@ -3261,6 +3261,10 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 					(int)( iTime/1000),
 					(int)( iTime%1000) );
 		}
+
+		// merged stats
+		if ( tMeta.m_hWordStats.GetLength() && ( tMeta.m_tExpansionStats.m_iTerms || tMeta.m_tExpansionStats.m_iMerged ) )
+			tBuf.Appendf ( "terms expansion=(merged %d, not merged %d)", tMeta.m_tExpansionStats.m_iMerged, tMeta.m_tExpansionStats.m_iTerms );
 
 		// warning
 		if ( !tMeta.m_sWarning.IsEmpty() )
@@ -7312,6 +7316,31 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	return !bSysVar;
 }
 
+// generate warning about slow full text expansion for queries there
+// merged terms is less then expanded terms
+// slower then query_log_min_msec or slower 100ms
+static void CheckExpansion ( CSphQueryResultMeta & tMeta )
+{
+	if ( tMeta.m_hWordStats.IsEmpty() || !tMeta.m_tExpansionStats.m_iTerms )
+		return;
+
+	if ( tMeta.m_tExpansionStats.m_iMerged>=tMeta.m_tExpansionStats.m_iTerms )
+		return;
+
+	if ( tMeta.m_iQueryTime<100 || ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs ) )
+		return;
+
+	int iTotal = tMeta.m_tExpansionStats.m_iMerged + tMeta.m_tExpansionStats.m_iTerms;
+	int iMerged = (int)( float(tMeta.m_tExpansionStats.m_iMerged) * 100.0f / iTotal );
+
+	StringBuilder_c sBuf;
+	sBuf.Appendf ( "too slow query, try to improve merge terms threshold %d%%(%d) using searchd.expansion_merge_threshold options", iMerged, iTotal );
+	if ( !tMeta.m_sWarning.IsEmpty() )
+		sBuf.Appendf ( "; %s", tMeta.m_sWarning.cstr() );
+
+	sBuf.MoveTo ( tMeta.m_sWarning );
+}
+
 // query info - render query into the view
 struct QueryInfo_t : public TaskInfo_t
 {
@@ -7650,6 +7679,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dNFailuresSet[iRes].BuildReport ( sFailures );
 			sFailures.MoveTo ( tRes.m_sWarning );
 		}
+		CheckExpansion ( tRes );
 
 		////////////
 		// finalize
@@ -20098,6 +20128,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	sphSetUnlinkOld ( hSearchd.GetBool ( "unlink_old" ) );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit" );
+	if ( hSearchd.Exists ( "expansion_merge_threshold_docs" ) )
+		ExpandedMergeThdDocs ( hSearchd.GetInt ( "expansion_merge_threshold_docs" ) );
+	if ( hSearchd.Exists ( "expansion_merge_threshold_hits" ) )
+		ExpandedMergeThdHits ( hSearchd.GetInt ( "expansion_merge_threshold_hits" ) );
 
 	// initialize buffering settings
 	SetUnhintedBuffer ( hSearchd.GetSize( "read_unhinted", DEFAULT_READ_UNHINTED ) );

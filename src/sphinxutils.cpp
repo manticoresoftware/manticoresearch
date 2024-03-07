@@ -1065,6 +1065,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "replication_query_timeout",		0, NULL },
 	{ "replication_retry_delay",		0, NULL },
 	{ "replication_retry_count",		0, NULL },
+	{ "expansion_merge_threshold_docs",		0, NULL },
+	{ "expansion_merge_threshold_hits",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

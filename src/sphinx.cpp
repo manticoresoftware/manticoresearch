@@ -10146,7 +10146,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	}
 
 	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.IsEmpty() );
-	ISphWordlist::Args_t tArgs ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+	ISphWordlist::Args_t tArgs ( bUseTermMerge, tCtx );
 
 	if ( !sphExpandGetWords ( sFull, tCtx, tArgs ) )
 	{
@@ -10210,7 +10210,7 @@ XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t 
 	return pNode;
 }
 
-bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
+bool ExpandRegex ( ExpansionContext_t & tCtx, CSphString & sError )
 {
 	if ( !tCtx.m_dRegexTerms.GetLength() )
 		return true;
@@ -10224,7 +10224,7 @@ bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
 	}
 
 	CSphFixedVector<std::unique_ptr < DictTerm2Expanded_i > > dConverters ( tCtx.m_dRegexTerms.GetLength() );
-	ISphWordlist::Args_t tArgs ( true, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+	ISphWordlist::Args_t tArgs ( true, tCtx );
 
 	assert ( tCtx.m_pWordlist );
 	tCtx.m_pWordlist->ScanRegexWords ( tCtx.m_dRegexTerms, tArgs, dConverters );
@@ -10235,7 +10235,7 @@ bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
 		if ( !dConverters[i] )
 			continue;
 
-		ISphWordlist::Args_t tArgs ( true, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+		ISphWordlist::Args_t tArgs ( true, tCtx );
 		dConverters[i]->Convert ( tArgs );
 
 		ExpandXQNode ( tCtx, tArgs, tCtx.m_dRegexTerms[i].second );
@@ -10375,6 +10375,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta &
 		return nullptr;
 
 	pNode->Check ( true );
+	tCtx.AggregateStats();
 
 	return pNode;
 }
@@ -12889,13 +12890,10 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 	return iCmpRes==0 ? iLen1-iLen2 : iCmpRes;
 }
 
-
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData )
-	: m_bPayload ( bPayload )
-	, m_iExpansionLimit ( iExpansionLimit )
-	, m_bHasExactForms ( bHasExactForms )
-	, m_eHitless ( eHitless )
-	, m_pIndexData ( pIndexData )
+ISphWordlist::Args_t::Args_t ( bool bPayload, ExpansionContext_t & tCtx )
+	: ExpansionTrait_t ( tCtx )
+	, m_bPayload ( bPayload )
+	, m_tExpansionStats ( tCtx.m_tExpansionStats )
 {
 	m_sBuf.Reserve ( 2048 * SPH_MAX_WORD_LEN * 3 );
 	m_dExpanded.Reserve ( 2048 );
@@ -12917,11 +12915,16 @@ void ISphWordlist::Args_t::AddExpanded ( const BYTE * sName, int iLen, int iDocs
 	m_sBuf[iOff+iLen] = '\0';
 }
 
-
 const char * ISphWordlist::Args_t::GetWordExpanded ( int iIndex ) const
 {
 	assert ( m_dExpanded[iIndex].m_iNameOff<m_sBuf.GetLength() );
 	return (const char *)m_sBuf.Begin() + m_dExpanded[iIndex].m_iNameOff;
+}
+
+void ExpansionContext_t::AggregateStats ()
+{
+	if ( m_pResult )
+		m_pResult->AddStat ( m_tExpansionStats );
 }
 
 static bool operator < ( const InfixBlock_t & a, const char * b )
@@ -13595,6 +13598,11 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 	tStats.second += iHits;
 }
 
+void CSphQueryResultMeta::AddStat ( const ExpansionStats_t & tExpansionStats )
+{
+	m_tExpansionStats.m_iTerms += tExpansionStats.m_iTerms;
+	m_tExpansionStats.m_iMerged += tExpansionStats.m_iMerged;
+}
 
 void CSphQueryResultMeta::MergeWordStats ( const CSphQueryResultMeta & tOther )
 {
@@ -13612,6 +13620,8 @@ void CSphQueryResultMeta::MergeWordStats ( const CSphQueryResultMeta & tOther )
 			tDst.second += tSrc.second.second;
 		}
 	}
+
+	AddStat ( tOther.m_tExpansionStats );
 }
 
 ///< sort wordstat to achieve reproducable result over different runs

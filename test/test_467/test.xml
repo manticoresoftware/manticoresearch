@@ -31,6 +31,13 @@ index test
 	dict = keywords
     charset_table = a..z
 }
+
+index dist1
+{
+	type = distributed
+	agent = <my_address/>:test
+}
+
 </config>
 
 <db_create>
@@ -64,35 +71,40 @@ CREATE TABLE test_table
 ( 20, 'eeeee')
 </db_insert>
 
+<metaindex name='META:all'>
+<index>test</index>
+<index>dist1</index>
+</metaindex>
+
 <queries><sphinxql>
-select * from test;
+select * from META:all;
 
-select * from test where s = 'eee';
-select * from test where s != 'eee';
-select * from test where s &lt; 'eee';
-select * from test where s &lt;= 'eee';
-select * from test where s >= 'eee';
-select * from test where s > 'eee';
+select * from META:all where s = 'eee';
+select * from META:all where s != 'eee';
+select * from META:all where s &lt; 'eee';
+select * from META:all where s &lt;= 'eee';
+select * from META:all where s >= 'eee';
+select * from META:all where s > 'eee';
 
-select * from test where s > 'b' and s &lt; 'e';
-select * from test where s >= 'b' and s &lt; 'e';
-select * from test where s > 'b' and s &lt;= 'e';
-select * from test where s >= 'b' and s &lt;= 'e';
+select * from META:all where s > 'b' and s &lt; 'e';
+select * from META:all where s >= 'b' and s &lt; 'e';
+select * from META:all where s > 'b' and s &lt;= 'e';
+select * from META:all where s >= 'b' and s &lt;= 'e';
 
-select * from test where s > 'w' and s &lt; 'w';
-select * from test where s > 'w' and s &lt; 'c';
-select * from test where s > 'w' and s &lt;= 'w';
-select * from test where s >= 'w' and s &lt; 'w';
+select * from META:all where s > 'w' and s &lt; 'w';
+select * from META:all where s > 'w' and s &lt; 'c';
+select * from META:all where s > 'w' and s &lt;= 'w';
+select * from META:all where s >= 'w' and s &lt; 'w';
 
-select * from test where s > 'w' or s &lt; 'w';
-select * from test where s &lt; 'e' or s &lt; 'c';
-select * from test where s &lt; 'e' or s &lt;= 'e';
-select * from test where s > 'eeee' or s >= 'eeee';
+select * from META:all where s > 'w' or s &lt; 'w';
+select * from META:all where s &lt; 'e' or s &lt; 'c';
+select * from META:all where s &lt; 'e' or s &lt;= 'e';
+select * from META:all where s > 'eeee' or s >= 'eeee';
 
-select * from test where (s > 'b' and s &lt; 'e') and s != 'c';
-select * from test where (s > 'b' and s &lt; 'e') or s > 'eeee';
-select * from test where (s > 'b' and s &lt; 'e') and id &lt; 5;
-select * from test where (s > 'b' and s &lt; 'e') or id > 17;
+select * from META:all where (s > 'b' and s &lt; 'e') and s != 'c';
+select * from META:all where (s > 'b' and s &lt; 'e') or s > 'eeee';
+select * from META:all where (s > 'b' and s &lt; 'e') and id &lt; 5;
+select * from META:all where (s > 'b' and s &lt; 'e') or id > 17;
 </sphinxql></queries>
 
 </test>

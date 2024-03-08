@@ -188,6 +188,16 @@ select * from sales inner join products on sales.product_id = products.id where 
 drop table sales;
 drop table products;
 
+<!-- NULL mask remap -->
+CREATE TABLE a (f text);
+CREATE TABLE b ( a_id int, i int);
+INSERT INTO a VALUES (1, 'a');
+
+select * from a left join b on b.a_id=a.id;
+
+DROP TABLE a;
+DROP TABLE b;
+
 </sphinxql>
 </queries>
 

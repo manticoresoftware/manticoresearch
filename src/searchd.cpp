@@ -4772,7 +4772,7 @@ public:
 	void	RemapGroupBy();
 	void	RemapFacets();
 
-	void	SwapAttrs ( CSphSchema & tSchema );
+	void	PopulateSchema ( CSphSchema & tSchema )  { tSchema.SwapAttrs(m_dFrontend); }
 
 private:
 	const AggrResult_t &				m_tRes;
@@ -4923,6 +4923,24 @@ void FrontendSchemaBuilder_c::AddAttrs()
 	}
 
 	m_dKnownAttrs.Sort();
+
+	if ( m_tRes.m_tSchema.GetAttr(GetNullMaskAttrName()) )
+	{
+		bool bHaveNullMask = false;
+		for ( auto & i : m_dFrontend )
+			if ( i.m_sName==GetNullMaskAttrName() )
+			{
+				bHaveNullMask = true;
+				break;
+			}
+
+		if ( !bHaveNullMask )
+		{
+			CSphColumnInfo & t = m_dFrontend.Add();
+			t.m_iIndex = m_tRes.m_tSchema.GetAttrIndex ( GetNullMaskAttrName() );
+			t.m_sName = GetNullMaskAttrName();
+		}
+	}
 }
 
 
@@ -5064,12 +5082,6 @@ void FrontendSchemaBuilder_c::RemapFacets()
 			tFrontend.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
 		}
 	}
-}
-
-
-void FrontendSchemaBuilder_c::SwapAttrs ( CSphSchema & tSchema )
-{
-	tSchema.SwapAttrs ( m_dFrontend );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5347,7 +5359,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
-	tFrontendBuilder.SwapAttrs ( tRes.m_tSchema );
+	CSphSchema tOldSchema = tRes.m_tSchema;
+	tFrontendBuilder.PopulateSchema ( tRes.m_tSchema );
+
+	if ( tRes.m_iSuccesses==1 )
+		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
+
 	return true;
 }
 

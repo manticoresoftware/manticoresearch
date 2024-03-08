@@ -41,6 +41,80 @@ int GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrc
 }
 
 
+static BYTE * RepackNullMaskStr ( const BYTE * pMask, int iNumDstAttrs, const IntVec_t & dNullRemap )
+{
+	ByteBlob_t dUnpacked = sphUnpackPtrAttr(pMask);
+	int iNumElements = dUnpacked.second*8;
+	BitVec_T<BYTE> tSrcMask ( (BYTE*)dUnpacked.first, iNumElements );
+	BitVec_T<BYTE> tDstMask ( iNumDstAttrs );
+	for ( int i = 0; i < iNumElements; i++ )
+		if ( tSrcMask.BitGet(i) && dNullRemap[i]!=-1 )
+			tDstMask.BitSet ( dNullRemap[i] );
+
+	return sphPackPtrAttr ( { tDstMask.Begin(), tDstMask.GetSizeBytes() } );
+}
+
+
+static SphAttr_t RepackNullMaskInt ( SphAttr_t uMask, const IntVec_t & dNullRemap )
+{
+	SphAttr_t uValue = 0;
+	for ( int i = 0; i < dNullRemap.GetLength(); i++ )
+		if ( ( uMask & ( 1ULL << i ) ) && dNullRemap[i]!=-1 )
+			uValue |= 1ULL << dNullRemap[i];
+
+	return uValue;
+}
+
+
+static IntVec_t SetupNullMaskRemap ( const ISphSchema & tOldSchema, const ISphSchema & tNewSchema )
+{
+	IntVec_t dNullRemap;
+	if ( !tOldSchema.GetAttr ( GetNullMaskAttrName() ) )
+		return dNullRemap;
+
+	for ( int i = 0; i < tOldSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tOldAttr = tOldSchema.GetAttr(i);
+		if ( tOldAttr.m_tLocator.m_bDynamic )
+			dNullRemap.Add ( tNewSchema.GetAttrIndex ( tOldAttr.m_sName.cstr() ) );
+	}
+
+	return dNullRemap;
+}
+
+
+void RemapNullMask ( VecTraits_T<CSphMatch> & dMatches, const CSphSchema & tOldSchema, CSphSchema & tNewSchema )
+{
+	const CSphColumnInfo * pOld = tOldSchema.GetAttr ( GetNullMaskAttrName() );
+	if ( !pOld )
+		return;
+
+	const CSphColumnInfo * pNew = tNewSchema.GetAttr ( GetNullMaskAttrName() );
+	assert(pNew);
+
+	int iNumDynamicAttrs = tNewSchema.GetAttrsCount()-1; // one is null mask which we exclude
+	// we assume that we don't change null mask type
+	assert ( pNew->m_eAttrType==DetermineNullMaskType(iNumDynamicAttrs) );
+
+	IntVec_t dNullRemap = SetupNullMaskRemap ( tOldSchema, tNewSchema );
+
+	if ( pOld->m_eAttrType==SPH_ATTR_STRINGPTR )
+	{
+		for ( auto & i : dMatches )
+		{
+			BYTE * pOldMask = (BYTE *)i.GetAttr ( pOld->m_tLocator );
+			BYTE * pNewMask = RepackNullMaskStr ( pOldMask, iNumDynamicAttrs, dNullRemap );
+			SafeDeleteArray(pOldMask);
+			i.SetAttr ( pNew->m_tLocator, (SphAttr_t)pNewMask );
+		}
+	}
+	else
+	{
+		for ( auto & i : dMatches )
+			i.SetAttr ( pNew->m_tLocator, RepackNullMaskInt ( i.GetAttr ( pOld->m_tLocator ), dNullRemap ) );
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 TransformedSchemaBuilder_c::TransformedSchemaBuilder_c ( const ISphSchema & tOldSchema, CSphSchema & tNewSchema )
@@ -164,7 +238,6 @@ private:
 
 	static void			SetupAction ( const CSphColumnInfo & tOld, const CSphColumnInfo & tNew, const ISphSchema * pOldSchema, MapAction_t & tAction );
 
-	void				SetupNullMaskRemap ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
 	FORCE_INLINE void	ProcessMatch ( CSphMatch * pMatch );
 	FORCE_INLINE void	PerformAction ( const MapAction_t & tAction, CSphMatch * pMatch, CSphMatch & tResult, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar );
 };
@@ -211,22 +284,8 @@ MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, cons
 			m_dRemapCmp.Add ( { pNewSchema->GetAttr(iSrc).m_tLocator, pNewSchema->GetAttr(iDst).m_tLocator } );
 		} );
 
-	SetupNullMaskRemap ( pOldSchema, pNewSchema );
+	m_dNullRemap = SetupNullMaskRemap ( *pOldSchema, *pNewSchema );
 	m_iNumDstAttrs = pNewSchema->GetAttrsCount();
-}
-
-
-void MatchesToNewSchema_c::SetupNullMaskRemap ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
-{
-	if ( !pOldSchema->GetAttr ( GetNullMaskAttrName() ) )
-		return;
-
-	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tOldAttr = pOldSchema->GetAttr(i);
-		if ( tOldAttr.m_tLocator.m_bDynamic )
-			m_dNullRemap.Add ( pNewSchema->GetAttrIndex ( tOldAttr.m_sName.cstr() ) );
-	}
 }
 
 
@@ -401,18 +460,8 @@ void MatchesToNewSchema_c::PerformAction ( const MapAction_t & tAction, CSphMatc
 	break;
 
 	case MapAction_t::NULLMASK_STR2STR:
-	{
-		ByteBlob_t dUnpacked = sphUnpackPtrAttr ( (const BYTE*)pMatch->GetAttr ( *tAction.m_pFrom ) );
-		int iNumElements = dUnpacked.second*8;
-		BitVec_T<BYTE> tSrcMask ( (BYTE*)dUnpacked.first, iNumElements );
-		BitVec_T<BYTE> tDstMask ( m_iNumDstAttrs );
-		for ( int i = 0; i < iNumElements; i++ )
-			if ( tSrcMask.BitGet(i) && m_dNullRemap[i]!=-1 )
-				tDstMask.BitSet ( m_dNullRemap[i] );
-
-		uValue = (SphAttr_t)sphPackPtrAttr ( { tDstMask.Begin(), tDstMask.GetSizeBytes() } );
-	}
-	break;
+		uValue = (SphAttr_t)RepackNullMaskStr ( (const BYTE*)pMatch->GetAttr ( *tAction.m_pFrom ), m_iNumDstAttrs, m_dNullRemap );
+		break;
 
 	default:
 		assert(false && "Unknown state");

@@ -30,5 +30,6 @@ private:
 };
 
 
+void				RemapNullMask ( VecTraits_T<CSphMatch> & dMatches, const CSphSchema & tOldSchema, CSphSchema & tNewSchema );
 int					GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
 MatchProcessor_i *	CreateMatchSchemaTransform ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GetBlobPoolFromMatch_fn fnGetBlobPool, GetColumnarFromMatch_fn fnGetColumnar );

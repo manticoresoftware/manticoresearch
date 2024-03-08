@@ -3,7 +3,7 @@ Apache v2 license
 
 How to retrieve:
 
-1. `git clone https://android.googlesource.com/platform/external/perfetto -b v27.1`
+1. `git clone https://android.googlesource.com/platform/external/perfetto -b v43.1`
 2. Copy `perfetto.cc` and `perfetto.h` from folder `sdk` into this folder
 3. Reconfigure
 

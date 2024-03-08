@@ -294,7 +294,9 @@ if (WITH_ZLIB OR WITH_ZSTD)
 endif ()
 
 add_subdirectory ( perfetto )
-target_link_libraries ( lextra INTERFACE perfetto )
+if (TARGET perfetto)
+	target_link_libraries ( lextra INTERFACE perfetto )
+endif()
 
 # stub library for all except daemon - to avoid link with openssl
 add_library ( stub_ssl searchdssl.cpp )

@@ -6977,7 +6977,7 @@ static void CheckExpansion ( CSphQueryResultMeta & tMeta )
 	int iMerged = (int)( float(tMeta.m_tExpansionStats.m_iMerged) * 100.0f / iTotal );
 
 	StringBuilder_c sBuf;
-	sBuf.Appendf ( "too slow query, try to improve merge terms threshold %d%%(%d) using searchd.expansion_merge_threshold options", iMerged, iTotal );
+	sBuf.Appendf ( "Your query performance may be improved by adjusting the 'expansion_merge_threshold_docs/hits' settings. The current merge of expanded terms is %d%%, with a total of %d. Consider reviewing these settings in your 'searchd' configuration for better performance.", iMerged, iTotal );
 	if ( !tMeta.m_sWarning.IsEmpty() )
 		sBuf.Appendf ( "; %s", tMeta.m_sWarning.cstr() );
 
@@ -14343,6 +14343,24 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 			sError = "Only VIP connections can change global threads_ex value";
 		return true;
 	}
+
+	if ( sName=="expansion_merge_threshold_docs" )
+	{
+		if ( iSetValue<0 )
+			sError.SetSprintf ( "expansion_merge_threshold_docs should be positive value, got %d", iSetValue );
+		else
+			ExpandedMergeThdDocs ( iSetValue );
+		return true;
+	}
+	if ( sName=="expansion_merge_threshold_hits" )
+	{
+		if ( iSetValue<0 )
+			sError.SetSprintf ( "expansion_merge_threshold_hits should be positive value, got %d", iSetValue );
+		else
+			ExpandedMergeThdHits ( iSetValue );
+		return true;
+	}
+
 	return false;
 }
 

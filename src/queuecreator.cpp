@@ -1424,7 +1424,13 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 {
 	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr1.cstr() );
 	if ( pAttr )
+	{
+		if ( pAttr->m_pExpr && pAttr->m_pExpr->UsesDocstore() )
+			return true;
+
+		const_cast<CSphColumnInfo *>(pAttr)->m_eStage = Min ( pAttr->m_eStage, SPH_EVAL_PRESORT );
 		return true;
+	}
 
 	if ( !sphJsonNameSplit ( sAttr1.cstr(), nullptr ) )
 	{

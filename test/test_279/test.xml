@@ -30,6 +30,17 @@ SELECT id, name FROM users INNER JOIN orders ON users.id=orders.user_id ORDER BY
 
 DROP TABLE users;
 DROP TABLE orders;
+
+<!-- join on columnar sort-by attribute -->
+CREATE TABLE tbl1 engine='columnar';
+CREATE TABLE tbl2 (tbl1_id bigint);
+INSERT INTO tbl1 VALUES (1);
+INSERT INTO tbl2 VALUES (1, 1);
+
+select id from tbl1 join tbl2 on tbl1.id=tbl2.tbl1_id order by id asc;
+
+drop table tbl2;
+drop table tbl1;
 </sphinxql>
 </queries>
 

@@ -3065,6 +3065,11 @@ static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 		tBuf << " /*" << q.m_sRawQuery << " */";
 }
 
+inline static void FormatTimeConnClient ( StringBuilder_c& tBuf )
+{
+	sphFormatCurrentTime ( tBuf );
+	tBuf << " conn " << session::GetConnID() << " (" << session::szClientName() << ")";
+}
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
@@ -3080,14 +3085,12 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
 
 	tBuf  << "/* ";
-	sphFormatCurrentTime ( tBuf );
+	FormatTimeConnClient ( tBuf );
+	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
 
 	if ( tMeta.m_iMultiplier>1 )
-		tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime )
-			 << " wall " << FixedFrac ( iQueryTime ) << " x" << tMeta.m_iMultiplier << " found " << tMeta.m_iTotalMatches << " */ ";
-	else
-		tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime )
-			 << " wall " << FixedFrac ( iQueryTime ) << " found " << tMeta.m_iTotalMatches << " */ ";
+		tBuf << " x" << tMeta.m_iMultiplier;
+	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
 
 	///////////////////////////////////
 	// format request as SELECT query
@@ -3241,8 +3244,8 @@ void LogSphinxqlError ( const char * sStmt, const Str_t& sError )
 
 	StringBuilder_c tBuf;
 	tBuf << "/* ";
-	sphFormatCurrentTime ( tBuf );
-	tBuf << " conn " << session::GetConnID() << " */ " << sStmt << " # error=" << sError << '\n';
+	FormatTimeConnClient ( tBuf );
+	tBuf << " */ " << sStmt << " # error=" << sError << '\n';
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
@@ -3287,8 +3290,8 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 
 	StringBuilder_c tBuf;
 	tBuf << "/* ";
-	sphFormatCurrentTime ( tBuf );
-	tBuf << " conn " << session::GetConnID() << " real " << FixedFrac ( iRealTime ) << " */ "
+	FormatTimeConnClient ( tBuf );
+	tBuf << " real " << FixedFrac ( iRealTime ) << " */ "
 
 	// query
 		<< sQuery

@@ -14347,7 +14347,7 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 	if ( sName=="expansion_merge_threshold_docs" )
 	{
 		if ( iSetValue<0 )
-			sError.SetSprintf ( "expansion_merge_threshold_docs should be positive value, got %d", iSetValue );
+			sError.SetSprintf ( "expansion_merge_threshold_docs should be positive value, got " INT64_FMT, iSetValue );
 		else
 			ExpandedMergeThdDocs ( iSetValue );
 		return true;
@@ -14355,7 +14355,7 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 	if ( sName=="expansion_merge_threshold_hits" )
 	{
 		if ( iSetValue<0 )
-			sError.SetSprintf ( "expansion_merge_threshold_hits should be positive value, got %d", iSetValue );
+			sError.SetSprintf ( "expansion_merge_threshold_hits should be positive value, got " INT64_FMT, iSetValue );
 		else
 			ExpandedMergeThdHits ( iSetValue );
 		return true;

@@ -301,7 +301,7 @@ POST /search
 
 <!-- end -->
 
-See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query **without actually executing the query**.
+See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query **without actually executing the query**. Note that when using `SHOW PLAN` after a query to a real-time table, the result will be based on a random disk/RAM chunk. Therefore, if you have recently modified the table's tokenization settings, or if the chunks vary significantly in terms of dictionaries, etc., you might not get the result you are expecting. Take this into account and consider using `EXPLAIN QUERY` as well.
 
 ## JSON result set notes
 

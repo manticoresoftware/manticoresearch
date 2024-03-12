@@ -198,6 +198,22 @@ select * from a left join b on b.a_id=a.id;
 DROP TABLE a;
 DROP TABLE b;
 
+<!-- joined stored fields -->
+create table people(name text, surname_id bigint);
+create table surname(surname text);
+
+insert into people values (1, 'john', 1), (2, 'mary', 1), (3, 'bill', 2),(4, 'matt', 3);
+insert into surname values(1, 'smith'),(2, 'goldman');
+
+select * from people left join surname on people.surname_id = surname.id;
+select surname.surname from people left join surname on people.surname_id = surname.id;
+
+select * from people join surname on people.surname_id = surname.id;
+select surname.surname from people join surname on people.surname_id = surname.id;
+
+drop table people;
+drop table surname;
+
 </sphinxql>
 </queries>
 

@@ -1514,6 +1514,24 @@ bool QueueCreator_c::AddJoinAttrs()
 			m_hQueryColumns.Add ( tAttr.m_sName );
 		}
 
+	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
+	{
+		const CSphColumnInfo & tField = tSchema.GetField(i);
+		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+		{
+			CSphColumnInfo tAttr;
+			tAttr.m_sName.SetSprintf ( "%s.%s", m_tSettings.m_pJoinArgs->m_sIndex2.cstr(), tField.m_sName.cstr() );
+			tAttr.m_eAttrType = SPH_ATTR_STRINGPTR;
+			tAttr.m_tLocator.Reset();
+			tAttr.m_eStage = SPH_EVAL_SORTER;
+			tAttr.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
+			m_pSorterSchema->AddAttr ( tAttr, true );
+
+			m_hQueryDups.Add ( tAttr.m_sName );
+			m_hQueryColumns.Add ( tAttr.m_sName );
+		}
+	}
+
 	return true;
 }
 

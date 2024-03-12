@@ -70,11 +70,11 @@ sharding_queue
 sharding_state
 sharding_table
 ––– input –––
-mysql -h0 -P1306 -e "create table s SHARDS='10' RF='1'"; echo $?
+mysql -h0 -P1306 -e "create table s shards='10' rf='1'"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table k(id bigint) SHARDS='10' RF='1'"; echo $?
+mysql -h0 -P1306 -e "create table k(id bigint) shards='10' rf='1'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -121,11 +121,11 @@ mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:m(id bigint) shards=10 rf=2"
 ––– output –––
 ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:j(id bigint) SHARDS=10 RF=3"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:j(id bigint) shards=10 rf=3"
 ––– output –––
 ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:x(id bigint) SHARDS=10 RF=10"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:x(id bigint) shards=10 rf=10"
 ––– output –––
 ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––

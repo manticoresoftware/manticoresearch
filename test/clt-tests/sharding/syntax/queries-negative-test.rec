@@ -23,13 +23,13 @@ ERROR 1064 (42000) at line 1: Invalid shards or rf options are set
 mysql -h0 -P1306 -e "create table u(id bigint) rf=1 shards=10"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create table c:m SHARDS=10 RF=2"
+mysql -h0 -P1306 -e "create table c:m shards=10 rf=2"
 ––– output –––
 ERROR 1064 (42000) at line 1: Cluster 'c' does not exist
 ––– input –––
-mysql -h0 -P1306 -e "create table l(id bigint) SHARDS=-10 RF=-1"
+mysql -h0 -P1306 -e "create table l(id bigint) shards=-10 rf=-1"
 ––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
+ERROR 1064 (42000) at line 1: Invalid shards or rf options are set
 ––– input –––
 mysql -h0 -P1306 -e "create table n(id bigint) shards=10 rf=2"
 ––– output –––
@@ -40,12 +40,13 @@ export CLUSTER_NAME=c
 ––– block: ../base/flexible/create-cluster –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table c:p(id bigint) shards=10 rf=2"
+mysql -h0 -P1306 -e "create table c:p(id bigint) shards=10 rf=1"
 ––– output –––
 ERROR 1064 (42000) at line 1: The node count for cluster c is too low: 1. You can create local sharded table.
 ––– input –––
 mysql -h0 -P1306 -e "create table c:q(id bigint) shards=10 rf=4"
 ––– output –––
+ERROR 1064 (42000) at line 1: The node count (3) is lower than replication factor (4)
 ––– input –––
 mysql -h0 -P1306 -e "create table c:r(id bigint) shards=10 rf=1"
 ––– output –––

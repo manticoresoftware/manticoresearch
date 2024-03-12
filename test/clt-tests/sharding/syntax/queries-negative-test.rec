@@ -14,14 +14,11 @@ export INSTANCE=3
 ––– input –––
 mysql -h0 -P1306 -e "create table h random=5"
 ––– output –––
-ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected integer, expecting string near '5'
 ––– input –––
 mysql -h0 -P1306 -e "create table t(id bigint) shards=a rf=b"
 ––– output –––
 ERROR 1064 (42000) at line 1: Invalid shards or rf options are set
-––– input –––
-mysql -h0 -P1306 -e "create table u(id bigint) rf=1 shards=10"
-––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "create table c:m shards=10 rf=2"
 ––– output –––
@@ -40,13 +37,27 @@ export CLUSTER_NAME=c
 ––– block: ../base/flexible/create-cluster –––
 ––– block: ../base/flexible/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table c:p(id bigint) shards=10 rf=1"
-––– output –––
-ERROR 1064 (42000) at line 1: The node count for cluster c is too low: 1. You can create local sharded table.
-––– input –––
 mysql -h0 -P1306 -e "create table c:q(id bigint) shards=10 rf=4"
 ––– output –––
 ERROR 1064 (42000) at line 1: The node count (3) is lower than replication factor (4)
 ––– input –––
-mysql -h0 -P1306 -e "create table c:r(id bigint) shards=10 rf=1"
+mysql -h0 -P1306 -e "create table c:r(id bigint) shards=10 rf=2"
 ––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show tables"
+––– output –––
++----------------+-------------+
+| Index          | Type        |
++----------------+-------------+
+| r              | distributed |
+| r_s0           | rt          |
+| r_s1           | rt          |
+| r_s3           | rt          |
+| r_s5           | rt          |
+| r_s6           | rt          |
+| r_s7           | rt          |
+| r_s9           | rt          |
+| sharding_queue | rt          |
+| sharding_state | rt          |
+| sharding_table | rt          |
++----------------+-------------+

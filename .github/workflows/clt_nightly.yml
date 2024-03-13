@@ -89,6 +89,6 @@ jobs:
     steps:
       - uses: manticoresoftware/clt@0.1.13
         with:
-          image: test-kit:img
+          image: test-kit:latest
           test_prefix: test/clt-tests/comparison-overhead-json-sql/
 

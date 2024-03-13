@@ -80,3 +80,14 @@ jobs:
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-u
+
+  clt_comparison_overhead_json_sql:
+    name: CLT test on comparison overhead json and sql
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/comparison-overhead-json-sql/

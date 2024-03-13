@@ -59,9 +59,9 @@ mysqli_query($all_links[0], "create table name(username text) min_infix_len='2' 
 
 $batch = [];
 $query_start = "insert into name(id, username) values ";
-$names = file('./test/clt-tests/core/test-comparison-overhead-json-sql/names.txt', FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
+$names = file('./test/clt-tests/comparison-overhead-json-sql/names.txt', FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
 $namesCount = count($names);
-$surnames = file('./test/clt-tests/core/test-comparison-overhead-json-sql/surnames.txt', FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
+$surnames = file('./test/clt-tests/comparison-overhead-json-sql/surnames.txt', FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";

@@ -1,12 +1,15 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt_mem_limit='128k'; insert into t values(0,'abc','string'); freeze t; SHOW THREADS\G;"
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt_mem_limit='128k'; insert into t values(0,'abc','string'); freeze t;"
 ––– output –––
 ––– input –––
-for n in `seq 1 1000`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'string string string stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring string');"; echo -n .; done &
+sleep 5; mysql -h0 -P9306 -e "SHOW THREADS\G;"
 ––– output –––
 ––– input –––
-sleep 2; mysql -h0 -P9306 -e "select count(*) from t; unfreeze t;"
+for n in `seq 1 1000`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'string string string stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring string');"; echo -n .; done 1>/dev/null &
+––– output –––
+––– input –––
+sleep 7; mysql -h0 -P9306 -e "select count(*) from t; unfreeze t;"
 ––– output –––
 ––– input –––
 sleep 3; mysql -h0 -P9306 -e "select count(*) from t;"

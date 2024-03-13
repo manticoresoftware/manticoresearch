@@ -2,14 +2,6 @@
 <?php
 if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier>\n");
 
-/*
-Requires:
-
-wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/male-names-list.txt > names.txt
-wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/female-names-list.txt >> names.txt
-wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/surnames-list.txt > surnames.txt
-*/
-
 // This function waits for an idle mysql connection for the $query, runs it and exits
 function process($query) {
     global $all_links;

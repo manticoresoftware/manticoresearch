@@ -1,14 +1,10 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt_mem_limit='128k'; insert into t values(0,'abc','string'); freeze t;"
+set -b +m
 ––– output –––
-+---------------------------------+---------------------------------+
-| file                            | normalized                      |
-+---------------------------------+---------------------------------+
-| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
-| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
-| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
-+---------------------------------+---------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt_mem_limit='128k'; insert into t values(0,'abc','string'); freeze t;" > /dev/null 2>&1
+––– output –––
 ––– input –––
 sleep 5; mysql -h0 -P9306 -e "SHOW THREADS\G;"
 ––– output –––
@@ -28,180 +24,51 @@ for n in `seq 1 1000`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 's
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
-sleep 7; mysql -h0 -P9306 -e "select count(*) from t; unfreeze t;"
+sleep 7; mysql -h0 -P9306 -e "select count(*) from t\G; unfreeze t;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "select count(*) from t;"
+sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-sleep 2; mysql -h0 -P9306 -e "freeze t;"
+sleep 2; mysql -h0 -P9306 -e "freeze t;" > /dev/null 2>&1
 ––– output –––
-+---------------------------------+---------------------------------+
-| file                            | normalized                      |
-+---------------------------------+---------------------------------+
-| /var/lib/manticore/t/t.0.spa    | /var/lib/manticore/t/t.0.spa    |
-| /var/lib/manticore/t/t.0.spb    | /var/lib/manticore/t/t.0.spb    |
-| /var/lib/manticore/t/t.0.spd    | /var/lib/manticore/t/t.0.spd    |
-| /var/lib/manticore/t/t.0.spds   | /var/lib/manticore/t/t.0.spds   |
-| /var/lib/manticore/t/t.0.spe    | /var/lib/manticore/t/t.0.spe    |
-| /var/lib/manticore/t/t.0.sph    | /var/lib/manticore/t/t.0.sph    |
-| /var/lib/manticore/t/t.0.sphi   | /var/lib/manticore/t/t.0.sphi   |
-| /var/lib/manticore/t/t.0.spi    | /var/lib/manticore/t/t.0.spi    |
-| /var/lib/manticore/t/t.0.spidx  | /var/lib/manticore/t/t.0.spidx  |
-| /var/lib/manticore/t/t.0.spm    | /var/lib/manticore/t/t.0.spm    |
-| /var/lib/manticore/t/t.0.spp    | /var/lib/manticore/t/t.0.spp    |
-| /var/lib/manticore/t/t.0.spt    | /var/lib/manticore/t/t.0.spt    |
-| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
-| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
-| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
-+---------------------------------+---------------------------------+
 ––– input –––
-sleep 7; mysql -h0 -P9306 -e "select count(*) from t;"
+sleep 7; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "select count(*) from t;"
+sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
 mysql -h0 -P9306 -e "unfreeze t;"
 ––– output –––
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "select count(*) from t;"
+sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "freeze t; freeze t;"
+sleep 3; mysql -h0 -P9306 -e "freeze t; freeze t;" > /dev/null 2>&1
 ––– output –––
-+---------------------------------+---------------------------------+
-| file                            | normalized                      |
-+---------------------------------+---------------------------------+
-| /var/lib/manticore/t/t.0.spa    | /var/lib/manticore/t/t.0.spa    |
-| /var/lib/manticore/t/t.0.spb    | /var/lib/manticore/t/t.0.spb    |
-| /var/lib/manticore/t/t.0.spd    | /var/lib/manticore/t/t.0.spd    |
-| /var/lib/manticore/t/t.0.spds   | /var/lib/manticore/t/t.0.spds   |
-| /var/lib/manticore/t/t.0.spe    | /var/lib/manticore/t/t.0.spe    |
-| /var/lib/manticore/t/t.0.sph    | /var/lib/manticore/t/t.0.sph    |
-| /var/lib/manticore/t/t.0.sphi   | /var/lib/manticore/t/t.0.sphi   |
-| /var/lib/manticore/t/t.0.spi    | /var/lib/manticore/t/t.0.spi    |
-| /var/lib/manticore/t/t.0.spidx  | /var/lib/manticore/t/t.0.spidx  |
-| /var/lib/manticore/t/t.0.spm    | /var/lib/manticore/t/t.0.spm    |
-| /var/lib/manticore/t/t.0.spp    | /var/lib/manticore/t/t.0.spp    |
-| /var/lib/manticore/t/t.0.spt    | /var/lib/manticore/t/t.0.spt    |
-| /var/lib/manticore/t/t.1.spa    | /var/lib/manticore/t/t.1.spa    |
-| /var/lib/manticore/t/t.1.spb    | /var/lib/manticore/t/t.1.spb    |
-| /var/lib/manticore/t/t.1.spd    | /var/lib/manticore/t/t.1.spd    |
-| /var/lib/manticore/t/t.1.spds   | /var/lib/manticore/t/t.1.spds   |
-| /var/lib/manticore/t/t.1.spe    | /var/lib/manticore/t/t.1.spe    |
-| /var/lib/manticore/t/t.1.sph    | /var/lib/manticore/t/t.1.sph    |
-| /var/lib/manticore/t/t.1.sphi   | /var/lib/manticore/t/t.1.sphi   |
-| /var/lib/manticore/t/t.1.spi    | /var/lib/manticore/t/t.1.spi    |
-| /var/lib/manticore/t/t.1.spidx  | /var/lib/manticore/t/t.1.spidx  |
-| /var/lib/manticore/t/t.1.spm    | /var/lib/manticore/t/t.1.spm    |
-| /var/lib/manticore/t/t.1.spp    | /var/lib/manticore/t/t.1.spp    |
-| /var/lib/manticore/t/t.1.spt    | /var/lib/manticore/t/t.1.spt    |
-| /var/lib/manticore/t/t.2.spa    | /var/lib/manticore/t/t.2.spa    |
-| /var/lib/manticore/t/t.2.spb    | /var/lib/manticore/t/t.2.spb    |
-| /var/lib/manticore/t/t.2.spd    | /var/lib/manticore/t/t.2.spd    |
-| /var/lib/manticore/t/t.2.spds   | /var/lib/manticore/t/t.2.spds   |
-| /var/lib/manticore/t/t.2.spe    | /var/lib/manticore/t/t.2.spe    |
-| /var/lib/manticore/t/t.2.sph    | /var/lib/manticore/t/t.2.sph    |
-| /var/lib/manticore/t/t.2.sphi   | /var/lib/manticore/t/t.2.sphi   |
-| /var/lib/manticore/t/t.2.spi    | /var/lib/manticore/t/t.2.spi    |
-| /var/lib/manticore/t/t.2.spidx  | /var/lib/manticore/t/t.2.spidx  |
-| /var/lib/manticore/t/t.2.spm    | /var/lib/manticore/t/t.2.spm    |
-| /var/lib/manticore/t/t.2.spp    | /var/lib/manticore/t/t.2.spp    |
-| /var/lib/manticore/t/t.2.spt    | /var/lib/manticore/t/t.2.spt    |
-| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
-| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
-| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
-+---------------------------------+---------------------------------+
-+---------------------------------+---------------------------------+
-| file                            | normalized                      |
-+---------------------------------+---------------------------------+
-| /var/lib/manticore/t/t.0.spa    | /var/lib/manticore/t/t.0.spa    |
-| /var/lib/manticore/t/t.0.spb    | /var/lib/manticore/t/t.0.spb    |
-| /var/lib/manticore/t/t.0.spd    | /var/lib/manticore/t/t.0.spd    |
-| /var/lib/manticore/t/t.0.spds   | /var/lib/manticore/t/t.0.spds   |
-| /var/lib/manticore/t/t.0.spe    | /var/lib/manticore/t/t.0.spe    |
-| /var/lib/manticore/t/t.0.sph    | /var/lib/manticore/t/t.0.sph    |
-| /var/lib/manticore/t/t.0.sphi   | /var/lib/manticore/t/t.0.sphi   |
-| /var/lib/manticore/t/t.0.spi    | /var/lib/manticore/t/t.0.spi    |
-| /var/lib/manticore/t/t.0.spidx  | /var/lib/manticore/t/t.0.spidx  |
-| /var/lib/manticore/t/t.0.spm    | /var/lib/manticore/t/t.0.spm    |
-| /var/lib/manticore/t/t.0.spp    | /var/lib/manticore/t/t.0.spp    |
-| /var/lib/manticore/t/t.0.spt    | /var/lib/manticore/t/t.0.spt    |
-| /var/lib/manticore/t/t.1.spa    | /var/lib/manticore/t/t.1.spa    |
-| /var/lib/manticore/t/t.1.spb    | /var/lib/manticore/t/t.1.spb    |
-| /var/lib/manticore/t/t.1.spd    | /var/lib/manticore/t/t.1.spd    |
-| /var/lib/manticore/t/t.1.spds   | /var/lib/manticore/t/t.1.spds   |
-| /var/lib/manticore/t/t.1.spe    | /var/lib/manticore/t/t.1.spe    |
-| /var/lib/manticore/t/t.1.sph    | /var/lib/manticore/t/t.1.sph    |
-| /var/lib/manticore/t/t.1.sphi   | /var/lib/manticore/t/t.1.sphi   |
-| /var/lib/manticore/t/t.1.spi    | /var/lib/manticore/t/t.1.spi    |
-| /var/lib/manticore/t/t.1.spidx  | /var/lib/manticore/t/t.1.spidx  |
-| /var/lib/manticore/t/t.1.spm    | /var/lib/manticore/t/t.1.spm    |
-| /var/lib/manticore/t/t.1.spp    | /var/lib/manticore/t/t.1.spp    |
-| /var/lib/manticore/t/t.1.spt    | /var/lib/manticore/t/t.1.spt    |
-| /var/lib/manticore/t/t.2.spa    | /var/lib/manticore/t/t.2.spa    |
-| /var/lib/manticore/t/t.2.spb    | /var/lib/manticore/t/t.2.spb    |
-| /var/lib/manticore/t/t.2.spd    | /var/lib/manticore/t/t.2.spd    |
-| /var/lib/manticore/t/t.2.spds   | /var/lib/manticore/t/t.2.spds   |
-| /var/lib/manticore/t/t.2.spe    | /var/lib/manticore/t/t.2.spe    |
-| /var/lib/manticore/t/t.2.sph    | /var/lib/manticore/t/t.2.sph    |
-| /var/lib/manticore/t/t.2.sphi   | /var/lib/manticore/t/t.2.sphi   |
-| /var/lib/manticore/t/t.2.spi    | /var/lib/manticore/t/t.2.spi    |
-| /var/lib/manticore/t/t.2.spidx  | /var/lib/manticore/t/t.2.spidx  |
-| /var/lib/manticore/t/t.2.spm    | /var/lib/manticore/t/t.2.spm    |
-| /var/lib/manticore/t/t.2.spp    | /var/lib/manticore/t/t.2.spp    |
-| /var/lib/manticore/t/t.2.spt    | /var/lib/manticore/t/t.2.spt    |
-| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
-| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
-| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
-+---------------------------------+---------------------------------+
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "select count(*) from t;"
+sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-sleep 7; mysql -h0 -P9306 -e "select count(*) from t; unfreeze t; unfreeze t;"
+sleep 7; mysql -h0 -P9306 -e "select count(*) from t\G; unfreeze t; unfreeze t;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "select count(*) from t;"
+sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      %{NUMBER} |
-+----------+
+*************************** 1. row ***************************
+count(*): %{NUMBER}

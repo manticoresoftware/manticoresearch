@@ -367,10 +367,9 @@ public:
 class FilterString_c : public IFilter_Str
 {
 public:
-	FilterString_c ( ESphCollation eCollation, bool bEq )
-		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
-		, m_dVal ( 0 )
-		, m_bEq ( bEq )
+	FilterString_c ( ESphCollation eCollation, bool bExclude )
+		: m_fnStrCmp { GetStringCmpFunc ( eCollation ) }
+		, m_bExclude { bExclude }
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) override
@@ -385,16 +384,16 @@ public:
 	bool Eval ( const CSphMatch & tMatch ) const override
 	{
 		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-		bool bEq = m_fnStrCmp ( dStr, m_dVal, false )==0;
-		return ( m_bEq==bEq );
+		bool bNeq = m_fnStrCmp ( dStr, m_dVal, false )!=0;
+		return m_bExclude == bNeq;
 	}
 
-protected:
-	SphStringCmp_fn			m_fnStrCmp;
+	bool CanExclude() const override { return true; }
 
 private:
-	CSphFixedVector<BYTE>	m_dVal;
-	bool					m_bEq;
+	CSphFixedVector<BYTE> m_dVal { 0 };
+	SphStringCmp_fn m_fnStrCmp;
+	bool m_bExclude;
 };
 
 static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVals )
@@ -404,11 +403,11 @@ static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVa
 		dVals[i] = *( pRef + i );
 }
 
-class Filter_StringValues_c : public FilterString_c
+class Filter_StringValues_c : public IFilter_Str
 {
 public:
 	Filter_StringValues_c ( ESphCollation eCollation )
-		: FilterString_c ( eCollation, false )
+		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) final
@@ -428,6 +427,7 @@ public:
 	}
 
 private:
+	SphStringCmp_fn m_fnStrCmp;
 	StrVec_t m_dValues;
 };
 
@@ -952,7 +952,7 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 				return std::make_unique<Filter_StringTagsAll_c>();
 		}
 		else
-			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bExclude );
 	}
 
 	// non-float, non-MVA

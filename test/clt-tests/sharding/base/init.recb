@@ -25,3 +25,7 @@ COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
 cd /.clt; echo $?
 ––– output –––
 0
+––– input –––
+apt-get install -y -q binutils > /dev/null; echo $?
+––– output –––
+0

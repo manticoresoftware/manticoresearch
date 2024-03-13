@@ -83,15 +83,12 @@ jobs:
           test_prefix: test/clt-tests/installation/deb-dev-u
 
   clt_comparison_overhead_json_sql:
-    name: comparison overhead json and sql
+    name: Testing comparison overhead JSON and SQL
     strategy:
-      
       fail-fast: false
-      matrix:
-        image: [ "test-kit-latest" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt@0.1.13
         with:
-          image: manticoresoftware/manticore-docker-test-kit:latest
-          test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-overhead-json-sql
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+          test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-

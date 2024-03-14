@@ -44,24 +44,72 @@ mysql -h0 -P1306 -e "CREATE TABLE tbl1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table tbl2(id bigint) shards=10 rf=1"; echo $?
+mysql -h0 -P1306 -e "create table tbl2(id bigint) shards=10 rf=1;"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table tbl3 shards=10 rf=1"; echo $?
+mysql -h0 -P1306 -e "create table tbl3 shards=10 rf=1;"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
+sharding_queue
+sharding_state
+sharding_table
+tbl1
+tbl2
+tbl2_s0
+tbl2_s1
+tbl2_s2
+tbl2_s3
+tbl2_s4
+tbl2_s5
+tbl2_s6
+tbl2_s7
+tbl2_s8
+tbl2_s9
+tbl3
+tbl3_s0
+tbl3_s1
+tbl3_s2
+tbl3_s3
+tbl3_s4
+tbl3_s5
+tbl3_s6
+tbl3_s7
+tbl3_s8
+tbl3_s9
 ––– input –––
-mysql -h0 -P2306 -e "create table tbl4(id bigint) shards=4 rf=1"; echo $?
+mysql -h0 -P2306 -e "create table tbl4(id bigint) shards=4 rf=1;"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P2306 -e "create table tbl5(id bigint) shards=10 rf=1"; echo $?
+mysql -h0 -P2306 -e "create table tbl5(id bigint) shards=10 rf=1;"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P2306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
+sharding_queue
+sharding_state
+sharding_table
+tbl4
+tbl4_s0
+tbl4_s1
+tbl4_s2
+tbl4_s3
+tbl5
+tbl5_s0
+tbl5_s1
+tbl5_s2
+tbl5_s3
+tbl5_s4
+tbl5_s5
+tbl5_s6
+tbl5_s7
+tbl5_s8
+tbl5_s9
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––
@@ -94,33 +142,173 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
+*************************** 1. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 2. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 3. row ***************************
+Index: sharding_table
+Type: rt
+*************************** 4. row ***************************
+Index: tbl1
+Type: rt
+*************************** 5. row ***************************
+Index: tbl2
+Type: distributed
+*************************** 6. row ***************************
+Index: tbl2_s0
+Type: rt
+*************************** 7. row ***************************
+Index: tbl2_s1
+Type: rt
+*************************** 8. row ***************************
+Index: tbl2_s2
+Type: rt
+*************************** 9. row ***************************
+Index: tbl2_s3
+Type: rt
+*************************** 10. row ***************************
+Index: tbl2_s4
+Type: rt
+*************************** 11. row ***************************
+Index: tbl2_s5
+Type: rt
+*************************** 12. row ***************************
+Index: tbl2_s6
+Type: rt
+*************************** 13. row ***************************
+Index: tbl2_s7
+Type: rt
+*************************** 14. row ***************************
+Index: tbl2_s8
+Type: rt
+*************************** 15. row ***************************
+Index: tbl2_s9
+Type: rt
+*************************** 16. row ***************************
+Index: tbl3
+Type: distributed
+*************************** 17. row ***************************
+Index: tbl3_s0
+Type: rt
+*************************** 18. row ***************************
+Index: tbl3_s1
+Type: rt
+*************************** 19. row ***************************
+Index: tbl3_s2
+Type: rt
+*************************** 20. row ***************************
+Index: tbl3_s3
+Type: rt
+*************************** 21. row ***************************
+Index: tbl3_s4
+Type: rt
+*************************** 22. row ***************************
+Index: tbl3_s5
+Type: rt
+*************************** 23. row ***************************
+Index: tbl3_s6
+Type: rt
+*************************** 24. row ***************************
+Index: tbl3_s7
+Type: rt
+*************************** 25. row ***************************
+Index: tbl3_s8
+Type: rt
+*************************** 26. row ***************************
+Index: tbl3_s9
+Type: rt
 ––– input –––
 mysql -h0 -P2306 -e "SHOW TABLES\G"
 ––– output –––
+*************************** 1. row ***************************
+Index: sharding_queue
+Type: rt
+*************************** 2. row ***************************
+Index: sharding_state
+Type: rt
+*************************** 3. row ***************************
+Index: sharding_table
+Type: rt
+*************************** 4. row ***************************
+Index: tbl4
+Type: distributed
+*************************** 5. row ***************************
+Index: tbl4_s0
+Type: rt
+*************************** 6. row ***************************
+Index: tbl4_s1
+Type: rt
+*************************** 7. row ***************************
+Index: tbl4_s2
+Type: rt
+*************************** 8. row ***************************
+Index: tbl4_s3
+Type: rt
+*************************** 9. row ***************************
+Index: tbl5
+Type: distributed
+*************************** 10. row ***************************
+Index: tbl5_s0
+Type: rt
+*************************** 11. row ***************************
+Index: tbl5_s1
+Type: rt
+*************************** 12. row ***************************
+Index: tbl5_s2
+Type: rt
+*************************** 13. row ***************************
+Index: tbl5_s3
+Type: rt
+*************************** 14. row ***************************
+Index: tbl5_s4
+Type: rt
+*************************** 15. row ***************************
+Index: tbl5_s5
+Type: rt
+*************************** 16. row ***************************
+Index: tbl5_s6
+Type: rt
+*************************** 17. row ***************************
+Index: tbl5_s7
+Type: rt
+*************************** 18. row ***************************
+Index: tbl5_s8
+Type: rt
+*************************** 19. row ***************************
+Index: tbl5_s9
+Type: rt
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl7(id bigint) shards=10 rf=1;" echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl7(id bigint) shards=10 rf=1;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl8(id bigint) shards=10 rf=2;" echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl8(id bigint) shards=10 rf=2;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl9(id bigint) shards=10 rf=3;" echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl9(id bigint) shards=10 rf=3;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "create table tbl8(id bigint) shards=10 rf=1"; echo $?
+mysql -h0 -P3306 -e "create table tbl8(id bigint) shards=10 rf=1;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl10(id bigint) shards=10 rf=4"; echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl10(id bigint) shards=10 rf=4;"; echo $?
 ––– output –––
 ––– input –––
 mysql -h0 -P3306 -e "SHOW TABLES\G" | grep 'Index' | cut -d' ' -f 2 | sort
 ––– output –––
+sharding_queue
+sharding_state
+sharding_table
+tbl7
+tbl7_s8
 ––– input –––
-mysql -h0 -P4306 -e "create table tbl10(id bigint) rf=1 shards=11"; echo $?
+mysql -h0 -P4306 -e "create table tbl10(id bigint) rf=1 shards=11;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl12(id bigint) rf=1 shards=10;" echo $?
+mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl12(id bigint) rf=1 shards=10;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl13(id bigint) shards=1 rf=10;" echo $?
+mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl13(id bigint) shards=1 rf=10;"; echo $?
 ––– output –––

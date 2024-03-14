@@ -8,17 +8,14 @@ mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt
 ––– input –––
 for n in `seq 1 10000`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'string string string stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring string');"; done &
 ––– output –––
-[1] 120
 ––– input –––
 sleep 7; mysql -h0 -P9306 -e "select count(*) from t\G; unfreeze t;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 sleep 2; mysql -h0 -P9306 -e "freeze t;" > /dev/null 2>&1
 ––– output –––
@@ -26,12 +23,10 @@ sleep 2; mysql -h0 -P9306 -e "freeze t;" > /dev/null 2>&1
 sleep 7; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 mysql -h0 -P9306 -e "unfreeze t;"
 ––– output –––
@@ -39,7 +34,6 @@ mysql -h0 -P9306 -e "unfreeze t;"
 sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 sleep 3; mysql -h0 -P9306 -e "freeze t; freeze t;" > /dev/null 2>&1
 ––– output –––
@@ -47,14 +41,11 @@ sleep 3; mysql -h0 -P9306 -e "freeze t; freeze t;" > /dev/null 2>&1
 sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 sleep 7; mysql -h0 -P9306 -e "select count(*) from t\G; unfreeze t; unfreeze t;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}
 ––– input –––
 sleep 3; mysql -h0 -P9306 -e "select count(*) from t\G;"
 ––– output –––
 *************************** 1. row ***************************
-count(*): %{NUMBER}

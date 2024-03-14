@@ -322,9 +322,15 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 
 	StrVec_t dWarnings;
 	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
-	ConfigureDistributedIndex ( []( const auto & sIdx ){ return true; }, *pIdx, tCmd.m_sIndex.cstr(), hConf, &dWarnings );
+	bool bOk = ConfigureDistributedIndex ( []( const auto & sIdx ){ return true; }, *pIdx, tCmd.m_sIndex.cstr(), hConf, sError, &dWarnings );
 	for ( const CSphString & sMsg : dWarnings )
 		sphWarning ( "distributed table '%s:%s': %s", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), sMsg.cstr() );
+	if ( !bOk || pIdx->IsEmpty() )
+	{
+		TlsMsg::Err ( "failed to create distributed table '%s:%s': %s", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), sError.cstr() );
+		sError = "";
+		return false;
+	}
 
 	// finally, check and add a new or replace an existed distributed index to global table
 	g_pDistIndexes->AddOrReplace ( pIdx, tCmd.m_sIndex );

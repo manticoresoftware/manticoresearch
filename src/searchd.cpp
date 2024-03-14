@@ -18308,7 +18308,7 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
 }
 
-void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings )
+bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
 {
 	assert ( hIndex("type") && hIndex["type"]=="distributed" );
 
@@ -18339,7 +18339,8 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 			if ( !fnCheck ( sLocal ) )
 			{
 				sphWarning ( "table '%s': no such local table '%s', SKIPPED", szIndexName, sLocal.cstr() );
-				continue;
+				sError.SetSprintf ( "no such local table '%s'", sLocal.cstr() );
+				return false;
 			}
 			tIdx.m_dLocal.Add ( sLocal );
 		}
@@ -18384,9 +18385,11 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		for ( CSphVariant * pAgentCnf = hIndex ( tAg.sSect ); pAgentCnf; pAgentCnf = pAgentCnf->m_pNext )
 		{
 			AgentOptions_t tAgentOptions { tAg.bBlh, tAg.bPrs, tIdx.m_eHaStrategy, tIdx.m_iAgentRetryCount, 0 };
-			auto pAgent = ConfigureMultiAgent ( pAgentCnf->cstr(), szIndexName, tAgentOptions, pWarnings );
-			if ( pAgent )
-				tIdx.m_dAgents.Add ( pAgent );
+			auto pAgent = ConfigureMultiAgent ( pAgentCnf->cstr(), szIndexName, tAgentOptions, sError, pWarnings );
+			if ( !pAgent )
+				return false;
+
+			tIdx.m_dAgents.Add ( pAgent );
 		}
 	}
 
@@ -18414,6 +18417,8 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 	// configure ha_strategy
 	if ( bSetHA && !bHaveHA )
 		sphWarning ( "table '%s': ha_strategy defined, but no ha agents in the table", szIndexName );
+
+	return true;
 }
 
 //////////////////////////////////////////////////
@@ -18423,11 +18428,14 @@ void ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 static ResultAndIndex_t AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings=nullptr )
 {
 	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
-	ConfigureDistributedIndex ( [] ( const auto& sIdx ) { return g_pLocalIndexes->Contains ( sIdx ); }, *pIdx, szIndexName, hIndex, pWarnings );
+	bool bOk = ConfigureDistributedIndex ( [] ( const auto& sIdx ) { return g_pLocalIndexes->Contains ( sIdx ); }, *pIdx, szIndexName, hIndex, sError, pWarnings );
 
-	if ( pIdx->IsEmpty () )
+	if ( !bOk || pIdx->IsEmpty () )
 	{
-		sError.SetSprintf ( "table '%s': no valid local/remote tables in distributed table", szIndexName );
+		if ( !bOk )
+			sError.SetSprintf ( "table '%s': %s", szIndexName, sError.cstr() );
+		else
+			sError.SetSprintf ( "table '%s': no valid local/remote tables in distributed table", szIndexName );
 		return { ADD_ERROR, nullptr };
 	}
 

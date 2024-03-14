@@ -123,7 +123,6 @@ index loc_field
 index dist_field
 {
 	type			= distributed
-	local			= <my_address/>:i2
 	agent			= <my_address/>:test
 }
 

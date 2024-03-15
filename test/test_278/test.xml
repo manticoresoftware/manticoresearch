@@ -214,6 +214,18 @@ select surname.surname from people join surname on people.surname_id = surname.i
 drop table people;
 drop table surname;
 
+<!-- multiple groupby on joined json attrs -->
+CREATE TABLE t1 (id bigint, name text, surname text);
+CREATE TABLE t2 (id bigint, t2_id bigint, name text, description text, attr json);
+
+INSERT INTO t1 (id, name, surname) VALUES (1, 'name1', 'surname1'), (2, 'name2', 'surname2');
+INSERT INTO t2 (id, t2_id, name, description, attr) VALUES (0, 1, 'name1', 'description1', '{"color":"black","size":14}'), (0, 1, 'name2', 'description2', '{"color":"black","size":14}');
+
+select id, *, count(*), groupby() from t1 inner join t2 on t1.id=t2.t2_id group by t2.attr.color, t2.attr.size order by id asc;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
 </sphinxql>
 </queries>
 

@@ -1123,7 +1123,7 @@ public:
 	bool Is (States_e eValue) const { return m_tValue.GetValue().m_eValue==eValue; }
 
 	// sleep and return true when expected state achieved.
-	// sleep and return false if shutdown expected
+	// sleep and return false if shutdown expected.
 	bool WaitStateOrShutdown ( States_e uState ) const
 	{
 		return uState == m_tValue.Wait ( [uState] ( const Value_t& tVal ) { return tVal.m_bShutdown || ( tVal.m_eValue == uState ); } ).m_eValue;

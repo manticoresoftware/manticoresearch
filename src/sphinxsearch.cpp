@@ -547,7 +547,7 @@ void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
 		tWord.AddDouble ( SZ_BOOST, tKeyword.m_fBoost );
 }
 
-void BuildProfileBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	using namespace bson;
 	tPlan.AddString ( SZ_TYPE, sphXQNodeToStr ( pNode ).cstr() );
@@ -571,7 +571,7 @@ void BuildProfileBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSph
 		for ( const auto & i : pNode->m_dChildren )
 		{
 			Obj_c tChild ( dChildren.StartObj () );
-			BuildProfileBson ( tChild, i, tSchema, dZones );
+			BuildPlanBson ( tChild, i, tSchema, dZones );
 		}
 	}
 }
@@ -606,7 +606,7 @@ Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, con
 	CSphVector<BYTE> dPlan;
 	{
 		bson::Root_c tPlan ( dPlan );
-		::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
+		::BuildPlanBson ( tPlan, pNode, tSchema, dZones );
 	}
 	return dPlan;
 }
@@ -616,7 +616,7 @@ void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema,
 {
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );
-	::BuildProfileBson ( tPlan, pRoot, tSchema, dZones );
+	::BuildPlanBson ( tPlan, pRoot, tSchema, dZones );
 }
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings, bool bUseBM25 )
@@ -644,7 +644,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	// we generally have three (!) trees for each query
 	// 1) parsed tree, a raw result of query parsing
-	// 2) transformed tree, with star expansions, morphology, and other transfomations
+	// 2) transformed tree, with star expansions, morphology, and other transformations
 	// 3) evaluation tree, with tiny keywords cache, and other optimizations
 	// tXQ.m_pRoot, passed to ranker from the index, is the transformed tree
 	// m_pRoot, internal to ranker, is the evaluation tree

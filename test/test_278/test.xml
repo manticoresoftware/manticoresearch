@@ -226,6 +226,18 @@ select id, *, count(*), groupby() from t1 inner join t2 on t1.id=t2.t2_id group 
 DROP TABLE t1;
 DROP TABLE t2;
 
+<!-- grouping on joined MVAs -->
+create table tbl(tbl2_id int);
+create table tbl2(id, m multi);
+
+insert into tbl2 values(1, (1,2)),(2,(2,3));
+insert into tbl values(1,1),(2,2);
+
+select * from tbl left join tbl2 on tbl.tbl2_id = tbl.id facet tbl2.m;;
+
+drop table tbl;
+drop table tbl2;
+
 </sphinxql>
 </queries>
 

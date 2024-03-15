@@ -189,16 +189,29 @@ static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
 		fnAdd ( sphUnalignedRead(tValue) );
 }
 
-template<typename T>
-void FetchMVAKeys ( CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+template<typename T, bool PTR>
+static void FetchMVAKeys ( CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
 {
 	dKeys.Resize(0);
 
-	if ( !pBlobPool )
-		return;
-
 	int iLengthBytes = 0;
-	const BYTE * pMva = sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
+	const BYTE * pMva = nullptr;
+
+	if constexpr ( PTR )
+	{
+		auto pPacked = (const BYTE *)tMatch.GetAttr(tLocator);
+		ByteBlob_t dUnpacked = sphUnpackPtrAttr(pPacked);
+		pMva = dUnpacked.first;
+		iLengthBytes = dUnpacked.second;
+	}
+	else
+	{
+		if ( !pBlobPool )
+			return;
+
+		pMva = sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
+	}
+
 	int iNumValues = iLengthBytes / sizeof(T);
 	const T * pValues = (const T*)pMva;
 
@@ -340,11 +353,11 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::MultipleKeysFromMatch ( const CSphMat
 		switch ( m_dAttrs[i].m_eAttrType )
 		{
 		case SPH_ATTR_UINT32SET:
-			FetchMVAKeys<DWORD> ( dCurKeys, tMatch, m_dAttrs[i].m_tLocator, GetBlobPool() );
+			FetchMVAKeys<DWORD,false> ( dCurKeys, tMatch, m_dAttrs[i].m_tLocator, GetBlobPool() );
 			break;
 
 		case SPH_ATTR_INT64SET:
-			FetchMVAKeys<int64_t> ( dCurKeys, tMatch, m_dAttrs[i].m_tLocator, GetBlobPool() );
+			FetchMVAKeys<int64_t,false> ( dCurKeys, tMatch, m_dAttrs[i].m_tLocator, GetBlobPool() );
 			break;
 
 		case SPH_ATTR_JSON:
@@ -441,7 +454,7 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::SpawnColumnarGroupers()
 	}
 }
 
-template<typename T>
+template<typename T, bool PTR>
 class GrouperMVA_T : public CSphGrouper
 {
 public:
@@ -449,7 +462,7 @@ public:
 
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const override					{ assert(0); return SphGroupKey_t(); }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override	{ assert(0); return SphGroupKey_t(); }
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override;
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { FetchMVAKeys<T,PTR> ( dKeys, tMatch, m_tLocator, GetBlobPool() ); }
 	void			GetLocator ( CSphAttrLocator & tOut ) const override { tOut = m_tLocator; }
 	ESphAttr		GetResultType () const override;
 	CSphGrouper *	Clone() const override { return new GrouperMVA_T ( m_tLocator ); }
@@ -459,23 +472,10 @@ private:
 	CSphAttrLocator	m_tLocator;
 };
 
-template<>
-ESphAttr GrouperMVA_T<DWORD>::GetResultType() const
-{
-	return SPH_ATTR_INTEGER;
-}
-
-template<>
-ESphAttr GrouperMVA_T<int64_t>::GetResultType() const
-{
-	return SPH_ATTR_BIGINT;
-}
-
-template<typename T>
-void GrouperMVA_T<T>::MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const
-{
-	FetchMVAKeys<T> ( dKeys, tMatch, m_tLocator, GetBlobPool() );
-}
+template<> ESphAttr GrouperMVA_T<DWORD,true>::GetResultType() const		{ return SPH_ATTR_INTEGER; }
+template<> ESphAttr GrouperMVA_T<DWORD,false>::GetResultType() const	{ return SPH_ATTR_INTEGER; }
+template<> ESphAttr GrouperMVA_T<int64_t,true>::GetResultType() const	{ return SPH_ATTR_BIGINT; }
+template<> ESphAttr GrouperMVA_T<int64_t,false>::GetResultType() const	{ return SPH_ATTR_BIGINT; }
 
 /////////////////////////////////////////////////////////////////////////////
 CSphGrouper * CreateGrouperDay ( const CSphAttrLocator & tLoc )
@@ -510,13 +510,19 @@ CSphGrouper * CreateGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * 
 
 CSphGrouper * CreateGrouperMVA32 ( const CSphAttrLocator & tLoc )
 {
-	return new GrouperMVA_T<DWORD>(tLoc);
+	if ( tLoc.m_bDynamic )
+		return new GrouperMVA_T<DWORD,true>(tLoc);
+
+	return new GrouperMVA_T<DWORD,false>(tLoc);
 }
 
 
 CSphGrouper * CreateGrouperMVA64 ( const CSphAttrLocator & tLoc )
 {
-	return new GrouperMVA_T<int64_t>(tLoc);
+	if ( tLoc.m_bDynamic )
+		return new GrouperMVA_T<int64_t,true>(tLoc);
+
+	return new GrouperMVA_T<int64_t,false>(tLoc);
 }
 
 

@@ -427,25 +427,19 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
-		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
-		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( GetAliasedColumnarAttrName(tGroupByAttr), eType );
-			bGrouperUsesAttrs = false;
-			break;
-		}
-
-		if ( eType==SPH_ATTR_UINT32SET )
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMVA32(tLoc);
-		else
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMVA64(tLoc);
-		break;
-
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 		if ( tGroupByAttr.IsColumnar() || tGroupByAttr.IsColumnarExpr() )
 		{
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperColumnarMVA ( GetAliasedColumnarAttrName(tGroupByAttr), eType );
 			bGrouperUsesAttrs = false;
+		}
+		else
+		{
+			if ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_UINT32SET_PTR )
+				m_tGroupSorterSettings.m_pGrouper = CreateGrouperMVA32(tLoc);
+			else
+				m_tGroupSorterSettings.m_pGrouper = CreateGrouperMVA64(tLoc);
 		}
 		break;
 

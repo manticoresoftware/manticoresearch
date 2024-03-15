@@ -75,6 +75,14 @@ static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoin
 	return false;
 }
 
+
+static StrVec_t ParseGroupBy ( const CSphString & sGroupBy )
+{
+	StrVec_t dRes;
+	sphSplit ( dRes, sGroupBy.cstr(), ", \t\n" );
+	return dRes;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // FIXME! maybe replace it with a LRU cache
@@ -991,7 +999,11 @@ void JoinSorter_c::SetupJoinSelectList()
 		AddToJoinSelectList ( i.m_sExpr, i.m_sAlias );
 
 	if ( !m_tQuery.m_sGroupBy.IsEmpty() )
-		AddToJoinSelectList ( m_tQuery.m_sGroupBy, m_tQuery.m_sGroupBy );
+	{
+		StrVec_t dGroupby = ParseGroupBy ( m_tQuery.m_sGroupBy );
+		for ( const auto & i : dGroupby )
+			AddToJoinSelectList ( i, i );
+	}
 
 	// find remapped sorting attrs
 	auto * pSorterSchema = m_pSorter->GetSchema();

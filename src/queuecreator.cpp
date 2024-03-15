@@ -277,6 +277,7 @@ private:
 	CSphVector<ExtraSortExpr_t> m_dGroupJsonExprs;
 	CSphGroupSorterSettings		m_tGroupSorterSettings;
 	CSphVector<std::pair<int,bool>> m_dGroupColumns;
+	StrVec_t					m_dGroupJsonAttrs;
 	bool						m_bHeadWOGroup;
 	bool						m_bGotDistinct;
 	bool						m_bExprsNeedDocids = false;
@@ -339,6 +340,7 @@ private:
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 	bool	IsJoinAttr ( const CSphString & sAttr ) const;
+	void	ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy );
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
 	int		GetGroupbyAttrIndex() const			{ return GetAliasedAttrIndex ( m_tQuery.m_sGroupBy, m_tQuery, *m_pSorterSchema ); }
 	int		GetGroupDistinctAttrIndex() const	{ return GetAliasedAttrIndex ( m_tQuery.m_sGroupDistinct, m_tQuery, *m_pSorterSchema ); }
@@ -548,6 +550,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 			dAttrs.Add ( tAttr );
 			m_dGroupColumns.Add ( { iAttr, true } );
+			m_dGroupJsonAttrs.Add(sJsonExpr);
 
 			if ( !sJsonExpr.IsEmpty() )
 			{
@@ -1264,6 +1267,93 @@ bool QueueCreator_c::IsJoinAttr ( const CSphString & sAttr ) const
 }
 
 
+void QueueCreator_c::ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy )
+{
+	auto AddColumn = [this] ( const CSphColumnInfo & tCol )
+		{
+			m_pSorterSchema->AddAttr ( tCol, true );
+			m_hQueryColumns.Add ( tCol.m_sName );
+		};
+
+	if ( m_tGroupSorterSettings.m_bJson )
+	{
+		bool bJoinAttr = IsJoinAttr ( m_tQuery.m_sGroupBy );
+
+		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
+		if ( !m_pSorterSchema->GetAttr ( sJsonGroupBy.cstr() ) )
+		{
+			CSphColumnInfo tGroupbyStr ( sJsonGroupBy.cstr() );
+			if ( bJoinAttr )
+				tGroupbyStr.m_eAttrType = SPH_ATTR_STRINGPTR;
+			else
+				tGroupbyStr.m_eAttrType = SPH_ATTR_JSON_FIELD;
+
+			tGroupbyStr.m_eStage = SPH_EVAL_SORTER;
+			AddColumn ( tGroupbyStr );
+		}
+
+		if ( bJoinAttr )
+		{
+			// we can't do grouping directly on joined JSON fields
+			// so we need to change the grouper
+			// fixme! this will not work on stuff that generates multiple groupby keys (like JSON arrays)
+			const CSphColumnInfo * pRemapped = m_pSorterSchema->GetAttr ( sJsonGroupBy.cstr() );
+			assert(pRemapped);
+
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperString ( pRemapped->m_tLocator, m_tQuery.m_eCollation );
+			m_tGroupSorterSettings.m_bJson = false;
+		}
+	}
+	else if ( m_tQuery.m_eGroupFunc==SPH_GROUPBY_MULTIPLE && m_bJoinedGroupSort )
+	{
+		bool bGrouperChanged = false;
+		ARRAY_FOREACH ( i, m_dGroupColumns )
+		{
+			const CSphColumnInfo & tAttr = m_pSorterSchema->GetAttr ( m_dGroupColumns[i].first );
+			bool bJoinAttr = IsJoinAttr ( tAttr.m_sName );
+			bool bJson = tAttr.m_eAttrType==SPH_ATTR_JSON_PTR || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD_PTR;
+
+			if ( bJoinAttr && bJson )
+			{
+				sJsonGroupBy = SortJsonInternalSet ( m_dGroupJsonAttrs[i] );
+				if ( !m_pSorterSchema->GetAttr ( sJsonGroupBy.cstr() ) )
+				{
+					CSphColumnInfo tGroupbyStr ( sJsonGroupBy.cstr() );
+					tGroupbyStr.m_eAttrType = SPH_ATTR_STRINGPTR;
+					tGroupbyStr.m_eStage = SPH_EVAL_SORTER;
+					AddColumn ( tGroupbyStr );
+				}
+
+				m_dGroupColumns[i].first = m_pSorterSchema->GetAttrIndex ( sJsonGroupBy.cstr() );
+				m_dGroupJsonAttrs[i] = "";
+				bGrouperChanged = true;
+			}
+		}
+
+		if ( bGrouperChanged )
+		{
+			CSphVector<CSphColumnInfo> dAttrs;
+			VecRefPtrs_t<ISphExpr *> dJsonKeys;
+			ARRAY_FOREACH ( i, m_dGroupColumns )
+			{
+				dAttrs.Add ( m_pSorterSchema->GetAttr ( m_dGroupColumns[i].first ) );
+
+				const CSphString & sJsonExpr = m_dGroupJsonAttrs[i];
+				if ( !sJsonExpr.IsEmpty() )
+				{
+					ExprParseArgs_t tExprArgs;
+					dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) );
+				}
+				else
+					dJsonKeys.Add(nullptr);
+			}
+
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMulti ( dAttrs, std::move(dJsonKeys), m_tQuery.m_eCollation );
+		}
+	}
+}
+
+
 bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 {
 	CSphString sJsonGroupBy;
@@ -1301,35 +1391,7 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 		}
 
 		// add @groupbystr last in case we need to skip it on sending (like @int_attr_*)
-		if ( m_tGroupSorterSettings.m_bJson )
-		{
-			bool bJoinAttr = IsJoinAttr ( m_tQuery.m_sGroupBy );
-
-			sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
-			if ( !m_pSorterSchema->GetAttr ( sJsonGroupBy.cstr() ) )
-			{
-				CSphColumnInfo tGroupbyStr ( sJsonGroupBy.cstr() );
-				if ( bJoinAttr )
-					tGroupbyStr.m_eAttrType = SPH_ATTR_STRINGPTR;
-				else
-					tGroupbyStr.m_eAttrType = SPH_ATTR_JSON_FIELD;
-
-				tGroupbyStr.m_eStage = SPH_EVAL_SORTER;
-				AddColumn ( tGroupbyStr );
-			}
-
-			if ( bJoinAttr )
-			{
-				// we can't do grouping directly on joined JSON fields
-				// so we need to change the grouper
-				// fixme! this will not work on stuff that generates multiple groupby keys (like JSON arrays)
-				const CSphColumnInfo * pRemapped = m_pSorterSchema->GetAttr ( sJsonGroupBy.cstr() );
-				assert(pRemapped);
-
-				m_tGroupSorterSettings.m_pGrouper = CreateGrouperString ( pRemapped->m_tLocator, m_tQuery.m_eCollation );
-				m_tGroupSorterSettings.m_bJson = false;
-			}
-		}
+		ReplaceJsonGroupbyWithStrings ( sJsonGroupBy );
 	}
 
 	#define LOC_CHECK( _cond, _msg ) if (!(_cond)) { m_sError = "invalid schema: " _msg; return false; }

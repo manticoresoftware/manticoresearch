@@ -54,7 +54,7 @@ struct ParsedJsonQuery_t
 	JsonQuery_c m_tQuery;
 	CSphString m_sWarning;
 	bool m_bProfile = false;
-	bool m_bPlan = false;
+	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
 };
 
 std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();

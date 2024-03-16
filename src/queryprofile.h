@@ -69,6 +69,7 @@ STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
 
 struct XQNode_t;
 
+enum class PLAN_FLAVOUR { ENONE, EDESCR, EOBJ, EBOTH };
 /// search query profile
 class QueryProfile_c
 {
@@ -79,7 +80,7 @@ public:
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 	CSphVector<BYTE> m_dPlan; 							///< bson with plan
-	bool			m_bNeedPlan = true;
+	PLAN_FLAVOUR	m_eNeedPlan = PLAN_FLAVOUR::EBOTH;
 	bool			m_bNeedProfile = true;
 
 	int				m_iMaxMatches = 0;

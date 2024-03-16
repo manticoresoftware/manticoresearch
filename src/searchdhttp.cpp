@@ -1263,9 +1263,9 @@ public:
 		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;
-		tProfile.m_bNeedPlan = m_tParsed.m_bPlan;
+		tProfile.m_eNeedPlan = (PLAN_FLAVOUR)m_tParsed.m_iPlan;
 		tProfile.m_bNeedProfile = m_tParsed.m_bProfile;
-		bool bNeedProfile = m_tParsed.m_bProfile || m_tParsed.m_bPlan;
+		bool bNeedProfile = m_tParsed.m_bProfile || ( m_tParsed.m_iPlan != 0 );
 		if ( bNeedProfile )
 			tHandler->SetProfile ( &tProfile );
 

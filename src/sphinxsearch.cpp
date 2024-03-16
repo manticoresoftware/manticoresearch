@@ -614,7 +614,7 @@ Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, con
 
 void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
-	if ( !m_bNeedPlan )
+	if ( m_eNeedPlan == PLAN_FLAVOUR::ENONE )
 		return;
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );

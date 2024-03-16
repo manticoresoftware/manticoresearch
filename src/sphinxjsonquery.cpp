@@ -994,7 +994,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 	if ( !tRoot.FetchBoolItem ( pQuery->m_bProfile, "profile", sError, true ) )
 		return false;
 
-	if ( !tRoot.FetchBoolItem ( pQuery->m_bPlan, "plan", sError, true ) )
+	if ( !tRoot.FetchIntItem ( pQuery->m_iPlan, "plan", sError, true ) )
 		return false;
 
 	// expression columns go first to select list
@@ -1984,11 +1984,20 @@ bool JsonRenderKeywordNode ( JsonEscapedBuilder & tRes, const bson::Bson_c& tBso
 	return true;
 }
 
-void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson )
+void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson, PLAN_FLAVOUR ePlanFlavour )
 {
 	using namespace bson;
 	if ( dBson==nullnode )
 		return;
+
+	if ( ePlanFlavour == PLAN_FLAVOUR::EDESCR )
+	{
+		auto dRootBlock = tOut.ObjectBlock();
+		tOut << "\"description\":";
+		tOut.AppendEscapedSkippingComma ( sph::RenderBsonPlanBrief ( dBson ).cstr() );
+		tOut.FinishBlocks ( dRootBlock );
+		return;
+	}
 
 	Bson_c tBson ( dBson );
 
@@ -2000,8 +2009,11 @@ void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson
 	tOut << "\"type\":";
 	tOut.AppendEscapedSkippingComma ( String ( tBson.ChildByName ( SZ_TYPE ) ).cstr() );
 
-	tOut << "\"description\":";
-	tOut.AppendEscapedSkippingComma ( sph::RenderBsonPlanBrief ( dBson ).cstr () );
+	if ( ePlanFlavour==PLAN_FLAVOUR::EBOTH )
+	{
+		tOut << "\"description\":";
+		tOut.AppendEscapedSkippingComma ( sph::RenderBsonPlanBrief ( dBson ).cstr () );
+	}
 
 	Bson_c ( tBson.ChildByName ( SZ_OPTIONS ) ).ForEach ( [&tOut] ( CSphString&& sName, const NodeHandle_t & tNode ) {
 		tOut.Sprintf ( R"("options":"%s=%d")", sName.cstr (), (int) Int ( tNode ) );
@@ -2011,7 +2023,7 @@ void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson
 
 	tOut.StartBlock ( ",", "\"children\":[", "]" );
 	Bson_c ( tBson.ChildByName ( SZ_CHILDREN ) ).ForEach ( [&] ( const NodeHandle_t & tNode ) {
-		FormatJsonPlanFromBson ( tOut, tNode );
+		FormatJsonPlanFromBson ( tOut, tNode, ePlanFlavour );
 	} );
 	tOut.FinishBlocks ( dRootBlock );
 }
@@ -2289,10 +2301,10 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		tOut.Sprintf ( R"("profile":{"query":%s})", sProfile.cstr () );
 	}
 
-	if ( pProfile && pProfile->m_bNeedPlan )
+	if ( pProfile && pProfile->m_eNeedPlan != PLAN_FLAVOUR::ENONE )
 	{
 		JsonEscapedBuilder sPlan;
-		FormatJsonPlanFromBson ( sPlan, bson::MakeHandle ( pProfile->m_dPlan ) );
+		FormatJsonPlanFromBson ( sPlan, bson::MakeHandle ( pProfile->m_dPlan ), pProfile->m_eNeedPlan );
 		if ( sPlan.IsEmpty() )
 			tOut << R"("plan":null)";
 		else

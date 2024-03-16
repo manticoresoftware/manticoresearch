@@ -663,6 +663,9 @@ public:
 				if ( m_dLog[i].m_sError==m_dLog[i-1].m_sError )
 					continue;
 
+			if ( m_dLog[iSpanStart].m_sError.IsEmpty() )
+				continue;
+
 			sReport << sColon;
 
 			ReportIndexesName ( iSpanStart, i, m_dLog, sReport );
@@ -13435,8 +13438,20 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 	if ( !tRes.m_iSuccesses )
 	{
-		// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
-		dRows.Error ( tRes.m_sError.cstr() );
+		if ( !tRes.m_sError.IsEmpty() )
+		{
+			// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
+			dRows.Error ( tRes.m_sError.cstr() );
+			return;
+		}
+		assert ( tRes.m_sError.IsEmpty() );
+		auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
+		CSphString sMeta = BuildMetaOneline ( tRes );
+
+		dRows.HeadBegin();
+		dRows.HeadColumn ( "" );
+		dRows.HeadEnd();
+		dRows.Eof ( bMoreResultsFollow, iWarns, sMeta.cstr() );
 		return;
 	}
 

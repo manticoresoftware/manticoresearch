@@ -7093,7 +7093,7 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			bool bChunkSucceed = tGuard.m_dDiskChunks[iChunk]->Cidx().MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs ) ;
 			bSucceed.fetch_and ( bChunkSucceed );
 			if ( !bChunkSucceed )
-				Interrupt ( "query error" );
+				Interrupt ( "" );
 
 			// check terms inconsistency among disk chunks
 			tThMeta.MergeWordStats ( tChunkMeta );

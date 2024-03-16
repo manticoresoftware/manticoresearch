@@ -614,6 +614,8 @@ Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, con
 
 void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
+	if ( !m_bNeedPlan )
+		return;
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );
 	::BuildPlanBson ( tPlan, pRoot, tSchema, dZones );

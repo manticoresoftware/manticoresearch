@@ -1172,8 +1172,6 @@ static CSphString g_sEmptySearch = R"(
 
 static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CSphString & sURL, CSphString & sRes )
 {
-	CSphString sError, sWarning;
-
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
 	if ( tReq.contains ( "index" ) )
@@ -1214,21 +1212,24 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	FixupFilter ( dIndexes, tReq );
 	FixupAggs ( dIndexes, tReq );
 
-	JsonQuery_c tQuery;
+	ParsedJsonQuery_t tParsedQuery;
+	auto& tQuery = tParsedQuery.m_tQuery;
 	tQuery.m_eQueryType = QUERY_JSON;
 	tQuery.m_sRawQuery = tReq.dump().c_str();
+	tParsedQuery.m_bProfile = false;
 	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
-	bool bProfile = false;
-	if ( !sphParseJsonQuery ( tMntReq, tQuery, bProfile, sError, sWarning ) )
+
+	if ( !sphParseJsonQuery ( tMntReq, &tParsedQuery ) )
 	{
+		auto sError = TlsMsg::MoveToString();
 		CompatWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
-		sRes = JsonEncodeResultError ( sError, "parse_exception", 400 );
+		sRes = JsonEncodeResultError ( sError.cstr(), "parse_exception", 400 );
 		return false;
 	}
 
-	if ( !sWarning.IsEmpty() )
-		CompatWarning ( "%s", sWarning.cstr() );
+	if ( !tParsedQuery.m_sWarning.IsEmpty() )
+		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
 	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
 	tHandler->RunQueries();

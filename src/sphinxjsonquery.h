@@ -49,9 +49,17 @@ struct JsonQuery_c : public CSphQuery
 	CSphVector<JsonAggr_t> m_dAggs;
 };
 
+struct ParsedJsonQuery_t
+{
+	JsonQuery_c m_tQuery;
+	CSphString m_sWarning;
+	bool m_bProfile = false;
+	bool m_bPlan = false;
+};
+
 std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();
-bool			sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning );
-bool			sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning );
+bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery );
+bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery );
 bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );

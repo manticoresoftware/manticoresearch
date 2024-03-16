@@ -943,25 +943,27 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 }
 
 
-bool sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
+bool sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery )
 {
+	assert ( pQuery );
 	JsonObj_c tRoot ( sQuery );
-	tQuery.m_sRawQuery = sQuery;
+	pQuery->m_tQuery.m_sRawQuery = sQuery;
 
-	return sphParseJsonQuery ( tRoot, tQuery, bProfile, sError, sWarning );
+	return sphParseJsonQuery ( tRoot, pQuery );
 }
 
-bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
+bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 {
+	TlsMsg::ResetErr();
 	if ( !tRoot )
-	{
-		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
-		return false;
-	}
+		return TlsMsg::Err ( "unable to parse: %s", tRoot.GetErrorPtr() );
 
+	TLS_MSG_STRING ( sError );
 	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
 	if ( !tIndex )
 		return false;
+
+	auto& tQuery = pQuery->m_tQuery;
 
 	tQuery.m_sIndexes = tIndex.StrVal();
 	if ( tQuery.m_sIndexes==g_szAll )
@@ -973,27 +975,26 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 	JsonObj_c tJsonQuery = tRoot.GetItem("query");
 	JsonObj_c tKNNQuery = tRoot.GetItem("knn");
 	if ( tJsonQuery && tKNNQuery )
-	{
-		sError = "\"query\" can't be used together with \"knn\"";
-		return false;
-	}
+		return TlsMsg::Err ( "\"query\" can't be used together with \"knn\"" );
 
 	// common code used by search queries and update/delete by query
-	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, sWarning ) )
+	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, pQuery->m_sWarning ) )
 		return false;
 
-	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, sWarning ) )
+	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, pQuery->m_sWarning ) )
 		return false;
 
-	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, sWarning ) )
+	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, pQuery->m_sWarning ) )
 		return false;
 
 	JsonObj_c tOptions = tRoot.GetItem("options");
 	if ( tOptions && !ParseOptions ( tOptions, tQuery, sError ) )
 		return false;
 
-	bProfile = false;
-	if ( !tRoot.FetchBoolItem ( bProfile, "profile", sError, true ) )
+	if ( !tRoot.FetchBoolItem ( pQuery->m_bProfile, "profile", sError, true ) )
+		return false;
+
+	if ( !tRoot.FetchBoolItem ( pQuery->m_bPlan, "plan", sError, true ) )
 		return false;
 
 	// expression columns go first to select list
@@ -1025,7 +1026,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 	if ( tSort )
 	{
 		bool bGotWeight = false;
-		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, sWarning ) )
+		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, pQuery->m_sWarning ) )
 			return false;
 
 		JsonObj_c tTrackScore = tRoot.GetBoolItem ( "track_scores", sError, true );
@@ -2081,6 +2082,48 @@ CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErro
 	return JsonEncodeResultError ( sError, sErrorType, &iStatus, sIndex );
 }
 
+CSphString HandleShowProfile ( const QueryProfile_c& p )
+{
+#define SPH_QUERY_STATE( _name, _desc ) _desc,
+	static const char* dStates[SPH_QSTATE_TOTAL] = { SPH_QUERY_STATES };
+#undef SPH_QUERY_STATES
+
+	JsonEscapedBuilder sProfile;
+	int64_t tmTotal = 0;
+	int iCount = 0;
+	for ( int i = 0; i < SPH_QSTATE_TOTAL; ++i )
+	{
+		if ( p.m_dSwitches[i] <= 0 )
+			continue;
+		tmTotal += p.m_tmTotal[i];
+		iCount += p.m_dSwitches[i];
+	}
+
+	{
+		auto arrayw = sProfile.ArrayW();
+
+		for ( int i = 0; i < SPH_QSTATE_TOTAL; ++i )
+		{
+			if ( p.m_dSwitches[i] <= 0 )
+				continue;
+
+			auto _ = sProfile.ObjectW();
+			sProfile.NamedString ( "status", dStates[i] );
+			sProfile.NamedVal ( "duration", FixedFrac_T<int64_t, 6> ( p.m_tmTotal[i] ) );
+			sProfile.NamedVal ( "switches", p.m_dSwitches[i] );
+			sProfile.NamedVal ( "percent", FixedFrac_T<int64_t, 2> ( PercentOf ( p.m_tmTotal[i], tmTotal, 2 ) ) );
+		}
+		{
+			auto _ = sProfile.ObjectW();
+			sProfile.NamedString ( "status", "total" );
+			sProfile.NamedVal ( "duration", FixedFrac_T<int64_t, 6> ( tmTotal ) );
+			sProfile.NamedVal ( "switches", iCount );
+			sProfile.NamedVal ( "percent", FixedFrac_T<int64_t, 2> ( PercentOf ( tmTotal, tmTotal, 2 ) ) );
+		}
+	}
+	return (CSphString)sProfile;
+}
+
 
 CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, bool bCompat )
 {
@@ -2240,14 +2283,20 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 	if ( bCompat )
 		tOut += R"("status": 200)";
 
-	if ( pProfile )
+	if ( pProfile && pProfile->m_bNeedProfile )
+	{
+		auto sProfile = HandleShowProfile ( *pProfile );
+		tOut.Sprintf ( R"("profile":{"query":%s})", sProfile.cstr () );
+	}
+
+	if ( pProfile && pProfile->m_bNeedPlan )
 	{
 		JsonEscapedBuilder sPlan;
 		FormatJsonPlanFromBson ( sPlan, bson::MakeHandle ( pProfile->m_dPlan ) );
 		if ( sPlan.IsEmpty() )
-			tOut << R"("profile":null)";
+			tOut << R"("plan":null)";
 		else
-			tOut.Sprintf ( R"("profile":{"query":%s})", sPlan.cstr () );
+			tOut.Sprintf ( R"("plan":{"query":%s})", sPlan.cstr() );
 	}
 
 	tOut.FinishBlocks (); tOut.MoveTo ( sResult ); return sResult;

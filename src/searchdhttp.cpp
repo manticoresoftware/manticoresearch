@@ -1257,19 +1257,22 @@ public:
 		if ( !pQueryParser )
 			return false;
 
-		int iQueries = ( 1 + m_tQuery.m_dAggs.GetLength() );
+		int iQueries = ( 1 + m_tParsed.m_tQuery.m_dAggs.GetLength() );
 
-		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tQuery );
+		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed.m_tQuery );
 		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;
-		if ( m_bProfile )
+		tProfile.m_bNeedPlan = m_tParsed.m_bPlan;
+		tProfile.m_bNeedProfile = m_tParsed.m_bProfile;
+		bool bNeedProfile = m_tParsed.m_bProfile || m_tParsed.m_bPlan;
+		if ( bNeedProfile )
 			tHandler->SetProfile ( &tProfile );
 
 		// search
 		tHandler->RunQueries();
 
-		if ( m_bProfile )
+		if ( bNeedProfile )
 			tProfile.Stop();
 
 		AggrResult_t * pRes = tHandler->GetResult ( 0 );
@@ -1280,25 +1283,23 @@ public:
 		}
 
 		// fixme: handle more than one warning at once?
-		if ( pRes->m_sWarning.IsEmpty() && !m_sWarning.IsEmpty() )
-			pRes->m_sWarning = m_sWarning;
+		if ( pRes->m_sWarning.IsEmpty() && !m_tParsed.m_sWarning.IsEmpty() )
+			pRes->m_sWarning = m_tParsed.m_sWarning;
 
 		CSphFixedVector<AggrResult_t *> dAggsRes ( iQueries );
 		dAggsRes[0] = tHandler->GetResult ( 0 );
-		ARRAY_FOREACH ( i, m_tQuery.m_dAggs )
+		ARRAY_FOREACH ( i,m_tParsed.m_tQuery.m_dAggs )
 			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
 
-		CSphString sResult = EncodeResult ( dAggsRes, m_bProfile ? &tProfile : nullptr );
+		CSphString sResult = EncodeResult ( dAggsRes, bNeedProfile ? &tProfile : nullptr );
 		BuildReply ( sResult, SPH_HTTP_STATUS_200 );
 
 		return true;
 	}
 
 protected:
-	bool					m_bProfile = false;
 	QueryType_e				m_eQueryType {QUERY_SQL};
-	JsonQuery_c				m_tQuery;
-	CSphString				m_sWarning;
+	ParsedJsonQuery_t		m_tParsed;
 
 	virtual std::unique_ptr<QueryParser_i> PreParseQuery() = 0;
 	virtual CSphString		EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) = 0;
@@ -1347,7 +1348,7 @@ protected:
 			return nullptr;
 		}
 
-		( (CSphQuery &) m_tQuery ) = m_dStmt[0].m_tQuery;
+		( (CSphQuery &) m_tParsed.m_tQuery ) = m_dStmt[0].m_tQuery;
 		bool bFacet = ( m_dStmt.GetLength()>1 );
 		for ( const auto & tStmt : m_dStmt )
 		{
@@ -1367,7 +1368,7 @@ protected:
 			return nullptr;
 		}
 		if ( bFacet )
-			AddAggs ( m_dStmt, m_tQuery );
+			AddAggs ( m_dStmt, m_tParsed.m_tQuery );
 
 		m_eQueryType = QUERY_SQL;
 
@@ -1376,7 +1377,7 @@ protected:
 
 	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) final
 	{
-		return sphEncodeResultJson ( dRes, m_tQuery, pProfile, false );
+		return sphEncodeResultJson ( dRes, m_tParsed.m_tQuery, pProfile, false );
 	}
 
 	void SetStmt ( PubSearchHandler_c & tHandler ) final
@@ -1724,11 +1725,11 @@ public:
 	std::unique_ptr<QueryParser_i> PreParseQuery() override
 	{
 		// TODO!!! add parsing collation from the query
-		m_tQuery.m_eCollation = session::GetCollation();
+		m_tParsed.m_tQuery.m_eCollation = session::GetCollation();
 
-		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, m_sError, m_sWarning ) )
+		if ( !sphParseJsonQuery ( m_sQuery, &m_tParsed ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( TlsMsg::szError(), SPH_HTTP_STATUS_400 );
 			return nullptr;
 		}
 
@@ -1739,7 +1740,7 @@ public:
 protected:
 	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) override
 	{
-		return sphEncodeResultJson ( dRes, m_tQuery, pProfile, false );
+		return sphEncodeResultJson ( dRes, m_tParsed.m_tQuery, pProfile, false );
 	}
 };
 

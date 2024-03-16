@@ -79,6 +79,8 @@ public:
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 	CSphVector<BYTE> m_dPlan; 							///< bson with plan
+	bool			m_bNeedPlan = true;
+	bool			m_bNeedProfile = true;
 
 	int				m_iMaxMatches = 0;
 	int				m_iPseudoShards = 1;

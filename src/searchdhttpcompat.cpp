@@ -299,7 +299,7 @@ static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 {
 	DocID_t tTmpID;
 	SqlStmt_t tStmt;
-	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, true, sError ) )
+	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, sError ) )
 		return false;
 
 	assert ( tTmpID>=0 );
@@ -2476,7 +2476,7 @@ void HttpCompatHandler_c::ProcessInsertIntoIdx ( const CompatInsert_t & tIns )
 	JsonObj_c tSource ( tIns.m_sBody.first );
 
 	CSphString sError;
-	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, false, sError ) && InsertDoc ( tStmt, sError ) );
+	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, sError ) && InsertDoc ( tStmt, sError ) );
 
 	if ( !bInserted )
 	{

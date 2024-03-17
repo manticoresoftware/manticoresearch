@@ -1064,7 +1064,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & b
 }
 
 
-bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, bool bCompat, CSphString & sError )
+bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
 	if ( !ParseIndexId ( tRoot, false, tStmt, tDocId, sError ) )
 		return false;
@@ -1080,71 +1080,79 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 	// "doc" is optional
 	JsonObj_c tSource = tRoot.GetItem("doc");
 
-	return ParseJsonInsertSource ( tSource, tStmt, bReplace, bCompat, sError );
+	return ParseJsonInsertSource ( tSource, tStmt, bReplace, sError );
 }
 
-bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool bReplace, bool bCompat, CSphString & sError )
+static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInsertSchema, CSphVector<SqlInsert_t> & dInsertValues, CSphString & sError )
+{
+	if ( !tSource )
+		return true;
+
+	for ( const auto & tItem : tSource )
+	{
+		dInsertSchema.Add ( tItem.Name() );
+		dInsertSchema.Last().ToLower();
+
+		SqlInsert_t & tNewValue = dInsertValues.Add();
+		if ( tItem.IsStr() )
+		{
+			tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+			tNewValue.m_sVal = tItem.StrVal();
+		} else if ( tItem.IsDbl() )
+		{
+			tNewValue.m_iType = SqlInsert_t::CONST_FLOAT;
+			tNewValue.m_fVal = tItem.FltVal();
+		} else if ( tItem.IsInt() || tItem.IsBool() )
+		{
+			tNewValue.m_iType = SqlInsert_t::CONST_INT;
+			tNewValue.SetValueInt ( tItem.IntVal() );
+		} else if ( tItem.IsArray() || tItem.IsObj() )
+		{
+			// could be either object or array
+			// all fit to JSON attribute
+			// array of int fits MVA attribute
+			tNewValue.m_sVal = tItem.AsString();
+
+			bool bMVA = false;
+
+			if ( tItem.IsArray() )
+			{
+				tNewValue.m_iType = SqlInsert_t::CONST_MVA;
+				tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
+				for ( const auto & tArrayItem : tItem )
+				{
+					if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+						break;
+
+					tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
+					bMVA = true;
+				}
+				if ( !bMVA && !tItem.Size() )
+					bMVA = true;
+			}
+
+			if ( !bMVA )
+			{
+				tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+				tNewValue.m_pVals = nullptr;
+			}
+
+		} else
+		{
+			sError = "unsupported value type";
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool bReplace, CSphString & sError )
 {
 	tStmt.m_eStmt = bReplace ? STMT_REPLACE : STMT_INSERT;
 
-	if ( tSource )
-	{
-		for ( const auto & tItem : tSource )
-		{
-			tStmt.m_dInsertSchema.Add ( tItem.Name() );
-			tStmt.m_dInsertSchema.Last().ToLower();
-
-			SqlInsert_t & tNewValue = tStmt.m_dInsertValues.Add();
-			if ( tItem.IsStr() )
-			{
-				tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
-				tNewValue.m_sVal = tItem.StrVal();
-			} else if ( tItem.IsDbl() )
-			{
-				tNewValue.m_iType = SqlInsert_t::CONST_FLOAT;
-				tNewValue.m_fVal = tItem.FltVal();
-			} else if ( tItem.IsInt() || tItem.IsBool() )
-			{
-				tNewValue.m_iType = SqlInsert_t::CONST_INT;
-				tNewValue.SetValueInt ( tItem.IntVal() );
-			} else if ( tItem.IsArray() || tItem.IsObj() )
-			{
-				// could be either object or array
-				// all fit to JSON attribute
-				// array of int fits MVA attribute
-				tNewValue.m_sVal = tItem.AsString();
-
-				bool bMVA = false;
-
-				if ( tItem.IsArray() )
-				{
-					tNewValue.m_iType = SqlInsert_t::CONST_MVA;
-					tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
-					for ( const auto & tArrayItem : tItem )
-					{
-						if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
-							break;
-
-						tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
-						bMVA = true;
-					}
-					if ( !bMVA && !tItem.Size() )
-						bMVA = true;
-				}
-
-				if ( !bMVA )
-				{
-					tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
-					tNewValue.m_pVals = nullptr;
-				}
-
-			} else
-			{
-				sError = "unsupported value type";
-				return false;
-			}
-		}
-	}
+	if ( !ParseJsonInsertSource ( tSource, tStmt.m_dInsertSchema, tStmt.m_dInsertValues, sError ) )
+		return false;
 
 	if ( !tStmt.CheckInsertIntegrity() )
 	{
@@ -1156,10 +1164,10 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 }
 
 
-bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, bool bCompat, CSphString & sError )
+bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
 	JsonObj_c tRoot ( szInsert );
-	return ParseJsonInsert ( tRoot, tStmt, tDocId, bReplace, bCompat, sError );
+	return ParseJsonInsert ( tRoot, tStmt, tDocId, bReplace, sError );
 }
 
 
@@ -1362,11 +1370,11 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 
 	if ( sStmt=="index" || sStmt=="replace" )
 	{
-		if ( !ParseJsonInsert ( tJsonStmt, tStmt, tDocId, true, false, sError ) )
+		if ( !ParseJsonInsert ( tJsonStmt, tStmt, tDocId, true, sError ) )
 			return false;
 	}  else if ( sStmt=="create" || sStmt=="insert" )
 	{
-		if ( !ParseJsonInsert ( tJsonStmt, tStmt, tDocId, false, false, sError ) )
+		if ( !ParseJsonInsert ( tJsonStmt, tStmt, tDocId, false, sError ) )
 			return false;
 	} else if ( sStmt=="update" )
 	{
@@ -1643,42 +1651,192 @@ static void EncodeFields ( const StrVec_t & dFields, const AggrResult_t & tRes, 
 	tOut.FinishBlock ( false ); // close obj
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, int iNow, JsonEscapedBuilder & tOut )
+struct CompositeLocator_t
 {
-	const CSphColumnInfo* pKey = nullptr;
-	const CSphColumnInfo* pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+	ESphAttr m_eAttrType = SPH_ATTR_NONE;
+	CSphAttrLocator m_tLocator;
+	const char * m_sName = nullptr;
+	CompositeLocator_t ( const CSphColumnInfo & tCol, const char * sName )
+		: m_eAttrType ( tCol.m_eAttrType )
+		, m_tLocator ( tCol.m_tLocator )
+		, m_sName ( sName )
+	{}
+	CompositeLocator_t() = default;
+};
 
-	bool bKeyed = false;
-	RangeNameHash_t tRangeNames;
+struct AggrKeyTrait_t
+{
+	const CSphColumnInfo * m_pKey = nullptr;
+	CSphVector<CompositeLocator_t> m_dCompositeKeys;
+	bool m_bKeyed = false;
+	RangeNameHash_t m_tRangeNames;
+};
+
+static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
+{
 	if ( tAggr.m_eAggrFunc==Aggr_e::NONE )
-		pKey = tRes.m_tSchema.GetAttr ( tAggr.m_sCol.cstr() );
-	else
 	{
-		pKey = tRes.m_tSchema.GetAttr ( GetAggrName ( iAggrItem, tAggr.m_sCol ).cstr() );
+		tRes.m_pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	} else if ( tAggr.m_eAggrFunc==Aggr_e::COMPOSITE )
+	{
+		for ( const auto & tItem : tAggr.m_dComposite )
+		{
+			const CSphColumnInfo * pCol = tSchema.GetAttr ( tItem.m_sColumn.cstr() );
+			if ( !pCol )
+				return false;
+
+			tRes.m_dCompositeKeys.Add ( CompositeLocator_t ( *pCol, tItem.m_sAlias.cstr() ) );
+		}
+
+	} else
+	{
+		tRes.m_pKey = tSchema.GetAttr ( GetAggrName ( iAggrItem, tAggr.m_sCol ).cstr() );
 		switch ( tAggr.m_eAggrFunc )
 		{
 		case Aggr_e::RANGE:
-			GetRangeKeyNames ( tAggr.m_tRange, tRangeNames );
-			bKeyed = tAggr.m_tRange.m_bKeyed;
+			GetRangeKeyNames ( tAggr.m_tRange, tRes.m_tRangeNames );
+			tRes.m_bKeyed = tAggr.m_tRange.m_bKeyed;
 			break;
 
 		case Aggr_e::DATE_RANGE:
-			GetRangeKeyNames ( tAggr.m_tDateRange, iNow, tRangeNames );
-			bKeyed = tAggr.m_tDateRange.m_bKeyed;
+			GetRangeKeyNames ( tAggr.m_tDateRange, iNow, tRes.m_tRangeNames );
+			tRes.m_bKeyed = tAggr.m_tDateRange.m_bKeyed;
 			break;
 
 		case Aggr_e::HISTOGRAM:
-			bKeyed = tAggr.m_tHist.m_bKeyed;
+			tRes.m_bKeyed = tAggr.m_tHist.m_bKeyed;
 			break;
 
 		case Aggr_e::DATE_HISTOGRAM:
-			bKeyed = tAggr.m_tDateHist.m_bKeyed;
+			tRes.m_bKeyed = tAggr.m_tDateHist.m_bKeyed;
 			break;
 
 		default:
 			break;
 		}
 	}
+
+	return ( tRes.m_pKey || tRes.m_dCompositeKeys.GetLength() );
+}
+
+static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, JsonEscapedBuilder & tPrefixBucketBlock )
+{
+	const char * sPrefix = "{";
+	if ( tKey.m_bKeyed )
+	{
+		switch ( eAggrFunc )
+		{
+		case Aggr_e::RANGE:
+		case Aggr_e::DATE_RANGE:
+		{
+			tPrefixBucketBlock.Clear();
+			tPrefixBucketBlock.Appendf ( "\"%s\":{", pRange->m_sKey.cstr() );
+			sPrefix = tPrefixBucketBlock.cstr();
+		}
+		break;
+
+		case Aggr_e::HISTOGRAM:
+		{
+			tPrefixBucketBlock.Clear();
+			tPrefixBucketBlock.Appendf ( "\"");
+			JsonObjAddAttr ( tPrefixBucketBlock, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator );
+			tPrefixBucketBlock.Appendf ( "\":{" );
+			sPrefix = tPrefixBucketBlock.cstr();
+		}
+		break;
+
+		case Aggr_e::DATE_HISTOGRAM:
+		{
+			tPrefixBucketBlock.Clear();
+			tPrefixBucketBlock.Appendf ( "\"");
+			time_t tSrcTime = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
+			FormatDate ( tSrcTime, tPrefixBucketBlock );
+			tPrefixBucketBlock.Appendf ( "\":{" );
+			sPrefix = tPrefixBucketBlock.cstr();
+		}
+		break;
+
+		default: break;
+		}
+	}
+
+	return sPrefix;
+}
+
+static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
+{
+	if ( eAggrFunc==Aggr_e::RANGE || eAggrFunc==Aggr_e::DATE_RANGE )
+	{
+		if ( !tKey.m_bKeyed )
+			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
+		if ( !pRange->m_sFrom.IsEmpty() )
+			tOut.Sprintf ( R"("from":"%s")", pRange->m_sFrom.cstr() );
+		if ( !pRange->m_sTo.IsEmpty() )
+			tOut.Sprintf ( R"("to":"%s")", pRange->m_sTo.cstr() );
+
+	} else if ( eAggrFunc==Aggr_e::DATE_HISTOGRAM )
+	{
+		tBuf.Clear();
+		JsonObjAddAttr ( tBuf, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator );
+		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
+
+		tBuf.Clear();
+		time_t tSrcTime = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
+		FormatDate ( tSrcTime, tBuf );
+		tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+
+	} else if ( eAggrFunc==Aggr_e::COMPOSITE )
+	{
+		ScopedComma_c sBlock ( tOut, ",", R"("key":{)", "}" );
+		for ( const auto & tItem : tKey.m_dCompositeKeys )
+			JsonObjAddAttr ( tOut, tItem.m_eAttrType, tItem.m_sName, tMatch, tItem.m_tLocator );
+
+	} else if ( !bCompat )
+	{
+		JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "key", tMatch, tKey.m_pKey->m_tLocator );
+
+	} else
+	{
+		tBuf.Clear();
+		JsonObjAddAttr ( tBuf, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator );
+		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
+
+		if ( tKey.m_pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
+			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+		else
+			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+	}
+}
+
+static VecTraits_T<CSphMatch> GetResultMatches ( const VecTraits_T<CSphMatch> & dMatches, const CSphSchema & tSchema, int iOff, int iCount, const JsonAggr_t & tAggr )
+{
+	bool bHasCompositeAfter = ( dMatches.GetLength() && tAggr.m_eAggrFunc==Aggr_e::COMPOSITE && tAggr.m_dCompositeAfterKey.GetLength() );
+	if ( !bHasCompositeAfter )
+		return dMatches.Slice ( iOff, iCount );
+
+	CSphString sError;
+	CreateFilterContext_t tCtx;
+	tCtx.m_pFilters = &tAggr.m_dCompositeAfterKey;
+	tCtx.m_pSchema = &tSchema;
+	tCtx.m_bScan = true;
+	if ( !sphCreateFilters ( tCtx, sError, sError ) || !sError.IsEmpty() )
+	{
+		sphWarning ( "failed to create \"after\" filter: %s", sError.cstr() );
+		return dMatches.Slice ( iOff, iCount );
+	}
+
+	int iFound = dMatches.GetFirst (  [&] ( const CSphMatch & tMatch ) { return tCtx.m_pFilter->Eval ( tMatch ); } );
+	if ( iOff<0 )
+		return dMatches.Slice ( iOff, iCount );
+	else
+		return dMatches.Slice ( iFound+1, iCount );
+}
+
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, int iNow, JsonEscapedBuilder & tOut )
+{
+	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+	AggrKeyTrait_t tKey;
+	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
 
 	// might be null for empty result set
 
@@ -1690,134 +1848,73 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		assert ( dNested[i].first );
 	}
 
-	StringBuilder_c tPrefixBucketName;
-	tPrefixBucketName.Appendf ( R"("%s":{)", tAggr.m_sBucketName.cstr() );
+	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
+
+	CSphString sBucketName;
+	sBucketName.SetSprintf ( R"("%s":{)", tAggr.m_sBucketName.cstr() );
+	tOut.StartBlock ( ",", sBucketName.cstr(), "}" );
+
+	// aggr.significant
 	switch ( tAggr.m_eAggrFunc )
 	{
 	case Aggr_e::SIGNIFICANT: // FIXME!!! add support
-		tPrefixBucketName.Sprintf ( "\"doc_count\":" INT64_FMT ",", tRes.m_iTotalMatches  );
-		tPrefixBucketName.Sprintf ( "\"bg_count\":" INT64_FMT ",", tRes.m_iTotalMatches  );
+		tOut.Appendf ( "\"doc_count\":" INT64_FMT ",", tRes.m_iTotalMatches  );
+		tOut.Appendf ( "\"bg_count\":" INT64_FMT ",", tRes.m_iTotalMatches  );
 		break;
 	default: break;
 	}
-	if ( !bKeyed )
-		tPrefixBucketName.Appendf ( "\"buckets\":[" );
+
+	// after_key for aggr.composite
+	if ( bHasKey && pCount && tAggr.m_eAggrFunc==Aggr_e::COMPOSITE && dMatches.GetLength() )
+	{
+		tOut.StartBlock ( ",", R"("after_key":{)", "}" );
+		for ( const auto & tItem : tKey.m_dCompositeKeys )
+			JsonObjAddAttr ( tOut, tItem.m_eAttrType, tItem.m_sName, dMatches.Last(), tItem.m_tLocator );
+		tOut.FinishBlock ( false ); // named bucket obj
+	}
+
+	// buckets might be named objects or array
+	if ( tKey.m_bKeyed )
+		tOut.StartBlock ( ",", R"("buckets":{)", "}" );
 	else
-		tPrefixBucketName.Appendf ( "\"buckets\":{" );
-	const char * sTermBucketName = ( bKeyed ? "}}" : "]}" );
-	tOut.StartBlock ( ",", tPrefixBucketName.cstr(), sTermBucketName );
+		tOut.StartBlock ( ",", R"("buckets":[)", "]" );
 
 	// might be null for empty result set
-	if ( pKey && pCount )
+	if ( bHasKey && pCount )
 	{
 		JsonEscapedBuilder tPrefixBucketBlock;
-		JsonEscapedBuilder tBuf;
+		JsonEscapedBuilder tBufMatch;
 
-		auto dMatches = tRes.m_dResults.First().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 		for ( const CSphMatch & tMatch : dMatches )
 		{
 			RangeKeyDesc_t * pRange = nullptr;
 			if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
 			{
-				int iBucket = tMatch.GetAttr ( pKey->m_tLocator );
-				pRange = tRangeNames ( iBucket );
+				int iBucket = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
+				pRange = tKey.m_tRangeNames ( iBucket );
 				// lets skip bucket with out of ranges index, ie _all
 				if ( !pRange )
 					continue;
 			}
 
 			// bucket item is array item or dict item
-			const char * sBucketPrefix = "{";
-			if ( bKeyed )
-			{
-				switch ( tAggr.m_eAggrFunc )
-				{
-				case Aggr_e::RANGE:
-				case Aggr_e::DATE_RANGE:
-				{
-					tPrefixBucketBlock.Clear();
-					tPrefixBucketBlock.Appendf ( "\"%s\":{", pRange->m_sKey.cstr() );
-					sBucketPrefix = tPrefixBucketBlock.cstr();
-				}
-				break;
-
-				case Aggr_e::HISTOGRAM:
-				{
-					tPrefixBucketBlock.Clear();
-					tPrefixBucketBlock.Appendf ( "\"");
-					JsonObjAddAttr ( tPrefixBucketBlock, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
-					tPrefixBucketBlock.Appendf ( "\":{" );
-					sBucketPrefix = tPrefixBucketBlock.cstr();
-				}
-				break;
-
-				case Aggr_e::DATE_HISTOGRAM:
-				{
-					tPrefixBucketBlock.Clear();
-					tPrefixBucketBlock.Appendf ( "\"");
-					time_t tSrcTime = tMatch.GetAttr ( pKey->m_tLocator );
-					FormatDate ( tSrcTime, tPrefixBucketBlock );
-					tPrefixBucketBlock.Appendf ( "\":{" );
-					sBucketPrefix = tPrefixBucketBlock.cstr();
-				}
-				break;
-
-				default: break;
-				}
-			}
+			const char * sBucketPrefix = GetBucketPrefix ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, tPrefixBucketBlock );
 			ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
-
-			if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
-			{
-				if ( !bKeyed )
-					tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
-				if ( !pRange->m_sFrom.IsEmpty() )
-					tOut.Sprintf ( R"("from":"%s")", pRange->m_sFrom.cstr() );
-				if ( !pRange->m_sTo.IsEmpty() )
-					tOut.Sprintf ( R"("to":"%s")", pRange->m_sTo.cstr() );
-
-			} else if ( tAggr.m_eAggrFunc==Aggr_e::DATE_HISTOGRAM )
-			{
-				tBuf.Clear();
-				JsonObjAddAttr ( tBuf, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
-				tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
-
-				tBuf.Clear();
-				time_t tSrcTime = tMatch.GetAttr ( pKey->m_tLocator );
-				FormatDate ( tSrcTime, tBuf );
-				tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
-
-			} else if ( !bCompat )
-			{
-				JsonObjAddAttr ( tOut, pKey->m_eAttrType, "key", tMatch, pKey->m_tLocator );
-
-			} else
-			{
-				tBuf.Clear();
-				JsonObjAddAttr ( tBuf, pKey->m_eAttrType, tMatch, pKey->m_tLocator );
-				tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
-
-				if ( pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
-					tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
-				else
-					tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
-			}
+			PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, tBufMatch, tOut );
 
 			JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
-			switch ( tAggr.m_eAggrFunc )
+			// FIXME!!! add support
+			if ( tAggr.m_eAggrFunc==Aggr_e::SIGNIFICANT )
 			{
-			case Aggr_e::SIGNIFICANT: // FIXME!!! add support
 				tOut.Sprintf ( R"("score":0.001)" );
 				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
-				break;
-			default: break;
 			}
 
 			for ( const auto & tNested : dNested )
 			{
-				tBuf.Clear();
-				tBuf.Appendf ( R"("%s":{"value":)",  tNested.second );
-				tOut.StartBlock ( ",", tBuf.cstr(), "}");
+				tBufMatch.Clear();
+				tBufMatch.Appendf ( R"("%s":{"value":)",  tNested.second );
+				tOut.StartBlock ( ",", tBufMatch.cstr(), "}");
 
 				JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
 
@@ -1825,7 +1922,8 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 			}
 		}
 	}
-
+	
+	tOut.FinishBlock ( false ); // buckets array
 	tOut.FinishBlock ( false ); // named bucket obj
 }
 
@@ -2970,6 +3068,8 @@ static Aggr_e GetAggrFunc ( const JsonObj_c & tBucket, bool bCheckAggType )
 		return Aggr_e::RANGE;
 	if ( StrEq ( tBucket.Name(), "date_range") )
 		return Aggr_e::DATE_RANGE;
+	if ( StrEq ( tBucket.Name(), "composite") )
+		return Aggr_e::COMPOSITE;
 
 	if ( bCheckAggType )
 		sphWarning ( "unsupported aggregate type '%s'", tBucket.Name() );
@@ -3218,6 +3318,96 @@ static bool ParseAggrDateHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tIt
  	return true;
 }
 
+static bool ParseAggrComposite ( const JsonObj_c & tBucket, JsonAggr_t & tAggr, CSphString & sError )
+{
+	JsonObj_c tComposite = tBucket.GetObjItem ( "composite", sError, false );
+	if ( !tComposite )
+		return false;
+	JsonObj_c tSource = tComposite.GetArrayItem ( "sources", sError, false );
+	if ( !tSource )
+		return false;
+
+	if ( !tSource.IsArray() )
+	{
+		sError = R"("sources" property item should be an array)";
+		return false;
+	}
+
+	SmallStringHash_T<AggrComposite_t> hColumns;
+	for ( const auto & tArrayItem : tSource )
+	{
+		if ( !tArrayItem.IsObj() )
+		{
+			sError = R"("sources" items should be an object)";
+			return false;
+		}
+		JsonObj_c tItem = tArrayItem.begin();
+		JsonObj_c tTerms = tItem.GetObjItem ( "terms", sError, false );
+		if ( !tTerms )
+			return false;
+
+		AggrComposite_t tCol;
+		if ( !tTerms.FetchStrItem ( tCol.m_sColumn, "field", sError, false ) )
+			return false;
+
+		tCol.m_sAlias = tItem.Name();
+		if ( !hColumns.Add ( tCol, tItem.Name() ) )
+		{
+			sError.SetSprintf ( R"("composite" has multiple "%s" aggregates)", tItem.Name() );
+			return false;
+		}
+	}
+	if ( hColumns.IsEmpty() )
+	{
+		sError = R"(empty "composite" aggregate)";
+		return false;
+	}
+
+	JsonObj_c tAfter = tComposite.GetObjItem ( "after", sError, false );
+	if ( tAfter && tAfter.Size() )
+	{
+		JsonObj_c tJsonQuery ( R"( {"query":{"bool":{"must":[] }}} )" );
+		JsonObj_c tFilters = tJsonQuery.GetItem ( "query" ).GetItem ( "bool" ).GetItem ( "must" );
+
+		for ( const auto & tItem : tAfter )
+		{
+			AggrComposite_t * pCol = hColumns ( tItem.Name() );
+			if ( !pCol )
+			{
+				sError.SetSprintf ( R"("after" missed "%s" aggregate)", tItem.Name() );
+				return false;
+			}
+
+			JsonObj_c tFilterVal = tItem.Clone();
+			JsonObj_c tEqItem ( R"( {"equals":{} } )") ;
+			tEqItem.begin().AddItem ( pCol->m_sColumn.cstr(), tFilterVal );
+			tFilters.AddItem ( tEqItem );
+		}
+
+		CSphQuery tTmpQuery;
+		if ( !ParseJsonQueryFilters ( tJsonQuery.GetItem( "query" ), tTmpQuery, sError, sError ) )
+			return false;
+		if ( !sError.IsEmpty() )
+			return false;
+
+		assert ( tTmpQuery.m_dFilterTree.IsEmpty() );
+		tAggr.m_dCompositeAfterKey = std::move ( tTmpQuery.m_dFilters );
+	}
+	tAggr.m_iSize = DEFAULT_MAX_MATCHES;
+	tComposite.FetchIntItem ( tAggr.m_iSize, "size", sError, true );
+
+	StringBuilder_c sColName ( "," );
+	tAggr.m_dComposite.Reserve ( hColumns.GetLength() );
+	for ( const auto & tCol : hColumns )
+	{
+		sColName += tCol.second.m_sColumn.cstr();
+		tAggr.m_dComposite.Add ( tCol.second );
+	}
+	tAggr.m_sCol = sColName.cstr();
+
+	return true;
+}
+
 static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<JsonAggr_t> & dParentItems, CSphString & sError )
 {
 	CSphString sWarning;
@@ -3255,7 +3445,7 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			return false;
 		}
 
-		if ( !tBucket.FetchStrItem ( tItem.m_sCol, "field", sError, false ) )
+		if ( !StrEq ( tBucket.Name(), "composite" ) && !tBucket.FetchStrItem ( tItem.m_sCol, "field", sError, false ) )
 			return false;
 
 		//tBucket.FetchStrItem ( tItem.m_sExpr, "calendar_interval", sError, true );
@@ -3288,6 +3478,10 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			if ( !ParseAggrRange ( tBucket, tItem, true, sError ) )
 				return false;
 			tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tDateRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
+			break;
+		case Aggr_e::COMPOSITE:
+			if ( !ParseAggrComposite ( tJsonItem, tItem, sError ) )
+				return false;
 			break;
 			
 		default: break;

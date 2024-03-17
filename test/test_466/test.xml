@@ -123,5 +123,44 @@ INSERT INTO `test_group2` VALUES
 
 <sphinxql>select id, code, count(*), range(code, {range_from=200,range_to=300},{range_from=400,range_to=415}) c1 from test_group1,test_group2 facet c1 as r1 order by c1 asc;</sphinxql>
 
+<!-- aggs.composite  -->
+<query endpoint="json/search">
+{
+    "index": "test_group1,test_group2",
+    "size":0,
+    "aggs": {
+        "gr_1": {
+            "composite": {
+                "size":5,
+                "sources": [
+                    { "product_tag": { "terms": { "field": "tag" } } },
+                    { "product_id": { "terms": { "field": "gid" } } }
+                ]
+            }
+        }
+    }
+}
+</query>
+<query endpoint="json/search">
+{
+    "index": "test_group1,test_group2",
+    "size":0,
+    "aggs": {
+        "gr_1": {
+            "composite": {
+                "after":{
+                    "product_tag":3,
+                    "product_id":8
+                },
+                "size":2,
+                "sources": [
+                    { "product_tag": { "terms": { "field": "tag" } } },
+                    { "product_id": { "terms": { "field": "gid" } } }
+                ]
+            }
+        }
+    }
+}
+</query>
 </queries>
 </test>

@@ -1102,6 +1102,9 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		if ( hAttrs[tBucket.m_sCol] )
 			continue;
 
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+			continue;
+
 		CSphQueryItem & tItem = tQuery.m_dItems.Add();
 		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
 		{
@@ -1135,6 +1138,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
 
 		// common to main query but flags, select list and ref items should uniq
+		tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR;
 
 		// facet flags
 		tQuery.m_bFacetHead = false;
@@ -1146,15 +1150,24 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		// ref items to facet query
 		tQuery.m_dRefItems.Resize ( 0 );
 		CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
-		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+		switch ( tBucket.m_eAggrFunc )
 		{
-			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
-			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			case Aggr_e::SIGNIFICANT:
+			case Aggr_e::HISTOGRAM:
+			case Aggr_e::DATE_HISTOGRAM:
+			case Aggr_e::RANGE:
+			case Aggr_e::DATE_RANGE:
+				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			break;
 
-		} else
-		{
-			tItem.m_sExpr = tBucket.m_sCol;
-			tItem.m_sAlias = tBucket.m_sCol;
+			case Aggr_e::COMPOSITE:
+			break;
+
+			default:
+				tItem.m_sExpr = tBucket.m_sCol;
+				tItem.m_sAlias = tBucket.m_sCol;
+			break;
 		}
 
 		// FIXME!!! no need to add count for AggrFunc aggregates
@@ -1171,22 +1184,45 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
 		}
 
-		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+
+		switch ( tBucket.m_eAggrFunc )
 		{
-			tQuery.m_sFacetBy = tQuery.m_sGroupBy = GetAggrName ( i, tBucket.m_sCol );
-		} else
-		{
-			tQuery.m_sGroupBy = tBucket.m_sCol;
-			tQuery.m_sFacetBy = tBucket.m_sCol;
+			case Aggr_e::SIGNIFICANT:
+			case Aggr_e::HISTOGRAM:
+			case Aggr_e::DATE_HISTOGRAM:
+			case Aggr_e::RANGE:
+			case Aggr_e::DATE_RANGE:
+				tQuery.m_sFacetBy = tQuery.m_sGroupBy = GetAggrName ( i, tBucket.m_sCol );
+			break;
+
+			case Aggr_e::COMPOSITE:
+			default:
+				tQuery.m_sGroupBy = tBucket.m_sCol;
+				tQuery.m_sFacetBy = tBucket.m_sCol;
+			break;
 		}
 		tQuery.m_sOrderBy = "@weight desc";
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+			tQuery.m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
 
 		if ( tBucket.m_sSort.IsEmpty() )
 		{
-			if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+			switch ( tBucket.m_eAggrFunc )
+			{
+			case Aggr_e::SIGNIFICANT:
+			case Aggr_e::HISTOGRAM:
+			case Aggr_e::DATE_HISTOGRAM:
+			case Aggr_e::RANGE:
+			case Aggr_e::DATE_RANGE:
 				tQuery.m_sGroupSortBy = "@groupby asc";
-			else
+				break;
+			case Aggr_e::COMPOSITE:
+				tQuery.m_sGroupSortBy = "@weight desc";
+				break;
+			default:
 				tQuery.m_sGroupSortBy = "@groupby desc";
+				break;
+			}
 		} else
 		{
 			tQuery.m_sGroupSortBy = tBucket.m_sSort;
@@ -1803,7 +1839,7 @@ public:
 		TRACE_CONN ( "conn", "HttpHandler_JsonInsert_c::Process" );
 		SqlStmt_t tStmt;
 		DocID_t tDocId = 0;
-		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, false, m_sError ) )
+		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, m_sError ) )
 		{
 			ReportError ( SPH_HTTP_STATUS_400 );
 			return false;
@@ -2954,7 +2990,7 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 	if ( sAction=="index" )
 	{
 		JsonObj_c tRoot ( sLine );
-		if ( !ParseJsonInsertSource ( tRoot, tStmt, true, true, sError ) )
+		if ( !ParseJsonInsertSource ( tRoot, tStmt, true, sError ) )
 			return false;
 		if ( !AddDocid ( tStmt, tDocId, sError ) )
 			return false;
@@ -2962,7 +2998,7 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 	}  else if ( sAction=="create" )
 	{
 		JsonObj_c tRoot ( sLine );
-		if ( !ParseJsonInsertSource ( tRoot, tStmt, false, true, sError ) )
+		if ( !ParseJsonInsertSource ( tRoot, tStmt, false, sError ) )
 			return false;
 		if ( !AddDocid ( tStmt, tDocId, sError ) )
 			return false;

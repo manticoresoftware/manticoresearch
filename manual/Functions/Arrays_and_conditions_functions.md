@@ -313,6 +313,21 @@ IF ( sqrt(3)*sqrt(3)-3, a, b )
 
 In the first case, the comparison operator <> will return 0.0 (false) due to a threshold, and `IF()` will always return `**` as a result. In the second case, the same `sqrt(3)*sqrt(3)-3` expression will be compared with zero *without* a threshold by the `IF()` function itself. However, its value will be slightly different from zero due to limited floating-point calculation precision. Because of this, the comparison with 0.0 done by `IF()` will not pass, and the second variant will return 'a' as a result.
 
+### HISTOGRAM()
+`HISTOGRAM(expr, {hist_interval=size, hist_offset=value})` takes a bucket size and returns the bucket number for the value. The key function is:
+```sql
+key_of_the_bucket = interval + offset * floor ( ( value - offset ) / interval )
+```
+The histogram argument `interval` must be positive. The histogram argument `offset` must be positive and less than `interval`. It is used in aggregation, FACET, and grouping.
+
+Example:
+
+```sql
+SELECT COUNT(*),
+HISTOGRAM(price, {hist_interval=100}) as price_range
+FROM facets
+GROUP BY price_range ORDER BY price_range ASC;
+```
 
 ### IN()
 `IN(expr,val1,val2,...)` takes 2 or more arguments and returns 1 if the 1st argument (expr) is equal to any of the other arguments (val1..valN), or 0 otherwise. Currently, all the checked values (but not the expression itself) are required to be constant. The constants are pre-sorted, and binary search is used, so `IN()` even against a large arbitrary list of constants will be very quick. The first argument can also be an MVA attribute. In that case, `IN()` will return 1 if any of the MVA values are equal to any of the other arguments. `IN()` also supports `IN(expr,@uservar)` syntax to check whether the value belongs to the list in the given global user variable. The first argument can be a JSON attribute.
@@ -327,6 +342,19 @@ In the first case, the comparison operator <> will return 0.0 (false) due to a t
 ### LENGTH()
 `LENGTH(attr_mva)` function returns the number of elements in an MVA set. It works with both 32-bit and 64-bit MVA attributes. `LENGTH(attr_json)` returns the length of a field in JSON. The return value depends on the type of field. For example, `LENGTH(json_attr.some_int)` always returns 1, and `LENGTH(json_attr.some_array)` returns the number of elements in the array. `LENGTH(string_expr)` function returns the length of the string resulting from an expression.
 [TO_STRING()](../Functions/Type_casting_functions.md#TO_STRING%28%29) must enclose the expression, regardless of whether the expression returns a non-string or it's simply a string attribute.
+
+### RANGE()
+`RANGE(expr, {range_from=value,range_to=value})` takes a set of ranges and returns the bucket number for the value.
+This expression includes the `range_from` value and excludes the `range_to` value for each range. A range can be open - having only the `range_from` or only the `range_to` value. It is used in aggregation, FACET, and grouping.
+
+Example:
+
+```sql
+SELECT COUNT(*),
+RANGE(price, {range_to=150},{range_from=150,range_to=300},{range_from=300}) price_range
+FROM facets
+GROUP BY price_range ORDER BY price_range ASC;
+```
 
 ### REMAP()
 `REMAP(condition, expression, (cond1, cond2, ...), (expr1, expr2, ...))` function allows you to make some exceptions to expression values depending on condition values. The condition expression should always result in an integer, while the expression can result in an integer or float.

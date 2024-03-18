@@ -1254,6 +1254,473 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 ```
 <!-- end -->
 
+<!-- example histogram -->
+
+### Facet over histogram values
+
+Facets can aggregate over histogram values by constructing fixed-size buckets over the values.
+The key function is:
+
+```sql
+key_of_the_bucket = interval + offset * floor ( ( value - offset ) / interval )
+```
+
+The histogram argument `interval` must be positive, and the histogram argument `offset` must be positive and less than `interval`. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+
+<!-- request SQL -->
+
+```sql
+SELECT COUNT(*), HISTOGRAM(price, {hist_interval=100}) as price_range FROM facets GROUP BY price_range ORDER BY price_range ASC;
+```
+
+<!-- response SQL -->
+
+```sql
++----------+-------------+
+| count(*) | price_range |
++----------+-------------+
+|        5 |           0 |
+|        5 |         100 |
+|        1 |         300 |
+|        4 |         400 |
+|        1 |         500 |
+|        3 |         700 |
+|        1 |         900 |
++----------+-------------+
+```
+<!-- request JSON -->
+
+``` json
+POST /search -d '
+{
+  "size":0,
+  "index":"facets",
+  "aggs":{
+    "price_range":{
+      "histogram":{
+        "field":"price",
+        "interval":300
+      }
+    }
+  }
+}'
+```
+
+<!-- response JSON -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "price_range": {
+      "buckets": [
+        {
+          "key": 0,
+          "doc_count": 10
+        },
+        {
+          "key": 300,
+          "doc_count": 6
+        },
+        {
+          "key": 600,
+          "doc_count": 3
+        },
+        {
+          "key": 900,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request JSON 2 -->
+
+``` json
+POST /search -d '
+{
+  "size":0,
+  "index":"facets",
+  "aggs":{
+    "price_range":{
+      "histogram":{
+        "field":"price",
+        "interval":300,
+        "keyed":true
+      }
+    }
+  }
+}'
+```
+
+<!-- response JSON 2 -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "price_range": {
+      "buckets": {
+        "0": {
+          "key": 0,
+          "doc_count": 10
+        },
+        "300": {
+          "key": 300,
+          "doc_count": 6
+        },
+        "600": {
+          "key": 600,
+          "doc_count": 3
+        },
+        "900": {
+          "key": 900,
+          "doc_count": 1
+        }
+      }
+    }
+  }
+}
+```
+<!-- end -->
+
+<!-- example histogram_date -->
+
+### Facet over histogram date values
+
+Facets can aggregate over histogram date values, which is similar to the normal histogram. The difference is that the interval is specified using a date or time expression. Such expressions require special support because the intervals are not always of fixed length. Values are rounded to the closest bucket using the following key function:
+
+```sql
+key_of_the_bucket = interval * floor ( value / interval ) 
+```
+
+The histogram parameter `calendar_interval` understands months to have different amounts of days. The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+
+<!-- request SQL -->
+
+```sql
+SELECT count(*), DATE_HISTOGRAM(tm, {calendar_interval='month'}) AS months FROM idx_dates GROUP BY months ORDER BY months ASC
+```
+
+<!-- response SQL -->
+
+```sql
++----------+------------+
+| count(*) | months     |
++----------+------------+
+|      442 | 1485907200 |
+|      744 | 1488326400 |
+|      720 | 1491004800 |
+|      230 | 1493596800 |
++----------+------------+
+```
+<!-- request JSON -->
+
+``` json
+POST /search -d '
+{
+  "index":"idx_dates",
+  "size":0,
+  "aggs":{
+    "months":{
+      "date_histogram":{
+        "field":"tm",
+        "keyed":true,
+        "calendar_interval":"month"
+      }
+    }
+  }
+}'
+```
+
+<!-- response JSON -->
+``` json
+{
+    "timed_out": false,
+    "hits": {
+        "total": 2136,
+        "total_relation": "eq",
+        "hits": []
+    },
+    "aggregations": {
+        "months": {
+            "buckets": {
+                "2017-02-01T00:00:00": {
+                    "key": 1485907200,
+                    "key_as_string": "2017-02-01T00:00:00",
+                    "doc_count": 442
+                },
+                "2017-03-01T00:00:00": {
+                    "key": 1488326400,
+                    "key_as_string": "2017-03-01T00:00:00",
+                    "doc_count": 744
+                },
+                "2017-04-01T00:00:00": {
+                    "key": 1491004800,
+                    "key_as_string": "2017-04-01T00:00:00",
+                    "doc_count": 720
+                },
+                "2017-05-01T00:00:00": {
+                    "key": 1493596800,
+                    "key_as_string": "2017-05-01T00:00:00",
+                    "doc_count": 230
+                }
+            }
+        }
+    }
+}
+```
+<!-- end -->
+
+
+<!-- example facet range -->
+
+### Facet over set of ranges 
+
+Facets can aggregate over a set of ranges. The values are checked against the bucket range, where each bucket includes the `from` value and excludes the `to` value from the range.
+Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+
+<!-- request SQL -->
+
+```sql
+SELECT COUNT(*), RANGE(price, {range_to=150},{range_from=150,range_to=300},{range_from=300}) price_range FROM facets GROUP BY price_range ORDER BY price_range ASC;
+```
+
+<!-- response SQL -->
+
+```sql
++----------+-------------+
+| count(*) | price_range |
++----------+-------------+
+|        8 |           0 |
+|        2 |           1 |
+|       10 |           2 |
++----------+-------------+
+```
+<!-- request JSON -->
+
+``` json
+POST /search -d '
+{
+  "size":0,
+  "index":"facets",
+  "aggs":{
+    "price_range":{
+      "range":{
+        "field":"price",
+        "ranges":[
+          {
+            "to":99
+          },
+          {
+            "from":99,
+            "to":550
+          },
+          {
+            "from":550
+          }
+        ]
+      }
+    }
+  }
+}'
+```
+
+<!-- response JSON -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "price_range": {
+      "buckets": [
+        {
+          "key": "*-99",
+          "to": "99",
+          "doc_count": 5
+        },
+        {
+          "key": "99-550",
+          "from": "99",
+          "to": "550",
+          "doc_count": 11
+        },
+        {
+          "key": "550-*",
+          "from": "550",
+          "doc_count": 4
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request JSON 2 -->
+
+``` json
+POST /search -d '
+{
+  "size":0,
+  "index":"facets",
+  "aggs":{
+    "price_range":{
+      "range":{
+        "field":"price",
+        "keyed":true,
+        "ranges":[
+          {
+            "from":100,
+            "to":399
+          },
+          {
+            "from":399
+          }
+        ]
+      }
+    }
+  }
+}'
+```
+
+<!-- response JSON 2 -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "price_range": {
+      "buckets": {
+        "100-399": {
+          "from": "100",
+          "to": "399",
+          "doc_count": 6
+        },
+        "399-*": {
+          "from": "399",
+          "doc_count": 9
+        }
+      }
+    }
+  }
+}
+```
+<!-- end -->
+
+<!-- example facet range_date -->
+
+### Facet over set of date ranges 
+
+Facets can aggregate over a set of date ranges, which is similar to the normal range. The difference is that the `from` and `to` values can be expressed in [Date Math](../Functions/Date_and_time_functions.md#Date-Math) expressions. This aggregation includes the `from` value and excludes the `to` value for each range. Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+
+<!-- request SQL -->
+
+```sql
+SELECT COUNT(*), DATE_RANGE(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) AS points FROM idx_dates GROUP BY points ORDER BY points ASC;
+```
+
+<!-- response SQL -->
+
+```sql
++----------+--------+
+| count(*) | points |
++----------+--------+
+|      442 |      0 |
+|     1464 |      1 |
+|      230 |      2 |
++----------+--------+
+```
+<!-- request JSON -->
+
+``` json
+POST /search -d '
+{
+  "index":"idx_dates",
+  "size":0,
+  "aggs":{
+    "points":{
+      "date_range":{
+        "field":"tm",
+        "keyed":true,
+        "ranges":[
+          {
+            "to":"2017||+2M/M"
+          },
+          {
+            "from":"2017||+2M/M",
+            "to":"2017||+4M/M"
+          },
+          {
+            "from":"2017||+4M/M",
+            "to":"2017||+5M/M"
+          },
+          {
+            "from":"2017||+5M/M"
+          }
+        ]
+      }
+    }
+  }
+}'
+```
+
+<!-- response JSON -->
+``` json
+{
+    "timed_out": false,
+    "hits": {
+        "total": 2136,
+        "total_relation": "eq",
+        "hits": []
+    },
+    "aggregations": {
+        "points": {
+            "buckets": {
+                "*-2017-03-01T00:00:00": {
+                    "to": "2017-03-01T00:00:00",
+                    "doc_count": 442
+                },
+                "2017-03-01T00:00:00-2017-04-01T00:00:00": {
+                    "from": "2017-03-01T00:00:00",
+                    "to": "2017-04-01T00:00:00",
+                    "doc_count": 744
+                },
+                "2017-04-01T00:00:00-2017-05-01T00:00:00": {
+                    "from": "2017-04-01T00:00:00",
+                    "to": "2017-05-01T00:00:00",
+                    "doc_count": 720
+                },
+                "2017-05-01T00:00:00-*": {
+                    "from": "2017-05-01T00:00:00",
+                    "doc_count": 230
+                }
+            }
+        }
+    }
+}
+```
+<!-- end -->
+
 <!-- example Ordering -->
 ### Ordering in facet result
 

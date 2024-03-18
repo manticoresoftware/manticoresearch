@@ -447,4 +447,77 @@ SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
 
 This example formats the current date and time, displaying the four-digit year and the time in 24-hour format.
 
+### DATE_HISTOGRAM()
+<!-- example DATE_HISTOGRAM -->
+`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` Takes a bucket size as a unit name and returns the bucket number for the value. Values are rounded to the closest bucket. The key function is:
+```sql
+key_of_the_bucket = interval * floor ( value / interval ) 
+```
+Intervals are specified using the unit name, such as `week` or as a single unit like `1M`. Multiple units such as `2w` are not supported.
+
+The valid intervals are:
+
+- `minute`, `1m`
+- `hour`, `1h`
+- `day`, `1d`
+- `week`, `1w` (a week is the interval between the start day of the week, hour, minute, second and the next week but the same day and time of the week)
+- `month`, `1M`
+- `year`, `1y` (a year is the interval between the start day of the month, time and the next year but the same day of the month, time)
+
+Used in aggregation, FACET, and grouping.
+
+Example:
+
+```sql
+SELECT COUNT(*),
+DATE_HISTOGRAM(tm, {calendar_interval='month'}) AS months
+FROM facets
+GROUP BY months ORDER BY months ASC;
+```
+
+### DATE_RANGE()
+<!-- example DATE_RANGE -->
+`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` takes a set of ranges and returns the bucket number for the value.
+This expression includes the `range_from` value and excludes the `range_to` value for each range. The range can be open - having only the `range_from` or only the `range_to` value.
+The difference between this and the [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) function is that the `range_from` and `range_to` values can be expressed in [Date Math](../Functions/Date_and_time_functions.md#Date-Math) expressions.
+
+Used in aggregation, FACET, and grouping.
+
+Example:
+
+```sql
+SELECT COUNT(*),
+DATE_RANGE(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) AS points
+FROM idx_dates
+GROUP BY points ORDER BY points ASC;
+```
+
+##### Date Math
+
+The expression starts with the date, such as:
+- `now`
+- a date string ending with `||`
+
+This date can optionally be followed by one or more math expressions:
+
+- `+1y` to add one year
+- `-1h` to subtract one hour
+- `/m` to round to the nearest month
+
+The supported date units are:
+
+- `s` - seconds
+- `m` - minutes
+- `h` or `H` - hours
+- `d` - days
+- `w` - weeks
+- `M` - months
+- `y` - years
+
+Here are some examples:
+
+- `now+4h` - Represents the current time plus four hours.
+- `now-2d/d` - Represents the current time minus two days, rounded down to the nearest day.
+- `2010-04-20||+2M/d` - Represents April 20, 2010, plus two months, rounded down to the nearest day.
+
 <!-- proofread -->

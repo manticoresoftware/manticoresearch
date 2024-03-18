@@ -48,6 +48,21 @@ index test_group2
   path      = <data_path/>/test_group2
 }
 
+source src_dates
+{
+    type			= mysql
+    <sql_settings/>
+    sql_query		= SELECT * FROM test_table_dates
+    sql_attr_timestamp	= tm
+}
+
+
+index idx_dates
+{
+    source			= src_dates
+    path			= <data_path/>/idx_dates
+}
+
 </config>
 
 <db_drop>drop table if exists test_group1</db_drop>
@@ -100,6 +115,25 @@ INSERT INTO `test_group2` VALUES
 ( 29,   3,  5,  101, 'test 125'),
 ( 30,   3,  4,  110, 'test 128')
 </db_insert>
+
+<db_create>
+CREATE TABLE test_table_dates
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	tm INTEGER NOT NULL,
+	title TEXT NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<db_insert>								  
+	<repeat count="24" vars="stamp" init="1486735200">
+		<var name="vals"/>
+		<repeat count="89" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
+		INSERT INTO test_table_dates VALUES <vals/><db_insert/></repeat>
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table_dates</db_drop>
+
 
 <queries>
 <query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "size": 40 } }} }</query>
@@ -162,5 +196,41 @@ INSERT INTO `test_group2` VALUES
     }
 }
 </query>
+
+<query endpoint="json/search">{ "index": "idx_dates", "size":0, "aggs":{ "months": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"month" } }} }</query>
+<sphinxql>select id, count(*), date_histogram(tm, {calendar_interval='month'}) as months from idx_dates group by months order by months asc</sphinxql>
+
+<query endpoint="json/search">
+{
+  "index":"idx_dates",
+  "size":0,
+  "aggs":{
+    "points":{
+      "date_range":{
+        "field":"tm",
+        "keyed":true,
+        "ranges":[
+          {
+            "to":"2017||+2M/M"
+          },
+          {
+            "from":"2017||+2M/M",
+            "to":"2017||+4M/M"
+          },
+          {
+            "from":"2017||+4M/M",
+            "to":"2017||+5M/M"
+          },
+          {
+            "from":"2017||+5M/M"
+          }
+        ]
+      }
+    }
+  }
+}
+</query>
+<sphinxql>select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) as points from idx_dates group by points order by points asc</sphinxql>
+
 </queries>
 </test>

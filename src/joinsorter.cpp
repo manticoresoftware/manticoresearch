@@ -1035,6 +1035,11 @@ public:
 	bool	Push ( const CSphMatch & tEntry ) override;
 	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override;
 
+	// cloning multi-sorter is hard with the current architecture
+	// as it holds pointers to sorters that also exist in dSorters array in matching/fullscan
+	// for cloning to work we would need to clone the sorters that we hold and also somehow sync them with dSorters
+	bool	CanBeCloned() const override { return false; }
+
 private:
 	CSphVector<ISphMatchSorter *> m_dSorters;	// we don't own 1..N sorters (JoinSorter_c owns sorter #0)
 };

@@ -4,7 +4,10 @@
 
 `SHOW PLAN` is an SQL statement that displays the execution plan of the previous `SELECT` statement. The plan is generated and stored during the actual execution, so profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
 
-To view the query execution plan in JSON queries, add `"plan": true` to the query. The result appears as a `plan` property in the result set.
+To view the query execution plan in JSON queries, add `"plan": N` to the query. The result appears as a `plan` property in the result set. `N` might be one of:
+* 1 - displays only textual plan of root node, similar the one returned in mysql. That is the most compact form.
+* 2 - displays only json object plan, useful for processing.
+* 3 - displays json object with textual description of every node. Note, description for children also present and repeat part of parent's description, which makes whole representation quite big.
 
 Note that there are two things returned in the SQL mode:
 * `transformed_tree`, which shows the full-text query decomposition
@@ -48,7 +51,7 @@ POST /search
   "query": {"query_string": "dog|cat"},
   "_source": { "excludes":["*"] },
   "limit": 0,
-  "plan":true
+  "plan":3
 }
 ```
 
@@ -143,7 +146,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON full format:
 
 <!-- request JSON -->
 
@@ -154,7 +157,7 @@ POST /search
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
-  "plan": true
+  "plan": 3
 }
 ```
 
@@ -294,6 +297,198 @@ POST /search
           ]
         }
       ]
+    }
+  }
+}
+```
+
+<!-- intro -->
+
+##### JSON object format:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "index": "forum",
+  "query": {"query_string": "@title way* @content hey"},
+  "_source": { "excludes":["*"] },
+  "limit": 1,
+  "plan": 2
+}
+```
+
+<!-- response JSON -->
+
+```JSON
+{
+  "took": 33,
+  "timed_out": false,
+  "hits": {
+    "total": 105,
+    "hits": [
+      {
+        "_id": "711651",
+        "_score": 2539,
+        "_source": {}
+      }
+    ]
+  },
+  "plan": {
+    "query": {
+      "type": "AND",
+      "children": [
+        {
+          "type": "OR",
+          "children": [
+            {
+              "type": "OR",
+              "children": [
+                {
+                  "type": "AND",
+                  "fields": [
+                    "title"
+                  ],
+                  "max_field_pos": 0,
+                  "children": [
+                    {
+                      "type": "KEYWORD",
+                      "word": "wayne",
+                      "querypos": 1,
+                      "expanded": true
+                    }
+                  ]
+                },
+                {
+                  "type": "OR",
+                  "children": [
+                    {
+                      "type": "AND",
+                      "fields": [
+                        "title"
+                      ],
+                      "max_field_pos": 0,
+                      "children": [
+                        {
+                          "type": "KEYWORD",
+                          "word": "ways",
+                          "querypos": 1,
+                          "expanded": true
+                        }
+                      ]
+                    },
+                    {
+                      "type": "AND",
+                      "fields": [
+                        "title"
+                      ],
+                      "max_field_pos": 0,
+                      "children": [
+                        {
+                          "type": "KEYWORD",
+                          "word": "wayyy",
+                          "querypos": 1,
+                          "expanded": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "AND",
+              "fields": [
+                "title"
+              ],
+              "max_field_pos": 0,
+              "children": [
+                {
+                  "type": "KEYWORD",
+                  "word": "way",
+                  "querypos": 1,
+                  "expanded": true
+                }
+              ]
+            },
+            {
+              "type": "OR",
+              "fields": [
+                "title"
+              ],
+              "max_field_pos": 0,
+              "children": [
+                {
+                  "type": "KEYWORD",
+                  "word": "way*",
+                  "querypos": 1,
+                  "expanded": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "AND",
+          "fields": [
+            "content"
+          ],
+          "max_field_pos": 0,
+          "children": [
+            {
+              "type": "KEYWORD",
+              "word": "hey",
+              "querypos": 2
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- intro -->
+
+##### JSON short format:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "index": "forum",
+  "query": {"query_string": "@title way* @content hey"},
+  "_source": { "excludes":["*"] },
+  "limit": 1,
+  "plan": 1
+}
+```
+
+<!-- response JSON -->
+
+```JSON
+{
+  "took":33,
+  "timed_out":false,
+  "hits":
+  {
+    "total":105,
+    "hits":
+    [
+       {
+          "_id":"711651",
+          "_score":2539,
+          "_source":{}
+       }
+    ]
+  },
+  "plan":
+  {
+    "query":
+    {
+      "description":"AND( OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded))),  AND(fields=(content), KEYWORD(hey, querypos=2)))"
     }
   }
 }

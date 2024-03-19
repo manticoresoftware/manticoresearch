@@ -211,18 +211,10 @@ CREATE TABLE test_table_dates
         "keyed":true,
         "ranges":[
           {
-            "to":"2017||+2M/M"
+            "to":"2017-02-10||+30d/M"
           },
           {
-            "from":"2017||+2M/M",
-            "to":"2017||+4M/M"
-          },
-          {
-            "from":"2017||+4M/M",
-            "to":"2017||+5M/M"
-          },
-          {
-            "from":"2017||+5M/M"
+            "from":"2017-04-10||/M"
           }
         ]
       }

@@ -33,7 +33,7 @@ a:1:{i:0;a:21:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_metho
             }
         }
     }
-}";s:4:"rows";s:264:"{"timed_out":false,"hits":{"total":20,"total_relation":"eq","hits":[]},"aggregations":{"gr_1":{"after_key":{"product_tag":3,"product_id":6},"buckets":[{"key":{"product_tag":3,"product_id":7},"doc_count":2},{"key":{"product_tag":3,"product_id":6},"doc_count":2}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:138:"{ "index": "idx_dates", "size":0, "aggs":{ "months": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"month" } }} }";s:4:"rows";s:493:"{"timed_out":false,"hits":{"total":2136,"total_relation":"eq","hits":[]},"aggregations":{"months":{"buckets":{"2017-02-01T00:00:00":{"key":1485907200,"key_as_string":"2017-02-01T00:00:00","doc_count":442},"2017-03-01T00:00:00":{"key":1488326400,"key_as_string":"2017-03-01T00:00:00","doc_count":744},"2017-04-01T00:00:00":{"key":1491004800,"key_as_string":"2017-04-01T00:00:00","doc_count":720},"2017-05-01T00:00:00":{"key":1493596800,"key_as_string":"2017-05-01T00:00:00","doc_count":230}}}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:3:{s:8:"sphinxql";s:129:"select id, count(*), date_histogram(tm, {calendar_interval='month'}) as months from idx_dates group by months order by months asc";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:2:"id";s:1:"1";s:8:"count(*)";s:3:"442";s:6:"months";s:10:"1485907200";}i:1;a:3:{s:2:"id";s:3:"443";s:8:"count(*)";s:3:"744";s:6:"months";s:10:"1488326400";}i:2;a:3:{s:2:"id";s:4:"1187";s:8:"count(*)";s:3:"720";s:6:"months";s:10:"1491004800";}i:3;a:3:{s:2:"id";s:4:"1907";s:8:"count(*)";s:3:"230";s:6:"months";s:10:"1493596800";}}}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:469:"{
+}";s:4:"rows";s:264:"{"timed_out":false,"hits":{"total":20,"total_relation":"eq","hits":[]},"aggregations":{"gr_1":{"after_key":{"product_tag":3,"product_id":6},"buckets":[{"key":{"product_tag":3,"product_id":7},"doc_count":2},{"key":{"product_tag":3,"product_id":6},"doc_count":2}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:138:"{ "index": "idx_dates", "size":0, "aggs":{ "months": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"month" } }} }";s:4:"rows";s:493:"{"timed_out":false,"hits":{"total":2136,"total_relation":"eq","hits":[]},"aggregations":{"months":{"buckets":{"2017-02-01T00:00:00":{"key":1485907200,"key_as_string":"2017-02-01T00:00:00","doc_count":442},"2017-03-01T00:00:00":{"key":1488326400,"key_as_string":"2017-03-01T00:00:00","doc_count":744},"2017-04-01T00:00:00":{"key":1491004800,"key_as_string":"2017-04-01T00:00:00","doc_count":720},"2017-05-01T00:00:00":{"key":1493596800,"key_as_string":"2017-05-01T00:00:00","doc_count":230}}}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:3:{s:8:"sphinxql";s:129:"select id, count(*), date_histogram(tm, {calendar_interval='month'}) as months from idx_dates group by months order by months asc";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:2:"id";s:1:"1";s:8:"count(*)";s:3:"442";s:6:"months";s:10:"1485907200";}i:1;a:3:{s:2:"id";s:3:"443";s:8:"count(*)";s:3:"744";s:6:"months";s:10:"1488326400";}i:2;a:3:{s:2:"id";s:4:"1187";s:8:"count(*)";s:3:"720";s:6:"months";s:10:"1491004800";}i:3;a:3:{s:2:"id";s:4:"1907";s:8:"count(*)";s:3:"230";s:6:"months";s:10:"1493596800";}}}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:299:"{
   "index":"idx_dates",
   "size":0,
   "aggs":{
@@ -43,21 +43,13 @@ a:1:{i:0;a:21:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_metho
         "keyed":true,
         "ranges":[
           {
-            "to":"2017||+2M/M"
+            "to":"2017-02-10||+30d/M"
           },
           {
-            "from":"2017||+2M/M",
-            "to":"2017||+4M/M"
-          },
-          {
-            "from":"2017||+4M/M",
-            "to":"2017||+5M/M"
-          },
-          {
-            "from":"2017||+5M/M"
+            "from":"2017-04-10||/M"
           }
         ]
       }
     }
   }
-}";s:4:"rows";s:485:"{"timed_out":false,"hits":{"total":2136,"total_relation":"eq","hits":[]},"aggregations":{"points":{"buckets":{"*-2017-03-01T00:00:00":{"to":"2017-03-01T00:00:00","doc_count":442},"2017-03-01T00:00:00-2017-04-01T00:00:00":{"from":"2017-03-01T00:00:00","to":"2017-04-01T00:00:00","doc_count":744},"2017-04-01T00:00:00-2017-05-01T00:00:00":{"from":"2017-04-01T00:00:00","to":"2017-05-01T00:00:00","doc_count":720},"2017-05-01T00:00:00-*":{"from":"2017-05-01T00:00:00","doc_count":230}}}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:20;a:3:{s:8:"sphinxql";s:195:"select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) as points from idx_dates group by points order by points asc";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:2:{s:8:"count(*)";s:3:"442";s:6:"points";s:1:"0";}i:1;a:2:{s:8:"count(*)";s:4:"1464";s:6:"points";s:1:"1";}i:2;a:2:{s:8:"count(*)";s:3:"230";s:6:"points";s:1:"2";}}}}}
+}";s:4:"rows";s:253:"{"timed_out":false,"hits":{"total":2136,"total_relation":"eq","hits":[]},"aggregations":{"points":{"buckets":{"*-2017-03-01T00:00:00":{"to":"2017-03-01T00:00:00","doc_count":442},"2017-04-01T00:00:00-*":{"from":"2017-04-01T00:00:00","doc_count":950}}}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:20;a:3:{s:8:"sphinxql";s:195:"select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) as points from idx_dates group by points order by points asc";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:2:{s:8:"count(*)";s:3:"442";s:6:"points";s:1:"0";}i:1;a:2:{s:8:"count(*)";s:4:"1464";s:6:"points";s:1:"1";}i:2;a:2:{s:8:"count(*)";s:3:"230";s:6:"points";s:1:"2";}}}}}

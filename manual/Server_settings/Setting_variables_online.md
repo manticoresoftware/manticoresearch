@@ -66,6 +66,7 @@ Known global server variables are:
 * `IOSTATS = {0 | 1}` Enables or disables I/O operations (except for attributes) reporting in the query log.
 * `CPUSTATS= {1|0}` Turns on/off [CPU time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
+* `AUTO_OPTIMIZE = {1|0}` Turns on/off [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
 * `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding).
 * `SECONDARY_INDEXES = {1|0}` Turns on/off [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) for search queries.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).

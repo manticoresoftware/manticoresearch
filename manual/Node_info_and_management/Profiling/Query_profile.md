@@ -104,73 +104,92 @@ You can view the final transformed query tree with all normalized keywords by ad
 }
 ```
 
-This feature is somewhat similar to the [SHOW PLAN](../../Node_info_and_management/Profiling/Query_plan.md) statement in SQL. The result appears as a profile property in the result set. For example:
+The result appears as a profile property in the result set. For example:
 
 ```json
-"profile":
-{
-  "query":
-  {
-    "type": "PHRASE",
-    "description": "PHRASE( AND(KEYWORD(had, querypos=1)),  AND(KEYWORD(grown, querypos=2)),  AND(KEYWORD(quite, querypos=3)))",
-    "children":
-    [
+ "profile": {
+    "query": [
       {
-        "type": "AND",
-        "description": "AND(KEYWORD(had, querypos=1))",
-        "max_field_pos": 0,
-        "children":
-        [
-          {
-            "type": "KEYWORD",
-            "word": "had",
-            "querypos": 1
-           }
-        ]
+        "status": "unknown",
+        "duration": 0.000141,
+        "switches": 8,
+        "percent": 2.17
       },
       {
-        "type": "AND",
-        "description": "AND(KEYWORD(grown, querypos=2))",
-        "max_field_pos": 0,
-        "children":
-        [
-          {
-            "type": "KEYWORD",
-            "word": "grown",
-            "querypos": 2
-          }
-        ]
+        "status": "local_df",
+        "duration": 0.000870,
+        "switches": 1,
+        "percent": 13.40
       },
       {
-        "type": "AND",
-        "description": "AND(KEYWORD(quite, querypos=3))",
-        "max_field_pos": 0,
-        "children":
-        [
-          {
-            "type": "KEYWORD",
-            "word": "quite",
-            "querypos": 3
-          }
-        ]
+        "status": "local_search",
+        "duration": 0.001038,
+        "switches": 2,
+        "percent": 15.99
+      },
+      {
+        "status": "setup_iter",
+        "duration": 0.000154,
+        "switches": 14,
+        "percent": 2.37
+      },
+      {
+        "status": "dict_setup",
+        "duration": 0.000026,
+        "switches": 3,
+        "percent": 0.40
+      },
+      {
+        "status": "parse",
+        "duration": 0.000205,
+        "switches": 3,
+        "percent": 3.15
+      },
+      {
+        "status": "transforms",
+        "duration": 0.000974,
+        "switches": 4,
+        "percent": 15.01
+      },
+      {
+        "status": "init",
+        "duration": 0.002931,
+        "switches": 20,
+        "percent": 45.16
+      },
+      {
+        "status": "get_docs",
+        "duration": 0.000007,
+        "switches": 7,
+        "percent": 0.10
+      },
+      {
+        "status": "rank",
+        "duration": 0.000002,
+        "switches": 14,
+        "percent": 0.03
+      },
+      {
+        "status": "finalize",
+        "duration": 0.000013,
+        "switches": 7,
+        "percent": 0.20
+      },
+      {
+        "status": "aggregate",
+        "duration": 0.000128,
+        "switches": 1,
+        "percent": 1.97
+      },
+      {
+        "status": "total",
+        "duration": 0.006489,
+        "switches": 84,
+        "percent": 100.00
       }
     ]
   }
-}
 ```
 
-`query` property contains the transformed full-text query tree. Each node contains:
+`query` property contains the profile values. That's naming and meaning are the same as for table returned on 'show profile' statement in mysql (above).
 
-* `type`: node type. Can be AND, OR, PHRASE, KEYWORD, etc.
-* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
-* `children`: child nodes, if any
-* `max_field_pos`: maximum position within a field
-* `word`: transformed keyword. Keyword nodes only
-* `querypos`: position of this keyword in a query. Keyword nodes only
-* `excluded`: keyword excluded from query. Keyword nodes only
-* `expanded`: keyword added by prefix expansion. Keyword nodes only
-* `field_start`: keyword must occur at the very start of the field. Keyword nodes only
-* `field_end`: keyword must occur at the very end of the field. Keyword nodes only
-* `boost`: keyword IDF will be multiplied by this. Keyword nodes only
-
-<!-- proofread -->

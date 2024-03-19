@@ -4,7 +4,7 @@
 
 `SHOW PLAN` is an SQL statement that displays the execution plan of the previous `SELECT` statement. The plan is generated and stored during the actual execution, so profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
 
-To view the query execution plan in JSON queries, add `"profile": true` to the query. The result appears as a `profile` property in the result set.
+To view the query execution plan in JSON queries, add `"plan": true` to the query. The result appears as a `plan` property in the result set.
 
 Note that there are two things returned in the SQL mode:
 * `transformed_tree`, which shows the full-text query decomposition
@@ -48,7 +48,7 @@ POST /search
   "query": {"query_string": "dog|cat"},
   "_source": { "excludes":["*"] },
   "limit": 0,
-  "profile":true
+  "plan":true
 }
 ```
 
@@ -62,7 +62,7 @@ POST /search
     "total_relation": "eq",
     "hits": []
   },
-  "profile": {
+  "plan": {
     "query": {
       "type": "OR",
       "description": "OR( AND(KEYWORD(dog, querypos=1)),  AND(KEYWORD(cat, querypos=2)))",
@@ -154,7 +154,7 @@ POST /search
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
-  "profile": true
+  "plan": true
 }
 ```
 
@@ -175,7 +175,7 @@ POST /search
        }
     ]
   },
-  "profile":
+  "plan":
   {
     "query":
     {
@@ -308,9 +308,9 @@ See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profili
 `query` property contains the transformed full-text query tree. Each node contains:
 
 * `type`: node type. Can be `AND`, `OR`, `PHRASE`, `KEYWORD`, etc.
-* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
-* `children`: child nodes, if any
-* `max_field_pos`: maximum position within a field
+* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format).
+* `children`: child nodes, if any.
+* `max_field_pos`: maximum position within a field.
 * `word`: transformed keyword. Keyword nodes only.
 * `querypos`: position of this keyword in a query. Keyword nodes only.
 * `excluded`: keyword excluded from query. Keyword nodes only.

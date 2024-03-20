@@ -50,7 +50,7 @@ static bool IsInetAddrFree ( DWORD uAddr, int iPort )
 }
 
 // manage ports pairs for clusters set as Galera replication listener ports range
-class FreePortList_c
+class FreePortList_c : public FreePortList_i
 {
 private:
 	CSphMutex m_tLock;
@@ -72,6 +72,7 @@ public:
 		m_uAddr = sphGetAddress ( sAddr.cstr(), false, false );
 	}
 
+private:
 	// get next available range of ports for Galera listener
 	// first reuse ports pair that was recently released
 	// or pair from range set
@@ -102,32 +103,44 @@ public:
 		return iPortMin;
 	}
 
+public:
+	ScopedPort_c AcquirePort () override
+	{
+		return ScopedPort_c ( Get(), this );
+	}
+
 	// free ports pair and add it to free list
-	void Free ( int iPort )
+	void Free ( int iPort ) override
 	{
 		ScopedMutex_t tLock ( m_tLock );
 		m_dFree.Add ( iPort );
 	}
 
-	static FreePortList_c m_gPorts;
+	~FreePortList_c() override {}
 };
 
 // ports pairs manager
-FreePortList_c FreePortList_c::m_gPorts;
+static FreePortList_c g_tReplicationPorts;
 
-ScopedPort_c::ScopedPort_c ( int iPort ) : m_iPort ( iPort )
+ScopedPort_c::ScopedPort_c ( int iPort, FreePortList_i * pPortList )
+	: m_iPort ( iPort )
+	, m_pPortsList ( pPortList )
 {
+	assert ( m_pPortsList );
 }
 
 ScopedPort_c::~ScopedPort_c ()
 {
 	if ( m_iPort!=-1 )
-		FreePortList_c::m_gPorts.Free ( m_iPort );
+	{
+		m_pPortsList->Free ( m_iPort );
+		m_iPort = -1;
+	}
 }
 
 ScopedPort_c PortRange::AcquirePort ()
 {
-	return ScopedPort_c ( FreePortList_c::m_gPorts.Get ());
+	return g_tReplicationPorts.AcquirePort();
 }
 
 void PortRange::AddPortsRange ( int iPort, int iCount )
@@ -138,10 +151,25 @@ void PortRange::AddPortsRange ( int iPort, int iCount )
 	if ((tPorts.m_iCount % 2)!=0 )
 		--tPorts.m_iCount;
 
-	FreePortList_c::m_gPorts.AddRange ( tPorts );
+	g_tReplicationPorts.AddRange ( tPorts );
 }
 
 void PortRange::AddAddr ( const CSphString& sAddr )
 {
-	FreePortList_c::m_gPorts.AddAddr( sAddr );
+	g_tReplicationPorts.AddAddr( sAddr );
+}
+
+FreePortList_i * PortRange::Create ( const CSphString & sAddr, int iPort, int iCount )
+{
+	FreePortList_c * pPortList = new FreePortList_c();
+
+	if ( !sAddr.IsEmpty() )
+		pPortList->AddAddr ( sAddr );
+
+	PortsRange_t tPorts;
+	tPorts.m_iPort = iPort;
+	tPorts.m_iCount = iCount;
+	pPortList->AddRange ( tPorts );
+
+	return pPortList;
 }

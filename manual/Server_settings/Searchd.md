@@ -352,7 +352,7 @@ expansion_limit = 16
 
 ### expansion_merge_threshold_docs
 
-<!-- example conf expansion_limit -->
+<!-- example conf expansion_merge_threshold_docs -->
 This setting determines the maximum number of documents in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 32.
 
 When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
@@ -369,7 +369,7 @@ expansion_merge_threshold_docs = 1024
 
 ### expansion_merge_threshold_hits
 
-<!-- example conf expansion_limit -->
+<!-- example conf expansion_merge_threshold_hits -->
 This setting determines the maximum number of hits in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 256.
 
 When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.

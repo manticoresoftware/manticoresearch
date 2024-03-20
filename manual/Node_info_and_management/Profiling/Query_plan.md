@@ -2,16 +2,17 @@
 
 <!-- example SHOW PLAN -->
 
-`SHOW PLAN` is an SQL statement that displays the execution plan of the previous `SELECT` statement. The plan is generated and stored during the actual execution, so profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
+The `SHOW PLAN` SQL statement and the `"plan": N` JSON interface option display the query execution plan. The plan is generated and stored during the actual execution, so in the case of SQL, profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
 
-To view the query execution plan in JSON queries, add `"plan": N` to the query. The result appears as a `plan` property in the result set. `N` might be one of:
-* 1 - displays only textual plan of root node, similar the one returned in mysql. That is the most compact form.
-* 2 - displays only json object plan, useful for processing.
-* 3 - displays json object with textual description of every node. Note, description for children also present and repeat part of parent's description, which makes whole representation quite big.
+Two items are returned in SQL mode:
+* `transformed_tree`, which displays the full-text query decomposition.
+* `enabled_indexes`, which provides information about effective secondary indexes.
 
-Note that there are two things returned in the SQL mode:
-* `transformed_tree`, which shows the full-text query decomposition
-* `enabled_indexes`, which shows information about effective secondary indexes
+To view the query execution plan in a JSON query, add `"plan": N` to the query. The result will appear as a `plan` property in the result set. `N` can be one of the following:
+* 1 - Displays only the textual plan of the root node, similar to the one returned in the `SHOW PLAN` SQL query. This is the most compact form.
+* 2 - Displays only the JSON object plan, useful for processing.
+* 3 - Displays a JSON object with a textual description of every node. Note that the description for child nodes is also present and repeats part of the parent's description, which makes the whole representation quite large.
+
 
 <!-- intro -->
 ##### SQL:
@@ -51,7 +52,7 @@ POST /search
   "query": {"query_string": "dog|cat"},
   "_source": { "excludes":["*"] },
   "limit": 0,
-  "plan":3
+  "plan": 3
 }
 ```
 

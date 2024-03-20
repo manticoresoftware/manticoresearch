@@ -1,3 +1,5 @@
+# Query profile
+
 <!-- example SHOW PROFILE -->
 
 The SQL `SHOW PROFILE` statement and the `"profile": true` JSON interface option both provide a detailed execution profile of the executed query. In the case of SQL, profiling must be enabled in the current session **before** running the statement to be instrumented. This can be accomplished with the `SET profiling=1` statement. By default, profiling is disabled to prevent potential performance implications, resulting in an empty profile if not enabled.

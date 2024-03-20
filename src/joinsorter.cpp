@@ -451,7 +451,7 @@ private:
 	void		SetupNullMask();
 	void		SetupAggregates();
 	FORCE_INLINE uint64_t SetupJoinFilters ( const CSphMatch & tEntry );
-	void		SetupRightFilters();
+	bool		SetupRightFilters ( CSphString & sError );
 	bool		SetupOnFilters ( CSphString & sError );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias );
 	void		SetupJoinSelectList();
@@ -577,12 +577,9 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 	m_tMatch.Reset ( iDynamicSize );
 	SetupJoinSelectList();
 	SetupSorterSchema();
-	SetupRightFilters();
-	if ( !SetupOnFilters(sError) )
-		return false;
-
-	if ( !SetupJoinSorter(sError) )
-		return false;
+	if ( !SetupRightFilters(sError) )	return false;
+	if ( !SetupOnFilters(sError) )		return false;
+	if ( !SetupJoinSorter(sError) )		return false;
 
 	SetupNullMask();
 	SetupAggregates();
@@ -806,16 +803,18 @@ void JoinSorter_c::FinalizeJoin ( CSphString & sWarning )
 }
 
 
-void JoinSorter_c::SetupRightFilters()
+bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 {
 	m_tJoinQuery.m_dFilters.Resize(0);
 
 	// add rhs filters that we removed in TransformFilters
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", m_pJoinedIndex->GetName() );
+
+	CSphVector<std::pair<int,bool>> dRightFilters;
 	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
 	{
-		auto & tFilter = m_tQuery.m_dFilters[i];
+		const auto & tFilter = m_tQuery.m_dFilters[i];
 		bool bHasPrefix = tFilter.m_sAttrName.Begins ( sPrefix.cstr() );
 		const CSphColumnInfo * pFilterAttr = m_pSorterSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
 		if ( pFilterAttr )
@@ -829,15 +828,37 @@ void JoinSorter_c::SetupRightFilters()
 				continue;
 		}
 
+		dRightFilters.Add ( {i,bHasPrefix} );
+	}
+
+	if ( m_tQuery.m_dFilterTree.GetLength() )
+	{
+		if ( !dRightFilters.GetLength() )
+			return true;
+
+		if ( dRightFilters.GetLength()==m_tQuery.m_dFilters.GetLength() )
+			m_tJoinQuery.m_dFilterTree = m_tQuery.m_dFilterTree;
+		else
+		{
+			sError = "Mixed filters on left/right tables with OR between them are not currently supported in JOIN";
+			return false;
+		}
+	}
+
+	ARRAY_FOREACH ( i, dRightFilters )
+	{
+		const auto & tFilter = m_tQuery.m_dFilters[dRightFilters[i].first];
 		m_tJoinQuery.m_dFilters.Add(tFilter);
 
 		// remove table name prefix
-		if ( bHasPrefix )
+		if ( dRightFilters[i].second )
 		{
 			int iPrefixLen = sPrefix.Length();
 			m_tJoinQuery.m_dFilters.Last().m_sAttrName = tFilter.m_sAttrName.SubString ( iPrefixLen, tFilter.m_sAttrName.Length() - iPrefixLen );
 		}
 	}
+
+	return true;
 }
 
 

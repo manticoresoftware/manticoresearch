@@ -1636,11 +1636,11 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 			return false;
 	}
 
+	RemoveJoinFilters ( tCtx, dModified );
+
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 		return true;
-
-	RemoveJoinFilters ( tCtx, dModified );
 
 	int iNumModified = dModified.GetLength();
 	for ( int i = 0; i < iNumModified; i++ )

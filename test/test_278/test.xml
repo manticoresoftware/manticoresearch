@@ -238,6 +238,18 @@ select * from tbl left join tbl2 on tbl.tbl2_id = tbl.id facet tbl2.m;;
 drop table tbl;
 drop table tbl2;
 
+<!-- OR filters on joined attrs -->
+create table t(f text);
+create table t2(t_id int, f text);
+
+insert into t values(1, 'abc');
+insert into t2 values(1, 'abc', 1),(2, 'def', 1);
+
+select * from t inner join t2 on t.id = t2.t_id where t2.id = 1 or t2.id = 2;
+
+drop table t;
+drop table t2;
+
 </sphinxql>
 </queries>
 

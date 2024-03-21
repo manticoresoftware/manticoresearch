@@ -31,111 +31,156 @@ UninstPage instfiles
 ;--------------------------------
 
 Function unpackInstall
-  Pop $R0  ; txt file name
-  Pop $R1  ; archive name
-  FileOpen $0 $INSTDIR\$R0 r
-  IfErrors Fail1
-  FileRead $0 $1
-  DetailPrint $1
-  FileClose $0
-  NSISdl::download $1 $R1
-  Pop $0
-  StrCmp $0 success success1
-  SetDetailsView show
-  DetailPrint "Error! Unable to download $R1!"
-  Abort
+	Pop $R0  ; txt file name
+	Pop $R1  ; archive name
+	FileOpen $0 $INSTDIR\$R0 r
+	IfErrors Fail1
+	FileRead $0 $1
+	DetailPrint $1
+	FileClose $0
+	NSISdl::download $1 $R1
+	Pop $0
+	StrCmp $0 success success1
+	SetDetailsView show
+	DetailPrint "Error! Unable to download $R1!"
+	Abort
 
 success1:
-  Delete $INSTDIR\$R0
-  nsisunz::Unzip "$INSTDIR\$R1" "$INSTDIR"
-  Pop $0
-  StrCmp $0 success success2
-  DetailPrint "Error! Unable to unzip $R1!"
+	Delete $INSTDIR\$R0
+	nsisunz::Unzip "$INSTDIR\$R1" "$INSTDIR"
+	Pop $0
+	StrCmp $0 success success2
+	DetailPrint "Error! Unable to unzip $R1!"
 
 success2:
-  Delete $INSTDIR\$R1
-  Goto Ok
+	Delete $INSTDIR\$R1
+	Goto Ok
 
 Fail1:
-  MessageBox MB_OK "Error! Unable to read $R0!"
-  Abort
+	MessageBox MB_OK "Error! Unable to read $R0!"
+	Abort
 
 Ok:
 FunctionEnd
 
 Function createConfig
-  StrCpy $R0 "$INSTDIR\etc\manticoresearch\manticore.conf"
-  FileOpen $0 $R0 w
-  FileWrite $0 "searchd$\n"
-  FileWrite $0 "{$\n"
-  FileWrite $0 "    listen = 127.0.0.1:9312$\n"
-  FileWrite $0 "    listen = 127.0.0.1:9306:mysql$\n"
-  FileWrite $0 "    listen = 127.0.0.1:9308:http$\n"
-  FileWrite $0 "    log = $INSTDIR/var/log/manticore/searchd.log$\n"
-  FileWrite $0 "    query_log = $INSTDIR/var/log/manticore/query.log$\n"
-  FileWrite $0 "    pid_file = $INSTDIR/var/run/manticore/searchd.pid$\n"
-  FileWrite $0 "    data_dir = $INSTDIR/var/data$\n"
-  FileWrite $0 "    query_log_format = sphinxql$\n"
-  FileWrite $0 "}$\n"
-  IfErrors Fail1
-  Goto Ok
+	StrCpy $R0 "$INSTDIR\etc\manticoresearch\manticore.conf"
+	FileOpen $0 $R0 w
+	FileWrite $0 "searchd$\n"
+	FileWrite $0 "{$\n"
+	FileWrite $0 "    listen = 127.0.0.1:9312$\n"
+	FileWrite $0 "    listen = 127.0.0.1:9306:mysql$\n"
+	FileWrite $0 "    listen = 127.0.0.1:9308:http$\n"
+	FileWrite $0 "    log = $INSTDIR/var/log/manticore/searchd.log$\n"
+	FileWrite $0 "    query_log = $INSTDIR/var/log/manticore/query.log$\n"
+	FileWrite $0 "    pid_file = $INSTDIR/var/run/manticore/searchd.pid$\n"
+	FileWrite $0 "    data_dir = $INSTDIR/var/data$\n"
+	FileWrite $0 "    query_log_format = sphinxql$\n"
+	FileWrite $0 "}$\n"
+	IfErrors Fail1
+	Goto Ok
 
 Fail1:
-  MessageBox MB_OK "Error! Unable to write to $R0!"
-  Abort
+	MessageBox MB_OK "Error! Unable to write to $R0!"
+	Abort
 
 Ok:
 FunctionEnd
 
 Section "Manticore Search"
-  SectionIn RO
-  SetOutPath $INSTDIR
+	SectionIn RO
+	SetOutPath $INSTDIR
 
-  File "manticore_src.txt"
-  Push "manticore.zip"
-  Push "manticore_src.txt"
-  Call unpackInstall
+	File "manticore_src.txt"
+	Push "manticore.zip"
+	Push "manticore_src.txt"
+	Call unpackInstall
 
-  File "tzdata_src.txt"
-  Push "tzdata.zip"
-  Push "tzdata_src.txt"
-  Call unpackInstall
+	File "tzdata_src.txt"
+	Push "tzdata.zip"
+	Push "tzdata_src.txt"
+	Call unpackInstall
 
-  CreateDirectory "$INSTDIR\var\data"
-  CreateDirectory "$INSTDIR\var\log\manticore"
-  CreateDirectory "$INSTDIR\var\run\manticore"
+	CreateDirectory "$INSTDIR\var\data"
+	CreateDirectory "$INSTDIR\var\log\manticore"
+	CreateDirectory "$INSTDIR\var\run\manticore"
+	CreateDirectory "$INSTDIR\usr\local\lib\manticore"
 
-  Call createConfig
+	Call createConfig
 
-  ; Write the installation path into the registry
-  WriteRegStr HKLM "SOFTWARE\Manticore Software LTD" "manticore" "$INSTDIR"
+	; Write the installation path into the registry
+	WriteRegStr HKLM "SOFTWARE\Manticore Software LTD" "manticore" "$INSTDIR"
 
-  ; Write the uninstall keys for Windows
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "DisplayName" "Manticore Search"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "UninstallString" '"$INSTDIR\uninstall.exe"'
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoModify" 1
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoRepair" 1
+	; Write the uninstall keys for Windows
+	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "DisplayName" "Manticore Search"
+	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "UninstallString" '"$INSTDIR\uninstall.exe"'
+	WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoModify" 1
+	WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoRepair" 1
 
-  WriteUninstaller "$INSTDIR\uninstall.exe"
+	WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
 
 Section "Manticore Executor"
-  File "executor_src.txt"
-  Push "executor.zip"
-  Push "executor_src.txt"
-  Call unpackInstall
+	File "executor_src.txt"
+	; Check if Docker is installed and working
+	nsExec::ExecToStack 'docker --version'
+	Pop $0  ; Pop the exit code from the stack
+	StrCmp $0 0 docker_installed  ; Compare the exit code to 0 (success)
+	MessageBox MB_OK "Docker is not installed or not working correctly. Please ensure Docker is installed and try again."
+	Abort
 
-  File "buddy_src.txt"
-  Push "buddy.zip"
-  Push "buddy_src.txt"
-  Call unpackInstall
+	docker_installed:
+	Pop $1  ; Pop the command output from the stack (and ignore it)
+
+	; Attempt to open the file
+	StrCpy $R0 "$INSTDIR\executor_src.txt"
+	FileOpen $0 $R0 r
+	IfErrors file_open_failed
+
+	; Attempt to read from the file
+	FileRead $0 $R0
+	IfErrors file_read_failed
+	StrCmp $R0 "" read_no_data
+
+	DetailPrint "Executor docker image read from file: $R0"
+
+	; Close the file handle
+	FileClose $0
+
+	; Continue with Docker pull if $R0 has data
+	nsExec::Exec '"docker" "pull" $R0'
+	Pop $0  ; Pop the exit code from the stack
+	StrCmp $0 0 docker_pull_succeed
+
+	MessageBox MB_OK "Failed to pull Docker image from: $R0"
+	Abort
+
+	; Error handling labels
+	file_open_failed:
+    MessageBox MB_ICONEXCLAMATION "Failed to open executor_src.txt."
+    Abort
+
+	file_read_failed:
+    MessageBox MB_ICONEXCLAMATION "Failed to read from executor_src.txt."
+    Abort
+
+	read_no_data:
+    MessageBox MB_ICONEXCLAMATION "No data read from executor_src.txt."
+    Abort
+
+  SetDetailsView show
+	docker_pull_succeed:
+		File "buddy_src.txt"
+		Push "buddy.zip"
+		Push "buddy_src.txt"
+		Call unpackInstall
 SectionEnd
 
 Section "Manticore Columnar Library"
-  File "mcl_src.txt"
-  Push "mcl.zip"
-  Push "mcl_src.txt"
-  Call unpackInstall
+	File "mcl_src.txt"
+	Push "mcl.zip"
+	Push "mcl_src.txt"
+	Call unpackInstall
 SectionEnd
 
 ;--------------------------------
@@ -143,21 +188,21 @@ SectionEnd
 ; Uninstaller
 
 Section "Uninstall"
+	; Remove registry keys
+	DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore"
+	DeleteRegKey HKLM "SOFTWARE\Manticore Software LTD"
 
-  ; Remove registry keys
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore"
-  DeleteRegKey HKLM "SOFTWARE\Manticore Software LTD"
+	; Remove files and uninstaller
+	RmDir /r $INSTDIR\bin
+	RmDir /r $INSTDIR\etc
+	RmDir /r $INSTDIR\include
+	RmDir /r $INSTDIR\share
+	RmDir /r $INSTDIR\usr
+	RmDir /r $INSTDIR\__MACOSX
+	Delete $INSTDIR\uninstall.exe
 
-  ; Remove files and uninstaller
-  RmDir /r $INSTDIR\bin
-  RmDir /r $INSTDIR\etc
-  RmDir /r $INSTDIR\include
-  RmDir /r $INSTDIR\share
-  RmDir /r $INSTDIR\__MACOSX
-  Delete $INSTDIR\uninstall.exe
-
-  ; Remove directories
-  RMDir "$SMPROGRAMS\Manticore"
-  RMDir "$INSTDIR"
+	; Remove directories
+	RMDir "$SMPROGRAMS\Manticore"
+	RMDir "$INSTDIR"
 
 SectionEnd

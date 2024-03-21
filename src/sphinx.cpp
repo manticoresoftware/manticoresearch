@@ -7892,7 +7892,14 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	fIteratorWithFT = EstimateMTCostSIFT ( fIteratorWithFT, iThreads );
 	fFTWithFilters = EstimateMTCost ( fFTWithFilters, iThreads );
 
-	return fIteratorWithFT<fFTWithFilters;
+	if ( fIteratorWithFT<fFTWithFilters )
+	{
+		return true;
+	} else
+	{
+		// if has any forced indexes when should use the path with iterators even FT estimates faster
+		return dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eForce!=SecondaryIndexType_e::NONE; } );
+	}
 }
 
 

@@ -21365,10 +21365,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
 	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
-	searchd::AddShutdownCb ( BuddyStop );
+	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
-	BuddyStart ( g_sBuddyPath, ( g_bHasBuddyPath || bTestMode ), dListenerDescs, g_bTelemetry, g_iThreads );
+	if ( !bTestMode )
+		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, g_iThreads, g_sConfigFile );
 
 	g_bJsonConfigLoadedOk = true;
 

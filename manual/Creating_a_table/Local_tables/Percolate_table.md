@@ -112,8 +112,29 @@ utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```
-<!-- request CONFIG -->
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request typescript -->
+
+```typescript
+res = await utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, meta json) type='pq'").Execute()
+```
+
+<!-- intro -->
 ##### Creating a percolate table via config:
+
+<!-- request CONFIG -->
 
 ```ini
 table products {

@@ -12,6 +12,7 @@ searchd
 {
 	<searchd_settings/>
 	binlog_path =
+  timezone = UTC
 }
 
 source src_gr1

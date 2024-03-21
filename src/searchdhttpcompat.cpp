@@ -3657,6 +3657,7 @@ bool HttpCompatHandler_c::Process()
 	bool bOk = ProcessEndpoints();
 	if ( !bOk || !m_sError.IsEmpty() )
 	{
+		bOk = false;
 		if ( m_sError.IsEmpty() )
 			FormatError ( SPH_HTTP_STATUS_501, "%s - unsupported endpoint", GetFullURL().cstr() );
 

@@ -1509,7 +1509,7 @@ RuntimeThreadContext_t& MyThreadContext()
 	return *g_pLocalThread;
 }
 
-LowThreadDesc_t& Threads::MyThd ()
+LowThreadDesc_t& Threads::MyThd () noexcept
 {
 	return g_pLocalThread->m_tDesc;
 }

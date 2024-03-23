@@ -212,9 +212,8 @@ class Worker_c final: public details::SchedulerOperation_t
 
 	inline void CoroGuardEnter() noexcept
 	{
-		auto& th = Threads::MyThd();
-		m_pPreviousWorker = th.m_pWorker.exchange ( this, std::memory_order_seq_cst );
 		auto& tMyThd = MyThd();
+		m_pPreviousWorker = std::exchange ( tMyThd.m_pWorker, this );
 		m_pPrevTlsMsg = tMyThd.m_pTlsMsg.exchange ( &m_sTlsMsg, std::memory_order_relaxed );
 		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		m_tmCpuTimeBase -= sphThreadCpuTimer();
@@ -230,8 +229,7 @@ class Worker_c final: public details::SchedulerOperation_t
 		auto& tMyThd = MyThd();
 		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		tMyThd.m_pTlsMsg.store ( m_pPrevTlsMsg, std::memory_order_relaxed );
-		auto& th = Threads::MyThd();
-		th.m_pWorker.exchange ( m_pPreviousWorker, std::memory_order_seq_cst );
+		std::exchange ( tMyThd.m_pWorker, m_pPreviousWorker );
 	}
 
 	// RAII worker's keeper
@@ -475,7 +473,7 @@ public:
 
 	inline static Worker_c* CurrentWorker() noexcept
 	{
-		return (Worker_c*)Threads::MyThd().m_pWorker.load ( std::memory_order_acquire );
+		return (Worker_c*)Threads::MyThd().m_pWorker;
 	}
 
 	inline bool Wake ( size_t iExpectedEpoch, bool bVip ) noexcept

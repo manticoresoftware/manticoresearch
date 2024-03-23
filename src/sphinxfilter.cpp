@@ -390,10 +390,38 @@ public:
 
 	bool CanExclude() const override { return true; }
 
-private:
+protected:
 	CSphFixedVector<BYTE> m_dVal { 0 };
 	SphStringCmp_fn m_fnStrCmp;
 	bool m_bExclude;
+};
+
+class FilterStringCmp_c : public FilterString_c
+{
+public:
+	FilterStringCmp_c ( ESphCollation eCollation, bool bExclude, EStrCmpDir eStrCmpDir )
+		: FilterString_c ( eCollation, bExclude )
+		, m_eStrCmpDir ( eStrCmpDir )
+	{}
+
+	bool Eval ( const CSphMatch & tMatch ) const override
+	{
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		int iCmpResult = m_fnStrCmp ( dStr, m_dVal, false );
+
+		switch ( m_eStrCmpDir )
+		{
+			case EStrCmpDir::LT: return m_bExclude ? iCmpResult>=0 : iCmpResult<0;
+			case EStrCmpDir::GT: return m_bExclude ? iCmpResult<=0 : iCmpResult>0;
+			case EStrCmpDir::EQ:
+			default:
+				assert (false && "unexpected: EStrCmpDir::EQ should not be here!");
+				return false;
+		}
+	}
+
+private:
+	EStrCmpDir				m_eStrCmpDir;
 };
 
 static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVals )
@@ -951,8 +979,10 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
 				return std::make_unique<Filter_StringTagsAll_c>();
 		}
-		else
+		else if ( tSettings.m_eStrCmpDir==EStrCmpDir::EQ )
 			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bExclude );
+		else
+			return std::make_unique<FilterStringCmp_c> ( eCollation, tSettings.m_bExclude, tSettings.m_eStrCmpDir );
 	}
 
 	// non-float, non-MVA
@@ -2335,8 +2365,20 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
+		{
+			const char * sOp = ([&]() {
+				switch ( f.m_eStrCmpDir )
+				{
+					case EStrCmpDir::EQ: return f.m_bExclude ? "!=" : "=";
+					case EStrCmpDir::LT: return f.m_bExclude ? ">=" : "<";
+					case EStrCmpDir::GT: return f.m_bExclude ? "<=" : ">";
+					default: assert(0); return f.m_bExclude ? "!?=" : "?=";
+				}
+			})();
+
+			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), sOp, ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
 			break;
+		}
 
 		case SPH_FILTER_NULL:
 			tBuf << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );

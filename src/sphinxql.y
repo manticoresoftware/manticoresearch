@@ -855,6 +855,26 @@ filter_item:
 			if ( !pParser->AddStringFilter ( $1, $3, true ) )
 				YYERROR;
 		}
+	| expr_ident '>' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, false, EStrCmpDir::GT ) )
+				YYERROR;
+		}
+	| expr_ident '<' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, false, EStrCmpDir::LT ) )
+				YYERROR;
+		}
+	| expr_ident TOK_GTE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, true, EStrCmpDir::LT ) )
+				YYERROR;
+		}
+	| expr_ident TOK_LTE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, true, EStrCmpDir::GT ) )
+				YYERROR;
+		}
 	| expr_ident TOK_IS TOK_NULL
 		{
 			if ( !pParser->AddNullFilter ( $1, true ) )

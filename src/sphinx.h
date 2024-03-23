@@ -332,6 +332,13 @@ std::unique_ptr<ISphFieldFilter> sphCreateFilterICU ( std::unique_ptr<ISphFieldF
 // SEARCH QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
+enum class EStrCmpDir
+{
+	EQ,
+	LT,
+	GT
+};
+
 /// search query filter
 struct CommonFilterSettings_t
 {
@@ -362,6 +369,7 @@ public:
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL
 	bool				m_bOptional = false;
 
+	EStrCmpDir			m_eStrCmpDir = EStrCmpDir::EQ;		///< string comparison direction
 	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA and stringlist folding function
 	CSphVector<SphAttr_t> m_dValues;	///< integer values set
 	StrVec_t			m_dStrings;	///< string values

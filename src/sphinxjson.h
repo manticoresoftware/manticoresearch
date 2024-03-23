@@ -943,5 +943,74 @@ static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPu
 	}
 }
 
+template <typename PUSH>
+void PushJsonFieldPtr ( const BYTE * pVal, ESphJsonType eJson, PUSH && fnPush )
+{
+	if ( !pVal )
+		return;
+
+	switch ( eJson )
+	{
+	case JSON_INT32:
+		fnPush ( sphFNV64 ( sphJsonLoadInt(&pVal) ) );
+		break;
+
+	case JSON_INT64:
+	case JSON_DOUBLE:
+		fnPush ( sphFNV64 ( sphJsonLoadBigint(&pVal) ) );
+		break;
+
+	case JSON_STRING:
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		fnPush ( sphFNV64 ( pVal, iLen ) );
+	}
+	break;
+
+	case JSON_INT32_VECTOR:
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		int iSize = eJson==JSON_INT32_VECTOR ? 1 : 2;
+		int iVals = sphJsonUnpackInt ( &pVal );
+		if ( !iVals )
+			break;
+
+		auto * pValues = (const int*)pVal;
+		for ( int i = 0; i < iVals; i++ )
+		{
+			fnPush ( sphFNV64(*pValues) );
+			pValues += iSize;
+		}
+	}
+	break;
+
+	case JSON_STRING_VECTOR:
+		{
+		sphJsonUnpackInt ( &pVal ); // total length
+		int iCount = sphJsonUnpackInt ( &pVal );
+
+		// head element
+		if ( iCount )
+		{
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			fnPush ( sphFNV64 ( pVal, iElemLen ) );
+			pVal += iElemLen;
+		}
+
+		// tail elements separated by space
+		for ( int i=1; i<iCount; i++ )
+		{
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			fnPush ( sphFNV64 ( pVal, iElemLen ) );
+			pVal += iElemLen;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+}
+
 #endif // _sphinxjson_
 

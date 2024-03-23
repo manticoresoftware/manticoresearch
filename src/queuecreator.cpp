@@ -27,7 +27,7 @@
 #include "knnmisc.h"
 
 static const char g_sIntAttrPrefix[] = "@int_attr_";
-static const char g_sIntJsonPrefix[] = "@groupbystr";
+static const char g_sIntJsonPrefix[] = "@groupbystr_";
 
 
 bool HasImplicitGrouping ( const CSphQuery & tQuery )
@@ -139,7 +139,7 @@ CSphString SortJsonInternalSet ( const CSphString& sColumnName )
 {
 	CSphString sName;
 	if ( !sColumnName.IsEmpty() )
-		( StringBuilder_c () << g_sIntJsonPrefix << "_" << sColumnName ).MoveTo ( sName );
+		( StringBuilder_c () << g_sIntJsonPrefix << sColumnName ).MoveTo ( sName );
 	return sName;
 }
 
@@ -465,19 +465,33 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 
 bool QueueCreator_c::SetupDistinctAttr()
 {
-	if ( m_tQuery.m_sGroupDistinct.IsEmpty() )
+	const CSphString & sDistinct = m_tQuery.m_sGroupDistinct;
+	if ( sDistinct.IsEmpty() )
 		return true;
 
 	assert ( m_pSorterSchema );
 	auto & tSchema = *m_pSorterSchema;
 
-	int iDistinct = tSchema.GetAttrIndex ( m_tQuery.m_sGroupDistinct.cstr () );
+	int iDistinct = tSchema.GetAttrIndex ( sDistinct.cstr() );
 	if ( iDistinct<0 )
-		return Err ( "group-count-distinct attribute '%s' not found", m_tQuery.m_sGroupDistinct.cstr() );
+	{
+		CSphString sJsonCol;
+		if ( !sphJsonNameSplit ( sDistinct.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonCol ) )
+		{
+			return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
+			return false;
+		}
+
+		CSphColumnInfo tExprCol ( sDistinct.cstr(), SPH_ATTR_JSON_FIELD_PTR );
+		tExprCol.m_eStage = SPH_EVAL_SORTER;
+		tExprCol.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
+		m_pSorterSchema->AddAttr ( tExprCol, true );
+		iDistinct = m_pSorterSchema->GetAttrIndex ( tExprCol.m_sName.cstr() );
+	}
 
 	const auto & tDistinctAttr = tSchema.GetAttr(iDistinct);
 	if ( IsNotRealAttribute(tDistinctAttr) )
-		return Err ( "group-count-distinct attribute '%s' not found", m_tQuery.m_sGroupDistinct.cstr() );
+		return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
 
 	if ( tDistinctAttr.IsColumnar() )
 		m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
@@ -562,7 +576,8 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	}
 
 	int iGroupBy = GetGroupbyAttrIndex();
-	if ( iGroupBy<0 && sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonColumn ) )
+	bool bJoined = iGroupBy>=0 && m_pSorterSchema->GetAttr(iGroupBy).IsJoined();
+	if ( ( iGroupBy<0 || bJoined ) && sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonColumn ) )
 	{
 		const int iAttr = tSchema.GetAttrIndex ( sJsonColumn.cstr() );
 		if ( iAttr<0 )
@@ -583,7 +598,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) };
 		m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		m_tGroupSorterSettings.m_bJson = true;
-		m_bJoinedGroupSort |= IsJoinAttr ( m_tQuery.m_sGroupBy );
+		m_bJoinedGroupSort |= bJoined;
 		return true;
 	}
 

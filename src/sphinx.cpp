@@ -12539,7 +12539,7 @@ public:
 		m_hKeywords.Reset();
 	}
 
-	void LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
+	void LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pFilenameBuilder, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( Writer_i & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
 	void WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteStopwords ( tOut ); }

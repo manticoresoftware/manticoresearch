@@ -60,12 +60,7 @@ void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, c
 	{
 		CSphString sStopwordFile = tSettings.m_sStopwords;
 		if ( !sStopwordFile.IsEmpty() )
-		{
-			if ( pFilenameBuilder )
-				sStopwordFile = pFilenameBuilder->GetFullPath ( sStopwordFile );
-
-			pDict->LoadStopwords ( sStopwordFile.cstr(), pTokenizer, bStripFile );
-		}
+			pDict->LoadStopwords ( sStopwordFile.cstr(), pFilenameBuilder, pTokenizer, bStripFile );
 	}
 
 	StrVec_t dWordformFiles;

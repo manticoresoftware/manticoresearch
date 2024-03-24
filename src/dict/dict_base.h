@@ -72,7 +72,7 @@ public:
 	virtual void ApplyStemmers ( BYTE* ) const {}
 
 	/// load stopwords from given files
-	virtual void LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) = 0;
+	virtual void LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c & pTokenizer, bool bStripFile ) = 0;
 
 	/// load stopwords from an array
 	virtual void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) = 0;
@@ -183,7 +183,7 @@ protected:
 public:
 	SphWordID_t GetWordID ( BYTE* ) override { return 0; }
 	SphWordID_t GetWordID ( const BYTE*, int, bool ) override { return 0; };
-	void LoadStopwords ( const char*, const TokenizerRefPtr_c&, bool ) override {};
+	void LoadStopwords ( const char * , FilenameBuilder_i * , const TokenizerRefPtr_c& , bool ) override {};
 	void LoadStopwords ( const CSphVector<SphWordID_t>& ) override {};
 	void WriteStopwords ( Writer_i & ) const override {};
 	void WriteStopwords ( JsonEscapedBuilder& ) const override {};

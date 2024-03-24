@@ -137,8 +137,8 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 
 	CSphString sPath = GetPathForNewIndex ( m_sIndex );
 
-	StrVec_t dFiles;
 	StringBuilder_c sNewValue {" "};
+	StringBuilder_c sTmp;
 
 	// we assume that path has been stripped before
 	StrVec_t dValues = sphSplit ( sName.cstr(), sName.Length(), " \t," );
@@ -147,12 +147,12 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 		if ( !i.Length() )
 			continue;
 
-		CSphString & sNew = dFiles.Add();
-		sNew.SetSprintf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
-		sNewValue << sNew;
+		sTmp.Clear();
+		sTmp.Appendf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
+		sNewValue << RealPath ( sTmp.cstr() );
 	}
 
-	return RealPath ( sNewValue.cstr() );
+	return (CSphString)sNewValue;
 }
 
 

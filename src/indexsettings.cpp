@@ -225,7 +225,7 @@ const RtTypedAttr_t & GetRtType ( int iType )
 
 static CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
-	if ( !pFilenameBuilder || sFile.IsEmpty() )
+	if ( !pFilenameBuilder || sFile.IsEmpty() || IsPathAbsolute ( sFile ) )
 		return sFile;
 
 	return pFilenameBuilder->GetFullPath(sFile);

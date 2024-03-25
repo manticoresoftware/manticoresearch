@@ -280,6 +280,12 @@ select * from join1 left join join2 on join1.id = join2.id where join2.name = 'n
 <!-- joined OR filters -->
 select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'name2' order by id asc;
 
+<!-- join ON mistype -->
+select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.izd;
+
+<!-- join filter mistype -->
+select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.id where join2.xidz>0;
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

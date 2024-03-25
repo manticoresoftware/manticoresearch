@@ -391,7 +391,7 @@ public:
 	void		SetMerge ( bool bMerge ) override									{ m_pSorter->SetMerge(bMerge); }
 	bool		IsPrecalc() const override											{ return false; }
 	bool		IsJoin() const override												{ return true; }
-	void		FinalizeJoin ( CSphString & sWarning ) override;
+	bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) override;
 
 	bool		GetErrorFlag() const												{ return m_bErrorFlag; }
 	const CSphString & GetErrorMessage() const										{ return m_sErrorMessage; }
@@ -684,6 +684,9 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 	if ( m_bFinalCalcOnly )
 		return fnPush(tEntry);
 
+	if ( m_bErrorFlag )
+		return false;
+
 	bool bInCache = true;
 	uint64_t uJoinOnFilterHash = SetupJoinFilters(tEntry);
 	if ( !m_tCache.Fetch ( uJoinOnFilterHash, m_dMatches ) )
@@ -698,7 +701,13 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 
 		CSphMultiQueryArgs tArgs(1);
 		ISphMatchSorter * pSorter = m_pRightSorter.get();
-		m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs );
+		if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
+		{
+			m_bErrorFlag = true;
+			m_sErrorMessage.SetSprintf ( "joined table %s: %s", m_pJoinedIndex->GetName(), tMeta.m_sError.cstr() );
+			return false;
+		}
+
 		m_dMatches.Resize(0);
 
 		// setup join attr remap, but do it only once
@@ -798,13 +807,19 @@ void JoinSorter_c::PopulateStoredFields()
 }
 
 
-void JoinSorter_c::FinalizeJoin ( CSphString & sWarning )
+bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
 	if ( !m_bFinalCalcOnly )
 	{
 		PopulateStoredFields();
 		ProduceCacheSizeWarning(sWarning);
-		return;
+		if ( m_bErrorFlag )
+		{
+			sError = m_sErrorMessage;
+			return false;
+		}
+
+		return true;
 	}
 
 	// replace underlying sorter with a new one
@@ -828,6 +843,14 @@ void JoinSorter_c::FinalizeJoin ( CSphString & sWarning )
 
 	PopulateStoredFields();
 	ProduceCacheSizeWarning(sWarning);
+
+	if ( m_bErrorFlag )
+	{
+		sError = m_sErrorMessage;
+		return false;
+	}
+
+	return true;
 }
 
 

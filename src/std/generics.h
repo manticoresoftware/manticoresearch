@@ -74,7 +74,7 @@ class ISphNoncopyable
 public:
 	ISphNoncopyable() = default;
 	ISphNoncopyable ( const ISphNoncopyable& ) = delete;
-	const ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
+	ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
 };
 
 /// prevent move

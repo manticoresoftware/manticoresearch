@@ -3,7 +3,10 @@
 
 <name>secondary</name>
 
-<requires> <secondary/> </requires>
+<requires>
+<secondary/>
+<non-rt/>
+</requires>
 
 <config>
 searchd

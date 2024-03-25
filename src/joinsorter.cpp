@@ -465,6 +465,7 @@ private:
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, const char * szRemapPrefix );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, int iSorterAttrId );
+	void		AddOnFilterToFilterTree ( int iFilterId );
 	void		SetupJoinSelectList();
 	void		RepackJsonFieldAsStr ( const CSphMatch & tSrcMatch, const CSphAttrLocator & tLocSrc, const CSphAttrLocator & tLocDst );
 	void		ProduceCacheSizeWarning ( CSphString & sWarning );
@@ -889,6 +890,22 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 }
 
 
+void JoinSorter_c::AddOnFilterToFilterTree ( int iFilterId )
+{
+	if ( !m_tJoinQuery.m_dFilterTree.GetLength() )
+		return;
+
+	int iRootNodeId = m_tJoinQuery.m_dFilterTree.GetLength()-1;
+	FilterTreeItem_t & tFilter = m_tJoinQuery.m_dFilterTree.Add();
+	tFilter.m_iFilterItem = iFilterId;
+
+	int iFilterNodeId = m_tJoinQuery.m_dFilterTree.GetLength()-1;
+	FilterTreeItem_t & tAnd = m_tJoinQuery.m_dFilterTree.Add();
+	tAnd.m_iLeft = iRootNodeId;
+	tAnd.m_iRight = iFilterNodeId;
+}
+
+
 bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 {
 	for ( auto & tOnFilter : m_tQuery.m_dOnFilters )
@@ -932,12 +949,15 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		tFilter.m_sAttrName = sAttrIdx2;
 		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING : SPH_FILTER_VALUES;
 
-		m_dFilterRemap.Add ( { m_tJoinQuery.m_dFilters.GetLength()-1, pAttr1->m_tLocator, bStringFilter } );
+		int iFilterId = m_tJoinQuery.m_dFilters.GetLength()-1;
+		m_dFilterRemap.Add ( { iFilterId, pAttr1->m_tLocator, bStringFilter } );
 
 		if ( bStringFilter )
 			tFilter.m_dStrings.Resize(1);
 		else
 			tFilter.m_dValues.Resize(1);
+
+		AddOnFilterToFilterTree(iFilterId);
 	}
 
 	return true;

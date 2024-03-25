@@ -274,6 +274,12 @@ select j.table, join2.j.table from join1 join join2 on join1.id = join2.id limit
 <!-- count distinct by joined json attr -->
 select j.table, count (distinct join2.j.table) from join1 join join2 on join1.id = join2.id;
 
+<!-- joined OR filters -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'not there' order by id asc;
+
+<!-- joined OR filters -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'name2' order by id asc;
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

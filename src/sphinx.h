@@ -359,6 +359,7 @@ struct CommonFilterSettings_t
 	bool				m_bOpenLeft = false;
 	bool				m_bOpenRight = false;
 	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
+	EStrCmpDir			m_eStrCmpDir = EStrCmpDir::EQ;		///< string comparison direction
 };
 
 
@@ -369,7 +370,6 @@ public:
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL
 	bool				m_bOptional = false;
 
-	EStrCmpDir			m_eStrCmpDir = EStrCmpDir::EQ;		///< string comparison direction
 	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA and stringlist folding function
 	CSphVector<SphAttr_t> m_dValues;	///< integer values set
 	StrVec_t			m_dStrings;	///< string values

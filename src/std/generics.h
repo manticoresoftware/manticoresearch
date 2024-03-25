@@ -86,6 +86,16 @@ public:
 	ISphNonmovable& operator= ( ISphNonmovable&& ) noexcept = delete;
 };
 
+/// prevent copy and move
+class ISphNonCopyMovable
+{
+public:
+	ISphNonCopyMovable() = default;
+	ISphNonCopyMovable ( const ISphNonCopyMovable& ) = delete;
+	ISphNonCopyMovable ( ISphNonCopyMovable&& ) = delete;
+	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
+};
+
 // implement moving ctr and moving= using swap-and-release
 #define MOVE_BYSWAP( class_c )								\
     class_c ( class_c&& rhs ) noexcept {Swap ( rhs );}		\

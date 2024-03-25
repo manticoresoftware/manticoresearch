@@ -132,6 +132,8 @@ static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
 static bool			g_bPseudoSharding		= true;
 static int			g_iPseudoShardingThresh	= 8192;
 
+static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
+
 static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_QUERYINFO __LINE__ << " "
 #define QUERYINFO LOGINFO ( SPLIT_QUERY, QUERYINFO )
@@ -7413,52 +7415,24 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 };
 
 
-/// scoped thread scheduling helper
-/// either makes the current thread low priority while the helper lives, or does nothing
-class ScopedThreadPriority_c
+/// scoped worker scheduling helper
+/// makes quantum of current task smaller
+class ScopedLowPriority_c : public ISphNonCopyMovable
 {
-private:
-	bool m_bRestore;
+	int64_t m_iStoredThrottlingPeriodUS;
 
 public:
-	ScopedThreadPriority_c ( bool bLowPriority )
+	ScopedLowPriority_c()
+		: m_iStoredThrottlingPeriodUS { Threads::Coro::GetThrottlingPeriodUS() }
 	{
-		m_bRestore = false;
-		if ( !bLowPriority )
-			return;
-
-#if _WIN32
-		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_IDLE ) )
-			return;
-#else
-		struct sched_param p;
-		p.sched_priority = 0;
-#ifdef SCHED_IDLE
-		int iPolicy = SCHED_IDLE;
-#else
-		int iPolicy = SCHED_OTHER;
-#endif
-		if ( pthread_setschedparam ( pthread_self (), iPolicy, &p ) )
-			return;
-#endif
-
-		m_bRestore = true;
+		if ( m_iStoredThrottlingPeriodUS > 0 )
+			Threads::Coro::SetThrottlingPeriodUS ( Max ( m_iStoredThrottlingPeriodUS / g_iLowPriorityDivisor, 1 ) );
 	}
 
-	~ScopedThreadPriority_c ()
+	~ScopedLowPriority_c()
 	{
-		if ( !m_bRestore )
-			return;
-
-#if _WIN32
-		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_NORMAL ) )
-			return;
-#else
-		struct sched_param p;
-		p.sched_priority = 0;
-		if ( pthread_setschedparam ( pthread_self (), SCHED_OTHER, &p ) )
-			return;
-#endif
+		if ( m_iStoredThrottlingPeriodUS > 0 )
+			Threads::Coro::SetThrottlingPeriodUS ( m_iStoredThrottlingPeriodUS );
 	}
 };
 
@@ -8132,7 +8106,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	int64_t tmQueryStart = sphMicroTimer();
 	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 
-	ScopedThreadPriority_c tPrio ( tQuery.m_bLowPriority );
+	std::optional<ScopedLowPriority_c> tPrio;
+	if ( tQuery.m_bLowPriority )
+		tPrio.emplace();
 
 	// select the sorter with max schema
 	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
@@ -11094,7 +11070,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( pProfile )
 		eOldState = pProfile->Switch ( SPH_QSTATE_INIT );
 
-	ScopedThreadPriority_c tPrio ( tQuery.m_bLowPriority );
+	std::optional<ScopedLowPriority_c> tPrio;
+	if ( tQuery.m_bLowPriority )
+		tPrio.emplace();
 
 	///////////////////
 	// setup searching

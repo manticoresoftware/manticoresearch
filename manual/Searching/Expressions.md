@@ -22,8 +22,6 @@ The expression parser automatically switches to integer mode if no operations re
 
 The comparison operators return 1.0 when the condition is true and 0.0 otherwise. For example, `(a=b)+3` evaluates to 4 when attribute `a` is equal to attribute `b`, and to 3 when `a` is not. Unlike MySQL, the equality comparisons (i.e., `=` and `<>` operators) include a small equality threshold (1e-6 by default). If the difference between the compared values is within the threshold, they are considered equal.
 
-For string attributes, only the equality operator is supported, and using other operators will result in a syntax error.
-
 The `BETWEEN` and `IN` operators, in the case of multi-value attributes, return true if at least one value matches the condition (similar to [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)). The `IN` operator does not support JSON attributes. The `IS (NOT) NULL` operator is supported only for JSON attributes.
 
 ## Boolean operators

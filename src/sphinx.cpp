@@ -601,7 +601,7 @@ const char* CheckFmtMagic ( DWORD uHeader )
 {
 	if ( uHeader!=INDEX_MAGIC_HEADER )
 	{
-		FlipEndianess ( &uHeader );
+		FlipEndianness ( &uHeader );
 		if ( uHeader==INDEX_MAGIC_HEADER )
 #if USE_LITTLE_ENDIAN
 			return "This instance is working on little-endian platform, but %s seems built on big-endian host.";

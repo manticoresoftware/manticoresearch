@@ -1324,7 +1324,7 @@ struct RemapXSV_t
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );
 
 
-inline void FlipEndianess ( DWORD* pData )
+inline void FlipEndianness ( DWORD* pData )
 {
 	BYTE* pB = (BYTE*)pData;
 	BYTE a = pB[0];

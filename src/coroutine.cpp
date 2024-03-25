@@ -839,11 +839,17 @@ void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
 	tmThrotleTimeQuantumMs = tmPeriodMs < 0 ? tmDefaultThrotleTimeQuantumMs : tmPeriodMs;
 }
 
-void SetThrottlingPeriod ( int tmPeriodMs )
+void SetThrottlingPeriodMS ( int tmPeriodMs )
 {
 	if ( tmPeriodMs < 0 )
 		tmPeriodMs = tmThrotleTimeQuantumMs;
-	Worker()->SetTimePeriodUS ( tmPeriodMs * 1000 );
+	SetThrottlingPeriodUS ( tmPeriodMs * 1000 );
+}
+
+void SetThrottlingPeriodUS ( int64_t tmPeriodUs )
+{
+	assert ( tmPeriodUs>=0 );
+	Worker()->SetTimePeriodUS ( tmPeriodUs );
 }
 
 int64_t GetThrottlingPeriodUS ()

@@ -10614,7 +10614,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 		};
 		QUERYINFO << "RunSplitQuery cloned context " << tJobContext.second;
 		tClonableCtx.SetJobOrder ( tJobContext.second, iJob );
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while ( !CheckInterrupt() ) // some earlier job met error; abort.
 		{
 			QUERYINFO << "RunSplitQuery " << tJobContext.second << ", job " << iJob;

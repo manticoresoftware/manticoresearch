@@ -6103,7 +6103,7 @@ void SearchHandler_c::RunLocalSearches ()
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
 		LOCSEARCHINFO << "RunLocalSearches cloned context " << tJobContext.second;
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while ( true )
 		{
 			if ( !pSource->FetchTask ( iJob ) )
@@ -8112,7 +8112,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
 		sphLogDebug ( "MakeSnippetsCoro cloned context %d", tJobContext.second );
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while (true)
 		{
 			myinfo::SetTaskInfo ( "s %d:", iJob );

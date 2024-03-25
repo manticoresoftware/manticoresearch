@@ -8262,7 +8262,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE );
 
-	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
+		return false;
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
@@ -11302,7 +11303,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 	}
 
-	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
+		return false;
 
 	// adjust result sets
 	if ( bFinalPass )

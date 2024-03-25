@@ -676,6 +676,36 @@ void DistinctFetcherJsonField_c::GetKeys ( const CSphMatch & tMatch, CSphVector<
 		} );
 }
 
+class DistinctFetcherJsonFieldPtr_c : public DistinctFetcherMulti_c
+{
+	using DistinctFetcherMulti_c::DistinctFetcherMulti_c;
+
+public:
+	void				GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override;
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherJsonField_c(m_tLocator); }
+};
+
+
+void DistinctFetcherJsonFieldPtr_c::GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const
+{
+	dKeys.Resize(0);
+	auto pValue = (const BYTE *)tMatch.GetAttr(m_tLocator);
+	if ( !pValue )
+		return;
+
+	auto tBlob = sphUnpackPtrAttr(pValue);
+	pValue = tBlob.first;
+	ESphJsonType eJson = (ESphJsonType)*pValue++;
+	PushJsonFieldPtr ( pValue, eJson, [&dKeys]( SphGroupKey_t uGroupKey )
+		{
+			if ( uGroupKey )
+				dKeys.Add(uGroupKey);
+
+			return true;
+		}
+	);
+}
+
 template<typename T>
 class DistinctFetcherMva_T : public DistinctFetcherMulti_c
 {
@@ -696,12 +726,12 @@ void DistinctFetcherMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVector<Sph
 
 DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType )
 {
-	// fixme! what about json?
 	switch ( eType )
 	{
 	case SPH_ATTR_STRING:
 	case SPH_ATTR_STRINGPTR:		return new DistinctFetcherString_c(tLocator);
 	case SPH_ATTR_JSON_FIELD:		return new DistinctFetcherJsonField_c(tLocator);
+	case SPH_ATTR_JSON_FIELD_PTR:	return new DistinctFetcherJsonFieldPtr_c(tLocator);
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_UINT32SET_PTR:	return new DistinctFetcherMva_T<DWORD>(tLocator);
 	case SPH_ATTR_INT64SET:

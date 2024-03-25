@@ -250,6 +250,46 @@ select * from t inner join t2 on t.id = t2.t_id where t2.id = 1 or t2.id = 2;
 drop table t;
 drop table t2;
 
+<!-- populate tables -->
+create table join1 ( id bigint, title text, string_id integer, tmp string attribute, j json );
+create table join2 ( id bigint, title text, name string attribute, j json );
+
+insert into join1 values (1, 'title1', 1, 'tmp1', '{"a":1,"table":"join1"}');
+insert into join1 values (2, 'title2', 2, 'tmp2', '{"b":2,"table":"join1"}');
+insert into join1 values (3, 'title3', 3, 'tmp3', '{"c":3,"table":"join1"}');
+insert into join1 values (4, 'title4', 4, 'tmp4', '{"d":4,"table":"join1"}');
+
+insert into join2 values (1, 'title1', 'name1', '{"a":1,"table":"join2"}');
+insert into join2 values (2, 'title2', 'name2', '{"b":2,"table":"join2"}');
+
+<!-- group by json attr + same attr in select list -->
+select count(*), j.table, join2.j.table from join1 join join2 on join1.id = join2.id group by join2.j.table;
+
+<!-- facet by json attr + same attr in select list -->
+select j.table, join2.j.table from join1 join join2 on join1.id = join2.id limit 0 facet join2.j.table distinct limit 1000;;
+
+<!-- facet by json attr + same attr in select list -->
+select j.table, join2.j.table from join1 join join2 on join1.id = join2.id limit 0 option max_matches=1000 facet j.table distinct limit 1000 facet join2.j.table distinct limit 1000;;
+
+<!-- count distinct by joined json attr -->
+select j.table, count (distinct join2.j.table) from join1 join join2 on join1.id = join2.id;
+
+<!-- joined OR filters -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'not there' order by id asc;
+
+<!-- joined OR filters -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'name2' order by id asc;
+
+<!-- join ON mistype -->
+select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.izd;
+
+<!-- join filter mistype -->
+select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.id where join2.xidz>0;
+
+<!-- cleanup -->
+drop table join1;
+drop table join2;
+
 </sphinxql>
 </queries>
 

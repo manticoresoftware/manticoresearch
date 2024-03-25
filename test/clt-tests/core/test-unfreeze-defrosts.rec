@@ -53,12 +53,12 @@ for n in `seq 1 500`; do mysql -h0 -P9306 -e "INSERT INTO orders (id, user_id, n
 sleep 1; mysql -h0 -P9306 -e "select count(*) from orders\G"
 ––– output –––
 *************************** 1. row ***************************
-count(*):
+count(*): #!/3\d{3}|4\d{3}/!#
 ––– input –––
 sleep 5; mysql -h0 -P9306 -e "unfreeze orders;"
 ––– output –––
 ––– input –––
-sleep 1; mysql -h0 -P9306 -e "select count(*) from orders\G"
+sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
 ––– output –––
 *************************** 1. row ***************************
-count(*):
+count(*): 10000

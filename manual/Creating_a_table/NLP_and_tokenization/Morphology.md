@@ -301,7 +301,7 @@ table products {
 index_exact_words = {0|1}
 ```
 
-This option enables indexing of the original keywords along with the stemmed or remapped versions. The default value is 0, which means this feature is disabled.
+This option enables indexing of the original keywords along with their stemmed versions, but original keywords remapped by the [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) and [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md) cannot be indexed. The default value is 0, which means this feature is disabled.
 
 When `index_exact_words` is enabled, the raw keywords are added to the full-text index along with the stemmed or remapped versions. This allows the use of the [exact form operator](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language. Keep in mind that enabling this feature will increase the full-text index size and indexing time, but will not impact search performance.
 

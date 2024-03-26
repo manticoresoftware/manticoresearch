@@ -850,7 +850,7 @@ for i in 1 2 3 4 5; do echo "#{$i}"; cat /var/lib/manticore-$i/manticore.json | 
 "ha_strategy": "random"
 }
 ––– input –––
-grep -m 60 -i '*/ CREATE TABLE IF NOT EXISTS' /var/log/manticore-{1,2,3,4,5}/query.log | awk '{print $1, $5, $18}' | sort -k3
+grep -i '*/ CREATE TABLE IF NOT EXISTS' /var/log/manticore-{1,2,3,4,5}/query.log | awk '{print $1, $5, $18}' | sort -k3,3 -u
 ––– output –––
 /var/log/manticore-1/query.log:/* %{TIMEMS} `t_s0`
 /var/log/manticore-1/query.log:/* %{TIMEMS} `t_s1`

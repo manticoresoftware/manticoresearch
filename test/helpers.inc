@@ -2198,8 +2198,8 @@ class SphinxConfig
                     '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
                     '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end',
                     '/(.* error: no AF_INET address found for:.*, error)(.*)/',
-                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/'
-
+                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/',
+                    '/(.*\: file not found\: )(.*)/'
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
@@ -2208,6 +2208,7 @@ class SphinxConfig
                     "\$end",
                     "$1: substituted",
                     "$1",
+                    "$1 substituted"
                 ], $s );
 		
 		return $s;

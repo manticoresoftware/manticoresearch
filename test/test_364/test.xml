@@ -38,6 +38,16 @@ CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards );
 <!-- sort_mode option -->
 CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards, 100 as expansion_limit, 'docs' as sort_mode );
 CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards, 100 as expansion_limit, 'hits' as sort_mode );
+
+<!-- expansion_limit vs chinks -->
+INSERT INTO rt (id, gid, title) VALUES ( 20, 1, 'testa2 far2' );
+INSERT INTO rt (id, gid, title) VALUES ( 21, 1, 'testa2 far3' );
+INSERT INTO rt (id, gid, title) VALUES ( 22, 1, 'testa2 far4' );
+INSERT INTO rt (id, gid, title) VALUES ( 23, 1, 'testa2 far5' );
+INSERT INTO rt (id, gid, title) VALUES ( 24, 1, 'testa2 far6' );
+INSERT INTO rt (id, gid, title) VALUES ( 25, 1, 'testa3 far7' );
+INSERT INTO rt (id, gid, title) VALUES ( 26, 1, 'testa3 far8' );
+CALL KEYWORDS ( 'test* far*', 'rt', 1 AS stats, 0 AS fold_wildcards, 3 as expansion_limit, 'hits' as sort_mode );
 </sphinxql></queries>
 
 </test>

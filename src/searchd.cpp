@@ -11487,6 +11487,7 @@ public:
 	CSphVector<CSphKeywordInfo> & m_dKeywords;
 };
 
+static void LimitKeywords ( int iLimit, CSphVector<CSphKeywordInfo> & dKeywords );
 static void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeywordInfo> & dKeywords );
 bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog )
 {
@@ -11552,6 +11553,8 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	}
 
 	SortKeywords ( tSettings, dKeywords );
+	if ( tSettings.m_iExpansionLimit )
+		LimitKeywords ( tSettings.m_iExpansionLimit, dKeywords );
 
 	return bOk;
 }
@@ -11746,6 +11749,36 @@ void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeyw
 		dKeywords.Sort ( KeywordSorter_fn() );
 	else
 		dKeywords.Sort ( KeywordSorterDocs_fn() );
+}
+
+struct KeywordLimiter_fn
+{
+	const int m_iLimit = 0;
+	int m_iCount = 0;
+
+	KeywordLimiter_fn ( int iLimit )
+		: m_iLimit ( iLimit )
+	{}
+
+	bool IsEq ( const CSphKeywordInfo & tKw1, const CSphKeywordInfo & tKw2 )
+	{
+		if ( tKw1.m_iQpos!=tKw2.m_iQpos )
+		{
+			m_iCount = 0;
+			return false;
+		}
+
+		m_iCount++;
+		return ( m_iCount>=m_iLimit );
+	}
+};
+
+void LimitKeywords ( int iLimit, CSphVector<CSphKeywordInfo> & dKeywords )
+{
+	assert ( iLimit>0 );
+	KeywordLimiter_fn tLimit ( iLimit );
+	int iLen = sphUniq ( dKeywords.Begin(), dKeywords.GetLength(), tLimit );
+	dKeywords.Resize ( iLen );
 }
 
 // sort by distance asc, document count desc, ABC asc

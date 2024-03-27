@@ -3851,3 +3851,16 @@ void SetIndexId ( int64_t iId )
 	g_tIndexId.store ( iId );
 }
 
+bool HasWildcards ( const char * sWord )
+{
+	if ( !sWord )
+		return false;
+
+	for ( ; *sWord; sWord++ )
+	{
+		if ( sphIsWild ( *sWord ) )
+			return true;
+	}
+
+	return false;
+}

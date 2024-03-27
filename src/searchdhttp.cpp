@@ -2317,6 +2317,10 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		}
 		else
 		{
+			pOption = tOptions ( "raw_query" );
+			if ( pOption )
+				SetQuery ( FromStr (*pOption) );
+
 			return std::make_unique<HttpSearchHandler_SQL_c> ( tOptions ); // non-json
 		}
 

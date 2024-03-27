@@ -1823,7 +1823,7 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_t & tDoc, CSphString & sError ) const
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 			continue;
 
-		if ( iNumValues!=tAttr.m_tKNN.m_iDims )
+		if ( iNumValues && iNumValues!=tAttr.m_tKNN.m_iDims )
 		{
 			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
 			return false;

@@ -19,6 +19,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 void BuddyShutdown ();
 
 bool HasBuddy();
+bool IsBuddyQuery ( const OptionsHash_t & hOptions );
 
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t& hOptions, CSphVector<BYTE>& dResult, bool bNeedHttpResponse, http_method eRequestType );
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t sError, std::pair<int, BYTE> tSavedPos, BYTE& uPackedID, GenericOutputBuffer_c& tOut );

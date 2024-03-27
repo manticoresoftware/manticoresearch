@@ -3366,6 +3366,10 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, c
 {
 	if ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs )
 		return;
+	// should not log query from buddy in the info but only in debug and more verbose
+	bool bNoLogQuery = ( ( q.m_uDebugFlags & QUERY_DEBUG_NO_LOG )==QUERY_DEBUG_NO_LOG );
+	if ( bNoLogQuery && g_eLogLevel==SPH_LOG_INFO )
+		return;
 
 	switch ( g_eLogFormat )
 	{
@@ -17020,6 +17024,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 			StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 			SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
+			// no log for search queries from the buddy in the info verbosity
+			if ( session::IsQueryLogDisabled() )
+				dStmt.Begin()->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 			tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, std::move ( dStmt.Begin()->m_pTableFunc ) );
 			tHandler.m_pStmt = pStmt;
 

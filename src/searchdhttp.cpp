@@ -1245,8 +1245,15 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 	return pHandler;
 }
 
+struct HttpOptionTrait_t
+{
+	const OptionsHash_t & m_tOptions;
+	explicit HttpOptionTrait_t ( const OptionsHash_t & tOptions ) 
+		: m_tOptions ( tOptions )
+	{}
+};
 
-class HttpSearchHandler_c : public HttpHandler_c
+class HttpSearchHandler_c : public HttpHandler_c, public HttpOptionTrait_t
 {
 public:
 	bool Process () final
@@ -1258,6 +1265,8 @@ public:
 			return false;
 
 		int iQueries = ( 1 + m_tParsed.m_tQuery.m_dAggs.GetLength() );
+		if ( IsBuddyQuery ( m_tOptions ) )
+			m_tParsed.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 
 		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed.m_tQuery );
 		SetStmt ( *tHandler );
@@ -1297,6 +1306,10 @@ public:
 		return true;
 	}
 
+	explicit HttpSearchHandler_c ( const OptionsHash_t & tOptions )
+		: HttpOptionTrait_t ( tOptions )
+	{}
+
 protected:
 	QueryType_e				m_eQueryType {QUERY_SQL};
 	ParsedJsonQuery_t		m_tParsed;
@@ -1324,11 +1337,9 @@ static void AddAggs ( const VecTraits_T<SqlStmt_t> & dStmt, JsonQuery_c & tQuery
 
 class HttpSearchHandler_SQL_c final: public HttpSearchHandler_c
 {
-	const OptionsHash_t& m_tOptions;
-
 public:
 	explicit HttpSearchHandler_SQL_c ( const OptionsHash_t & tOptions )
-		: m_tOptions ( tOptions )
+		: HttpSearchHandler_c ( tOptions )
 	{}
 
 protected:
@@ -1682,13 +1693,14 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 	}
 }
 
-class HttpRawSqlHandler_c final: public HttpHandler_c
+class HttpRawSqlHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
 {
 	Str_t m_sQuery;
 
 public:
-	explicit HttpRawSqlHandler_c ( Str_t sQuery )
-		: m_sQuery ( sQuery )
+	explicit HttpRawSqlHandler_c ( Str_t sQuery, const OptionsHash_t & tOptions )
+		: HttpOptionTrait_t ( tOptions )
+		, m_sQuery ( sQuery )
 	{}
 
 	bool Process () final
@@ -1699,6 +1711,9 @@ public:
 			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
 			return false;
 		}
+
+		if ( IsBuddyQuery ( m_tOptions ) )
+			session::SetQueryDisableLog();
 
 		JsonRowBuffer_c tOut;
 		session::Execute ( m_sQuery, tOut );
@@ -1718,8 +1733,9 @@ class HttpHandler_JsonSearch_c : public HttpSearchHandler_c
 	Str_t m_sQuery;
 
 public:
-	explicit HttpHandler_JsonSearch_c ( Str_t sQuery )
-		: m_sQuery ( sQuery )
+	explicit HttpHandler_JsonSearch_c ( Str_t sQuery, const OptionsHash_t &	tOptions )
+		: HttpSearchHandler_c ( tOptions )
+		, m_sQuery ( sQuery )
 	{}
 
 	std::unique_ptr<QueryParser_i> PreParseQuery() override
@@ -2233,14 +2249,13 @@ private:
 	}
 };
 
-class HttpHandlerPQ_c final : public HttpHandler_c
+class HttpHandlerPQ_c final : public HttpHandler_c, public HttpOptionTrait_t
 {
 	Str_t m_sQuery;
-	const OptionsHash_t& m_tOptions;
 public:
-	HttpHandlerPQ_c ( Str_t sQuery, const OptionsHash_t& tOptions )
-		: m_sQuery ( sQuery )
-		, m_tOptions ( tOptions )
+	HttpHandlerPQ_c ( Str_t sQuery, const OptionsHash_t & tOptions )
+		: HttpOptionTrait_t ( tOptions )
+		, m_sQuery ( sQuery )
 	{}
 
 	bool Process () final;
@@ -2313,7 +2328,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 			auto pQuery = tOptions ( "query" );
 			if ( pQuery )
 				SetQuery ( FromStr ( *pQuery ) );
-			return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
+			return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
 		}
 		else
 		{
@@ -2338,12 +2353,12 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 			if ( tSource.GetError() )
 				return nullptr;
 			else
-				return std::make_unique<HttpRawSqlHandler_c> ( sQuery ); // non-json
+				return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
 		}
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
 		SetQuery ( tSource.ReadAll() );
-		return std::make_unique<HttpHandler_JsonSearch_c> ( sQuery ); // json
+		return std::make_unique<HttpHandler_JsonSearch_c> ( sQuery, tOptions ); // json
 
 	case SPH_HTTP_ENDPOINT_JSON_INDEX:
 	case SPH_HTTP_ENDPOINT_JSON_CREATE:
@@ -2745,7 +2760,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 {
 	StringBuilder_c sQuery;
 	sQuery.Sprintf(R"({"index":"%s"})", sIndex.scstr());
-	auto pHandler = std::make_unique<HttpHandler_JsonSearch_c> ( (Str_t)sQuery ) ;
+	auto pHandler = std::make_unique<HttpHandler_JsonSearch_c> ( (Str_t)sQuery, m_tOptions ) ;
 	if ( !pHandler )
 		return false;
 

@@ -141,7 +141,8 @@ class ISphMatchSorter;
 
 enum QueryDebug_e
 {
-	QUERY_DEBUG_NO_PAYLOAD = 1<<0
+	QUERY_DEBUG_NO_PAYLOAD = 1<<0,
+	QUERY_DEBUG_NO_LOG = 1<<1
 };
 
 // collect valid schemas from sorters, excluding one

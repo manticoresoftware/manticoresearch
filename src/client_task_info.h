@@ -53,6 +53,7 @@ public:
 	int m_iWTimeoutS = -1;
 	int64_t m_iMaxStackSize = Threads::GetMaxCoroStackSize();
 	bool m_bSqlQuoteShowCreate = false;
+	bool m_bQueryDisableLog = false;
 
 	ESphCollation m_eCollation { GlobalCollation () };
 	Profile_e			m_eProfile { Profile_e::NONE };
@@ -212,7 +213,9 @@ namespace session {
 
 	inline void SetMaxStackSize ( int64_t iStackSize ) { ClientTaskInfo_t::Info().m_iMaxStackSize = iStackSize; }
 	inline int64_t GetMaxStackSize() noexcept { return ClientTaskInfo_t::Info().m_iMaxStackSize; }
-
+	
+	inline void SetQueryDisableLog () { ClientTaskInfo_t::Info().m_bQueryDisableLog = true; }
+	inline bool IsQueryLogDisabled () { return ClientTaskInfo_t::Info().m_bQueryDisableLog; }
 } // namespace session
 
 namespace myinfo {

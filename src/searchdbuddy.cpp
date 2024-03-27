@@ -548,7 +548,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
 
-static bool HasProhibitBuddy ( const OptionsHash_t & hOptions )
+bool IsBuddyQuery ( const OptionsHash_t & hOptions )
 {
 	CSphString * pProhibit = hOptions ( "user-agent" );
 	return pProhibit != nullptr && ( pProhibit->Begins ( "Manticore Buddy" ) );
@@ -620,13 +620,13 @@ static ESphHttpStatus GetHttpStatusCode ( int iBuddyHttpCode, ESphHttpStatus eRe
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || IsBuddyQuery ( hOptions ) )
 	{
 		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
 		{
 			if ( !HasBuddy() )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );
-			else if ( HasProhibitBuddy ( hOptions ) )
+			else if ( IsBuddyQuery ( hOptions ) )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint with User-Agent:Manticore Buddy" );
 			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
 		}

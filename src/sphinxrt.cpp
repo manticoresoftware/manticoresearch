@@ -1096,47 +1096,72 @@ CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
 class SaveState_c
 {
 public:
-
 	enum States_e : BYTE {
-		ENABLED,	// normal
+		ENABLED,	// normal, saving possible
 		DISCARD,	// disabled, current result will not be necessary (can escape to don't waste resources)
 		DISABLED,	// disabled, current stage must be completed first
 	};
 
-	explicit SaveState_c ( States_e eValue )
-		: m_tValue { eValue, false } {}
-
 	void SetState ( States_e eState )
 	{
-		if ( Threads::IsInsideCoroutine() )
-			m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t ) { t.m_eValue = eState; } );
-		else { // call from naked worker, typically indextool
+		if ( !Threads::IsInsideCoroutine() )
+		{ // call from naked worker, typically indextool
 			auto& t = const_cast<Value_t&> ( m_tValue.GetValueRef() );
 			t.m_eValue = eState;
+			return;
 		}
+
+		assert ( Threads::IsInsideCoroutine() );
+		m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t )
+		{
+			t.m_eValue = eState;
+			if ( eState == States_e::ENABLED )
+			{
+				if ( t.m_iDisabledCounter > 0 )
+					--t.m_iDisabledCounter;
+			} else
+				++t.m_iDisabledCounter;
+		});
 	}
 	void SetShutdownFlag ()
 	{
 		m_tValue.ModifyValueAndNotifyAll ( [] ( Value_t& t ) { t.m_bShutdown = true; } );
 	}
 
-	bool Is (States_e eValue) const { return m_tValue.GetValue().m_eValue==eValue; }
-
-	// sleep and return true when expected state achieved.
-	// sleep and return false if shutdown expected.
-	bool WaitStateOrShutdown ( States_e uState ) const
+	bool ActiveStateIs ( States_e eValue ) const
 	{
-		return uState == m_tValue.Wait ( [uState] ( const Value_t& tVal ) { return tVal.m_bShutdown || ( tVal.m_eValue == uState ); } ).m_eValue;
+		if ( !Threads::IsInsideCoroutine() ) // call from naked worker, typically indextool
+			return m_tValue.GetValueRef().m_eValue == eValue;
+
+		if ( eValue == States_e::ENABLED )
+			return m_tValue.GetValueRef().m_iDisabledCounter == 0;
+		return m_tValue.GetValueRef().m_eValue == eValue;
 	}
+
+	// sleep and return true when state is enabled.
+	// sleep and return false if index's shutdown happened.
+	bool WaitEnabledOrShutdown () const noexcept
+	{
+		return !m_tValue.Wait ( [&] ( const Value_t& tVal ) {
+			if ( tVal.m_bShutdown )
+				return true;
+			if ( tVal.m_eValue != States_e::ENABLED )
+				return false;
+			return tVal.m_iDisabledCounter == 0;
+		}).m_bShutdown;
+	}
+
+	int GetNumOfLocks() const noexcept
+	{
+		return m_tValue.GetValueRef().m_iDisabledCounter;
+	}
+
 private:
 	struct Value_t
 	{
-		States_e m_eValue;
-		bool m_bShutdown;
-		Value_t ( States_e eValue, bool bShutdown )
-			: m_eValue { eValue }
-			, m_bShutdown { bShutdown }
-		{}
+		States_e m_eValue = SaveState_c::ENABLED;
+		int m_iDisabledCounter = 0;
+		bool m_bShutdown = false;
 	};
 	Coro::Waitable_T<Value_t> m_tValue;
 };
@@ -1314,7 +1339,7 @@ private:
 	int							m_iMaxCodepointLength = 0;
 	TokenizerRefPtr_c			m_pTokenizerIndexing;
 	bool						m_bPreallocPassedOk = true;
-	SaveState_c					m_tSaving { SaveState_c::ENABLED };
+	SaveState_c					m_tSaving;
 	bool						m_bHasFiles = false;
 
 	// fixme! make this *Lens atomic together with disk/ram data, to avoid any kind of race among them
@@ -1572,7 +1597,7 @@ bool RtIndex_c::IsFlushNeed() const
 	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
 		return false;
 
-	return m_tSaving.Is ( SaveState_c::ENABLED );
+	return m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 }
 
 static int64_t SegmentsGetUsedRam ( const ConstRtSegmentSlice_t& dSegments )
@@ -2865,7 +2890,7 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
 
-	if ( !Threads::IsInsideCoroutine() || m_tSaving.Is ( SaveState_c::ENABLED ) )
+	if ( !Threads::IsInsideCoroutine() || m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
 		for ( auto& pChunk : *pChunks )
 			iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
 	else
@@ -2880,7 +2905,7 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 				if ( bNeedWait )
 				{
 					bNeedWait = false;
-					bEnabled = m_tSaving.WaitStateOrShutdown ( SaveState_c::ENABLED );
+					bEnabled = m_tSaving.WaitEnabledOrShutdown();
 				}
 				return bEnabled;
 			});
@@ -3903,7 +3928,7 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 
 void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 {
-	if ( !m_tSaving.Is ( SaveState_c::ENABLED ) )
+	if ( !m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
 		return;
 
 	// sanity check
@@ -4023,7 +4048,7 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 // i.e. create new disk chunk from ram segments
 bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
-	if ( !m_tSaving.WaitStateOrShutdown ( SaveState_c::ENABLED ) )
+	if ( !m_tSaving.WaitEnabledOrShutdown() )
 		return !bBootstrap;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
@@ -4811,7 +4836,7 @@ void RtIndex_c::SaveRamFieldLengths ( CSphWriter& wrChunk ) const
 
 bool RtIndex_c::SaveRamChunk ()
 {
-	if ( !m_tSaving.Is ( SaveState_c::ENABLED ) )
+	if ( !m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
 		return false;
 
 	MEMORY ( MEM_INDEX_RT );
@@ -8049,7 +8074,7 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 	bool bCritical = false;
 	CSphString sWarning;
 
-	bool bEnabled = m_tSaving.Is ( SaveState_c::ENABLED );
+	bool bEnabled = m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 	bool bNeedWait = !bEnabled;
 
 	// if saving is disabled, and we NEED to actually update a disk chunk,
@@ -8058,7 +8083,7 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 		if ( bNeedWait )
 		{
 			bNeedWait = false;
-			bEnabled = m_tSaving.WaitStateOrShutdown ( SaveState_c::ENABLED );
+			bEnabled = m_tSaving.WaitEnabledOrShutdown();
 		}
 		return bEnabled;
 	};
@@ -8191,7 +8216,7 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 
 	const auto& pDiskChunks = m_tRtChunks.DiskChunks();
 
-	if ( pDiskChunks->IsEmpty() || m_tSaving.Is ( SaveState_c::DISCARD ) )
+	if ( pDiskChunks->IsEmpty() || m_tSaving.ActiveStateIs ( SaveState_c::DISCARD ) )
 		return true;
 
 	for ( auto& pChunk : *pDiskChunks )
@@ -9928,6 +9953,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	pRes->m_iTID = m_iTID;
 	pRes->m_iSavedTID = m_iSavedTID;
+	pRes->m_iLockCount = m_tSaving.GetNumOfLocks();
 //	sphWarning ( "Chunks: %d, RAM: %d, DISK: %d", pRes->m_iNumChunks, (int) pRes->m_iRamUse, (int) pRes->m_iDiskUse );
 }
 

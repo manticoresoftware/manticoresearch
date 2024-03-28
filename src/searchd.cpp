@@ -15760,6 +15760,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
 		dStatus.MatchTupletf ( "mem_limit_rate", "%0.2F%%", PercentOf ( tStatus.m_fSaveRateLimit, 1.0, 2 ) );
 		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );
+		dStatus.MatchTupletf ( "locked", "%d", tStatus.m_iLockCount );
 	}
 	if ( bPq )
 	{
@@ -15958,7 +15959,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
-		tOut.Error ( "select TABLE.status requires an existing table" );
+		tOut.Error ( "select TABLE.@status requires an existing table" );
 		return;
 	}
 
@@ -16779,12 +16780,12 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 }
 
 //////////////////////////////////////////////////////////////////////////
-void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphString& sWarningOut )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes, dNonlockedIndexes, dIndexFiles;
 
-	ParseIndexList ( sIndexes, dIndexes );
+	ParseIndexList ( tStmt.m_sIndex, dIndexes );
 	for ( const auto& sIndex : dIndexes )
 	{
 		auto pIndex = GetServed ( sIndex );
@@ -16810,6 +16811,8 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 		++iWarnings;
 	}
 
+	CheckLike tSelector { tStmt.m_sStringParam.cstr() };
+
 	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "normalized" );
@@ -16817,6 +16820,9 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, C
 
 	for ( const auto& sFile : dIndexFiles )
 	{
+		if ( !tSelector.Match ( sFile.cstr() ) )
+			continue;
+
 		tOut.PutString ( sFile );
 		tOut.PutString ( RealPath ( sFile ) );
 		if ( !tOut.Commit() )
@@ -17402,7 +17408,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_FREEZE:
-		HandleMysqlFreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning);
+		HandleMysqlFreezeIndexes ( tOut, *pStmt, m_tLastMeta.m_sWarning);
 		return true;
 
 	case STMT_UNFREEZE:

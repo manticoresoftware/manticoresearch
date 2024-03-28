@@ -3429,6 +3429,8 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 {
 	if ( g_iQueryLogFile<0 || g_eLogFormat!=LOG_FORMAT_SPHINXQL || !IsFilled ( sQuery ) )
 		return;
+	if ( session::IsQueryLogDisabled() && g_eLogLevel==SPH_LOG_INFO )
+		return;
 
 	StringBuilder_c tBuf;
 	tBuf << "/* ";

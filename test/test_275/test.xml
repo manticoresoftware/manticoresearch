@@ -54,6 +54,11 @@ searchd
 	select * from t;
 	select id, knn_dist() from t;
 	drop table t;
+
+	create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );
+	replace into test (id, title) values (1, 'test1');
+	select * from test;
+	drop table test;
 </sphinxql>
 </queries>
 

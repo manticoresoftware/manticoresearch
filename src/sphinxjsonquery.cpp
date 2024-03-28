@@ -43,6 +43,10 @@ public:
 	const CSphIndexSettings &	GetIndexSettings() { return m_tSettings; }
 	const CSphQuery *			GetQuery() { return m_pQuery; }
 
+	bool m_bHasFulltext = false;
+	bool m_bHasFilter = false;
+	void ResetNodesFlags() { m_bHasFulltext = m_bHasFilter = false; } 
+
 private:
 	const CSphQuery *			m_pQuery {nullptr};
 	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
@@ -412,13 +416,18 @@ bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVec
 
 	// we created filters before, no need to process them again
 	if ( IsFilter(tItem) )
+	{
+		tBuilder.m_bHasFilter = true;
 		return true;
+	}
 
 	XQNode_t * pNode = ConstructNode ( tItem, tBuilder );
 	if ( !pNode )
 		return IsBoolNode ( tItem ); // need walk down the tree for compart mode
 
 	dNodes.Add ( pNode );
+	tBuilder.m_bHasFulltext = true;
+
 	return true;
 }
 
@@ -471,8 +480,15 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 				return nullptr;
 		} else if ( sName=="should" )
 		{
+			tBuilder.ResetNodesFlags();
 			if ( !ConstructBoolNodeItems ( tClause, dShould, tBuilder ) )
 				return nullptr;
+			if ( tBuilder.m_bHasFilter && tBuilder.m_bHasFulltext )
+			{
+				tBuilder.Error ( "filter and full-text can be used together only inside \"must\" node" );
+				return nullptr;
+			}
+
 		} else if ( sName=="must_not" )
 		{
 			if ( !ConstructBoolNodeItems ( tClause, dMustNot, tBuilder ) )

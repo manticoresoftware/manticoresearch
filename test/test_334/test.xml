@@ -507,5 +507,20 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- error on mix of full-text with filters -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "bool": {
+      "should": [
+        { "match": {"_all":"white"} },
+        { "range": { "id": { "lt": 10 } } }
+      ]
+    }
+  }
+}
+</query>
+
 </queries>
 </test>

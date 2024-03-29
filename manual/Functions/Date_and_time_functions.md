@@ -451,7 +451,7 @@ This example formats the current date and time, displaying the four-digit year a
 <!-- example DATE_HISTOGRAM -->
 `DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` Takes a bucket size as a unit name and returns the bucket number for the value. Values are rounded to the closest bucket. The key function is:
 ```sql
-key_of_the_bucket = interval * floor ( value / interval ) 
+key_of_the_bucket = interval * floor ( value / interval )
 ```
 Intervals are specified using the unit name, such as `week` or as a single unit like `1M`. Multiple units such as `2w` are not supported.
 
@@ -464,7 +464,7 @@ The valid intervals are:
 - `month`, `1M`
 - `year`, `1y` (a year is the interval between the start day of the month, time and the next year but the same day of the month, time)
 
-Used in aggregation, FACET, and grouping.
+Used in aggregation, `FACET`, and grouping.
 
 Example:
 
@@ -478,10 +478,10 @@ GROUP BY months ORDER BY months ASC;
 ### DATE_RANGE()
 <!-- example DATE_RANGE -->
 `DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` takes a set of ranges and returns the bucket number for the value.
-This expression includes the `range_from` value and excludes the `range_to` value for each range. The range can be open - having only the `range_from` or only the `range_to` value.
-The difference between this and the [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) function is that the `range_from` and `range_to` values can be expressed in [Date Math](../Functions/Date_and_time_functions.md#Date-Math) expressions.
+The expression includes the `range_from` value and excludes the `range_to` value for each range. The range can be open - having only the `range_from` or only the `range_to` value.
+The difference between this and the [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) function is that the `range_from` and `range_to` values can be expressed in [Date math](../Functions/Date_and_time_functions.md#Date-math) expressions.
 
-Used in aggregation, FACET, and grouping.
+Used in aggregation, `FACET`, and grouping.
 
 Example:
 
@@ -492,32 +492,31 @@ FROM idx_dates
 GROUP BY points ORDER BY points ASC;
 ```
 
-##### Date Math
+##### Date math
 
-The expression starts with the date, such as:
-- `now`
-- a date string ending with `||`
+Date math lets you work with dates and times directly in your searches. It's especially useful for handling data that changes over time. With date math, you can easily do things like find entries from a certain period, analyze data trends, or manage when information should be removed. It simplifies working with dates by letting you add or subtract time from a given date, round dates to the nearest time unit, and more, all within your search queries.
 
-This date can optionally be followed by one or more math expressions:
+To use date math, you start with a base date, which can be:
+- `now` for the current date and time,
+- or a specific date string ending with `||`.
 
-- `+1y` to add one year
-- `-1h` to subtract one hour
-- `/m` to round to the nearest month
+Then, you can modify this date with operations like:
+- `+1y` to add one year,
+- `-1h` to subtract one hour,
+- `/m` to round to the nearest month.
 
-The supported date units are:
+You can use these units in your operations:
+- `s` for seconds,
+- `m` for minutes,
+- `h` (or `H`) for hours,
+- `d` for days,
+- `w` for weeks,
+- `M` for months,
+- `y` for years.
 
-- `s` - seconds
-- `m` - minutes
-- `h` or `H` - hours
-- `d` - days
-- `w` - weeks
-- `M` - months
-- `y` - years
-
-Here are some examples:
-
-- `now+4h` - Represents the current time plus four hours.
-- `now-2d/d` - Represents the current time minus two days, rounded down to the nearest day.
-- `2010-04-20||+2M/d` - Represents April 20, 2010, plus two months, rounded down to the nearest day.
+Here are some examples of how you might use date math:
+- `now+4h` means four hours from now.
+- `now-2d/d` is the time two days ago, rounded to the nearest day.
+- `2010-04-20||+2M/d` is June 20, 2010, rounded to the nearest day.
 
 <!-- proofread -->

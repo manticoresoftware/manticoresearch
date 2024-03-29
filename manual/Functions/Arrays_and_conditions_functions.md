@@ -318,7 +318,7 @@ In the first case, the comparison operator <> will return 0.0 (false) due to a t
 ```sql
 key_of_the_bucket = interval + offset * floor ( ( value - offset ) / interval )
 ```
-The histogram argument `interval` must be positive. The histogram argument `offset` must be positive and less than `interval`. It is used in aggregation, FACET, and grouping.
+The histogram argument `interval` must be positive. The histogram argument `offset` must be positive and less than `interval`. It is used in aggregation, `FACET`, and grouping.
 
 Example:
 
@@ -345,7 +345,7 @@ GROUP BY price_range ORDER BY price_range ASC;
 
 ### RANGE()
 `RANGE(expr, {range_from=value,range_to=value})` takes a set of ranges and returns the bucket number for the value.
-This expression includes the `range_from` value and excludes the `range_to` value for each range. A range can be open - having only the `range_from` or only the `range_to` value. It is used in aggregation, FACET, and grouping.
+This expression includes the `range_from` value and excludes the `range_to` value for each range. A range can be open - having only the `range_from` or only the `range_to` value. It is used in aggregation, `FACET`, and grouping.
 
 Example:
 

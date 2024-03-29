@@ -1402,7 +1402,7 @@ POST /search -d '
 Facets can aggregate over histogram date values, which is similar to the normal histogram. The difference is that the interval is specified using a date or time expression. Such expressions require special support because the intervals are not always of fixed length. Values are rounded to the closest bucket using the following key function:
 
 ```sql
-key_of_the_bucket = interval * floor ( value / interval ) 
+key_of_the_bucket = interval * floor ( value / interval )
 ```
 
 The histogram parameter `calendar_interval` understands months to have different amounts of days. The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
@@ -1486,7 +1486,7 @@ POST /search -d '
 
 <!-- example facet range -->
 
-### Facet over set of ranges 
+### Facet over set of ranges
 
 Facets can aggregate over a set of ranges. The values are checked against the bucket range, where each bucket includes the `from` value and excludes the `to` value from the range.
 Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
@@ -1629,9 +1629,9 @@ POST /search -d '
 
 <!-- example facet range_date -->
 
-### Facet over set of date ranges 
+### Facet over set of date ranges
 
-Facets can aggregate over a set of date ranges, which is similar to the normal range. The difference is that the `from` and `to` values can be expressed in [Date Math](../Functions/Date_and_time_functions.md#Date-Math) expressions. This aggregation includes the `from` value and excludes the `to` value for each range. Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+Facets can aggregate over a set of date ranges, which is similar to the normal range. The difference is that the `from` and `to` values can be expressed in [Date math](../Functions/Date_and_time_functions.md#Date-math) expressions. This aggregation includes the `from` value and excludes the `to` value for each range. Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
 
 <!-- request SQL -->
 

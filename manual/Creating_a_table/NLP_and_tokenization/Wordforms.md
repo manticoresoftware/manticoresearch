@@ -29,7 +29,7 @@ There is a bundled utility called [Spelldump](../../Miscellaneous_tools.md#spell
 
 You can map several source words to a single destination word. The process happens on tokens, not the source text, so differences in whitespace and markup are ignored.
 
-You can use the `=>` symbol instead of `>`. Comments (starting with `#`) are also allowed. Finally, if a line starts with a tilde (`~`), the wordform will be applied after morphology, instead of before (note that only a single source and destination word is supported in this case).
+You can use the `=>` symbol instead of `>`. Comments (starting with `#`) are also allowed. Finally, if a line starts with a tilde (`~`), the wordform will be applied after morphology, instead of before (note that only a single source and destination word are supported in this case).
 
 ```ini
 core 2 duo > c2d

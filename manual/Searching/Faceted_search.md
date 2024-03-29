@@ -1293,13 +1293,13 @@ SELECT COUNT(*), HISTOGRAM(price, {hist_interval=100}) as price_range FROM facet
 ``` json
 POST /search -d '
 {
-  "size":0,
-  "index":"facets",
-  "aggs":{
-    "price_range":{
-      "histogram":{
-        "field":"price",
-        "interval":300
+  "size": 0,
+  "index": "facets",
+  "aggs": {
+    "price_range": {
+      "histogram": {
+        "field": "price",
+        "interval": 300
       }
     }
   }
@@ -1345,14 +1345,14 @@ POST /search -d '
 ``` json
 POST /search -d '
 {
-  "size":0,
-  "index":"facets",
-  "aggs":{
-    "price_range":{
-      "histogram":{
-        "field":"price",
-        "interval":300,
-        "keyed":true
+  "size": 0,
+  "index": "facets",
+  "aggs": {
+    "price_range": {
+      "histogram": {
+        "field": "price",
+        "interval": 300,
+        "keyed": true
       }
     }
   }
@@ -1430,14 +1430,14 @@ SELECT count(*), DATE_HISTOGRAM(tm, {calendar_interval='month'}) AS months FROM 
 ``` json
 POST /search -d '
 {
-  "index":"idx_dates",
-  "size":0,
-  "aggs":{
-    "months":{
-      "date_histogram":{
-        "field":"tm",
-        "keyed":true,
-        "calendar_interval":"month"
+  "index": "idx_dates",
+  "size": 0,
+  "aggs": {
+    "months": {
+      "date_histogram": {
+        "field": "tm",
+        "keyed": true,
+        "calendar_interval": "month"
       }
     }
   }
@@ -1513,22 +1513,22 @@ SELECT COUNT(*), RANGE(price, {range_to=150},{range_from=150,range_to=300},{rang
 ``` json
 POST /search -d '
 {
-  "size":0,
-  "index":"facets",
-  "aggs":{
-    "price_range":{
-      "range":{
-        "field":"price",
-        "ranges":[
+  "size": 0,
+  "index": "facets",
+  "aggs": {
+    "price_range": {
+      "range": {
+        "field": "price",
+        "ranges": [
           {
-            "to":99
+            "to": 99
           },
           {
-            "from":99,
-            "to":550
+            "from": 99,
+            "to": 550
           },
           {
-            "from":550
+            "from": 550
           }
         ]
       }
@@ -1655,27 +1655,27 @@ SELECT COUNT(*), DATE_RANGE(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/
 ``` json
 POST /search -d '
 {
-  "index":"idx_dates",
-  "size":0,
-  "aggs":{
-    "points":{
-      "date_range":{
-        "field":"tm",
-        "keyed":true,
-        "ranges":[
+  "index": "idx_dates",
+  "size": 0,
+  "aggs": {
+    "points": {
+      "date_range": {
+        "field": "tm",
+        "keyed": true,
+        "ranges": [
           {
-            "to":"2017||+2M/M"
+            "to": "2017||+2M/M"
           },
           {
-            "from":"2017||+2M/M",
-            "to":"2017||+4M/M"
+            "from": "2017||+2M/M",
+            "to": "2017||+4M/M"
           },
           {
-            "from":"2017||+4M/M",
-            "to":"2017||+5M/M"
+            "from": "2017||+4M/M",
+            "to": "2017||+5M/M"
           },
           {
-            "from":"2017||+5M/M"
+            "from": "2017||+5M/M"
           }
         ]
       }

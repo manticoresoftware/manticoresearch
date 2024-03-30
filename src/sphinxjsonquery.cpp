@@ -232,6 +232,48 @@ bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->m_dWords.GetLength () ) );
 }
 
+static bool IsFullText ( const CSphString & sName );
+static bool IsBoolNode ( const CSphString & sName );
+
+bool CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError )
+{
+	bool bFilter = false;
+	bool bBool = false;
+	bool bFullText = false;
+	for ( const auto & tItem : tRoot )
+	{
+		const CSphString & sName = tItem.Name();
+		if ( IsFilter ( tItem ) )
+		{
+			if ( bFilter )
+			{
+				sError = "\"query\" has multiple filter properties, use bool node";
+				return false;
+			}
+			bFilter = true;
+		}
+		else if ( IsBoolNode ( sName ) )
+		{
+			if ( bBool )
+			{
+				sError = "\"query\" has multiple bool properties";
+				return false;
+			}
+			bBool = true;
+		}
+		else if ( IsFullText ( sName ) )
+		{
+			if ( bFullText )
+			{
+				sError = "\"query\" has multiple full-text properties, use bool node";
+				return false;
+			}
+			bFullText = true;
+		}
+	}
+
+	return true;
+}
 
 bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
@@ -244,6 +286,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		tParsed.m_sParseError = "\"query\" property is empty";
 		return false;
 	}
+	if ( iNumIndexes!=1 && !CheckRootNode ( tRoot, tParsed.m_sParseError ) )
+		return false;
 
 	assert ( pQueryTokenizerJson->IsQueryTok() );
 	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
@@ -305,6 +349,10 @@ static bool IsBoolNode ( const JsonObj_c & tJson )
 	return CSphString ( tJson.Name() )=="bool";
 }
 
+bool IsBoolNode ( const CSphString & sName )
+{
+	return ( sName=="bool" );
+}
 
 XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const
 {
@@ -670,6 +718,45 @@ XQNode_t * QueryParserJson_c::ConstructMatchAllNode ( QueryTreeBuilder_c & tBuil
 	return pNewNode;
 }
 
+static bool IsFtMatch ( const CSphString & sName )
+{
+	return ( sName=="match" );
+}
+
+static bool IsFtTerms ( const CSphString & sName )
+{
+	return ( sName=="terms" );
+}
+
+static bool IsFtPhrase ( const CSphString & sName )
+{
+	return ( sName=="match_phrase" );
+}
+
+static bool IsFtTerm ( const CSphString & sName )
+{
+	return ( sName=="term" );
+}
+
+static bool IsFtMatchAll ( const CSphString & sName )
+{
+	return ( sName=="match_all" );
+}
+
+static bool IsFtQueryString ( const CSphString & sName )
+{
+	return ( sName=="query_string" );
+}
+
+static bool IsFtQueryStringSimple ( const CSphString & sName )
+{
+	return ( sName=="simple_query_string" );
+}
+
+bool IsFullText ( const CSphString & sName )
+{
+	return ( IsFtMatch ( sName ) || IsFtTerms ( sName ) || IsFtPhrase ( sName ) || IsFtTerm ( sName ) || IsFtMatchAll ( sName ) || IsFtQueryString ( sName ) || IsFtQueryStringSimple ( sName ));
+}
 
 XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
@@ -680,23 +767,23 @@ XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTree
 		return nullptr;
 	}
 
-	bool bMatch = ( sName=="match" );
-	bool bTerms = ( sName=="terms" );
-	bool bPhrase = sName=="match_phrase";
-	bool bSingleTerm = ( sName=="term" );
+	bool bMatch = IsFtMatch ( sName );
+	bool bTerms = IsFtTerms ( sName );
+	bool bPhrase = IsFtPhrase ( sName );
+	bool bSingleTerm = IsFtTerm ( sName );
 	if ( bMatch || bPhrase || bTerms || bSingleTerm )
 		return ConstructMatchNode ( tJson, bPhrase, bTerms, bSingleTerm, tBuilder );
 
-	if ( sName=="match_all" )
+	if ( IsFtMatchAll ( sName ) )
 		return ConstructMatchAllNode ( tBuilder );
 
-	if ( sName=="bool" )
+	if ( IsBoolNode ( sName ) )
 		return ConstructBoolNode ( tJson, tBuilder );
 
-	if ( sName=="query_string" )
+	if ( IsFtQueryString ( sName ) )
 		return ConstructQLNode ( tJson, tBuilder );
 
-	if ( sName=="simple_query_string" && tJson.IsObj() )
+	if ( IsFtQueryStringSimple ( sName ) && tJson.IsObj() )
 		return ConstructQLNode ( tJson.GetItem ( "query" ), tBuilder );
 
 	return nullptr;

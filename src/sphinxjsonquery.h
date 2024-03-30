@@ -75,6 +75,7 @@ JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIn
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
+bool			CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError );
 
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus );
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus, const char * sIndex );

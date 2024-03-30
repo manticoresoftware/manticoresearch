@@ -522,5 +522,50 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- error on multiple full-texts at the root node without the bool node -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "match": { "*": "a" },
+    "query_string": "b"
+  }
+}
+</query>
+
+<!-- error on multiple filters at the root node without the bool node -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "equals": { "gid": 1 },
+    "in": { "gid": [2] }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "query_string": "b",
+    "equals": { "gid": 1 },
+    "in": { "gid": [2] }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "match": { "*": "a" },
+    "query_string": "b",
+    "equals": { "gid": 1 }
+  }
+}
+</query>
+
+
 </queries>
 </test>

@@ -415,6 +415,9 @@ bool FilterTreeConstructor_c::Parse ( const JsonObj_c & tObj )
 
 std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::ConstructPlainFilters ( const JsonObj_c & tObj )
 {
+	if ( !CheckRootNode ( tObj, m_sError ) )
+		return { false, nullptr };
+
 	for ( const auto & tChild : tObj )
 		if ( IsFilter(tChild) )
 		{

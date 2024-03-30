@@ -490,6 +490,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 void BuddyStop ()
 {
+#if _WIN32
 	if ( g_pBuddy )
 	{
 		std::error_code tErrorCode;
@@ -498,6 +499,19 @@ void BuddyStop ()
 			sphWarning ( "[BUDDY] stopped, exit code: %d", tErrorCode.value() );
 		BuddyStopContainer();
 	}
+#else
+	if ( g_pBuddy )
+	{
+		// FIXME!!! migrate to boost::process::v2 and use
+		// proc.request_exit();
+		// proc.wait();
+		kill ( g_pBuddy->id(), SIGTERM );
+		std::error_code tErrorCode;
+		g_pBuddy->wait ( tErrorCode );
+		if ( tErrorCode )
+			sphLogDebug ( "[BUDDY] stopped, exit code: %d", tErrorCode.value() );
+	}
+#endif
 
 	g_eBuddy = BuddyState_e::STOPPED;
 	g_pBuddy.reset();

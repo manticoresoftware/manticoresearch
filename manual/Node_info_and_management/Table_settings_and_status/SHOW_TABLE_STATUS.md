@@ -81,6 +81,7 @@ mysql> SHOW TABLE statistic STATUS;
 | mem_limit                   | 134217728                                                                |
 | mem_limit_rate              | 95.00%                                                                   |
 | ram_bytes_retired           | 0                                                                        |
+| locked                      | 0                                                                        |
 | tid                         | 0                                                                        |
 | tid_saved                   | 0                                                                        |
 | query_time_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
@@ -116,6 +117,7 @@ Array(
     [ram_chunk_segments_count] => 2
     [mem_limit] => 134217728
     [ram_bytes_retired] => 0
+    [locked] => 0
     [tid] => 15
     [query_time_1min] => {"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}
     [query_time_5min] => {"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}
@@ -151,6 +153,7 @@ utilsApi.sql('SHOW TABLE statistic STATUS')
     {u'Key': u'ram_chunk_segments_count', u'Value': u'2'}
     {u'Key': u'mem_limit', u'Value': u'134217728'}
     {u'Key': u'ram_bytes_retired', u'Value': u'0'}
+    {u'Key': u'locked', u'Value': u'0'}
     {u'Key': u'tid', u'Value': u'15'}
     {u'Key': u'query_time_1min', u'Value': u'{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}'}
     {u'Key': u'query_time_5min', u'Value': u'{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}'}
@@ -187,6 +190,7 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
     {"Key": "ram_chunk_segments_count", "Value": "2"}
     {"Key": "mem_limit", "Value": "134217728"}
     {"Key": "ram_bytes_retired", "Value": "0"}
+    {"Key": "locked", "Value": "0"}
     {"Key": "tid", "Value": "15"}
     {"Key": "query_time_1min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
     {"Key": "query_time_5min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
@@ -223,6 +227,7 @@ utilsApi.sql("SHOW TABLE statistic STATUS");
     { Key=ram_chunk_segments_count, Value=2}
     { Key=mem_limit, Value=134217728}
     { Key=ram_bytes_retired, Value=0}
+    { Key=locked, Value=0}
     { Key=tid, Value=15}
     { Key=query_time_1min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
     { Key=query_time_5min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
@@ -260,6 +265,7 @@ utilsApi.Sql("SHOW TABLE statistic STATUS");
     { Key=ram_chunk_segments_count, Value=2}
     { Key=mem_limit, Value=134217728}
     { Key=ram_bytes_retired, Value=0}
+    { Key=locked, Value=0}
     { Key=tid, Value=15}
     { Key=query_time_1min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
     { Key=query_time_5min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
@@ -304,6 +310,7 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 	    {"Key": "ram_chunk_segments_count", "Value": "2"}
 	    {"Key": "mem_limit", "Value": "134217728"}
 	    {"Key": "ram_bytes_retired", "Value": "0"}
+	    {"Key": "locked", "Value": "0"}
 	    {"Key": "tid", "Value": "15"}
 	    {"Key": "query_time_1min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
 	    {"Key": "query_time_5min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
@@ -350,6 +357,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 	    {"Key": "ram_chunk_segments_count", "Value": "2"}
 	    {"Key": "mem_limit", "Value": "134217728"}
 	    {"Key": "ram_bytes_retired", "Value": "0"}
+	    {"Key": "locked", "Value": "0"}
 	    {"Key": "tid", "Value": "15"}
 	    {"Key": "query_time_1min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
 	    {"Key": "query_time_5min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}

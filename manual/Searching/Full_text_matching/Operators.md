@@ -22,7 +22,7 @@ The logical OR operator `|` has a higher precedence than AND, so `looking for ca
 hello | world
 ```
 
-Note: There is no explicit `OR` operator. Please use `|` instead.
+Note: There is no operator `OR`. Please use `|` instead.
 
 ### MAYBE operator
 

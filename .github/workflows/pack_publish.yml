@@ -275,7 +275,7 @@ jobs:
           arch:
           artifact: win_installer
           type: arc
-          delimiter:
+          delimiter: "-"
 
   build_docker:
     name: Building and pushing docker

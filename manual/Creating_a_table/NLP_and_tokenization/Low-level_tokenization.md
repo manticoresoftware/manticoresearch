@@ -351,6 +351,8 @@ Blended characters list. Optional, default is empty.
 
 Blended characters are indexed as both separators and valid characters. For example, when `&` is defined as a blended character and `AT&T` appears in an indexed document, three different keywords will be indexed, `at&t`, `at` and `t`.
 
+Additionally, blended characters can influence indexing in such a way that keywords are indexed as if the blended characters were not typed at all. This behavior is particularly evident when `blend_mode = trim_all` is specified. For example, the phrase `some_thing` will be indexed as `some`, `something`, and `thing` with `blend_mode = trim_all`.
+
 Care should be taken when using blended characters as defining a character as blended means that it is no longer a separator.
 * Therefore, if you put a comma to the `blend_chars` and search for `dog,cat`, it will treat that as a single token `dog,cat`. If `dog,cat` was **not** indexed as `dog,cat`, but left as `dog cat` only, then it will not match.
 * Hence, this behavior should be controlled with the [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting.

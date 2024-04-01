@@ -6,19 +6,23 @@ The query string can include specific operators that define the conditions for h
 
 #### AND operator
 
-An implicit `AND` operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
+An implicit logical AND operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
 
 ```sql
 hello  world
 ```
 
+Note: There is no explicit `AND` operator.
+
 #### OR operator
 
-The `OR` operator has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
+The logical OR operator `|` has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
 
 ```sql
 hello | world
 ```
+
+Note: There is no explicit `OR` operator. Please use `|` instead.
 
 ### MAYBE operator
 

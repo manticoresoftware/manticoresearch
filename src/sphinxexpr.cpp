@@ -7274,6 +7274,20 @@ public:
 		m_dHashes.Sort();
 	}
 
+	Expr_JsonFieldIn_c ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
+		: Expr_ArgVsConstSet_T<int64_t> ( pArg )
+	{
+		m_dHashes.AddN ( dVals.GetLength() );
+		m_uValueHash = SPH_FNV64_SEED;
+		ARRAY_FOREACH ( i, dVals )
+		{
+			const CSphString & sVal = dVals[i];
+			m_dHashes[i] = sphFNV64 ( sVal.cstr() );
+			m_uValueHash = sphFNV64cont ( sVal.cstr(), m_uValueHash );
+		}
+		m_dHashes.Uniq();
+	}
+
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
 		Expr_ArgVsConstSet_T<int64_t>::Command ( eCmd, pArg );
@@ -7462,6 +7476,11 @@ private:
 		, m_dHashes ( rhs.m_dHashes )
 	{}
 };
+
+ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
+{
+	return new Expr_JsonFieldIn_c ( dVals, pArg );
+}
 
 // fixme! Expr_ArgVsConstSet_T collects raw packed strings in the case.
 // m.b. store FNV hashes there instead, and use them to boost search speed?

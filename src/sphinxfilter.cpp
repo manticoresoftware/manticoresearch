@@ -1149,14 +1149,8 @@ public:
 
 	bool Eval ( const CSphMatch & tMatch ) const
 	{
-		// attribute storages can fetch string length without reading the string itself
-		int iLen = m_pExpr->StringLenEval ( tMatch );
-		// StringLenEval returns -1 if not supported by expression
-		if ( iLen!=-1 )
-			return false;
-
 		const BYTE * pVal = nullptr;
-		iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		ByteBlob_t sRef ( pVal, iLen );
 
 		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
@@ -1261,6 +1255,11 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 	bool bJsonExpr = false;
 	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
+
+	// IN ( string list ) filter by JSON attribute should be done via Expr_JsonFieldIn_c expression
+	if ( bJsonExpr && tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+		return std::make_unique< ExprFilterProxy_c > ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+
 	if ( bJsonExpr && !bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 

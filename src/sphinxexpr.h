@@ -353,6 +353,7 @@ struct JoinArgs_t
 
 ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const JoinArgs_t * pJoinArgs, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
+ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg );
 
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 

@@ -1,5 +1,154 @@
 # Changelog
 
+# Upcoming version (dev)
+
+## Changelog [manticoresearch]
+
+## Major Changes
+
+- [Change logic to run Buddy in Docker on Windows](https://github.com/manticoresoftware/manticoresearch/commit/7a5508424) (#1540)
+- [Buddy Protocol Upgrade to v2](https://github.com/manticoresoftware/manticoresearch/commit/782a757b8) (#1869)
+
+## Minor Changes
+
+- [Install librdkafka for test-kit](https://github.com/manticoresoftware/manticoresearch/commit/0a85f1360) (#1908)
+- [Update version of the executor and backup version](https://github.com/manticoresoftware/manticoresearch/commit/6e1ddbafb), [03ce58dd2](https://github.com/manticoresoftware/manticoresearch/commit/03ce58dd2) (#1534)
+- [Update doc for backup with newly added force parameter and add missed disable-telemetry](https://github.com/manticoresoftware/manticoresearch/commit/c91ee823a)
+- [Manual updates:](https://github.com/manticoresoftware/manticoresearch/commit/32b388724) Add info that K is not applicable for ramchunks (#2011), [Add Info section to show buddy plugins](https://github.com/manticoresoftware/manticoresearch/commit/1f87e1c8d) (#1825), [Update telemetry metrics info](https://github.com/manticoresoftware/manticoresearch/commit/8dad89c93) (#1777)
+- [Refactor mysqldump tests and add mariadb with reusable instructions](https://github.com/manticoresoftware/manticoresearch/commit/2e5c23656)
+
+## Deprecations
+
+*None listed*
+
+## Bugfixes
+
+- [Fix version of the composer](https://github.com/manticoresoftware/manticoresearch/commit/338de405c)
+- [Update clt-version](https://github.com/manticoresoftware/manticoresearch/commit/c7d6e88d8)
+- [Fix installation nightly tests](https://github.com/manticoresoftware/manticoresearch/commit/54afe1af4)
+- [Use branch to run nightly tests of release installation](https://github.com/manticoresoftware/manticoresearch/commit/18aa21a1a)
+- [Adapt tests to config change](https://github.com/manticoresoftware/manticoresearch/commit/d61f9df8f)
+- [Update version of upload artifacts](https://github.com/manticoresoftware/manticoresearch/commit/a516e3849)
+
+## Changelog [Buddy]
+
+### Major Features
+- `[cd54d20](https://github.com/manticoresoftware/manticoresearch-buddy/commit/cd54d20)` Implement enable/disable buddy plugin logic
+- `[5a3aa00](https://github.com/manticoresoftware/manticoresearch-buddy/commit/5a3aa00)` Move Sharding from the core logic to the core Plugin
+- `[541c941](https://github.com/manticoresoftware/manticoresearch-buddy/commit/541c941)` Add float_vector support to InsertMva plugin
+- `[ae81e55](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ae81e55)` Implement consistent sharding
+- `[888aad1](https://github.com/manticoresoftware/manticoresearch-buddy/commit/888aad1) New protocol (#231)`
+- `[1a91919](https://github.com/manticoresoftware/manticoresearch-buddy/commit/1a91919)` Merge all core plugins into the Buddy and change the core logic
+
+### Minor Features
+- `[93341a1](https://github.com/manticoresoftware/manticoresearch-buddy/commit/93341a1)` Add calculation of rates for some metrics
+- `[86f98ab](https://github.com/manticoresoftware/manticoresearch-buddy/commit/86f98ab)` Change _rate suffix to _rps for rate metrics
+- `[2eea30a](https://github.com/manticoresoftware/manticoresearch-buddy/commit/2eea30a)` Introduce the logic to make it possible to bind to custom port for Buddy server
+
+### Deprecations
+- `[216b824](https://github.com/manticoresoftware/manticoresearch-buddy/commit/216b824)` Disable pcre.jit due to issue with some regexps and no profit in time from having enabled it
+
+### Bug Fixes
+- `[fa91865](https://github.com/manticoresoftware/manticoresearch-buddy/commit/fa91865)` Fix issue with Sharding Util test
+- `[8973ad3](https://github.com/manticoresoftware/manticoresearch-buddy/commit/8973ad3)` Fix issue with upper case options in ModifyTable plugin
+- `[f975242](https://github.com/manticoresoftware/manticoresearch-buddy/commit/f975242)` Fix issue with Replace plugin and change the logic how we handle errors - same production and debug mode (#213)
+- `[65f812c](https://github.com/manticoresoftware/manticoresearch-buddy/commit/65f812c)` Fix issue with MVA restoring in some cases (#183)
+
+### Other Changes
+- `[7166c2a](https://github.com/manticoresoftware/manticoresearch-buddy/commit/7166c2a)` To properly initialize ini settings we should do so before server start instead of onStart due to some cases
+- Several updates and fixes related to dependencies, composer deps, and telemetry lib updates for better performance and security.
+- Various improvements and bug fixes related to sharding logic, task processing, and plugin management.
+
+## Changelog [Backup]
+
+### Major Changes
+- [d6cd26d](https://github.com/manticoresoftware/manticoresearch-backup/commit/d6cd26d) Implement the logic to backup and restore multiple configs (#106)
+- [f62270c](https://github.com/manticoresoftware/manticoresearch-backup/commit/f62270c) Use vip http port by default when available and add test (#97)
+- [39ab088](https://github.com/manticoresoftware/manticoresearch-backup/commit/39ab088) Versions check & stream zstd decompress (#85)
+
+### Minor Changes
+- [4b4b542](https://github.com/manticoresoftware/manticoresearch-backup/commit/4b4b542) Update telemetry version in deps ands libs due to critical fix
+- [73c10f6](https://github.com/manticoresoftware/manticoresearch-backup/commit/73c10f6) Add extra method to use sorted file iterator when we really need it instead of sorting all the time
+- [db7e2b9](https://github.com/manticoresoftware/manticoresearch-backup/commit/db7e2b9) Add sorting to the file iterator to keep consistency in different situations
+- [3b357ea](https://github.com/manticoresoftware/manticoresearch-backup/commit/3b357ea) Add backup version to display after manticore search start to find out if we have some issue on this stage
+- [e23585a](https://github.com/manticoresoftware/manticoresearch-backup/commit/e23585a) We do not backup plugin_dir anymore, remove logic related to backing up plugins
+
+### Deprecations
+- No deprecations in this period.
+
+### Bugfixes
+- [2164d3b](https://github.com/manticoresoftware/manticoresearch-backup/commit/2164d3b) Make sure that extra files or folder that we add in stage of Docker build to data dir do not break tests
+- [aba70b2](https://github.com/manticoresoftware/manticoresearch-backup/commit/aba70b2) Fix CI tests due to migration to latest daemon version and new docker image
+- [ad2e5da](https://github.com/manticoresoftware/manticoresearch-backup/commit/ad2e5da) Update error message when we failed to connect to the daemon
+- [f221bfe](https://github.com/manticoresoftware/manticoresearch-backup/commit/f221bfe) Fix issue when we restore backup from the root directory
+- [48166e5](https://github.com/manticoresoftware/manticoresearch-backup/commit/48166e5) Add extra chown to make sure that files are using default root user in Ubuntu
+- [331764b](https://github.com/manticoresoftware/manticoresearch-backup/commit/331764b) Add defattr to prevent weird users in files after installation on rhel
+- [ce5ea85](https://github.com/manticoresoftware/manticoresearch-backup/commit/ce5ea85) Fix issue when we convert absolute root backup path to relative and remove writeable check on restore to make it possible restore from different paths
+- [15f34bd](https://github.com/manticoresoftware/manticoresearch-backup/commit/15f34bd) Fix incorrect checks in CLT tests
+
+Based on the provided git log output, here's a formatted changelog in markdown suitable for documentation. I've categorized the commits into Major, Minor, Deprecations, and Bugfixes according to their descriptions:
+
+## Changelog [telemetry]
+
+### Major Features
+- [a397311](https://github.com/manticoresoftware/telemetry-lib/commit/a397311) Add logic to make it possible to update labels
+- [505a20c](https://github.com/manticoresoftware/telemetry-lib/commit/505a20c) Parse os-release file and add info about os name and version to base labels
+
+### Minor Features
+- [7035168](https://github.com/manticoresoftware/telemetry-lib/commit/7035168) Return plain array on getLabels to be consistent
+
+### Deprecations
+- [8e2efd6](https://github.com/manticoresoftware/telemetry-lib/commit/8e2efd6) Remove arch cuz we already send machine_type
+
+### Bugfixes
+- [9548909](https://github.com/manticoresoftware/telemetry-lib/commit/9548909) Fix silly misprint in some labels
+- [44b2f18](https://github.com/manticoresoftware/telemetry-lib/commit/44b2f18) Fix issue with proper machine id detection on osx and send unknown when we something went wrong
+
+## Changelog [executor]
+
+### Major Features
+- [`3a4d6c4`](https://github.com/manticoresoftware/executor/commit/3a4d6c4) Add rdkafka support and update to PHP 8.3.3
+- [`bd91d4e`](https://github.com/manticoresoftware/executor/commit/bd91d4e) Add build on osx arm64 runner and update macOS to 13
+- [`d4a117d`](https://github.com/manticoresoftware/executor/commit/d4a117d) Use matrix to deploy different arch for docker
+- [`c59566a`](https://github.com/manticoresoftware/executor/commit/c59566a) Add step to build and deploy docker image
+
+### Minor Features
+- [`d2d9454`](https://github.com/manticoresoftware/executor/commit/d2d9454) Update PHP to 8.3.4 and Swoole to 5.1.2
+- [`d57231a`](https://github.com/manticoresoftware/executor/commit/d57231a) Enable ctype extensions
+- [`2559cd5`](https://github.com/manticoresoftware/executor/commit/2559cd5) Add Github flow to update executor version
+- [`5c60407`](https://github.com/manticoresoftware/executor/commit/5c60407) Update PHP to 8.2.12 and add mysqli to dev build
+- [`e18d426`](https://github.com/manticoresoftware/executor/commit/e18d426) Add swoole, disable zts and remove parallel extension
+
+### Deprecations
+- [`ca7e854`](https://github.com/manticoresoftware/executor/commit/ca7e854) Comment arm64 build due to it does not work on Github yet
+
+### Bugfixes
+- [`452cff5`](https://github.com/manticoresoftware/executor/commit/452cff5) Fix issue with possibly random date and take the date from vars instead of calling to date function
+- [`7f40363`](https://github.com/manticoresoftware/executor/commit/7f40363) Fix date and commit difference in built packages
+- [`d5df8f7`](https://github.com/manticoresoftware/executor/commit/d5df8f7) Fix issues with rpm artifacts in workflow
+- [`e1aebd7`](https://github.com/manticoresoftware/executor/commit/e1aebd7) Migrate to GitHub action for deploy and fix issues
+
+### Other Changes
+- [`b5bd600`](https://github.com/manticoresoftware/executor/commit/b5bd600) Remove brew upgrade
+
+## Changelog [manticoresearch-php]
+
+### Major
+- [21b3fd6](https://github.com/manticoresoftware/manticoresearch-php/commit/21b3fd6) Add the way to get _knn_dist property from the doc
+
+### Minor
+- [0b08765](https://github.com/manticoresoftware/manticoresearch-php/commit/0b08765) Validate document on nulls in fields before we insert, update or replace (#188)
+- [57716bb](https://github.com/manticoresoftware/manticoresearch-php/commit/57716bb) Fix issue when we passing list of ids that has not ordered keys (#177)
+- [7f4ea48](https://github.com/manticoresoftware/manticoresearch-php/commit/7f4ea48) Autoset limit when fetching documents by ids (#175)
+- [fb8fd0a](https://github.com/manticoresoftware/manticoresearch-php/commit/fb8fd0a) Replace self with static
+
+### Deprecations
+- [0c09860](https://github.com/manticoresoftware/manticoresearch-php/commit/0c09860) Fix issue with deprecated callable in PHP 8.2
+
+### Bugfixes
+- [3e33cc9](https://github.com/manticoresoftware/manticoresearch-php/commit/3e33cc9) Return null as default for getKnnDist()
+- [36d1ef2](https://github.com/manticoresoftware/manticoresearch-php/commit/36d1ef2) Return null as default for getKnnDist()
+
 # Version x.y.z (dev)
 
 ### Major changes

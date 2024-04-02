@@ -122,7 +122,7 @@ Known global server variables are:
 * `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` changes [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) param. Only clients with VIP connections can change this variable.
 * `optimize_cutoff = <value>`: Changes the value of the config's [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) setting on-the-fly.
 * `accurate_aggregation`: Sets the default value for the option [accurate_aggregation](../Searching/Options.md#accurate_aggregation) of future queries.
-* `distinct_precision_threshold`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options#distinct_precision_threshold) of future queries.
+* `distinct_precision_threshold`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) of future queries.
 * `expansion_merge_threshold_docs`: Changes the value of the config's [expansion_merge_threshold_docs](Server_settings/Searchd.md#expansion_merge_threshold_docs) setting on-the-fly.
 * `expansion_merge_threshold_hits`: Changes the value of the config's [expansion_merge_threshold_hits](Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
 

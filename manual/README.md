@@ -180,6 +180,7 @@
         * [⪢ Plugins]
             * [• Creating a plugin](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md)
             * [• Deleting a plugin](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md)
+            * [• Enable or disable a Buddy plugin](Extensions/UDFs_and_Plugins/Plugins/Enable_Disable_a_plugin.md)
             * [• Reloading plugins](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md)
             * [• Ranker plugins](Extensions/UDFs_and_Plugins/Plugins/Ranker_plugins.md)
             * [• Token filter plugins](Extensions/UDFs_and_Plugins/Plugins/Token_filter_plugins.md)

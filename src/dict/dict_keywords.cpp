@@ -76,6 +76,7 @@ public:
 		int m_iDocs;
 		int m_iHits;
 		BYTE m_uHint;
+		BYTE m_uKeywordLen;
 		int64_t m_iSkiplistPos; ///< position in .spe file
 	};
 
@@ -430,6 +431,7 @@ void CSphDictKeywords::DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntr
 	assert ( m_iSkiplistBlockSize > 0 );
 
 	tEntry.m_sKeyword = (char*)pKeyword;
+	tEntry.m_uKeywordLen = iKeywordLen;
 	tEntry.m_uOff = dBin.UnzipOffset();
 	tEntry.m_iDocs = dBin.UnzipInt();
 	tEntry.m_iHits = dBin.UnzipInt();
@@ -532,7 +534,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	while ( qWords.GetLength() )
 	{
 		const DictKeywordTagged_t& tWord = qWords.Root();
-		auto iLen = (const int)strlen ( tWord.m_sKeyword ); // OPTIMIZE?
+		auto iLen = (const int)tWord.m_uKeywordLen;
 
 		// store checkpoints as needed
 		if ( ( iWords % SPH_WORDLIST_CHECKPOINT ) == 0 )
@@ -554,7 +556,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 
 			tLastKeyword.Reset();
 		}
-		iWords++;
+		++iWords;
 
 		// write final dict entry
 		assert ( iLen );

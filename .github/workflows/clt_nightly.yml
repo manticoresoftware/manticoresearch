@@ -13,6 +13,7 @@ on:
     branches: [ master ]
     paths:
       - 'test/clt-tests/installation/**'
+      - 'test/clt-tests/core/test-replace-into'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -101,4 +102,4 @@ jobs:
       - uses: manticoresoftware/clt@0.1.13
         with:
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-          test_prefix: test/clt-tests/core/test-replace-
+          test_prefix: test/clt-tests/core/test-replace-into

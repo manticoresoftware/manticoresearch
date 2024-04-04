@@ -1,0 +1,15 @@
+––– block: ./init –––
+––– input –––
+docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker pull elasticsearch:8.13.0 > /dev/null
+––– output –––
+––– input –––
+docker network create test_network > /dev/null
+––– output –––
+––– input –––
+docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d -v ./test/clt-tests/mysqldump/scripts/generate-records.sh:/generate-records.sh ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
+––– output –––
+0

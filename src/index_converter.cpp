@@ -664,9 +664,9 @@ bool Wordlist_t::Preread ( const char * sName, DWORD uVersion, bool bWordDict, C
 
 		// FIXME!!! store and load that explicitly
 		if ( iInfixCount )
-			m_iWordsEnd = uInfixOffset - strlen ( g_sTagInfixEntries );
+			m_iWordsEnd = uInfixOffset - g_sTagInfixEntries.second;
 		else
-			m_iWordsEnd -= strlen ( g_sTagInfixEntries );
+			m_iWordsEnd -= g_sTagInfixEntries.second;
 	}
 
 	if ( tReader.GetErrorFlag() )

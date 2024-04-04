@@ -317,7 +317,7 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 	int iCheckpointOnlySize = (int)(iFileSize-m_iDictCheckpointsOffset);
 	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
-		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - strlen ( g_sTagInfixBlocks ) - m_iDictCheckpointsOffset);
+		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - g_sTagInfixBlocks.second - m_iDictCheckpointsOffset);
 
 	if ( iFileSize-m_iDictCheckpointsOffset>=UINT_MAX )
 	{
@@ -383,9 +383,9 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 		// FIXME!!! store and load that explicitly
 		if ( m_dInfixBlocks.GetLength() )
-			m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - strlen ( g_sTagInfixEntries );
+			m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - g_sTagInfixEntries.second;
 		else
-			m_iWordsEnd -= strlen ( g_sTagInfixEntries );
+			m_iWordsEnd -= g_sTagInfixEntries.second;
 	}
 
 	if ( tReader.GetErrorFlag() )

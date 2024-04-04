@@ -849,8 +849,8 @@ void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVec
 const char * CheckFmtMagic ( DWORD uHeader );
 bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const KillListTargets_c & tTargets, CSphString & sError );
 void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTargets_c & tTargets );
-extern const char * g_sTagInfixBlocks;
-extern const char * g_sTagInfixEntries;
+static constexpr Str_t g_sTagInfixBlocks = FROMS ( "infix-blocks" );
+static constexpr Str_t g_sTagInfixEntries = FROMS ( "infix-entries" );
 
 template < typename VECTOR >
 int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )

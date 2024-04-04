@@ -12272,8 +12272,6 @@ static inline int ZippedIntSize ( DWORD v )
 }
 
 
-const char * g_sTagInfixEntries = "infix-entries";
-
 template < int SIZE >
 void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 {
@@ -12281,7 +12279,7 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 	// we mark the block end with an editcode of 0
 	const int INFIX_BLOCK_SIZE = 64;
 
-	wrDict.PutBytes ( g_sTagInfixEntries, strlen ( g_sTagInfixEntries ) );
+	wrDict.PutBlob ( g_sTagInfixEntries );
 
 	CSphVector<int> dIndex;
 	dIndex.Resize ( m_dArena.GetLength()-1 );
@@ -12414,14 +12412,11 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 		sphDie ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at infix save", wrDict.GetPos() );
 }
 
-
-const char * g_sTagInfixBlocks = "infix-blocks";
-
 template < int SIZE >
 int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 {
 	// save the blocks
-	wrDict.PutBytes ( g_sTagInfixBlocks, strlen ( g_sTagInfixBlocks ) );
+	wrDict.PutBlob ( g_sTagInfixBlocks );
 
 	SphOffset_t iInfixBlocksOffset = wrDict.GetPos();
 	assert ( iInfixBlocksOffset<=INT_MAX );

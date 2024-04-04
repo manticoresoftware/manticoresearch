@@ -80,3 +80,14 @@ jobs:
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-u
+
+  clt_replace_into:
+    name: Testing replace into
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    steps:
+        - uses: manticoresoftware/clt@0.1.13
+          with:
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+          test_prefix: test/clt-tests/core/test-replace-

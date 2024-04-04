@@ -849,8 +849,6 @@ void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVec
 const char * CheckFmtMagic ( DWORD uHeader );
 bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const KillListTargets_c & tTargets, CSphString & sError );
 void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTargets_c & tTargets );
-static constexpr Str_t g_sTagInfixBlocks = FROMS ( "infix-blocks" );
-static constexpr Str_t g_sTagInfixEntries = FROMS ( "infix-entries" );
 
 template < typename VECTOR >
 int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
@@ -1277,34 +1275,6 @@ BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen );
 void localtime_r ( const time_t * clock, struct tm * res );
 void gmtime_r ( const time_t * clock, struct tm * res );
 #endif
-
-struct InfixBlock_t
-{
-	union
-	{
-		const char *	m_sInfix;
-		DWORD			m_iInfixOffset;
-	};
-	DWORD				m_iOffset;
-};
-
-
-/// infix hash builder
-class ISphInfixBuilder
-{
-public:
-	explicit		ISphInfixBuilder() {}
-	virtual			~ISphInfixBuilder() {}
-	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint, bool bHasMorphology ) = 0;
-	virtual void	SaveEntries ( CSphWriter & wrDict ) = 0;
-	virtual int64_t	SaveEntryBlocks ( CSphWriter & wrDict ) = 0;
-	virtual int		GetBlocksWordsSize () const = 0;
-};
-
-
-std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError );
-bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints );
-
 
 /// compute utf-8 character length in bytes from its first byte
 inline int sphUtf8CharBytes ( BYTE uFirst )

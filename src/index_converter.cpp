@@ -27,6 +27,7 @@
 #include "attrindex_builder.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
+#include "dict/infix/infix_builder.h"
 
 namespace legacy
 {

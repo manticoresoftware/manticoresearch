@@ -42,6 +42,7 @@
 #include "pseudosharding.h"
 #include "knnmisc.h"
 #include "std/sys.h"
+#include "dict/infix/infix_builder.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>

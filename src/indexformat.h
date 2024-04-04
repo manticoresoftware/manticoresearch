@@ -18,6 +18,7 @@
 #include "fileutils.h"
 #include "indexing_sources/source_stats.h"
 #include "dict/dict_entry.h"
+#include "dict/infix/infix_builder.h"
 
 const int	DOCLIST_HINT_THRESH = 256;
 const DWORD HITLESS_DOC_MASK = 0x7FFFFFFF;

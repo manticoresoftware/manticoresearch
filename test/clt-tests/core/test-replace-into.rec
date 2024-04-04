@@ -1,9 +1,9 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-chmod +x ./test/clt-tests/core/bash-script-1mln-replace.sh
+chmod +x ./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-./test/clt-tests/core/bash-script-1mln-replace.sh
+./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
 --------------
 SHOW TABLES

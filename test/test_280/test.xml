@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>freeze counter</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries><sphinxql>
+	create table test ( title text );
+	show table test status like 'locked';
+	freeze test like 'fake';
+	show table test status like 'locked';
+	freeze test like 'fake';
+	freeze test like 'fake';
+	freeze test like 'fake';
+	show table test status like 'locked';
+	unfreeze test;
+	show table test status like 'locked';
+	unfreeze test;
+	unfreeze test;
+	show table test status like 'locked';
+	unfreeze test;
+	unfreeze test;
+	show table test status like 'locked';
+	drop table test;
+</sphinxql></queries>
+
+</test>

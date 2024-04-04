@@ -163,7 +163,7 @@ struct CoroState_t
 
 namespace Coro {
 
-class Worker_c : public details::SchedulerOperation_t
+class Worker_c final: public details::SchedulerOperation_t
 {
 	// our executor (thread pool, etc. which provides Schedule(handler) method)
 	Scheduler_i * m_pScheduler = nullptr;
@@ -176,8 +176,7 @@ class Worker_c : public details::SchedulerOperation_t
 	Handler m_fnYieldWithProceeder = nullptr;
 
 	// chain nested workers via TLS
-	static thread_local Worker_c * m_pTlsThis;
-	Worker_c * m_pPreviousWorker = nullptr;
+	void * m_pPreviousWorker = nullptr;
 
 	// operative stuff to be as near as possible
 	void * m_pCurrentTaskInfo = nullptr;
@@ -211,10 +210,10 @@ class Worker_c : public details::SchedulerOperation_t
 		m_tInternalTimer.EngageAt ( m_tmNextTimePointUS );
 	}
 
-	inline void CoroGuardEnter()
+	inline void CoroGuardEnter() noexcept
 	{
-		m_pPreviousWorker = std::exchange ( m_pTlsThis, this );
 		auto& tMyThd = MyThd();
+		m_pPreviousWorker = std::exchange ( tMyThd.m_pWorker, this );
 		m_pPrevTlsMsg = tMyThd.m_pTlsMsg.exchange ( &m_sTlsMsg, std::memory_order_relaxed );
 		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		m_tmCpuTimeBase -= sphThreadCpuTimer();
@@ -222,7 +221,7 @@ class Worker_c : public details::SchedulerOperation_t
 		CheckEngageTimer( TimePoint_e::fromresume );
 	}
 
-	inline void CoroGuardFinishExit()
+	inline void CoroGuardExit()
 	{
 		if ( m_tmRuntimePeriodUS )
 			m_tInternalTimer.UnEngage();
@@ -230,18 +229,16 @@ class Worker_c : public details::SchedulerOperation_t
 		auto& tMyThd = MyThd();
 		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		tMyThd.m_pTlsMsg.store ( m_pPrevTlsMsg, std::memory_order_relaxed );
-	}
-
-	static inline void CoroGuardExit()
-	{
-		std::exchange ( m_pTlsThis, m_pTlsThis->m_pPreviousWorker ) -> CoroGuardFinishExit();
+		std::exchange ( tMyThd.m_pWorker, m_pPreviousWorker );
 	}
 
 	// RAII worker's keeper
-	struct CoroGuard_t
+	class CoroGuard_c
 	{
-		explicit CoroGuard_t ( Worker_c * pWorker ) { pWorker->CoroGuardEnter(); }
-		~CoroGuard_t () { Worker_c::CoroGuardExit(); }
+		Worker_c* m_pWorker;
+	public:
+		explicit CoroGuard_c ( Worker_c* pWorker ) : m_pWorker { pWorker } { m_pWorker->CoroGuardEnter(); }
+		~CoroGuard_c() { m_pWorker->CoroGuardExit(); }
 	};
 
 	static void DoComplete ( void* pOwner, SchedulerOperation_t* pBase )
@@ -363,7 +360,7 @@ public:
 		auto pOldStack = Threads::TopOfStack ();
 		Threads::SetTopStack ( &dStack.Last() );
 		{
-			CoroGuard_t pThis ( &tAction );
+			CoroGuard_c pThis ( &tAction );
 			tAction.m_tCoroutine.Run ();
 		}
 		Threads::SetTopStack ( pOldStack );
@@ -423,7 +420,7 @@ public:
 	inline bool Resume () noexcept
 	{
 		{
-			CoroGuard_t pThis (this);
+			CoroGuard_c pThis (this);
 			m_tCoroutine.Run();
 		}
 		if ( m_tCoroutine.IsFinished () )
@@ -476,7 +473,7 @@ public:
 
 	inline static Worker_c* CurrentWorker() noexcept
 	{
-		return m_pTlsThis;
+		return (Worker_c*)Threads::MyThd().m_pWorker;
 	}
 
 	inline bool Wake ( size_t iExpectedEpoch, bool bVip ) noexcept
@@ -535,7 +532,6 @@ public:
 	}
 };
 
-thread_local Worker_c * Worker_c::m_pTlsThis = nullptr;
 
 Worker_c* CurrentWorker() noexcept
 {
@@ -843,11 +839,17 @@ void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
 	tmThrotleTimeQuantumMs = tmPeriodMs < 0 ? tmDefaultThrotleTimeQuantumMs : tmPeriodMs;
 }
 
-void SetThrottlingPeriod ( int tmPeriodMs )
+void SetThrottlingPeriodMS ( int tmPeriodMs )
 {
 	if ( tmPeriodMs < 0 )
 		tmPeriodMs = tmThrotleTimeQuantumMs;
-	Worker()->SetTimePeriodUS ( tmPeriodMs * 1000 );
+	SetThrottlingPeriodUS ( tmPeriodMs * 1000 );
+}
+
+void SetThrottlingPeriodUS ( int64_t tmPeriodUs )
+{
+	assert ( tmPeriodUs>=0 );
+	Worker()->SetTimePeriodUS ( tmPeriodUs );
 }
 
 int64_t GetThrottlingPeriodUS ()

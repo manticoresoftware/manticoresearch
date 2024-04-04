@@ -1065,6 +1065,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "replication_query_timeout",		0, NULL },
 	{ "replication_retry_delay",		0, NULL },
 	{ "replication_retry_count",		0, NULL },
+	{ "expansion_merge_threshold_docs",		0, NULL },
+	{ "expansion_merge_threshold_hits",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3128,7 +3130,10 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !hConf("common") || !hConf["common"]("common") )
+	{
+		sphPluginInit ( nullptr );
 		return;
+	}
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	if ( hCommon ( "lemmatizer_base" ) )
@@ -3601,16 +3606,12 @@ static DateMathUnitNames_t InitMathUnits()
 }
 static DateMathUnitNames_t g_hDateMathUnits = InitMathUnits();
 
-// !COMMIT
-#include "cctz/time_zone.h"
-#include <iostream>
-
 static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 {
 	const char * sCur = sMathExpr.first;
 	const char * sEnd = sCur + sMathExpr.second;
 
-	while ( sCur<sEnd)
+	while ( sCur<sEnd && *sCur )
 	{
 		const int iOp = *sCur++;
 		DateMathOp_e eOp = DateMathOp_e::Mod;
@@ -3644,7 +3645,7 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 			return false;
 
 		const char * sUnitStart = sCur++;
-		while ( sCur<sEnd && sphIsAlphaOnly ( *sCur) )
+		while ( sCur<sEnd && sphIsAlphaOnly ( *sCur ) )
 			sCur++;
 		CSphString sUnit;
 		sUnit.SetBinary ( sUnitStart, sCur - sUnitStart );
@@ -3653,14 +3654,7 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 		if ( !pUnit )
 			return false;
 
-		// !COMMIT
-		cctz::time_zone lax;
-		std::cout << cctz::format ( "in  %Y:%m:%d(%A) %H:%M:%S ", cctz::convert ( ConvertTime ( tDateTime ), lax ), lax ) << ", unit:" << sUnit.cstr() << ", op:" << (int)eOp << "\n";
-
 		DoDateMath ( eOp, *pUnit, iNum, tDateTime );
-
-		// !COMMIT
-		std::cout << cctz::format ( "out %Y:%m:%d(%A) %H:%M:%S\n", cctz::convert ( ConvertTime ( tDateTime ), lax ), lax );
 	}
 	return tDateTime;
 }
@@ -3669,9 +3663,6 @@ bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, i
 {
 	if ( sMathExpr.IsEmpty() )
 		return false;
-
-	// !COMMIT
-	sphInfo ( "%s", sMathExpr.cstr() );
 
 	const char sNow[] = "now";
 	Str_t sExpr = FromStr ( sMathExpr );
@@ -3691,9 +3682,10 @@ bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, i
 			sExpr = Str_t(); // nothing else
 		} else
 		{
+			const int iDelimiterLen = 2;
 			int iOff = sFullDateDel - sMathExpr.cstr();
 			sDateOnly.SetBinary ( sMathExpr.cstr(), iOff );
-			sExpr = Str_t ( sFullDateDel + 2, sMathExpr.Length() - iOff );
+			sExpr = Str_t ( sFullDateDel + iDelimiterLen, sMathExpr.Length() - iOff - iDelimiterLen );
 		}
 
 		// We're going to just require ISO8601 timestamps, k?
@@ -3859,3 +3851,16 @@ void SetIndexId ( int64_t iId )
 	g_tIndexId.store ( iId );
 }
 
+bool HasWildcards ( const char * sWord )
+{
+	if ( !sWord )
+		return false;
+
+	for ( ; *sWord; sWord++ )
+	{
+		if ( sphIsWild ( *sWord ) )
+			return true;
+	}
+
+	return false;
+}

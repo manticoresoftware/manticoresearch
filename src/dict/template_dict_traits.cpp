@@ -454,7 +454,7 @@ bool TemplateDictTraits_c::HasState() const
 #endif
 }
 
-void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile )
+void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c & pTokenizer, bool bStripFile )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -490,6 +490,9 @@ void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRe
 			*pCur++ = '\0';
 
 		CSphString sFileName = sName;
+		if ( pFilenameBuilder )
+			sFileName = pFilenameBuilder->GetFullPath ( sFileName );
+
 		bool bGotFile = sphIsReadable ( sFileName );
 		if ( !bGotFile )
 		{

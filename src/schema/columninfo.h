@@ -89,6 +89,7 @@ struct CSphColumnInfo
 	bool IsColumnarExpr() const;
 	bool IsStoredExpr() const;
 	bool IsIndexedKNN() const;
+	bool IsJoined() const;
 };
 
 

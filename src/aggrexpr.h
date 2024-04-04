@@ -57,7 +57,8 @@ enum class Aggr_e
 	HISTOGRAM,
 	DATE_HISTOGRAM,
 	RANGE,
-	DATE_RANGE
+	DATE_RANGE,
+	COMPOSITE
 };
 
 struct DateRangeSetting_t

@@ -25,7 +25,7 @@ struct ISphQueryFilter
 
 	virtual ~ISphQueryFilter() = default;
 
-	void GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const ExpansionContext_t& tCtx );
+	void GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx );
 	virtual void AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, int iQpos, CSphVector<CSphKeywordInfo>& dKeywords ) = 0;
 };
 

@@ -74,7 +74,7 @@ class ISphNoncopyable
 public:
 	ISphNoncopyable() = default;
 	ISphNoncopyable ( const ISphNoncopyable& ) = delete;
-	const ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
+	ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
 };
 
 /// prevent move
@@ -84,6 +84,16 @@ public:
 	ISphNonmovable() = default;
 	ISphNonmovable ( ISphNonmovable&& ) noexcept = delete;
 	ISphNonmovable& operator= ( ISphNonmovable&& ) noexcept = delete;
+};
+
+/// prevent copy and move
+class ISphNonCopyMovable
+{
+public:
+	ISphNonCopyMovable() = default;
+	ISphNonCopyMovable ( const ISphNonCopyMovable& ) = delete;
+	ISphNonCopyMovable ( ISphNonCopyMovable&& ) = delete;
+	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
 };
 
 // implement moving ctr and moving= using swap-and-release

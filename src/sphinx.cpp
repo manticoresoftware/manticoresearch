@@ -132,6 +132,8 @@ static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
 static bool			g_bPseudoSharding		= true;
 static int			g_iPseudoShardingThresh	= 8192;
 
+static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
+
 static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_QUERYINFO __LINE__ << " "
 #define QUERYINFO LOGINFO ( SPLIT_QUERY, QUERYINFO )
@@ -601,7 +603,7 @@ const char* CheckFmtMagic ( DWORD uHeader )
 {
 	if ( uHeader!=INDEX_MAGIC_HEADER )
 	{
-		FlipEndianess ( &uHeader );
+		FlipEndianness ( &uHeader );
 		if ( uHeader==INDEX_MAGIC_HEADER )
 #if USE_LITTLE_ENDIAN
 			return "This instance is working on little-endian platform, but %s seems built on big-endian host.";
@@ -1210,7 +1212,7 @@ public:
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
 	void				DebugDumpDict ( FILE * fp ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
-	int					DebugCheck ( DebugCheckError_i& ) final;
+	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
@@ -7413,52 +7415,24 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 };
 
 
-/// scoped thread scheduling helper
-/// either makes the current thread low priority while the helper lives, or does nothing
-class ScopedThreadPriority_c
+/// scoped worker scheduling helper
+/// makes quantum of current task smaller
+class ScopedLowPriority_c : public ISphNonCopyMovable
 {
-private:
-	bool m_bRestore;
+	int64_t m_iStoredThrottlingPeriodUS;
 
 public:
-	ScopedThreadPriority_c ( bool bLowPriority )
+	ScopedLowPriority_c()
+		: m_iStoredThrottlingPeriodUS { Threads::Coro::GetThrottlingPeriodUS() }
 	{
-		m_bRestore = false;
-		if ( !bLowPriority )
-			return;
-
-#if _WIN32
-		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_IDLE ) )
-			return;
-#else
-		struct sched_param p;
-		p.sched_priority = 0;
-#ifdef SCHED_IDLE
-		int iPolicy = SCHED_IDLE;
-#else
-		int iPolicy = SCHED_OTHER;
-#endif
-		if ( pthread_setschedparam ( pthread_self (), iPolicy, &p ) )
-			return;
-#endif
-
-		m_bRestore = true;
+		if ( m_iStoredThrottlingPeriodUS > 0 )
+			Threads::Coro::SetThrottlingPeriodUS ( Max ( m_iStoredThrottlingPeriodUS / g_iLowPriorityDivisor, 1 ) );
 	}
 
-	~ScopedThreadPriority_c ()
+	~ScopedLowPriority_c()
 	{
-		if ( !m_bRestore )
-			return;
-
-#if _WIN32
-		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_NORMAL ) )
-			return;
-#else
-		struct sched_param p;
-		p.sched_priority = 0;
-		if ( pthread_setschedparam ( pthread_self (), SCHED_OTHER, &p ) )
-			return;
-#endif
+		if ( m_iStoredThrottlingPeriodUS > 0 )
+			Threads::Coro::SetThrottlingPeriodUS ( m_iStoredThrottlingPeriodUS );
 	}
 };
 
@@ -7892,7 +7866,14 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	fIteratorWithFT = EstimateMTCostSIFT ( fIteratorWithFT, iThreads );
 	fFTWithFilters = EstimateMTCost ( fFTWithFilters, iThreads );
 
-	return fIteratorWithFT<fFTWithFilters;
+	if ( fIteratorWithFT<fFTWithFilters )
+	{
+		return true;
+	} else
+	{
+		// if has any forced indexes when should use the path with iterators even FT estimates faster
+		return dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eForce!=SecondaryIndexType_e::NONE; } );
+	}
 }
 
 
@@ -8125,7 +8106,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	int64_t tmQueryStart = sphMicroTimer();
 	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 
-	ScopedThreadPriority_c tPrio ( tQuery.m_bLowPriority );
+	std::optional<ScopedLowPriority_c> tPrio;
+	if ( tQuery.m_bLowPriority )
+		tPrio.emplace();
 
 	// select the sorter with max schema
 	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
@@ -8255,7 +8238,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE );
 
-	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
+		return false;
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
@@ -10146,7 +10130,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	}
 
 	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.IsEmpty() );
-	ISphWordlist::Args_t tArgs ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+	ISphWordlist::Args_t tArgs ( bUseTermMerge, tCtx );
 
 	if ( !sphExpandGetWords ( sFull, tCtx, tArgs ) )
 	{
@@ -10210,7 +10194,7 @@ XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t 
 	return pNode;
 }
 
-bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
+bool ExpandRegex ( ExpansionContext_t & tCtx, CSphString & sError )
 {
 	if ( !tCtx.m_dRegexTerms.GetLength() )
 		return true;
@@ -10224,7 +10208,7 @@ bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
 	}
 
 	CSphFixedVector<std::unique_ptr < DictTerm2Expanded_i > > dConverters ( tCtx.m_dRegexTerms.GetLength() );
-	ISphWordlist::Args_t tArgs ( true, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+	ISphWordlist::Args_t tArgs ( true, tCtx );
 
 	assert ( tCtx.m_pWordlist );
 	tCtx.m_pWordlist->ScanRegexWords ( tCtx.m_dRegexTerms, tArgs, dConverters );
@@ -10235,7 +10219,7 @@ bool ExpandRegex ( const ExpansionContext_t & tCtx, CSphString & sError )
 		if ( !dConverters[i] )
 			continue;
 
-		ISphWordlist::Args_t tArgs ( true, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+		ISphWordlist::Args_t tArgs ( true, tCtx );
 		dConverters[i]->Convert ( tArgs );
 
 		ExpandXQNode ( tCtx, tArgs, tCtx.m_dRegexTerms[i].second );
@@ -10375,6 +10359,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta &
 		return nullptr;
 
 	pNode->Check ( true );
+	tCtx.AggregateStats();
 
 	return pNode;
 }
@@ -10605,7 +10590,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 		};
 		QUERYINFO << "RunSplitQuery cloned context " << tJobContext.second;
 		tClonableCtx.SetJobOrder ( tJobContext.second, iJob );
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while ( !CheckInterrupt() ) // some earlier job met error; abort.
 		{
 			QUERYINFO << "RunSplitQuery " << tJobContext.second << ", job " << iJob;
@@ -11085,7 +11070,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( pProfile )
 		eOldState = pProfile->Switch ( SPH_QSTATE_INIT );
 
-	ScopedThreadPriority_c tPrio ( tQuery.m_bLowPriority );
+	std::optional<ScopedLowPriority_c> tPrio;
+	if ( tQuery.m_bLowPriority )
+		tPrio.emplace();
 
 	///////////////////
 	// setup searching
@@ -11294,7 +11281,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 	}
 
-	dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->FinalizeJoin ( tMeta.m_sWarning ); } );
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
+		return false;
 
 	// adjust result sets
 	if ( bFinalPass )
@@ -11473,7 +11461,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 #endif
 
 
-int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
+int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i * pFilenameBuilder )
 {
 	auto pIndexChecker = std::make_unique<DiskIndexChecker_c> ( *this, tReporter );
 
@@ -11492,8 +11480,15 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 	CSphSavedFile tStat;
 	CSphString sError;
 	const CSphTokenizerSettings & tTokenizerSettings = m_pTokenizer->GetSettings ();
-	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() && !tStat.Collect ( tTokenizerSettings.m_sSynonymsFile.cstr(), &sError ) )
-		tReporter.Fail ( "unable to open exceptions '%s': %s", tTokenizerSettings.m_sSynonymsFile.cstr(), sError.cstr() );
+	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() )
+	{
+		CSphString sSynonymsFile = tTokenizerSettings.m_sSynonymsFile;
+		if ( pFilenameBuilder )
+			sSynonymsFile = pFilenameBuilder->GetFullPath ( sSynonymsFile );
+
+		if ( !tStat.Collect ( sSynonymsFile.cstr(), &sError ) )
+			tReporter.Fail ( "unable to open exceptions '%s': %s", sSynonymsFile.cstr(), sError.cstr() );
+	}
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings ();
 	const char * pStop = tDictSettings.m_sStopwords.cstr();
@@ -11510,6 +11505,8 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 
 		CSphString sStopFile;
 		sStopFile.SetBinary ( sNameStart, int ( pStop-sNameStart ) );
+		if ( pFilenameBuilder )
+			sStopFile = pFilenameBuilder->GetFullPath ( sStopFile );
 
 		if ( !tStat.Collect ( sStopFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open stopwords '%s': %s", sStopFile.cstr(), sError.cstr() );
@@ -11519,8 +11516,12 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i& tReporter )
 	{
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 		{
-			if ( !tStat.Collect ( tDictSettings.m_dWordforms[i].cstr(), &sError ) )
-				tReporter.Fail ( "unable to open wordforms '%s': %s", tDictSettings.m_dWordforms[i].cstr(), sError.cstr() );
+			CSphString sWordforms = tDictSettings.m_dWordforms[i];
+			if ( pFilenameBuilder )
+				sWordforms = pFilenameBuilder->GetFullPath ( sWordforms );
+
+			if ( !tStat.Collect ( sWordforms.cstr(), &sError ) )
+				tReporter.Fail ( "unable to open wordforms '%s': %s", sWordforms.cstr(), sError.cstr() );
 		}
 	}
 
@@ -12518,7 +12519,7 @@ public:
 		m_hKeywords.Reset();
 	}
 
-	void LoadStopwords ( const char * sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
+	void LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pFilenameBuilder, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( Writer_i & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
 	void WriteStopwords ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteStopwords ( tOut ); }
@@ -12876,13 +12877,10 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 	return iCmpRes==0 ? iLen1-iLen2 : iCmpRes;
 }
 
-
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData )
-	: m_bPayload ( bPayload )
-	, m_iExpansionLimit ( iExpansionLimit )
-	, m_bHasExactForms ( bHasExactForms )
-	, m_eHitless ( eHitless )
-	, m_pIndexData ( pIndexData )
+ISphWordlist::Args_t::Args_t ( bool bPayload, ExpansionContext_t & tCtx )
+	: ExpansionTrait_t ( tCtx )
+	, m_bPayload ( bPayload )
+	, m_tExpansionStats ( tCtx.m_tExpansionStats )
 {
 	m_sBuf.Reserve ( 2048 * SPH_MAX_WORD_LEN * 3 );
 	m_dExpanded.Reserve ( 2048 );
@@ -12904,11 +12902,16 @@ void ISphWordlist::Args_t::AddExpanded ( const BYTE * sName, int iLen, int iDocs
 	m_sBuf[iOff+iLen] = '\0';
 }
 
-
 const char * ISphWordlist::Args_t::GetWordExpanded ( int iIndex ) const
 {
 	assert ( m_dExpanded[iIndex].m_iNameOff<m_sBuf.GetLength() );
 	return (const char *)m_sBuf.Begin() + m_dExpanded[iIndex].m_iNameOff;
+}
+
+void ExpansionContext_t::AggregateStats ()
+{
+	if ( m_pResult )
+		m_pResult->AddStat ( m_tExpansionStats );
 }
 
 static bool operator < ( const InfixBlock_t & a, const char * b )
@@ -13582,6 +13585,11 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 	tStats.second += iHits;
 }
 
+void CSphQueryResultMeta::AddStat ( const ExpansionStats_t & tExpansionStats )
+{
+	m_tExpansionStats.m_iTerms += tExpansionStats.m_iTerms;
+	m_tExpansionStats.m_iMerged += tExpansionStats.m_iMerged;
+}
 
 void CSphQueryResultMeta::MergeWordStats ( const CSphQueryResultMeta & tOther )
 {
@@ -13599,6 +13607,8 @@ void CSphQueryResultMeta::MergeWordStats ( const CSphQueryResultMeta & tOther )
 			tDst.second += tSrc.second.second;
 		}
 	}
+
+	AddStat ( tOther.m_tExpansionStats );
 }
 
 ///< sort wordstat to achieve reproducable result over different runs

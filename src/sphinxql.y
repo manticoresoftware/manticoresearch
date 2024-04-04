@@ -598,6 +598,16 @@ opt_alias:
 	| opt_as identcol						{ pParser->AliasLastItem ( &$2 ); }
 	;
 
+distinct_joined_col:
+	TOK_SUBKEY
+	| distinct_joined_col TOK_SUBKEY	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+distinct_ident:
+	identcol
+	| identcol distinct_joined_col		{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
 select_expr:
 	expr								{ pParser->AddItem ( &$1 ); }
 	| sysvar							{ pParser->AddItem ( &$1 ); }
@@ -608,7 +618,7 @@ select_expr:
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
-	| TOK_COUNT '(' TOK_DISTINCT identcol')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
+	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
 opt_where_clause:
@@ -853,6 +863,26 @@ filter_item:
 	| expr_ident TOK_NE TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddStringFilter ( $1, $3, true ) )
+				YYERROR;
+		}
+	| expr_ident '>' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, false, EStrCmpDir::GT ) )
+				YYERROR;
+		}
+	| expr_ident '<' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, false, EStrCmpDir::LT ) )
+				YYERROR;
+		}
+	| expr_ident TOK_GTE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, true, EStrCmpDir::LT ) )
+				YYERROR;
+		}
+	| expr_ident TOK_LTE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, true, EStrCmpDir::GT ) )
 				YYERROR;
 		}
 	| expr_ident TOK_IS TOK_NULL

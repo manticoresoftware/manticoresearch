@@ -1,5 +1,5 @@
-name: CLT latest release installation tests
-run-name: CLT latest release installation tests ${{ github.sha }}
+name: Nightly tests
+run-name: Nightly tests ${{ github.sha }}
 
 on:
   schedule:
@@ -14,6 +14,7 @@ on:
     paths:
       - 'test/clt-tests/installation/**'
       - 'test/clt-tests/core/test-replace-into'
+      - 'test/clt-tests/comparison-overhead-json-sql/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -103,3 +104,4 @@ jobs:
         with:
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           test_prefix: test/clt-tests/core/test-replace-into
+     

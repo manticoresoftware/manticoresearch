@@ -535,6 +535,83 @@ SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, rele
 |           2 |         2009 |        4 |
 +-------------+--------------+----------+
 ```
+<!-- request JSON -->
+``` json
+POST /search -d '
+    {
+    "size": 0,
+    "index": "films", 
+    "aggs": {
+        "cat_release": {
+            "composite": {
+                "size":5,
+                "sources": [
+                    { "category": { "terms": { "field": "category_id" } } },
+                    { "release year": { "terms": { "field": "release_year" } } }
+                ]
+            }
+        }
+    }
+    }
+'
+```
+<!-- response JSON -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1000,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "cat_release": {
+      "after_key": {
+        "category": 1,
+        "release year": 2007
+      },
+      "buckets": [
+        {
+          "key": {
+            "category": 1,
+            "release year": 2008
+          },
+          "doc_count": 7
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2009
+          },
+          "doc_count": 14
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2005
+          },
+          "doc_count": 10
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2004
+          },
+          "doc_count": 5
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2007
+          },
+          "doc_count": 5
+        }
+      ]
+    }
+  }
+}
+```
 <!-- end -->
 
 <!-- example group4 -->

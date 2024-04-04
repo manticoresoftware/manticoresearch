@@ -87,7 +87,7 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-22.04
     steps:
-        - uses: manticoresoftware/clt@0.1.13
-          with:
+      - uses: manticoresoftware/clt@0.1.13
+        with:
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           test_prefix: test/clt-tests/core/test-replace-

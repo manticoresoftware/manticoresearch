@@ -33,11 +33,11 @@ mysql -h0 -P9306 -e "show version;"
 +-----------+--------------------------------+
 | Component | Version                        |
 +-----------+--------------------------------+
-| Daemon    | 6.2.13 %{COMMITDATE} dev  |
-| Columnar  | columnar 2.2.5 %{COMMITDATE}  |
-| Secondary | secondary 2.2.5 %{COMMITDATE} |
-| KNN       | knn 2.2.5 %{COMMITDATE}       |
-| Buddy     | buddy v2.3.1                   |
+| Daemon    | %{SEMVER} %{COMMITDATE} dev  |
+| Columnar  | columnar %{SEMVER} %{COMMITDATE}  |
+| Secondary | secondary %{SEMVER} %{COMMITDATE} |
+| KNN       | knn %{SEMVER} %{COMMITDATE}       |
+| Buddy     | buddy v%{SEMVER}                   |
 +-----------+--------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 15 PRO' WHERE id = 101; select * from tbl WHERE id = 101;"

@@ -1031,6 +1031,18 @@ void HttpHandler_c::FormatError ( ESphHttpStatus eStatus, const char * sError, .
 	}
 }
 
+void HttpHandler_c::ReportError ( const char * sError, HttpErrorType_e eType, ESphHttpStatus eStatus, const char * sIndex )
+{
+	if ( sError )
+		m_sError = sError;
+	m_eHttpCode = eStatus;
+
+	const char * sErrorType = GetErrorTypeName ( eType );
+	int iStatus = HttpGetStatusCodes ( eStatus );
+	CSphString sReply = ( sErrorType ? JsonEncodeResultError ( m_sError, sErrorType, iStatus, sIndex ) : JsonEncodeResultError ( m_sError, iStatus ) );
+	HttpBuildReplyHead ( GetResult(), eStatus, sReply.cstr(), sReply.Length(), false );
+}
+
 void HttpHandler_c::BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
 {
 	m_eHttpCode = eStatus;
@@ -1858,7 +1870,7 @@ public:
 		DocID_t tDocId = 0;
 		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, m_sError ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( nullptr, HttpErrorType_e::Parse, SPH_HTTP_STATUS_400, tStmt.m_sIndex.cstr() );
 			return false;
 		}
 
@@ -1866,8 +1878,10 @@ public:
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
 
-		CSphString sResult = tResult.AsString();
-		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
+		if ( bResult )
+			BuildReply ( tResult.AsString(), SPH_HTTP_STATUS_200 );
+		else
+			ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, SPH_HTTP_STATUS_409, tStmt.m_sIndex.cstr() );
 
 		return bResult;
 	}
@@ -1926,13 +1940,17 @@ public:
 		DocID_t tDocId = 0;
 		if ( !ParseQuery ( tStmt, tDocId ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( nullptr, HttpErrorType_e::Parse, SPH_HTTP_STATUS_400, tStmt.m_sIndex.cstr() );
 			return false;
 		}
 
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
-		BuildReply ( tResult.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
+
+		if ( bResult )
+			BuildReply ( tResult.AsString(), SPH_HTTP_STATUS_200 );
+		else
+			ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, SPH_HTTP_STATUS_409, tStmt.m_sIndex.cstr() );
 
 		return bResult;
 	}
@@ -2233,7 +2251,7 @@ private:
 	{
 		if ( !m_tOptions.Exists ( "content-type" ) )
 		{
-			ReportError ( "Content-Type must be set", SPH_HTTP_STATUS_400 );
+			ReportError ( "Content-Type must be set", HttpErrorType_e::Parse, SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
@@ -2241,7 +2259,7 @@ private:
 		auto dParts = sphSplit ( sContentType.cstr(), ";" );
 		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
 		{
-			ReportError ( "Content-Type must be application/x-ndjson", SPH_HTTP_STATUS_400 );
+			ReportError ( "Content-Type must be application/x-ndjson", HttpErrorType_e::Parse, SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
@@ -2295,7 +2313,7 @@ public:
 private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
 	bool Validate();
-	void ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly );
+	void ReportLogError ( const char * sError, HttpErrorType_e eType , ESphHttpStatus eStatus, bool bLogOnly );
 };
 
 static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
@@ -3070,10 +3088,10 @@ bool Ends ( const Str_t tVal, const char * sSuffix )
 	return strncmp ( tVal.first + tVal.second - iSuffix, sSuffix, iSuffix )==0;
 }
 
-void HttpHandlerEsBulk_c::ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly )
+void HttpHandlerEsBulk_c::ReportLogError ( const char * sError, HttpErrorType_e eType, ESphHttpStatus eStatus, bool bLogOnly )
 {
 	if ( !bLogOnly )
-		ReportError ( sError, sErrorType, eStatus );
+		ReportError ( sError, eType, eStatus );
 
 	for ( char * sCur = (char *)GetBody().first; sCur<GetBody().first+GetBody().second; sCur++ )
 	{
@@ -3092,7 +3110,7 @@ bool HttpHandlerEsBulk_c::Validate()
 	CSphString * pOptContentType = GetOptions() ( "content-type" );
 	if ( !pOptContentType )
 	{
-		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( "Content-Type must be set", HttpErrorType_e::IllegalArgument, SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 
@@ -3101,18 +3119,18 @@ bool HttpHandlerEsBulk_c::Validate()
 	if ( !dOptContentType.Contains ( "application/x-ndjson" ) && !dOptContentType.Contains ( "application/json" ) )
 	{
 		sError.SetSprintf ( "Content-Type header [%s] is not supported", pOptContentType->cstr() );
-		ReportLogError ( sError.cstr(), "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( sError.cstr(), HttpErrorType_e::IllegalArgument, SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 
 	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportLogError ( "request body is required", "parse_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( "request body is required", HttpErrorType_e::Parse, SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 	if ( !Ends ( GetBody(), "\n" ) )
 	{
-		ReportLogError ( "The bulk request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( "The bulk request must be terminated by a newline [\n]", HttpErrorType_e::IllegalArgument, SPH_HTTP_STATUS_400, false );
 		return false;
 	}
 
@@ -3150,7 +3168,7 @@ bool HttpHandlerEsBulk_c::Process()
 			BulkDoc_t & tDoc = dDocs.Add();
 			if ( !ParseMetaLine ( tLine.first, tDoc, sError ) )
 			{
-				ReportLogError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
+				ReportLogError ( sError.cstr(), HttpErrorType_e::ActionRequestValidation, SPH_HTTP_STATUS_400, false );
 				return false;
 			}
 			if ( tDoc.m_sAction=="delete" )
@@ -3193,7 +3211,7 @@ bool HttpHandlerEsBulk_c::Process()
 	BuildReply ( tRoot.AsString(), ( bOk ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 ) );
 
 	if ( !bOk )
-		ReportLogError ( "failed to commit", "", SPH_HTTP_STATUS_400, true );
+		ReportLogError ( "failed to commit", HttpErrorType_e::Unknown, SPH_HTTP_STATUS_400, true );
 
 	return bOk;
 }
@@ -3395,4 +3413,22 @@ bool HttpSetLogVerbosity ( const CSphString & sVal )
 void LogReplyStatus100()
 {
 	HTTPINFO << "100 Continue sent";
+}
+
+const char * GetErrorTypeName ( HttpErrorType_e eType )
+{
+	switch ( eType )
+	{
+	case HttpErrorType_e::Parse: return "parse_exception";
+	case HttpErrorType_e::IllegalArgument: return "illegal_argument_exception";
+	case HttpErrorType_e::ActionRequestValidation: return "action_request_validation_exception";
+	case HttpErrorType_e::IndexNotFound: return "index_not_found_exception";
+	case HttpErrorType_e::ContentParse: return "x_content_parse_exception";
+	case HttpErrorType_e::VersionConflictEngine: return "version_conflict_engine_exception";
+	case HttpErrorType_e::DocumentMissing: return "document_missing_exception";
+	case HttpErrorType_e::ResourceAlreadyExists: return "resource_already_exists_exception";
+	case HttpErrorType_e::AliasesNotFound: return "aliases_not_found_exception";
+	default:
+		return nullptr;;
+	}
 }

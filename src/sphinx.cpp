@@ -13017,24 +13017,6 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 }
 
 
-// calculate length, upto iInfixCodepointBytes chars from infix start
-int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointBytes )
-{
-	int iBytes1 = Min ( 6, iBytes );
-	if ( iInfixCodepointBytes!=1 )
-	{
-		int iCharsLeft = 6;
-		const char * s = sInfix;
-		const char * sMax = sInfix + iBytes;
-		while ( iCharsLeft-- && s<sMax )
-			s += sphUtf8CharBytes(*s);
-		iBytes1 = (int)( s - sInfix );
-	}
-
-	return iBytes1;
-}
-
-
 static int BuildUtf8Offsets ( const char * sWord, int iLen, int * pOff, int DEBUGARG ( iBufSize ) )
 {
 	const BYTE * s = (const BYTE *)sWord;

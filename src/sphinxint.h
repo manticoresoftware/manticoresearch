@@ -1304,21 +1304,32 @@ public:
 
 std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError );
 bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints );
-// calculate length, upto iInfixCodepointBytes chars from infix start
-int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointBytes );
 
 
 /// compute utf-8 character length in bytes from its first byte
 inline int sphUtf8CharBytes ( BYTE uFirst )
 {
-	switch ( uFirst>>4 )
-	{
-		case 12: return 2; // 110x xxxx, 2 bytes
-		case 13: return 2; // 110x xxxx, 2 bytes
-		case 14: return 3; // 1110 xxxx, 3 bytes
-		case 15: return 4; // 1111 0xxx, 4 bytes
-		default: return 1; // either 1 byte, or invalid/unsupported code
-	}
+	// 110x xxxx, 2 bytes
+	// 1110 xxxx, 3 bytes
+	// 1111 0xxx, 4 bytes
+	// others - either 1 byte, or invalid/unsupported code
+
+	static const std::array<BYTE, 16> dValues { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4 };
+	return dValues[uFirst >> 4];
+}
+
+// calculate length, upto iInfixCodepointBytes chars from infix start
+inline int sphGetInfixLength ( const char* sInfix, int iBytes, int iInfixCodepointBytes )
+{
+	if ( iInfixCodepointBytes == 1 )
+		return Min ( 6, iBytes );
+
+	int iCharsLeft = 6;
+	const char* s = sInfix;
+	const char* sMax = sInfix + iBytes;
+	while ( iCharsLeft-- && s < sMax )
+		s += sphUtf8CharBytes ( *s );
+	return (int)( s - sInfix );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -6671,22 +6671,16 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	// say to observer we're going to collect alive rows from dst index
 	// (kills directed to that index must be collected to reapply at the finish)
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pDstIndex->m_iChunk );
-	for ( int i = 0; i < dDstRowMap.GetLength(); ++i, pRow+=iStride )
+	for ( RowID_t i = 0; i < dDstRowMap.GetLength(); ++i, pRow+=iStride )
 	{
 		if ( pDstIndex->m_tDeadRowMap.IsSet(i) )
 			continue;
 
-		if ( bSupressDstDocids && tExtraDeadMap.IsSet(i) )
+		if ( bSupressDstDocids && tExtraDeadMap.IsSet ( i ) )
 			continue;
 
-		if ( pFilter )
-		{
-			CSphMatch tFakeMatch;
-			tFakeMatch.m_tRowID = i;
-			tFakeMatch.m_pStatic = pRow;
-			if ( !pFilter->Eval ( tFakeMatch ) )
-				continue;
-		}
+		if ( pFilter && !pFilter->Eval ( { i, pRow } ) )
+			continue;
 
 		dDstRowMap[i] = (RowID_t)iTotalDocs++;
 	}

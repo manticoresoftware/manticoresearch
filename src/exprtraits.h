@@ -202,6 +202,12 @@ public:
 		CalcValueHash();
 	}
 
+	Expr_ArgVsConstSet_T ( ISphExpr * pArg )
+		: Expr_ArgVsSet_T<T> ( pArg )
+		, m_bFloat ( false )
+	{
+	}
+
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
 		EXPR_CLASS_NAME("Expr_ArgVsConstSet_T");

@@ -1385,6 +1385,8 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 
 		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
 			continue;
+		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tCol.IsIndexedKNN() )
+			continue;
 
 		common::StringHash_fn fnStringCalcHash = nullptr;
 		common::AttrType_e eAttrType = ToColumnarType ( tCol.m_eAttrType, tCol.m_tLocator.m_iBitCount );

@@ -186,7 +186,6 @@ index sub_dist_1
 index sub_dist_2
 {
 	type					= distributed
-	local					= sub_dist_1
 	agent				= <my_address/>:sub_loc_2
 }
 

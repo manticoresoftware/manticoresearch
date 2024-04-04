@@ -17,6 +17,7 @@
 #ifdef PERFETTO
 
 #include "coroutine.h"
+#include "client_task_info.h"
 #include <perfetto.h>
 
 PERFETTO_DEFINE_CATEGORIES (

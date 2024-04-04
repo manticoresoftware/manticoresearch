@@ -192,6 +192,8 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
+	CSphVector<int64_t> dTempKNN;
+
 	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
@@ -224,6 +226,15 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 				const int64_t* pMva = &tDoc.m_dMvas[iMva];
 				int nValues = (int)*pMva++;
 				iMva += nValues + 1;
+
+				// assume 0-value knn as missing; fill with zeroes
+				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && !nValues )
+				{
+					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
+					dTempKNN.ZeroVec();
+					pMva = dTempKNN.Begin();
+					nValues = dTempKNN.GetLength(); 
+				}
 
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, nValues );

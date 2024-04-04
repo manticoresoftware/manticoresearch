@@ -367,10 +367,9 @@ public:
 class FilterString_c : public IFilter_Str
 {
 public:
-	FilterString_c ( ESphCollation eCollation, bool bEq )
-		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
-		, m_dVal ( 0 )
-		, m_bEq ( bEq )
+	FilterString_c ( ESphCollation eCollation, bool bExclude )
+		: m_fnStrCmp { GetStringCmpFunc ( eCollation ) }
+		, m_bExclude { bExclude }
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) override
@@ -385,16 +384,44 @@ public:
 	bool Eval ( const CSphMatch & tMatch ) const override
 	{
 		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-		bool bEq = m_fnStrCmp ( dStr, m_dVal, false )==0;
-		return ( m_bEq==bEq );
+		bool bNeq = m_fnStrCmp ( dStr, m_dVal, false )!=0;
+		return m_bExclude == bNeq;
 	}
 
+	bool CanExclude() const override { return true; }
+
 protected:
-	SphStringCmp_fn			m_fnStrCmp;
+	CSphFixedVector<BYTE> m_dVal { 0 };
+	SphStringCmp_fn m_fnStrCmp;
+	bool m_bExclude;
+};
+
+class FilterStringCmp_c : public FilterString_c
+{
+public:
+	FilterStringCmp_c ( ESphCollation eCollation, bool bExclude, EStrCmpDir eStrCmpDir )
+		: FilterString_c ( eCollation, bExclude )
+		, m_eStrCmpDir ( eStrCmpDir )
+	{}
+
+	bool Eval ( const CSphMatch & tMatch ) const override
+	{
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		int iCmpResult = m_fnStrCmp ( dStr, m_dVal, false );
+
+		switch ( m_eStrCmpDir )
+		{
+			case EStrCmpDir::LT: return m_bExclude ? iCmpResult>=0 : iCmpResult<0;
+			case EStrCmpDir::GT: return m_bExclude ? iCmpResult<=0 : iCmpResult>0;
+			case EStrCmpDir::EQ:
+			default:
+				assert (false && "unexpected: EStrCmpDir::EQ should not be here!");
+				return false;
+		}
+	}
 
 private:
-	CSphFixedVector<BYTE>	m_dVal;
-	bool					m_bEq;
+	EStrCmpDir				m_eStrCmpDir;
 };
 
 static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVals )
@@ -404,11 +431,11 @@ static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVa
 		dVals[i] = *( pRef + i );
 }
 
-class Filter_StringValues_c : public FilterString_c
+class Filter_StringValues_c : public IFilter_Str
 {
 public:
 	Filter_StringValues_c ( ESphCollation eCollation )
-		: FilterString_c ( eCollation, false )
+		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) final
@@ -428,6 +455,7 @@ public:
 	}
 
 private:
+	SphStringCmp_fn m_fnStrCmp;
 	StrVec_t m_dValues;
 };
 
@@ -951,8 +979,10 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
 				return std::make_unique<Filter_StringTagsAll_c>();
 		}
+		else if ( tSettings.m_eStrCmpDir==EStrCmpDir::EQ )
+			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bExclude );
 		else
-			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+			return std::make_unique<FilterStringCmp_c> ( eCollation, tSettings.m_bExclude, tSettings.m_eStrCmpDir );
 	}
 
 	// non-float, non-MVA
@@ -1119,14 +1149,8 @@ public:
 
 	bool Eval ( const CSphMatch & tMatch ) const
 	{
-		// attribute storages can fetch string length without reading the string itself
-		int iLen = m_pExpr->StringLenEval ( tMatch );
-		// StringLenEval returns -1 if not supported by expression
-		if ( iLen!=-1 )
-			return false;
-
 		const BYTE * pVal = nullptr;
-		iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		ByteBlob_t sRef ( pVal, iLen );
 
 		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
@@ -1231,6 +1255,11 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 	bool bJsonExpr = false;
 	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
+
+	// IN ( string list ) filter by JSON attribute should be done via Expr_JsonFieldIn_c expression
+	if ( bJsonExpr && tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+		return std::make_unique< ExprFilterProxy_c > ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+
 	if ( bJsonExpr && !bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 
@@ -1615,12 +1644,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	for ( int i = dModified.GetLength()-1; i>=0; i-- )
 	{
 		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
-		bool bRemove = false;
-		if ( pAttr )
-			bRemove = pAttr->m_uAttrFlags & CSphColumnInfo::ATTR_JOINED;
-		else
-			bRemove = dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
-
+		bool bRemove = pAttr ? pAttr->IsJoined() : dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
 		if ( bRemove )
 			dModified.Remove(i);		
 	}
@@ -1641,11 +1665,11 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 			return false;
 	}
 
+	RemoveJoinFilters ( tCtx, dModified );
+
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 		return true;
-
-	RemoveJoinFilters ( tCtx, dModified );
 
 	int iNumModified = dModified.GetLength();
 	for ( int i = 0; i < iNumModified; i++ )
@@ -2340,8 +2364,20 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
+		{
+			const char * sOp = ([&]() {
+				switch ( f.m_eStrCmpDir )
+				{
+					case EStrCmpDir::EQ: return f.m_bExclude ? "!=" : "=";
+					case EStrCmpDir::LT: return f.m_bExclude ? ">=" : "<";
+					case EStrCmpDir::GT: return f.m_bExclude ? "<=" : ">";
+					default: assert(0); return f.m_bExclude ? "!?=" : "?=";
+				}
+			})();
+
+			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), sOp, ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
 			break;
+		}
 
 		case SPH_FILTER_NULL:
 			tBuf << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );

@@ -1529,7 +1529,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto tJobContext = dCtx.CloneNewContext();
 		sphLogDebug ( "DoMatchDocuments cloned context %d", tJobContext.second );
 		auto& tCtx = tJobContext.first;
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while (true)
 		{
 			sphLogDebugv ( "DoMatchDocuments %d, iJob: %d", tJobContext.second, iJob );

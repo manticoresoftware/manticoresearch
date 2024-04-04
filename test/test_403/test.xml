@@ -84,6 +84,11 @@ call keywords('a', 'test4');
 drop table test4;
 </sphinxql>
 
+<!-- create table should fail on missed wordforms (exact file without search mask) -->
+<sphinxql>
+create table test2 ( title text, tag integer ) wordforms = '<this_test/>/wrong.file';
+</sphinxql>
+
 </queries>
 
 </test>

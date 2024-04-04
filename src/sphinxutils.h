@@ -79,6 +79,8 @@ inline bool sphIsWild ( T c )
 	return c=='*' || c=='?' || c=='%';
 }
 
+bool HasWildcards ( const char * sWord );
+
 namespace sph {
 
 	/* Custom format specifiers for types:

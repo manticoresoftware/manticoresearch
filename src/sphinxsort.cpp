@@ -1121,29 +1121,6 @@ ISphMatchSorter * CreateSorter ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFun
 	return CreateGroupSorter ( eGroupFunc, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, tPrecalc );
 }
 
-
-static bool ExprHasJoinPrefix ( const CSphString & sExpr, const JoinArgs_t * pArgs )
-{
-	if ( !pArgs )
-		return false;
-
-	CSphString sPrefix;
-	sPrefix.SetSprintf ( "%s.", pArgs->m_sIndex2.cstr() );
-
-	const char * szFound = strstr ( sExpr.cstr(), sPrefix.cstr() );
-	if ( !szFound )
-		return false;
-
-	if ( szFound > sExpr.cstr() )
-	{
-		char c = *(szFound-1);
-		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' )
-			return false;
-	}
-
-	return true;
-}
-
 /////////////////////////
 // SORTING QUEUE FACTORY
 /////////////////////////

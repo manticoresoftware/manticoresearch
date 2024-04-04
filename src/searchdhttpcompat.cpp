@@ -82,7 +82,9 @@ private:
 	
 	void EmptyReply();
 
-	void ProcessMSearch ();
+	bool ProcessMSearch ();
+	bool ProcessSearch();
+
 	void ProcessEmptyHead();
 	bool ProcessKbnTableDoc();
 	void ProcessCat();
@@ -90,7 +92,6 @@ private:
 	void ProcessILM();
 	void ProcessCCR();
 	void ProcessKbnTableGet();
-	void ProcessSearch();
 	void ProcessCount();
 	bool ProcessInsert();
 	void ProcessInsertIntoIdx ( const CompatInsert_t & tIns );
@@ -299,7 +300,7 @@ static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 {
 	DocID_t tTmpID;
 	SqlStmt_t tStmt;
-	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, true, sError ) )
+	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, sError ) )
 		return false;
 
 	assert ( tTmpID>=0 );
@@ -1172,8 +1173,6 @@ static CSphString g_sEmptySearch = R"(
 
 static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CSphString & sURL, CSphString & sRes )
 {
-	CSphString sError, sWarning;
-
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
 	if ( tReq.contains ( "index" ) )
@@ -1214,21 +1213,24 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	FixupFilter ( dIndexes, tReq );
 	FixupAggs ( dIndexes, tReq );
 
-	JsonQuery_c tQuery;
+	ParsedJsonQuery_t tParsedQuery;
+	auto& tQuery = tParsedQuery.m_tQuery;
 	tQuery.m_eQueryType = QUERY_JSON;
 	tQuery.m_sRawQuery = tReq.dump().c_str();
+	tParsedQuery.m_bProfile = false;
 	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
-	bool bProfile = false;
-	if ( !sphParseJsonQuery ( tMntReq, tQuery, bProfile, sError, sWarning ) )
+
+	if ( !sphParseJsonQuery ( tMntReq, &tParsedQuery ) )
 	{
-		CompatWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
+		const char * sError = TlsMsg::szError();
+		CompatWarning ( "%s at '%s' body '%s'", sError, sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 		sRes = JsonEncodeResultError ( sError, "parse_exception", 400 );
 		return false;
 	}
 
-	if ( !sWarning.IsEmpty() )
-		CompatWarning ( "%s", sWarning.cstr() );
+	if ( !tParsedQuery.m_sWarning.IsEmpty() )
+		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
 	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
 	tHandler->RunQueries();
@@ -1247,23 +1249,24 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		{
 			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 			bOk = false;
+			TlsMsg::Err ( pAggr->m_sError );
 		}
 	}
 
 	return bOk;
 }
 
-void HttpCompatHandler_c::ProcessMSearch ()
+bool HttpCompatHandler_c::ProcessMSearch ()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
 		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 	if ( !Ends ( GetBody(), "\n" ) )
 	{
 		ReportError ( "The msearch request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 
 	int64_t tmStarted = sphMicroTimer();
@@ -1276,12 +1279,16 @@ void HttpCompatHandler_c::ProcessMSearch ()
 
 	//bool bRestTotalHitsInt = IsTrue ( hOpts, "rest_total_hits_as_int" );
 
+	bool bParsedOk = true;
 	CSphVector<nljson> tSourceReq;
 	int iSourceLine = 0;
 	SplitNdJson ( GetBody(),
 		[&] ( const char * sLine, int iLen )
 		{
-			nljson tItem = nljson::parse ( sLine );
+			nljson tItem = nljson::parse ( sLine, nullptr, false );
+			if ( tItem.is_discarded() )
+				bParsedOk = false;
+
 			if ( ( iSourceLine%2 )==0 )
 			{
 				tSourceReq.Add ( tItem );
@@ -1293,10 +1300,10 @@ void HttpCompatHandler_c::ProcessMSearch ()
 		}
 	);
 
-	if ( iSourceLine<2 )
+	if ( iSourceLine<2 || !bParsedOk )
 	{
 		ReportError ( "Validation Failed: 1: no requests added;", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 
 	CSphFixedVector<CSphString> dRes ( tSourceReq.GetLength() );
@@ -1327,6 +1334,7 @@ void HttpCompatHandler_c::ProcessMSearch ()
 	tReply += "}";
 
 	BuildReply ( tReply, SPH_HTTP_STATUS_200 );
+	return true;
 }
 
 typedef CSphVector< std::pair < CSphString, int > > DocIdVer_t;
@@ -2007,31 +2015,38 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	return true;
 }
 
-void HttpCompatHandler_c::ProcessSearch()
+bool HttpCompatHandler_c::ProcessSearch()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
 		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
-	nljson tReq = nljson::parse ( GetBody().first );
+	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tReq.is_discarded())
+	{
+		ReportError ( "invalid body", "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
 
 	if ( EmulateIndexCount ( sIndex, tReq, GetResult() ) )
-		return;
+		return true;
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
-		BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_400 );
-		return;
+		const char * sError = TlsMsg::szError();
+		ReportError ( sError, "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
 	}
 
 	// filter_path and _source uri params
 	ProcessKbnResult ( GetOptions()( "_source" ), GetOptions()( "filter_path" ), sRes );
 
 	BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_200 );
+	return true;
 }
 
 void HttpCompatHandler_c::ProcessCount()
@@ -2476,7 +2491,7 @@ void HttpCompatHandler_c::ProcessInsertIntoIdx ( const CompatInsert_t & tIns )
 	JsonObj_c tSource ( tIns.m_sBody.first );
 
 	CSphString sError;
-	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, false, sError ) && InsertDoc ( tStmt, sError ) );
+	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, sError ) && InsertDoc ( tStmt, sError ) );
 
 	if ( !bInserted )
 	{
@@ -3403,10 +3418,7 @@ void HttpCompatHandler_c::ProcessFields()
 bool HttpCompatHandler_c::ProcessEndpoints()
 {
 	if ( m_dUrlParts.GetLength() && m_dUrlParts.Last().Ends ( "_msearch" ) )
-	{
-		ProcessMSearch();
-		return true;
-	}
+		return ProcessMSearch();
 
 	if ( GetRequestType()==HTTP_GET || GetRequestType()==HTTP_HEAD )
 	{
@@ -3461,10 +3473,7 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 	}
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_search" )
-	{
-		ProcessSearch();
-		return true;
-	}
+		return ProcessSearch();
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_count" )
 	{

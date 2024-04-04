@@ -132,7 +132,7 @@ public:
 	virtual bool		IsPrecalc() const { return false; }
 
 	virtual bool		IsJoin() const { return false; }
-	virtual void		FinalizeJoin ( CSphString & sWarning ) {}
+	virtual bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) { return true; }
 };
 
 

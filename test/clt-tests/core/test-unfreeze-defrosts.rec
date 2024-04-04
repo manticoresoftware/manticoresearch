@@ -1,0 +1,64 @@
+––– block: ../base/start-searchd –––
+––– input –––
+set -b +m
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt_mem_limit='128k'; insert into t values(0,'abc','string'); freeze t;" > /dev/null 2>&1
+––– output –––
+––– input –––
+for n in `seq 1 100`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'string string string stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring string');"; done &
+––– output –––
+[1] %{NUMBER}
+––– input –––
+sleep 10; mysql -h0 -P9306 -e "select count(*) from t\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): #!/55|56|57|58|59/!#
+––– input –––
+mysql -h0 -P9306 -e "unfreeze t;"
+––– output –––
+––– input –––
+sleep 10; mysql -h0 -P9306 -e "select count(*) from t\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): 101
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt_mem_limit='128k'; insert into t values(0,'abc','string'); freeze t; freeze t; freeze t;" > /dev/null 2>&1
+––– output –––
+––– input –––
+for n in `seq 1 100`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'string string string stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring string');"; done &
+––– output –––
+[1] %{NUMBER}
+––– input –––
+sleep 10; mysql -h0 -P9306 -e "select count(*) from t\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): #!/55|56|57|58|59/!#
+––– input –––
+mysql -h0 -P9306 -e "unfreeze t; unfreeze t; unfreeze t;"
+––– output –––
+––– input –––
+sleep 10; mysql -h0 -P9306 -e "select count(*) from t\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): 101
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS orders; CREATE TABLE orders (id bigint, user_id bigint, name text, description text, price float, order_date timestamp, attr json, region_id int, confirm bool, analogs multi); INSERT INTO orders (id, user_id, name, description, price, order_date, attr, region_id, confirm, analogs) VALUES (0, 1, 'Macbook', '16', 3500.99, 1614258732, '{\"color\":\"titan\",\"size\":16}', 22, 'TRUE', (8,4,16)) rt_mem_limit='64k'; freeze orders;" > /dev/null 2>&1
+––– output –––
+––– input –––
+for n in `seq 1 500`; do mysql -h0 -P9306 -e "INSERT INTO orders (id, user_id, name, description, price, order_date, attr, region_id, confirm, analogs) VALUES (0, 1, 'iPhone', '14Pro', 1500.50, 1708866233, '{\"color\":\"black\",\"size\":14}', 178, 'TRUE', (9,11,15)), (0, 2, 'Macbook', '16', 3500.99, 1614258732, '{\"color\":\"titan\",\"size\":16}', 22, 'TRUE', (8,4,16)), (0, 3, 'iPad', '15Pro', 2600, 1708866234, '{\"color\":\"gold\",\"size\":15}', 178, 'TRUE', (9,11,15)), (0, 4, 'iPhone', '12Mini', 900.50, 1708866235, '{\"color\":\"blue\",\"size\":12}', 179, 'TRUE', (1,5,17)), (0, 5, 'Samsung Galaxy', 'S21', 1000, 1708866236, '{\"color\":\"white\",\"size\":14}', 180, 'FALSE', (13,19,21)), (0, 6, 'Dell Laptop', 'Latitude', 2000, 1708866237, '{\"color\":\"silver\",\"size\":15}', 181, 'TRUE', (4,6,23)), (0, 7, 'Headphones', 'Bluetooth', 100, 1708866238, '{\"color\":\"black\",\"size\":\"M\"}', 182, 'TRUE', (5,7,25)), (0, 8, 'Desk', 'Wooden', 400, 1708866239, '{\"color\":\"brown\",\"size\":\"XL\"}', 183, 'TRUE', (8,9,27)), (0, 9, 'Refrigerator', 'Samsung', 1500, 1708866240, '{\"color\":\"white\",\"size\":60}', 184, 'FALSE', (10,11,29)), (0, 10, 'Smartwatch', 'Fitbit', 300, 1708866241, '{\"color\":\"black\",\"size\":\"S\"}', 185, 'TRUE', (12,13,31)), (0, 11, 'Printer', 'Epson', 250, 1708866242, '{\"color\":\"grey\",\"size\":\"L\"}', 186, 'TRUE', (14,15,33)), (0, 12, 'Chair', 'Office', 150, 1708866243, '{\"color\":\"black\",\"size\":\"M\"}', 187, 'FALSE', (16,17,35)), (0, 13, 'Smartphone', 'Xiaomi', 700, 1708866244, '{\"color\":\"blue\",\"size\":6}', 188, 'TRUE', (18,19,37)), (0, 14, 'Camera', 'Canon', 800, 1708866245, '{\"color\":\"black\",\"size\":\"M\"}', 189, 'TRUE', (20,21,39)), (0, 15, 'Backpack', 'Hiking', 100, 1708866246, '{\"color\":\"green\",\"size\":\"S\"}', 190, 'TRUE', (22,23,41)), (0, 16, 'Table', 'Coffee', 250, 1708866247, '{\"color\":\"brown\",\"size\":\"L\"}', 191, 'FALSE', (24,25,43)), (0, 17, 'Smart TV', 'LG', 1200, 1708866248, '{\"color\":\"silver\",\"size\":55}', 192, 'TRUE', (26,27,45)), (0, 18, 'Blender', 'Kitchen', 80, 1708866249, '{\"color\":\"white\",\"size\":\"M\"}', 193, 'TRUE', (28,29,47)), (0, 19, 'Keyboard', 'Logitech', 50, 1708866250, '{\"color\":\"black\",\"size\":\"L\"}', 194, 'TRUE', (30,31,49)), (0, 20, 'Monitor', 'Samsung', 400, 1708866251, '{\"color\":\"black\",\"size\":24}', 195, 'TRUE', (32,33,51));"; done &
+––– output –––
+[1] %{NUMBER}
+––– input –––
+sleep 1; mysql -h0 -P9306 -e "select count(*) from orders\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): #!/3\d{3}|4\d{3}/!#
+––– input –––
+sleep 5; mysql -h0 -P9306 -e "unfreeze orders;"
+––– output –––
+––– input –––
+sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): 10000

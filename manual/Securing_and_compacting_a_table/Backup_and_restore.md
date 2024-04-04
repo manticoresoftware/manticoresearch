@@ -263,7 +263,7 @@ Manticore config
 <!-- example mysqldump_backup -->
 To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
 
-Note, `mysqldump` is supported only in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
+Note, `mysqldump` is supported only for real-time tables.
 
 <!-- request SQL -->
 ```bash
@@ -280,6 +280,10 @@ Executing this command will produce a backup file named `manticore_backup.sql`. 
 
 If you're looking to restore a Manticore Search database from a backup file, the mysql client is your tool of choice.
 
+Note, if you are restoring in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), you cannot drop and recreate tables directly. Therefore, you should:
+- Use `mysqldump` with the `-t` option to exclude `CREATE TABLE` statements from your backup.
+- Manually [TRUNCATE](../Emptying_a_table.md) the tables before proceeding with the restoration.
+
 <!-- request SQL -->
 ```bash
 mysql -h0 -P9306 < manticore_backup.sql
@@ -287,8 +291,8 @@ mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
 This command enables you to restore everything from the `manticore_backup.sql` file.
-
 <!-- end -->
+
 ### Additional options
 
 Here are some more settings that can be used with mysqldump to tailor your backup:

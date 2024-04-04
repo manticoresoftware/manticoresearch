@@ -318,6 +318,7 @@ res = await utilsApi.sql('create table products(title text, price float) morphol
 <!-- request Go -->
 ```go
 res := apiClient.UtilsAPI.Sql(context.Background()).Body("create table products(title text, price float) morphology='stem_en'").Execute();
+```
 
 <!-- end -->
 

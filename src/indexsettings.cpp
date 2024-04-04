@@ -225,7 +225,7 @@ const RtTypedAttr_t & GetRtType ( int iType )
 
 static CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
-	if ( !pFilenameBuilder || sFile.IsEmpty() )
+	if ( !pFilenameBuilder || sFile.IsEmpty() || IsPathAbsolute ( sFile ) )
 		return sFile;
 
 	return pFilenameBuilder->GetFullPath(sFile);
@@ -1388,7 +1388,7 @@ bool IndexSettingsContainer_c::Contains ( const char * szName ) const
 }
 
 
-StrVec_t IndexSettingsContainer_c::GetFiles() const
+StrVec_t IndexSettingsContainer_c::GetFiles()
 {
 	StrVec_t dFiles;
 	for ( const auto & i : m_dStopwordFiles )
@@ -1402,6 +1402,13 @@ StrVec_t IndexSettingsContainer_c::GetFiles() const
 		StrVec_t dFilesFound = FindFiles ( i.cstr() );
 		for ( const auto & j : dFilesFound )
 			dFiles.Add(j);
+		
+		// missed wordforms for file without wildcard should fail create table
+		if ( dFilesFound.IsEmpty() && !HasWildcards ( i.cstr() ) )
+		{
+			m_sError.SetSprintf ( "file not found: '%s'", i.cstr() );
+			return StrVec_t();
+		}
 	}
 
 	for ( const auto & i : m_dHitlessFiles )
@@ -1435,6 +1442,9 @@ void IndexSettingsContainer_c::SetDefaults()
 bool IndexSettingsContainer_c::CheckPaths()
 {
 	StrVec_t dFiles = GetFiles();
+	if ( !m_sError.IsEmpty() )
+		return false;
+
 	for ( const auto & i : dFiles )
 	{
 		if ( !sphIsReadable(i) )

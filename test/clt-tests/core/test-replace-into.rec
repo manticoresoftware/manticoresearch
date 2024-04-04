@@ -160,21 +160,53 @@ echo $((elapsed_time / elapsed_time2))
 ––– input –––
 mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS abc; create table abc(id, t1 text, t2 text indexed); insert into abc VALUES (1, 'abc', 'cde'); desc abc;"
 ––– output –––
+--------------
+SHOW TABLES
+--------------
++-------+------+
+| Index | Type |
++-------+------+
+| tbl   | rt   |
++-------+------+
+--------------
+DROP TABLE IF EXISTS abc
+--------------
+--------------
+create table abc(id, t1 text, t2 text indexed)
+--------------
+--------------
+insert into abc VALUES (1, 'abc', 'cde')
+--------------
+--------------
+desc abc
+--------------
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| t1    | text   | indexed stored |
+| t2    | text   | indexed        |
++-------+--------+----------------+
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO abc SET t1 ='iPhone 15 PRO' WHERE id = 1;"
 ––– output –––
+ERROR 1064 (42000) at line 1: Field t2 doesn't have stored property. Replace query can't be performed
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 16 PRO MAX' WHERE id > 105;"
 ––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUES near 'SET model ='iPhone 16 PRO MAX' WHERE id > 105'
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 17 PRO MAX' WHERE id = 'abs';"
 ––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUES near 'SET model ='iPhone 17 PRO MAX' WHERE id = 'abs''
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 18 PRO' WHERE id in (1,2,3);"
 ––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUES near 'SET model ='iPhone 18 PRO' WHERE id in (1,2,3)'
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 18 PRO' WHERE sold = 0;"
 ––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUES near 'SET model ='iPhone 18 PRO' WHERE sold = 0'
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET id =777 WHERE id = 144; select * from tbl WHERE id = 144;"
 ––– output –––

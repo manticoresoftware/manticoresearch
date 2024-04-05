@@ -16520,6 +16520,23 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	StrVec_t dOldFiles;
 	pRtIndex->GetIndexFiles ( dOldFiles, dOldFiles );
 
+	StrVec_t dCopiedFiles;
+	auto tCleanup = AtScopeExit ( [&dCopiedFiles] { dCopiedFiles.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
+
+	StrVec_t dNewFiles = tContainer.GetFiles();
+	if ( !tContainer.GetError().IsEmpty() )
+	{
+		tOut.Error ( tContainer.GetError().cstr () );
+		return;
+	}
+
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
+	if ( !CopyExternalIndexFiles ( dNewFiles, sIndexPath, dCopiedFiles, sError ) )
+	{
+		tOut.Error ( sError.cstr () );
+		return;
+	}
+
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
 	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
@@ -16546,6 +16563,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	{
 		// all ok, delete old files
 		RemoveOutdatedFiles ( pRtIndex, dOldFiles );
+		dCopiedFiles.Reset();
 
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	}

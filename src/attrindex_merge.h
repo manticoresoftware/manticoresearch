@@ -15,13 +15,15 @@
 #include "sphinx.h"
 #include "indexformat.h"
 
+struct BuildBufferSettings_t;
+
 class AttrMerger_c
 {
 	class Impl_c;
 	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
-	AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs );
+	AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings );
 	~AttrMerger_c();
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );

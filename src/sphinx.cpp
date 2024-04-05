@@ -132,6 +132,8 @@ static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
 static bool			g_bPseudoSharding		= true;
 static int			g_iPseudoShardingThresh	= 8192;
 
+static BuildBufferSettings_t g_tMergeSettings;
+
 static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
 
 static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
@@ -2660,7 +2662,8 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
-	auto pBuilder = CreateColumnarBuilder ( tNewSchema, GetTmpFilename ( SPH_EXT_SPC ), sError );
+	BuildBufferSettings_t tSettings; // use default buffer settings
+	auto pBuilder = CreateColumnarBuilder ( tNewSchema, GetTmpFilename ( SPH_EXT_SPC ), tSettings.m_iBufferColumnar, sError );
 	if ( !pBuilder )
 		return false;
 
@@ -5187,7 +5190,8 @@ bool CSphIndex_VLN::Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & p
 	if ( !m_tSchema.HasStoredFields() && !m_tSchema.HasStoredAttrs() )
 		return true;
 
-	auto pBuilder = CreateDocstoreBuilder ( GetFilename ( SPH_EXT_SPDS ), GetSettings(), m_sLastError );
+	BuildBufferSettings_t tSettings; // use default buffer settings
+	auto pBuilder = CreateDocstoreBuilder ( GetFilename ( SPH_EXT_SPDS ), GetSettings(), tSettings.m_iBufferStorage, m_sLastError );
 	if ( !pBuilder )
 		return false;
 
@@ -5217,7 +5221,8 @@ bool CSphIndex_VLN::Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> &
 	if ( !m_tSchema.HasBlobAttrs() )
 		return true;
 
-	pBuilder = sphCreateBlobRowBuilder ( m_tSchema, GetTmpFilename ( SPH_EXT_SPB ), m_tSettings.m_tBlobUpdateSpace, m_sLastError );
+	BuildBufferSettings_t tSettings; // use default buffer settings
+	pBuilder = sphCreateBlobRowBuilder ( m_tSchema, GetTmpFilename ( SPH_EXT_SPB ), m_tSettings.m_tBlobUpdateSpace, tSettings.m_iBufferAttributes, m_sLastError );
 	return !!pBuilder;
 }
 
@@ -5231,7 +5236,8 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 		if ( m_tSchema.GetAttr(i).IsColumnar() )
 			tColumnarsAttrs.BitSet(i);
 
-	pBuilder = CreateColumnarBuilder ( m_tSchema, GetTmpFilename ( SPH_EXT_SPC ), m_sLastError );
+	BuildBufferSettings_t tSettings; // use default buffer settings
+	pBuilder = CreateColumnarBuilder ( m_tSchema, GetTmpFilename ( SPH_EXT_SPC ), tSettings.m_iBufferColumnar, m_sLastError );
 	return !!pBuilder;
 }
 
@@ -5536,7 +5542,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphBitvec tSIAttrs ( m_tSchema.GetAttrsCount() );
 	if ( IsSecondaryLibLoaded() )
 	{
-		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetFilename ( SPH_EXT_SPIDX ), m_sLastError );
+		BuildBufferSettings_t tSettings; // use default buffer settings
+		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetFilename ( SPH_EXT_SPIDX ), tSettings.m_iBufferStorage, m_sLastError );
 		if ( !pCidxBuilder )
 			return 0;
 	}
@@ -6756,7 +6763,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	// merging attributes
 	{
-		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs };
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings };
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
@@ -6779,12 +6786,11 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
 
-	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, &dDeleteOnInterrupt );
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
 
 	// FIXME? is this magic dict block constant any good?..
-	pDict->DictBegin ( tTmpDict, tDict, iHitBufferSize );
+	pDict->DictBegin ( tTmpDict, tDict, g_tMergeSettings.m_iBufferDict );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
@@ -6816,7 +6822,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tHitBuilder.cidxHit ( &tFlush );
 
 	int iMinInfixLen = pSettings->m_tSettings.m_iMinInfixLen;
-	if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen, pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+	if ( !tHitBuilder.cidxDone ( g_tMergeSettings.m_iBufferDict, iMinInfixLen, pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return false;
 
 	WriteHeader_t tWriteHeader;
@@ -7038,7 +7044,8 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
-		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), sError );
+		BuildBufferSettings_t tSettings; // use default buffer settings
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), tSettings.m_iBufferStorage, sError );
 		if ( !pDocstoreBuilder )
 			return false;
 
@@ -12856,6 +12863,12 @@ bool GetPseudoSharding()
 void SetPseudoShardingThresh ( int iThresh )
 {
 	g_iPseudoShardingThresh = iThresh;
+}
+
+
+void SetMergeSettings ( const BuildBufferSettings_t & tSettings )
+{
+	g_tMergeSettings = tSettings;
 }
 
 //////////////////////////////////////////////////////////////////////////

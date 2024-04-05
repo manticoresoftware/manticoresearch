@@ -985,7 +985,7 @@ DocstoreBuilder_i::Doc_t::Doc_t ( const DocstoreDoc_t & tDoc )
 class DocstoreBuilder_c : public DocstoreBuilder_i, public DocstoreSettings_t
 {
 public:
-			DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings );
+			DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings, int iBufferSize );
 
 	bool	Init ( CSphString & sError );
 
@@ -1010,6 +1010,7 @@ private:
 	MemoryWriter2_c			m_tHeaderWriter;
 	CSphWriter				m_tWriter;
 	DocstoreFields_c		m_tFields;
+	int						m_iBufferSize = 0;
 	DWORD					m_uStoredLen = 0;
 	int						m_iNumBlocks = 0;
 	SphOffset_t				m_tHeaderOffset = 0;
@@ -1030,9 +1031,10 @@ private:
 };
 
 
-DocstoreBuilder_c::DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings )
+DocstoreBuilder_c::DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings, int iBufferSize )
 	: m_sFilename ( std::move (sFilename) )
 	, m_tHeaderWriter ( m_dHeader )
+	, m_iBufferSize ( iBufferSize )
 {
 	*(DocstoreSettings_t*)this = tSettings;
 }
@@ -1044,6 +1046,7 @@ bool DocstoreBuilder_c::Init ( CSphString & sError )
 	if ( !m_pCompressor )
 		return false;
 
+	m_tWriter.SetBufferSize(m_iBufferSize);
 	return m_tWriter.OpenFile ( m_sFilename, sError );
 }
 
@@ -1914,9 +1917,9 @@ std::unique_ptr<Docstore_i> CreateDocstore ( int64_t iIndexId, const CSphString 
 }
 
 
-std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError )
+std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, int iBufferSize, CSphString & sError )
 {
-	auto pBuilder = std::make_unique<DocstoreBuilder_c>( sFilename, tSettings );
+	auto pBuilder = std::make_unique<DocstoreBuilder_c>( sFilename, tSettings, iBufferSize );
 	if ( !pBuilder->Init(sError) )
 		return nullptr;
 

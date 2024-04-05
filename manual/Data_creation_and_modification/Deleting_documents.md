@@ -129,7 +129,7 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->deleteDocuments(new Match('dummy','*'));
+$index->deleteDocuments(new MatchPhrase('dummy','*'));
 ```
 
 <!-- response json -->

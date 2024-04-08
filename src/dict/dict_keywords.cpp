@@ -53,7 +53,7 @@ public:
 	// OPTIMIZE? change pointers to 8:24 locators to save RAM on x64 gear?
 	struct HitblockKeyword_t
 	{
-		SphWordID_t m_uWordid;			// locally unique word id (crc value, adjusted in case of collsion)
+		SphWordID_t m_uWordid;			// locally unique word id (crc value, adjusted in case of collision)
 		HitblockKeyword_t* m_pNextHash; // next hashed entry
 		char* m_pKeyword;				// keyword
 	};

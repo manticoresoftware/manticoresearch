@@ -350,7 +350,7 @@ public:
 		// tricky bit
 		// FindSpan() will match a block where tBaseRowIDPlus1[i] <= tRowID < tBaseRowIDPlus1[i+1]
 		// meaning that the subsequent ids decoded will be strictly > RefValue
-		// meaning that if previous (!) blocks end with tRowID exactly,
+		// meaning that if previous (!) block ends with tRowID exactly,
 		// and we use tRowID itself as RefValue, that document gets lost!
 
 		// first check if we're still inside the last block

@@ -192,7 +192,7 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 /////////////////////////////////////////////////////////////////////
 
 /// everything required to setup search term
-class DiskIndexQwordSetup_c : public ISphQwordSetup
+class DiskIndexQwordSetup_c final : public ISphQwordSetup
 {
 public:
 	DiskIndexQwordSetup_c ( DataReaderFactoryPtr_c pDoclist, DataReaderFactoryPtr_c pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders, RowID_t iRowsCount )
@@ -207,7 +207,7 @@ public:
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
-	ISphQword *			ScanSpawn() const override;
+	ISphQword *			ScanSpawn() const final;
 
 private:
 	DataReaderFactoryPtr_c		m_pDoclist;
@@ -353,7 +353,7 @@ public:
 		{
 			m_uHitState = 0;
 			m_iHitPos = EMPTY_HIT;
-			if_const ( DISABLE_HITLIST_SEEK )
+			if constexpr ( DISABLE_HITLIST_SEEK )
 				assert ( m_rdHitlist->GetPos()==uOff ); // make sure we're where caller thinks we are.
 			else
 				m_rdHitlist->SeekTo ( uOff, READ_NO_SIZE_HINT );
@@ -6372,7 +6372,7 @@ private:
 	CSphHitBuilder *	m_pHitBuilder;
 };
 
-
+// QWORDDST, QWORDSRC = DiskIndexQword_c
 template < typename QWORDDST, typename QWORDSRC >
 bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {

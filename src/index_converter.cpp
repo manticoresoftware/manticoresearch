@@ -1062,7 +1062,8 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
-		pBlobRowBuilder = sphCreateBlobRowJsonBuilder ( m_tSchema, sSPB, tIndex.m_tSettings.m_tBlobUpdateSpace, sError );
+		BuildBufferSettings_t tSettings; // use default buffer settings
+		pBlobRowBuilder = sphCreateBlobRowJsonBuilder ( m_tSchema, sSPB, tIndex.m_tSettings.m_tBlobUpdateSpace, tSettings.m_iBufferAttributes, sError );
 		if ( !pBlobRowBuilder )
 			return false;
 	}

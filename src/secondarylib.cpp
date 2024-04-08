@@ -21,7 +21,7 @@ using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNu
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
 using CreateSI_fn =				SI::Index_i * (*) ( const char * sFile, std::string & sError );
-using CreateBuilder_fn =		SI::Builder_i *	(*) ( const common::Schema_t & tSchema, int iMemoryLimit, const std::string & sFile, std::string & sError );
+using CreateBuilder_fn =		SI::Builder_i *	(*) ( const common::Schema_t & tSchema, int iMemoryLimit, const std::string & sFile, size_t tBufferSize, std::string & sError );
 
 static void *					g_pSecondaryLib = nullptr;
 static VersionStr_fn			g_fnVersionStr = nullptr;
@@ -126,7 +126,7 @@ SI::Index_i * CreateSecondaryIndex ( const char * sFile, CSphString & sError )
 	return pSIdx;
 }
 
-std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
 	{
@@ -137,7 +137,7 @@ std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schem
 	assert ( g_fnCreateBuilder );
 
 	std::string sTmpError;
-	std::unique_ptr<SI::Builder_i> pBuilder { g_fnCreateBuilder ( tSchema, iMemoryLimit, sFile.cstr(), sTmpError ) };
+	std::unique_ptr<SI::Builder_i> pBuilder { g_fnCreateBuilder ( tSchema, iMemoryLimit, sFile.cstr(), iBufferSize, sTmpError ) };
 	if ( !pBuilder )
 		sError = sTmpError.c_str();
 

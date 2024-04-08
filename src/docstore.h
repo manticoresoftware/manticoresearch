@@ -117,8 +117,8 @@ private:
 };
 
 
-std::unique_ptr<Docstore_i>		CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
-std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError );
+std::unique_ptr<Docstore_i>			CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
+std::unique_ptr<DocstoreBuilder_i>	CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, int iBufferSize, CSphString & sError );
 std::unique_ptr<DocstoreRT_i>		CreateDocstoreRT();
 std::unique_ptr<DocstoreFields_i>	CreateDocstoreFields();
 

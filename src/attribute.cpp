@@ -172,7 +172,7 @@ protected:
 class BlobRowBuilder_File_c : public BlobRowBuilder_Base_c
 {
 public:
-							BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked );
+							BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked, int iBufferSize );
 
 	bool					Setup ( const CSphString & sFile, CSphString & sError );
 
@@ -182,12 +182,14 @@ public:
 
 private:
 	CSphWriter				m_tWriter;
-	SphOffset_t				m_tSpaceForUpdates {0};
+	SphOffset_t				m_tSpaceForUpdates = 0;
+	int						m_iBufferSize = 0;
 };
 
 
-BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked )
+BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked, int iBufferSize )
 	: m_tSpaceForUpdates ( tSpaceForUpdates )
+	, m_iBufferSize ( iBufferSize )
 {
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
@@ -226,6 +228,8 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 
 bool BlobRowBuilder_File_c::Setup ( const CSphString & sFile, CSphString & sError )
 {
+	m_tWriter.SetBufferSize ( m_iBufferSize );
+
 	if ( !m_tWriter.OpenFile ( sFile, sError ) )
 		return false;
 
@@ -478,9 +482,9 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 //////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, int iBufferSize, CSphString & sError )
 {
-	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, false );
+	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, false, iBufferSize );
 	if ( !pBuilder->Setup ( sFile, sError ) )
 		pBuilder = nullptr;
 
@@ -488,9 +492,9 @@ std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & t
 }
 
 
-std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, int iBufferSize, CSphString & sError )
 {
-	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, true );
+	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, true, iBufferSize );
 	if ( !pBuilder->Setup ( sFile, sError ) )
 		pBuilder = nullptr;
 

@@ -811,7 +811,6 @@ int				ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError );
 int				ConsiderStackAbsolute ( const struct XQNode_t* pRoot );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
-bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );
 
@@ -828,6 +827,18 @@ void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings& tSettings, const FilenameBuilder_i* pFilenameBuilder, StrVec_t& dFiles );
+
+struct BuildBufferSettings_t
+{
+	int m_iSIMemLimit		= 128*1024*1024;
+	int m_iBufferAttributes = 8*1024*1024;
+	int m_iBufferStorage	= 8*1024*1024;
+	int m_iBufferColumnar	= 1*1024*1024;
+	int m_iBufferFulltext	= 8*1024*1024;
+	int m_iBufferDict		= 16*1024*1024;
+};
+
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError );
 
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );

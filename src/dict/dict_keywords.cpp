@@ -444,14 +444,16 @@ void CSphDictKeywords::DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntr
 void CSphDictKeywords::DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit )
 {
 	m_iTmpFD = tTempDict.GetFD();
+
+	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK * (int)sizeof ( DictKeyword_t ) ); // can't use less than 1 chunk
+
 	m_wrTmpDict.CloseFile();
+	m_wrTmpDict.SetBufferSize(m_iDictLimit);
 	m_wrTmpDict.SetFile ( tTempDict, nullptr, m_sWriterError );
 
 	m_wrDict.CloseFile();
 	m_wrDict.SetFile ( tDict, nullptr, m_sWriterError );
 	m_wrDict.PutByte ( 1 );
-
-	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK * (int)sizeof ( DictKeyword_t ) ); // can't use less than 1 chunk
 }
 
 

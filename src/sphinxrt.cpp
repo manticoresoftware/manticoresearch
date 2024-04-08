@@ -3354,10 +3354,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 	AttrIndexBuilder_c tMinMaxBuilder(m_tSchema);
 
+	BuildBufferSettings_t tSettings; // use default buffer settings
+
 	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
-		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, sSPB, m_tSettings.m_tBlobUpdateSpace, sError );
+		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, sSPB, m_tSettings.m_tBlobUpdateSpace, tSettings.m_iBufferAttributes, sError );
 		if ( !pBlobRowBuilder )
 			return false;
 	}
@@ -3365,7 +3367,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{
-		pDocstoreBuilder = CreateDocstoreBuilder ( sSPDS, m_tSettings, sError );
+		pDocstoreBuilder = CreateDocstoreBuilder ( sSPDS, m_tSettings, tSettings.m_iBufferStorage, sError );
 		if ( !pDocstoreBuilder )
 			return false;
 
@@ -3375,7 +3377,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	std::unique_ptr<columnar::Builder_i> pColumnarBuilder;
 	if ( m_tSchema.HasColumnarAttrs() )
 	{
-		pColumnarBuilder = CreateColumnarBuilder ( m_tSchema, sSPC, sError );
+		pColumnarBuilder = CreateColumnarBuilder ( m_tSchema, sSPC, tSettings.m_iBufferColumnar, sError );
 		if ( !pColumnarBuilder )
 			return false;
 	}
@@ -3388,7 +3390,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	std::unique_ptr<SI::Builder_i> pSIdxBuilder;
 	if ( IsSecondaryLibLoaded() )
 	{
-		pSIdxBuilder = CreateIndexBuilder ( m_iRtMemLimit, m_tSchema, sSIdx, dSiAttrs, sError );
+		pSIdxBuilder = CreateIndexBuilder ( m_iRtMemLimit, m_tSchema, sSIdx, dSiAttrs, tSettings.m_iBufferStorage, sError );
 		if ( !pSIdxBuilder )
 			return false;
 	}
@@ -3497,7 +3499,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( pDocstoreBuilder )
 		pDocstoreBuilder->Finalize();
 
-	if ( pKNNBuilder && !pKNNBuilder->Save ( sSKNN.cstr(), sErrorSTL ) )
+	if ( pKNNBuilder && !pKNNBuilder->Save ( sSKNN.cstr(), tSettings.m_iBufferStorage, sErrorSTL ) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;

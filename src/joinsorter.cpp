@@ -967,6 +967,12 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 			return false;
 		}
 
+		if ( !pAttr2 && !sphJsonNameSplit ( sAttrIdx2.cstr() ) )
+		{
+			sError.SetSprintf ( "joined table %s: unknown column: %s", sIdx2.cstr(), sAttrIdx2.cstr() );
+			return false;
+		}
+
 		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING;
 
 		tFilter.m_sAttrName = sAttrIdx2;

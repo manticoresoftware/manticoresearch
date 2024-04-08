@@ -283,6 +283,9 @@ select * from join1 left join join2 on join1.id = join2.id where join2.name = 'n
 <!-- join ON mistype -->
 select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.izd;
 
+<!-- join ON mistype with match() -->
+select * from join1 left join join2 on join1.id = join2.id_typo where match('title1') and string_id = 1 and join2.name = 'name1' order by id asc;
+
 <!-- join filter mistype -->
 select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.id where join2.xidz>0;
 

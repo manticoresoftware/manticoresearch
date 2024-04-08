@@ -2857,12 +2857,20 @@ bool HttpHandlerPQ_c::Process()
 	if ( dPoints.GetLength()>2 )
 		pUID = dPoints.Begin() + 2;
 
-	bool bMatch = false;
-	bool bDelete = false;
+	enum class PercolateOp_e
+	{
+		UNKNOWN,
+		ADD,
+		DEL,
+		SEARCH
+	} eOp = PercolateOp_e::UNKNOWN;
+
 	if ( sOp=="_delete_by_query" )
-		bDelete = true;
-	else if ( sOp!="doc" )
-		bMatch = true;
+		eOp = PercolateOp_e::DEL;
+	else if ( sOp=="doc" )
+		eOp = PercolateOp_e::ADD;
+	else if ( sOp=="search" )
+		eOp = PercolateOp_e::SEARCH;
 
 	if ( IsEmpty ( m_sQuery ) )
 		return ListQueries ( sIndex );
@@ -2877,15 +2885,23 @@ bool HttpHandlerPQ_c::Process()
 	if ( !tRoot.Size() )
 		return ListQueries ( sIndex );
 
-	JsonObj_c tQuery = tRoot.GetObjItem ( "query", m_sError, bDelete );
-	if ( !tQuery && !bDelete )
+	if ( eOp==PercolateOp_e::UNKNOWN )
+	{
+		m_sError.SetSprintf ( "invalid percolate operation '%s', should be one of 'search' or 'doc' or '_delete_by_query'", sOp.cstr() );
+		ReportError ( SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+
+	JsonObj_c tQuery = tRoot.GetObjItem ( "query", m_sError, ( eOp==PercolateOp_e::DEL ) );
+	if ( !tQuery && ( eOp!=PercolateOp_e::DEL ) )
 	{
 		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	JsonObj_c tPerc = bMatch ? tQuery.GetObjItem ( "percolate", m_sError ) : JsonNull;
-	if ( bMatch && !tPerc )
+	JsonObj_c tPerc = ( ( eOp==PercolateOp_e::SEARCH ) ? tQuery.GetObjItem ( "percolate", m_sError ) : JsonNull );
+	if ( ( eOp==PercolateOp_e::SEARCH ) && !tPerc )
 	{
 		ReportError ( SPH_HTTP_STATUS_400 );
 		return false;
@@ -2903,9 +2919,9 @@ bool HttpHandlerPQ_c::Process()
 			bVerbose = tVerbose.BoolVal();
 	}
 
-	if ( bMatch )
+	if ( eOp==PercolateOp_e::SEARCH )
 		return DoCallPQ ( sIndex, tPerc, bVerbose );
-	else if ( bDelete )
+	else if ( eOp==PercolateOp_e::DEL )
 		return Delete ( sIndex, tRoot );
 	else
 	{

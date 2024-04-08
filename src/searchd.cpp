@@ -16520,6 +16520,23 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	StrVec_t dOldFiles;
 	pRtIndex->GetIndexFiles ( dOldFiles, dOldFiles );
 
+	StrVec_t dCopiedFiles;
+	auto tCleanup = AtScopeExit ( [&dCopiedFiles] { dCopiedFiles.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
+
+	StrVec_t dNewFiles = tContainer.GetFiles();
+	if ( !tContainer.GetError().IsEmpty() )
+	{
+		tOut.Error ( tContainer.GetError().cstr () );
+		return;
+	}
+
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
+	if ( !CopyExternalIndexFiles ( dNewFiles, sIndexPath, dCopiedFiles, sError ) )
+	{
+		tOut.Error ( sError.cstr () );
+		return;
+	}
+
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
 	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
@@ -16546,6 +16563,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	{
 		// all ok, delete old files
 		RemoveOutdatedFiles ( pRtIndex, dOldFiles );
+		dCopiedFiles.Reset();
 
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	}
@@ -19829,6 +19847,21 @@ static void SetOptionSI ( const CSphConfigSection & hSearchd, bool bTestMode )
 	SetSecondaryIndexDefault ( eState );
 }
 
+
+static void ConfigureMerge ( const CSphConfigSection & hSearchd )
+{
+	BuildBufferSettings_t tSettings;
+	tSettings.m_iBufferAttributes	= hSearchd.GetSize ( "merge_buffer_attributes",	tSettings.m_iBufferAttributes );
+	tSettings.m_iBufferColumnar		= hSearchd.GetSize ( "merge_buffer_columnar",	tSettings.m_iBufferColumnar );
+	tSettings.m_iBufferStorage		= hSearchd.GetSize ( "merge_buffer_storage",	tSettings.m_iBufferStorage );
+	tSettings.m_iBufferFulltext		= hSearchd.GetSize ( "merge_buffer_fulltext",	tSettings.m_iBufferFulltext );
+	tSettings.m_iBufferDict			= hSearchd.GetSize ( "merge_buffer_dict",		tSettings.m_iBufferDict );
+	tSettings.m_iSIMemLimit			= hSearchd.GetSize ( "merge_si_memlimit",		tSettings.m_iSIMemLimit );
+
+	SetMergeSettings(tSettings);
+}
+
+
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode ) REQUIRES ( MainThread )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
@@ -20094,6 +20127,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );
+
+	ConfigureMerge(hSearchd);
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

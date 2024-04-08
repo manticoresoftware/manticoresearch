@@ -811,6 +811,13 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 		if ( i==sDest )
 			continue;
 
+		// can not overwrite existed destination file
+		if ( sphIsReadable ( sDest.cstr(), nullptr ) )
+		{
+			sError.SetSprintf ( "can not overwrite index file '%s'", sDest.cstr() );
+			return false;
+		}
+
 		if ( !CopyFile ( i, sDest, sError ) )
 			return false;
 

@@ -10,6 +10,15 @@ docker pull elasticsearch:8.13.0 > /dev/null
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d -v ./test/clt-tests/mysqldump/scripts/generate-records.sh:/generate-records.sh ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
+docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
 ––– output –––
 0
+––– input –––
+docker run -d --name elasticsearch --net test_network -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:8.13.0
+––– output –––
+––– input –––
+elasticdump --input=http://localhost:9200/your_index   --output=http://localhost:9308/your_index --type=mapping
+––– output –––
+––– input –––
+elasticdump --input=http://localhost:9200/your_index   --output=http://localhost:9308/your_index --type=data
+––– output –––

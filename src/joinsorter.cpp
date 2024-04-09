@@ -442,6 +442,8 @@ private:
 	bool							m_bFinalCalcOnly = false;
 	const ISphSchema *				m_pSorterSchema = nullptr;
 	CSphVector<ContextCalcItem_t>	m_dAggregates;
+	bool							m_bHaveNullFilters = false;
+	bool							m_bHaveNotNullFilters = false;
 
 	MatchCache_c					m_tCache;
 	bool							m_bCacheOk = true;
@@ -726,6 +728,26 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 		m_bCacheOk &= bInCache;
 	}
 
+	auto tScopedReset = AtScopeExit ( [this, bInCache]
+	{
+		if ( bInCache )
+		{
+			for ( auto & i : m_dMatches )
+				i.m_pDynamic = nullptr;
+		}
+		else
+		{
+			for ( auto & i : m_dMatches )
+			{
+				m_pRightSorterSchema->FreeDataPtrs(i);
+				i.ResetDynamic();
+			}
+		}
+	} );
+
+	if ( m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT && m_bHaveNullFilters )
+		return false;
+
 	CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
 	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
 	m_tMatch.m_pDynamic = pDynamic;
@@ -756,21 +778,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 			}
 	}
 
-	if ( bInCache )
-	{
-		for ( auto & i : m_dMatches )
-			i.m_pDynamic = nullptr;
-	}
-	else
-	{
-		for ( auto & i : m_dMatches )
-		{
-			m_pRightSorterSchema->FreeDataPtrs(i);
-			i.ResetDynamic();
-		}
-	}
-
-	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT )
+	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT && !m_bHaveNotNullFilters )
 	{
 		memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
 		CalcContextItems ( m_tMatch, m_dAggregates );
@@ -854,9 +862,18 @@ bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 }
 
 
+static void RemoveTableNamePrefix ( CSphString & sAttr, const CSphFilterSettings & tFilter, const CSphString & sPrefix )
+{
+	int iPrefixLen = sPrefix.Length();
+	sAttr = tFilter.m_sAttrName.SubString ( iPrefixLen, tFilter.m_sAttrName.Length() - iPrefixLen );
+}
+
+
 bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 {
 	m_tJoinQuery.m_dFilters.Resize(0);
+	m_bHaveNullFilters = false;
+	m_bHaveNotNullFilters = false;
 
 	// add rhs filters that we removed in TransformFilters
 	CSphString sPrefix;
@@ -879,6 +896,8 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 				continue;
 		}
 
+		m_bHaveNullFilters |= tFilter.m_eType==SPH_FILTER_NULL && tFilter.m_bIsNull;
+		m_bHaveNotNullFilters |= tFilter.m_eType==SPH_FILTER_NULL && !tFilter.m_bIsNull;
 		dRightFilters.Add ( {i,bHasPrefix} );
 	}
 
@@ -887,26 +906,24 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 		if ( !dRightFilters.GetLength() )
 			return true;
 
-		if ( dRightFilters.GetLength()==m_tQuery.m_dFilters.GetLength() )
-			m_tJoinQuery.m_dFilterTree = m_tQuery.m_dFilterTree;
-		else
+		if ( m_bHaveNullFilters || m_bHaveNotNullFilters || dRightFilters.GetLength()!=m_tQuery.m_dFilters.GetLength() )
 		{
 			sError = "Mixed filters on left/right tables with OR between them are not currently supported in JOIN";
 			return false;
 		}
+
+		m_tJoinQuery.m_dFilterTree = m_tQuery.m_dFilterTree;
 	}
 
 	ARRAY_FOREACH ( i, dRightFilters )
 	{
 		const auto & tFilter = m_tQuery.m_dFilters[dRightFilters[i].first];
-		m_tJoinQuery.m_dFilters.Add(tFilter);
+		if ( tFilter.m_eType==SPH_FILTER_NULL )
+			continue;
 
-		// remove table name prefix
+		m_tJoinQuery.m_dFilters.Add(tFilter);
 		if ( dRightFilters[i].second )
-		{
-			int iPrefixLen = sPrefix.Length();
-			m_tJoinQuery.m_dFilters.Last().m_sAttrName = tFilter.m_sAttrName.SubString ( iPrefixLen, tFilter.m_sAttrName.Length() - iPrefixLen );
-		}
+			RemoveTableNamePrefix ( m_tJoinQuery.m_dFilters.Last().m_sAttrName, tFilter, sPrefix );
 	}
 
 	return true;

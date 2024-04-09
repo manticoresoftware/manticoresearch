@@ -298,6 +298,15 @@ select * from join1 left join join2 on join1.id = join2.id where match('title1')
 <!-- join filter mistype -->
 select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.id where join2.xidz>0;
 
+<!-- IS NULL filter -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name is null order by id asc;
+
+<!-- IS NOT NULL filter -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name is not null order by id asc;
+
+<!-- IS NULL filter vs filter tree (not supported) -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name is null order by id asc;
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

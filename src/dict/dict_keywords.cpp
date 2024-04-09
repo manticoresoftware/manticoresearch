@@ -49,7 +49,7 @@ static CSphWordHit* FindFirstGte ( CSphWordHit* pHits, int iHits, SphWordID_t uI
 class CSphDictKeywords final: public CSphDictCRC<CRCALGO::CRC32>
 {
 	using BASE = CSphDictCRC<CRCALGO::CRC32>;
-public:
+private:
 	// OPTIMIZE? change pointers to 8:24 locators to save RAM on x64 gear?
 	struct HitblockKeyword_t
 	{
@@ -105,6 +105,14 @@ public:
 	SphWordID_t GetWordIDNonStemmed ( BYTE* pWord ) final;
 	SphWordID_t GetWordID ( const BYTE* pWord, int iLen, bool bFilterStops ) final;
 	DictRefPtr_c Clone() const final { return CloneBase ( new CSphDictKeywords() ); }
+
+	/// full crc and keyword check
+	inline static bool FullIsLess ( const HitblockException_t& a, const HitblockException_t& b ) noexcept
+	{
+		if ( a.m_uCRC != b.m_uCRC )
+			return a.m_uCRC < b.m_uCRC;
+		return strcmp ( a.m_pEntry->m_pKeyword, b.m_pEntry->m_pKeyword ) < 0;
+	}
 
 protected:
 	~CSphDictKeywords() final;
@@ -646,14 +654,6 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	return !m_wrDict.IsError();
 }
 
-struct DictKeywordCmp_fn
-{
-	inline bool IsLess ( CSphDictKeywords::DictKeyword_t* a, CSphDictKeywords::DictKeyword_t* b ) const
-	{
-		return strcmp ( a->m_sKeyword, b->m_sKeyword ) < 0;
-	}
-};
-
 void CSphDictKeywords::DictFlush()
 {
 	if ( !m_dDictChunks.GetLength() )
@@ -678,7 +678,10 @@ void CSphDictKeywords::DictFlush()
 			dWords[iIdx++] = pWord++;
 	}
 
-	dWords.Sort ( DictKeywordCmp_fn() );
+	dWords.Sort ( Lesser ( [] ( const CSphDictKeywords::DictKeyword_t* a, const CSphDictKeywords::DictKeyword_t* b ) noexcept {
+		return strcmp ( a->m_sKeyword, b->m_sKeyword ) < 0;
+	} ) );
+
 
 	// write em
 	DictBlock_t& tBlock = m_dDictBlocks.Add();
@@ -819,16 +822,6 @@ SphWordID_t CSphDictKeywords::GetWordID ( const BYTE* pWord, int iLen, bool bFil
 	return HitblockGetID ( (const char*)pWord, iLen, uCRC ); // !COMMIT would break, we kind of strcmp inside; but must never get called?
 }
 
-/// full crc and keyword check
-namespace {
-inline bool FullIsLess ( const CSphDictKeywords::HitblockException_t& a, const CSphDictKeywords::HitblockException_t& b )
-{
-	if ( a.m_uCRC != b.m_uCRC )
-		return a.m_uCRC < b.m_uCRC;
-	return strcmp ( a.m_pEntry->m_pKeyword, b.m_pEntry->m_pKeyword ) < 0;
-}
-} // namespace
-
 /// do hit block patching magic
 void CSphDictKeywords::HitblockPatch ( CSphWordHit* pHits, int iHits ) const
 {
@@ -856,7 +849,7 @@ void CSphDictKeywords::HitblockPatch ( CSphWordHit* pHits, int iHits ) const
 
 		// check whether they are in proper order already
 		bool bSorted = true;
-		for ( int i = iFirst; i < iMax - 1 && bSorted; i++ )
+		for ( int i = iFirst; i < iMax - 1 && bSorted; ++i )
 			if ( FullIsLess ( dExc[i + 1], dExc[i] ) )
 				bSorted = false;
 
@@ -904,10 +897,8 @@ void CSphDictKeywords::HitblockPatch ( CSphWordHit* pHits, int iHits ) const
 		{
 			// generic case, more than two
 			CSphVector<int> dReorder ( iMax - iFirst );
-			ARRAY_FOREACH ( i, dReorder )
-				dReorder[i] = i;
-
-			dReorder.Sort ( Lesser ( [pBase = &dExc[iFirst]] ( int a, int b ) { return FullIsLess ( pBase[a], pBase[b] ); } ) );
+			dReorder.FillSeq();
+			dReorder.Sort ( Lesser ( [pBase = &dExc[iFirst]] ( int a, int b ) noexcept { return FullIsLess ( pBase[a], pBase[b] ); } ) );
 
 			// OPTIMIZE? could skip heading and trailing blocks that are already in position
 			pTemp = new CSphWordHit[dChunk.Last() - dChunk[0]];

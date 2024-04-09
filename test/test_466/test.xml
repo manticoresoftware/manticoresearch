@@ -225,5 +225,25 @@ CREATE TABLE test_table_dates
 </query>
 <sphinxql>select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) as points from idx_dates group by points order by points asc</sphinxql>
 
+<!-- count(*) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{}}</query>
+<!-- min(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"min_code":{"min":{"field": "code"}}}}</query>
+<!-- max(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"max_code":{"max":{"field": "code"}}}}</query>
+<!-- sum(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"sum_code":{"sum":{"field": "code"}}}}</query>
+<!-- avg(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"avg_code":{"avg":{"field": "code"}}},
+"query": {
+    "range": {
+      "code": {
+        "lte": 200
+      }
+    }
+}
+}</query>
+
+
 </queries>
 </test>

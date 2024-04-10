@@ -6841,9 +6841,9 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 			if ( sphInterrupted () )
 				return false;
 
+			tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
 			if ( bHitless )
 			{
-				tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
 				tHit.m_dFieldMask = tQword.m_dQwordFields; // fixme! what field mask on hitless? m.b. write 0 here?
 				tHit.m_dFieldMask.DeleteBit (iKillField);
 				if ( tHit.m_dFieldMask.TestAll ( false ) )
@@ -6853,7 +6853,6 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 			} else
 			{
 				assert ( tQword.m_bHasHitlist );
-				tHit.m_tRowID = tQword.m_tDoc.m_tRowID;
 				for ( Hitpos_t uHit = tQword.GetNextHit(); uHit!=EMPTY_HIT; uHit = tQword.GetNextHit() )
 				{
 					int iField = HITMAN::GetField ( uHit );

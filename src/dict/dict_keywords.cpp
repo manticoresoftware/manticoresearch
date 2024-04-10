@@ -722,11 +722,7 @@ void CSphDictKeywords::DictFlush()
 
 void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 {
-	// they say, this might just happen during merge
-	// FIXME! can we make merge avoid sending such keywords to dict and assert here?
-	if ( !tEntry.m_iDocs )
-		return;
-
+	assert ( tEntry.m_iDocs );
 	assert ( tEntry.m_iHits );
 	assert ( tEntry.m_iDoclistLength > 0 );
 	assert ( m_iSkiplistBlockSize > 0 );

@@ -3524,7 +3524,8 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 			m_tWord.m_uWordID = m_tLastHit.m_uWordID;
 			m_tWord.m_sKeyword = m_tLastHit.m_sKeyword;
 			m_tWord.m_iDoclistLength = m_wrDoclist.GetPos() - m_tWord.m_iDoclistOffset;
-			m_pDict->DictEntry ( m_tWord );
+			if ( m_tWord.m_iDocs )
+				m_pDict->DictEntry ( m_tWord );
 
 			// reset trackers
 			m_tWord.m_iDocs = 0;

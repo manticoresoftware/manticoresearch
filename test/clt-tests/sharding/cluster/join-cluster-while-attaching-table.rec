@@ -1,0 +1,38 @@
+––– block: ../base/init –––
+––– block: ../base/start-searchd-1 –––
+––– block: ../base/start-searchd-2 –––
+––– block: ../base/start-searchd-3 –––
+––– input –––
+mysql -h0 -P19306 -e "create cluster a 'a' as path"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "create table t"
+––– output –––
+––– input –––
+mysql -h0 -P29306 -e "join cluster a at '127.0.0.1:19312' 'a' as path" &
+––– output –––
+[1] %{NUMBER}
+––– input –––
+mysql -h0 -P19306 -e "alter cluster a add t" &
+––– output –––
+[2] %{NUMBER}
+––– input –––
+mysql -h0 -P39306 -e "join cluster a at '127.0.0.1:19312' 'a' as path" &
+––– output –––
+[3] %{NUMBER}
+––– input –––
+wait 1>/dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "#$i – $?"; done
+––– output –––
+#1 – 1
+#2 – 1
+#3 – 1
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show tables\G" | grep 'Index: t'; done
+––– output –––
+Index: t
+Index: t
+Index: t

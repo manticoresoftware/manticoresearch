@@ -1,0 +1,23 @@
+––– input –––
+mysql -h0 -P19306 -e "create cluster c"
+––– output –––
+––– input –––
+mysql -h0 -P29306 -e "join cluster c at '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P39306 -e "join cluster c at '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P49306 -e "join cluster c at '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P59306 -e "join cluster c at '127.0.0.1:19312'"
+––– output –––
+––– input –––
+mysql -h0 -P19306 -e "show status like 'cluster_c_status'"
+––– output –––
++------------------+---------+
+| Counter          | Value   |
++------------------+---------+
+| cluster_c_status | primary |
++------------------+---------+

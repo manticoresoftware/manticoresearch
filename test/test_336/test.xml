@@ -485,6 +485,12 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 { "index":"test_rt1", "query": { "equals": {  "str_col": "STR" } } }
 </query>
 
+<!-- lt lte gt gte vaiants of string comparsions -->
+<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"lt":"str2" } } } }</query>
+<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"lte":"str1" } } } }</query>
+<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gt":"str5" } } } }</query>
+<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gte":"str5" } } } }</query>
+
 </httpqueries>
 
 </test>

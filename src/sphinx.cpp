@@ -11207,6 +11207,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tFlx.m_bScan = tQuery.m_sQuery.IsEmpty ();
 	tFlx.m_pHistograms = m_pHistograms;
 	tFlx.m_pSI = m_pSIdx.get();
+	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	if ( !TransformFilters ( tFlx, dTransformedFilters, tMeta.m_sError ) )

@@ -35,7 +35,7 @@ SphLesser<COMP>::SphLesser ( COMP&& fnComp )
 
 template<typename COMP>
 template<typename T>
-bool SphLesser<COMP>::IsLess ( T&& a, T&& b ) const noexcept
+bool SphLesser<COMP>::IsLess ( T&& a, T&& b ) const noexcept ( noexcept ( m_fnComp ) )
 {
 	return m_fnComp ( std::forward<T> ( a ), std::forward<T> ( b ) );
 }

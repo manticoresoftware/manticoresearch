@@ -47,7 +47,7 @@ struct SphLesser
 	explicit SphLesser ( COMP&& fnComp );
 
 	template<typename T>
-	bool IsLess ( T&& a, T&& b ) const noexcept;
+	bool IsLess ( T&& a, T&& b ) const noexcept ( noexcept ( m_fnComp ) );
 };
 
 // make

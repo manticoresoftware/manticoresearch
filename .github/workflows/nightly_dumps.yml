@@ -40,3 +40,21 @@ jobs:
           image: manticoresoftware/dind:latest
           test_prefix: test/clt-tests/mysqldump/versions/
           run_args: --privileged
+
+  clt_test_migration_es_ms:
+    name: Testing supported myqldump versions
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build test kit
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+          tags: manticoresoftware/dind:latest
+          context: test/clt-tests/migration-es-ms/docker/
+      - uses: manticoresoftware/clt@0.1.13
+        with:
+          image: manticoresoftware/dind:latest
+          test_prefix: test/clt-tests/migration-es-ms/
+          run_args: --privileged

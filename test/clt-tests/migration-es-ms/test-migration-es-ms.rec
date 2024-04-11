@@ -4,21 +4,88 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– output –––
 0
 ––– input –––
-docker pull elasticsearch:8.13.0 > /dev/null
+docker pull docker.elastic.co/elasticsearch/elasticsearch:7.5.2 > /dev/null
 ––– output –––
+––– input –––
+npm install elasticdump -g elasticdump > /dev/null 2>&1; echo $?
+––– output –––
+0
 ––– input –––
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
+docker run -it --privileged --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -p 9308:9308 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker run -d --name elasticsearch --net test_network -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:8.13.0
+docker run -d --name elasticsearch --platform linux/amd64 --net test_network -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.5.2 > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
-elasticdump --input=http://localhost:9200/your_index   --output=http://localhost:9308/your_index --type=mapping
+elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output=http://localhost:9200/es_index --type=mapping
 ––– output –––
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
+(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 1 objects from source file (offset: 0)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 1 objects to destination elasticsearch, wrote 2
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source file (offset: 1)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 2
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
-elasticdump --input=http://localhost:9200/your_index   --output=http://localhost:9308/your_index --type=data
+elasticdump --input=./test/clt-tests/migration-es-ms/index_data.json --output=http://localhost:9200/es-index --type=data
 ––– output –––
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
+(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 0)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 100)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 200)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 300)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 64 objects from source file (offset: 400)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 64 objects to destination elasticsearch, wrote 64
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source file (offset: 464)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 464
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
+––– input –––
+elasticdump --input=http://localhost:9200/es-index   --output=http://localhost:9308/ms_index  --type=mapping
+––– output –––
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
+(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 1 objects from source elasticsearch (offset: 0)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 1 objects to destination elasticsearch, wrote 1
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source elasticsearch (offset: 1)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 1
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
+––– input –––
+elasticdump --input=http://localhost:9200/es-index   --output=http://localhost:9308/ms_index --type=data
+––– output –––
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
+(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 0)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 100)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 200)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 300)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 64 objects from source elasticsearch (offset: 400)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 64 objects to destination elasticsearch, wrote 64
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source elasticsearch (offset: 464)
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 464
+#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM ms_index;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|      464 |
++----------+

@@ -565,14 +565,8 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 				ExprParseArgs_t tExprArgs;
 				dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), tSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) );
 			}
-			else if ( tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
-			{
-				assert ( tAttr.m_pExpr );
-				dJsonKeys.Add ( tAttr.m_pExpr );
-			} else
-			{
+			else
 				dJsonKeys.Add ( nullptr );
-			}
 
 			m_bJoinedGroupSort |= IsJoinAttr(sGroupBy);
 		}

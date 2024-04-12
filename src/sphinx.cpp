@@ -3338,7 +3338,7 @@ void CSphHitBuilder::HitReset()
 	m_tLastHit.m_tRowID = INVALID_ROWID;
 	m_tLastHit.m_uWordID = 0;
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
-	m_tLastHit.m_sKeyword = m_sLastKeyword;
+	m_tLastHit.m_szKeyword = m_sLastKeyword;
 	m_iPrevHitPos = 0;
 	m_bGotFieldEnd = false;
 }
@@ -3483,7 +3483,7 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 	// next word
 	/////////////
 
-	const bool bNextWord = ( m_tLastHit.m_uWordID!=pHit->m_uWordID ||	( m_pDict->GetSettings().m_bWordDict && strcmpp ( (const char*)m_tLastHit.m_sKeyword, (const char*)pHit->m_sKeyword ) ) ); // OPTIMIZE?
+	const bool bNextWord = ( m_tLastHit.m_uWordID!=pHit->m_uWordID ||	( m_pDict->GetSettings().m_bWordDict && strcmpp ( (const char*)m_tLastHit.m_szKeyword, (const char*)pHit->m_szKeyword ) ) ); // OPTIMIZE?
 	const bool bNextDoc = bNextWord || ( m_tLastHit.m_tRowID!=pHit->m_tRowID );
 
 	if ( m_bGotFieldEnd && ( bNextWord || bNextDoc ) )
@@ -3522,7 +3522,7 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 
 			// emit dict entry
 			m_tWord.m_uWordID = m_tLastHit.m_uWordID;
-			m_tWord.m_sKeyword = m_tLastHit.m_sKeyword;
+			m_tWord.m_szKeyword = m_tLastHit.m_szKeyword;
 			m_tWord.m_iDoclistLength = m_wrDoclist.GetPos() - m_tWord.m_iDoclistOffset;
 			if ( m_tWord.m_iDocs )
 				m_pDict->DictEntry ( m_tWord );
@@ -3544,15 +3544,15 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 #ifndef NDEBUG
 		assert ( pHit->m_uWordID > m_tLastHit.m_uWordID
 			|| ( m_pDict->GetSettings().m_bWordDict &&
-				pHit->m_uWordID==m_tLastHit.m_uWordID && strcmp ( (const char*)pHit->m_sKeyword, (const char*)m_tLastHit.m_sKeyword )>0 )
+				pHit->m_uWordID==m_tLastHit.m_uWordID && strcmp ( (const char*)pHit->m_szKeyword, (const char*)m_tLastHit.m_szKeyword )>0 )
 			|| m_bMerging );
 #endif // usually assert excluded in release, but this is 'paranoid' clause
 		m_tWord.m_iDoclistOffset = m_wrDoclist.GetPos();
 		m_tLastHit.m_uWordID = pHit->m_uWordID;
 		if ( m_pDict->GetSettings().m_bWordDict )
 		{
-			assert ( strlen ( (const char *)pHit->m_sKeyword )<sizeof(m_sLastKeyword)-1 );
-			strncpy ( (char*)const_cast<BYTE*>(m_tLastHit.m_sKeyword), (const char*)pHit->m_sKeyword, sizeof(m_sLastKeyword) ); // OPTIMIZE?
+			assert ( strlen ( (const char *)pHit->m_szKeyword )<sizeof(m_sLastKeyword)-1 );
+			strncpy ( (char*)const_cast<BYTE*>(m_tLastHit.m_szKeyword), (const char*)pHit->m_szKeyword, sizeof(m_sLastKeyword) ); // OPTIMIZE?
 		}
 	}
 
@@ -4230,9 +4230,9 @@ inline bool SPH_CMPAGGRHIT_LESS ( const AggregateHit_t & a, const AggregateHit_t
 	if ( a.m_uWordID > b.m_uWordID )
 		return false;
 
-	if ( a.m_sKeyword )
+	if ( a.m_szKeyword )
 	{
-		int iCmp = strcmp ( (const char*)a.m_sKeyword, (const char*)b.m_sKeyword ); // OPTIMIZE?
+		int iCmp = strcmp ( (const char*)a.m_szKeyword, (const char*)b.m_szKeyword ); // OPTIMIZE?
 		if ( iCmp!=0 )
 			return ( iCmp<0 );
 	}
@@ -4283,7 +4283,7 @@ public:
 
 		tEntry.m_tRowID = tHit.m_tRowID;
 		tEntry.m_uWordID = tHit.m_uWordID;
-		tEntry.m_sKeyword = tHit.m_sKeyword; // bin must hold the actual data for the queue
+		tEntry.m_szKeyword = tHit.m_szKeyword; // bin must hold the actual data for the queue
 		tEntry.m_iWordPos = tHit.m_iWordPos;
 		tEntry.m_dFieldMask = tHit.m_dFieldMask;
 		tEntry.m_iBin = iBin;
@@ -6029,7 +6029,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		AggregateHit_t tFlush;
 		tFlush.m_tRowID = INVALID_ROWID;
 		tFlush.m_uWordID = 0;
-		tFlush.m_sKeyword = NULL;
+		tFlush.m_szKeyword = nullptr;
 		tFlush.m_iWordPos = EMPTY_HIT;
 		tFlush.m_dFieldMask.UnsetAll();
 		tHitBuilder.cidxHit ( &tFlush );
@@ -6333,13 +6333,13 @@ public:
 	{}
 
 	template < typename QWORD >
-	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * sWord,
+	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * szWord,
 							const CSphIndex_VLN * pSourceIndex, const VecTraits_T<RowID_t>& dRows,
 							MergeCb_c & tMonitor )
 	{
 		AggregateHit_t tHit;
 		tHit.m_uWordID = iWordID;
-		tHit.m_sKeyword = sWord;
+		tHit.m_szKeyword = szWord;
 		tHit.m_dFieldMask.UnsetAll();
 
 		while ( QwordIteration::NextDocument ( tQword, pSourceIndex, dRows ) && !tMonitor.NeedStop() )
@@ -6496,7 +6496,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 			AggregateHit_t tHit;
 			tHit.m_uWordID = tDstReader.m_uWordID; // !COMMIT m_sKeyword anyone?
-			tHit.m_sKeyword = tDstReader.GetWord();
+			tHit.m_szKeyword = tDstReader.GetWord();
 			tHit.m_dFieldMask.UnsetAll();
 
 			// we assume that all the duplicates have been removed
@@ -6748,7 +6748,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	AggregateHit_t tFlush;
 	tFlush.m_tRowID = INVALID_ROWID;
 	tFlush.m_uWordID = 0;
-	tFlush.m_sKeyword = (const BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
+	tFlush.m_szKeyword = (const BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
 	tFlush.m_iWordPos = EMPTY_HIT;
 	tFlush.m_dFieldMask.UnsetAll();
 	tHitBuilder.cidxHit ( &tFlush );
@@ -6832,7 +6832,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 
 		AggregateHit_t tHit;
 		tHit.m_uWordID = tWordsReader.m_uWordID; // !COMMIT m_sKeyword anyone?
-		tHit.m_sKeyword = tWordsReader.GetWord();
+		tHit.m_szKeyword = tWordsReader.GetWord();
 		tHit.m_dFieldMask.UnsetAll();
 
 		// transfer hits
@@ -6912,7 +6912,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 	AggregateHit_t tFlush;
 	tFlush.m_tRowID = INVALID_ROWID;
 	tFlush.m_uWordID = 0;
-	tFlush.m_sKeyword = (const BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
+	tFlush.m_szKeyword = (const BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
 	tFlush.m_iWordPos = EMPTY_HIT;
 	tFlush.m_dFieldMask.UnsetAll();
 	tHitBuilder.cidxHit ( &tFlush );

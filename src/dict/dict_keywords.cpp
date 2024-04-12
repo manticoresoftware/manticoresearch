@@ -554,12 +554,12 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 				m_wrDict.ZipInt ( 0 );
 			}
 
-			BYTE* sClone = new BYTE[iLen + 1]; // OPTIMIZE? pool these?
-			memcpy ( sClone, tWord.m_sKeyword, iLen );
-			sClone[iLen] = '\0';
+			BYTE* szClone = new BYTE[iLen + 1]; // OPTIMIZE? pool these?
+			memcpy ( szClone, tWord.m_sKeyword, iLen );
+			szClone[iLen] = '\0';
 
 			CSphWordlistCheckpoint& tCheckpoint = m_dCheckpoints.Add();
-			tCheckpoint.m_sWord = (char*)sClone;
+			tCheckpoint.m_szWord = (char*)szClone;
 			tCheckpoint.m_iWordlistOffset = m_wrDict.GetPos();
 
 			tLastKeyword.Reset();
@@ -617,16 +617,16 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 
 	ARRAY_FOREACH ( i, m_dCheckpoints )
 	{
-		auto iLen = (const int)strlen ( m_dCheckpoints[i].m_sWord );
+		auto iLen = (const int)strlen ( m_dCheckpoints[i].m_szWord );
 
 		assert ( m_dCheckpoints[i].m_iWordlistOffset > 0 );
 		assert ( iLen > 0 && iLen < MAX_KEYWORD_BYTES );
 
 		m_wrDict.PutDword ( iLen );
-		m_wrDict.PutBytes ( m_dCheckpoints[i].m_sWord, iLen );
+		m_wrDict.PutBytes ( m_dCheckpoints[i].m_szWord, iLen );
 		m_wrDict.PutOffset ( m_dCheckpoints[i].m_iWordlistOffset );
 
-		SafeDeleteArray ( m_dCheckpoints[i].m_sWord );
+		SafeDeleteArray ( m_dCheckpoints[i].m_szWord );
 	}
 
 	// flush infix hash blocks
@@ -728,7 +728,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 	assert ( m_iSkiplistBlockSize > 0 );
 
 	DictKeyword_t* pWord = NULL;
-	auto iLen = (int)strlen ( (const char*)tEntry.m_sKeyword ) + 1;
+	auto iLen = (int)strlen ( (const char*)tEntry.m_szKeyword ) + 1;
 
 	while ( true )
 	{
@@ -765,7 +765,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 	pWord = m_pDictChunk++;
 	m_iDictChunkFree--;
 	pWord->m_sKeyword = (char*)m_pKeywordChunk;
-	memcpy ( m_pKeywordChunk, tEntry.m_sKeyword, iLen );
+	memcpy ( m_pKeywordChunk, tEntry.m_szKeyword, iLen );
 	m_pKeywordChunk[iLen - 1] = '\0';
 	m_pKeywordChunk += iLen;
 	m_iKeywordChunkFree -= iLen;

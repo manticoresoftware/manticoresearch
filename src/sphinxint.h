@@ -907,13 +907,13 @@ int sphDictCmpStrictly ( const char* pStr1, int iLen1, const char* pStr2, int iL
 template <typename CP>
 int sphCheckpointCmp ( const char * sWord, int iLen, const CP & tCP )
 {
-	return sphDictCmp ( sWord, iLen, tCP.m_sWord, (int) strlen ( tCP.m_sWord ) );
+	return sphDictCmp ( sWord, iLen, tCP.m_szWord, (int) strlen ( tCP.m_szWord ) );
 }
 
 template <typename CP>
 int sphCheckpointCmpStrictly ( const char * sWord, int iLen, const CP & tCP )
 {
-	return sphDictCmpStrictly ( sWord, iLen, tCP.m_sWord, (int)strlen ( tCP.m_sWord ) );
+	return sphDictCmpStrictly ( sWord, iLen, tCP.m_szWord, (int)strlen ( tCP.m_szWord ) );
 }
 
 template<typename CP>

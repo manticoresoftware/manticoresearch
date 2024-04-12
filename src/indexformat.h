@@ -74,7 +74,7 @@ struct CSphWordlistCheckpoint
 	union
 	{
 		SphWordID_t		m_uWordID;
-		const char *	m_sWord;
+		const char *	m_szWord;
 	};
 	SphOffset_t			m_iWordlistOffset;
 };

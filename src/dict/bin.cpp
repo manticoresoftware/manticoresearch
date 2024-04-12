@@ -22,7 +22,7 @@ CSphBin::CSphBin ( ESphHitless eMode, bool bWordDict )
 	: m_eMode ( eMode )
 	, m_bWordDict ( bWordDict )
 {
-	m_tHit.m_sKeyword = bWordDict ? m_sKeyword : nullptr;
+	m_tHit.m_szKeyword = bWordDict ? m_sKeyword : nullptr;
 	m_sKeyword[0] = '\0';
 
 #ifndef NDEBUG

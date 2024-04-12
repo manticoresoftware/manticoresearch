@@ -1083,6 +1083,30 @@ static ESphAggrFunc GetAggr ( Aggr_e eAggrFunc )
 	}
 }
 
+template<bool HAS_ATTRS>
+void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dItems, sph::StringSet * pAttrs )
+{
+	if_const ( HAS_ATTRS )
+	{
+		assert ( pAttrs );
+	}
+
+	StrVec_t dAttrs;
+	sphSplit ( dAttrs, sCol.cstr(), "," );
+	for ( const CSphString & sCol : dAttrs )
+	{
+		if_const ( HAS_ATTRS )
+			if ( (*pAttrs)[sCol] )
+				continue;
+
+		CSphQueryItem & tItem = dItems.Add();
+		tItem.m_sExpr = sCol;
+		tItem.m_sAlias = sCol;
+		if_const ( HAS_ATTRS )
+			(*pAttrs).Add ( sCol );
+	}
+}
+
 std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
 {
 	tQuery.m_pQueryParser = pQueryParser.get();
@@ -1114,8 +1138,14 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		if ( hAttrs[tBucket.m_sCol] )
 			continue;
 
-		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE || tBucket.m_eAggrFunc==Aggr_e::COUNT )
+		if ( tBucket.m_eAggrFunc==Aggr_e::COUNT )
 			continue;
+
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+		{
+			AddCompositeItems<true> ( tBucket.m_sCol, tQuery.m_dItems, &hAttrs );
+			continue;
+		}
 
 		CSphQueryItem & tItem = tQuery.m_dItems.Add();
 		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
@@ -1127,6 +1157,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		{
 			tItem.m_sExpr = tBucket.m_sCol;
 			tItem.m_sAlias = tBucket.m_sCol;
+			hAttrs.Add ( tBucket.m_sCol );
 		}
 
 		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
@@ -1161,7 +1192,6 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 
 		// ref items to facet query
 		tQuery.m_dRefItems.Resize ( 0 );
-		CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 		switch ( tBucket.m_eAggrFunc )
 		{
 			case Aggr_e::SIGNIFICANT:
@@ -1169,11 +1199,17 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 			case Aggr_e::DATE_HISTOGRAM:
 			case Aggr_e::RANGE:
 			case Aggr_e::DATE_RANGE:
+			{
+				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
 				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			}
 			break;
 
 			case Aggr_e::COMPOSITE:
+				AddCompositeItems<false> ( tBucket.m_sCol, tQuery.m_dRefItems, nullptr );
+				break;
+
 			case Aggr_e::COUNT:
 			break;
 
@@ -1181,14 +1217,20 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 			case Aggr_e::MAX:
 			case Aggr_e::SUM:
 			case Aggr_e::AVG:
+			{
+				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
 				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
 				tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+			}
 			break;
 
 			default:
+			{
+				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 				tItem.m_sExpr = tBucket.m_sCol;
 				tItem.m_sAlias = tBucket.m_sCol;
+			}
 			break;
 		}
 

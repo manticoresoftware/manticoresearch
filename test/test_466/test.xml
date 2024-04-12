@@ -64,6 +64,22 @@ index idx_dates
     path			= <data_path/>/idx_dates
 }
 
+source src_multi1
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_multi1
+	sql_attr_uint   = brand_id
+	sql_attr_json     = j
+}
+
+
+index multi1
+{
+	source            = src_multi1
+	path              = <data_path/>/multi1
+}
+
 </config>
 
 <db_drop>drop table if exists test_group1</db_drop>
@@ -135,6 +151,22 @@ CREATE TABLE test_table_dates
 
 <db_drop>DROP TABLE IF EXISTS test_table_dates</db_drop>
 
+<db_create>
+CREATE TABLE `table_multi1` (
+  `id` int(11),
+  `title` varchar(255),
+  `brand_id` int(11),
+  `j` varchar(255)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `table_multi1`;</db_drop>
+
+<db_insert>
+insert into table_multi1 (id,title,brand_id,j) values
+(1,'Product 1', 11, '{a:13, b:14}'),
+(2,'Product 2', 12, '{a:13, b:12}'),
+(3,'Product 3', 11, '{a:13, b:13}')
+</db_insert>
 
 <queries>
 <query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "size": 40 } }} }</query>
@@ -243,6 +275,26 @@ CREATE TABLE test_table_dates
     }
 }
 }</query>
+
+<!-- aggs.composite with JSON.field  -->
+<query endpoint="json/search">
+{
+    "index": "multi1",
+    "size":0,
+    "aggs": {
+        "gr_1": {
+            "composite": {
+                "size":20,
+                "sources": [
+                    { "brand_id": { "terms": { "field": "brand_id" } } },
+                    { "product_id": { "terms": { "field": "j.a" } } }
+                ]
+            }
+        }
+    }
+}
+</query>
+
 
 
 </queries>

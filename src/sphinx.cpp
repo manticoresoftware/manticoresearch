@@ -6710,10 +6710,9 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	}
 
 	const CSphIndex_VLN* pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
-	CSphAutofile tTmpDict ( pDstIndex->GetFilename("spi.tmp"), SPH_O_NEW, sError, true ); // that is huge file with bins
 	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError, true );
 
-	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || tMonitor.NeedStop() )
+	if ( !sError.IsEmpty() || tDict.GetFD()<0 || tMonitor.NeedStop() )
 		return false;
 
 	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
@@ -6721,8 +6720,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
 
+	int iInfixCodepointBytes = 0;
+	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().m_bWordDict )
+		iInfixCodepointBytes = pSettings->m_pTokenizer->GetMaxCodepointLength();
+
 	// FIXME? is this magic dict block constant any good?..
-	pDict->DictBegin ( tTmpDict, tDict, g_tMergeSettings.m_iBufferDict );
+	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
@@ -6875,10 +6878,9 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 
 bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError )
 {
-	CSphAutofile tTmpDict ( GetFilename ( "spi.tmp" ), SPH_O_NEW, sError, true );
 	CSphAutofile tNewDict ( GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError );
 
-	if ( !sError.IsEmpty () || tTmpDict.GetFD ()<0 || tNewDict.GetFD ()<0 || sphInterrupted () )
+	if ( !sError.IsEmpty () || tNewDict.GetFD ()<0 || sphInterrupted () )
 		return false;
 
 	DictRefPtr_c pDict { m_pDict->Clone () };
@@ -6888,7 +6890,12 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, nullptr );
 
 	// FIXME? is this magic dict block constant any good?..
-	pDict->DictBegin ( tTmpDict, tNewDict, iHitBufferSize );
+
+	int iInfixCodepointBytes = 0;
+	if ( m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().m_bWordDict )
+		iInfixCodepointBytes = m_pTokenizer->GetMaxCodepointLength();
+
+	pDict->SortedDictBegin ( tNewDict, iHitBufferSize, iInfixCodepointBytes );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
@@ -6922,7 +6929,6 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 		return false;
 
 	/// as index is w-locked, we can also detach doclist/hitlist/dictionary and juggle them.
-	tTmpDict.Close();
 	tNewDict.Close();
 
 	m_tWordlist.Reset();

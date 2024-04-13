@@ -44,7 +44,12 @@ static CSphWordHit* FindFirstGte ( CSphWordHit* pHits, int iHits, SphWordID_t uI
 }
 
 //////////////////////////////////////////////////////////////////////////
-
+struct KeywordDictFinalization_t : public ISphNonCopyMovable
+{
+	std::unique_ptr<ISphInfixBuilder> m_pInfixer;
+	int m_iWords = 0;
+	CSphKeywordDeltaWriter m_tLastKeyword;
+};
 
 class CSphDictKeywords final: public CSphDictCRC<CRCALGO::CRC32>
 {
@@ -96,8 +101,9 @@ public:
 	void HitblockReset() final;
 
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) final;
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) final;
 	void DictEntry ( const DictEntry_t& tEntry ) final;
-	void DictEndEntries ( SphOffset_t ) final {}
+	void DictEndEntries ( SphOffset_t ) final {};
 	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) final;
 
 	SphWordID_t GetWordID ( BYTE* pWord ) final;
@@ -154,13 +160,17 @@ private:
 	CSphVector<DictBlock_t> m_dDictBlocks; ///< on-disk locations of dict entry blocks
 
 	std::array<char, MAX_KEYWORD_BYTES> m_sClippedWord; ///< keyword storage for clipped word
+	std::unique_ptr<KeywordDictFinalization_t> m_pFinalizer;
 
 private:
 	SphWordID_t HitblockGetID ( const char* pWord, int iLen, SphWordID_t uCRC );
 	HitblockKeyword_t* HitblockAddKeyword ( DWORD uHash, const char* pWord, int iLen, SphWordID_t uID );
 
+	inline bool IsSorted() const noexcept { return m_iDictLimit==0; }
 	void DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntry, BYTE* pKeyword );
 	void DictFlush();
+	void DictEntryNonSorted ( const DictEntry_t& tEntry );
+	bool SortedDictEnd ( DictHeader_t* pHeader, CSphString& sError );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -298,8 +308,8 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char* sWord, int iLen, SphWo
 				m_dHash[uHash] = pEntry;
 				return pEntry->m_uWordid;
 			}
-			a++;
-			b++;
+			++a;
+			++b;
 		}
 
 		// collision detected!
@@ -335,7 +345,7 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char* sWord, int iLen, SphWo
 
 			// incoming word collided into a known exception? clear the matched entry; no need to re-add it (see below)
 			if ( pExcWord == pEntry )
-				pEntry = NULL;
+				pEntry = nullptr;
 
 			// find first exception with wordid greater or equal to our candidate
 			if ( pExcWord->m_uWordid >= uWordid && iExc == iExcLen )
@@ -362,9 +372,9 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char* sWord, int iLen, SphWo
 			// candidate collides with a known exception? increment it, and keep looking
 			if ( iExc < iExcLen && m_dExceptions[iExc].m_pEntry->m_uWordid == uWordid )
 			{
-				uWordid++;
+				++uWordid;
 				while ( iExc < iExcLen && m_dExceptions[iExc].m_pEntry->m_uWordid < uWordid )
-					iExc++;
+					++iExc;
 				continue;
 			}
 
@@ -387,7 +397,7 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char* sWord, int iLen, SphWo
 			tColl.m_uCRC = pCheck->m_uWordid; // not a known exception; hence, wordid must equal crc
 
 			// and keep looking
-			uWordid++;
+			++uWordid;
 			continue;
 		}
 
@@ -466,9 +476,28 @@ void CSphDictKeywords::DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict,
 	m_wrDict.PutByte ( 1 );
 }
 
+void CSphDictKeywords::SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes )
+{
+	m_iTmpFD = -1;
+	m_wrDict.CloseFile();
+	m_wrDict.SetFile ( tDict, nullptr, m_sWriterError );
+	m_wrDict.PutByte ( 1 );
+	assert ( m_wrDict.GetPos() == 1 );
+
+	m_iDictLimit = 0; // 0 assumes we have sorted
+
+	m_pFinalizer = std::make_unique<KeywordDictFinalization_t>();
+	CSphString sError;
+	m_pFinalizer->m_pInfixer = sphCreateInfixBuilder ( iInfixCodepointBytes, &sError );
+	assert ( sError.IsEmpty() );
+}
 
 bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError )
 {
+	if ( IsSorted() )
+		return SortedDictEnd ( pHeader, sError );
+
+	assert ( !IsSorted() );
 	DictFlush();
 	m_wrTmpDict.CloseFile(); // tricky: file is not owned, so it won't get closed, and iTmpFD won't get invalidated
 
@@ -488,8 +517,10 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 		return true;
 	}
 
+	m_pFinalizer = std::make_unique<KeywordDictFinalization_t>();
+
 	// infix builder, if needed
-	std::unique_ptr<ISphInfixBuilder> pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError );
+	m_pFinalizer->m_pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError );
 	if ( !sError.IsEmpty() )
 		return false;
 
@@ -537,7 +568,6 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	}
 
 	bool bHasMorphology = HasMorphology();
-	CSphKeywordDeltaWriter tLastKeyword;
 	int iWords = 0;
 	while ( qWords.GetLength() )
 	{
@@ -562,7 +592,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 			tCheckpoint.m_szWord = (char*)szClone;
 			tCheckpoint.m_iWordlistOffset = m_wrDict.GetPos();
 
-			tLastKeyword.Reset();
+			m_pFinalizer->m_tLastKeyword.Reset();
 		}
 		++iWords;
 
@@ -572,7 +602,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 		assert ( tWord.m_iDocs );
 		assert ( tWord.m_iHits );
 
-		tLastKeyword.PutDelta ( m_wrDict, (const BYTE*)tWord.m_sKeyword, iLen );
+		m_pFinalizer->m_tLastKeyword.PutDelta ( m_wrDict, (const BYTE*)tWord.m_sKeyword, iLen );
 		m_wrDict.ZipOffset ( tWord.m_uOff );
 		m_wrDict.ZipInt ( tWord.m_iDocs );
 		m_wrDict.ZipInt ( tWord.m_iHits );
@@ -582,8 +612,8 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 			m_wrDict.ZipOffset ( tWord.m_iSkiplistPos );
 
 		// build infixes
-		if ( pInfixer )
-			pInfixer->AddWord ( (const BYTE*)tWord.m_sKeyword, iLen, m_dCheckpoints.GetLength(), bHasMorphology );
+		if ( m_pFinalizer->m_pInfixer )
+			m_pFinalizer->m_pInfixer->AddWord ( (const BYTE*)tWord.m_sKeyword, iLen, m_dCheckpoints.GetLength(), bHasMorphology );
 
 		// next
 		int iBin = tWord.m_iBlock;
@@ -602,14 +632,20 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 			qWords.Push ( tEntry );
 		}
 	}
+	return SortedDictEnd ( pHeader, sError );
+}
+
+bool CSphDictKeywords::SortedDictEnd ( DictHeader_t * pHeader, CSphString& sError )
+{
+	assert ( m_pFinalizer );
 
 	// end of dictionary block
 	m_wrDict.ZipInt ( 0 );
 	m_wrDict.ZipInt ( 0 );
 
 	// flush infix hash entries, if any
-	if ( pInfixer )
-		pInfixer->SaveEntries ( m_wrDict );
+	if ( m_pFinalizer->m_pInfixer )
+		m_pFinalizer->m_pInfixer->SaveEntries ( m_wrDict );
 
 	// flush wordlist checkpoints (blocks)
 	pHeader->m_iDictCheckpointsOffset = m_wrDict.GetPos();
@@ -630,13 +666,17 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	}
 
 	// flush infix hash blocks
-	if ( pInfixer )
+	if ( m_pFinalizer->m_pInfixer )
 	{
-		pHeader->m_iInfixBlocksOffset = pInfixer->SaveEntryBlocks ( m_wrDict );
-		pHeader->m_iInfixBlocksWordsSize = pInfixer->GetBlocksWordsSize();
+		pHeader->m_iInfixBlocksOffset = m_pFinalizer->m_pInfixer->SaveEntryBlocks ( m_wrDict );
+		pHeader->m_iInfixBlocksWordsSize = m_pFinalizer->m_pInfixer->GetBlocksWordsSize();
 		if ( pHeader->m_iInfixBlocksOffset > UINT_MAX ) // FIXME!!! change to int64
 			sphDie ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at dictend save", pHeader->m_iInfixBlocksOffset );
 	}
+
+	// cleanup stuff we no more need
+	m_dCheckpoints.Reset();
+	m_pFinalizer = nullptr;
 
 	// flush header
 	// mostly for debugging convenience
@@ -687,9 +727,8 @@ void CSphDictKeywords::DictFlush()
 	DictBlock_t& tBlock = m_dDictBlocks.Add();
 	tBlock.m_iPos = m_wrTmpDict.GetPos();
 
-	ARRAY_FOREACH ( i, dWords )
+	for ( const DictKeyword_t* pWord : dWords )
 	{
-		const DictKeyword_t* pWord = dWords[i];
 		auto iLen = (int)strlen ( pWord->m_sKeyword );
 		m_wrTmpDict.PutByte ( (BYTE)iLen );
 		m_wrTmpDict.PutBytes ( pWord->m_sKeyword, iLen );
@@ -705,16 +744,14 @@ void CSphDictKeywords::DictFlush()
 	tBlock.m_iLen = (int)( m_wrTmpDict.GetPos() - tBlock.m_iPos );
 
 	// clean up buffers
-	ARRAY_FOREACH ( i, m_dDictChunks )
-		SafeDeleteArray ( m_dDictChunks[i] );
+	m_dDictChunks.for_each ( [] ( auto& dChunk ) { delete[] ( dChunk ); } );
 	m_dDictChunks.Resize ( 0 );
-	m_pDictChunk = NULL;
+	m_pDictChunk = nullptr;
 	m_iDictChunkFree = 0;
 
-	ARRAY_FOREACH ( i, m_dKeywordChunks )
-		SafeDeleteArray ( m_dKeywordChunks[i] );
+	m_dKeywordChunks.for_each ( [] ( auto& dChunk ) { delete[] ( dChunk ); } );
 	m_dKeywordChunks.Resize ( 0 );
-	m_pKeywordChunk = NULL;
+	m_pKeywordChunk = nullptr;
 	m_iKeywordChunkFree = 0;
 
 	m_iMemUse = 0;
@@ -724,8 +761,58 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 {
 	assert ( tEntry.m_iDocs );
 	assert ( tEntry.m_iHits );
+	assert ( tEntry.m_iDoclistOffset );
 	assert ( tEntry.m_iDoclistLength > 0 );
 	assert ( m_iSkiplistBlockSize > 0 );
+
+	if ( !IsSorted() )
+		return DictEntryNonSorted ( tEntry );
+
+	auto iLen = (int)strlen ( (const char*)tEntry.m_szKeyword );
+
+	// store checkpoints as needed
+	if ( ( m_pFinalizer->m_iWords % SPH_WORDLIST_CHECKPOINT ) == 0 )
+	{
+		// emit a checkpoint, unless we're at the very dict beginning
+		if ( m_pFinalizer->m_iWords )
+		{
+			m_wrDict.ZipInt ( 0 );
+			m_wrDict.ZipInt ( 0 );
+		}
+
+		auto* szClone = new BYTE[iLen + 1]; // OPTIMIZE? pool these?
+		memcpy ( szClone, tEntry.m_szKeyword, iLen );
+		szClone[iLen] = '\0';
+
+		CSphWordlistCheckpoint& tCheckpoint = m_dCheckpoints.Add();
+		tCheckpoint.m_szWord = (const char*)szClone;
+		tCheckpoint.m_iWordlistOffset = m_wrDict.GetPos();
+
+		m_pFinalizer->m_tLastKeyword.Reset();
+	}
+	++m_pFinalizer->m_iWords;
+
+	// write final dict entry
+	assert ( iLen );
+	m_pFinalizer->m_tLastKeyword.PutDelta( m_wrDict, (const BYTE*)tEntry.m_szKeyword, iLen );
+	m_wrDict.ZipOffset ( tEntry.m_iDoclistOffset );
+	m_wrDict.ZipInt ( tEntry.m_iDocs );
+	m_wrDict.ZipInt ( tEntry.m_iHits );
+	auto uHint = sphDoclistHintPack ( tEntry.m_iDocs, tEntry.m_iDoclistLength );
+	if ( uHint )
+		m_wrDict.PutByte ( uHint );
+	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
+		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
+
+	// build infixes
+	if ( m_pFinalizer->m_pInfixer )
+		m_pFinalizer->m_pInfixer->AddWord ( (const BYTE*)tEntry.m_szKeyword, iLen, m_dCheckpoints.GetLength(), HasMorphology() );
+}
+
+// non-sorted case - we push all entries into huge temporary file, and then finalize it in DictEnd()
+void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )
+{
+	assert ( !IsSorted() );
 
 	DictKeyword_t* pWord = NULL;
 	auto iLen = (int)strlen ( (const char*)tEntry.m_szKeyword ) + 1;
@@ -763,7 +850,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 	}
 
 	pWord = m_pDictChunk++;
-	m_iDictChunkFree--;
+	--m_iDictChunkFree;
 	pWord->m_sKeyword = (char*)m_pKeywordChunk;
 	memcpy ( m_pKeywordChunk, tEntry.m_szKeyword, iLen );
 	m_pKeywordChunk[iLen - 1] = '\0';

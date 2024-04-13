@@ -22,7 +22,7 @@ CSphBin::CSphBin ( ESphHitless eMode, bool bWordDict )
 	: m_eMode ( eMode )
 	, m_bWordDict ( bWordDict )
 {
-	m_tHit.m_szKeyword = bWordDict ? m_sKeyword : nullptr;
+	m_tHit.m_szKeyword = bWordDict ? m_sKeyword.data() : nullptr;
 	m_sKeyword[0] = '\0';
 
 #ifndef NDEBUG
@@ -257,22 +257,22 @@ int CSphBin::ReadHit ( AggregateHit_t* pOut )
 #ifdef NDEBUG
 					// FIXME?! move this under PARANOID or something?
 					// or just introduce an assert() checked release build?
-					if ( uDelta >= sizeof ( m_sKeyword ) )
+					if ( uDelta >= std::size ( m_sKeyword ) )
 						sphDie ( "INTERNAL ERROR: corrupted keyword length (len=" UINT64_FMT ", deltapos=" UINT64_FMT ")",
 							(uint64_t)uDelta,
 							(uint64_t)( m_iFilePos - m_iLeft ) );
 #else
-					assert ( uDelta > 0 && uDelta < sizeof ( m_sKeyword ) - 1 );
+					assert ( uDelta > 0 && uDelta < std::size ( m_sKeyword ) - 1 );
 #endif
 
-					ReadBytes ( m_sKeyword, (int)uDelta );
+					ReadBytes ( m_sKeyword.data(), (int)uDelta );
 					m_sKeyword[uDelta] = '\0';
-					tHit.m_uWordID = sphCRC32 ( m_sKeyword ); // must be in sync with dict!
+					tHit.m_uWordID = sphCRC32 ( m_sKeyword.data() ); // must be in sync with dict!
 
 #ifndef NDEBUG
 					assert ( ( m_iLastWordID < tHit.m_uWordID )
-							 || ( m_iLastWordID == tHit.m_uWordID && strcmp ( (char*)m_sLastKeyword, (char*)m_sKeyword ) < 0 ) );
-					strncpy ( (char*)m_sLastKeyword, (char*)m_sKeyword, sizeof ( m_sLastKeyword ) );
+							 || ( m_iLastWordID == tHit.m_uWordID && strcmp ( (char*)m_sLastKeyword.data(), (char*)m_sKeyword.data() ) < 0 ) );
+					strncpy ( (char*)m_sLastKeyword.data(), (char*)m_sKeyword.data(), std::size ( m_sLastKeyword ) );
 #endif
 
 				} else

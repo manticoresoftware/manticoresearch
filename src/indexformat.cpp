@@ -716,7 +716,7 @@ void KeywordsBlockReader_c::Reset ( const BYTE * pBuf )
 	m_pBuf = pBuf;
 	m_sWord[0] = '\0';
 	m_iLen = 0;
-	m_szKeyword = m_sWord;
+	m_szKeyword = m_sWord.data();
 }
 
 
@@ -750,9 +750,9 @@ bool KeywordsBlockReader_c::UnpackWord()
 	}
 
 	assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
-	assert ( iMatch<=(int)strlen ( (char *)m_sWord ) );
+	assert ( iMatch<=(int)strlen ( (char *)m_sWord.data() ) );
 
-	memcpy ( m_sWord + iMatch, m_pBuf, iDelta );
+	memcpy ( m_sWord.data() + iMatch, m_pBuf, iDelta );
 	m_pBuf += iDelta;
 
 	m_iLen = iMatch + iDelta;

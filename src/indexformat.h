@@ -148,12 +148,12 @@ public:
 	void			Reset ( const BYTE * pBuf );
 	bool			UnpackWord();
 
-	const char *	GetWord() const			{ return (const char*)m_sWord; }
+	const char *	GetWord() const			{ return (const char*)m_sWord.data(); }
 	int				GetWordLen() const		{ return m_iLen; }
 
 private:
 	const BYTE *	m_pBuf;
-	BYTE			m_sWord [ MAX_KEYWORD_BYTES ];
+	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
 	int				m_iLen;
 	BYTE			m_uHint = 0;
 	int				m_iSkiplistBlockSize = 0;

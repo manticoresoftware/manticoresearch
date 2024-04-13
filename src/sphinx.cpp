@@ -3243,7 +3243,7 @@ private:
 	AggregateHit_t				m_tLastHit;				///< hitlist entry
 	Hitpos_t					m_iPrevHitPos {0};		///< previous hit position
 	bool						m_bGotFieldEnd = false;
-	BYTE						m_sLastKeyword [ MAX_KEYWORD_BYTES ];
+	std::array<BYTE, MAX_KEYWORD_BYTES> m_sLastKeyword;
 
 	const CSphVector<SphWordID_t> &	m_dHitlessWords;
 	DictRefPtr_c				m_pDict;
@@ -3338,7 +3338,7 @@ void CSphHitBuilder::HitReset()
 	m_tLastHit.m_tRowID = INVALID_ROWID;
 	m_tLastHit.m_uWordID = 0;
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
-	m_tLastHit.m_szKeyword = m_sLastKeyword;
+	m_tLastHit.m_szKeyword = m_sLastKeyword.data();
 	m_iPrevHitPos = 0;
 	m_bGotFieldEnd = false;
 }

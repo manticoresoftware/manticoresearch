@@ -153,7 +153,7 @@ private:
 	CSphWriter m_wrTmpDict;				   ///< temp dict writer
 	CSphVector<DictBlock_t> m_dDictBlocks; ///< on-disk locations of dict entry blocks
 
-	char m_sClippedWord[MAX_KEYWORD_BYTES]; ///< keyword storage for cliiped word
+	std::array<char, MAX_KEYWORD_BYTES> m_sClippedWord; ///< keyword storage for clipped word
 
 private:
 	SphWordID_t HitblockGetID ( const char* pWord, int iLen, SphWordID_t uCRC );
@@ -250,25 +250,25 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char* sWord, int iLen, SphWo
 {
 	if ( iLen > MAX_KEYWORD_BYTES - 4 ) // fix of very long word (zones)
 	{
-		memcpy ( m_sClippedWord, sWord, MAX_KEYWORD_BYTES - 4 );
-		memset ( m_sClippedWord + MAX_KEYWORD_BYTES - 4, 0, 4 );
+		memcpy ( m_sClippedWord.data(), sWord, MAX_KEYWORD_BYTES - 4 );
+		memset ( m_sClippedWord.data() + MAX_KEYWORD_BYTES - 4, 0, 4 );
 
 		CSphString sOrig;
 		sOrig.SetBinary ( sWord, iLen );
 		sphWarn ( "word overrun buffer, clipped!!!\n"
 				  "clipped (len=%d, word='%s')\noriginal (len=%d, word='%s')",
 			MAX_KEYWORD_BYTES - 4,
-			m_sClippedWord,
+			m_sClippedWord.data(),
 			iLen,
 			sOrig.cstr() );
 
-		sWord = m_sClippedWord;
+		sWord = m_sClippedWord.data();
 		iLen = MAX_KEYWORD_BYTES - 4;
-		uCRC = sphCRC32 ( m_sClippedWord, MAX_KEYWORD_BYTES - 4 );
+		uCRC = sphCRC32 ( m_sClippedWord.data(), MAX_KEYWORD_BYTES - 4 );
 	}
 
 	// is this a known one? find it
-	// OPTIMIZE? in theory we could use something faster than crc32; but quick lookup3 test did not show any improvements
+	// OPTIMIZE? in theory, we could use something faster than crc32; but quick lookup3 test did not show any improvements
 	const DWORD uHash = (DWORD)( uCRC % SLOTS );
 
 	HitblockKeyword_t* pEntry = m_dHash[uHash];

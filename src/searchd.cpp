@@ -15770,6 +15770,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "max_stack_need", "%l", tStatus.m_iStackNeed );
 		dStatus.MatchTupletf ( "average_stack_base", "%l", tStatus.m_iStackBase );
 		dStatus.MatchTupletf ( "desired_thread_stack", "%l", sphRoundUp ( tStatus.m_iStackNeed + tStatus.m_iStackBase, 128 ) );
+		dStatus.MatchTupletf ( "locked", "%d", tStatus.m_iLockCount );
 	}
 
 	if ( bRt || bPq )

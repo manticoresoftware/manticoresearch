@@ -1466,9 +1466,6 @@ void				SetPseudoShardingThresh ( int iThresh );
 struct BuildBufferSettings_t;
 void				SetMergeSettings ( const BuildBufferSettings_t & tSettings );
 
-void				InitSkipCache ( int64_t iCacheSize );
-void				ShutdownSkipCache();
-
 //////////////////////////////////////////////////////////////////////////
 
 volatile bool & sphGetbCpuStat () noexcept;

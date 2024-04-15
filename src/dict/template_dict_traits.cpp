@@ -846,7 +846,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 				// sort forms by files and length
 				// but do not sort if we're loading embedded
 				if ( iFileId >= 0 )
-					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) {
+					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) noexcept {
 						assert ( pA && pB );
 						return ( pA->m_iFileId == pB->m_iFileId ) ? pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength() : pA->m_iFileId > pB->m_iFileId;
 					} ) );

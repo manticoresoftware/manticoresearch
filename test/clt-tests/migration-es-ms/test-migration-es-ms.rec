@@ -1,4 +1,4 @@
-––– block: ./init –––
+––– block: ../mysqldump/versions/init –––
 ––– input –––
 docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null 2>&1; echo $?
 ––– output –––
@@ -6,6 +6,10 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– input –––
 docker pull docker.elastic.co/elasticsearch/elasticsearch:7.5.2 > /dev/null
 ––– output –––
+––– input –––
+apk add npm > /dev/null 2>&1; echo $?
+––– output –––
+0
 ––– input –––
 npm install elasticdump -g elasticdump > /dev/null 2>&1; echo $?
 ––– output –––
@@ -21,6 +25,12 @@ docker run -it --privileged --network=test_network --entrypoint=docker-entrypoin
 docker run -d --name elasticsearch --platform linux/amd64 --net test_network -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.5.2 > /dev/null 2>&1; echo $?
 ––– output –––
 0
+––– input –––
+unzip ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
+––– output –––
+Archive:  ./test/clt-tests/migration-es-ms/index.zip
+inflating: index_mapping.json
+inflating: index_data.json
 ––– input –––
 elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output=http://localhost:9200/es_index --type=mapping
 ––– output –––
@@ -89,3 +99,6 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM ms_index;"
 +----------+
 |      464 |
 +----------+
+––– input –––
+rm ./test/clt-tests/migration-es-ms/index_mapping.json ./test/clt-tests/migration-es-ms/index_data.json
+––– output –––

@@ -1786,6 +1786,10 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 		for ( const auto & tItem : tAggr.m_dComposite )
 		{
 			const CSphColumnInfo * pCol = tSchema.GetAttr ( tItem.m_sColumn.cstr() );
+			CSphString sJsonCol;
+			if ( !pCol && sphJsonNameSplit ( tItem.m_sColumn.cstr(), nullptr, &sJsonCol ) )
+				pCol = tSchema.GetAttr ( sJsonCol.cstr() );
+			
 			if ( !pCol )
 				return false;
 

@@ -306,6 +306,12 @@ void CSphGrouperMulti<PRED, HAVE_COLUMNAR>::SetBlobPool ( const BYTE * pBlobPool
 	for ( auto & i : m_dJsonKeys )
 		if ( i )
 			i->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+	// might be JSON whole attribute not the json.field stored in the m_dJsonKeys
+	for ( auto & tAttr : m_dAttrs )
+	{
+		if ( tAttr.m_pExpr )
+			tAttr.m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+	}
 }
 
 template <class PRED, bool HAVE_COLUMNAR>

@@ -609,16 +609,16 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 		if ( pCheckpoint )
 		{
 			// there could be valid data prior 1st checkpoint that should be unpacked and checked
-			auto iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
-			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen )==0 && iPrefix==iNameLen) )
+			auto iNameLen = (int) strnlen ( pCheckpoint->m_szWord, SPH_MAX_KEYWORD_LEN );
+			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_szWord, iNameLen )==0 && iPrefix==iNameLen) )
 				tChPoint.m_uOff = pCheckpoint->m_iOffset;
 
 			// find the last checkpoint that meets prefix condition ( ie might be a span of terms that splat to a couple of checkpoints )
 			++pCheckpoint;
 			while ( pCheckpoint<=pLast )
 			{
-				iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
-				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen );
+				iNameLen = (int) strnlen ( pCheckpoint->m_szWord, SPH_MAX_KEYWORD_LEN );
+				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_szWord, iNameLen );
 				if ( iCmp==0 && iPrefix==iNameLen )
 					tChPoint.m_uOff = pCheckpoint->m_iOffset;
 				if ( iCmp<0 )

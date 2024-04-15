@@ -76,7 +76,7 @@ using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 // DATASOURCES
 /////////////////////////////////////////////////////////////////////////////
 
-typedef uint64_t SphWordID_t;
+using SphWordID_t = uint64_t;
 STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
 
 /// hit position storage type

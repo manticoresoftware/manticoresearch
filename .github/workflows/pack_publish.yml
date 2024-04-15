@@ -142,7 +142,7 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_apr12
+      sysroot: roots_apr15
       cmake_command: |
         mkdir build
         cd build

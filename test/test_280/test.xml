@@ -15,24 +15,32 @@ searchd
 }
 </config>
 
+<metaindex name='META:rtpq'>
+	<index>testrt</index>
+	<index>testpq</index>
+</metaindex>
+
+
 <queries><sphinxql>
-	create table test ( title text );
-	show table test status like 'locked';
-	freeze test like 'fake';
-	show table test status like 'locked';
-	freeze test like 'fake';
-	freeze test like 'fake';
-	freeze test like 'fake';
-	show table test status like 'locked';
-	unfreeze test;
-	show table test status like 'locked';
-	unfreeze test;
-	unfreeze test;
-	show table test status like 'locked';
-	unfreeze test;
-	unfreeze test;
-	show table test status like 'locked';
-	drop table test;
+	create table testrt ( title text );
+	create table testpq ( title text ) type='pq';
+
+	show table META:rtpq status like 'locked';
+	freeze META:rtpq like 'fake';
+	show table META:rtpq status like 'locked';
+	freeze META:rtpq like 'fake';
+	freeze META:rtpq like 'fake';
+	freeze META:rtpq like 'fake';
+	show table META:rtpq status like 'locked';
+	unfreeze META:rtpq;
+	show table META:rtpq status like 'locked';
+	unfreeze META:rtpq;
+	unfreeze META:rtpq;
+	show table META:rtpq status like 'locked';
+	unfreeze META:rtpq;
+	unfreeze META:rtpq;
+	show table META:rtpq status like 'locked';
+	drop table META:rtpq;
 </sphinxql></queries>
 
 </test>

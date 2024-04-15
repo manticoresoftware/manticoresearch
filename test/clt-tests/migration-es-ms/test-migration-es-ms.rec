@@ -100,5 +100,62 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM ms_index;"
 |      464 |
 +----------+
 ––– input –––
+docker exec manticore mysql -h0 -P9306 -e "DESCRIBE ms_index;"
+––– output –––
++-----------------+-----------+------------+
+| Field           | Type      | Properties |
++-----------------+-----------+------------+
+| id              | bigint    |            |
+| field           | text      | indexed    |
+| field10         | text      | indexed    |
+| field11         | text      | indexed    |
+| field12         | text      | indexed    |
+| field13         | text      | indexed    |
+| field14         | text      | indexed    |
+| field15         | text      | indexed    |
+| field16         | text      | indexed    |
+| field17         | text      | indexed    |
+| field18         | text      | indexed    |
+| field2          | text      | indexed    |
+| field3          | text      | indexed    |
+| field4          | text      | indexed    |
+| field5          | text      | indexed    |
+| field6          | text      | indexed    |
+| field7          | text      | indexed    |
+| field8          | text      | indexed    |
+| field9          | text      | indexed    |
+| message         | text      | indexed    |
+| @timestamp      | timestamp |            |
+| extra_timestamp | timestamp |            |
+| log             | json      |            |
++-----------------+-----------+------------+
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM ms_index;"
+––– output –––
++---------------------+------------+-----------------+------------------+
+| id                  | @timestamp | extra_timestamp | log              |
++---------------------+------------+-----------------+------------------+
+| 5448198095297826404 | 1712620087 |            2024 | {"level":"INFO"} |
+| 9097666193355230552 | 1712620087 |            2024 | {"level":"INFO"} |
+| 7381722540488568573 | 1712620087 |            2024 | {"level":"INFO"} |
+| 6911901198776545583 | 1712620087 |            2024 | {"level":"INFO"} |
+| 4157627641165230591 | 1712620087 |            2024 | {"level":"INFO"} |
+|  948096711986651649 | 1712620087 |            2024 | {"level":"INFO"} |
+| 4718977505436221020 | 1712620087 |            2024 | {"level":"INFO"} |
+| 5628374973127727282 | 1712620086 |            2024 | {"level":"INFO"} |
+| 6918063120946876514 | 1712620086 |            2024 | {"level":"INFO"} |
+| 2003240025326794422 | 1712620086 |            2024 | {"level":"INFO"} |
+| 1035703439441705855 | 1712620086 |            2024 | {"level":"INFO"} |
+| 9200630174028921389 | 1712620086 |            2024 | {"level":"INFO"} |
+| 4259798338765043837 | 1712620086 |            2024 | {"level":"INFO"} |
+| 3777995070567678103 | 1712620086 |            2024 | {"level":"INFO"} |
+| 7236771320172416990 | 1712620086 |            2024 | {"level":"INFO"} |
+| 5128701379809434320 | 1712620086 |            2024 | {"level":"INFO"} |
+| 8792590799816885056 | 1712620086 |            2024 | {"level":"INFO"} |
+| 8828760827591472844 | 1712620086 |            2024 | {"level":"INFO"} |
+| 7103584392189579473 | 1712620086 |            2024 | {"level":"INFO"} |
+| 3538954593482063643 | 1712620086 |            2024 | {"level":"INFO"} |
++---------------------+------------+-----------------+------------------+
+––– input –––
 rm ./test/clt-tests/migration-es-ms/index_mapping.json ./test/clt-tests/migration-es-ms/index_data.json
 ––– output –––

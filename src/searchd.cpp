@@ -61,6 +61,7 @@
 #include "joinsorter.h"
 #include "schematransform.h"
 #include "frontendschema.h"
+#include "skip_cache.h"
 
 // services
 #include "taskping.h"

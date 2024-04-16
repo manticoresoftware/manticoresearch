@@ -62,7 +62,7 @@ elasticdump --input=./test/clt-tests/migration-es-ms/index_data.json --output=ht
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 464
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
-elasticdump --input=http://localhost:9200/es-index   --output=http://localhost:9308/ms_index  --type=mapping
+elasticdump --input=http://localhost:9200/es-index --output=http://localhost:9308/ms_index  --type=mapping
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
 (node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.

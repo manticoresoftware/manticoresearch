@@ -17,6 +17,9 @@ CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string,
 ––– input –––
 chmod +x ./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
+––– input –––
+./test/clt-tests/core/generate-1mln-records.sh
+––– output –––
 +-------+------+
 | Index | Type |
 +-------+------+
@@ -27,10 +30,6 @@ chmod +x ./test/clt-tests/core/generate-1mln-records.sh
 +----------+
 |  1000000 |
 +----------+
-––– input –––
-./test/clt-tests/core/generate-1mln-records.sh
-––– output –––
-
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 15 PRO' WHERE id = 101; select * from tbl WHERE id = 101;"
 ––– output –––

@@ -649,6 +649,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		return tRes.m_bOk;
 	}
 
+	myinfo::SetCommand ( sSrcQuery.first );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
+
 	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
 	if ( !tReplyRaw.first )
 	{

@@ -3,13 +3,13 @@
 srand(1024);
 
 $id=0;
-echo "create table t(f text, a int, b float, j json, m multi, s string);\n";
+echo "create table t(f text, a int, b float, j json, m multi, s string, l bool, d timestamp, v multi64, fv float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');\n";
 for ($i = 0; $i < $argv[1]; $i++) {
   if ($i % 10000 === 0) {
     if ($i !== 0) {
       echo ";\n";
     }
-    echo 'insert into t (id, f, a, b, j, m, s) values ';
+    echo 'insert into t (id, f, a, b, j, m, s, l, d, v, fv) values ';
   } else {
     echo ',';
   }
@@ -29,5 +29,5 @@ for ($i = 0; $i < $argv[1]; $i++) {
     $var = "rand$n";
     $random_text .= chr($$var % 26 + 65 + $$var % 2 * 32);
   }
-  echo "(" . ++$id . ", '$s', $rand1, $rand2, '{\"a\": [$rand3,$rand4], \"b\": $rand5}', ($rand6,$rand7,$rand8), '$random_text')";
+  echo "(" . ++$id . ", '$s', $rand1, $rand2, '{\"a\": [$rand3,$rand4], \"b\": $rand5}', ($rand6,$rand7,$rand8), '$random_text', TRUE, NOW(), ($rand6,$rand7,$rand8), ($rand6,$rand7,$rand8))";
 }

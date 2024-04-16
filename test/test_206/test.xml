@@ -123,7 +123,6 @@ index loc_field
 index dist_field
 {
 	type			= distributed
-	local			= <my_address/>:i2
 	agent			= <my_address/>:test
 }
 
@@ -317,6 +316,21 @@ index objects1
 	source = json_objects1
 	path=<data_path/>/json_objects1
 }
+
+source json_str_arrays
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * from json_str_arrays
+    sql_attr_string	= title
+	sql_attr_json	= j
+}
+
+index json_str_arrays
+{
+	source  = json_str_arrays
+	path    = <data_path/>/json_str_arrays
+}
 </config>
 
 <db_create>
@@ -479,6 +493,15 @@ INSERT INTO json_objects1 ( id, gid, j ) VALUES
     (4,1,'{}')
 </db_insert>
 
+<db_create>CREATE TABLE json_str_arrays ( id INTEGER NOT NULL, title VARCHAR(255) NOT NULL, j VARCHAR(255) )</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_str_arrays`;</db_drop>
+<db_insert>
+INSERT INTO json_str_arrays ( id, title, j ) VALUES
+    ( 1, 'Product 1', '{"color":["blue","black","yellow"]}'),
+    ( 2, 'Product 2', '{"color":["white","black","blue"]}'),
+    ( 3, 'Product 3', '{"color":["black"]}'),
+    ( 4, 'Product 4', NULL )
+</db_insert>
 
 <queries>
 <!-- json via API -->
@@ -853,6 +876,10 @@ select id, json1 from json_attr where json1.username in ( 'Alice', 'damon' );
 set collation_connection=libc_ci;
 select id, json1, json1.username in ( 'Alice', 'damon' ) as cnd from json_attr where cnd=1 ;
 select id, json1 from json_attr where json1.username in ( 'Alice', 'damon' );
+
+<!-- json array with in filter strings -->
+select id, j, j.color in ( 'blue' ) as cnd from json_str_arrays where cnd=1 order by id asc;
+select id, j from json_str_arrays where j.color in ( 'blue' ) order by id asc;
 
 </sphinxql>
 </queries>

@@ -147,6 +147,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveDistIndex ( tOut, tBuf, sCluster );
 		break;
 
+	case E_CLUSTER::GET_NODE_STATE:
+		ReceiveClusterGetState ( tOut, tBuf, sCluster );
+		break;
+
 	default:
 		TlsMsg::Err ( "INTERNAL ERROR: unhandled command %d", (int) eClusterCmd );
 		break;

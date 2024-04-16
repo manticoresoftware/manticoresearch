@@ -31,6 +31,10 @@ public:
 
 public:
 	CSphMatch () = default;
+	CSphMatch ( RowID_t tRowID, const CSphRowitem* pStatic )
+		: m_tRowID { tRowID }
+		, m_pStatic { pStatic }
+	{}
 
 	/// dtor. frees everything
 	~CSphMatch ();

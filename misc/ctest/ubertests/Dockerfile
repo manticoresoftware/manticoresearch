@@ -2,7 +2,7 @@ FROM ubuntu:jammy
 ENV DEBIAN_FRONTEND noninteractive
 ENV DISTR jammy
 
-RUN apt-get update && apt-get install -y wget
+RUN apt-get -y update && apt-get install -y wget
 
 RUN wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
     dpkg -i manticore-dev-repo.noarch.deb && \
@@ -67,22 +67,31 @@ chmod +x llvm.sh && \
 ENV CC clang-13
 ENV CXX clang++-13
 
-# mysql
-RUN wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/5.3/mysql-connector-odbc-5.3.9-linux-ubuntu16.04-x86-64bit.tar.gz \
+# Ubertests settings file
+ARG TARGETPLATFORM
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=aarch64; else ARCHITECTURE=x86-64bit; fi \
+&& wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}.tar.gz \
     && tar -zxf /odbc.tar.gz \
     && rm /odbc.tar.gz \
     && mkdir -p /var/run/mysqld && chmod a+rwX /var/run/mysqld \
     && { mysqld & } && sleep 30 \
     && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
-    && mysqladmin shutdown
+    && mysqladmin shutdown \
+&& <<EOF cat > /root/.sphinx
+(
+    "db-host"=>"127.0.0.1",
+    "db-user"=>"test",
+    'lemmatizer_base'=>'/work/aot',
+    'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-${ARCHITECTURE}/lib/libmyodbc8w.so;CHARSET=utf8'
+)
+EOF
 
-# Note: for mysql 8 on x86-64 change url above to https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit.tar.gz,
-# and 'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit/lib/libmyodbc8w.so;CHARSET=utf8' line in file 'sphinx'
-
-# Note: for mysql 8 on ARM64 change url above to https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-aarch64.tar.gz,
-# and 'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-aarch64/lib/libmyodbc8w.so;CHARSET=utf8' line in file 'sphinx'
-
-# Note for both: if test 228 fails with broken encoding - try to remove ';CHARSET=utf8' ending in the odbc_driver line above. M.b. better is to probe once on local instance before pushing to dockerhub
+# ODBC notes:
+# * Urls for various odbc mysql driver versions:
+#   - https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit.tar.gz
+#   - https://dev.mysql.com/get/Downloads/Connector-ODBC/8.3/mysql-connector-odbc-8.3.0-linux-glibc2.28-aarch64.tar.gz
+#   - https://dev.mysql.com/get/Downloads/Connector-ODBC/5.3/mysql-connector-odbc-5.3.9-linux-ubuntu16.04-x86-64bit.tar.gz
+# * If test 228 fails with broken encoding - try to remove ';CHARSET=utf8' ending in the odbc_driver line above. M.b. better is to probe once on local instance before pushing to dockerhub
 
 # AOT
 RUN mkdir -p /work/aot && cd /work/aot && \
@@ -97,7 +106,6 @@ rm *.tar.xz
 # Cleanup
 RUN rm -rf /var/lib/apt/lists/*
 
-ADD sphinx /root/.sphinx
 RUN git config --global --add safe.directory '*'
 ADD entry_point.sh /
 VOLUME [ "/work" ]
@@ -107,7 +115,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_jammy .
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_mar_2024 .
 
 # deprecated:
 # docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263 .

@@ -8,9 +8,11 @@
 ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
+
+ALTER TABLE table MODIFY COLUMN column_name bigint
 ```
 
-This feature only supports adding one field at a time for RT tables. The supported data types are:
+This feature only supports adding one field at a time for RT tables or the expansion of an `int` column to `bigint`. The supported data types are:
 * `int` - integer attribute
 * `timestamp` - timestamp attribute
 * `bigint` - big integer attribute
@@ -31,7 +33,7 @@ This feature only supports adding one field at a time for RT tables. The support
 * Querying a table is impossible while a column is being added.
 * Newly created attribute's values are set to 0.
 * `ALTER` will not work for distributed tables and tables without any attributes.
-* `DROP COLUMN` will fail if a table has only one field.
+* You can't delete the `id` column.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
 * Adding/dropping full-text field is only supported in the [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
 

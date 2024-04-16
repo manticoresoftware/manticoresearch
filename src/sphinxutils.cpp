@@ -20,6 +20,7 @@
 #include "fileutils.h"
 #include "threadutils.h"
 #include "indexfiles.h"
+#include "datetime.h"
 
 #include <codecvt>
 #include <ctype.h>
@@ -958,6 +959,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_timeout",			KEY_DEPRECATED, "network_timeout" },
 	{ "network_timeout",		0, NULL },
 	{ "client_timeout",			0, NULL },
+	{ "reset_network_timeout_on_packet",			0, NULL },
 	{ "max_children",			KEY_REMOVED, NULL },
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			KEY_REMOVED, NULL },
@@ -1058,10 +1060,19 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
 	{ "engine",					0, nullptr },
+	{ "join_cache_size",		0, nullptr },
 	{ "replication_connect_timeout",	0, NULL },
 	{ "replication_query_timeout",		0, NULL },
 	{ "replication_retry_delay",		0, NULL },
 	{ "replication_retry_count",		0, NULL },
+	{ "expansion_merge_threshold_docs",		0, NULL },
+	{ "expansion_merge_threshold_hits",		0, NULL },
+	{ "merge_buffer_attributes", 0, NULL },
+	{ "merge_buffer_columnar",	0, NULL },
+	{ "merge_buffer_storage",	0, NULL },
+	{ "merge_buffer_fulltext",	0, NULL },
+	{ "merge_buffer_dict",		0, NULL },
+	{ "merge_si_memlimit",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3125,7 +3136,10 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !hConf("common") || !hConf["common"]("common") )
+	{
+		sphPluginInit ( nullptr );
 		return;
+	}
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	if ( hCommon ( "lemmatizer_base" ) )
@@ -3570,3 +3584,289 @@ int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
 	return std::mktime ( &tTM );
 }
 
+enum class DateMathOp_e
+{
+	Mod,
+	Add,
+	Sub,
+};
+
+typedef CSphOrderedHash<DateUnit_e, CSphString, CSphStrHashFunc, 32> DateMathUnitNames_t;
+
+static void DoDateMath ( DateMathOp_e eOp, DateUnit_e eUnit, int iVal, time_t & tDateTime );
+
+static DateMathUnitNames_t InitMathUnits()
+{
+	typedef std::pair<const char *, DateUnit_e> NamedUnit_t;
+	NamedUnit_t dUnits[] = {
+	// date math names
+	{"ms", DateUnit_e::ms }, {"s", DateUnit_e::sec}, {"m", DateUnit_e::minute}, {"h", DateUnit_e::hour}, {"d", DateUnit_e::day}, {"w", DateUnit_e::week}, {"M", DateUnit_e::month}, {"y", DateUnit_e::year},
+	// histogram names
+	{"minute", DateUnit_e::minute}, {"hour", DateUnit_e::hour}, {"day", DateUnit_e::day}, {"week", DateUnit_e::week}, {"month", DateUnit_e::month}, {"year", DateUnit_e::year}
+	};
+
+	DateMathUnitNames_t hRes;
+	for ( const auto & tUnit : dUnits )
+		hRes.Add ( tUnit.second, tUnit.first );
+	return hRes;
+}
+static DateMathUnitNames_t g_hDateMathUnits = InitMathUnits();
+
+static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
+{
+	const char * sCur = sMathExpr.first;
+	const char * sEnd = sCur + sMathExpr.second;
+
+	while ( sCur<sEnd && *sCur )
+	{
+		const int iOp = *sCur++;
+		DateMathOp_e eOp = DateMathOp_e::Mod;
+		if ( iOp=='/' )
+		{
+			eOp = DateMathOp_e::Mod;
+		} else if ( iOp=='+' )
+		{
+			eOp = DateMathOp_e::Add;
+		} else if ( iOp=='-' )
+		{
+			eOp = DateMathOp_e::Sub;
+		} else
+		{
+			return false;
+		}
+
+		int iNum = 1;
+		if ( !sphIsDigital ( *sCur ) )
+		{
+			iNum = 1;
+		} else
+		{
+			char * sNumEnd = nullptr;
+			iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+			sCur = sNumEnd;
+		}
+
+		// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
+		if ( eOp==DateMathOp_e::Mod && iNum!=1 )
+			return false;
+
+		const char * sUnitStart = sCur++;
+		while ( sCur<sEnd && sphIsAlphaOnly ( *sCur ) )
+			sCur++;
+		CSphString sUnit;
+		sUnit.SetBinary ( sUnitStart, sCur - sUnitStart );
+
+		DateUnit_e * pUnit = g_hDateMathUnits ( sUnit );
+		if ( !pUnit )
+			return false;
+
+		DoDateMath ( eOp, *pUnit, iNum, tDateTime );
+	}
+	return tDateTime;
+}
+
+bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime )
+{
+	if ( sMathExpr.IsEmpty() )
+		return false;
+
+	const char sNow[] = "now";
+	Str_t sExpr = FromStr ( sMathExpr );
+	if ( sMathExpr.Begins ( sNow ) )
+	{
+		tDateTime = iNow;
+		int iNowLen = sizeof ( sNow ) - 1;
+		sExpr.first += iNowLen;
+		sExpr.second -= iNowLen;
+	} else
+	{
+		CSphString sDateOnly;
+		const char * sFullDateDel = strstr ( sMathExpr.cstr(), "||" );
+		if ( !sFullDateDel )
+		{
+			sDateOnly = sMathExpr;
+			sExpr = Str_t(); // nothing else
+		} else
+		{
+			const int iDelimiterLen = 2;
+			int iOff = sFullDateDel - sMathExpr.cstr();
+			sDateOnly.SetBinary ( sMathExpr.cstr(), iOff );
+			sExpr = Str_t ( sFullDateDel + iDelimiterLen, sMathExpr.Length() - iOff - iDelimiterLen );
+		}
+
+		// We're going to just require ISO8601 timestamps, k?
+		tDateTime = GetUTC ( sDateOnly, sFormat );
+	}
+
+	if ( IsEmpty ( sExpr ) )
+		return true;
+
+	return ParseDateMath ( sExpr, tDateTime );
+}
+
+DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
+{
+	const char * sCur = sExpr.cstr();
+	const char * sEnd = sCur + sExpr.Length();
+
+	int iNum = 1;
+	if ( !sphIsDigital ( *sCur ) )
+	{
+		iNum = 1;
+	} else
+	{
+		char * sNumEnd = nullptr;
+		iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+		sCur = sNumEnd;
+	}
+
+	// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
+	if ( iNum!=1 )
+	{
+		sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a calendar interval", sExpr.cstr() );
+		return DateUnit_e::total_units;
+	}
+
+	const char * sUnitStart = sCur++;
+	while ( sCur<sEnd && sphIsAlphaOnly ( *sCur) )
+		sCur++;
+	CSphString sUnit;
+	sUnit.SetBinary ( sUnitStart, sCur - sUnitStart );
+
+	DateUnit_e * pUnit = g_hDateMathUnits ( sUnit );
+	if ( !pUnit )
+	{
+		sError.SetSprintf ( "unknown interval [%s]", sExpr.cstr() );
+		return DateUnit_e::total_units;
+	}
+
+	return *pUnit;
+}
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+{
+	if ( eUnit==DateUnit_e::ms )
+		return;
+
+	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	switch ( eUnit )
+	{
+	case DateUnit_e::sec:
+		tDateTime = ConvertTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::minute:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ) );
+	break;
+
+	case DateUnit_e::hour:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ) );
+	break;
+
+	case DateUnit_e::day:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ) );
+	break;
+
+	case DateUnit_e::week:
+	{
+		cctz::civil_day tWeekStart ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() );
+		if ( cctz::get_weekday ( tWeekStart )!=cctz::weekday::monday )
+			tWeekStart = cctz::prev_weekday ( tWeekStart, cctz::weekday::monday );
+		tDateTime = ConvertTime ( tWeekStart );
+	}
+	break;
+
+	case DateUnit_e::month:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ) );
+		break;
+
+	case DateUnit_e::year:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() ) );
+		break;
+
+	default:
+		break;
+	}
+}
+
+void DoDateMath ( DateMathOp_e eOp, DateUnit_e eUnit, int iVal, time_t & tDateTime )
+{
+	if ( eOp==DateMathOp_e::Mod )
+	{
+		RoundDate ( eUnit, tDateTime );
+		return;
+	}
+
+	if ( eOp==DateMathOp_e::Sub )
+		iVal = -iVal;
+
+	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	switch ( eUnit )
+	{
+	case DateUnit_e::ms:
+	{
+		int iMsLeft = iVal % 1000;
+		int iSec = iVal / 1000;
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() + iSec ) );
+		tDateTime += iMsLeft;
+	}
+	break;
+
+	case DateUnit_e::sec:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() + iVal ) );
+	break;
+
+	case DateUnit_e::minute:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() + iVal, tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::hour:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() + iVal, tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::day:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() + iVal, tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::week:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() + iVal*7, tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::month:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() + iVal, tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::year:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() + iVal, tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	default:
+		break;
+	}
+}
+
+static std::atomic<long> g_tIndexId { 0 };
+
+int64_t GenerateIndexId()
+{
+	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
+}
+
+void SetIndexId ( int64_t iId )
+{
+	g_tIndexId.store ( iId );
+}
+
+bool HasWildcards ( const char * sWord )
+{
+	if ( !sWord )
+		return false;
+
+	for ( ; *sWord; sWord++ )
+	{
+		if ( sphIsWild ( *sWord ) )
+			return true;
+	}
+
+	return false;
+}

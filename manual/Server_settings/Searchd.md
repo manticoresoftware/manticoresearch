@@ -186,8 +186,47 @@ An empty value disables binary logging, which improves performance but puts the 
 binlog_path = # disable logging
 binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc will be created
 ```
-<!-- end -->    
+<!-- end -->
 
+
+### buddy_path
+
+<!-- example conf buddy_path -->
+This setting determines the path to the Manticore Buddy binary. It is optional, with a default value being the build-time configured path, which varies across different operating systems. Typically, you don't need to modify this setting. However, it may be useful if you wish to run Manticore Buddy in debug mode, make changes to Manticore Buddy, or implement a new plugin. In the latter case, you can `git clone` Buddy from https://github.com/manticoresoftware/manticoresearch-buddy, add a new plugin to the directory `./plugins/`, and run `composer install --prefer-source` for easier development after you change the directory to the Buddy source.
+
+To ensure you can run `composer`, your machine must have PHP 8.2 or higher installed with the following extensions:
+
+```
+--enable-dom
+--with-libxml
+--enable-tokenizer
+--enable-xml
+--enable-xmlwriter
+--enable-xmlreader
+--enable-simplexml
+--enable-phar
+--enable-bcmath
+--with-gmp
+--enable-debug
+--with-mysqli
+--enable-mysqlnd
+```
+
+You can also opt for the special `manticore-executor-dev` version for Linux amd64 available in the releases, for example: https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
+
+If you go this route, remember to link the dev version of the manticore executor to `/usr/bin/php`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in Linux, but run it in debug mode
+buddy_path = manticore-executor -n /opt/homebrew/share/manticore/modules/manticore-buddy/bin/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in MacOS arm64, but run it in debug mode
+buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debug # use Manticore Buddy from a non-default location
+```
+<!-- end -->
 
 ### client_timeout
 
@@ -203,7 +242,7 @@ This setting determines the maximum time to wait between requests (in seconds or
 ```ini
 client_timeout = 1h
 ```
-<!-- end -->    
+<!-- end -->
 
 
 ### collation_libc_locale
@@ -291,7 +330,7 @@ Default attribute storage engine used when creating tables in RT mode. Can be `r
 ```ini
 engine = columnar
 ```
-<!-- end -->    
+<!-- end -->
 
 
 ### expansion_limit
@@ -309,8 +348,41 @@ When performing substring searches against tables built with `dict = keywords` e
 ```ini
 expansion_limit = 16
 ```
-<!-- end -->    
+<!-- end -->
 
+### expansion_merge_threshold_docs
+
+<!-- example conf expansion_merge_threshold_docs -->
+This setting determines the maximum number of documents in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 32.
+
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_merge_threshold_docs = 1024
+```
+<!-- end -->
+
+### expansion_merge_threshold_hits
+
+<!-- example conf expansion_merge_threshold_hits -->
+This setting determines the maximum number of hits in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 256.
+
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_merge_threshold_hits = 512
+```
+<!-- end -->
 
 ### grouping_in_utc
 
@@ -700,6 +772,8 @@ Defines how many requests are processed on each iteration of the network loop. T
 <!-- example conf network_timeout -->
 Network client request read/write timeout, in seconds (or  [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, the default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
 
+Note also the [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) parameter. This parameter alters the behavior of `network_timeout` from applying to the entire `query` or `result` to individual packets instead. Typically, a query/result fits within one or two packets. However, in cases where a large amount of data is required, this parameter can be invaluable in maintaining active operations.
+
 <!-- request Example -->
 
 ```ini
@@ -838,7 +912,7 @@ predicted_time =
     hit_cost * processed_hits +
     skip_cost * skiplist_jumps +
     match_cost * found_matches
-```    
+```
 
 The query is then terminated early when the `predicted_time` reaches a given limit.
 
@@ -1051,6 +1125,30 @@ When querying, some reads know in advance exactly how much data is there to be r
 ```ini
 read_unhinted = 32K
 ```
+<!-- end -->
+
+### reset_network_timeout_on_packet
+
+<!-- example conf reset_network_timeout_on_packet -->
+Refines the behavior of networking timeouts (such as `network_timeout`, `read_timeout`, and `agent_query_timeout`).
+
+When set to 0, timeouts limit the maximum time for sending the entire request/query.
+When set to 1 (default), timeouts limit the maximum time between network activities.
+
+With replication, a node may need to send a large file (for example, 100GB) to another node. Assume the network can transfer data at 1GB/s, with a series of packets of 4-5MB each. To transfer the entire file, you would need 100 seconds. A default timeout of 5 seconds would only allow the transfer of 5GB before the connection is dropped. Increasing the timeout could be a workaround, but it is not scalable (for instance, the next file might be 150GB, leading to failure again). However, with the default `reset_network_timeout_on_packet` set to 1, the timeout is applied not to the entire transfer but to individual packets. As long as the transfer is in progress (and data is actually being received over the network during the timeout period), it is kept alive. If the transfer gets stuck, such that a timeout occurs between packets, it will be dropped.
+
+Note that if you set up a distributed table, each node — both master and agents — should be tuned. On the master side, `agent_query_timeout` is affected; on agents, `network_timeout` is relevant.
+
+<!-- intro -->
+
+##### Example:
+
+<!-- request Example -->
+
+```ini
+reset_network_timeout_on_packet = 0
+```
+
 <!-- end -->
 
 

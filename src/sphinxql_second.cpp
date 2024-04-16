@@ -67,7 +67,7 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, c
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_secondparser ( YYSTYPE* lvalp, void* yyscanner, SqlSecondParser_c* pParser )
 
-#include "flexsphinxqlsecond.c"
+#include "flexsphinxql_second.c"
 
 static void yyerror ( SqlParserTraits_c* pParser, const char* szMessage )
 {

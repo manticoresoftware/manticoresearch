@@ -146,7 +146,7 @@
 * [⪢ Node info and management]
     * [• Node status](Node_info_and_management/Node_status.md)
     * [• SHOW META](Node_info_and_management/SHOW_META.md)
-    * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 
+    * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md)
     * [• SHOW QUERIES](Node_info_and_management/SHOW_QUERIES.md)
     * [• SHOW VERSION](Node_info_and_management/SHOW_VERSION.md)
     * [• KILL](Node_info_and_management/KILL.md)
@@ -180,6 +180,7 @@
         * [⪢ Plugins]
             * [• Creating a plugin](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md)
             * [• Deleting a plugin](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md)
+            * [• Enabling and disabling Buddy plugins](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md)
             * [• Reloading plugins](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md)
             * [• Ranker plugins](Extensions/UDFs_and_Plugins/Plugins/Ranker_plugins.md)
             * [• Token filter plugins](Extensions/UDFs_and_Plugins/Plugins/Token_filter_plugins.md)

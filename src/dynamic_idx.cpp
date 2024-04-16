@@ -12,6 +12,7 @@
 
 #include "dynamic_idx.h"
 #include "sphinxsort.h"
+#include "querycontext.h"
 
 using namespace Threads;
 
@@ -120,7 +121,7 @@ public:
 
 public:
 	// Header of the table with defined num of columns
-	inline void HeadBegin ( int ) override
+	inline void HeadBegin () override
 	{
 		if ( !m_pSchema )
 			return;
@@ -409,7 +410,7 @@ public:
 	}
 
 public:
-	void HeadBegin ( int ) override {}
+	void HeadBegin () override {}
 
 	// add the next column.
 	void HeadColumn ( const char * sName, MysqlColumnType_e uType ) override

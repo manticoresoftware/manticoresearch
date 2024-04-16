@@ -137,8 +137,8 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 
 	CSphString sPath = GetPathForNewIndex ( m_sIndex );
 
-	StrVec_t dFiles;
 	StringBuilder_c sNewValue {" "};
+	StringBuilder_c sTmp;
 
 	// we assume that path has been stripped before
 	StrVec_t dValues = sphSplit ( sName.cstr(), sName.Length(), " \t," );
@@ -147,12 +147,12 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 		if ( !i.Length() )
 			continue;
 
-		CSphString & sNew = dFiles.Add();
-		sNew.SetSprintf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
-		sNewValue << sNew;
+		sTmp.Clear();
+		sTmp.Appendf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
+		sNewValue << RealPath ( sTmp.cstr() );
 	}
 
-	return RealPath ( sNewValue.cstr() );
+	return (CSphString)sNewValue;
 }
 
 
@@ -810,6 +810,13 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
 		if ( i==sDest )
 			continue;
+
+		// can not overwrite existed destination file
+		if ( sphIsReadable ( sDest.cstr(), nullptr ) )
+		{
+			sError.SetSprintf ( "can not overwrite index file '%s'", sDest.cstr() );
+			return false;
+		}
 
 		if ( !CopyFile ( i, sDest, sError ) )
 			return false;

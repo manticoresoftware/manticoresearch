@@ -1867,7 +1867,7 @@ Float vector attributes allow storing variable-length lists of floats. It's impo
 
 Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
 
-** Currently, `float_vector` fields can only be utilized in KNN search and the data type is not supported in any other functions or expressions. **
+** Currently, `float_vector` fields can only be utilized in KNN search within real-time tables and the data type is not supported in any other functions or expressions, nor is it supported in plain tables. **
 
 <!-- intro -->
 ##### SQL:

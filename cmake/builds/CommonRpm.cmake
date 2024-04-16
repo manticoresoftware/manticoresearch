@@ -110,7 +110,7 @@ set ( CPACK_RPM_SPEC_MORE_DEFINE
 %define manticore_user manticore
 %define manticore_group manticore" )
 
-SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
+SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 3 (GPL3)" )
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )

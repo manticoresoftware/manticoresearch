@@ -351,6 +351,8 @@ Blended characters list. Optional, default is empty.
 
 Blended characters are indexed as both separators and valid characters. For example, when `&` is defined as a blended character and `AT&T` appears in an indexed document, three different keywords will be indexed, `at&t`, `at` and `t`.
 
+Additionally, blended characters can influence indexing in such a way that keywords are indexed as if the blended characters were not typed at all. This behavior is particularly evident when `blend_mode = trim_all` is specified. For example, the phrase `some_thing` will be indexed as `some`, `something`, and `thing` with `blend_mode = trim_all`.
+
 Care should be taken when using blended characters as defining a character as blended means that it is no longer a separator.
 * Therefore, if you put a comma to the `blend_chars` and search for `dog,cat`, it will treat that as a single token `dog,cat`. If `dog,cat` was **not** indexed as `dog,cat`, but left as `dog cat` only, then it will not match.
 * Hence, this behavior should be controlled with the [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting.
@@ -1915,13 +1917,13 @@ regexp_filter = (blue|red) => color
 ```
 
 <!-- example regexp_filter -->
-Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regexps.
+Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regular expressions. The regular expressions engine used by Manticore Search is Google's RE2, which is known for its speed and safety. For detailed information on the syntax supported by RE2, you can visit the [RE2 syntax guide](https://github.com/google/re2/wiki/Syntax).
 
 In certain applications such as product search, there can be many ways to refer to a product, model, or property. For example, `iPhone 3gs` and `iPhone 3 gs` (or even `iPhone3 gs`) are very likely to refer to the same product. Another example could be different ways to express a laptop screen size, such as `13-inch`, `13 inch`, `13"`, or `13in`.
 
 Regexps provide a mechanism to specify rules tailored to handle such cases. In the first example, you could possibly use a wordforms file to handle a handful of iPhone models, but in the second example, it's better to specify rules that would normalize "13-inch" and "13in" to something identical.
 
-Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing, even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
+Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing (including [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)), even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
 
 <!-- request SQL -->
 

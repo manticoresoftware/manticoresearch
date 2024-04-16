@@ -17,6 +17,7 @@
 #include "tokenizer/tokenizer.h"
 
 void CSphDict::DictBegin ( CSphAutofile&, CSphAutofile&, int ) {}
+void CSphDict::SortedDictBegin ( CSphAutofile&, int, int ) {}
 void CSphDict::DictEntry ( const DictEntry_t& ) {}
 void CSphDict::DictEndEntries ( SphOffset_t ) {}
 
@@ -60,12 +61,7 @@ void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, c
 	{
 		CSphString sStopwordFile = tSettings.m_sStopwords;
 		if ( !sStopwordFile.IsEmpty() )
-		{
-			if ( pFilenameBuilder )
-				sStopwordFile = pFilenameBuilder->GetFullPath ( sStopwordFile );
-
-			pDict->LoadStopwords ( sStopwordFile.cstr(), pTokenizer, bStripFile );
-		}
+			pDict->LoadStopwords ( sStopwordFile.cstr(), pFilenameBuilder, pTokenizer, bStripFile );
 	}
 
 	StrVec_t dWordformFiles;

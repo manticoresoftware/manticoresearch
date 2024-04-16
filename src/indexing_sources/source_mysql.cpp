@@ -34,6 +34,16 @@ static const char * GET_MYSQL_LIB()
 	return MYSQL_LIB;
 }
 
+#define MYSQL57PLUS MYSQL_VERSION_ID >= 50700
+#if MYSQL57PLUS
+#define MYSQL_OPTIONS_OR_SSL_SET mysql_options
+#else
+#define MYSQL_OPTIONS_OR_SSL_SET mysql_ssl_set
+#endif
+
+#define XSTR( s ) STR ( s )
+#define STR( s ) #s
+
 #if DL_MYSQL
 
 	static decltype (&mysql_free_result) sph_mysql_free_result = nullptr;
@@ -44,7 +54,7 @@ static const char * GET_MYSQL_LIB()
 	static decltype (&mysql_errno) sph_mysql_errno = nullptr;
 	static decltype (&mysql_error) sph_mysql_error = nullptr;
 	static decltype (&mysql_init) sph_mysql_init = nullptr;
-	static decltype (&mysql_ssl_set) sph_mysql_ssl_set = nullptr;
+	static decltype ( &MYSQL_OPTIONS_OR_SSL_SET ) sph_mysql_options_or_ssl_set = nullptr;
 	static decltype (&mysql_real_connect) sph_mysql_real_connect = nullptr;
 	static decltype (&mysql_close) sph_mysql_close = nullptr;
 	static decltype (&mysql_num_fields) sph_mysql_num_fields = nullptr;
@@ -56,14 +66,14 @@ static const char * GET_MYSQL_LIB()
 	{
 		const char * sFuncs[] = { "mysql_free_result", "mysql_next_result", "mysql_use_result"
 			, "mysql_num_rows", "mysql_query", "mysql_errno", "mysql_error"
-			, "mysql_init", "mysql_ssl_set", "mysql_real_connect", "mysql_close"
+			, "mysql_init", XSTR ( MYSQL_OPTIONS_OR_SSL_SET ), "mysql_real_connect", "mysql_close"
 			, "mysql_num_fields", "mysql_fetch_row", "mysql_fetch_fields"
 			, "mysql_fetch_lengths" };
 
 		void ** pFuncs[] = { (void **) &sph_mysql_free_result, (void **) &sph_mysql_next_result
 			, (void **) &sph_mysql_use_result, (void **) &sph_mysql_num_rows, (void **) &sph_mysql_query
 			, (void **) &sph_mysql_errno, (void **) &sph_mysql_error, (void **) &sph_mysql_init
-			, (void **) &sph_mysql_ssl_set, (void **) &sph_mysql_real_connect, (void **) &sph_mysql_close
+			, (void **) &sph_mysql_options_or_ssl_set, (void **) &sph_mysql_real_connect, (void **) &sph_mysql_close
 			, (void **) &sph_mysql_num_fields, (void **) &sph_mysql_fetch_row
 			, (void **) &sph_mysql_fetch_fields, (void **) &sph_mysql_fetch_lengths };
 
@@ -72,7 +82,6 @@ static const char * GET_MYSQL_LIB()
 	}
 
 #else
-
 	#define sph_mysql_free_result mysql_free_result
 	#define sph_mysql_next_result mysql_next_result
 	#define sph_mysql_use_result mysql_use_result
@@ -81,7 +90,7 @@ static const char * GET_MYSQL_LIB()
 	#define sph_mysql_errno mysql_errno
 	#define sph_mysql_error mysql_error
 	#define sph_mysql_init mysql_init
-	#define sph_mysql_ssl_set mysql_ssl_set
+	#define sph_mysql_options_or_ssl_set mysql_ssl_set
 	#define sph_mysql_real_connect mysql_real_connect
 	#define sph_mysql_close mysql_close
 	#define sph_mysql_num_fields mysql_num_fields
@@ -215,7 +224,15 @@ bool CSphSource_MySQL::SqlConnect ()
 
 	sph_mysql_init ( &m_tMysqlDriver );
 	if ( !m_sSslKey.IsEmpty() || !m_sSslCert.IsEmpty() || !m_sSslCA.IsEmpty() )
-		sph_mysql_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
+	{
+#if MYSQL57PLUS
+		sph_mysql_options_or_ssl_set ( &m_tMysqlDriver, MYSQL_OPT_SSL_KEY, m_sSslKey.cstr() );
+		sph_mysql_options_or_ssl_set ( &m_tMysqlDriver, MYSQL_OPT_SSL_CERT, m_sSslCert.cstr() );
+		sph_mysql_options_or_ssl_set ( &m_tMysqlDriver, MYSQL_OPT_SSL_CA, m_sSslCA.cstr() );
+#else
+		sph_mysql_options_or_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
+#endif
+	}
 
 	m_iMysqlConnectFlags |= CLIENT_MULTI_RESULTS; // we now know how to handle this
 	bool bRes = ( nullptr!=sph_mysql_real_connect ( &m_tMysqlDriver,

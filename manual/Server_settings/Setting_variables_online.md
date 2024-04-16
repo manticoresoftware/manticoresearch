@@ -43,7 +43,56 @@ Known per-session server variables:
 
 * `AUTOCOMMIT = {0 | 1}` determines if data modification statements should be implicitly wrapped by `BEGIN` and `COMMIT`.
 * `COLLATION_CONNECTION = collation_name` selects the collation for `ORDER BY` or `GROUP BY` on string values in subsequent queries. Refer to [Collations](../Searching/Collations.md) for a list of known collation names.
-* `WAIT_TIMEOUT = <value>` sets connection timeout, either per session or global. Global can only be set on a VIP connection.
+* `WAIT_TIMEOUT/net_read_timeout = <value>` sets connection timeout, either per session or global. Global can only be set on a VIP connection.
+* `net_write_timeout = <value>`: Tunes the network timeout for write operations, i.e., sending data. The global value can be changed only with VIP privileges.
+* `throttling_period = <INT_VALUE>`: Interval (in milliseconds) during which the current running query will reschedule. A value of 0 disables throttling, meaning the query will occupy CPU cores until it finishes. If concurrent queries come from other connections at the same time, they will be allocated to free cores or will be suspended until a core is released. Providing a negative value (-1) resets throttling to the default compiled-in value (100ms), which means the query will be rescheduled every 100ms, allowing concurrent queries a chance to be executed. The global value (set via `set global`) can only be set on a VIP connection.
+* `thread_stack = <value>`: Changes the default value on-the-fly, which limits the stack size provided to one task. Note that here 'thread' refers not to an OS thread, but to a userspace thread, also known as a coroutine. This can be useful if, for example, you load a percolate table with unexpectedly high requirements. In such cases, 'call pq' would fail with a message about insufficient stack size. Generally, you should stop the daemon, increase the value in the config, and then restart. However, you can also try a new value without restarting, by setting a new one with this variable. The global value can also be changed online with `set global thread_stack`, but this is available only from a VIP connection.
+* `optimize_by_id = {0 | 1}`: Internal flag used in some `debug` commands.
+* `threads_ex` (diagnostic): Forces Manticore to behave as if it is running on a CPU with the provided profile. As a short example, `set threads_ex='4/2+6/3'` indicates 'you have 4 free CPU cores, when scheduling multiple queries they should be batched by 2. Also, you have 6 free CPU cores for pseudo-sharding, parts should be batched by 3'. This option is diagnostic, as it is very helpful, for example, to see how your query would run on a configuration you don't have locally. For instance, on a 128-core CPU. Or, conversely, to quickly limit the daemon to behave as single-threaded, to locate a bottleneck or investigate a crash.
+
+  <details>
+
+	By default, Manticore starts a thread pool with a calculated number of CPU cores. All typical tasks are then distributed into this thread pool to ensure maximum CPU utilization. For instance, when a real-time table has several disk chunks, the search will be parallelized over the CPU cores. Similarly, for a single full-text search over a single index, the daemon will attempt to optimize search execution in parallel, using a technique referred to as "pseudo-sharding". Both features heavily depend on the total number of CPU cores and the number of free cores available for immediate use.
+
+	This approach enhances performance but can make incident investigation more challenging. For example, a query doing `COUNT(*)` may return an approximate result (e.g., greater than 100 matches), and a subsequent execution of the same query may yield an exact result (e.g., exactly 120 matches). This variability depends on the available cores, but since this factor is unpredictable, it generally leads to non-reproducible results. Although this is usually acceptable, it can sometimes pose a problem. The `threads_ex` option specifies a desired CPU cores configuration, making queries with this configuration reproducible.
+
+	`threads_ex` sets the CPU template for standard tasks and for pseudo-sharding, as pseudo-sharding can be part of the standard parallelization process. For example, if there are several disk chunks, they will be queried in parallel, but each may be further parallelized using pseudo-sharding. Thus, to manage this situation effectively, you need a couple of templates for each task type.
+
+	A template is a string like `10/3`, where 10 represents concurrency and 3 represents batch size. If concurrency is 0, the default concurrency will be used. If batch size is 0, the default trivial template will be used. Any zero value can be omitted or replaced with `*`. The default (trivial) template can be described as `''`, and also as `*/*`, `0/0`, `0/`, `*/`, `/0`, `*`, etc. This means the daemon uses all available CPU cores without special batching limitations.
+
+	A trivial template with 20 threads can be expressed as `20/*`, `20/0`, `20/`, or simply `20`. A round-robin template with a batch size of 2 is `*/2`, `0/2`, or simply `/2`. A round-robin dispatcher with 20 threads and a batch size of 3 is `20/3`.
+
+	`threads_ex` is a template for basic tasks and for pseudo-sharding, separated by `+`, like:
+
+	* `30+3` - a trivial base of 30 threads + trivial pseudo-sharding of 3 threads
+	* `+/2` - a trivial base + round-robin pseudo-sharding with default threads and batch=2
+	* `10` - a trivial base of 10 threads + default trivial pseudo-sharding
+	* `/1+10` - a round-robin base with default threads and batch=1 + trivial pseudo-sharding with 10 threads
+	* `4/2+2/1` - a round-robin base with 4 threads and batch=2 + round-robin pseudo-sharding with 2 threads and batch=1
+	* `1+1` - the most deterministic case. Exactly 1 thread + 1 pseudo-shard, i.e., no parallelization at all. With this setting, you can reproducibly repeat the same problematic query and investigate behavior details. Furthermore, if you set `throttling_period=0`, your query will 'stick' to the current thread and never be rescheduled during execution, creating an ideal environment for troubleshooting.
+
+	The option can be set globally from outside as an environment variable `MANTICORE_THREADS_EX`, like:
+
+	```bash
+	export MANTICORE_THREADS_EX=8
+	export MANTICORE_THREADS_EX='16+8/2'
+  ```
+
+  Or, via the MySQL CLI, as:
+  ```sql
+  SET threads_ex='16';
+	SET GLOBAL threads_ex='/2';
+  ```
+
+  Or, as a query parameter, like:
+  ```sql
+  SELECT ... OPTION threads_ex='1+1';
+  ```
+
+  The `threads_ex` configuration follows a hierarchy: environment variables first, then the global variable, and lastly, query options, allowing specific settings to override general ones.
+
+  </details>
+
 * `PROFILING = {0 | 1}` enables query profiling in the current session. Defaults to 0. See also [show profile](../Node_info_and_management/Profiling/Query_profile.md).
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` redefines [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) in the runtime. Per-session variable influences only the queries run in the same session (connection), i.e. up to disconnect. Value 0 means 'no limit'. If both per-session and the global variables are set, the per-session one has a higher priority.
 * `ro = {1 | 0}` switches session to read-only mode or back. In `show variables` output the variable displayed with name `session_read_only`.
@@ -66,9 +115,16 @@ Known global server variables are:
 * `IOSTATS = {0 | 1}` Enables or disables I/O operations (except for attributes) reporting in the query log.
 * `CPUSTATS= {1|0}` Turns on/off [CPU time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
+* `AUTO_OPTIMIZE = {1|0}` Turns on/off [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
 * `PSEUDO_SHARDING = {1|0}` Turns on/off search [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding).
 * `SECONDARY_INDEXES = {1|0}` Turns on/off [secondary indexes](../Server_settings/Searchd.md#secondary_indexes) for search queries.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).
+* `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` changes [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) param. Only clients with VIP connections can change this variable.
+* `optimize_cutoff = <value>`: Changes the value of the config's [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) setting on-the-fly.
+* `accurate_aggregation`: Sets the default value for the option [accurate_aggregation](../Searching/Options.md#accurate_aggregation) of future queries.
+* `distinct_precision_threshold`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) of future queries.
+* `expansion_merge_threshold_docs`: Changes the value of the config's [expansion_merge_threshold_docs](Server_settings/Searchd.md#expansion_merge_threshold_docs) setting on-the-fly.
+* `expansion_merge_threshold_hits`: Changes the value of the config's [expansion_merge_threshold_hits](Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
 
 Examples:
 

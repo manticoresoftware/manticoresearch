@@ -35,7 +35,7 @@ jobs:
           push: false
           tags: manticoresoftware/dind:latest
           context: test/clt-tests/mysqldump/versions/docker/
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.21
         with:
           image: manticoresoftware/dind:latest
           test_prefix: test/clt-tests/mysqldump/versions/

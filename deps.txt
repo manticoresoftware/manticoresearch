@@ -1,8 +1,7 @@
-backup 1.3.3 24020805 382dc0e
-buddy 2.1.3 24020607 191ad89
-mcl 2.2.5 240115 214ce90
-executor 1.0.13 23122917 fa7313e
-executor-win 0.3.5 221125 a40554c
+backup 1.3.5 24041602 b58f2be
+buddy 2.3.5 24041511 15de2ec
+mcl 2.2.5 240405 b4f7386
+executor 1.1.3 24040213 d2d9454
 tzdata 0.9.9 230720 daeb8a8
 ---
 ! Do not change the separator that splits this desc from the data

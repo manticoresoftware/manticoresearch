@@ -1,5 +1,5 @@
-name: CLT latest release installation tests
-run-name: CLT latest release installation tests ${{ github.sha }}
+name: Nightly tests
+run-name: Nightly tests ${{ github.sha }}
 
 on:
   schedule:
@@ -13,6 +13,7 @@ on:
     branches: [ master ]
     paths:
       - 'test/clt-tests/installation/**'
+      - 'test/clt-tests/comparison-overhead-json-sql/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -36,7 +37,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.19
         with:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
@@ -49,7 +50,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.19
         with:
           ref: manticore-6.2.12
           image: ${{ matrix.image }}
@@ -63,7 +64,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.19
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-u
@@ -76,7 +77,18 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.19
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-u
+
+  clt_comparison_overhead_json_sql:
+    name: Testing comparison overhead JSON and SQL
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.19
+        with:
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+          test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>freeze counter</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<metaindex name='META:rtpq'>
+	<index>testrt</index>
+	<index>testpq</index>
+</metaindex>
+
+
+<queries><sphinxql>
+	create table testrt ( title text );
+	create table testpq ( title text ) type='pq';
+
+	show table META:rtpq status like 'locked';
+	freeze META:rtpq like 'fake';
+	show table META:rtpq status like 'locked';
+	freeze META:rtpq like 'fake';
+	freeze META:rtpq like 'fake';
+	freeze META:rtpq like 'fake';
+	show table META:rtpq status like 'locked';
+	unfreeze META:rtpq;
+	show table META:rtpq status like 'locked';
+	unfreeze META:rtpq;
+	unfreeze META:rtpq;
+	show table META:rtpq status like 'locked';
+	unfreeze META:rtpq;
+	unfreeze META:rtpq;
+	show table META:rtpq status like 'locked';
+	drop table META:rtpq;
+</sphinxql></queries>
+
+</test>

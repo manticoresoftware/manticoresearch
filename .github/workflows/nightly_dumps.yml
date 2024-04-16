@@ -29,15 +29,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build test kit
-        uses: docker/build-push-action@v5
+      - uses: manticoresoftware/clt@0.1.21
         with:
-          push: false
-          tags: manticoresoftware/dind:latest
-          context: test/clt-tests/mysqldump/versions/docker/
-      - uses: manticoresoftware/clt@0.1.19
-        with:
-          image: manticoresoftware/dind:latest
+          image: manticoresoftware/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/
           run_args: --privileged
 
@@ -47,15 +41,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build test kit
-        uses: docker/build-push-action@v5
-        with:
-          push: false
-          tags: manticoresoftware/dind:latest
-          context: test/clt-tests/migration-es-ms/docker/
       - uses: manticoresoftware/clt@0.1.21
         with:
-          image: manticoresoftware/dind:latest
+          image: manticoresoftware/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
           run_args: --privileged
           

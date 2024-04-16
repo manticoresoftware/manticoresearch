@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
       - uses: manticoresoftware/clt@0.1.21
         with:
-          image: manticoresoftware/dind:v1
+          image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/
           run_args: --privileged
 
@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
       - uses: manticoresoftware/clt@0.1.21
         with:
-          image: manticoresoftware/dind:v1
+          image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
           run_args: --privileged
           

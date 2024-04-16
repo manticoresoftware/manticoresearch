@@ -1,4 +1,4 @@
-––– block: ./init –––
+––– block: ../base/docker/init –––
 ––– input –––
 docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null 2>&1; echo $?
 ––– output –––

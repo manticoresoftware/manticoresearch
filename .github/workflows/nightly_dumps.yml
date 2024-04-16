@@ -42,7 +42,7 @@ jobs:
           run_args: --privileged
 
   clt_test_migration_es_ms:
-    name: Testing supported myqldump versions
+    name: Testing data migration from elastic to manticore
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -53,7 +53,7 @@ jobs:
           push: false
           tags: manticoresoftware/dind:latest
           context: test/clt-tests/migration-es-ms/docker/
-      - uses: manticoresoftware/clt@0.1.13
+      - uses: manticoresoftware/clt@0.1.21
         with:
           image: manticoresoftware/dind:latest
           test_prefix: test/clt-tests/migration-es-ms/

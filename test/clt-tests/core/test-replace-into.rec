@@ -1,9 +1,6 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-chmod +x ./test/clt-tests/core/generate-1mln-records.sh
-––– output –––
-––– input –––
-./test/clt-tests/core/generate-1mln-records.sh
+mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS tbl; SHOW TABLES; CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
 ––– output –––
 --------------
 SHOW TABLES
@@ -17,6 +14,9 @@ SHOW TABLES
 --------------
 CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')
 --------------
+––– input –––
+chmod +x ./test/clt-tests/core/generate-1mln-records.sh
+––– output –––
 +-------+------+
 | Index | Type |
 +-------+------+
@@ -28,17 +28,9 @@ CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string,
 |  1000000 |
 +----------+
 ––– input –––
-mysql -h0 -P9306 -e "show version;"
+./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
-+-----------+--------------------------------+
-| Component | Version                        |
-+-----------+--------------------------------+
-| Daemon    | %{SEMVER} %{COMMITDATE} dev  |
-| Columnar  | columnar %{SEMVER} %{COMMITDATE}  |
-| Secondary | secondary %{SEMVER} %{COMMITDATE} |
-| KNN       | knn %{SEMVER} %{COMMITDATE}       |
-| Buddy     | buddy v%{SEMVER}                   |
-+-----------+--------------------------------+
+
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 15 PRO' WHERE id = 101; select * from tbl WHERE id = 101;"
 ––– output –––
@@ -216,10 +208,7 @@ mysql -h0 -P9306 -e "REPLACE INTO tbl SET id =777 WHERE id = 144; select * from 
 |  144 | Sony Xperia XZ3 |               64 | forest green |         2018 | 899.989990 |       799.989990 |    1 | 3308512240 | 126,127,128   | 3723456764345678976,9223372036854775807 | {"features":["Snapdragon 845","6.0-inch display","Single camera"]} | 0.733448,0.272478,0.097971,0.419821 |
 +------+-----------------+------------------+--------------+--------------+------------+------------------+------+------------+---------------+-----------------------------------------+--------------------------------------------------------------------+-------------------------------------+
 ––– input –––
-chmod +x ./test/clt-tests/core/generate-1mln-records-with-columnar.sh
-––– output –––
-––– input –––
-./test/clt-tests/core/generate-1mln-records-with-columnar.sh
+mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS tbl; DROP TABLE IF EXISTS abc; SHOW TABLES; CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') engine='columnar';"
 ––– output –––
 --------------
 SHOW TABLES
@@ -242,6 +231,12 @@ SHOW TABLES
 --------------
 CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') engine='columnar'
 --------------
+––– input –––
+chmod +x ./test/clt-tests/core/generate-1mln-records.sh
+––– output –––
+––– input –––
+./test/clt-tests/core/generate-1mln-records.sh
+––– output –––
 +-------+------+
 | Index | Type |
 +-------+------+

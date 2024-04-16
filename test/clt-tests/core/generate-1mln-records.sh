@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS tbl; SHOW TABLES; CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
-
 total_iterations=20000
 
 output_file="/tmp/insert_commands.sql"

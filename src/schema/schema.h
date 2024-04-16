@@ -155,3 +155,6 @@ private:
 	void					SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 	void					SetupKNNFlags ( const CSphSourceSettings & tSettings );
 };
+
+
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );

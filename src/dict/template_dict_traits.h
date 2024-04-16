@@ -24,7 +24,7 @@ protected:
 	~TemplateDictTraits_c() override;
 
 public:
-	void LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final;
+	void LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c & pTokenizer, bool bStripFile ) final;
 	void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) final;
 	void WriteStopwords ( Writer_i & tWriter ) const final;
 	void WriteStopwords ( JsonEscapedBuilder& tOut ) const final;

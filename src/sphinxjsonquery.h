@@ -22,6 +22,12 @@ struct cJSON;
 struct XQNode_t;
 struct SqlStmt_t;
 
+struct AggrComposite_t
+{
+	CSphString m_sAlias;
+	CSphString m_sColumn;
+};
+
 struct JsonAggr_t : public AggrSettings_t
 {
 	CSphString	m_sBucketName;
@@ -29,6 +35,8 @@ struct JsonAggr_t : public AggrSettings_t
 	int			m_iSize = 0;
 	CSphVector<JsonAggr_t> m_dNested;
 	CSphString	m_sSort;
+	CSphVector<AggrComposite_t> m_dComposite;
+	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;
 
 	CSphString GetAliasName () const;
 };
@@ -41,10 +49,18 @@ struct JsonQuery_c : public CSphQuery
 	CSphVector<JsonAggr_t> m_dAggs;
 };
 
+struct ParsedJsonQuery_t
+{
+	JsonQuery_c m_tQuery;
+	CSphString m_sWarning;
+	bool m_bProfile = false;
+	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
+};
+
 std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();
-bool			sphParseJsonQuery ( Str_t sQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning );
-bool			sphParseJsonQuery ( const JsonObj_c & tRoot, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning );
-bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, bool bCompat, CSphString & sError );
+bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery );
+bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery );
+bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError );
@@ -59,12 +75,13 @@ JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIn
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
+bool			CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError );
 
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus );
 CSphString JsonEncodeResultError ( const CSphString & sError, const char * sErrorType, int iStatus, const char * sIndex );
 CSphString JsonEncodeResultError ( const CSphString & sError, int iStatus );
 
-bool ParseJsonInsertSource ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, bool bReplace, bool bCompat, CSphString & sError );
+bool ParseJsonInsertSource ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, bool bReplace, CSphString & sError );
 bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 
 #endif

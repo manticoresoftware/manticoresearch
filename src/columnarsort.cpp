@@ -1102,6 +1102,9 @@ static bool CanCreateColumnarSorter ( const ISphSchema & tSchema, const CSphMatc
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 		if ( tAttr.m_eStage<=SPH_EVAL_PRESORT && tAttr.m_pExpr && sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
 			return false;
+
+		if ( tAttr.IsJoined() )
+			return false;
 	}
 
 	bool bHaveColumnar = false;

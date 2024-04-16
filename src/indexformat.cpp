@@ -176,7 +176,7 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 			tExpand.m_iDocs = tWord.m_iDocs;
 			tExpand.m_iHits = tWord.m_iHits;
 			m_dWordBuf.Resize ( iOff + iWordLen + 1 );
-			memcpy ( m_dWordBuf.Begin() + iOff + 1, tWord.m_sKeyword, iWordLen );
+			memcpy ( m_dWordBuf.Begin() + iOff + 1, tWord.m_szKeyword, iWordLen );
 			m_dWordBuf[iOff] = (BYTE)iWordLen;
 
 		} else
@@ -214,6 +214,8 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 				iTotalDocs += iDocs;
 				iTotalHits += tCur.m_iHits;
 			}
+
+			tArgs.m_tExpansionStats.m_iTerms += m_dWordExpand.GetLength();
 		}
 
 		if ( m_dWordPayload.GetLength() )
@@ -238,6 +240,7 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 			pPayload->m_iTotalDocs = iTotalDocs;
 			pPayload->m_iTotalHits = iTotalHits;
 			tArgs.m_pPayload = std::move ( pPayload );
+			tArgs.m_tExpansionStats.m_iMerged += m_dWordPayload.GetLength();
 		}
 		tArgs.m_iTotalDocs = iTotalDocs;
 		tArgs.m_iTotalHits = iTotalHits;
@@ -314,7 +317,7 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 	int iCheckpointOnlySize = (int)(iFileSize-m_iDictCheckpointsOffset);
 	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
-		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - strlen ( g_sTagInfixBlocks ) - m_iDictCheckpointsOffset);
+		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - g_sTagInfixBlocks.second - m_iDictCheckpointsOffset);
 
 	if ( iFileSize-m_iDictCheckpointsOffset>=UINT_MAX )
 	{
@@ -335,7 +338,7 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 	BYTE * pWord = m_pWords.Begin();
 	for ( auto & dCheckpoint : m_dCheckpoints )
 	{
-		dCheckpoint.m_sWord = (char *)pWord;
+		dCheckpoint.m_szWord = (char *)pWord;
 
 		const int iLen = tReader.GetDword();
 		assert ( iLen>0 );
@@ -380,9 +383,9 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 		// FIXME!!! store and load that explicitly
 		if ( m_dInfixBlocks.GetLength() )
-			m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - strlen ( g_sTagInfixEntries );
+			m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - g_sTagInfixEntries.second;
 		else
-			m_iWordsEnd -= strlen ( g_sTagInfixEntries );
+			m_iWordsEnd -= g_sTagInfixEntries.second;
 	}
 
 	if ( tReader.GetErrorFlag() )
@@ -532,7 +535,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 		{
 			// block is sorted
 			// so once keywords are greater than the prefix, no more matches
-			int iCmp = sphDictCmp ( sSubstring, iSubLen, (const char *)tDictReader.m_sKeyword, tDictReader.GetWordLen() );
+			int iCmp = sphDictCmp ( sSubstring, iSubLen, (const char *)tDictReader.m_szKeyword, tDictReader.GetWordLen() );
 			if ( iCmp<0 )
 				break;
 
@@ -540,7 +543,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 				break;
 
 			// does it match the prefix *and* the entire wildcard?
-			if ( iCmp==0 && sphWildcardMatch ( (const char *)tDictReader.m_sKeyword + iSkipMagic, sWildcard, pWildcard ) )
+			if ( iCmp==0 && sphWildcardMatch ( (const char *)tDictReader.m_szKeyword + iSkipMagic, sWildcard, pWildcard ) )
 				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
 		}
 
@@ -551,7 +554,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 		if ( pCheckpoint > &m_dCheckpoints.Last() )
 			break;
 
-		if ( sphDictCmp ( sSubstring, iSubLen, pCheckpoint->m_sWord, (int) strlen ( pCheckpoint->m_sWord ) )<0 )
+		if ( sphDictCmp ( sSubstring, iSubLen, pCheckpoint->m_szWord, (int) strlen ( pCheckpoint->m_szWord ) )<0 )
 			break;
 	}
 
@@ -594,10 +597,10 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasExactForms && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *tDictReader.m_szKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
-			if ( sphWildcardMatch ( (const char *)tDictReader.m_sKeyword+iSkipMagic, sWildcard, pWildcard ) )
+			if ( sphWildcardMatch ( (const char *)tDictReader.m_szKeyword+iSkipMagic, sWildcard, pWildcard ) )
 				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
 		}
 
@@ -651,11 +654,11 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasExactForms && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *tDictReader.m_szKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
 			int iLen = tDictReader.GetWordLen();
-			re2::StringPiece sDictToken ( (const char *)tDictReader.m_sKeyword+iSkipMagic, iLen );
+			re2::StringPiece sDictToken ( (const char *)tDictReader.m_szKeyword+iSkipMagic, iLen );
 
 			ARRAY_FOREACH ( i, dRegex )
 			{
@@ -713,7 +716,7 @@ void KeywordsBlockReader_c::Reset ( const BYTE * pBuf )
 	m_pBuf = pBuf;
 	m_sWord[0] = '\0';
 	m_iLen = 0;
-	m_sKeyword = m_sWord;
+	m_szKeyword = m_sWord.data();
 }
 
 
@@ -747,9 +750,9 @@ bool KeywordsBlockReader_c::UnpackWord()
 	}
 
 	assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
-	assert ( iMatch<=(int)strlen ( (char *)m_sWord ) );
+	assert ( iMatch<=(int)strlen ( (char *)m_sWord.data() ) );
 
-	memcpy ( m_sWord + iMatch, m_pBuf, iDelta );
+	memcpy ( m_sWord.data() + iMatch, m_pBuf, iDelta );
 	m_pBuf += iDelta;
 
 	m_iLen = iMatch + iDelta;
@@ -767,4 +770,22 @@ bool KeywordsBlockReader_c::UnpackWord()
 
 	assert ( m_iLen>0 );
 	return true;
+}
+
+static int g_iExpandMergeDocs = 32;
+static int g_iExpandMergeHits = 256;
+
+bool sphIsExpandedPayload ( int iDocs, int iHits )
+{
+	return ( iHits<g_iExpandMergeHits || iDocs<g_iExpandMergeDocs );
+}
+
+void ExpandedMergeThdDocs ( int iDocs )
+{
+	g_iExpandMergeDocs = iDocs;
+}
+
+void ExpandedMergeThdHits ( int iHits )
+{
+	g_iExpandMergeHits = iHits;
 }

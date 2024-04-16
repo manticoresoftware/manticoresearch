@@ -271,58 +271,17 @@ public:
 	const char *	m_szIndexName = nullptr;
 	const char *	m_szAgent = nullptr;
 
-	WarnInfo_c ( const char * szIndexName, const char *	szAgent, StrVec_t * pWarnings=nullptr )
-		: m_szIndexName ( szIndexName )
-		, m_szAgent ( szAgent )
-		, m_pWarnings ( pWarnings )
-	{}
+	WarnInfo_c ( const char * szIndexName, const char *	szAgent, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
-	void Warn ( const char * szFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, szFmt );
-
-		CSphString sWarning;
-		if ( m_szIndexName )
-			sWarning.SetSprintf ( "table '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
-		else
-			sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
-
-		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
-		sphInfo ( "%s", sWarning.cstr() );
-
-		if ( m_pWarnings )
-			m_pWarnings->Add(sWarning);
-
-		va_end ( ap );
-	}
+	void Warn ( const char * szFmt, ... ) const;
 
 	/// format an error message using idx and agent names from own context
 	/// \return always false, to simplify statements
-	bool ErrSkip ( const char * szFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, szFmt );
-
-		CSphString sWarning;
-
-		if ( m_szIndexName )
-			sWarning.SetSprintf ( "table '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
-		else
-			sWarning.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
-
-		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
-		sphWarning ( "%s", sWarning.cstr() );
-
-		if ( m_pWarnings )
-			m_pWarnings->Add(sWarning);
-
-		va_end ( ap );
-		return false;
-	}
+	bool ErrSkip ( const char * szFmt, ... ) const;
 
 private:
 	StrVec_t *		m_pWarnings = nullptr;
+	CSphString &	m_sError;
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
@@ -800,7 +759,7 @@ bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInf
 //! \param szIndexName - index we apply to
 //! \param tOptions - global options affecting agent
 //! \return configured multiagent, or null if failed
-MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings=nullptr );
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
 class RequestBuilder_i : public ISphNoncopyable
 {

@@ -87,12 +87,13 @@ private:
 
 	void LoadDistrFromConfig ( const CSphString& sIndex, const CSphConfigSection& hIndex )
 	{
+		CSphString sError;
 		DistributedIndexRefPtr_t pNewDistr ( new DistributedIndex_t );
-		ConfigureDistributedIndex ( [this] ( const auto& sIdx ) { return m_hLocals[sIdx]; }, *pNewDistr, sIndex.cstr(), hIndex );
-		if ( pNewDistr->IsEmpty() )
+		bool bOk = ConfigureDistributedIndex ( [this] ( const auto& sIdx ) { return m_hLocals[sIdx]; }, *pNewDistr, sIndex.cstr(), hIndex, sError );
+		if ( !bOk || pNewDistr->IsEmpty() )
 		{
 			if ( CopyExistingDistr ( sIndex ) || CopyExistingLocal ( sIndex ) )
-				sphWarning ( "table '%s': no valid local/remote tables in distributed table; using last valid definition", sIndex.cstr() );
+				sphWarning ( "table '%s': no valid local/remote tables in distributed table; using last valid definition; error: %s", sIndex.cstr(), sError.cstr() );
 		} else
 			m_hNewDistrIndexes.Add ( pNewDistr, sIndex );
 	}

@@ -84,6 +84,23 @@ call keywords('a', 'test4');
 drop table test4;
 </sphinxql>
 
+<!-- create table should fail on missed wordforms (exact file without search mask) -->
+<sphinxql>
+create table test2 ( title text, tag integer ) wordforms = '<this_test/>/wrong.file';
+</sphinxql>
+
+<!-- alter table failed on add any external files -->
+<sphinxql>
+create table test_alter ( title text, tag integer );
+
+alter table test_alter exceptions='<this_test/>/exc1.txt';
+alter table test_alter stopwords='<this_test/>/stops1.txt';
+alter table test_alter wordforms='<this_test/>/wordforms2.txt';
+
+SHOW CREATE TABLE test_alter;
+drop table test_alter;
+</sphinxql>
+
 </queries>
 
 </test>

@@ -78,7 +78,7 @@ $ignore_old = $g_ignore_weights;
 $g_ignore_weights = false;
 // final fixup; we don't want to compare times
 for ( $i=0; $i<count($results); $i++ )
-	CompareResultSetFixup ( $results[$i], 0, true, false );
+	$this->CompareResultSetFixup ( $results[$i], 0, true, false );
 
 $g_ignore_weights = $ignore_old;
 

@@ -12,12 +12,12 @@
 
 
 template<typename T, typename C>
-SphMemberLess_T<T, C>::SphMemberLess_T ( T C::*pMember )
+inline SphMemberLess_T<T, C>::SphMemberLess_T ( T C::*pMember )
 	: m_pMember ( pMember )
 {}
 
 template<typename T, typename C>
-inline bool SphMemberLess_T<T, C>::IsLess ( const C& a, const C& b ) const
+inline bool SphMemberLess_T<T, C>::IsLess ( const C& a, const C& b ) const noexcept
 {
 	return ( ( &a )->*m_pMember ) < ( ( &b )->*m_pMember );
 }
@@ -35,7 +35,7 @@ SphLesser<COMP>::SphLesser ( COMP&& fnComp )
 
 template<typename COMP>
 template<typename T>
-bool SphLesser<COMP>::IsLess ( T&& a, T&& b ) const
+bool SphLesser<COMP>::IsLess ( T&& a, T&& b ) const noexcept ( noexcept ( m_fnComp ) )
 {
 	return m_fnComp ( std::forward<T> ( a ), std::forward<T> ( b ) );
 }
@@ -55,16 +55,16 @@ SphMemberFunctor_T<T,CLASS>::SphMemberFunctor_T ( T CLASS::*pMember )
 {}
 
 template<typename T, typename CLASS>
-const T& SphMemberFunctor_T<T, CLASS>::operator() ( const CLASS& arg ) const { return ( &arg )->*m_pMember; }
+const T& SphMemberFunctor_T<T, CLASS>::operator() ( const CLASS& arg ) const noexcept { return ( &arg )->*m_pMember; }
 
 template<typename T, typename CLASS>
-inline bool SphMemberFunctor_T<T, CLASS>::IsLess ( const CLASS& a, const CLASS& b ) const
+inline bool SphMemberFunctor_T<T, CLASS>::IsLess ( const CLASS& a, const CLASS& b ) const noexcept
 {
 	return ( &a )->*m_pMember < ( &b )->*m_pMember;
 }
 
 template<typename T, typename CLASS>
-inline bool SphMemberFunctor_T<T, CLASS>::IsEq ( const CLASS& a, T b )
+inline bool SphMemberFunctor_T<T, CLASS>::IsEq ( const CLASS& a, T b ) const noexcept
 {
 	return ( ( &a )->*m_pMember ) == b;
 }

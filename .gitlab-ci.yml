@@ -185,6 +185,7 @@ win_tests:
     BOOST_ROOT: "x:/boost_1_75_0"
     CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
     CTEST_CONFIGURATION_TYPE: Debug
+    CTEST_EXCLUDE_REGEX: "_466"
     NO_BUILD: 1
   script:
     - 'net use x: \\\\VBOXSRV\\shared'

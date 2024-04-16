@@ -169,3 +169,6 @@
 
 /* hardcoded default plugin dir */
 #define HARDCODED_PLUGIN_DIR "${CMAKE_INSTALL_FULL_LOCALLIBDIR}/manticore"
+
+/* define to set custom executor image version */
+#define BUDDY_EXECUTOR_VERNUM "${EXECUTOR_VERNUM}"

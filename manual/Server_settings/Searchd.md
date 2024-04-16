@@ -186,7 +186,7 @@ An empty value disables binary logging, which improves performance but puts the 
 binlog_path = # disable logging
 binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc will be created
 ```
-<!-- end -->    
+<!-- end -->
 
 
 ### buddy_path
@@ -226,7 +226,7 @@ buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/
 buddy_path = manticore-executor -n /opt/homebrew/share/manticore/modules/manticore-buddy/bin/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in MacOS arm64, but run it in debug mode
 buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debug # use Manticore Buddy from a non-default location
 ```
-<!-- end -->    
+<!-- end -->
 
 ### client_timeout
 
@@ -242,7 +242,7 @@ This setting determines the maximum time to wait between requests (in seconds or
 ```ini
 client_timeout = 1h
 ```
-<!-- end -->    
+<!-- end -->
 
 
 ### collation_libc_locale
@@ -330,7 +330,7 @@ Default attribute storage engine used when creating tables in RT mode. Can be `r
 ```ini
 engine = columnar
 ```
-<!-- end -->    
+<!-- end -->
 
 
 ### expansion_limit
@@ -348,8 +348,41 @@ When performing substring searches against tables built with `dict = keywords` e
 ```ini
 expansion_limit = 16
 ```
-<!-- end -->    
+<!-- end -->
 
+### expansion_merge_threshold_docs
+
+<!-- example conf expansion_merge_threshold_docs -->
+This setting determines the maximum number of documents in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 32.
+
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_merge_threshold_docs = 1024
+```
+<!-- end -->
+
+### expansion_merge_threshold_hits
+
+<!-- example conf expansion_merge_threshold_hits -->
+This setting determines the maximum number of hits in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 256.
+
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_merge_threshold_hits = 512
+```
+<!-- end -->
 
 ### grouping_in_utc
 
@@ -739,8 +772,7 @@ Defines how many requests are processed on each iteration of the network loop. T
 <!-- example conf network_timeout -->
 Network client request read/write timeout, in seconds (or  [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, the default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
 
-Notice also [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). This param switches behaviour of `network_timeout` between whole `query` or `result`, and individual packets. Usually query/result fits in one-two packets, but sometimes when
-you need a large amount of data, this param will help you to keep work alive.
+Note also the [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) parameter. This parameter alters the behavior of `network_timeout` from applying to the entire `query` or `result` to individual packets instead. Typically, a query/result fits within one or two packets. However, in cases where a large amount of data is required, this parameter can be invaluable in maintaining active operations.
 
 <!-- request Example -->
 
@@ -880,7 +912,7 @@ predicted_time =
     hit_cost * processed_hits +
     skip_cost * skiplist_jumps +
     match_cost * found_matches
-```    
+```
 
 The query is then terminated early when the `predicted_time` reaches a given limit.
 
@@ -1098,22 +1130,14 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-Refines behaviour of networking timeouts (like `network_timeout`, `read_timeout`, and `agent_query_timeout`).
+Refines the behavior of networking timeouts (such as `network_timeout`, `read_timeout`, and `agent_query_timeout`).
 
-When set to 0 - timeouts limit max time for sending whole request/query.
-When set to 1 (default) timeouts limit max time between network activities.
+When set to 0, timeouts limit the maximum time for sending the entire request/query.
+When set to 1 (default), timeouts limit the maximum time between network activities.
 
-With replication, a node might need to send large (say, 100Gig) file to another node.
-Say, network provides ability to send 1Gig/s - with serie of packets 4-5Mb each.
-So, to transfer whole file you need 100s. Default timeout of 5s will allow you to transfer only 5Gig, then 
-connection will be dropped. You can increase timeout, but that is still not scalable (because next file may 
-be 150Gig - and you're failed again). But having default `reset_network_timeout_on_packet` set to 1, timeout will be
-applied not to whole transfer, but to individual packets. As long, as transfer in progress (and something really came
-over network during timeout, it is kept alive). If transfer stuck, so that timeout happened between packets -
-it will be dropped.
+With replication, a node may need to send a large file (for example, 100GB) to another node. Assume the network can transfer data at 1GB/s, with a series of packets of 4-5MB each. To transfer the entire file, you would need 100 seconds. A default timeout of 5 seconds would only allow the transfer of 5GB before the connection is dropped. Increasing the timeout could be a workaround, but it is not scalable (for instance, the next file might be 150GB, leading to failure again). However, with the default `reset_network_timeout_on_packet` set to 1, the timeout is applied not to the entire transfer but to individual packets. As long as the transfer is in progress (and data is actually being received over the network during the timeout period), it is kept alive. If the transfer gets stuck, such that a timeout occurs between packets, it will be dropped.
 
-Notice, that if you set up distributed table, each node - master and agent(s) should be tuned. On master side
-`agent_query_timeout` is affected, on agents - `network_timeout`.
+Note that if you set up a distributed table, each node — both master and agents — should be tuned. On the master side, `agent_query_timeout` is affected; on agents, `network_timeout` is relevant.
 
 <!-- intro -->
 

@@ -415,6 +415,9 @@ bool FilterTreeConstructor_c::Parse ( const JsonObj_c & tObj )
 
 std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::ConstructPlainFilters ( const JsonObj_c & tObj )
 {
+	if ( !CheckRootNode ( tObj, m_sError ) )
+		return { false, nullptr };
+
 	for ( const auto & tChild : tObj )
 		if ( IsFilter(tChild) )
 		{
@@ -936,6 +939,38 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 				iLessVal = (int) time ( nullptr );
 			if ( bGreater && iGreaterVal )
 				iGreaterVal = (int) time ( nullptr );
+		}
+
+		// full string comparsion in range
+		if ( ( bLess && iLessVal==-1 ) || ( bGreater && iGreaterVal==-1) )
+		{
+			tFilter.m_eType = SPH_FILTER_STRING;
+			if ( bLess )
+			{
+				tFilter.m_dStrings.Add ( tLess.StrVal() );
+				if ( tFilter.m_bHasEqualMax )
+				{
+					tFilter.m_eStrCmpDir = EStrCmpDir::GT;
+					tFilter.m_bExclude = true;
+				} else
+				{
+					tFilter.m_eStrCmpDir = EStrCmpDir::LT;
+				}
+			} else
+			{
+				tFilter.m_dStrings.Add ( tGreater.StrVal() );
+				tFilter.m_eStrCmpDir = EStrCmpDir::GT;
+				if ( tFilter.m_bHasEqualMin )
+				{
+					tFilter.m_eStrCmpDir = EStrCmpDir::LT;
+					tFilter.m_bExclude = true;
+				} else
+				{
+					tFilter.m_eStrCmpDir = EStrCmpDir::GT;
+				}
+			}
+
+			return pFilterNode;
 		}
 
 		if ( ( bLess && iLessVal==-1 ) || ( bGreater && iGreaterVal==-1) )

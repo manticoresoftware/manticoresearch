@@ -3,7 +3,10 @@
 
 <name>secondary</name>
 
-<requires> <secondary/> </requires>
+<requires>
+<secondary/>
+<non-rt/>
+</requires>
 
 <config>
 searchd
@@ -93,7 +96,8 @@ insert into test_table1 (id,title, tag, flag,extra,coeff) values
 (2,'abc', 1, 1,'', -1.0 ),
 (3,'abc', 2, 0,'', -10.0 ),
 (4,'abc', 1, 1,'1', 10.0 ),
-(5,'abc', 2, 0,'1', -100.0 )
+(5,'abc', 2, 0,'1', -100.0 ),
+(6,'dec', 1, 0,'1', -100.0 )
 </db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table2</db_drop>
@@ -125,6 +129,9 @@ select * from test4 where tag in (2006) order by id desc /*+ SecondaryIndex(tag)
 select * from test4 where tag in (2007) order by id desc /*+ SecondaryIndex(tag) */;
 select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag) */;
 </sphinxql>
+
+<!-- regression no forced SI at FT -->
+<sphinxql>select * from test1 where MATCH('dec') AND tag=1 /*+ SecondaryIndex(tag) */; show meta</sphinxql>
 
 </queries>
 

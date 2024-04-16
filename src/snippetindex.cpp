@@ -148,22 +148,6 @@ void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int 
 	}
 }
 
-
-bool HasWildcards ( const char * sWord )
-{
-	if ( !sWord )
-		return false;
-
-	for ( ; *sWord; sWord++ )
-	{
-		if ( sphIsWild ( *sWord ) )
-			return true;
-	}
-
-	return false;
-}
-
-
 template<typename T>
 void TermShiftDownQpos ( CSphVector<T> & dTerms, const CSphVector<int> & dRemovedQPos )
 {

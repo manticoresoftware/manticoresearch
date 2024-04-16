@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 20
+	VER_COMMAND_SEARCH_MASTER = 21
 };
 
 
@@ -170,7 +170,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x125, // 1.37
+	VER_COMMAND_SEARCH		= 0x126, // 1.38
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x101,
@@ -842,6 +842,11 @@ public:
 		m_tRunningIndex.m_tLock.ReadLock();
 	}
 
+	RIdx_T ( RIdx_T && rhs )
+		: m_pServedKeeper ( std::move(rhs.m_pServedKeeper) )
+		, m_tRunningIndex ( std::move(rhs.m_tRunningIndex) )
+	{}
+
 	~RIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
 
 	PIDX Ptr () const NO_THREAD_SAFETY_ANALYSIS { return static_cast<PIDX> ( m_tRunningIndex.m_pIndex.get() ); }
@@ -1195,7 +1200,7 @@ enum class RotateFrom_e : BYTE;
 bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
-void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );
+bool ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, CSphString & sError, StrVec_t* pWarnings = nullptr );
 void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
 
 volatile bool& sphGetSeamlessRotate() noexcept;
@@ -1478,6 +1483,7 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( ESphHttpStatus eStatus );
+ESphHttpStatus HttpGetStatusCodes ( int iStatus );
 void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );

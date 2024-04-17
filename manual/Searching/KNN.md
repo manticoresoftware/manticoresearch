@@ -116,7 +116,8 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
       {
           "field": "<field>",
           "query_vector": [<query vector>],
-          "k": <k>
+          "k": <k>,
+          "ef": <ef>
       }
   }
   ```
@@ -125,6 +126,7 @@ The parameters are:
 * `field`: This is the name of the float vector attribute containing vector data.
 * `k`: This represents the number of documents to return and is a key parameter for Hierarchical Navigable Small World (HNSW) indexes. It specifies the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
 * `query_vector`: This is the search vector.
+* `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -134,7 +136,7 @@ Documents are always sorted by their distance to the search vector. Any addition
 <!-- request SQL -->
 
 ```sql
-select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
+select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), 2000 );
 ```
 <!-- response SQL -->
 
@@ -161,7 +163,8 @@ POST /search
 	{
 		"field": "image_vector",
 		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5
+		"k": 5,
+		"ef": 2000
 	}
 }
 ```

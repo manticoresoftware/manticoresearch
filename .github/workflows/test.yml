@@ -111,7 +111,6 @@ jobs:
             start: 871
             end: 999999
     with:
-      CTEST_CONFIGURATION_TYPE: "Debug"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
       build_artifact_name: debug_build
@@ -253,7 +252,6 @@ jobs:
             start: 871
             end: 999999
     with:
-      CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
       build_artifact_name: release_build

@@ -521,6 +521,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 	for ( const auto & tClause : tJson )
 	{
+		tBuilder.ResetNodesFlags();
 		CSphString sName = tClause.Name();
 		if ( sName=="must" )
 		{
@@ -528,7 +529,6 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 				return nullptr;
 		} else if ( sName=="should" )
 		{
-			tBuilder.ResetNodesFlags();
 			if ( !ConstructBoolNodeItems ( tClause, dShould, tBuilder ) )
 				return nullptr;
 			if ( tBuilder.m_bHasFilter && tBuilder.m_bHasFulltext )

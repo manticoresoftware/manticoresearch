@@ -1,0 +1,19 @@
+––– block: start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW QUERIES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show-queries"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW QUERIES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show-queries"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW QUERIES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW PLUGINS"
+––– output –––

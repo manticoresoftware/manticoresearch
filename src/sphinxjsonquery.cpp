@@ -1026,6 +1026,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 
 	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
 	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
+	if ( !tJson.FetchIntItem ( tQuery.m_iKnnEf, "ef", sError, true ) )		return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
 	if ( !tQueryVec )

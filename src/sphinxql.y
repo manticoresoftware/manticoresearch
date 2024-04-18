@@ -697,7 +697,12 @@ on_clause:
 knn_item:
 	TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ')'
 		{
-			if ( !pParser->SetKNN ( $3, $5, $8 ) )
+			if ( !pParser->SetKNN ( $3, $5, $8, nullptr ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' const_int ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, $8, &$11 ) )
 				YYERROR;
 		}
 	;

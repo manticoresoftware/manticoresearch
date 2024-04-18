@@ -111,7 +111,6 @@ jobs:
             start: 871
             end: 999999
     with:
-      CTEST_CONFIGURATION_TYPE: "Debug"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
       build_artifact_name: debug_build
@@ -253,7 +252,6 @@ jobs:
             start: 871
             end: 999999
     with:
-      CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
       build_artifact_name: release_build
@@ -407,7 +405,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.19
+      - uses: manticoresoftware/clt@0.1.21
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -418,7 +416,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.19
+      - uses: manticoresoftware/clt@0.1.21
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -429,7 +427,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.19
+      - uses: manticoresoftware/clt@0.1.21
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -440,7 +438,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.19
+      - uses: manticoresoftware/clt@0.1.21
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -451,7 +449,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.19
+      - uses: manticoresoftware/clt@0.1.21
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
@@ -462,7 +460,7 @@ jobs:
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.19
+      - uses: manticoresoftware/clt@0.1.21
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img

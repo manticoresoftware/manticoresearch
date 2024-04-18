@@ -64,7 +64,7 @@ ScopedPort_c g_tBuddyPort;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort );
+static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir );
 static void BuddyStop ();
 
 #if _WIN32
@@ -418,7 +418,7 @@ static void BuddyStopContainer()
 #endif
 }
 
-void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath )
+void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -457,7 +457,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 	SetContainerName ( sConfigFilePath );
 	BuddyStopContainer();
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort );
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
 	if ( sPath.IsEmpty() )
 		return;
 
@@ -649,6 +649,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		return tRes.m_bOk;
 	}
 
+	myinfo::SetCommand ( sSrcQuery.first );
+	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
+
 	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
 	if ( !tReplyRaw.first )
 	{
@@ -762,18 +765,33 @@ static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphStr
 #endif
 }
 
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort )
+#ifdef _WIN32
+CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
+{
+	if ( bHasBuddyPath )
+		return sConfigPath;
+
+	StringBuilder_c sCmd ( " " );
+	sCmd.Appendf ( "docker run --rm" ); // the head of the docker start command
+	sCmd.Appendf ( "-p %d:9999", iHostPort ); // port mapping
+	sCmd.Appendf ( "-v \"%s/%s:/buddy\"", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() ); // volume for buddy modules
+	sCmd.Appendf ( "-v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore" ); // pesistent volume for buddy data
+	if ( !sDataDir.IsEmpty() ) // volume for data dir into container
+		sCmd.Appendf ( "-v %s:/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
+	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
+	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
+	sCmd.Appendf ( "%s /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command
+
+	return CSphString ( sCmd );
+}
+#else
+CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & )
 {
 	if ( bHasBuddyPath )
 		return sConfigPath;
 
 	CSphString sExecPath;
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
-	// check executor first
-#ifdef _WIN32
-	sExecPath.SetSprintf ( "docker run --rm -p %d:9999 -v \"%s/%s:/buddy\" -v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore -w /buddy --name %s %s /buddy/src/main.php", iHostPort, GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr(), g_sContainerName.cstr(), g_sDefaultBuddyDockerImage.cstr() );
-	return sExecPath;
-#endif
 
 	CSphString sPathBuddy2Module;
 	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
@@ -787,6 +805,6 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 		return GetFullBuddyPath ( sExecPath, sPathBuddy2Cwd );
 
 	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
-
 	return CSphString();
 }
+#endif

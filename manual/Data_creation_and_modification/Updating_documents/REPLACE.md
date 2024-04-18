@@ -186,26 +186,18 @@ POST /products/_doc/3
 ```json
 POST /products/_update/55
 {
-  "description": "HUAWEI Matebook 15",
-  "price": 10
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
 }
 ```
 
 <!-- response Elasticsearch-like partial -->
 ```json
 {
-"_id":55,
 "_index":"products",
-"_primary_term":1,
-"_seq_no":0,
-"_shards":{
-    "failed":0,
-    "successful":1,
-    "total":1
-},
-"_type":"_doc",
-"_version":1,
-"result":"updated"
+"updated":1
 }
 ```
 

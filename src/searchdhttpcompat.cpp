@@ -2816,6 +2816,11 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		ReportMissedIndex ( GetUrlParts()[0] );
 		return true;
 	}
+	if ( IsEmpty ( GetBody() ) )
+	{
+		ReportError ( "Validation Failed: 1: script or doc is missing", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
 
 	nljson tUpd = nljson::parse ( GetBody().first );
 

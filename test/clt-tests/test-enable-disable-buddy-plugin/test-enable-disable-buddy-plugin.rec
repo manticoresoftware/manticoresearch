@@ -1,4 +1,7 @@
-––– block: start-searchd –––
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS"
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW QUERIES"
 ––– output –––

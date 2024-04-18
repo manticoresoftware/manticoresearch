@@ -106,7 +106,7 @@ POST /insert
 
 Now, you can perform a KNN search using the `knn` clause in either SQL or JSON format. Both interfaces support the same essential parameters, ensuring a consistent experience regardless of the format you choose:
 
-- SQL: `select ... from <table name> where knn ( <field>, <k>, <query vector> )`
+- SQL: `select ... from <table name> where knn ( <field>, <k>, <query vector> [,<ef>] )`
 - JSON:
   ```
   POST /search

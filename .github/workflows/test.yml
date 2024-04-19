@@ -422,6 +422,8 @@ jobs:
               test/clt-tests/mysqldump/maria/
           - name: Replication
             test_prefix: test/clt-tests/replication/
+          - name: Plugins
+            test_prefix: test/clt-tests/plugins/
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

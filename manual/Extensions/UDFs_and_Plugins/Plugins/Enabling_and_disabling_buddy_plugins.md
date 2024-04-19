@@ -2,6 +2,8 @@
 
 To simplify the control of Buddy plugins, especially when developing a new one or modifying an existing one, the enable and disable Buddy plugin commands are provided. These commands act temporarily during runtime and will reset to their defaults after restarting the daemon or performing a Buddy reset. To permanently disable a plugin, it must be removed.
 
+You need the fully qualified package name of the plugin to enable or disable it. To find it, you can run the `SHOW BUDDY PLUGINS` query and look for the full qualified name in the `package` field. For example, the `SHOW` plugin has the fully qualified name `manticoresoftware/buddy-plugin-show`.
+
 <!-- example enable_buddy_plugin -->
 ## ENABLE BUDDY PLUGIN
 
@@ -16,7 +18,7 @@ This command reactivates a previously disabled Buddy plugin, allowing it to proc
 
 <!-- request SQL -->
 ```sql
-ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show-queries
+ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
 <!-- end -->
 
@@ -34,7 +36,7 @@ This command deactivates an active Buddy plugin, preventing it from processing a
 
 <!-- request SQL -->
 ```sql
-DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show-queries
+DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
 
 After disabling, if you try the `SHOW QUERIES` command, you'll encounter an error because the plugin is disabled.

@@ -186,12 +186,13 @@ jobs:
           name: debug_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux debug test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -327,12 +328,13 @@ jobs:
           name: release_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux release test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -549,11 +551,12 @@ jobs:
         run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
         shell: bash
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
           check_name: Windows test results
           compare_to_earlier_commit: false
           files: build/xml_*/junit_tests.xml
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |

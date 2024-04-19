@@ -186,7 +186,7 @@ jobs:
           name: debug_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux debug test results
@@ -327,7 +327,7 @@ jobs:
           name: release_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux release test results
@@ -549,7 +549,7 @@ jobs:
         run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
         shell: bash
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
           check_name: Windows test results
           compare_to_earlier_commit: false

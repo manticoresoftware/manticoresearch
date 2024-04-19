@@ -192,6 +192,7 @@ jobs:
           check_name: Linux debug test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -333,6 +334,7 @@ jobs:
           check_name: Linux release test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -554,6 +556,7 @@ jobs:
           check_name: Windows test results
           compare_to_earlier_commit: false
           files: build/xml_*/junit_tests.xml
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |

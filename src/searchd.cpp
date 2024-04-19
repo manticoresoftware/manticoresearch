@@ -19841,10 +19841,10 @@ static void SetOptionSI ( const CSphConfigSection & hSearchd, bool bTestMode )
 			eState = SIDefault_e::DISABLED;
 		else
 			eState = SIDefault_e::ENABLED;
-	}
 
-	if ( eState!=SIDefault_e::DISABLED && !IsSecondaryLibLoaded() )
-		sphWarning ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+		if ( eState != SIDefault_e::DISABLED && !IsSecondaryLibLoaded() )
+			sphWarning ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+	}
 
 	SetSecondaryIndexDefault ( eState );
 }

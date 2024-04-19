@@ -30,78 +30,36 @@ jobs:
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
-  clt_rhel_release_installation:
-    name: Testing RHEL release packages installation
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+  clt:
+    name: CLT
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false 
+      matrix:
+        test-suite:
+          - name: RHEL release packages installation
+            image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+            test_prefix: test/clt-tests/installation/rhel-release-
+          - name: DEB release packages installation
+            image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: RHEL dev packages update
+            image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+            test_prefix: test/clt-tests/installation/rhel-dev-u
+          - name: DEB dev packages update
+            image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+            test_prefix: test/clt-tests/installation/deb-dev-u
+          - name: Testing comparison overhead JSON and SQL
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
+          - name: Testing replcae into
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/core/test-replace-into
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.1.23
         with:
           ref: manticore-6.2.12
-          image: ${{ matrix.image }}
-          test_prefix: test/clt-tests/installation/rhel-release-
-  clt_deb_release_installation:
-    name: Testing DEB release packages installation
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          ref: manticore-6.2.12
-          image: ${{ matrix.image }}
-          test_prefix: test/clt-tests/installation/deb-release-
+          image: ${{ matrix.test-suite.image }}
+          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          comment_mode: failures
 
-  clt_rhel_dev_update:
-    name: Testing RHEL dev packages update
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          image: ${{ matrix.image }}
-          test_prefix: test/clt-tests/installation/rhel-dev-u
-
-  clt_deb_dev_update:
-    name: Testing DEB dev packages update
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          image: ${{ matrix.image }}
-          test_prefix: test/clt-tests/installation/deb-dev-u
-
-  clt_comparison_overhead_json_sql:
-    name: Testing comparison overhead JSON and SQL
-    strategy:
-      fail-fast: false
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-           test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
-          
-  clt_replace_into:
-    name: Testing replace into
-    strategy:
-      fail-fast: false
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.13
-        with:
-          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-          test_prefix: test/clt-tests/core/test-replace-into
-     

@@ -402,71 +402,33 @@ jobs:
           path: manticore_test_kit.img
 
 
-  clt_core_test:
-    name: CLT test of core logic of Manticore Search
+  clt:
+    name: CLT
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        test-suite:
+          - name: Core
+            test_prefix: |-
+              test/clt-tests/core/
+              test/clt-tests/expected-errors/
+          - name: Logstash
+            test_prefix: test/clt-tests/logstash/logstash- 
+          - name: mysqldump
+            test_prefix: |-
+              test/clt-tests/mysqldump/mysql/
+              test/clt-tests/mysqldump/maria/
+          - name: Replication
+            test_prefix: test/clt-tests/replication/
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.1.23
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          test_prefix: test/clt-tests/core/
-
-  clt_logstash_test:
-    name: CLT test on Logstash and Filebeat
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/logstash/logstash-
-
-  clt_mysqldump_mysql_test:
-    name: CLT test on mysqldump features for MySQL
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/mysqldump/mysql/
-
-  clt_mysqldump_maria_test:
-    name: CLT test on mysqldump features for MariaDB
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/mysqldump/maria/
-
-  clt_expected_errors_test:
-    name: CLT test on expected errors in Searchd for Buddy
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/expected-errors/
-
-  clt_restarting_replication_nodes:
-    name: CLT test on replication node restart
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/replication/
+          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          comment_mode: failures
 
   build_aarch64:
     name: Linux aarch64 build

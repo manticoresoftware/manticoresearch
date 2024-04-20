@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false 
       matrix:
-        test-suite:
+        test_suite:
           - name: RHEL release packages installation
             image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -59,7 +59,7 @@ jobs:
       - uses: manticoresoftware/clt@0.1.23
         with:
           ref: manticore-6.2.12
-          image: ${{ matrix.test-suite.image }}
-          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          image: ${{ matrix.test_suite.image }}
+          test_prefix: ${{ matrix.test_suite.test_prefix }}
           comment_mode: failures
 

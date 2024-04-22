@@ -21,12 +21,12 @@ mysql -h0 -P9306 -e "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
 ––– input –––
 mysql -h0 -P9306 -e "SHOW QUERIES"
 ––– output –––
-+------+--------------+-----------+----------+-----------------+
-| id   | query        | time      | protocol | host            |
-+------+--------------+-----------+----------+-----------------+
-|   %{NUMBER} | select       | %{NUMBER}us ago | http     | %{IPADDR}:%{NUMBER} |
-|   %{NUMBER} | SHOW QUERIES | %{NUMBER}us       | mysql    | %{IPADDR}:%{NUMBER} |
-+------+--------------+-----------+----------+-----------------+
+#!/[+-]+/!#
+| id   | query        | time#!/\s+/!#| protocol | host            |
+#!/[+-]+/!#
+|   %{NUMBER} | select       | %{NUMBER}us#!/\s+/!#ago#!/\s+/!#| http     | %{IPADDR}:%{NUMBER} |
+|   %{NUMBER} | SHOW QUERIES | %{NUMBER}us#!/\s+/!#| mysql    | %{IPADDR}:%{NUMBER} |
+#!/[+-]+/!#
 ––– input –––
 mysql -h0 -P9306 -e "create table t (id bigint, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
 ––– output –––

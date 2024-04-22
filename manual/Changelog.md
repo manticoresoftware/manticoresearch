@@ -10,6 +10,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * ❗[Issue #1541](https://github.com/manticoresoftware/manticoresearch/issues/1541) Added a [REGEX](Searching/Full_text_matching/Operators.md#REGEX-operator) full-text operator.
 * ❗[Issue #1540](https://github.com/manticoresoftware/dev/issues/2647) Running Manticore in WIndows now requires Docker to run Buddy
 * ❗[Issue #1569](https://github.com/manticoresoftware/manticoresearch/issues/1569) Binary log is now written with transaction granularity.
+
 ### Minor changes
 * [Issue #1285](https://github.com/manticoresoftware/manticoresearch/issues/1285) Support of Filebeat versions 8.10 - 8.11
 * [Issue #1417](https://github.com/manticoresoftware/manticoresearch/issues/1417) Partial replace via [REPLACE INTO ... SET](Data_creation_and_modification/Updating_documents/REPLACE.md#SQL-REPLACE)
@@ -67,6 +68,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1105](https://github.com/manticoresoftware/manticoresearch/issues/1105) Support for running indexer via systemd ([docs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Schedule-indexer-via-systemd))
 * [Issue #340](https://github.com/manticoresoftware/manticoresearch/issues/340) Minor optimization in Manticore systemd unit related with RuntimeDirectory
 * [Commit 86f9](https://github.com/manticoresoftware/manticoresearch-buddy/commit/86f98ab) Changed metric suffix from '_rate' to '_rps'
+
 ### Breaking changes
 * ⚠️[Issue #1436](https://github.com/manticoresoftware/manticoresearch/issues/1436) Improved the master-agent search protocol (version increased).
 * ⚠️[Issue #1572](https://github.com/manticoresoftware/manticoresearch/issues/1572) Improved replication protocol (updated version)
@@ -76,6 +78,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * ⚠️[Issue #1982](https://github.com/manticoresoftware/manticoresearch/issues/1982) Changed `profile` to `plan` in JSON, added query profiling for JSON.
 * ⚠️[Issue #38](https://github.com/manticoresoftware/executor/issues/38) Added Swoole, disabled ZTS, and removed the parallel extension
 * ⚠️[Commit e235](https://github.com/manticoresoftware/manticoresearch-backup/commit/e23585a) Removed the backup logic for plugin_dir as it is no longer backed up
+
 ### Bug fixes
 * [Commit 95f9](https://github.com/manticoresoftware/manticoresearch-auto-replication/commit/95f98b363bef082e2150f2bbb22011d993c9cbdf) Fix: Restore max attempts defaults
 * [Commit 8973](https://github.com/manticoresoftware/manticoresearch-buddy/commit/8973ad3) Fixed issue with upper case options in the ModifyTable plugin
@@ -167,6 +170,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit e87f](https://github.com/manticoresoftware/columnar/commit/e87f088b458d4c5b1b6159fc72ed0d57b786891a) fixed SI iterator being hinted at an already processed block
 * [Commit 7b4e](https://github.com/manticoresoftware/manticoresearch/commit/7b4ea95e) When starting without the secondary index (SI) library and parameters in the configuration, the misleading warning message 'WARNING: secondary_indexes set but failed to initialize secondary library' was issued.
 * [Issue #1692](https://github.com/manticoresoftware/manticoresearch/issues/1692) crash on alter table tbl add column col uint
+
 ### Related with manticore-backup
 * ❗[Issue #85](https://github.com/manticoresoftware/manticoresearch-backup/pull/85) Various improvements: improved versions check and streaming ZSTD decompression; added user prompts for version mismatches during restore; fixed incorrect prompting behavior for different versions on restore; enhanced decompression logic to read directly from the stream rather than into working memory; added --force flag
 * ❗[Issue #97](https://github.com/manticoresoftware/manticoresearch-backup/pull/97) Set VIP HTTP port as default when available
@@ -177,10 +181,12 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit ce5e](https://github.com/manticoresoftware/manticoresearch-backup/commit/ce5ea85) Fixed issue with converting absolute root backup paths to relative and removed writeable check on restore to enable restoration from different paths
 * [Commit db7e](https://github.com/manticoresoftware/manticoresearch-backup/commit/db7e2b9) Added sorting to the file iterator to ensure consistency across various situations
 * [Issue #91](https://github.com/manticoresoftware/manticoresearch-backup/pull/91) Added extra chown to ensure files default to the root user in Ubuntu
-#### Clients-related
+
+### Clients-related
 * ❗[Commit d659](https://github.com/manticoresoftware/openapi/commit/d659992ef60dc05caed8e82f9cb80b6a525eaf85) Added Typescript client
 * [Issue #1465](https://github.com/manticoresoftware/manticoresearch/issues/1465) Added examples for TypeScript and Go clients to documentation
 * [Issue #15](https://github.com/manticoresoftware/manticoresearch-java/issues/15) Spring Boot 3 support
+
 ### Related with the columnar storage
 * [Commit 709b](https://github.com/manticoresoftware/columnar/commit/709b9acaaac97d9a1ca8796892f9ad432021c785) use separate streamvbyte library for columnar and SI
 * [Commit 574c](https://github.com/manticoresoftware/manticoresearch/commit/574c023152564fa72092c18ebd1f594abfd4b6d7) fixed a crash on saving a disk chunk with mixed rowwise and columnar storage
@@ -188,6 +194,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1510](https://github.com/manticoresoftware/manticoresearch/issues/1510) Fixed crash when aggregating to a columnar attribute used in `HAVING`.
 * [Issue #1519](https://github.com/manticoresoftware/manticoresearch/issues/1519) Fixed crash in `expr` ranker on using columnar attribute.
 * [Commit 1c26](https://github.com/manticoresoftware/manticoresearch/commit/1c2623763ced14bb94ad624dde9614a938408d89) added a warning that columnar storage doesn't support json attrs
+
 ### Related with Docker
 * ❗[Issue #42](https://github.com/manticoresoftware/docker/issues/42) Support of [plain indexation](https://github.com/manticoresoftware/docker#building-plain-tables) via environment variables.
 * [Issue #54](https://github.com/manticoresoftware/docker/pull/54) Improved the [backup and restore](https://github.com/manticoresoftware/docker#backup-and-restore) processes for Docker.
@@ -196,6 +203,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit a27c](https://github.com/manticoresoftware/docker/commit/a27c048dd9e73d8d6bea8d9a4830cafb486b82c5) Fixed query logging to stdout
 * [Issue #38](https://github.com/manticoresoftware/docker/issues/38) Mute BUDDY warnings if EXTRA is not set
 * [Issue #71](https://github.com/manticoresoftware/docker/pull/71) Fixed hostname in manticore.conf.sh
+
 ### Replication-related changes
 * [Commit 3376](https://github.com/manticoresoftware/manticoresearch/commit/3376351f73db3ff0cb6cb708a304a7bd83e69cfb) Fixed replication error on SST of large files.
 * [Commit 6d36](https://github.com/manticoresoftware/manticoresearch/commit/6d36c68fb7ce3cb274b467aac435788905084952) Added a retry mechanism to replication commands; fixed replication join failure on a busy network with packet loss.

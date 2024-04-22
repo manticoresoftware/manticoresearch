@@ -2,12 +2,12 @@
 ––– input –––
 mysql -h0 -P9306 -e "SHOW QUERIES"
 ––– output –––
-+------+--------------+---------+----------+-----------------+
-| id   | query        | time    | protocol | host            |
-+------+--------------+---------+----------+-----------------+
-|    %{NUMBER} | select       | %{NUMBER}ms ago | http     | %{IPADDR}:%{NUMBER} |
-|    %{NUMBER} | SHOW QUERIES | %{NUMBER}us   | mysql    | %{IPADDR}:%{NUMBER} |
-+------+--------------+---------+----------+-----------------+
+#!/[+-]+/!#
+| id   | query        | time#!/\s+/!#| protocol | host            |
+#!/[+-]+/!#
+|   %{NUMBER} | select       | %{NUMBER}ms#!/\s+/!#ago#!/\s+/!#| http     | %{IPADDR}:%{NUMBER} |
+|   %{NUMBER} | SHOW QUERIES | %{NUMBER}us#!/\s+/!#| mysql    | %{IPADDR}:%{NUMBER} |
+#!/[+-]+/!#
 ––– input –––
 mysql -h0 -P9306 -e "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
 ––– output –––

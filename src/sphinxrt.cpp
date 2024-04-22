@@ -876,6 +876,14 @@ public:
 		return ConstDiskChunkRefPtr_t (nullptr);
 	}
 
+	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const
+	{
+		ScRL_t rLock ( m_tLock );
+		if ( iChunk < 0 || iChunk >= m_pChunks->GetLength() )
+			return ConstDiskChunkRefPtr_t ( nullptr );
+		return ( *m_pChunks )[iChunk];
+	}
+
 	ConstDiskChunkVecRefPtr_t DiskChunks () const
 	{
 		ScRL_t rLock ( m_tLock );
@@ -9854,11 +9862,12 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 	}
 
 	RTDLOG << "Optimize: start compressing pass for the rest of " << m_tRtChunks.GetDiskChunksCount() << " chunks.";
-	// optimize (wipe deletes) in the rest of the chunks
+	// light optimize (drop totally killed chunks) in the rest of the chunks
 	for ( int i = 0; bWork && i < m_tRtChunks.GetDiskChunksCount(); ++i )
 	{
-		bWork &= CompressOneChunk ( ChunkIDByChunkIdx ( i ), &iAffected );
-		RTDLOG << "Optimize: compress chunk " << ChunkIDByChunkIdx ( i ) << " (" << i << ")";
+		auto pVictim = m_tRtChunks.DiskChunkByIdx ( i );
+		const CSphIndex& tVictim = pVictim->Cidx();
+		SkipOrDrop ( tVictim.m_iChunk, tVictim, false, &iAffected );
 	}
 	return iAffected;
 }

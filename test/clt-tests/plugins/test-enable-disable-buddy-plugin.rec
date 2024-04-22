@@ -5,7 +5,7 @@ mysql -h0 -P9306 -e "SHOW QUERIES"
 #!/[+-]+/!#
 | id   | query        | time#!/\s+/!#| protocol | host            |
 #!/[+-]+/!#
-|   %{NUMBER} | select       | %{NUMBER}ms#!/\s+/!#ago#!/\s+/!#| http     | %{IPADDR}:%{NUMBER} |
+|   %{NUMBER} | select       | %{NUMBER}us#!/\s+/!#ago#!/\s+/!#| http     | %{IPADDR}:%{NUMBER} |
 |   %{NUMBER} | SHOW QUERIES | %{NUMBER}us#!/\s+/!#| mysql    | %{IPADDR}:%{NUMBER} |
 #!/[+-]+/!#
 ––– input –––

@@ -3,6 +3,7 @@
 # Version 6.3.0 (preparing for release)
 While 6.3.0 is being prepared for release, use the dev version which includes all the below changes - https://mnt.cr/dev/nightly
 
+Changelog note markdown
 ### Major changes
 * ❗[Issue #839](https://github.com/manticoresoftware/manticoresearch/issues/839) Implemented [float_vector](Creating_a_table/Data_types.md#Float-vector) data type; implemented [vector search](Searching/KNN.md#KNN-vector-search).
 * ❗[Issue #1673](https://github.com/manticoresoftware/manticoresearch/issues/1673) INNER/LEFT JOIN
@@ -78,6 +79,19 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * ⚠️[Issue #1982](https://github.com/manticoresoftware/manticoresearch/issues/1982) Changed `profile` to `plan` in JSON, added query profiling for JSON.
 * ⚠️[Issue #38](https://github.com/manticoresoftware/executor/issues/38) Added Swoole, disabled ZTS, and removed the parallel extension
 * ⚠️[Commit e235](https://github.com/manticoresoftware/manticoresearch-backup/commit/e23585a) Removed the backup logic for plugin_dir as it is no longer backed up
+
+### Replication-related changes
+* [Commit 3376](https://github.com/manticoresoftware/manticoresearch/commit/3376351f73db3ff0cb6cb708a304a7bd83e69cfb) Fixed replication error on SST of large files.
+* [Commit 6d36](https://github.com/manticoresoftware/manticoresearch/commit/6d36c68fb7ce3cb274b467aac435788905084952) Added a retry mechanism to replication commands; fixed replication join failure on a busy network with packet loss.
+* [Commit 842e](https://github.com/manticoresoftware/manticoresearch/commit/842e27e71790833ab4125d49103d2933d5df60c3) Changed the FATAL message in replication to a WARNING message.
+* [Commit 8c32](https://github.com/manticoresoftware/manticoresearch/commit/8c32bce7db39d8ed3b1a06aaa1d2c3ec372084f0) Fixed the calculation of the `gcache.page_size` for replication clusters without tables or with empty tables; also fixed saving and loading of the Galera options.
+* [Commit a2af](https://github.com/manticoresoftware/manticoresearch/commit/a2af06ca36abcbf893e43c8803853130b397c54b) Added functionality to skip the update nodes replication command on the node that joins the cluster.
+* [Commit c054](https://github.com/manticoresoftware/manticoresearch/commit/c0541e6892f5116b1f957b40060ba8ecd01a5afb) Fixed deadlock during replication on updating blob attributes versus replacing documents.
+* [Commit e80d](https://github.com/manticoresoftware/manticoresearch/commit/e80d505b963999016033613c40c1cf3151d648e7) Added [replication_connect_timeout](Server_settings/Searchd.md#replication_connect_timeout), [replication_query_timeout](Server_settings/Searchd.md#replication_query_timeout), [replication_retry_delay](Server_settings/Searchd.md#replication_retry_delay), [replication_retry_count](Server_settings/Searchd.md#replication_retry_count) searchd config options to control network during replication similar to `searchd.agent_*` but with different defaults.
+* [Issue #1356](https://github.com/manticoresoftware/manticoresearch/issues/1356) Fixed replication nodes retry after some nodes are missed and name resolution of these nodes failed.
+* [Issue #1445](https://github.com/manticoresoftware/manticoresearch/issues/1445) Fixed the replication log verbosity level at the `show variables`.
+* [Issue #1482](https://github.com/manticoresoftware/manticoresearch/issues/1482) Fixed a replication issue for a joiner node connecting to a cluster on a pod restarted in Kubernetes.
+* [Issue #1962](https://github.com/manticoresoftware/manticoresearch/issues/1962) Fixed a long wait for replication to alter on empty cluster with an invalid node name.
 
 ### Bug fixes
 * [Commit 95f9](https://github.com/manticoresoftware/manticoresearch-auto-replication/commit/95f98b363bef082e2150f2bbb22011d993c9cbdf) Fix: Restore max attempts defaults
@@ -182,11 +196,6 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit db7e](https://github.com/manticoresoftware/manticoresearch-backup/commit/db7e2b9) Added sorting to the file iterator to ensure consistency across various situations
 * [Issue #91](https://github.com/manticoresoftware/manticoresearch-backup/pull/91) Added extra chown to ensure files default to the root user in Ubuntu
 
-### Clients-related
-* ❗[Commit d659](https://github.com/manticoresoftware/openapi/commit/d659992ef60dc05caed8e82f9cb80b6a525eaf85) Added Typescript client
-* [Issue #1465](https://github.com/manticoresoftware/manticoresearch/issues/1465) Added examples for TypeScript and Go clients to documentation
-* [Issue #15](https://github.com/manticoresoftware/manticoresearch-java/issues/15) Spring Boot 3 support
-
 ### Related with the columnar storage
 * [Commit 709b](https://github.com/manticoresoftware/columnar/commit/709b9acaaac97d9a1ca8796892f9ad432021c785) use separate streamvbyte library for columnar and SI
 * [Commit 574c](https://github.com/manticoresoftware/manticoresearch/commit/574c023152564fa72092c18ebd1f594abfd4b6d7) fixed a crash on saving a disk chunk with mixed rowwise and columnar storage
@@ -203,19 +212,6 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit a27c](https://github.com/manticoresoftware/docker/commit/a27c048dd9e73d8d6bea8d9a4830cafb486b82c5) Fixed query logging to stdout
 * [Issue #38](https://github.com/manticoresoftware/docker/issues/38) Mute BUDDY warnings if EXTRA is not set
 * [Issue #71](https://github.com/manticoresoftware/docker/pull/71) Fixed hostname in manticore.conf.sh
-
-### Replication-related changes
-* [Commit 3376](https://github.com/manticoresoftware/manticoresearch/commit/3376351f73db3ff0cb6cb708a304a7bd83e69cfb) Fixed replication error on SST of large files.
-* [Commit 6d36](https://github.com/manticoresoftware/manticoresearch/commit/6d36c68fb7ce3cb274b467aac435788905084952) Added a retry mechanism to replication commands; fixed replication join failure on a busy network with packet loss.
-* [Commit 842e](https://github.com/manticoresoftware/manticoresearch/commit/842e27e71790833ab4125d49103d2933d5df60c3) Changed the FATAL message in replication to a WARNING message.
-* [Commit 8c32](https://github.com/manticoresoftware/manticoresearch/commit/8c32bce7db39d8ed3b1a06aaa1d2c3ec372084f0) Fixed the calculation of the `gcache.page_size` for replication clusters without tables or with empty tables; also fixed saving and loading of the Galera options.
-* [Commit a2af](https://github.com/manticoresoftware/manticoresearch/commit/a2af06ca36abcbf893e43c8803853130b397c54b) Added functionality to skip the update nodes replication command on the node that joins the cluster.
-* [Commit c054](https://github.com/manticoresoftware/manticoresearch/commit/c0541e6892f5116b1f957b40060ba8ecd01a5afb) Fixed deadlock during replication on updating blob attributes versus replacing documents.
-* [Commit e80d](https://github.com/manticoresoftware/manticoresearch/commit/e80d505b963999016033613c40c1cf3151d648e7) Added [replication_connect_timeout](Server_settings/Searchd.md#replication_connect_timeout), [replication_query_timeout](Server_settings/Searchd.md#replication_query_timeout), [replication_retry_delay](Server_settings/Searchd.md#replication_retry_delay), [replication_retry_count](Server_settings/Searchd.md#replication_retry_count) searchd config options to control network during replication similar to `searchd.agent_*` but with different defaults.
-* [Issue #1356](https://github.com/manticoresoftware/manticoresearch/issues/1356) Fixed replication nodes retry after some nodes are missed and name resolution of these nodes failed.
-* [Issue #1445](https://github.com/manticoresoftware/manticoresearch/issues/1445) Fixed the replication log verbosity level at the `show variables`.
-* [Issue #1482](https://github.com/manticoresoftware/manticoresearch/issues/1482) Fixed a replication issue for a joiner node connecting to a cluster on a pod restarted in Kubernetes.
-* [Issue #1962](https://github.com/manticoresoftware/manticoresearch/issues/1962) Fixed a long wait for replication to alter on empty cluster with an invalid node name.
 
 # Version 6.2.12
 Released: August 23rd 2023

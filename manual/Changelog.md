@@ -34,7 +34,6 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit 30e7](https://github.com/manticoresoftware/manticoresearch/commit/30e789d9657f9b3093c280c6e5b0e46a021f6dc7) Added [range](Searching/Faceted_search.md#Facet-over-set-of-ranges), [histogram](Searching/Faceted_search.md#Facet-over-histogram-values), [date_range](Searching/Faceted_search.md#Facet-over-set-of-date-ranges), and [date_histogram](Searching/Faceted_search.md#Facet-over-histogram-date-values) aggregates to the HTTP interface and similar expressions into SQL.
 * [Commit 55cd](https://github.com/manticoresoftware/manticoresearch/commit/55cdce32) Added support for vanilla Galera v.3 (api v25) (`libgalera_smm.so` from MySQL 5.x).
 * [Commit 86f9](https://github.com/manticoresoftware/manticoresearch-buddy/commit/86f98ab) Changed metric suffix from `_rate` to `_rps`
-* [Commit aaad](https://github.com/manticoresoftware/manticoresearch/commit/aaad011946f5dfea05d21aa89acfcd77a2159896) Decomposition of sphinxsort.cpp
 * [Commit c0c1](https://github.com/manticoresoftware/manticoresearch-helm/commit/c0c1cff780031412ef57cefab987dfd16613368e) Improved docs about balancer HA support
 * [Commit d1d2](https://github.com/manticoresoftware/manticoresearch/commit/d1d2ca18857c68106e89743756260e73285be739) Changed `index` to `table` in error messages; fixed bison parser error message fixup
 * [Commit fd26](https://github.com/manticoresoftware/manticoresearch/commit/fd26671b) Support `manticore.tbl` as table name.
@@ -69,15 +68,18 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #51](https://github.com/manticoresoftware/executor/issues/51) Added rdkafka support and updated to PHP 8.3.3
 * [Issue #527](https://github.com/manticoresoftware/manticoresearch/issues/527) Support of [attaching](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md#Attaching-table---general-syntax) an RT table.
 
-### Breaking changes
-* ⚠️[Issue #1436](https://github.com/manticoresoftware/manticoresearch/issues/1436) Improved the master-agent search protocol (version increased).
-* ⚠️[Issue #1572](https://github.com/manticoresoftware/manticoresearch/issues/1572) Improved replication protocol (updated version)
-* ⚠️[Issue #171](https://github.com/manticoresoftware/manticoresearch-buddy/issues/155) Migrated Buddy to Swoole to improve performance and stability
-* ⚠️[Issue #1763](https://github.com/manticoresoftware/manticoresearch/pull/1763) HTTP API endpoint aliases /json/* have been deprecated
+### Breaking changes and deprecations
+* ⚠️[Issue #1436](https://github.com/manticoresoftware/manticoresearch/issues/1436) Improved the master-agent search protocol (version updated). If you are running Manticore Search in a distributed environment with multiple instances, make sure to first upgrade the agents, then the masters.
+* ⚠️[Issue #1572](https://github.com/manticoresoftware/manticoresearch/issues/1572) Improved replication protocol. If you are running a replication cluster, you need to:
+  - First, cleanly stop all your nodes
+  - Then, start the node that was stopped last with `--new-cluster`, using the tool `manticore_new_cluster` in Linux.
+  - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+* ⚠️[Issue #1763](https://github.com/manticoresoftware/manticoresearch/pull/1763) HTTP API endpoint aliases `/json/*` have been deprecated
+* ⚠️[Issue #1982](https://github.com/manticoresoftware/manticoresearch/issues/1982) Changed [profile](Node_info_and_management/Profiling/Query_profile.md#Query-profile) to [plan](Node_info_and_management/Profiling/Query_plan.md#Query-plan) in JSON, added query profiling for JSON.
+* ⚠️[Commit e235](https://github.com/manticoresoftware/manticoresearch-backup/commit/e23585a) manticore-backup doesn't backup `plugin_dir` anymore
+* ⚠️[Issue #171](https://github.com/manticoresoftware/manticoresearch-buddy/issues/155) Migrated Buddy to Swoole to improve performance and stability. When switching to the new version, ensure all Manticore packages are updated.
 * ⚠️[Issue #196](https://github.com/manticoresoftware/manticoresearch-buddy/pull/205) Merged all core plugins into Buddy and changed the core logic
-* ⚠️[Issue #1982](https://github.com/manticoresoftware/manticoresearch/issues/1982) Changed `profile` to `plan` in JSON, added query profiling for JSON.
 * ⚠️[Issue #38](https://github.com/manticoresoftware/executor/issues/38) Added Swoole, disabled ZTS, and removed the parallel extension
-* ⚠️[Commit e235](https://github.com/manticoresoftware/manticoresearch-backup/commit/e23585a) Removed the backup logic for plugin_dir as it is no longer backed up
 
 ### Replication-related changes
 * [Commit 3376](https://github.com/manticoresoftware/manticoresearch/commit/3376351f73db3ff0cb6cb708a304a7bd83e69cfb) Fixed replication error on SST of large files.
@@ -210,7 +212,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #77](https://github.com/manticoresoftware/docker/issues/76) Improved entrypoint to handle backup restoration on first start only
 * [Commit a27c](https://github.com/manticoresoftware/docker/commit/a27c048dd9e73d8d6bea8d9a4830cafb486b82c5) Fixed query logging to stdout
 * [Issue #38](https://github.com/manticoresoftware/docker/issues/38) Mute BUDDY warnings if EXTRA is not set
-* [Issue #71](https://github.com/manticoresoftware/docker/pull/71) Fixed hostname in manticore.conf.sh
+* [Issue #71](https://github.com/manticoresoftware/docker/pull/71) Fixed hostname in `manticore.conf.sh`
 
 # Version 6.2.12
 Released: August 23rd 2023

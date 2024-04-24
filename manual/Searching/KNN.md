@@ -16,7 +16,7 @@ To run KNN searches, you must first configure your table. It needs to have at le
 * `knn_type`: A mandatory setting; currently, only `hnsw` is supported.
 * `knn_dims`: A mandatory setting that specifies the dimensions of the vectors being indexed.
 * `hnsw_similarity`: A mandatory setting that specifies the distance function used by the HNSW index. Acceptable values are:
-  - `L2` - Squared L2
+  - `L2` - Squared L2 (default)
   - `IP` - Inner product
   - `COSINE` - Cosine similarity
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.

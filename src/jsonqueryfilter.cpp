@@ -582,6 +582,9 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 				if ( !pFilter )
 					return {false, nullptr};
 
+				// might be a list from range string with both lt(e) and gt(e) nodes
+				if ( pFilter->m_pRight )
+					dAdded.push_back ( std::move(pFilter->m_pRight) );
 				dAdded.push_back ( std::move(pFilter) );
 			}
 		}
@@ -879,6 +882,32 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructEqualsFilter
 	return pFilterNode;
 }
 
+static void SetRangeStrLess ( const JsonObj_c & tLess, CSphFilterSettings & tFilter )
+{
+	tFilter.m_dStrings.Add ( tLess.StrVal() );
+	if ( tFilter.m_bHasEqualMax )
+	{
+		tFilter.m_eStrCmpDir = EStrCmpDir::GT;
+		tFilter.m_bExclude = true;
+	} else
+	{
+		tFilter.m_eStrCmpDir = EStrCmpDir::LT;
+	}
+}
+
+static void SetRangeStrGreater ( const JsonObj_c & tGreater, CSphFilterSettings & tFilter )
+{
+	tFilter.m_dStrings.Add ( tGreater.StrVal() );
+	tFilter.m_eStrCmpDir = EStrCmpDir::GT;
+	if ( tFilter.m_bHasEqualMin )
+	{
+		tFilter.m_eStrCmpDir = EStrCmpDir::LT;
+		tFilter.m_bExclude = true;
+	} else
+	{
+		tFilter.m_eStrCmpDir = EStrCmpDir::GT;
+	}
+}
 
 std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter ( const JsonObj_c & tJson )
 {
@@ -939,6 +968,29 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 				iLessVal = (int) time ( nullptr );
 			if ( bGreater && iGreaterVal )
 				iGreaterVal = (int) time ( nullptr );
+		}
+
+		// full string comparsion in range
+		if ( ( bLess && iLessVal==-1 ) || ( bGreater && iGreaterVal==-1) )
+		{
+			tFilter.m_eType = SPH_FILTER_STRING;
+			if ( bLess && bGreater )
+			{
+				auto pFilterNodeGt = std::make_unique<FilterTreeNode_t>();
+				pFilterNodeGt->m_pFilter = std::make_unique<CSphFilterSettings>( tFilter );
+				SetRangeStrLess ( tLess, tFilter );
+				SetRangeStrGreater ( tGreater, *pFilterNodeGt->m_pFilter );
+				pFilterNode->m_pRight = std::move ( pFilterNodeGt );
+			}
+			else if ( bLess )
+			{
+				SetRangeStrLess ( tLess, tFilter );
+			} else
+			{
+				SetRangeStrGreater ( tGreater, tFilter );
+			}
+
+			return pFilterNode;
 		}
 
 		if ( ( bLess && iLessVal==-1 ) || ( bGreater && iGreaterVal==-1) )

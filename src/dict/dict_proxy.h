@@ -57,6 +57,7 @@ public:
 
 public:
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) final { m_pDict->DictBegin ( tTempDict, tDict, iDictLimit ); };
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) final { m_pDict->SortedDictBegin ( tDict, iDictLimit, iInfixCodepointBytes ); };
 	void DictEntry ( const DictEntry_t& tEntry ) final { m_pDict->DictEntry ( tEntry ); };
 	void DictEndEntries ( SphOffset_t iDoclistOffset ) final { m_pDict->DictEndEntries ( iDoclistOffset ); };
 	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) final { return m_pDict->DictEnd ( pHeader, iMemLimit, sError ); };

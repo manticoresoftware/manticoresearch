@@ -219,7 +219,7 @@ struct RtWordCheckpoint_t
 	union
 	{
 		SphWordID_t m_uWordID;
-		const char * m_sWord;
+		const char * m_szWord;
 	};
 	int m_iOffset;
 };

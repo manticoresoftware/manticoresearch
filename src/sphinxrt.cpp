@@ -42,6 +42,7 @@
 #include "pseudosharding.h"
 #include "knnmisc.h"
 #include "std/sys.h"
+#include "dict/infix/infix_builder.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -873,6 +874,14 @@ public:
 			if ( pChunk->Cidx().m_iChunk == iChunkID )
 				return pChunk;
 		return ConstDiskChunkRefPtr_t (nullptr);
+	}
+
+	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const
+	{
+		ScRL_t rLock ( m_tLock );
+		if ( iChunk < 0 || iChunk >= m_pChunks->GetLength() )
+			return ConstDiskChunkRefPtr_t ( nullptr );
+		return ( *m_pChunks )[iChunk];
 	}
 
 	ConstDiskChunkVecRefPtr_t DiskChunks () const
@@ -2023,7 +2032,7 @@ static void FixupSegmentCheckpoints ( RtSegment_t * pSeg )
 	const char * pBase = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
 	assert ( pBase );
 	for ( auto & dCheckpoint : pSeg->m_dWordCheckpoints )
-		dCheckpoint.m_sWord = pBase + dCheckpoint.m_uWordID;
+		dCheckpoint.m_szWord = pBase + dCheckpoint.m_uWordID;
 }
 
 
@@ -4806,7 +4815,7 @@ void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) 
 	{
 		wrChunk.PutOffset ( dWordCheckpoint.m_iOffset );
 		if ( m_bKeywordDict )
-			wrChunk.PutOffset ( dWordCheckpoint.m_sWord - pCheckpoints );
+			wrChunk.PutOffset ( dWordCheckpoint.m_szWord - pCheckpoints );
 		else
 			wrChunk.PutOffset ( dWordCheckpoint.m_uWordID );
 	}
@@ -4937,7 +4946,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 			tWordCheckpoint.m_iOffset = (int)rdChunk.GetOffset();
 			SphOffset_t uOff = rdChunk.GetOffset();
 			if ( m_bKeywordDict )
-				tWordCheckpoint.m_sWord = pCheckpoints + uOff;
+				tWordCheckpoint.m_szWord = pCheckpoints + uOff;
 			else
 				tWordCheckpoint.m_uWordID = (SphWordID_t)uOff;
 		}
@@ -5391,8 +5400,8 @@ void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegmen
 
 			if ( m_bKeywordDict )
 			{
-				tCP.m_sWord = new char [sWord[0]+1];
-				memcpy ( (void *)tCP.m_sWord, sWord+1, sWord[0]+1 );
+				tCP.m_szWord = new char [sWord[0]+1];
+				memcpy ( (void *)tCP.m_szWord, sWord+1, sWord[0]+1 );
 			} else
 				tCP.m_uWordID = tWord.m_uWordID;
 		}
@@ -5618,18 +5627,18 @@ void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegmen
 	{
 		const RtWordCheckpoint_t & tRefCP = dRefCheckpoints[i];
 		const RtWordCheckpoint_t & tCP = tSegment.m_dWordCheckpoints[i];
-		const int iLen = m_bKeywordDict ? (const int) strlen ( tCP.m_sWord ) : 0;
-		if ( m_bKeywordDict && ( !tCP.m_sWord || ( !strlen ( tRefCP.m_sWord ) || !strlen ( tCP.m_sWord ) ) ) )
+		const int iLen = m_bKeywordDict ? (const int) strlen ( tCP.m_szWord ) : 0;
+		if ( m_bKeywordDict && ( !tCP.m_szWord || ( !strlen ( tRefCP.m_szWord ) || !strlen ( tCP.m_szWord ) ) ) )
 		{
 			tReporter.Fail ( "empty word checkpoint %d ((segment=%d, read_word=%s, read_len=%u, readpos=%d, calc_word=%s, calc_len=%u, calcpos=%d)",
-				i, iSegment, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), tCP.m_iOffset,
-				tRefCP.m_sWord, (DWORD)strlen ( tRefCP.m_sWord ), tRefCP.m_iOffset );
-		} else if ( sphCheckpointCmpStrictly ( tCP.m_sWord, iLen, tCP.m_uWordID, m_bKeywordDict, tRefCP ) || tRefCP.m_iOffset!=tCP.m_iOffset )
+				i, iSegment, tCP.m_szWord, (DWORD)strlen ( tCP.m_szWord ), tCP.m_iOffset,
+				tRefCP.m_szWord, (DWORD)strlen ( tRefCP.m_szWord ), tRefCP.m_iOffset );
+		} else if ( sphCheckpointCmpStrictly ( tCP.m_szWord, iLen, tCP.m_uWordID, m_bKeywordDict, tRefCP ) || tRefCP.m_iOffset!=tCP.m_iOffset )
 		{
 			if ( m_bKeywordDict )
 			{
 				tReporter.Fail ( "word checkpoint %d differs (segment=%d, read_word=%s, readpos=%d, calc_word=%s, calcpos=%d)",
-					i, iSegment, tCP.m_sWord, tCP.m_iOffset, tRefCP.m_sWord, tRefCP.m_iOffset );
+					i, iSegment, tCP.m_szWord, tCP.m_iOffset, tRefCP.m_szWord, tRefCP.m_iOffset );
 			} else
 			{
 				tReporter.Fail ( "word checkpoint %d differs (segment=%d, readid=" UINT64_FMT ", readpos=%d, calcid=" UINT64_FMT ", calcpos=%d)",
@@ -5640,7 +5649,7 @@ void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegmen
 
 	if ( m_bKeywordDict )
 		ARRAY_FOREACH ( i, dRefCheckpoints )
-			SafeDeleteArray ( dRefCheckpoints[i].m_sWord );
+			SafeDeleteArray ( dRefCheckpoints[i].m_szWord );
 
 	dRefCheckpoints.Reset ();
 
@@ -6526,9 +6535,9 @@ void RtIndex_c::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 			if ( pCurCheckpoint )
 			{
 				// there could be valid data prior 1st checkpoint that should be unpacked and checked
-				auto iCheckpointNameLen = (int) strlen ( pCurCheckpoint->m_sWord );
+				auto iCheckpointNameLen = (int) strlen ( pCurCheckpoint->m_szWord );
 				if ( pCurCheckpoint!=pCurSeg->m_dWordCheckpoints.Begin()
-					|| ( sphDictCmp ( sSubstring, iSubLen, pCurCheckpoint->m_sWord, iCheckpointNameLen )==0 && iSubLen==iCheckpointNameLen ) )
+					|| ( sphDictCmp ( sSubstring, iSubLen, pCurCheckpoint->m_szWord, iCheckpointNameLen )==0 && iSubLen==iCheckpointNameLen ) )
 				{
 					tReader.m_pCur = pCurSeg->m_dWords.Begin() + pCurCheckpoint->m_iOffset;
 				}
@@ -9174,7 +9183,7 @@ bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & 
 				ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
 				{
 					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_iOffset );
-					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_sWord - pBase );
+					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_szWord - pBase );
 				}
 			}
 
@@ -9856,11 +9865,12 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 	}
 
 	RTDLOG << "Optimize: start compressing pass for the rest of " << m_tRtChunks.GetDiskChunksCount() << " chunks.";
-	// optimize (wipe deletes) in the rest of the chunks
+	// light optimize (drop totally killed chunks) in the rest of the chunks
 	for ( int i = 0; bWork && i < m_tRtChunks.GetDiskChunksCount(); ++i )
 	{
-		bWork &= CompressOneChunk ( ChunkIDByChunkIdx ( i ), &iAffected );
-		RTDLOG << "Optimize: compress chunk " << ChunkIDByChunkIdx ( i ) << " (" << i << ")";
+		auto pVictim = m_tRtChunks.DiskChunkByIdx ( i );
+		const CSphIndex& tVictim = pVictim->Cidx();
+		SkipOrDrop ( tVictim.m_iChunk, tVictim, false, &iAffected );
 	}
 	return iAffected;
 }

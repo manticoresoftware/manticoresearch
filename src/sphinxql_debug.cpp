@@ -164,7 +164,7 @@ CSphString DebugCommand_t::sOpt ( const char * szName, const char * szDefault ) 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_debugparser ( YYSTYPE * lvalp, void * yyscanner, SqlDebugParser_c * pParser )
 
-#include "flexsphinxqldebug.c"
+#include "flexsphinxql_debug.c"
 
 static void yyerror ( SqlDebugParser_c* pParser, const char* szMessage )
 {

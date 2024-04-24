@@ -61,6 +61,7 @@
 #include "joinsorter.h"
 #include "schematransform.h"
 #include "frontendschema.h"
+#include "skip_cache.h"
 
 // services
 #include "taskping.h"
@@ -13320,7 +13321,7 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 	StringBuilder_c sMeta;
 	// since we have us precision, printing 0 will output '0us', which is not necessary true.
 	if ( tMeta.m_iQueryTime > 0 )
-		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, tMeta.m_iQueryTime * 1000 );
+		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, (int64_t)tMeta.m_iQueryTime * 1000 );
 	else
 		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
 	return (CSphString)sMeta;
@@ -15769,6 +15770,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "max_stack_need", "%l", tStatus.m_iStackNeed );
 		dStatus.MatchTupletf ( "average_stack_base", "%l", tStatus.m_iStackBase );
 		dStatus.MatchTupletf ( "desired_thread_stack", "%l", sphRoundUp ( tStatus.m_iStackNeed + tStatus.m_iStackBase, 128 ) );
+		dStatus.MatchTupletf ( "locked", "%d", tStatus.m_iLockCount );
 	}
 
 	if ( bRt || bPq )
@@ -19839,10 +19841,10 @@ static void SetOptionSI ( const CSphConfigSection & hSearchd, bool bTestMode )
 			eState = SIDefault_e::DISABLED;
 		else
 			eState = SIDefault_e::ENABLED;
-	}
 
-	if ( eState!=SIDefault_e::DISABLED && !IsSecondaryLibLoaded() )
-		sphWarning ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+		if ( eState != SIDefault_e::DISABLED && !IsSecondaryLibLoaded() )
+			sphWarning ( "secondary_indexes set but failed to initialize secondary library: %s", g_sSecondaryError.cstr() );
+	}
 
 	SetSecondaryIndexDefault ( eState );
 }
@@ -21455,7 +21457,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
 	if ( !bTestMode )
-		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, g_iThreads, g_sConfigFile );
+		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, g_iThreads, g_sConfigFile, RealPath ( GetDataDirInt() ) );
 
 	g_bJsonConfigLoadedOk = true;
 

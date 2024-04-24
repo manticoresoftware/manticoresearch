@@ -81,12 +81,12 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 <!-- example conf auto_optimize -->
 This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) process for table compaction.
 
-Starting with Manticore 4, table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
+By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
 * 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
 * 1 to explicitly enable it
 * N to enable it, but allow OPTIMIZE to start when the number of disk chunks is greater than `# of CPU cores * 2 * N`
 
-Note that toggling `auto_optimize` on or off doesn't prevent you from running `OPTIMIZE` manually.
+Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
 <!-- intro -->
 ##### Example:

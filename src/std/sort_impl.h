@@ -160,19 +160,19 @@ void Sort ( T* pData, int iCount, U&& COMP, V&& ACC )
 } // namespace sphstd
 
 template<typename T, typename U, typename V>
-void sphSort ( T* pData, int iCount, U&& COMP, V&& ACC )
+void sphSort ( T* pData, int iCount, U&& COMP, V&& ACC ) noexcept
 {
 	sphstd::Sort ( pData, iCount, std::forward<U> ( COMP ), std::forward<V> ( ACC ) );
 }
 
 template<typename T, typename U>
-void sphSort ( T* pData, int iCount, U&& COMP )
+void sphSort ( T* pData, int iCount, U&& COMP ) noexcept
 {
 	sphSort ( pData, iCount, std::forward<U> ( COMP ), SphAccessor_T<T>() );
 }
 
 template<typename T>
-void sphSort ( T* pData, int iCount )
+void sphSort ( T* pData, int iCount ) noexcept
 {
 	sphSort ( pData, iCount, SphLess_T<T>() );
 }

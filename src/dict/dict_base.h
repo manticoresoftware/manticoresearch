@@ -144,6 +144,9 @@ public:
 	/// begin creating dictionary file, setup any needed internal structures
 	virtual void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit );
 
+	/// begin creating dictionary file, assuming sorted entries came (when processing ready dicts like merge, add/delete field, etc.)
+	virtual void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes );
+
 	/// add next keyword entry to final dict
 	virtual void DictEntry ( const DictEntry_t& tEntry );
 

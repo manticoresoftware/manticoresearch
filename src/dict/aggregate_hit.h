@@ -20,7 +20,7 @@ struct AggregateHit_t
 {
 	RowID_t m_tRowID { INVALID_ROWID }; ///< document ID
 	SphWordID_t m_uWordID { 0 };		///< word ID in current dictionary
-	const BYTE* m_sKeyword { nullptr }; ///< word itself (in keywords dictionary case only)
+	const BYTE* m_szKeyword { nullptr }; ///< word itself (in keywords dictionary case only)
 	Hitpos_t m_iWordPos { 0 };			///< word position in current document, or hit count in case of aggregate hit
 	FieldMask_t m_dFieldMask;			///< mask of fields containing this word, 0 for regular hits, non-0 for aggregate hits
 

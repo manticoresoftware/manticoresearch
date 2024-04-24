@@ -1,0 +1,27 @@
+name: ❓ Support Request
+description: Need help with Manticore Search? Submit your questions here!
+body:
+  - type: checkboxes
+    id: dev
+    attributes:
+      label: "Confirmation Checklist:"
+      description: >
+        Before submitting your request, we ask that you confirm the following items to ensure that you receive the most effective support:
+      options:
+        - label: "You have searched for an answer in [the manual](https://manual.manticoresearch.com/)."
+        - label: "You have considered using [the forum](https://forum.manticoresearch.com/) for general discussions, which can be more suitable for non-urgent or broad queries."
+        - label: "You are aware of our community support channels on [Slack](https://slack.manticoresearch.com/), [Telegram EN](https://t.me/manticoresearch_en), and [Telegram RU](https://t.me/manticore_chat), where you can interact with other users and our developers."
+        - label: "You know about Manticore Team's [professional services](https://manticoresearch.com/services). Engaging with our experts through a support subscription can significantly accelerate resolution times and provide tailored solutions to your specific needs."
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: "Your question:"
+      description: >
+        Please provide detailed information about your question to ensure prompt and accurate help!
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "## Thank you for completing the form! If you need immediate, dedicated support or a long-term support subscription, consider using our [professional services](https://manticoresearch.com/services)."

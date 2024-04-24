@@ -521,6 +521,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 	for ( const auto & tClause : tJson )
 	{
+		tBuilder.ResetNodesFlags();
 		CSphString sName = tClause.Name();
 		if ( sName=="must" )
 		{
@@ -528,7 +529,6 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 				return nullptr;
 		} else if ( sName=="should" )
 		{
-			tBuilder.ResetNodesFlags();
 			if ( !ConstructBoolNodeItems ( tClause, dShould, tBuilder ) )
 				return nullptr;
 			if ( tBuilder.m_bHasFilter && tBuilder.m_bHasFulltext )
@@ -1026,6 +1026,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 
 	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
 	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
+	if ( !tJson.FetchIntItem ( tQuery.m_iKnnEf, "ef", sError, true ) )		return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
 	if ( !tQueryVec )
@@ -1786,6 +1787,10 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 		for ( const auto & tItem : tAggr.m_dComposite )
 		{
 			const CSphColumnInfo * pCol = tSchema.GetAttr ( tItem.m_sColumn.cstr() );
+			CSphString sJsonCol;
+			if ( !pCol && sphJsonNameSplit ( tItem.m_sColumn.cstr(), nullptr, &sJsonCol ) )
+				pCol = tSchema.GetAttr ( sJsonCol.cstr() );
+			
 			if ( !pCol )
 				return false;
 
@@ -1936,8 +1941,16 @@ static VecTraits_T<CSphMatch> GetResultMatches ( const VecTraits_T<CSphMatch> & 
 		return dMatches.Slice ( iFound+1, iCount );
 }
 
+static bool IsSingleValue ( Aggr_e eAggr )
+{
+	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG );
+}
+
 static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, int iNow, JsonEscapedBuilder & tOut )
 {
+	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
+		return;
+
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 	AggrKeyTrait_t tKey;
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
@@ -1977,57 +1990,69 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		tOut.FinishBlock ( false ); // named bucket obj
 	}
 
-	// buckets might be named objects or array
-	if ( tKey.m_bKeyed )
-		tOut.StartBlock ( ",", R"("buckets":{)", "}" );
-	else
-		tOut.StartBlock ( ",", R"("buckets":[)", "]" );
-
-	// might be null for empty result set
-	if ( bHasKey && pCount )
+	if ( !IsSingleValue ( tAggr.m_eAggrFunc ) )
 	{
-		JsonEscapedBuilder tPrefixBucketBlock;
-		JsonEscapedBuilder tBufMatch;
+		// buckets might be named objects or array
+		if ( tKey.m_bKeyed )
+			tOut.StartBlock ( ",", R"("buckets":{)", "}" );
+		else
+			tOut.StartBlock ( ",", R"("buckets":[)", "]" );
 
-		for ( const CSphMatch & tMatch : dMatches )
+		// might be null for empty result set
+		if ( bHasKey && pCount )
 		{
-			RangeKeyDesc_t * pRange = nullptr;
-			if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
+			JsonEscapedBuilder tPrefixBucketBlock;
+			JsonEscapedBuilder tBufMatch;
+
+			for ( const CSphMatch & tMatch : dMatches )
 			{
-				int iBucket = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
-				pRange = tKey.m_tRangeNames ( iBucket );
-				// lets skip bucket with out of ranges index, ie _all
-				if ( !pRange )
-					continue;
-			}
+				RangeKeyDesc_t * pRange = nullptr;
+				if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
+				{
+					int iBucket = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
+					pRange = tKey.m_tRangeNames ( iBucket );
+					// lets skip bucket with out of ranges index, ie _all
+					if ( !pRange )
+						continue;
+				}
 
-			// bucket item is array item or dict item
-			const char * sBucketPrefix = GetBucketPrefix ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, tPrefixBucketBlock );
-			ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
-			PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, tBufMatch, tOut );
+				// bucket item is array item or dict item
+				const char * sBucketPrefix = GetBucketPrefix ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, tPrefixBucketBlock );
+				ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
+				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, tBufMatch, tOut );
 
-			JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
-			// FIXME!!! add support
-			if ( tAggr.m_eAggrFunc==Aggr_e::SIGNIFICANT )
-			{
-				tOut.Sprintf ( R"("score":0.001)" );
-				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
-			}
+				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
+				// FIXME!!! add support
+				if ( tAggr.m_eAggrFunc==Aggr_e::SIGNIFICANT )
+				{
+					tOut.Sprintf ( R"("score":0.001)" );
+					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
+				}
 
-			for ( const auto & tNested : dNested )
-			{
-				tBufMatch.Clear();
-				tBufMatch.Appendf ( R"("%s":{"value":)",  tNested.second );
-				tOut.StartBlock ( ",", tBufMatch.cstr(), "}");
+				for ( const auto & tNested : dNested )
+				{
+					tBufMatch.Clear();
+					tBufMatch.Appendf ( R"("%s":{"value":)",  tNested.second );
+					tOut.StartBlock ( ",", tBufMatch.cstr(), "}");
 
-				JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
+					JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
 
-				tOut.FinishBlock ( false ); // named bucket obj
+					tOut.FinishBlock ( false ); // named bucket obj
+				}
 			}
 		}
-	}
 	
-	tOut.FinishBlock ( false ); // buckets array
+		tOut.FinishBlock ( false ); // buckets array
+
+	} else
+	{
+		if ( bHasKey && pCount && dMatches.GetLength() )
+		{
+			const CSphMatch & tMatch = dMatches[0];
+			JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "value", tMatch, tKey.m_pKey->m_tLocator );
+		}
+	}
+
 	tOut.FinishBlock ( false ); // named bucket obj
 }
 
@@ -3234,6 +3259,14 @@ static Aggr_e GetAggrFunc ( const JsonObj_c & tBucket, bool bCheckAggType )
 		return Aggr_e::DATE_RANGE;
 	if ( StrEq ( tBucket.Name(), "composite") )
 		return Aggr_e::COMPOSITE;
+	if ( StrEq ( tBucket.Name(), "min") )
+		return Aggr_e::MIN;
+	if ( StrEq ( tBucket.Name(), "max") )
+		return Aggr_e::MAX;
+	if ( StrEq ( tBucket.Name(), "sum") )
+		return Aggr_e::SUM;
+	if ( StrEq ( tBucket.Name(), "avg") )
+		return Aggr_e::AVG;
 
 	if ( bCheckAggType )
 		sphWarning ( "unsupported aggregate type '%s'", tBucket.Name() );
@@ -3574,6 +3607,14 @@ static bool ParseAggrComposite ( const JsonObj_c & tBucket, JsonAggr_t & tAggr, 
 
 static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<JsonAggr_t> & dParentItems, CSphString & sError )
 {
+	if ( bRoot && tAggs.begin().Empty() )
+	{
+		JsonAggr_t & tCount = dParentItems.Add();
+		tCount.m_eAggrFunc = Aggr_e::COUNT;
+		tCount.m_iSize = 1;
+		return true;
+	}
+
 	CSphString sWarning;
 	JsonQuery_c tTmpQuery;
 
@@ -3647,6 +3688,11 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			if ( !ParseAggrComposite ( tJsonItem, tItem, sError ) )
 				return false;
 			break;
+		case Aggr_e::MIN:
+		case Aggr_e::MAX:
+		case Aggr_e::SUM:
+		case Aggr_e::AVG:
+			tItem.m_iSize = 1;
 			
 		default: break;
 		}
@@ -3695,9 +3741,6 @@ bool ParseAggregates ( const JsonObj_c & tAggs, JsonQuery_c & tQuery, CSphString
 		sError = R"("aggs" property should be an object")";
 		return false;
 	}
-
-	if ( !tAggs.Size() )
-		return true;
 
 	if ( !AddSubAggregate ( tAggs, true, tQuery.m_dAggs, sError ) )
 		return false;

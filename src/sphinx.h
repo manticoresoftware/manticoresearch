@@ -512,6 +512,7 @@ struct CSphQuery
 
 	CSphString		m_sKNNAttr;					///< which attr to use for KNN search (enables KNN if not empty)
 	int				m_iKNNK = 0;				///< KNN K
+	int				m_iKnnEf = 0;				///< KNN ef
 	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
@@ -1465,9 +1466,6 @@ void				SetPseudoShardingThresh ( int iThresh );
 
 struct BuildBufferSettings_t;
 void				SetMergeSettings ( const BuildBufferSettings_t & tSettings );
-
-void				InitSkipCache ( int64_t iCacheSize );
-void				ShutdownSkipCache();
 
 //////////////////////////////////////////////////////////////////////////
 

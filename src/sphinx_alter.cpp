@@ -364,6 +364,8 @@ protected:
 bool IndexAlterHelper_c::Alter_AddRemoveRowwiseAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, DWORD uNumRows, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter,
 	WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName )
 {
+	if ( !pDocinfo && tOldSchema.GetRowSize() )
+		return false;
 	AddRemoveCtx_c tCtx ( tOldSchema, tNewSchema, pDocinfo, uNumRows, pBlobPool, tSPAWriter, tSPBWriter, sAttrName, *this );
 	if ( bAddAttr )
 		return tCtx.AddRowwiseAttr();

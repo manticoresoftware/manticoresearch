@@ -8147,10 +8147,12 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 	
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-	if ( !TransformFilters ( tFlx, dTransformedFilters, tMeta.m_sError ) )
+	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError ) )
 		return false;
 
 	tFlx.m_pFilters = &dTransformedFilters;
+	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
 
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
@@ -11210,10 +11212,12 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-	if ( !TransformFilters ( tFlx, dTransformedFilters, tMeta.m_sError ) )
+	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError ) )
 		return false;
 
 	tFlx.m_pFilters = &dTransformedFilters;
+	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
 
 	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;

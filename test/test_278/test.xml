@@ -307,6 +307,14 @@ select * from join1 left join join2 on join1.id = join2.id where join2.name is n
 <!-- IS NULL filter vs filter tree (not supported) -->
 select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name is null order by id asc;
 
+insert into join2 values (3, 'title3', 'name3', '{"b":2,"table":"join2"}');
+
+<!-- mixed filters from left and right tables -->
+select * from join1 inner join join2 on join1.string_id = join2.id where join2.name = 'name1' or id=2 order by id asc;
+
+<!-- mixed filters from left and right tables; one filter is json -->
+select * from join1 inner join join2 on join1.string_id = join2.id where id=1 or join2.j.b=2 order by id asc;
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

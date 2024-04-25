@@ -1,20 +1,19 @@
 # Real-time table
 
-A **Real-time table** is a main type of table in Manticore, allowing you to add, update, and delete documents with immediate availability of the changes. The settings for a Real-time Table can be defined in a configuration file or online using  `CREATE`/`UPDATE`/`DELETE`/`ALTER` commands.
+A **real-time table** is a main type of table in Manticore. It lets you add, update, and delete documents, and you can see these changes right away. You can set up a real-time Table in a configuration file or use commands like `CREATE`, `UPDATE`, `DELETE`, or `ALTER`.
 
-A Real-time Table is comprised of one or multiple  [plain tables](../../Creating_a_table/Local_tables/Plain_table.md) called **chunks**. There are two types of chunks:
+Internally a real-time table consists of one or more [plain tables](../../Creating_a_table/Local_tables/Plain_table.md) called **chunks**. There are two kinds of chunks:
 
-* multiple **disk chunks** -  These are stored on disk and have the same structure as a Plain Table.
-* single **ram chunk** - This is stored in memory and is used as an accumulator of changes.
+* multiple **disk chunks** - these are saved on a disk and are structured like a [plain table](../../Creating_a_table/Local_tables/Plain_table.md).
+* single **ram chunk** - this is kept in memory and collects all changes.
 
-The size of the RAM chunk is controlled by the [rt_mem_limit](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit) setting. Once this limit is reached, the RAM chunk is flushed to disk in the form of a disk chunk. If there are too many disk chunks, they can be merged into one for better performance using the  [OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) command or automatically.
+The size of the RAM chunk is controlled by the [rt_mem_limit](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit) setting. Once this limit is reached, the RAM chunk is transferred to disk as a disk chunk. If there are too many disk chunks, Manticore [combines some of them](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) to improve performance.
 
+### Creating a real-time table:
 
-### 👍 Creating a real-time table:
+You can create a new real-time table in two ways: by using the `CREATE TABLE` command or through the [_mapping endpoint](../../Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) of the HTTP JSON API.
 
-There are two ways you can create a new real-time table: with the `CREATE TABLE` command  or by using the `_mapping` endpoint of HTTP JSON API.
-
-#### 👍 CREATE TABLE command:
+#### CREATE TABLE command:
 
 <!-- example rt -->
 
@@ -108,7 +107,7 @@ table products {
 ```
 <!-- end -->
 
-#### 👍 _mapping endpoint:
+#### _mapping API:
 
 <!-- example rt-mapping -->
 
@@ -116,7 +115,7 @@ Alternatively, you can create a new table via the `_mapping` endpoint. This endp
 
 The body of your request must have the following structure:
 
-```
+```json
 "properties"
 {
   "FIELD_NAME_1":
@@ -127,9 +126,9 @@ The body of your request must have the following structure:
   {
     "type": "FIELD_TYPE_2"
   },
-  
+
   ...
-  
+
   "FIELD_NAME_N":
   {
     "type": "FIELD_TYPE_M"
@@ -160,7 +159,7 @@ When creating a table, Elasticsearch data types will be mapped to Manticore type
 -    ip => string
 -    ip_range => json
 -    keyword => string
--    knn_vector => float_vector,
+-    knn_vector => float_vector
 -    long => bigint
 -    long_range => json
 -    match_only_text => text
@@ -209,16 +208,16 @@ POST /your_table_name/_mapping -d '
 <!-- end -->
 
 ### 👍 What you can do with a real-time table:
-* Add documents using the [Add](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) feature.
-* Update attributes and full-text fields through the [Update](../../Quick_start_guide.md#Update) process.
-* Delete documents using the [Delete](../../Quick_start_guide.md#Delete) feature.
-* Emptying the table using the [Truncate](../../Emptying_a_table.md) process.
-* Change the schema online using the `ALTER` command as described in [Change schema online](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
-* Define the table in a configuration file as described in [Define table](../../Creating_a_table/Local_tables/Real-time_table.md).
+* [Add documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
+* Update attributes and full-text fields using the [Update](../../Quick_start_guide.md#Update) process.
+* [Delete documents](../../Quick_start_guide.md#Delete).
+* [Empty the table](../../Emptying_a_table.md).
+* Change the schema online with the `ALTER` command, as explained in [Change schema online](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
+* Define the table in a configuration file, as detailed in [Define table](../../Creating_a_table/Local_tables/Real-time_table.md).
 * Use the [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) feature for automatic ID provisioning.
 
 ### ⛔ What you cannot do with a real-time table:
-* Index data using the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) feature.
+* Ingest data using the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) feature.
 * Connect it to [sources](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md) for easy indexing from external storage.
 * Update the [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target), as it is automatically managed by the real-time table.
 
@@ -233,5 +232,5 @@ The following table outlines the different file extensions and their respective 
 | `.meta` | The headers of the real-time table that define its structure and settings. |
 | `.*.sp*` | Disk chunks that are stored on disk with the same format as plain tables. They are created when the RAM chunk size exceeds the  rt_mem_limit.|
 
- For more information on the structure of disk chunks, refer to the [plain table format](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure))
+ For more information on the structure of disk chunks, refer to the [plain table files structure](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure).
 <!-- proofread -->

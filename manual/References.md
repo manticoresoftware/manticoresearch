@@ -98,7 +98,7 @@
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
 * [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
-* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#Importing_a_table_from_Elasticsearch) - Creates a table schema imported from an Elasticsearch index
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
 * [data types](Creating_a_table/Data_types.md)

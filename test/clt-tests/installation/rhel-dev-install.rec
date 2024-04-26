@@ -11,6 +11,10 @@ yum install --enablerepo manticore-dev -y -q manticore manticore-extra > /dev/nu
 ––– output –––
 0
 ––– input –––
+yum install -y procps > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 searchd --version
 ––– output –––
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#) (secondary %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#) (knn %{SEMVER} %{COMMITDATE})

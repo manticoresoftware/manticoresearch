@@ -1,9 +1,7 @@
 ––– input –––
-mysql -h0 -P9306 -e 'SHOW QUERIES'
+ps ax | grep searchd
 ––– output –––
-+------+--------------+----------+-----------------+
-| id   | query        | protocol | host            |
-+------+--------------+----------+-----------------+
-| #!/\s*[0-9]+/!# | select       | http     | %{IPADDR}:#!/[0-9]{5}/!# |
-| #!/\s*[0-9]+/!# | SHOW QUERIES | mysql    | %{IPADDR}:#!/[0-9]{5}/!# |
-+------+--------------+----------+-----------------+
+%{NUMBER} ?        Zs     0:00 [searchd] <defunct>
+%{NUMBER} ?        S      0:00 searchd
+%{NUMBER} ?        Sl     0:00 searchd
+%{NUMBER} pts/1    S+     0:00 grep searchd

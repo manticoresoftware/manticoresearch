@@ -62,8 +62,11 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1981](https://github.com/manticoresoftware/manticoresearch/issues/1981) Fixed wrong error
 * [Issue #1983](https://github.com/manticoresoftware/manticoresearch/issues/1983) Introduced support for verbosity levels for the [query plan via JSON](Node_info_and_management/Profiling/Query_plan.md?client=JSON#Query-plan).
 * [Issue #2010](https://github.com/manticoresoftware/manticoresearch/issues/2010) Disabled logging of queries from Buddy unless `log_level=debug` is set
+* [Issue #2035](https://github.com/manticoresoftware/manticoresearch/issues/2035) Linux Mint 21.3 suppport
+* [Issue #2056](https://github.com/manticoresoftware/manticoresearch/issues/2056) Manticore couldn't be built with Mysql 8.3+
 * [Issue #218](https://github.com/manticoresoftware/manticoresearch-buddy/issues/218) Handle `@timestamp` column as timestamp
 * [Issue #252](https://github.com/manticoresoftware/manticoresearch-buddy/issues/250) Implemented logic to enable/disable buddy plugins
+* [Issue #254](https://github.com/manticoresoftware/manticoresearch-buddy/issues/254) Updated composer to a fresher version where recent CVEs are fixed
 * [Issue #340](https://github.com/manticoresoftware/manticoresearch/issues/340) Minor optimization in Manticore systemd unit related with `RuntimeDirectory`
 * [Issue #51](https://github.com/manticoresoftware/executor/issues/51) Added rdkafka support and updated to PHP 8.3.3
 * [Issue #527](https://github.com/manticoresoftware/manticoresearch/issues/527) Support of [attaching](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md#Attaching-table---general-syntax) an RT table.
@@ -108,6 +111,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit 7b4e](https://github.com/manticoresoftware/manticoresearch/commit/7b4ea95e) When starting without the secondary index (SI) library and parameters in the configuration, the misleading warning message 'WARNING: secondary_indexes set but failed to initialize secondary library' was issued.
 * [Commit 8496](https://github.com/manticoresoftware/manticoresearch/commit/8496317f099fade8d2db463fb88483e7fcdfe85b) fixed hit sorting in quorum
 * [Commit 8973](https://github.com/manticoresoftware/manticoresearch-buddy/commit/8973ad3) Fixed issue with upper case options in the ModifyTable plugin
+* [Commit 9935](https://github.com/manticoresoftware/manticoresearch-buddy/commit/99350d4c184379b19f3efa9751d9b5be5e6edfb5) Fixed restoring from a dump with empty json values (represented as NULL)
 * [Commit a28f](https://github.com/manticoresoftware/manticoresearch/commit/a28f6e087b3d957e48816070be17d0823904936a) Fixed SST timeout at the joiner node when receiving SST by using pcon.
 * [Commit b5a5](https://github.com/manticoresoftware/manticoresearch/commit/b5a55cc26debcddcda5d9caef8366a707e0dd763) fixed a crash on selecting aliased string attribute
 * [Commit c556](https://github.com/manticoresoftware/manticoresearch/commit/c556e7ed8b6da8eac8ef094650df5f0a8977916b) Added query transform of the term into `=term` of full-text query with the `morphology_skip_fields` field.
@@ -159,6 +163,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1769](https://github.com/manticoresoftware/manticoresearch/issues/1769) Sorting by string attributes does not work with `SPH_SORT_ATTR_DESC` and `SPH_SORT_ATTR_ASC`.
 * [Issue #177](https://github.com/manticoresoftware/manticoresearch-buddy/issues/177) Disabled the `Expect: 100-continue` HTTP header for curl requests to Buddy.
 * [Issue #1791](https://github.com/manticoresoftware/manticoresearch/issues/1791) crash caused by GROUP BY alias
+* [Issue #1792](https://github.com/manticoresoftware/manticoresearch/issues/1792) SQL meta summary shows wrong time on windows
 * [Issue #1794](https://github.com/manticoresoftware/manticoresearch/issues/1794) Fixed a single-term performance drop with JSON queries.
 * [Issue #1798](https://github.com/manticoresoftware/manticoresearch/issues/1798) Incompatible filters didn't raise an error on `/search`.
 * [Issue #1802](https://github.com/manticoresoftware/manticoresearch/issues/1802) Fixed `ALTER CLUSTER ADD` and `JOIN CLUSTER` operations to wait for each other, preventing a race condition where `ALTER` adds a table to the cluster while the donor sends tables to the joiner node.
@@ -166,6 +171,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #183](https://github.com/manticoresoftware/manticoresearch-buddy/pull/183) Fixed an issue with MVA restoration in some cases
 * [Issue #1849](https://github.com/manticoresoftware/manticoresearch/issues/1849) Fixed indextool crash on shutdown if used with MCL.
 * [Issue #1872](https://github.com/manticoresoftware/manticoresearch/issues/1872) change plugin_dir set logic on daemon start
+* [Issue #1891](https://github.com/manticoresoftware/manticoresearch/issues/1891#issuecomment-2051941200) Manticore crashes with `signal 11` when inserting data
 * [Issue #1920](https://github.com/manticoresoftware/manticoresearch/issues/1920) Reduced throttling for [low_priority](Searching/Options.md#Low-Priority)
 * [Issue #1924](https://github.com/manticoresoftware/manticoresearch/issues/1924) Mysqldump + mysql restore bug
 * [Issue #1951](https://github.com/manticoresoftware/manticoresearch/issues/1951) Fixed incorrect creation of the distributed table in the case of a missing local table or incorrect agent description; now returns an error message.
@@ -177,6 +183,8 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1994](https://github.com/manticoresoftware/manticoresearch/issues/1994) wrong external files
 * [Issue #2021](https://github.com/manticoresoftware/manticoresearch/issues/2021) A few manticore-executor processes could be left running after stopping Manticore.
 * [Issue #2029](https://github.com/manticoresoftware/manticoresearch/issues/2029) Crash using Levenshtein Distance
+* [Issue #2045](https://github.com/manticoresoftware/manticoresearch/issues/2045) Grouping by multiple fields returns incorrect results
+* [Issue #2052](https://github.com/manticoresoftware/manticoresearch/issues/2052) crash on multi-group with JSON.field
 * [Issue #2067](https://github.com/manticoresoftware/manticoresearch/issues/2067) Manticore was crashing on incorrect request to _update
 * [Issue #2069](https://github.com/manticoresoftware/manticoresearch/issues/2069) Fixed an issue with string filter comparators for closed ranges in the JSON interface
 * [Issue #223](https://github.com/manticoresoftware/manticoresearch-buddy/issues/223) Proper error when trying to insert a document w/o schema and w/o column names

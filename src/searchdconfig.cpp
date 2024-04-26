@@ -808,7 +808,7 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 		CSphString sDest = i;
 		StripPath(sDest);
 		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
-		if ( i==sDest )
+		if ( RealPath ( i ) == RealPath ( sDest ) )
 			continue;
 
 		// can not overwrite existed destination file

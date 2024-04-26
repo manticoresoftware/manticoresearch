@@ -1,7 +1,4 @@
 ––– input –––
-ps ax | grep searchd
+ps ax | awk -F" " '{print $5}' | grep -w "^searchd$" > /dev/null;echo $?
 ––– output –––
-%{NUMBER} ?        Zs     0:00 [searchd] <defunct>
-%{NUMBER} ?        S      0:00 searchd
-%{NUMBER} ?        Sl     0:00 searchd
-%{NUMBER} pts/1    S+     0:00 grep searchd
+0

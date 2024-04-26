@@ -6,6 +6,10 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
+apt-get install -y procps > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 apt-get install -y gnupg2 wget mariadb-client > /dev/null; echo $?
 ––– output –––
 perl: warning: Setting locale failed.

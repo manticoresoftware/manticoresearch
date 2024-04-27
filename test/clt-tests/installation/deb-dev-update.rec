@@ -6,16 +6,12 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y gnupg2 wget mariadb-client procps > /dev/null 2>&1; echo $?
+apt-get install -y gnupg2 wget mariadb-client procps binutils > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
 wget -q https://repo.manticoresearch.com/manticore-repo.noarch.deb
 ––– output –––
-––– input –––
-apt-get install -y -q binutils > /dev/null 2>&1; echo $?
-––– output –––
-0
 ––– input –––
 dpkg -i manticore-repo.noarch.deb > /dev/null; echo $?
 ––– output –––

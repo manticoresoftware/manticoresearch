@@ -1,5 +1,5 @@
 ––– input –––
-yum install -y --skip-broken mariadb mariadb105 which > /dev/null 2>&1; echo $?
+yum install -y --skip-broken mariadb mariadb105 which procps binutils > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -11,21 +11,13 @@ yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-yum install -y -q binutils > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-yum install -y procps > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
 manticore-executor -v
 ––– output –––
 PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (ZTS)
 Copyright (c) The PHP Group
 Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
-––– block: check-buddy –––
+––– block: check-searchd-process –––
 ––– block: check-backup –––
 ––– block: check-version/export-current-version –––
 ––– input –––

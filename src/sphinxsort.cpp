@@ -677,10 +677,10 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 		if ( i == 0 )
 		{
 			assert (tCol.m_sName == "id");
-			pRows->HeadColumn ( "id", ESphAttr2MysqlColumn ( SPH_ATTR_UINT64 ) );
+			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
 			continue;
 		}
-		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
+		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
 	}
 
 	pRows->HeadEnd ( false, 0 );
@@ -759,7 +759,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			{
 				StringBuilder_c dStr;
 				auto dMVA = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
+				dStr << "(";
 				sphMVA2Str ( dMVA, eAttrType == SPH_ATTR_INT64SET, dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 				break;
 			}
@@ -768,7 +770,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_UINT32SET_PTR:
 			{
 				StringBuilder_c dStr;
+				dStr << "(";
 				sphPackedMVA2Str ( (const BYTE*)tMatch.GetAttr ( tLoc ), eAttrType == SPH_ATTR_INT64SET_PTR, dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 				break;
 			}
@@ -777,7 +781,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			{
 				StringBuilder_c dStr;
 				auto dFloatVec = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
+				dStr << "(";
 				sphFloatVec2Str ( dFloatVec, dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 			}
 			break;
@@ -785,7 +791,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_FLOAT_VECTOR_PTR:
 			{
 				StringBuilder_c dStr;
+				dStr << "(";
 				sphPackedFloatVec2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 			}
 			break;

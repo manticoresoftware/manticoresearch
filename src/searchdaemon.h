@@ -1521,6 +1521,28 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumn ( ESphAttr eAttrType )
 	}
 }
 
+// streamed version - used to map columns with streamed select; hacks mysqldump
+inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
+	case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
+	case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
+	case SPH_ATTR_BIGINT: return MYSQL_COL_LONGLONG;
+	case SPH_ATTR_UINT64: return MYSQL_COL_UINT64;
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_INT64SET_PTR: return MYSQL_COL_LONG; // long is treated as a number without interpretation (just copied from input to output)
+	default: return MYSQL_COL_STRING;
+	}
+}
+
 class RowBuffer_i : public ISphNoncopyable
 {
 public:

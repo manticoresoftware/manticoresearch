@@ -1,5 +1,5 @@
 ––– input –––
-yum install -y --skip-broken mariadb mariadb105 which > /dev/null 2>&1; echo $?
+yum install -y --skip-broken mariadb mariadb105 which procps > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -8,10 +8,6 @@ yum install -y -q https://repo.manticoresearch.com/manticore-repo.noarch.rpm > /
 0
 ––– input –––
 yum install --enablerepo manticore-dev -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-yum install -y procps > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

@@ -454,7 +454,7 @@ bool TemplateDictTraits_c::HasState() const
 #endif
 }
 
-void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile )
+void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c & pTokenizer, bool bStripFile )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -490,6 +490,9 @@ void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRe
 			*pCur++ = '\0';
 
 		CSphString sFileName = sName;
+		if ( pFilenameBuilder )
+			sFileName = pFilenameBuilder->GetFullPath ( sFileName );
+
 		bool bGotFile = sphIsReadable ( sFileName );
 		if ( !bGotFile )
 		{
@@ -843,7 +846,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 				// sort forms by files and length
 				// but do not sort if we're loading embedded
 				if ( iFileId >= 0 )
-					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) {
+					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) noexcept {
 						assert ( pA && pB );
 						return ( pA->m_iFileId == pB->m_iFileId ) ? pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength() : pA->m_iFileId > pB->m_iFileId;
 					} ) );

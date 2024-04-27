@@ -57,7 +57,7 @@ The log format is as follows:
 *   "tsegs" for `SPH_SORT_TIME_SEGMENTS` mode;
 *   "ext" for `SPH_SORT_EXTENDED` mode.
 
-Note: the `SPH*` modes are specific to the `sphinx` legacy interface. SQL and HTTP interfaces will log, in most cases, `ext2` as `match-mode` and `ext` and `rel` as `sort-mode`.
+Note: the `SPH*` modes are specific to the `sphinx` legacy interface. SQL and JSON interfaces will log, in most cases, `ext2` as `match-mode` and `ext` and `rel` as `sort-mode`.
 
 If Manticore was started with `--iostats` (or it was enabled via `SET GLOBAL iostats=1`), the corresponding metrics will be included:
 

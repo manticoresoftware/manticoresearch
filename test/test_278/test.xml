@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>JOIN</name>
+
+<requires><force-rt/></requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+<!-- populate tables -->
+create table join1 ( id bigint, title text, string_id integer, tmp string attribute, j json );
+insert into join1 values ( 1, 'doc1', 1, 'tmp1',    '{"str_id":1}' );
+insert into join1 values ( 2, 'doc2', 1, 'tmp2',    '{"str_id":1}' );
+insert into join1 values ( 3, 'doc3', 2, 'tmp3',    '{"str_id":2}' );
+insert into join1 values ( 4, 'doc4', 2, 'tmp4',    '{"str_id":2}' );
+insert into join1 values ( 5, 'doc5', 3, 'tmp5',    '{"str_id":3}' );
+insert into join1 values ( 6, 'doc6', 3, 'tmp6',    '{"str_id":3}' );
+insert into join1 values ( 7, 'doc7', 4, 'tmp7',    '{"str_id":4}' );
+insert into join1 values ( 8, 'doc8', 4, 'tmp8',    '{"str_id":4}' );
+insert into join1 values ( 9, 'doc9', 5, 'tmp9',    '{"str_id":5}' );
+insert into join1 values ( 10, 'doc10', 5, 'tmp10', '{"str_id":5}' );
+select * from join1 order by id asc;
+
+create table join2 ( id bigint, title text, name string attribute, j json );
+insert into join2 values ( 1, 'str1', 'string1', '{"a":1,"c":2}' );
+insert into join2 values ( 2, 'str2', 'string2', '{"a":2,"b":1,"d":2}' );
+insert into join2 values ( 3, 'str3', 'string3', '{"b":2,"x":1,"y":2}' );
+insert into join2 values ( 4, 'str4', 'string4', '{}' );
+select * from join2 order by id asc;
+
+<!-- plain join -->
+select id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- plain join -->
+select id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- join with group by joined plain attr -->
+select count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.id order by groupby() asc;
+
+<!-- join with groupby by joined attr and a string in select list -->
+select join2.name, count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.id order by groupby() asc;
+
+<!-- joined json in select list -->
+select id,join2.j.a from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- join with group by joined json -->
+select count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.j.a;
+
+<!-- star syntax -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- group by string -->
+select id, count(*), groupby() from join1 inner join join2 on join1.string_id=join2.id group by join2.name order by id asc;
+
+<!-- order by string -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc, id asc;
+
+<!-- order by json ASC -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by join2.j.a asc, id asc;
+
+<!-- order by json DESC -->
+select * from join1 inner join join2 on join1.string_id=join2.id order by join2.j.a desc, id asc;
+
+<!-- join expressions -->
+select join2.j.a, join2.j.a+1 from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- FIXME! DOES NOT WORK CORRECTLY -->
+select join2.j.a*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- join expression alias DOES NOT WORK
+select id, join2.j.a x, x*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+-->
+
+<!-- join expression alias -->
+select id, integer(join2.j.a) x, x*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- FIXME! does not work for now; returns error  -->
+select id, join2.id, (join2.j.a+50)*string_id from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc;
+
+<!-- join expression alias -->
+select id, join2.j.a, string_id, (join2.j.a+50) x, x*string_id from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc;
+
+<!-- filter over left table -->
+select * from join1 inner join join2 on join1.string_id=join2.id where string_id>2 order by id asc;
+
+<!-- filter over right table -->
+select * from join1 inner join join2 on join1.string_id=join2.id where join2.id>2 order by id asc;
+
+<!-- json filter over right table -->
+select * from join1 inner join join2 on join1.string_id=join2.id where join2.j.a=1 order by id asc;
+
+<!-- default join = inner join -->
+select * from join1 join join2 on join1.string_id=join2.id where join2.j.a=1 order by id asc;
+
+<!-- join on json attr -->
+select * from join1 join join2 on join1.j.str_id=join2.id order by id asc;
+
+<!-- join on json attr -->
+select * from join1 join join2 on join2.id=join1.j.str_id order by id asc;
+
+<!-- join on json attr -->
+select * from join1 join join2 on join1.id=join2.j.a order by id asc;
+
+<!-- left join on json attr -->
+select * from join1 left join join2 on join1.id=join2.j.a order by id asc;
+
+<!-- inner join vs facet -->
+select id from join1 inner join join2 on join1.id=join2.j.a facet join2.id;;
+
+<!-- left join vs facet -->
+select id from join1 left join join2 on join1.id=join2.j.a facet join2.id;;
+
+<!-- join on nonexistent index -->
+select id from join1 inner join join2 on non_existent.id=join2.j.a;
+
+<!-- join with match on left table -->
+select id from join1 inner join join2 on join1.string_id=join2.id where match('doc2') order by id asc;
+
+<!-- join with match on left table -->
+select id from join1 inner join join2 on join1.string_id=join2.id where match('doc2',join1) order by id asc;
+
+<!-- join with match on right table -->
+select id,join2.id from join1 inner join join2 on join1.string_id=join2.id where match('str2',join2) order by id asc;
+
+<!-- regression for a crash when joined json is present in select list and filters -->
+select *,join2.j.a from join1 left join join2 on join1.string_id=join2.j.c where join2.j.a=1 order by id asc;
+
+<!-- join over fulltext (error) table -->
+select * from join1 join join2 on join1.title=join2.title order by id asc;
+
+<!-- join over fulltext (error) table -->
+select id,join2.id from join1 join join2 on join1.title=join2.title order by id asc;
+
+<!-- join vs aggregates -->
+select id, join2.id from join1 join join2 on join1.string_id=join2.id order by id asc;
+select sum(join2.id) from join1 join join2 on join1.string_id=join2.id;
+
+<!-- clean up -->
+drop table join2;
+drop table join1;
+
+<!-- create new tables -->
+CREATE TABLE products ( product_name text, price int );
+CREATE TABLE sales ( comment text, product_id int, sale_date string, quantity int );
+
+<!-- populate tables -->
+INSERT INTO products (id, product_name, price) VALUES (1, 'Laptop', 1200), (2, 'Phone', 800), (3, 'Tablet', 450);
+INSERT INTO sales VALUES (1, 'sale1', 1, '2023-01-01', 3), (2, 'sale2', 2, '2023-01-02', 2), (3, 'sale3', 1, '2023-01-03', 1), (4, 'sale4', 3, '2023-01-04', 2);
+
+<!-- filter on aliased joined attr -->
+select *, sales.quantity * 10 al from products inner join sales on products.id = sales.product_id where al > 20;
+
+<!-- error on unknown index in MATCH() -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet', wrong_table);
+
+<!-- MATCH() for left and right tables (no left match) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products)
+
+<!-- MATCH() for left and right tables (left match1) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products) and match('sale2',sales);
+
+<!-- MATCH() for left and right tables (left match2) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products) and match('sale4',sales);
+
+<!-- MATCH() for left and right tables (alternate syntax) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone', products) and match('sale2');
+
+<!-- MATCH() for left and right tables and filter -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone|laptop', products) and match('sale2|sale4') and id>2;
+
+<!-- MATCH() for right and right tables (error) -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone|laptop', products) and match('sale2|sale4', products);
+
+<!-- MATCH() syntax error -->
+select * from sales inner join products on sales.product_id = products.id where match('tablet|phone|laptop', products) and match('sale2', sales) and match('sale4', sales);
+
+<!-- clean up -->
+drop table sales;
+drop table products;
+
+<!-- NULL mask remap -->
+CREATE TABLE a (f text);
+CREATE TABLE b ( a_id int, i int);
+INSERT INTO a VALUES (1, 'a');
+
+select * from a left join b on b.a_id=a.id;
+
+DROP TABLE a;
+DROP TABLE b;
+
+<!-- joined stored fields -->
+create table people(name text, surname_id bigint);
+create table surname(surname text);
+
+insert into people values (1, 'john', 1), (2, 'mary', 1), (3, 'bill', 2),(4, 'matt', 3);
+insert into surname values(1, 'smith'),(2, 'goldman');
+
+select * from people left join surname on people.surname_id = surname.id;
+select surname.surname from people left join surname on people.surname_id = surname.id;
+
+select * from people join surname on people.surname_id = surname.id;
+select surname.surname from people join surname on people.surname_id = surname.id;
+
+drop table people;
+drop table surname;
+
+<!-- multiple groupby on joined json attrs -->
+CREATE TABLE t1 (id bigint, name text, surname text);
+CREATE TABLE t2 (id bigint, t2_id bigint, name text, description text, attr json);
+
+INSERT INTO t1 (id, name, surname) VALUES (1, 'name1', 'surname1'), (2, 'name2', 'surname2');
+INSERT INTO t2 (id, t2_id, name, description, attr) VALUES (0, 1, 'name1', 'description1', '{"color":"black","size":14}'), (0, 1, 'name2', 'description2', '{"color":"black","size":14}');
+
+select id, *, count(*), groupby() from t1 inner join t2 on t1.id=t2.t2_id group by t2.attr.color, t2.attr.size order by id asc;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
+<!-- grouping on joined MVAs -->
+create table tbl(tbl2_id int);
+create table tbl2(id, m multi);
+
+insert into tbl2 values(1, (1,2)),(2,(2,3));
+insert into tbl values(1,1),(2,2);
+
+select * from tbl left join tbl2 on tbl.tbl2_id = tbl.id facet tbl2.m;;
+
+drop table tbl;
+drop table tbl2;
+
+<!-- OR filters on joined attrs -->
+create table t(f text);
+create table t2(t_id int, f text);
+
+insert into t values(1, 'abc');
+insert into t2 values(1, 'abc', 1),(2, 'def', 1);
+
+select * from t inner join t2 on t.id = t2.t_id where t2.id = 1 or t2.id = 2;
+
+drop table t;
+drop table t2;
+
+<!-- populate tables -->
+create table join1 ( id bigint, title text, string_id integer, tmp string attribute, j json );
+create table join2 ( id bigint, title text, name string attribute, j json );
+
+insert into join1 values (1, 'title1', 1, 'tmp1', '{"a":1,"table":"join1"}');
+insert into join1 values (2, 'title2', 2, 'tmp2', '{"b":2,"table":"join1"}');
+insert into join1 values (3, 'title3', 3, 'tmp3', '{"c":3,"table":"join1"}');
+insert into join1 values (4, 'title4', 4, 'tmp4', '{"d":4,"table":"join1"}');
+
+insert into join2 values (1, 'title1', 'name1', '{"a":1,"table":"join2"}');
+insert into join2 values (2, 'title2', 'name2', '{"b":2,"table":"join2"}');
+
+<!-- group by json attr + same attr in select list -->
+select count(*), j.table, join2.j.table from join1 join join2 on join1.id = join2.id group by join2.j.table;
+
+<!-- facet by json attr + same attr in select list -->
+select j.table, join2.j.table from join1 join join2 on join1.id = join2.id limit 0 facet join2.j.table distinct limit 1000;;
+
+<!-- facet by json attr + same attr in select list -->
+select j.table, join2.j.table from join1 join join2 on join1.id = join2.id limit 0 option max_matches=1000 facet j.table distinct limit 1000 facet join2.j.table distinct limit 1000;;
+
+<!-- count distinct by joined json attr -->
+select j.table, count (distinct join2.j.table) from join1 join join2 on join1.id = join2.id;
+
+<!-- joined OR filters -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'not there' order by id asc;
+
+<!-- joined OR filters -->
+select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' or join2.name = 'name2' order by id asc;
+
+<!-- join ON mistype -->
+select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.izd;
+
+<!-- join ON mistype with match() -->
+select * from join1 left join join2 on join1.id = join2.id_typo where match('title1') and string_id = 1 and join2.name = 'name1' order by id asc;
+
+<!-- join filter mistype with match() -->
+select * from join1 left join join2 on join1.id = join2.id where match('title1') and string_id = 1 and join2.name_typo = 'name1' order by id asc;
+
+flush ramchunk join1;
+flush ramchunk join2;
+
+<!-- join filter mistype with match() after 'flush ramchunk' -->
+select * from join1 left join join2 on join1.id = join2.id where match('title1') and string_id = 1 and join2.name_typo = 'name1' order by id asc;
+
+<!-- join filter mistype -->
+select id, string_id, tmp, j, join2.id, join2.name, join2.j from join1 left join join2 on join1.id = join2.id where join2.xidz>0;
+
+<!-- cleanup -->
+drop table join1;
+drop table join2;
+
+</sphinxql>
+</queries>
+
+</test>

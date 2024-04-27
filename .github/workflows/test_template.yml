@@ -3,9 +3,6 @@ name: Test Template
 on:
   workflow_call:
     inputs:
-      CTEST_CONFIGURATION_TYPE:
-        required: true
-        type: string
       WITH_COVERAGE:
         required: false
         type: number
@@ -19,6 +16,9 @@ on:
         type: number
         default: 999999
       artifact_name:
+        required: true
+        type: string
+      build_artifact_name:
         required: true
         type: string
       timeout:
@@ -40,7 +40,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263
+      image: manticoresearch/ubertests_ctest:3263_mar_2024
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -68,7 +68,7 @@ jobs:
       - name: Download build artifacts
         uses: manticoresoftware/download_artifact_with_retries@v2
         with:
-          name: build_bionic_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
+          name: ${{ inputs.build_artifact_name }}
           path: .
 
       - name: List files

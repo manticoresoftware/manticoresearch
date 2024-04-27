@@ -232,6 +232,12 @@ if (STATIC_BINARY)
 endif ()
 with_get ( icu "ICU" "International Components for Unicode" )
 
+include ( GetCCTZ )
+target_link_libraries ( lextra INTERFACE cctz::cctz )
+
+include ( GetxxHash )
+target_link_libraries ( lextra INTERFACE xxHash::xxhash )
+
 # Support for OpenSSL
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
@@ -316,6 +322,9 @@ configure_file ( "LICENSE" "${MANTICORE_BINARY_DIR}/LICENSE" COPYONLY )
 # Common all-packages info
 include ( ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake )
 include ( CommonInfo )
+
+include( builds/VersionDeps )
+message("EXECUTOR image: manticoresearch/manticore-executor:${EXECUTOR_VERNUM}")
 
 # set final paths for build
 set ( only_set_paths ON )

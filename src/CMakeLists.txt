@@ -54,7 +54,7 @@ target_link_libraries ( lextra INTERFACE generated_config )
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp
-		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp sphinxjsonquery.cpp
+		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
 		jsonqueryfilter.cpp attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp datareader.cpp
@@ -65,7 +65,9 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sph
 		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp client_task_info.cpp
 		indexfiles.cpp indexfilebase.cpp attrindex_builder.cpp queryfilter.cpp aggregate.cpp secondarylib.cpp costestimate.cpp
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
-		detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp )
+		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
+		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
+		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
@@ -138,15 +140,10 @@ target_link_libraries ( lmanticore_coro PUBLIC lextra )
 
 target_link_libraries ( lmanticore PUBLIC lmanticore_coro )
 
-set ( LMANTICORE_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
-set ( LMANTICORE_FLEX sphinxjson.l sphinxexpr.l )
-set ( SEARCHD_BISON sphinxql.y sphinxql_debug.y ddl.y sphinxql_second.y sphinxql_extra.y)
-set ( SEARCHD_FLEX sphinxql.l sphinxql_debug.l ddl.l sphinxql_second.l sphinxql_extra.l)
-
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
-set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphinxpq.h sphinxrt.h
+set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		sphinxsort.h sphinxstem.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxquery.h sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h event.h threadutils.h threadutils_impl.h
@@ -154,8 +151,10 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxjsonquery.h sphin
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
 		chunksearchctx.h indexfilebase.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
-		costestimate.h docidlookup.h tracer.h attrindex_merge.h columnarmisc.h distinct.h hyperloglog.h pseudosharding.h
-		geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h )
+		costestimate.h docidlookup.h tracer.h attrindex_merge.h columnarmisc.h distinct.h hyperloglog.h pseudosharding.h datetime.h
+		grouper.h exprdatetime.h geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h match_impl.h std/string_impl.h
+		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h sortergroup.h
+		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h)
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
@@ -163,57 +162,74 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		netreceive_api.h netreceive_http.h netreceive_ql.h networking_daemon.h query_status.h
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
-		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h)
+		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
+		frontendschema.h )
 
-source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
-source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
 
 # add the extra targets in the case we want on-the-fly grammar compiler
-find_package ( BISON REQUIRED )
+find_package ( BISON QUIET )
 set ( BISON_DIR "${MANTICORE_BINARY_DIR}/config" )
 set ( BIS_FLAGS "" )
 if (BISON_VERSION VERSION_GREATER 3.0)
 	set ( BIS_FLAGS "-Wno-deprecated" )
 endif ()
 
-BISON_TARGET ( ExprParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.y" ${BISON_DIR}/bissphinxexpr.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( SelectParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxselect.y" ${BISON_DIR}/bissphinxselect.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( QueryParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxquery.y" ${BISON_DIR}/bissphinxquery.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( SQLParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.y" ${BISON_DIR}/bissphinxql.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( DDLParser "${CMAKE_CURRENT_SOURCE_DIR}/ddl.y" ${BISON_DIR}/bisddl.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( JsonParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.y" ${BISON_DIR}/bissphinxjson.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( SQLDebugParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.y" ${BISON_DIR}/bissphinxql_debug.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( SQLSecondParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_second.y" ${BISON_DIR}/bissphinxql_second.c COMPILE_FLAGS ${BIS_FLAGS} )
-BISON_TARGET ( SQLExtraParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_extra.y" ${BISON_DIR}/bissphinxql_extra.c COMPILE_FLAGS ${BIS_FLAGS} )
+function ( MY_BISON ParserName ParserSrc Dependency TargetBison )
+	if (NOT BISON_FOUND)
+		if (EXISTS "${BISON_DIR}/bis${ParserSrc}.c" AND EXISTS "${BISON_DIR}/bis${ParserSrc}.h")
+			infomsg ( "Will use pre-built ${BISON_DIR}/bis${ParserSrc}.c and ${BISON_DIR}/bis${ParserSrc}.h for grammar parser ${ParserName}" )
+			return ()
+		else ()
+			message ( FATAL_ERROR "No pre-compiled grammar files bis${ParserSrc}.c and bis${ParserSrc}.h for ${ParserSrc}.y exists, and Bison not found. Can't continue" )
+		endif ()
+	endif ()
 
-set_source_files_properties ( sphinxexpr.cpp PROPERTIES OBJECT_DEPENDS ${BISON_ExprParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( sphinx.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( sphinxquery.cpp PROPERTIES OBJECT_DEPENDS ${BISON_QueryParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( sphinxjson.cpp PROPERTIES OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( searchdddl.cpp PROPERTIES OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( searchdsql.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( sphinxql_debug.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLDebugParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( sphinxql_second.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLSecondParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
-set_source_files_properties ( sphinxql_extra.cpp PROPERTIES OBJECT_DEPENDS ${BISON_SQLExtraParser_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+	LIST ( APPEND ${TargetBison}_BISON "${ParserSrc}.y" )
+	set ( ${TargetBison}_BISON ${${TargetBison}_BISON} PARENT_SCOPE )
+	BISON_TARGET ( ${ParserName} "${CMAKE_CURRENT_SOURCE_DIR}/${ParserSrc}.y" "${BISON_DIR}/bis${ParserSrc}.c" COMPILE_FLAGS ${BIS_FLAGS} )
+	set_source_files_properties ( ${Dependency} PROPERTIES OBJECT_DEPENDS ${BISON_${ParserName}_OUTPUT_SOURCE} SKIP_UNITY_BUILD_INCLUSION ON )
+endfunction ()
+
+MY_BISON ( ExprParser sphinxexpr sphinxexpr.cpp LMANTICORE )
+MY_BISON ( SelectParser sphinxselect sphinx.cpp LMANTICORE )
+MY_BISON ( QueryParser sphinxquery sphinxquery.cpp LMANTICORE )
+MY_BISON ( JsonParser sphinxjson sphinxjson.cpp LMANTICORE )
+MY_BISON ( SQLParser sphinxql searchdsql.cpp SEARCHD )
+MY_BISON ( DDLParser ddl searchdddl.cpp SEARCHD )
+MY_BISON ( SQLDebugParser sphinxql_debug sphinxql_debug.cpp SEARCHD )
+MY_BISON ( SQLSecondParser sphinxql_second sphinxql_second.cpp SEARCHD )
+MY_BISON ( SQLExtraParser sphinxql_extra sphinxql_extra.cpp SEARCHD )
+source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 
 # add the extra targets in the case we want on-the-fly lex compiler
-find_package ( FLEX REQUIRED )
+find_package ( FLEX QUIET )
 set ( FLEX_DIR "${MANTICORE_BINARY_DIR}/config" )
-FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c )
-FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c )
-FLEX_TARGET ( Exprlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.l" ${FLEX_DIR}/flexsphinxexpr.c )
-FLEX_TARGET ( DDLlex "${CMAKE_CURRENT_SOURCE_DIR}/ddl.l" ${FLEX_DIR}/flexddl.c )
-FLEX_TARGET ( SQLDebuglex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.l" ${FLEX_DIR}/flexsphinxqldebug.c )
-FLEX_TARGET ( SQLSecondlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_second.l" ${FLEX_DIR}/flexsphinxqlsecond.c )
-FLEX_TARGET ( SQLExtralex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_extra.l" ${FLEX_DIR}/flexsphinxqlextra.c )
+function ( MY_FLEX LexerName LexerSrc Dependency TargetFlex )
+	if (NOT FLEX_FOUND)
+		if (EXISTS "${FLEX_DIR}/flex${LexerSrc}.c")
+			infomsg ( "Will use pre-built ${FLEX_DIR}/flex${LexerSrc}.c for lexer ${LexerName}" )
+			return ()
+		else ()
+			message ( FATAL_ERROR "No pre-compiled lexer file flex${LexerSrc}.c for ${LexerSrc}.l exists, and Flex not found. Can't continue" )
+		endif ()
+	endif ()
 
-set_property ( SOURCE searchdsql.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS} )
-set_property ( SOURCE searchdddl.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_DDLlex_OUTPUTS} )
-set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
-set_property ( SOURCE sphinxexpr.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_Exprlex_OUTPUTS} )
-set_property ( SOURCE sphinxql_debug.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLDebuglex_OUTPUTS} )
-set_property ( SOURCE sphinxql_second.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLSecondlex_OUTPUTS} )
-set_property ( SOURCE sphinxql_extra.cpp APPEND PROPERTY OBJECT_DEPENDS ${FLEX_SQLExtralex_OUTPUTS} )
+	LIST ( APPEND ${TargetFlex}_FLEX "${LexerSrc}.l" )
+	set ( ${TargetFlex}_FLEX ${${TargetFlex}_FLEX} PARENT_SCOPE )
+	FLEX_TARGET ( ${LexerName} "${CMAKE_CURRENT_SOURCE_DIR}/${LexerSrc}.l" "${FLEX_DIR}/flex${LexerSrc}.c" )
+	set_property ( SOURCE ${Dependency} APPEND PROPERTY OBJECT_DEPENDS ${FLEX_${LexerName}_OUTPUTS} )
+endfunction ()
+
+MY_FLEX ( Jsonlex sphinxjson sphinxjson.cpp LMANTICORE )
+MY_FLEX ( Exprlex sphinxexpr sphinxexpr.cpp LMANTICORE )
+MY_FLEX ( SQLlex sphinxql searchdsql.cpp SEARCHD )
+MY_FLEX ( DDLlex ddl searchdddl.cpp SEARCHD )
+MY_FLEX ( SQLDebuglex sphinxql_debug sphinxql_debug.cpp SEARCHD )
+MY_FLEX ( SQLSecondlex sphinxql_second sphinxql_second.cpp SEARCHD )
+MY_FLEX ( SQLExtralex sphinxql_extra sphinxql_extra.cpp SEARCHD )
+source_group ( "Lexer sources" FILES ${LMANTICORE_FLEX} ${SEARCHD_FLEX} )
+
+diag ( LMANTICORE_BISON SEARCHD_BISON LMANTICORE_FLEX SEARCHD_FLEX )
 
 # our mega-lib
 target_sources ( lmanticore PUBLIC ${LMANTICORE_BISON} ${LMANTICORE_FLEX} ${HEADERS} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
@@ -227,7 +243,8 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
-		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp)
+		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp sphinxjsonquery.cpp
+		frontendschema.cpp )
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
@@ -288,7 +305,9 @@ if (WITH_ZLIB OR WITH_ZSTD)
 endif ()
 
 add_subdirectory ( perfetto )
-target_link_libraries ( lextra INTERFACE perfetto )
+if (TARGET perfetto)
+	target_link_libraries ( lextra INTERFACE perfetto )
+endif()
 
 # stub library for all except daemon - to avoid link with openssl
 add_library ( stub_ssl searchdssl.cpp )

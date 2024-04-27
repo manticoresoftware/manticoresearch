@@ -21,10 +21,9 @@ What you need to keep in mind when creating a new percolate table is to specify 
 
 
 <!-- intro -->
-##### SQL:
+##### Creating a percolate table via MySQL protocol:
 
 <!-- request SQL -->
-##### Creating a percolate table via MySQL protocol:
 
 ```sql
 CREATE TABLE products(title text, meta json) type='pq';
@@ -35,8 +34,10 @@ CREATE TABLE products(title text, meta json) type='pq';
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-<!-- request JSON -->
+<!-- intro -->
 ##### Creating a percolate table via JSON over HTTP:
+
+<!-- request JSON -->
 
 ```json
 POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
@@ -52,8 +53,10 @@ POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
 }
 ```
 
-<!-- request PHP -->
+<!-- intro -->
 ##### Creating a percolate table via PHP client:
+
+<!-- request PHP -->
 
 ```php
 $index = [
@@ -112,8 +115,29 @@ utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```
-<!-- request CONFIG -->
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request typescript -->
+
+```typescript
+res = await utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, meta json) type='pq'").Execute()
+```
+
+<!-- intro -->
 ##### Creating a percolate table via config:
+
+<!-- request CONFIG -->
 
 ```ini
 table products {

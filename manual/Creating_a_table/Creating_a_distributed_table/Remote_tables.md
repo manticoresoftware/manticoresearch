@@ -135,6 +135,8 @@ The `agent_query_timeout` sets the amount of time that searchd will wait for a r
 
 After establishing a connection, `searchd` will wait for a maximum of agent_query_timeout for remote queries to complete. Note that this timeout is separate from the `agent_connection_timeout` and the total possible delay caused by a remote agent will be the sum of both values. If the agent_query_timeout is reached, the query will **not** be retried, instead, a warning will be produced.
 
+Note that behavior is also affected by [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet)
+
 ## agent_retry_count
 
 The `agent_retry_count` is an integer that specifies how many times Manticore will attempt to connect and query remote agents in a distributed table before reporting a fatal query error. It works similarly to `agent_retry_count` defined in the "searchd" section of the configuration file but applies specifically to the table.

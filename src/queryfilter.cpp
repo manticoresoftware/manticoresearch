@@ -14,7 +14,7 @@
 
 #include "sphinxsearch.h"
 
-void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const ExpansionContext_t& tCtx )
+void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
 
@@ -54,7 +54,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 		{
 			dQposWildcards.Add ( iQpos );
 
-			ISphWordlist::Args_t tWordlist ( false, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+			ISphWordlist::Args_t tWordlist ( false, tCtx );
 			bool bExpanded = sphExpandGetWords ( (const char*)sWord, tCtx, tWordlist );
 
 			int iDocs = 0;

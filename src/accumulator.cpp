@@ -116,6 +116,8 @@ void RtAccum_t::Cleanup()
 	m_uAccumDocs = 0;
 	m_iAccumBytes = 0;
 	m_dAccumKlist.Reset();
+	m_sIndexName = CSphString();
+	m_iIndexId = 0;
 
 	m_dCmd.Reset();
 }
@@ -155,7 +157,7 @@ static void ResetTailHit ( CSphWordHit * pHit )
 		pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
 }
 
-void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
+void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
 {
 	MEMORY ( MEM_RT_ACCUM );
 
@@ -190,6 +192,8 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
+	CSphVector<int64_t> dTempKNN;
+
 	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
@@ -219,14 +223,25 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
 			{
-				const int64_t* pMva = &tDoc.m_dMvas[iMva];
-				int nValues = (int)*pMva++;
-				iMva += nValues + 1;
+				int iNumValues = 0;
+				bool bDefault = false;
+				const int64_t * pMva = tDoc.GetMVA(iMva);
+				std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
+				iMva += iNumValues + 1;
+
+				// fill default/missing float_vector+knn attributes with zeroes
+				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && bDefault )
+				{
+					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
+					dTempKNN.ZeroVec();
+					pMva = dTempKNN.Begin();
+					iNumValues = dTempKNN.GetLength(); 
+				}
 
 				if ( tColumn.IsColumnar() )
-					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, nValues );
+					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, nValues * sizeof ( int64_t ), sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
 			}
 			break;
 
@@ -481,12 +496,14 @@ void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 }
 
 
-void RtAccum_t::SetIndex ( RtIndex_i* pIndex )
+void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	assert ( pIndex );
 	m_iIndexGeneration = pIndex->GetAlterGeneration();
 	m_pIndex = pIndex;
 	m_pBlobWriter.reset();
+	m_sIndexName = pIndex->GetName();
+	m_iIndexId = pIndex->GetIndexId();
 
 	const CSphSchema& tSchema = pIndex->GetInternalSchema();
 	if ( tSchema.HasBlobAttrs() )

@@ -488,7 +488,7 @@ function RunIndexer ( &$error, $params )
 
 function CheckSearchdLog ( $error_file, &$retval )
 {
-	$rawlog = file ( $error_file );
+	$rawlog = file ( $error_file, FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES );
 	$error = "";
 
 	foreach ( $rawlog as $line )
@@ -501,7 +501,7 @@ function CheckSearchdLog ( $error_file, &$retval )
 				// Adding an explicit check to avoid possible fails caused by the columnar library init warning
 				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: Error initializing columnar storage" )!==false )
 					continue;
-				$error .= $t;
+				$error .= $t."\n";
 				if ( $tag!="WARNING:" )
 					$retval = 1;
 			}
@@ -667,7 +667,8 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	} else
 	{
 //		print  ( "$path --config $abs_config_file $extra_params > $abs_error_file\n" );
-		system ( "$path --config $abs_config_file $extra_params > $abs_error_file", $retval );
+		exec("$path --config $abs_config_file $extra_params", $output, $retval);
+		file_put_contents($abs_error_file, implode("\n", $output));
 //		print ("started\n");
 	}
 
@@ -717,22 +718,22 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 			$port = $sd_port;
 
 		$cl = new SphinxClient;
-		$cl->SetServer ( $addr, $port );	
+		$cl->SetServer ( $addr, $port );
 		$cl->SetConnectTimeout ( 10 );
-		
+
 		$ok = false;
-		$start = MyMicrotime();		
+		$start = MyMicrotime();
 		for ( $i=0; $i<$STARTUP_TRIES; $i++ )
 		{
 			if ( $cl->Open() )
 			{
-				$cl->Close(); 
+				$cl->Close();
 				$ok = true;
 				break;
 			}
 			usleep ( 500 );
 		}
-		
+
 		if ( !$ok )
 		{
 			$tm = ( MyMicrotime() - $start );
@@ -803,7 +804,7 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 	global $action_wait_timeout, $windows;
 
 	$abs_pidfile = testdir($pidfile);
-	
+
 	if ( file_exists($abs_pidfile) && count(file($abs_pidfile)) )
 	{
 		$fp = fopen($abs_pidfile,"r");
@@ -953,79 +954,6 @@ function SqlRsetFixup ( &$set, $columnar )
 	}
 }
 
-
-function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $columnar, $keep_json_ctrls=false )
-{
-	global $g_ignore_weights;
-
-	if ( !is_array($set) )
-		return;
-
-	if ( $roundoff && !@$set["resarray"] ) // FIXME! support resarray too
-		foreach ( $set["attrs"] as $name=>$type )
-			if ( $type==SPH_ATTR_FLOAT )
-			{
-				foreach ( $set["matches"] as $id=>$match )
-					$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f", $set["matches"][$id]["attrs"][$name] );
-			}
-
-	// fixup floats in json via http
-	if ( isset ( $set["http"] ) && $set["http"]==1 )
-		JsonRsetFixup ( $set, $columnar, $keep_json_ctrls );
-	else
-		SqlRsetFixup ( $set, $columnar );
-
-    // fixup sphinxql trim
-    if ( isset ( $set['sphinxql'] ) )
-        $set['sphinxql'] = trim ($set['sphinxql']);
-
-    // fixup http_request trim
-    if ( isset ( $set['http_request'] ) )
-        $set['http_request'] = trim ($set['http_request']);
-
-	if ( $g_ignore_weights )
-	{
-		if ( isset($set["matches"]) )
-		{
-			if ( @$set["resarray"] )
-			{
-				for ( $i=0; $i<count($set); $i++ )
-					unset ( $set["matches"][$i]["weight"] );
-			} else
-			{
-				foreach ( $set["matches"] as $id=>$match )
-					unset ( $set["matches"][$id]["weight"] );
-			}
-		}
-		if ( @$set["words"] )
-			foreach ( $set["words"] as $word=>$info )
-				$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
-		if ( isset($set["sphinxql"]) && isset($set["rows"]) )
-		{
-			for ( $i=0; $i<count($set["rows"]); $i++ )
-				unset($set["rows"][$i]["weight()"]);
-		}
-	}
-
-	//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
-	foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
-		unset ( $set[$key] );
-
-	// variants are be used to check mva32/mva64, int/bigint, etc
-	// thus in variants check we fixup the compatible attribute types and only check the data
-	if ( $variants_match && isset ( $set["attrs"] ) )
-	{
-		foreach ( $set["attrs"] as $k=>$v )
-		{
-			if ( $v==SPH_ATTR_MULTI64 )
-				$set["attrs"][$k] = SPH_ATTR_MULTI; 
-			if ( $v==SPH_ATTR_BIGINT && $k[0]=="@" )
-				$set["attrs"][$k] = SPH_ATTR_INTEGER;
-		}
-	}
-}
-
-	
 function ChildrenArray ( $node, $name="" )
 {
 	$res = array ();
@@ -1162,7 +1090,7 @@ class QLClient
 
 		if ( $r===true )
 			return "OK";
-			
+
 		$n = 0;
 		$res = "";
 		while ($row = mysqli_fetch_row($r))
@@ -1173,7 +1101,7 @@ class QLClient
 		$res .= "$n rows";
 		return $res;
 	}
-	
+
 	function SetConnection($conn)
 	{
 		$this->_conn = $conn;
@@ -1220,7 +1148,7 @@ function FormatJsonRow ( $j )
 }
 
 // avoiding json errors in case json being processed contains control characters
-class SafeJsonHandler 
+class SafeJsonHandler
 {
 	private $replaces = [];
 
@@ -1234,7 +1162,7 @@ class SafeJsonHandler
 		{
 			$this->replaces["to"] = $matches[0];
 			// finding a safe replace token
-			$from0 = $this->replaces["from"];	
+			$from0 = $this->replaces["from"];
 			while ( strpos( $json, $this->replaces["from"] ) !== false ) {
 			    $this->replaces["from"] .= $from0;
 			}
@@ -1247,7 +1175,7 @@ class SafeJsonHandler
 	function Encode ( $json_obj, $flags=0, $depth=512 )
 	{
 		$json = json_encode ( $json_obj, $flags, $depth );
-		if ( !empty( $this->replaces ) && !empty( $this->replaces["to"] ) ) 
+		if ( !empty( $this->replaces ) && !empty( $this->replaces["to"] ) )
 		{
 			$from = $this->replaces["from"];
 			foreach( $this->replaces["to"] as $to )
@@ -1285,10 +1213,10 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 	if ( array_key_exists ( 'http_method', $result ) )
 		$http_method = $result['http_method'];
 
-	if ( array_key_exists ( 'http_code', $result ) )	
+	if ( array_key_exists ( 'http_code', $result ) )
 		$http_code = $result['http_code'];
-    
-	if ( array_key_exists ( 'rows', $result ) )	
+
+	if ( array_key_exists ( 'rows', $result ) )
 	{
 		if ( $keep_json_ctrls )
 		{
@@ -1304,11 +1232,11 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 
 	$request = json_encode ( $http_request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	$request = stripcslashes ( $request );
-	
+
 	$str .= "http-$nquery$agent> /$http_endpoint\n";
 	$str .= "Status: $http_code\n";
 	$str .= "$http_method ". $request . "\n";
-				
+
 	if ( count ( $rows ) )
 		$str .= ( $keep_json_ctrls ? $json_handler->Encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) )."\n";
 
@@ -1321,23 +1249,23 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 function RunCurl ( $curl_desc, &$rows )
 {
 	$con = curl_init();
-	
+
 	curl_setopt_array ( $con, $curl_desc );
 	$rows = curl_exec ( $con );
 	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
-	
+
 	curl_close($con);
-	
+
 	return $http_code;
 }
 
 function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl )
 {
 	global $agents;
-	
+
 	$ssl = $use_ssl ? "https://" : "";
-	
+
 	$http_port = $agents[$use_agent]["http_port"];
 	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
 	if ( $http_method=="POST" )
@@ -1541,7 +1469,7 @@ class SphinxConfig
 		$this->_testdir			= "";
 	}
 
-	function EnableCompat098 ()		{ $this->_compat098 = true; }	
+	function EnableCompat098 ()		{ $this->_compat098 = true; }
 	function SubtestNo ()			{ return $this->_subtest; }
 	function SubtestCount ()		{ return $this->_subtestcount; }
 	function Name ()				{ return $this->_name; }
@@ -1590,7 +1518,7 @@ class SphinxConfig
 	function GetLocal ( $key )
 	{
 		global $g_locals;
-		
+
 		if ( !array_key_exists ( $key, $g_locals ) )
 		{
 			printf ( "FATAL: unbound local variable '%s' (go add it at ~/.sphinx).\n", $key );
@@ -1623,7 +1551,7 @@ class SphinxConfig
         array_push ( $this->_shadow_results_model, $failed );
 	}
 
-	
+
 	function ModelSubtestFailed ()
 	{
 		$failed = array ();
@@ -1650,7 +1578,7 @@ class SphinxConfig
 		$this->_sd_http_port = $agent["http_port"];
 	}
 
-	
+
 	function SetPIDFile ( $pidfile )
 	{
 		$this->_sd_pid_file = $pidfile;
@@ -1663,7 +1591,7 @@ class SphinxConfig
 			return FALSE;
 
 		$num_variants = count ( ChildrenArray ( $this->_dynamic_entries[$i], "variant" ) );
-	
+
 		if ( $this->_counters [$i] == $num_variants - 1 )
 		{
 			if ( $i == count ( $this->_dynamic_entries ) - 1 )
@@ -1679,8 +1607,8 @@ class SphinxConfig
 
 		return TRUE;
 	}
-	
-	
+
+
 	function WriteCustomTestResults ( $fp )
 	{
 		$res_fmt = $this->FormatResultSet ( 0, $this->_results );
@@ -2035,7 +1963,7 @@ class SphinxConfig
                     "attrs" => $attrs,
                     "type" => 'query');
                 return;
-            }               
+            }
             default:
                 return;
         }
@@ -2075,7 +2003,7 @@ class SphinxConfig
 			for ( $i=0; $i<$node->childNodes->length; $i++ )
 			{
 				$child = $node->childNodes->item ( $i );
-				
+
 				$lowername = strtolower($child->nodeName);
 				if ( $lowername=="sphqueries" || $lowername=="httpqueries")
 					$this->AddQueries ( $child, $encoding, $metaindexes );
@@ -2270,8 +2198,8 @@ class SphinxConfig
                     '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
                     '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end',
                     '/(.* error: no AF_INET address found for:.*, error)(.*)/',
-                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/'
-
+                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/',
+                    '/(.*\: file not found\: )(.*)/'
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
@@ -2280,7 +2208,9 @@ class SphinxConfig
                     "\$end",
                     "$1: substituted",
                     "$1",
+                    "$1 substituted"
                 ], $s );
+		
 		return $s;
 	}
 
@@ -2671,7 +2601,7 @@ class SphinxConfig
 
 			$old_vip = $vip_connection;
 		}
-			
+
 		if ( !empty($system_cmd) )
 		{
 			$status = '';
@@ -2989,6 +2919,7 @@ class SphinxConfig
 						{
 							$results["resarray"] = (int)@$qinfo["resarray"];
 							$results["roundoff"] = (int)@$qinfo["roundoff"];
+//							$results["time"] = "0.0001";
 						}
 					}
 					else
@@ -3120,7 +3051,7 @@ class SphinxConfig
 			$result = array();
 			foreach ( $v as $key=>$value )
 			{
-				if ( $key==PHP_INT_MAX || $key==-PHP_INT_MAX-1 )
+				if ( $key==PHP_INT_MAX || $key==PHP_INT_MIN )
 					$key = (int)$key;
 				$result[$key] = $this->FixKeys ( $value );
 			}
@@ -3151,6 +3082,28 @@ class SphinxConfig
 			$fixarr[] = $v;
 	}
 
+	// linux and windows line ending breaks model at different boxes
+	function fix_crlf ($contents)
+	{
+		return preg_replace_callback('!s:\d+:"(.*?)";!s', function($m) { return "s:" . strlen($m[1]) . ':"'.$m[1].'";'; }, $contents);
+	}
+
+	function fix_serialized_bignums ( $bignumbers, $content )
+	{
+		if ( is_array ($bignumbers) && sizeof($bignumbers)>0)
+		{
+			$findes=[];
+			$replaces=[];
+			foreach ($bignumbers as $key)
+			{
+				$findes[]="i:$key";
+				$replaces[]="s:".strlen($key).":\"$key\"";
+			}
+			$content = str_replace ( $findes, $replaces, $content );
+		}
+		return $content;
+	}
+
 
 	function LoadModel ( $filename )
 	{
@@ -3163,32 +3116,42 @@ class SphinxConfig
 			if ( ! $contents )
 				return 0;
 
-			// linux and windows line ending breaks model at different boxes
-			$fixed_data = preg_replace_callback('!s:\d+:"(.*?)";!s', function($m) { return "s:" . strlen($m[1]) . ':"'.$m[1].'";'; }, $contents);
-			
+			// check for wrapped 'big numbers' model
+			if ( substr( $contents, 0, 24 ) === 'a:2:{s:12:"huge_numbers"' )
+			{
+				$model32 = unserialize ( $contents );
+				$fixed_data = $this->fix_crlf($model32["model64"]);
+
+				// need to patch data only when we need it
+				if (PHP_INT_SIZE<=4)
+					$fixed_data = $this->fix_serialized_bignums (unserialize($model32["huge_numbers"]), $fixed_data );
+			} else
+				$fixed_data = $this->fix_crlf($contents);
+
 			$this->_results_model = $this->FixKeys ( unserialize ( $fixed_data ) );
 		}
 
 		return 1;
 	}
 
-    function FixupErrorMessageInResult($result)
+    function FixupErrorMessageInResult(&$result)
     {
-        if ( @is_array($result) && @array_key_exists ( "error", $result ) && $result["error"] ) {
+        if ( @is_array($result) && @array_key_exists ( "error", $result ) && $result["error"] )
+		{
             $origerror = $result["error"];
             $fixup = $this->FixupErrorMessage(1064,$origerror);
             if ( $fixup!=$origerror )
                 $result["error"] = $fixup;
         }
-        return $result;
     }
 
 	function ImportantResults()
     {
-        $_results			= array ();
+        $_results = array();
         foreach ( $this->_results as $result )
             if ( !result_must_be_skipped ($result) )
-                $_results[] = $this->FixupErrorMessageInResult($result);
+                $_results[] = $result;
+
         return $_results;
     }
 
@@ -3198,20 +3161,96 @@ class SphinxConfig
 	}
 
 
+	function CompareResultSetFixup ( &$set, $roundoff, $variants_match, $keep_json_ctrls=false )
+	{
+		global $g_ignore_weights;
+
+		if ( !is_array($set) )
+			return;
+
+		$this->FixupErrorMessageInResult($set);
+
+		if ( $roundoff && !@$set["resarray"] ) // FIXME! support resarray too
+			foreach ( $set["attrs"] as $name=>$type )
+				if ( $type==SPH_ATTR_FLOAT )
+				{
+					foreach ( $set["matches"] as $id=>$match )
+						$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f", $set["matches"][$id]["attrs"][$name] );
+				}
+
+		// fixup floats in json via http
+		if ( isset ( $set["http"] ) && $set["http"]==1 )
+			JsonRsetFixup ( $set, $this->IsColumnar(), $keep_json_ctrls );
+		else
+			SqlRsetFixup ( $set, $this->IsColumnar() );
+
+	    // fixup sphinxql trim
+	    if ( isset ( $set['sphinxql'] ) )
+	        $set['sphinxql'] = trim ($set['sphinxql']);
+
+	    // fixup http_request trim
+	    if ( isset ( $set['http_request'] ) )
+	        $set['http_request'] = trim ($set['http_request']);
+
+		if ( $g_ignore_weights )
+		{
+			if ( isset($set["matches"]) )
+			{
+				if ( @$set["resarray"] )
+				{
+					for ( $i=0; $i<count($set); $i++ )
+						unset ( $set["matches"][$i]["weight"] );
+				} else
+				{
+					foreach ( $set["matches"] as $id=>$match )
+						unset ( $set["matches"][$id]["weight"] );
+				}
+			}
+
+			if ( @$set["words"] )
+				foreach ( $set["words"] as $word=>$info )
+					$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
+
+			if ( isset($set["sphinxql"]) && isset($set["rows"]) )
+			{
+				for ( $i=0; $i<count($set["rows"]); $i++ )
+					unset($set["rows"][$i]["weight()"]);
+			}
+		}
+
+		//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
+		foreach ( ['time', 'warning', 'status', 'fields', 'resarray', 'roundoff'] as $key )
+			unset ( $set[$key] );
+
+		// variants are be used to check mva32/mva64, int/bigint, etc
+		// thus in variants check we fixup the compatible attribute types and only check the data
+		if ( $variants_match && isset ( $set["attrs"] ) )
+		{
+			foreach ( $set["attrs"] as $k=>$v )
+			{
+				if ( $v==SPH_ATTR_MULTI64 )
+					$set["attrs"][$k] = SPH_ATTR_MULTI;
+
+				if ( $v==SPH_ATTR_BIGINT && $k[0]=="@" )
+					$set["attrs"][$k] = SPH_ATTR_INTEGER;
+			}
+		}
+	}
+
+
 	function CompareResultSets ( $set1, $set2 )
 	{
-
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
-		
+
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
-		CompareResultSetFixup ( $set1, $roundoff, $variants_match, $this->IsColumnar(), $keep_json_ctrls );
-		CompareResultSetFixup ( $set2, $roundoff, $variants_match, $this->IsColumnar(), $keep_json_ctrls );
+		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
+		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		return $set1==$set2;
+		return $set1===$set2;
 	}
 
 	function CompareResults ( $query1, $query2 )
@@ -3233,7 +3272,7 @@ class SphinxConfig
 	{
 		if ( !$this->Requires("variant_match") )
 			return false;
-		
+
 		$total = count ( $this->_results_model );
 		if ( $total==1 )
 			return "variant match required, but there are no variants";
@@ -3254,7 +3293,7 @@ class SphinxConfig
 				file_put_contents ( "first", $first );
 				file_put_contents ( "current", $current );
 				system ( "diff --unified=3 first current > diff.txt" );
-						
+
 				$diff = file_get_contents ( "diff.txt" );
 				unlink ( "current" );
 				unlink ( "first" );
@@ -3371,7 +3410,10 @@ class SphinxConfig
                 $str .= "Sort: expr: " . $qinfo["sortby"] . "\n";
         }
 
-		$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
+		if ( @$opts["no_time"] )
+			$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches.\n";
+		else
+			$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( @array_key_exists ( "error", $result ) && $result["error"] )
 			$str .= "Error: $result[error]\n";
 		if ( @array_key_exists ( "warning", $result ) && $result["warning"] )
@@ -3463,7 +3505,10 @@ class SphinxConfig
 						$val = $docinfo["attrs"][$attr];
 						if ( is_array ( $val ) )
 							$val = join ( " ", $val );
-						$str .= " $attr=$val";
+						if ( is_string ( $val ) )
+							$str .= " $attr=\"$val\"";
+						else
+							$str .= " $attr=$val";
 					}
 					continue;
 				}
@@ -3527,18 +3572,22 @@ class SphinxConfig
 			}
 
 			$cur = $_results[$nquery];
+
+			$opts = [ "no_time"=>1 ];
+			unset ( $cur["time"] );
+			unset ( $ref["time"] );
+
 			if ( $this->CompareResultSets ( $ref, $cur ) )
 			{
 				$nquery++;
 				continue;
 			}
 
-			$opts = array();
 			if ( isset($cur["attrs"]) || isset($ref["attrs"]) )
-				if ( @$cur["attrs"]!=@$ref["attrs"] )
+				if ( @$cur["attrs"]!==@$ref["attrs"] )
 					$opts["format_attrs"] = 1;
 
-			$result_f_cur = $this->FormatResultSet ( $nquery+1, $_results[$nquery], $opts );
+			$result_f_cur = $this->FormatResultSet ( $nquery+1, $cur, $opts );
 			$result_f_ref = $this->FormatResultSet ( $nquery+1, $ref, $opts );
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
@@ -3981,7 +4030,7 @@ class SphinxConfig
 		{
 			// remove binlog files if any
 			$this->EraseIndexFiles ( 'data/binlog' );
-			
+
 			$pattern = "/.*?index\s+\S*?(\s*\:\s*\S*?)?\s*\{(.*?)\}.*?/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			// parse indexes
@@ -4069,7 +4118,7 @@ class SphinxConfig
 					$query .= ( array_key_exists ( $i, $is_mva ) && $is_mva[$i] ) ? '('.$s.')' : "'".$s."'";
 					$i++;
 				}
-				
+
 				if ( ( strlen ($accum) + strlen ($query) ) > 8192000 ) ///<checkit!
 				{
 					$result = mysqli_wr ( $prefix.$accum, $cn );
@@ -4109,23 +4158,23 @@ class SphinxConfig
 
 	function WriteModel ( $filename, $model )
 	{
-        $result = serialize ( $model );
+		// that's a legacy hack: we serialize model 'as is', but add a layer of indirection: we write all huge numbers
+		// which are not fit in int32 as array of strings, and then serialize again this array + original serialized
+		// model. So that test on machine with tiny int can first fixup serialized model.
         if (PHP_INT_SIZE>4)
         {
-            $keys = array();
-            $this->FixSerialize64 ( $model, $keys );
+            $allkeys = [];
+            $this->FixSerialize64 ( $model, $allkeys );
+			$keys = array_unique($allkeys);
             if ( sizeof($keys)>0 )
             {
-                $findes=array();
-                $replaces=array();
-                foreach ($keys as $key)
-                {
-                    $findes[]="i:$key";
-                    $replaces[]="s:".strlen($key).":\"$key\"";
-                }
-                $result = str_replace ( $findes, $replaces, $result );
-            }
-        }
+				$model32 = ["huge_numbers"=>$this->fix_serialized_bignums ($keys, serialize($keys))];
+				$model32["model64"] = serialize ( $model );
+				$result = serialize ($model32);
+            } else
+				$result = serialize ($model);
+        } else
+			$result = serialize ($model);
         file_put_contents ( $filename, $result );
 	}
 
@@ -4293,7 +4342,7 @@ class SphinxConfig
 				return;
 			}
 			case "agent_id": fwrite($fp, $agentid); return;
-			
+
 		}
 
 		if ( $nodename=="dynamic" )
@@ -4344,7 +4393,7 @@ function EraseDirContents ( $path, $dir=false )
 	if ( $fp )
 	{
 		while ( ( $file = readdir ( $fp ) ) !== false )
-		{ 
+		{
 		if ( $file!="." && $file!=".." && $file!="stub.txt" )
 			if (!is_dir("$path/$file")) {
 				unlink ( "$path/$file" );
@@ -4352,7 +4401,7 @@ function EraseDirContents ( $path, $dir=false )
 				EraseDirContents ( "$path/$file", $dir );
 				rmdir ( "$path/$file" );
 			}
-		} 
+		}
 
 		closedir ( $fp );
 	}
@@ -4361,14 +4410,14 @@ function EraseDirContents ( $path, $dir=false )
 function CopyDirContents ( $from, $to )
 {
 	$ffrom = opendir ( $from );
-	
+
 	if ( $ffrom && is_dir ( $to ) )
 	{
 		while ( ( $file = readdir ( $ffrom ) ) !== false )
 		{
 			if ( $file != "." && $file != ".." && !is_dir ( $file ) )
 				copy ( "$from/$file", "$to/$file" );
-		} 
+		}
 
 		closedir ( $ffrom );
 	}
@@ -4376,8 +4425,8 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded;
-	
+	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
+
 	if ( $config->Requires("non-windows") && $windows )
 	{
 		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $path, $config->Name () );
@@ -4454,7 +4503,7 @@ function CheckConfig ( $config, $path )
 		printf ( "SKIPPING %s, %s - lemmatizer_base required, add it to your ~/.sphinx\n", $path, $config->Name () );
 		return false;
 	}
-	
+
 	if ( $config->Requires("replication") && !$g_repli )
 	{
 		printf ( "SKIPPING %s, %s - compile with replication support to run this test\n", $path, $config->Name () );
@@ -4466,7 +4515,7 @@ function CheckConfig ( $config, $path )
 		printf ( "SKIPPING %s, %s - compile with SSL support or add SSL extension to php\n", $path, $config->Name () );
 		return false;
 	}
-    
+
 	if ( $config->Requires("secondary") && !$g_secondary_loaded )
 	{
 		printf ( "SKIPPING %s, %s - secondary library not loaded\n", $path, $config->Name () );
@@ -4476,6 +4525,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("knn") && !$g_knn_loaded)
 	{
 		printf ( "SKIPPING %s, %s - knn library not loaded\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("tzdata") && !$g_tzdata_loaded)
+	{
+		printf ( "SKIPPING %s, %s - timezone data is not available\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -4546,10 +4601,10 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	if ( !file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
-		
+
 	if ( $config->Requires ( "replication" ) )
 		EraseDirContents ( testdir ( "data/" ), true );
-	
+
 	$report_path = "$res_path/report";
 	$report_file = "$report_path.txt";
 	$report = fopen ( $report_file, "w" );
@@ -4658,14 +4713,14 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$searchd_ret = 0;
 			else
 				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $ss_pid_file, $error, $config->GetSearchdRequirements() );
-			
+
 			$stop[scriptdir("config.conf")] = $ss_pid_file;
 
 			if ( $searchd_ret == 1 )
 			{
 				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
 					$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
-				
+
 				$searchd_error = TRUE;
 			}
 			else if ( $searchd_ret==2 )
@@ -4686,7 +4741,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$error_agent = "error_".$agent_id.".txt";
-				$config->SetAgent ( $agents [$i], 0 );
+				$config->SetAgent ( $agents [$i], $i );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;
@@ -4703,9 +4758,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				{
 					if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
 						$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
-				
+
 					$searchd_error = TRUE;
-		
+
 				}
 				else if ( $searchd_ret==2 )
 				{
@@ -4765,11 +4820,11 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			$config->WriteReferenceResultsDiff ( $report );
 		}
 
-        $config->WriteModel($shadow_model_file, $config->_shadow_results_model);
-
 		$config->SubtestFinished ();
 	}
 	while ( $config->CreateNextConfig () );
+
+	$config->WriteModel($shadow_model_file, $config->_shadow_results_model);
 
 	if ( $isdemo )
 	{

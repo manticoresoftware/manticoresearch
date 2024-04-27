@@ -32,8 +32,6 @@ bool LoadExFunctions ();
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
 
-extern int				g_iReadTimeoutS; // defined in searchd.cpp
-
 extern int64_t			g_iPingIntervalUs;
 extern DWORD			g_uHAPeriodKarmaS;		// by default use the last 1 minute statistic to determine the best HA agent
 extern int				g_iPersistentPoolSize;
@@ -273,58 +271,17 @@ public:
 	const char *	m_szIndexName = nullptr;
 	const char *	m_szAgent = nullptr;
 
-	WarnInfo_c ( const char * szIndexName, const char *	szAgent, StrVec_t * pWarnings=nullptr )
-		: m_szIndexName ( szIndexName )
-		, m_szAgent ( szAgent )
-		, m_pWarnings ( pWarnings )
-	{}
+	WarnInfo_c ( const char * szIndexName, const char *	szAgent, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
-	void Warn ( const char * szFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, szFmt );
-
-		CSphString sWarning;
-		if ( m_szIndexName )
-			sWarning.SetSprintf ( "table '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
-		else
-			sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
-
-		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
-		sphInfo ( "%s", sWarning.cstr() );
-
-		if ( m_pWarnings )
-			m_pWarnings->Add(sWarning);
-
-		va_end ( ap );
-	}
+	void Warn ( const char * szFmt, ... ) const;
 
 	/// format an error message using idx and agent names from own context
 	/// \return always false, to simplify statements
-	bool ErrSkip ( const char * szFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, szFmt );
-
-		CSphString sWarning;
-
-		if ( m_szIndexName )
-			sWarning.SetSprintf ( "table '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
-		else
-			sWarning.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
-
-		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
-		sphWarning ( "%s", sWarning.cstr() );
-
-		if ( m_pWarnings )
-			m_pWarnings->Add(sWarning);
-
-		va_end ( ap );
-		return false;
-	}
+	bool ErrSkip ( const char * szFmt, ... ) const;
 
 private:
 	StrVec_t *		m_pWarnings = nullptr;
+	CSphString &	m_sError;
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
@@ -580,6 +537,7 @@ private:
 	int			m_iDelay { g_iAgentRetryDelayMs };	///< delay between retries
 
 	// active timeout (directly used by poller)
+	int64_t			m_iPoolerTimeoutPeriodUS = -1;
 	int64_t			m_iPoolerTimeoutUS = -1;	///< m.b. query, or connect+query when TCP_FASTOPEN
 	ETimeoutKind 	m_eTimeoutKind { TIMEOUT_UNKNOWN };
 
@@ -623,8 +581,8 @@ private:
 
 	bool StartNextRetry ();
 
-	void LazyTask ( int64_t iTimeoutMS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
-	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1 );
+	void LazyTask ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
+	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1, int64_t iTimeoutPeriodUS = -1 );
 	void ScheduleCallbacks ();
 	void DisableWrite();
 
@@ -801,7 +759,7 @@ bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInf
 //! \param szIndexName - index we apply to
 //! \param tOptions - global options affecting agent
 //! \return configured multiagent, or null if failed
-MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings=nullptr );
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
 class RequestBuilder_i : public ISphNoncopyable
 {

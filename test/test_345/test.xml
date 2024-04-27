@@ -88,6 +88,8 @@ index idx2
 
 <query endpoint="json/pq/idx1/search"/>
 
+<query endpoint="json/pq/idx1/missed">{ "query": { "percolate": { "document" : { "title" : "test" } } } }</query>
+
 <sphinxql>
 	select * from idx1 where query='new | old';
 	select * from idx1 where query='{"match":{"title":"tree"}}';

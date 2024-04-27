@@ -1,0 +1,68 @@
+name: 🐞 Bug Report
+description: Submit a bug report for Manticore Search
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for submitting a bug report. We appreciate your effort to provide detailed information. Please answer the following questions to help us identify and fix the bug. Thank you!
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Bug Description:"
+      description: >
+        Describe the bug in detail. Include a [Minimal Reproducible Example](https://en.wikipedia.org/wiki/Minimal_reproducible_example) (MRE) if possible. Place any code blocks within triple backticks:
+      value: |
+        ```bash
+        # Example code block; replace with your code if applicable
+        ```
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "Manticore Search Version:"
+      description: >
+        Provide the version of Manticore Search you are using. Execute `searchd -v` in the command line to find this information.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: "Operating System Version:"
+      description: >
+        Specify the version of your operating system.
+    validations:
+      required: true
+  - type: checkboxes
+    id: dev
+    attributes:
+      label: "Have you tried the latest development version?"
+      description: >
+        Consider testing with the latest development version, which often includes fixes and improvements. You can find installation instructions [here](https://mnt.cr/dev/nightly). Check the box below if you have already tried it.
+      options:
+        - label: "Yes"
+  - type: markdown
+    attributes:
+      value: "## Thank you for completing the form! For an expedited solution, consider our [professional services](https://manticoresearch.com/services/)."
+  - type: textarea
+    id: checklist
+    attributes:
+      label: "Internal Checklist:"
+      description: >
+        **For Manticore Team Use Only** — Please do not edit this section. This checklist will be completed by the Manticore team as they manage the issue.
+      value: |
+        <sup>To be completed by the assignee. Check off tasks that have been completed or are not applicable.</sup>
+        <details>
+
+        - [ ] Task estimated
+        - [ ] Specification created, reviewed, and approved
+        - [ ] Implementation completed
+        - [ ] Tests developed
+        - [ ] Documentation updated
+        - [ ] Documentation proofread
+        - [ ] Changelog updated
+
+        </details>
+    validations:
+      required: true

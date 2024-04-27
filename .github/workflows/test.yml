@@ -40,9 +40,6 @@ jobs:
 
   win_bundle:
     name: Windows supplementary files preparation
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     runs-on: ubuntu-22.04
     steps:
       - name: Check out cache
@@ -58,7 +55,7 @@ jobs:
       - name: Extract Windows bundle from Windows sysroot
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/sysroots/roots_nov22/sysroot_windows_x64.tar.xz
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_apr15/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
           mv diskc/winbundle bundle
       - name: Extract Boost to put it to the cache
@@ -69,18 +66,13 @@ jobs:
 
   build_linux_debug:
     name: Linux debug build
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
+      artifact_name: debug_build
 
   test_linux_debug:
     name: Linux debug mode tests
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: build_linux_debug
     uses: ./.github/workflows/test_template.yml
     strategy:
@@ -119,18 +111,15 @@ jobs:
             start: 871
             end: 999999
     with:
-      CTEST_CONFIGURATION_TYPE: "Debug"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      build_artifact_name: debug_build
       artifact_name: debug_test_${{ matrix.name }}
       xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
       timeout: 10
 
   debug_tests_report:
     name: Debug mode tests summary and report
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: test_linux_debug
     runs-on: ubuntu-22.04
     steps:
@@ -197,12 +186,13 @@ jobs:
           name: debug_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux debug test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -219,16 +209,12 @@ jobs:
 
   build_linux_release:
     name: Linux release build
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
+    with:
+      artifact_name: release_build
 
   test_linux_release:
     name: Linux release mode tests
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: build_linux_release
     uses: ./.github/workflows/test_template.yml
     strategy:
@@ -267,18 +253,15 @@ jobs:
             start: 871
             end: 999999
     with:
-      CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      build_artifact_name: release_build
       artifact_name: release_test_${{ matrix.name }}
       xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
       timeout: 10
 
   release_tests_report:
     name: Release mode tests summary and report
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: test_linux_release
     runs-on: ubuntu-22.04
     steps:
@@ -345,12 +328,13 @@ jobs:
           name: release_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux release test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -367,9 +351,6 @@ jobs:
 
   pack_jammy:
     name: Jammy x86_64 package
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: jammy
@@ -384,9 +365,6 @@ jobs:
 
   build_test_kit_docker:
     name: Test Kit docker image
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: pack_jammy
     runs-on: ubuntu-22.04
     env:
@@ -424,88 +402,46 @@ jobs:
           path: manticore_test_kit.img
 
 
-  clt_core_test:
-    name: CLT test of core logic of Manticore Search
+  clt:
+    name: CLT
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        test-suite:
+          - name: Core
+            test_prefix: |-
+              test/clt-tests/core/
+              test/clt-tests/expected-errors/
+          - name: Logstash
+            test_prefix: test/clt-tests/logstash/logstash- 
+          - name: mysqldump
+            test_prefix: |-
+              test/clt-tests/mysqldump/mysql/
+              test/clt-tests/mysqldump/maria/
+          - name: Replication
+            test_prefix: test/clt-tests/replication/
+          - name: Plugins
+            test_prefix: test/clt-tests/plugins/
     steps:
-      - uses: manticoresoftware/clt@0.1.17
+      - uses: manticoresoftware/clt@0.1.23
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          test_prefix: test/clt-tests/core/
-
-  clt_logstash_test:
-    name: CLT test on Logstash and Filebeat
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.17
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/logstash/logstash-
-
-  clt_mysqldump_mysql_test:
-    name: CLT test on mysqldump features for MySQL
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.17
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/mysqldump/mysql/
-
-  clt_mysqldump_maria_test:
-    name: CLT test on mysqldump features for MariaDB
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.17
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/mysqldump/maria/
-
-  clt_expected_errors_test:
-    name: CLT test on expected errors in Searchd for Buddy
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.17
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/expected-errors/
-
-  clt_restarting_replication_nodes:
-    name: CLT test on replication node restart
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.17
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/sharding/replication/
+          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          comment_mode: failures
 
   build_aarch64:
     name: Linux aarch64 build
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
       arch: aarch64
       cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
-      cache_key: build_bionic_aarch64
+      cache_key: build_jammy_aarch64
 
   build_freebsd:
     name: FreeBSD x86_64 build
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: freebsd13
@@ -515,14 +451,11 @@ jobs:
 
   build_windows:
     name: Windows x64 build
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_apr12
+      sysroot: roots_apr15
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
@@ -530,9 +463,6 @@ jobs:
 
   test_windows:
     name: Windows tests
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: [build_windows, win_bundle]
     uses: ./.github/workflows/win_test_template.yml
     strategy:
@@ -556,13 +486,10 @@ jobs:
 
   windows_tests_report:
     name: Windows tests summary and report
-    if: |
-      (github.event_name == 'push')
-      || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'pack') && !contains(github.event.pull_request.labels.*.name, 'publish'))
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: manticoresearch/ubertests_ctest:3263
+      image: manticoresearch/ubertests_ctest:3263_jammy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -588,11 +515,12 @@ jobs:
         run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
         shell: bash
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
           check_name: Windows test results
           compare_to_earlier_commit: false
           files: build/xml_*/junit_tests.xml
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |

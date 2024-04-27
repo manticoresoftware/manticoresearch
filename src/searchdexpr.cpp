@@ -793,7 +793,7 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema 
 	}
 
 	if ( !sError.IsEmpty() )
-		pRes->Release();
+		return nullptr;
 
 	return pRes.Leak();
 }

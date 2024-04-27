@@ -401,7 +401,7 @@ public:
 	bool			Contains ( const char * szName ) const;
 	void			RemoveKeys ( const CSphString & sName );
 	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
-	StrVec_t 		GetFiles() const;
+	StrVec_t 		GetFiles();
 	bool			CheckPaths();
 
 	const CSphConfigSection &	AsCfg() const;

@@ -52,7 +52,20 @@ searchd
 	select * from t;
 	flush ramchunk t;
 	select * from t;
+	select id, knn_dist() from t;
 	drop table t;
+
+	create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );
+	replace into test (id, title) values (1, 'test1');
+	select * from test;
+	drop table test;
+
+	create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' );
+	insert into test values ( 1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406) );
+	select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
+	flush ramchunk test;
+	select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
+	drop table test;
 </sphinxql>
 </queries>
 

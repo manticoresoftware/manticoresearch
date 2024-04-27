@@ -14,11 +14,10 @@ Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.
 <!-- example Example_1 -->
 
 ```sql
-SELECT * FROM index WHERE MATCH('cats|birds');
+SELECT * FROM myindex WHERE MATCH('cats|birds');
 ```
 
-[SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause for performing full-text searches. It accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
-
+The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. `MATCH()` accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
 
 <!-- intro -->
 ##### SQL:
@@ -38,8 +37,13 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 |    2 |   12 | second find me |
 +------+------+----------------+
 2 rows in set (0.00 sec)
+```
 
+<!-- request MATCH with filters -->
+An example of a more complex query using MATCH with WHERE filters.
 
+```sql
+SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
 ```
 
 <!-- end -->
@@ -118,10 +122,21 @@ By default, keywords are combined using the OR operator. However, you can change
 }
 ```
 
+### match_all
+
+"match_all" accepts an empty object and returns documents from the table without performing any attribute filtering or full-text matching. Alternatively, you can just omit the `query` clause in the request which will have the same effect.
+
+```json
+"query":
+{
+  "match_all": {}
+}
+```
+
 
 ### Combining full-text filtering with other filters
 
-All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of an [HTTP `bool` query](../../Searching/Filters.md#bool-query).
+All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of a [JSON `bool` query](../../Searching/Filters.md#bool-query).
 
 <!-- intro -->
 Examples:
@@ -131,7 +146,7 @@ Examples:
 ```json
 POST /search
 -d
-'{   
+'{
     "index" : "hn_small",
     "query":
     {
@@ -170,7 +185,7 @@ POST /search
 ```json
 POST /search
 -d
-'{   
+'{
     "index" : "hn_small",
     "query":
     {
@@ -370,6 +385,70 @@ class SearchResponse {
     }
     profile: null
     warning: null
+}
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: "test document 1" },
+  "_source": ["content", "title"],
+  limit: 1
+});
+```
+<!-- response TypeScript -->
+```json
+{
+  took: 1,
+  timed_out: false,
+  hits:
+   exports {
+     total: 5,
+     total_relation: 'eq',
+     hits:
+      [ { _id: '1',
+          _score: 2566,
+          _source: { content: 'This is a test document 1', title: 'Doc 1' }
+        }
+      ]
+   }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoresearch.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "test document 1"}
+searchReq.SetSource([]string{"content", "title"})
+searchReq.SetLimit(1)
+resp, httpRes, err := search.SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+```json
+{
+  "hits": {
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 2566,
+        "_source": {
+          "content": "This is a test document 1",
+          "title": "Doc 1"
+        }
+      }
+    ],
+    "total": 5,
+    "total_relation": "eq"
+  },
+  "timed_out": false,
+  "took": 0
 }
 ```
 <!-- end -->

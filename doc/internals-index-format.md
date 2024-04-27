@@ -1,8 +1,8 @@
 # Manticore plain index format
 
-    WARNING. This document is just an internal note. It might or might not be
-    in sync with the actual code. Use it as an overview; refer to the source
-    for precise details.
+	WARNING. This document is just an internal note. It might or might not be
+	in sync with the actual code. Use it as an overview; refer to the source
+	for precise details.
 
 ## General
 
@@ -121,7 +121,7 @@ Almost all the dictionary writing happens in `cidxHit()` method.
 		if ver >= 31 and num_docs > SKIPLIST_BLOCK:
 			zint skiplist_pos
 			zint skiplist_len
-	
+
 	checkpoint[] checkpoints
 	checkpoint is:
 		qword wordid
@@ -145,21 +145,21 @@ Almost all the dictionary writing happens in `cidxHit()` method.
 		if ver >= 31 and num_docs > SKIPLIST_BLOCK:
 			zint skiplist_pos
 			zint skiplist_len
-	
+
 	if min_infix_len > 0:
 		tag "infix-entries"
 		infix_entry[] infix_hash_entries
-	
+
 	checkpoint[] checkpoints
 	checkpoint is:
 		dword keyword_len
 		byte[] keyword [ keyword_len ]
 		qword dict_offset
-	
+
 	if min_infix_len > 0:
 		tag "infix-blocks"
 		infix_block[] infix_hash_blocks
-	
+
 	tag "dict-header"
 	zint num_checkpoints
 	zint checkpoints_offset
@@ -300,28 +300,28 @@ To perform the opposite task - get internal Row ID by real Document ID, we have 
 
 It has the following structure:
 
-    dword num_of_docs
-    dword docs_per_checkpoint
-    docid-type max_doc_id
-    checkpoints[]
-    checkpoint is:
+	dword num_of_docs
+	dword docs_per_checkpoint
+	docid-type max_doc_id
+	checkpoints[]
+	checkpoint is:
 		docid-type base_doc_id
-        offset block_offset
-    blocks[]
-    block is:
-        uint32 base_row_id
-        lookup_pair[]
-        lookup_pair is:
-            zint : docid-type, delta-encoded
-            uint64 rowid
+		offset block_offset
+	blocks[]
+	block is:
+		uint32 base_row_id
+		lookup_pair[]
+		lookup_pair is:
+			zint : docid-type, delta-encoded
+			uint32 rowid
 
 All set of docids is divided to blocks by `docs_per_checkpoint` in each, last block may be non-complete.
 So, total number of checkpoints may be calculated from header as `(num_of_docs + docs_per_checkpoint - 1) / docs_per_checkpoint`.
 
 Checkpoints are placed in accending base_doc_id order, that is important.
 
-Each block provides `docs_per_checkpoint` pairs of document ID and corresponding row ID. Very first element is a single row ID (as corresponding document ID is jus base_doc_id of the block). Next elements are pairs; first
-follows VLB delta from previos document ID, then uncompressed row ID.
+Each block provides `docs_per_checkpoint` pairs of document ID and corresponding row ID. Very first element is a single row ID (as corresponding document ID is just base_doc_id of the block). Next elements are pairs; first
+follows VLB delta from previous document ID, then uncompressed row ID.
 
 When we need to make a lookup, we first binary search over array of checkpoints, locating the one which may
 include interesting document ID. Then we step into the block using block_offset, and iterate linearly over the documents there. After matching document ID we read row ID, and that is the one we are looking for.

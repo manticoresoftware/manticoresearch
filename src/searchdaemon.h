@@ -117,6 +117,7 @@ volatile bool& sphGetGotSigusr2() noexcept;
 // these are in searchd.cpp
 extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
+extern bool g_bTimeoutEachPacket;
 
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
@@ -161,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 20
+	VER_COMMAND_SEARCH_MASTER = 21
 };
 
 
@@ -169,7 +170,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x125, // 1.37
+	VER_COMMAND_SEARCH		= 0x126, // 1.38
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x101,
@@ -180,7 +181,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x107,
+	VER_COMMAND_CLUSTER		= 0x108,
 	VER_COMMAND_GETFIELD	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
@@ -841,6 +842,11 @@ public:
 		m_tRunningIndex.m_tLock.ReadLock();
 	}
 
+	RIdx_T ( RIdx_T && rhs )
+		: m_pServedKeeper ( std::move(rhs.m_pServedKeeper) )
+		, m_tRunningIndex ( std::move(rhs.m_tRunningIndex) )
+	{}
+
 	~RIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
 
 	PIDX Ptr () const NO_THREAD_SAFETY_ANALYSIS { return static_cast<PIDX> ( m_tRunningIndex.m_pIndex.get() ); }
@@ -1194,7 +1200,7 @@ enum class RotateFrom_e : BYTE;
 bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
-void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );
+bool ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, CSphString & sError, StrVec_t* pWarnings = nullptr );
 void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
 
 volatile bool& sphGetSeamlessRotate() noexcept;
@@ -1477,6 +1483,7 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( ESphHttpStatus eStatus );
+ESphHttpStatus HttpGetStatusCodes ( int iStatus );
 void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
@@ -1561,8 +1568,8 @@ public:
 
 	virtual void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, int64_t iLastInsertId=0 ) = 0;
 
-	// Header of the table with defined num of columns
-	virtual void HeadBegin ( int iColumns ) = 0;
+	// Header of the table
+	virtual void HeadBegin () = 0;
 
 	virtual bool HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
 
@@ -1668,10 +1675,10 @@ public:
 		return Commit();
 	}
 
-	// Fire he header for table with iSize string columns
+	// Fire the header for table with given string columns
 	bool HeadOfStrings ( std::initializer_list<const char*> dNames )
 	{
-		HeadBegin ( (int) dNames.size() );
+		HeadBegin ();
 		for ( const char* szCol : dNames )
 			HeadColumn ( szCol );
 		return HeadEnd ();
@@ -1679,7 +1686,7 @@ public:
 
 	bool HeadOfStrings ( const VecTraits_T<CSphString>& sNames )
 	{
-		HeadBegin ( (int) sNames.GetLength() );
+		HeadBegin ();
 		for ( const auto& sName : sNames )
 			HeadColumn ( sName.cstr() );
 		return HeadEnd ();
@@ -1688,7 +1695,7 @@ public:
 	// table of 2 columns (we really often use them!)
 	bool HeadTuplet ( const char * pLeft, const char * pRight )
 	{
-		HeadBegin ( 2 );
+		HeadBegin ();
 		HeadColumn ( pLeft );
 		HeadColumn ( pRight );
 		return HeadEnd();

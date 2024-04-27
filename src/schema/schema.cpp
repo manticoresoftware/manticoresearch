@@ -18,9 +18,6 @@
 #include "indexsettings.h"
 
 
-//////////////////////////////////////////////////////////////////////////
-
-
 CSphSchema::CSphSchema ( CSphString sName )
 	: m_sName ( std::move ( sName ) )
 {
@@ -355,11 +352,11 @@ bool CSphSchema::IsReserved ( const char* szToken )
 {
 	static const char * dReserved[] =
 	{
-		"AND", "AS", "BY", "COLUMNARSCAN", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
-		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "IS", "KNN", "LIMIT",
-		"MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
-		"OFFSET", "OR", "ORDER", "REGEX", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
-		"TRUE", NULL
+		"AND", "AS", "BY", "COLUMNARSCAN", "DATE_ADD", "DATE_SUB", "DAY", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
+		"FACET", "FALSE", "FORCE", "FROM", "HOUR", "IGNORE", "IN", "INDEXES", "INNER", "INTERVAL", "IS", "JOIN", "KNN",
+		"LEFT", "LIMIT", "MINUTE", "MOD", "MONTH", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
+		"OFFSET", "ON", "OR", "ORDER", "QUARTER", "REGEX", "RELOAD", "SECOND", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
+		"TRUE", "WEEK", "YEAR", NULL
 	};
 
 	const char** p = dReserved;
@@ -669,4 +666,31 @@ bool CSphSchema::IsFieldStored ( int iField ) const
 bool CSphSchema::IsAttrStored ( int iAttr ) const
 {
 	return !!( m_dAttrs[iAttr].m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	// first time schema setup?
+	if ( !pOldSchema )
+		return;
+
+	if ( tLocator.m_iBlobAttrId==-1 && tLocator.m_iBitCount==-1 )
+		return;
+
+	assert ( pNewSchema );
+	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = pOldSchema->GetAttr(i);
+		if ( tLocator==tAttr.m_tLocator )
+		{
+			const CSphColumnInfo * pAttrInNewSchema = pNewSchema->GetAttr ( tAttr.m_sName.cstr() );
+			if ( pAttrInNewSchema )
+			{
+				tLocator = pAttrInNewSchema->m_tLocator;
+				return;
+			}
+		}
+	}
 }

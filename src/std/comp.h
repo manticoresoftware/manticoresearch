@@ -15,14 +15,14 @@
 /// generic comparator
 template<typename T> struct SphLess_T
 {
-	inline static bool IsLess ( const T& a, const T& b ) { return a < b; }
+	inline static bool IsLess ( const T& a, const T& b ) noexcept { return a < b; }
 };
 
 
 /// generic comparator
 template<typename T> struct SphGreater_T
 {
-	inline static bool IsLess ( const T& a, const T& b ) { return b < a; }
+	inline static bool IsLess ( const T& a, const T& b ) noexcept { return b < a; }
 };
 
 
@@ -33,7 +33,7 @@ struct SphMemberLess_T
 	const T C::*m_pMember;
 
 	explicit SphMemberLess_T ( T C::*pMember );
-	inline bool IsLess ( const C& a, const C& b ) const;
+	inline bool IsLess ( const C& a, const C& b ) const noexcept;
 };
 
 template<typename T, typename C>
@@ -47,7 +47,7 @@ struct SphLesser
 	explicit SphLesser ( COMP&& fnComp );
 
 	template<typename T>
-	bool IsLess ( T&& a, T&& b ) const;
+	bool IsLess ( T&& a, T&& b ) const noexcept ( noexcept ( m_fnComp ) );
 };
 
 // make
@@ -63,9 +63,9 @@ struct SphMemberFunctor_T
 	const T CLASS::*m_pMember;
 
 	explicit SphMemberFunctor_T ( T CLASS::*pMember );
-	const T& operator() ( const CLASS& arg ) const;
-	inline bool IsLess ( const CLASS& a, const CLASS& b ) const;
-	inline bool IsEq ( const CLASS& a, T b );
+	const T& operator() ( const CLASS& arg ) const noexcept;
+	inline bool IsLess ( const CLASS& a, const CLASS& b ) const noexcept;
+	inline bool IsEq ( const CLASS& a, T b ) const noexcept;
 };
 
 

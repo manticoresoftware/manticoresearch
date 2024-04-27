@@ -7,6 +7,9 @@ add_library ( dict dict_base.cpp dict_entry.h dict_base.h dict_proxy.h dict_star
 target_include_directories ( dict PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( dict PRIVATE lextra lstem )
 
+add_subdirectory ( infix )
+target_link_libraries ( dict PUBLIC infix )
+
 if (WITH_STEMMER)
 	target_link_libraries ( dict PRIVATE stemmer::stemmer )
 endif ()

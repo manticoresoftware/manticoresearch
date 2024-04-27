@@ -171,6 +171,74 @@ int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen )
 	return int ( d - pTarget );
 }
 
+
+CSphString FormatJsonAsSortStr ( const BYTE * pVal, ESphJsonType eJson )
+{
+	if ( !pVal )
+		return "";
+
+	CSphString sVal;
+
+	// FIXME!!! make string length configurable for STRING and STRING_VECTOR to compare and allocate only Min(String.Length, CMP_LENGTH)
+	switch ( eJson )
+	{
+	case JSON_INT32:
+		sVal.SetSprintf ( "%d", sphJsonLoadInt ( &pVal ) );
+		break;
+	case JSON_INT64:
+		sVal.SetSprintf ( INT64_FMT, sphJsonLoadBigint ( &pVal ) );
+		break;
+	case JSON_DOUBLE:
+		sVal.SetSprintf ( "%f", sphQW2D ( sphJsonLoadBigint ( &pVal ) ) );
+		break;
+	case JSON_STRING:
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		sVal.SetBinary ( (const char *)pVal, iLen );
+		break;
+	}
+	case JSON_STRING_VECTOR:
+	{
+		int iTotalLen = sphJsonUnpackInt ( &pVal );
+		int iCount = sphJsonUnpackInt ( &pVal );
+
+		CSphFixedVector<BYTE> dBuf ( iTotalLen + 4 + iCount ); // data and tail GAP and space count
+		BYTE * pDst = dBuf.Begin();
+
+		// head element
+		if ( iCount )
+		{
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			memcpy ( pDst, pVal, iElemLen );
+			pDst += iElemLen;
+			pVal += iElemLen;
+		}
+
+		// tail elements separated by space
+		for ( int i=1; i<iCount; i++ )
+		{
+			*pDst++ = ' ';
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			memcpy ( pDst, pVal, iElemLen );
+			pDst += iElemLen;
+			pVal += iElemLen;
+		}
+
+		// filling junk space
+		while ( pDst<dBuf.Begin()+dBuf.GetLength() )
+			*pDst++ = '\0';
+
+		auto szValue = (char*)dBuf.LeakData();
+		sVal.Adopt ( &szValue );
+		break;
+	}
+	default:
+		break;
+	}
+
+	return sVal;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // just a pair of numbers (std::pair is not suitable since assumes non-trivial ctrs)
 struct BlobLocator_t
@@ -1264,13 +1332,9 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 }
 
 
-bool sphJsonNameSplit ( const char * sName, CSphString * sColumn )
+static bool FindNextSeparator ( const char * & pSep )
 {
-	if ( !sName )
-		return false;
-
 	// find either '[' or '.', what comes first
-	const char * pSep = sName;
 	while ( *pSep && *pSep!='.' && *pSep!='[' )
 	{
 		// check for invalid characters
@@ -1279,15 +1343,33 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn )
 		++pSep;
 	}
 
-	if ( !*pSep )
+	return *pSep;
+}
+
+
+bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * pColumn )
+{
+	if ( !szName )
 		return false;
 
-	int iSep = int ( pSep - sName );
-	if ( sColumn )
+	const char * pSep = szName;
+	if ( !FindNextSeparator(pSep) )
+		return false;
+
+	if ( szIndex && *pSep=='.' && !strncmp ( szIndex, szName, pSep - szName ) )
 	{
-		sColumn->SetBinary ( sName, iSep );
-		sColumn->Trim();
+		// this was not a json separator, but a dot between table name and column name
+		pSep++;
+		if ( !FindNextSeparator(pSep) )
+			return false;
 	}
+
+	if ( pColumn )
+	{
+		pColumn->SetBinary ( szName, pSep-szName );
+		pColumn->Trim();
+	}
+
 	return true;
 }
 

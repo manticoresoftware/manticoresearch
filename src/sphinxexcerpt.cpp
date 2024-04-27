@@ -94,7 +94,7 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_sAfterMatch!=tDefault.m_sAfterMatch )			tOut.Appendf ( "after_match='%s'",		m_sAfterMatch.cstr() );
 	if ( m_sChunkSeparator!=tDefault.m_sChunkSeparator )	tOut.Appendf ( "snippet_separator='%s'",m_sChunkSeparator.cstr() );
 	if ( m_sFieldSeparator!=tDefault.m_sFieldSeparator )	tOut.Appendf ( "field_separator='%s'",	m_sFieldSeparator.cstr() );
-	if ( m_sStripMode!=tDefault.m_sStripMode )				tOut.Appendf ( "strip_mode='%s'",		m_sStripMode.cstr() );
+	if ( m_sStripMode!=tDefault.m_sStripMode )				tOut.Appendf ( "html_strip_mode='%s'",		m_sStripMode.cstr() );
 	if ( m_iAround!=tDefault.m_iAround )					tOut.Appendf ( "around=%d",				m_iAround );
 	if ( m_iPassageId!=tDefault.m_iPassageId )				tOut.Appendf ( "start_snippet_id=%d",	m_iPassageId );
 	if ( m_bUseBoundaries!=tDefault.m_bUseBoundaries )		tOut.Appendf ( "use_boundaries=%d",		m_bUseBoundaries ? 1 : 0 );

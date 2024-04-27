@@ -149,7 +149,7 @@ inline ESphSortKeyPart Attr2Keypart_ ( ESphAttr eType )
 class SortStateSetup_c
 {
 public:
-			SortStateSetup_c ( const char * szTok, SortClauseTokenizer_c & tTok, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iField, const ISphSchema & tSchema, const CSphQuery & tQuery );
+			SortStateSetup_c ( const char * szTok, SortClauseTokenizer_c & tTok, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, int iField, const ISphSchema & tSchema, const CSphQuery & tQuery, const JoinArgs_t * pJoinArgs );
 
 	bool	Setup ( CSphString & sError );
 
@@ -161,6 +161,7 @@ private:
 	const int					m_iField;
 	const ISphSchema &			m_tSchema;
 	const CSphQuery &			m_tQuery;
+	const JoinArgs_t *			m_pJoinArgs = nullptr;
 
 	int							m_iAttr = -1;
 	ESphAttr					m_eAttrType = SPH_ATTR_NONE;
@@ -180,7 +181,7 @@ private:
 };
 
 
-SortStateSetup_c::SortStateSetup_c ( const char * szTok, SortClauseTokenizer_c & tTok, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dJsonExprs, int iField, const ISphSchema & tSchema, const CSphQuery & tQuery )
+SortStateSetup_c::SortStateSetup_c ( const char * szTok, SortClauseTokenizer_c & tTok, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dJsonExprs, int iField, const ISphSchema & tSchema, const CSphQuery & tQuery, const JoinArgs_t * pJoinArgs )
 	: m_szTok ( szTok )
 	, m_tTok ( tTok )
 	, m_tState ( tState )
@@ -188,6 +189,7 @@ SortStateSetup_c::SortStateSetup_c ( const char * szTok, SortClauseTokenizer_c &
 	, m_iField ( iField )
 	, m_tSchema ( tSchema )
 	, m_tQuery ( tQuery )
+	, m_pJoinArgs ( pJoinArgs )
 {}
 
 
@@ -330,14 +332,14 @@ void SortStateSetup_c::SetupJsonAttr()
 bool SortStateSetup_c::SetupJsonField ( CSphString & sError )
 {
 	CSphString sJsonCol;
-	if ( !sphJsonNameSplit ( m_szTok, &sJsonCol ) )
+	if ( !sphJsonNameSplit ( m_szTok, m_tQuery.m_sJoinIdx.cstr(), &sJsonCol ) )
 		return true;
 
 	m_iAttr = m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
 	if ( m_iAttr>=0 )
 	{
 		ExprParseArgs_t tExprArgs;
-		ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
+		ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs, sError, tExprArgs );
 		if ( !pExpr )
 			return false;
 
@@ -355,12 +357,12 @@ bool SortStateSetup_c::SetupColumnar ( CSphString & sError )
 		return true;
 
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr(m_iAttr);
-	if ( !tAttr.IsColumnar() )
+	if ( !tAttr.IsColumnar() || tAttr.IsJoined() )
 		return true;
 
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &m_eAttrType;
-	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
+	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs, sError, tExprArgs );
 	if ( !pExpr )
 		return false;
 
@@ -396,7 +398,7 @@ void SortStateSetup_c::SetupJsonConversions()
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	CSphString sError; // ignored
-	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
+	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs, sError, tExprArgs );
 	if ( !pExpr )
 		return;
 
@@ -460,7 +462,7 @@ bool SortStateSetup_c::Setup ( CSphString & sError )
 
 //////////////////////////////////////////////////////////////////////////
 
-ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, CSphString & sError )
+ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, const JoinArgs_t * pJoinArgs, CSphString & sError )
 {
 	for ( auto & tAttr : tState.m_dAttrs )
 		tAttr = -1;
@@ -506,7 +508,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char
 			return SORT_CLAUSE_ERROR;
 		}
 		
-		SortStateSetup_c tSetup ( pTok, tTok, tState, dExtraExprs, iField, tSchema, tQuery );
+		SortStateSetup_c tSetup ( pTok, tTok, tState, dExtraExprs, iField, tSchema, tQuery, pJoinArgs );
 		if ( !tSetup.Setup(sError) )
 			return SORT_CLAUSE_ERROR;		
 	}

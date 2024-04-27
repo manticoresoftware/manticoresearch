@@ -163,6 +163,8 @@ CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );
 
 CSphString		RealPath ( const CSphString& sPath );
+bool			IsSymlink ( const CSphString & sFile );
+bool			ResolveSymlink ( const CSphString & sFile, CSphString & sResult );
 
 class CSphWriter;
 void			SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t tValue );

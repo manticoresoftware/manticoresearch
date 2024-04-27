@@ -113,3 +113,73 @@ StrVec_t GetNodeListFromRemotes ( const ClusterDesc_t& tDesc )
 		TlsMsg::Err ( "cluster '%s', invalid nodes '%s'(%s), error: %s", tDesc.m_sName.cstr(), StrVec2Str ( dNodes ).cstr(), StrVec2Str ( tDesc.m_dClusterNodes ).cstr(), TlsMsg::szError() );
 	return dNodes;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// cluster get nodes state
+/////////////////////////////////////////////////////////////////////////////
+
+struct ClusterNodesStatesReply_t : public ClusterRequest_t
+{
+	ClusterNodesStatesVec_t m_dStates;
+	RemoteNodeClusterState_t m_tState;
+};
+
+// API command to remote node to get node state
+using ClusterNodeState_c = ClusterCommand_T<E_CLUSTER::GET_NODE_STATE, ClusterRequest_t, ClusterNodesStatesReply_t>;
+
+void operator<< ( ISphOutputBuffer & tOut, const ClusterNodesStatesReply_t & tReq )
+{
+	tOut << (const ClusterRequest_t&)tReq;
+	tOut.SendByte ( (BYTE)tReq.m_tState.m_eState );
+	tOut.SendString ( tReq.m_tState.m_sNode.cstr() );
+	tOut.SendString ( tReq.m_tState.m_sHash.cstr() );
+}
+
+void operator>> ( InputBuffer_c & tIn, ClusterNodesStatesReply_t & tReq )
+{
+	tIn >> (ClusterRequest_t&)tReq;
+
+	RemoteNodeClusterState_t & tState = tReq.m_dStates.Add();
+	tState.m_eState = (ClusterState_e)tIn.GetByte();
+	tState.m_sNode = tIn.GetString();
+	tState.m_sHash = tIn.GetString();
+}
+
+static bool SendClusterNodesStates ( const CSphString & sCluster, const VecTraits_T<CSphString> & dNodes, ClusterNodesStatesVec_t & dStates )
+{
+	ClusterNodeState_c::REQUEST_T tReq;
+	tReq.m_sCluster = sCluster;
+
+	auto dAgents = ClusterNodeState_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tReq );
+	// no nodes left seems a valid case
+	if ( dAgents.IsEmpty() )
+		return true;
+
+	ClusterNodeState_c tReply;
+	// FIXME!!! handle errors
+	PerformRemoteTasksWrap ( dAgents, tReply, tReply, true );
+
+	for ( const AgentConn_t * pAgent : dAgents )
+	{
+		if ( pAgent->m_bSuccess )
+			dStates.Append ( ClusterNodeState_c::GetRes ( *pAgent ).m_dStates );
+	}
+
+	return true;
+}
+
+ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc )
+{
+	ClusterNodesStatesVec_t dStates;
+	SendClusterNodesStates ( tDesc.m_sName, tDesc.m_dClusterNodes, dStates );
+	return dStates;
+}
+
+void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster )
+{
+	ClusterNodesStatesReply_t tRequest;
+	ClusterNodeState_c::ParseRequest ( tBuf, tRequest );
+	
+	ClusterGetState ( tRequest.m_sCluster, tRequest.m_tState );
+	ClusterNodeState_c::BuildReply ( tOut, tRequest );
+}

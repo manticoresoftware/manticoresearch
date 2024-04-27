@@ -1102,6 +1102,9 @@ static bool CanCreateColumnarSorter ( const ISphSchema & tSchema, const CSphMatc
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 		if ( tAttr.m_eStage<=SPH_EVAL_PRESORT && tAttr.m_pExpr && sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
 			return false;
+
+		if ( tAttr.IsJoined() )
+			return false;
 	}
 
 	bool bHaveColumnar = false;
@@ -1237,8 +1240,6 @@ ISphMatchSorter * CreateColumnarProxySorter ( ISphMatchSorter * pSorter, int iMa
 	switch ( eSortFunc )
 	{
 	case FUNC_REL_DESC:		return CreateProxySorter<MatchRelevanceLt_fn>	( pSorter, iMaxMatches, tSchema, tState, iSortFastPath, bAllInt, bAllFloat );
-	case FUNC_ATTR_DESC:	return CreateProxySorter<MatchAttrLt_fn>		( pSorter, iMaxMatches, tSchema, tState, iSortFastPath, bAllInt, bAllFloat );
-	case FUNC_ATTR_ASC:		return CreateProxySorter<MatchAttrGt_fn>		( pSorter, iMaxMatches, tSchema, tState, iSortFastPath, bAllInt, bAllFloat );
 	case FUNC_TIMESEGS:		return CreateProxySorter<MatchTimeSegments_fn>	( pSorter, iMaxMatches, tSchema, tState, iSortFastPath, bAllInt, bAllFloat );
 	case FUNC_GENERIC1:		return CreateProxySorter<MatchGeneric1_fn>		( pSorter, iMaxMatches, tSchema, tState, iSortFastPath, bAllInt, bAllFloat );
 	case FUNC_GENERIC2:		return CreateProxySorter<MatchGeneric2_fn>		( pSorter, iMaxMatches, tSchema, tState, iSortFastPath, bAllInt, bAllFloat );

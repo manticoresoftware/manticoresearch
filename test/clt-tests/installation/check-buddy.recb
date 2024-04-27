@@ -1,4 +1,4 @@
 ––– input –––
-ps ax | awk -F" " '{print $5}' | grep -w "^searchd$" > /dev/null;echo $?
+ps aux | grep -q '[s]earchd'; echo $?
 ––– output –––
 0

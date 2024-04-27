@@ -804,7 +804,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				JsonEscapedBuilder sTmp;
 				if ( pJson.second )
 					sphJsonFormat ( sTmp, pJson.first );
-				dRows.PutArray ( sTmp );
+				dRows.PutArray ( sTmp, false );
 			}
 			break;
 		case SPH_ATTR_JSON_PTR:
@@ -816,7 +816,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 					auto dJson = sphUnpackPtrAttr ( pString );
 					sphJsonFormat ( sTmp, dJson.first );
 				}
-				dRows.PutArray ( sTmp );
+				dRows.PutArray ( sTmp, false );
 			}
 			break;
 

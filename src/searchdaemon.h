@@ -1539,6 +1539,8 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR: return MYSQL_COL_LONG; // long is treated as a number without interpretation (just copied from input to output)
+	case SPH_ATTR_JSON:
+	case SPH_ATTR_JSON_PTR: return MYSQL_COL_DECIMAL; // decimal is treaded as string without internal escaping
 	default: return MYSQL_COL_STRING;
 	}
 }

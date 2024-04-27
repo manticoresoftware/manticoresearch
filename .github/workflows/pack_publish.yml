@@ -324,3 +324,4 @@ jobs:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-
           run_args: -e TELEMETRY=0
+

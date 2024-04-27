@@ -3,6 +3,9 @@ run-name: 📦 Pack and publish ${{ github.sha }}
 
 #on: workflow_call
 on:
+  push:
+    branches:
+      - master
   pull_request:
     branches: [ master ]
     types: [opened, synchronize, reopened, labeled, unlabeled]

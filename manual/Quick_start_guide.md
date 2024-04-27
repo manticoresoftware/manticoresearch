@@ -79,7 +79,7 @@ By default Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for connections from other Manticore nodes and clients based on Manticore binary API
 
-More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/)   
+More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/).   
 
 <!-- intro -->
 ##### Connect via MySQL:
@@ -555,7 +555,7 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 <!-- end -->
 
 More details on the subject can be found here:
-* [Adding data to a plain table]](https://play.manticoresearch.com/mysql/) 
+* [Adding data to a plain table](https://play.manticoresearch.com/mysql/) 
 * [Adding data to a RealTime table](https://play.manticoresearch.com/rtintro/)
 
 

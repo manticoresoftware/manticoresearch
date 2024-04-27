@@ -669,11 +669,17 @@ ISphMatchSorter * CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tColl
 void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
 	pRows->HeadBegin ();
-	for ( int i : dOrder )
+	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& tCol = tSchema.GetAttr ( i );
+		const CSphColumnInfo& tCol = tSchema.GetAttr ( dOrder[i] );
 		if ( sphIsInternalAttr ( tCol ) )
 			continue;
+		if ( i == 0 )
+		{
+			assert (tCol.m_sName == "id");
+			pRows->HeadColumn ( "id", ESphAttr2MysqlColumn ( SPH_ATTR_UINT64 ) );
+			continue;
+		}
 		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
 	}
 
@@ -683,14 +689,17 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
 	auto& dRows = *pRows;
-	for ( int i : dOrder )
+	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& dAttr = tSchema.GetAttr ( i );
+		const CSphColumnInfo& dAttr = tSchema.GetAttr ( dOrder[i] );
 		if ( sphIsInternalAttr ( dAttr ) )
 			continue;
 
 		CSphAttrLocator tLoc = dAttr.m_tLocator;
 		ESphAttr eAttrType = dAttr.m_eAttrType;
+
+		if ( i == 0 )
+			eAttrType = SPH_ATTR_UINT64;
 
 		switch ( eAttrType )
 		{

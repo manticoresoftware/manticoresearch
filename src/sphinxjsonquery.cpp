@@ -474,7 +474,6 @@ bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVec
 		return IsBoolNode ( tItem ); // need walk down the tree for compart mode
 
 	dNodes.Add ( pNode );
-	tBuilder.m_bHasFulltext = true;
 
 	return true;
 }
@@ -772,19 +771,31 @@ XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTree
 	bool bPhrase = IsFtPhrase ( sName );
 	bool bSingleTerm = IsFtTerm ( sName );
 	if ( bMatch || bPhrase || bTerms || bSingleTerm )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructMatchNode ( tJson, bPhrase, bTerms, bSingleTerm, tBuilder );
+	}
 
 	if ( IsFtMatchAll ( sName ) )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructMatchAllNode ( tBuilder );
+	}
 
 	if ( IsBoolNode ( sName ) )
 		return ConstructBoolNode ( tJson, tBuilder );
 
 	if ( IsFtQueryString ( sName ) )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructQLNode ( tJson, tBuilder );
+	}
 
 	if ( IsFtQueryStringSimple ( sName ) && tJson.IsObj() )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructQLNode ( tJson.GetItem ( "query" ), tBuilder );
+	}
 
 	return nullptr;
 }

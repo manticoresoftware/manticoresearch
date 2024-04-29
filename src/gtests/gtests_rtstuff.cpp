@@ -294,7 +294,7 @@ TEST_F ( RT, WeightBoundary )
 	StrVec_t dWarnings;
 	EXPECT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
 
-	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
 	RtAccum_t tAcc;
@@ -402,7 +402,7 @@ TEST_F ( RT, RankerFactors )
 	Verify ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
 
 	CSphString sFilter;
-	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
 	RtAccum_t tAcc;
@@ -608,7 +608,7 @@ TEST_F ( RT, SendVsMerge )
 	ASSERT_TRUE ( pSorter );
 
 	CSphString sFilter;
-	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
 
 	RtAccum_t tAcc;

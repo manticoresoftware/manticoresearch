@@ -89,7 +89,7 @@ public:
 	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
+	bool AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
@@ -772,7 +772,7 @@ bool PercolateIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString* pError )
 }
 
 
-bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
+bool PercolateIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
 	if ( !BindAccum ( pAcc, &sError ) )
 		return false;

@@ -4,14 +4,14 @@ With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUN
 
 Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 
-* True Multi-Master: Read and write to any node at any time.
-* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) No slave lag and no data loss after a node crash.
-* Hot Standby: No downtime during failover (since there is no failover).
-* Tightly Coupled: All nodes hold the same state and no diverged data between nodes is allowed.
-* Automatic Node Provisioning: No need to manually backup the database and restore it on a new node.
-* Easy to Use and Deploy.
-* Detection and Automatic Eviction of Unreliable Nodes.
-* Certification-based Replication.
+* True multi-master: read and write to any node at any time.
+* [Virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) no slave lag and no data loss after a node crash.
+* Hot standby: no downtime during failover (since there is no failover).
+* Tightly coupled: all nodes hold the same state and no diverged data between nodes is allowed.
+* Automatic node provisioning: no need to manually backup the database and restore it on a new node.
+* Easy to use and deploy.
+* Detection and automatic eviction of unreliable nodes.
+* Certification-based replication.
 
 To set up replication in Manticore Search:
 

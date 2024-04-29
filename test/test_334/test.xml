@@ -617,5 +617,41 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<query endpoint="json/search">
+{
+  "index": "test10",
+  "query":{
+    "bool":{
+      "filter":[
+        {
+          "bool":{
+            "should":[
+              {
+                "bool":{
+                  "must":[
+                    {
+                      "term":{
+                        "content":"in"
+                      }
+                    }
+                  ],
+                  "must_not":[
+                    {
+                      "exists":{
+                        "field":"title"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+</query>
+
 </queries>
 </test>

@@ -51,7 +51,7 @@ enum class ReplCmd_e {
 };
 
 struct CSphReconfigureSettings;
-struct InsertDocData_t;
+class InsertDocData_c;
 struct RtSegment_t;
 class MemoryWriter_c;
 
@@ -113,7 +113,7 @@ public:
 	void			CleanupPart();
 	void			Cleanup();
 
-	void			AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
+	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );

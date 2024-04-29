@@ -88,6 +88,7 @@
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
 * [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Lists all currently active client threads
 * [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Lists server-wide variables and their values
+* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - Provides detailed version information of various components of the instance.
 
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Execute an SQL statement over HTTP JSON
@@ -102,6 +103,7 @@
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
 * [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
 * [data types](Creating_a_table/Data_types.md)

@@ -438,7 +438,7 @@ public:
 	int			Flatten ( CSphMatch * pTo ) override								{ return m_pSorter->Flatten(pTo); }
 	const CSphMatch * GetWorst() const override										{ return m_pSorter->GetWorst(); }
 	bool		CanBeCloned() const override										{ return m_pSorter->CanBeCloned(); }
-	ISphMatchSorter * Clone() const override										{ return new JoinSorter_c ( m_pIndex, m_pJoinedIndex, m_dQueries, m_pSorter->Clone(), !m_bFinalCalcOnly ); }
+	ISphMatchSorter * Clone() const override;
 	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override			{ m_pSorter->MoveTo ( ((JoinSorter_c *)pRhs)->m_pSorter.get(), bCopyMeta ); }
 	void		CloneTo ( ISphMatchSorter * pTrg ) const override					{ m_pSorter->CloneTo(pTrg); }
 	void		SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override	{ m_pSorter->SetFilteredAttrs(hAttrs, bAddDocid); }
@@ -492,6 +492,7 @@ private:
 	FilterEval_c					m_tMixedFilter;
 	CSphMatch						m_tMatch;
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
+	std::unique_ptr<ISphMatchSorter> m_pOriginalSorter;
 	std::unique_ptr<ISphMatchSorter> m_pRightSorter;
 	std::unique_ptr<ISphSchema>		m_pRightSorterSchema;
 	const BYTE *					m_pBlobPool = nullptr;
@@ -552,9 +553,15 @@ JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoined
 	, m_pSorter ( pSorter )
 	, m_tCache ( GetJoinCacheSize() )
 {
-	assert ( pIndex && pJoinedIndex );
+	assert ( pIndex && pJoinedIndex && pSorter );
 
-	m_bFinalCalcOnly = !bJoinedGroupSort && m_tQuery.m_eJoinType==JoinType_e::LEFT;
+	const ISphSchema & tSorterSchema = *m_pSorter->GetSchema();
+	bool bHaveAggregates = false;
+	for ( int i = 0; i < tSorterSchema.GetAttrsCount(); i++ )
+		bHaveAggregates |= tSorterSchema.GetAttr(i).m_eAggrFunc!=SPH_AGGR_NONE;
+
+	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( m_tQuery.m_dFilters, tSorterSchema, m_tQuery.m_sJoinIdx.cstr() );
+	m_bFinalCalcOnly = !bJoinedGroupSort && !bHaveAggregates && !dRightFilters.GetLength() && !NeedToMoveMixedJoinFilters ( m_tQuery, tSorterSchema );
 	m_bErrorFlag = !SetupJoinQuery ( m_pSorter->GetSchema()->GetDynamicSize(), m_sErrorMessage );
 }
 
@@ -905,6 +912,13 @@ void JoinSorter_c::PopulateStoredFields()
 }
 
 
+ISphMatchSorter * JoinSorter_c::Clone() const
+{
+	ISphMatchSorter * pSourceSorter = m_pOriginalSorter ? m_pOriginalSorter.get() : m_pSorter.get();
+	return new JoinSorter_c ( m_pIndex, m_pJoinedIndex, m_dQueries, pSourceSorter->Clone(), !m_bFinalCalcOnly );
+}
+
+
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
 	if ( !m_bFinalCalcOnly )
@@ -920,23 +934,25 @@ bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 		return true;
 	}
 
+	// keep the original underlying sorter in case other threads want to clone it
+	assert ( !m_pOriginalSorter );
+	m_pOriginalSorter = std::move(m_pSorter);
+
 	// replace underlying sorter with a new one
 	// and fill it with matches that we already have
-	std::unique_ptr<ISphMatchSorter> pOldSorter = std::move(m_pSorter);
-
-	m_pSorter = std::unique_ptr<ISphMatchSorter> ( pOldSorter->Clone() );
+	m_pSorter = std::unique_ptr<ISphMatchSorter> ( m_pOriginalSorter->Clone() );
 	SetupSorterSchema();
 
 	m_bFinalCalcOnly = false;
-	if ( pOldSorter->IsGroupby() )
+	if ( m_pOriginalSorter->IsGroupby() )
 	{
 		MatchCalcGrouped_c tCalc(this);
-		pOldSorter->Finalize ( tCalc, false, false );
+		m_pOriginalSorter->Finalize ( tCalc, false, false );
 	}
 	else
 	{
 		MatchCalc_c tCalc(this);
-		pOldSorter->Finalize ( tCalc, false, false );
+		m_pOriginalSorter->Finalize ( tCalc, false, false );
 	}
 
 	PopulateStoredFields();

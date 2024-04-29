@@ -498,6 +498,8 @@ bool QueueCreator_c::SetupDistinctAttr()
 	else
 		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
 
+	m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
+
 	return true;
 }
 

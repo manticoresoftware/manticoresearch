@@ -12,8 +12,9 @@ docker pull -q --platform linux/x86_64 postgres:latest > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker network create t_network > /dev/null
+docker network create t_network > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 docker run -d --network=t_network -p 3306:3306 --platform linux/x86_64 --name mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=test mysql:latest > /dev/null; echo $?
 ––– output –––
@@ -24,13 +25,22 @@ timeout 20 grep -m2 "Plugin ready for connections" <(docker logs -f mysql 2>&1)
 #!/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{6}Z/!# 0 [System] [MY-011323] [Server] X Plugin ready for connections. Socket: /var/run/mysqld/mysqlx.sock
 #!/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{6}Z/!# 0 [System] [MY-011323] [Server] X Plugin ready for connections. Bind-address: '::' port: 33060, socket: /var/run/mysqld/mysqlx.sock
 ––– input –––
-docker run -d --network=t_network --platform linux/x86_64 --name manticore -v ./test/clt-tests/core/indexer-latest-mysql-and-postgres/min_mysql.conf:/min_mysql.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_mysql.conf > /dev/null; echo $?
+docker run --network=t_network --platform linux/x86_64 --name manticore -v ./test/clt-tests/core/indexer-latest-mysql-and-postgres/min_mysql.conf:/min_mysql.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_mysql.conf
 ––– output –––
-0
-––– input –––
-timeout 20 grep -m1 "creating secondary index" <(docker logs -f manticore 2>&1)
-––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+using config file '/min_mysql.conf'...
+indexing table 'idx_min'...
+collected 1 docs, 0.0 MB
 creating secondary index
+creating lookup: 0.0 Kdocs, 100.0% done
+sorted 0.0 Mhits, 100.0% done
+total 1 docs, 3 bytes
+total #!/[0-9]{1}\.[0-9]{3}/!# sec, %{NUMBER} bytes/sec, #!/[0-9]{1}\.[0-9]{2}/!# docs/sec
+total 3 reads, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
+total 15 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
 ––– input –––
 docker run -d --network=t_network -p 5432:5432 --platform linux/amd64 --name postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres  postgres:latest > /dev/null; echo $?
 ––– output –––
@@ -41,10 +51,19 @@ timeout 20 grep -m2 'database system is ready to accept connections' <(docker lo
 #!/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}/!# UTC [%{NUMBER}] LOG:  database system is ready to accept connections
 #!/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}/!# UTC [%{NUMBER}] LOG:  database system is ready to accept connections
 ––– input –––
-docker run -d --network=t_network --platform linux/x86_64 --name manticore2 -v ./test/clt-tests/core/indexer-latest-mysql-and-postgres/min_postgres.sql:/min_postgres.sql ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_postgres.sql > /dev/null; echo $?
+docker run --network=t_network --platform linux/x86_64 --name manticore2 -v ./test/clt-tests/core/indexer-latest-mysql-and-postgres/min_postgres.sql:/min_postgres.sql ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_postgres.sql
 ––– output –––
-0
-––– input –––
-timeout 10 grep -m1 "creating secondary index" <(docker logs -f manticore2 2>&1)
-––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+using config file '/min_postgres.sql'...
+indexing table 'idx'...
+collected 1 docs, 0.0 MB
 creating secondary index
+creating lookup: 0.0 Kdocs, 100.0% done
+sorted 0.0 Mhits, 100.0% done
+total 1 docs, 3 bytes
+total #!/[0-9]{1}\.[0-9]{3}/!# sec, %{NUMBER} bytes/sec, #!/[0-9]{1}\.[0-9]{2}/!# docs/sec
+total 3 reads, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
+total 15 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg

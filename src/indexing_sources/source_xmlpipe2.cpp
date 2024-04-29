@@ -1119,10 +1119,27 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		if ( m_iCurAttr!=-1 )
 		{
 			assert ( m_pCurDocument );
+
 			if ( !m_pCurDocument->m_dAttrs [ m_iCurAttr ].IsEmpty () )
-				sphWarn ( "duplicate attribute node <%s> - using first value", m_tSchema.GetAttr ( m_iCurAttr ).m_sName.cstr() );
-			else
+			{
+				const CSphColumnInfo & tCol = m_tSchema.GetAttr ( m_iCurAttr );
+				// can not redefine id attribute
+				if ( tCol.m_sName=="id" )
+				{
+					m_pCurDocument->m_dAttrs [ m_iCurAttr ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+					if ( m_dParsedDocuments.GetLength() )
+						m_dParsedDocuments.Last()->m_tDocID = sphToUInt64 ( m_pCurDocument->m_dAttrs [ m_iCurAttr ].cstr() );
+					Error ( "duplicate attribute node <%s>", tCol.m_sName.cstr() );
+					return;
+				}
+				else
+				{
+					sphWarn ( "duplicate attribute node <%s> - using first value", tCol.m_sName.cstr() );
+				}
+			} else
+			{
 				m_pCurDocument->m_dAttrs [ m_iCurAttr ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+			}
 		}
 
 		m_iFieldBufferLen = 0;

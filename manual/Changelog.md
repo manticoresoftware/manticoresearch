@@ -7,7 +7,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #839](https://github.com/manticoresoftware/manticoresearch/issues/839) Implemented [float_vector](Creating_a_table/Data_types.md#Float-vector) data type; implemented [vector search](Searching/KNN.md#KNN-vector-search).
 * [Issue #1673](https://github.com/manticoresoftware/manticoresearch/issues/1673) INNER/LEFT JOIN
 * [Issue #1720](https://github.com/manticoresoftware/manticoresearch/pull/1720) Changed Manticore Search license from GPLv2-or-later to GPLv3-or-later.
-* [Issue #1540](https://github.com/manticoresoftware/dev/issues/2647) Running Manticore in Windows now requires Docker to run Buddy
+* [Commit 7a55](https://github.com/manticoresoftware/manticoresearch/commit/7a5508424) Running Manticore in Windows now requires Docker to run Buddy
 * [Issue #1541](https://github.com/manticoresoftware/manticoresearch/issues/1541) Added a [REGEX](Searching/Full_text_matching/Operators.md#REGEX-operator) full-text operator.
 * [Issue #1569](https://github.com/manticoresoftware/manticoresearch/issues/1569) Binary log is now written with transaction granularity.
 * [Commit 514d](https://github.com/manticoresoftware/manticoresearch/commit/514d35b497f4bdb20b6473ff963752a978a4bb8d) Revamp of time operations for better performance and new date/time functions:

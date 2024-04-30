@@ -997,7 +997,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		if ( m_hQueryDups[tItem.m_sAlias] )
 		{
-			bool bJoined = m_pSorterSchema->GetAttr(iSorterAttr).m_tLocator.m_bDynamic;
+			bool bJoined = !!(m_pSorterSchema->GetAttr(iSorterAttr).m_uAttrFlags & CSphColumnInfo::ATTR_JOINED);
 			if ( bColumnar || bJoined )	// we might have several similar aliases for columnar attributes (and they are not plain attrs but expressions)
 				return true;
 			else
@@ -1513,7 +1513,12 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 
 	if ( !sphJsonNameSplit ( sAttr1.cstr(), nullptr ) )
 	{
-		m_sError.SetSprintf ( "Unable to perform join on '%s'", sAttr1.cstr() );
+		const CSphColumnInfo * pField = m_pSorterSchema->GetField ( sAttr1.cstr() );
+		if ( pField && ( pField->m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) )
+			m_sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", m_tSettings.m_pJoinArgs->m_sIndex1.cstr(), sAttr1.cstr() );
+		else
+			m_sError.SetSprintf ( "Unable to perform join on '%s'", sAttr1.cstr() );
+
 		return false;
 	}
 
@@ -1666,6 +1671,9 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 			tExprCol.m_eStage = SPH_EVAL_SORTER;
 			tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 			m_pSorterSchema->AddAttr ( tExprCol, true );
+
+			m_hQueryDups.Add(sAttr);
+			m_hQueryColumns.Add(sAttr);
 		}
 
 	return true;
@@ -2290,12 +2298,12 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 bool QueueCreator_c::SetupComputeQueue ()
 {
 	return AddJoinAttrs()
+		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates()
-		&& AddJoinFilterAttrs()
 		&& AddNullBitmask();
 }
 

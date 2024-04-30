@@ -1428,7 +1428,26 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 }
 
 
-static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, CSphString & sError, CSphString & sWarning )
+static void TryToCreateJoinNullFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CommonFilterSettings_t & tFixedSettings )
+{
+	if ( pFilter )
+		return;
+
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
+
+	int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
+	if ( iAttr<0 )
+		return;
+
+	const CSphColumnInfo * pAttrMask = tCtx.m_pSchema->GetAttr ( GetNullMaskAttrName() );
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+	if ( ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED ) && pAttrMask && tFixedSettings.m_eType==SPH_FILTER_NULL )
+		pFilter = CreateJoinNullFilter ( tSettings, pAttrMask->m_tLocator );
+}
+
+
+static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -2038,6 +2057,7 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 	if ( !FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName, sError ) )
 		return nullptr;
 
+	TryToCreateJoinNullFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings );
 	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, sError, sWarning );
 	TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 

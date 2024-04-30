@@ -115,19 +115,19 @@ CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CS
 
 bool NeedToMoveMixedJoinFilters ( const CSphQuery & tQuery, const ISphSchema & tSchema )
 {
-	if ( !tQuery.m_dFilterTree.GetLength() )
-		return false;
-
-	bool bHaveNullFilters = false;
 	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( tQuery.m_dFilters, tSchema, tQuery.m_sJoinIdx.cstr() );
-	for ( const auto & i : dRightFilters )
-		bHaveNullFilters |= tQuery.m_dFilters[i.first].m_eType==SPH_FILTER_NULL;
-
 	if ( !dRightFilters.GetLength() )
 		return false;
 
-	// null filters won't work unless it's a left join
-	return ( bHaveNullFilters && tQuery.m_eJoinType==JoinType_e::LEFT ) || dRightFilters.GetLength()!=tQuery.m_dFilters.GetLength();
+	// move all filters to the left query in case of LEFT JOIN
+	// otherwise we can't distinguish between 'no match' and 'match with null part from right table'
+	if ( tQuery.m_eJoinType==JoinType_e::LEFT )
+		return true;
+
+	if ( !tQuery.m_dFilterTree.GetLength() )
+		return false;
+
+	return dRightFilters.GetLength()!=tQuery.m_dFilters.GetLength();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -506,8 +506,6 @@ private:
 	bool							m_bFinalCalcOnly = false;
 	const ISphSchema *				m_pSorterSchema = nullptr;
 	CSphVector<ContextCalcItem_t>	m_dAggregates;
-	bool							m_bHaveNullFilters = false;
-	bool							m_bHaveNotNullFilters = false;
 
 	MatchCache_c					m_tCache;
 	bool							m_bCacheOk = true;
@@ -775,14 +773,16 @@ template <typename PUSH>
 bool JoinSorter_c::PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush )
 {
 	memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
+
+	// set NULL bitmask
+	assert(m_pAttrNullBitmask);
+	m_tMatch.SetAttr ( m_pAttrNullBitmask->m_tLocator, m_uNullMask );
+
 	if ( !m_tMixedFilter.Eval(m_tMatch) )
 		return false;
 
 	CalcContextItems ( m_tMatch, m_dAggregates );
 
-	// set NULL bitmask
-	assert(m_pAttrNullBitmask);
-	m_tMatch.SetAttr ( m_pAttrNullBitmask->m_tLocator, m_uNullMask );
 	return fnPush(m_tMatch);
 }
 
@@ -874,16 +874,13 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 		}
 	} );
 
-	if ( m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT && m_bHaveNullFilters )
-		return false;
-
 	CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
 	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
 	m_tMatch.m_pDynamic = pDynamic;
 
 	bool bAnythingPushed = PushJoinedMatches ( tEntry, fnPush );
 
-	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT && !m_bHaveNotNullFilters )
+	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT )
 		return PushLeftMatch ( tEntry, fnPush );
 
 	return bAnythingPushed;
@@ -978,23 +975,15 @@ static void RemoveTableNamePrefix ( CSphString & sAttr, const CSphFilterSettings
 bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 {
 	m_tJoinQuery.m_dFilters.Resize(0);
-	m_bHaveNullFilters = false;
-	m_bHaveNotNullFilters = false;
 
 	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( m_tQuery.m_dFilters, *m_pSorterSchema, m_pJoinedIndex->GetName() );
-	for ( const auto & i : dRightFilters )
-	{
-		const auto & tFilter = m_tQuery.m_dFilters[i.first];
-		m_bHaveNullFilters |= tFilter.m_eType==SPH_FILTER_NULL && tFilter.m_bIsNull;
-		m_bHaveNotNullFilters |= tFilter.m_eType==SPH_FILTER_NULL && !tFilter.m_bIsNull;
-	}
-
-	if ( m_tQuery.m_dFilterTree.GetLength() )
+	bool bLeftJoin = m_tQuery.m_eJoinType==JoinType_e::LEFT;
+	if ( bLeftJoin || m_tQuery.m_dFilterTree.GetLength() )
 	{
 		if ( !dRightFilters.GetLength() )
 			return true;
 
-		if ( m_bHaveNullFilters || m_bHaveNotNullFilters || dRightFilters.GetLength()!=m_tQuery.m_dFilters.GetLength() )
+		if ( bLeftJoin || dRightFilters.GetLength()!=m_tQuery.m_dFilters.GetLength() )
 		{
 			CreateFilterContext_t tCtx;
 			tCtx.m_pFilters		= &m_tQuery.m_dFilters;
@@ -1434,6 +1423,33 @@ bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedInd
 	}
 
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class JoinNullFilter_c : public ISphFilter
+{
+public:
+			JoinNullFilter_c ( bool bIsNull, const CSphAttrLocator & tNullMapLocator );
+
+	bool	Eval ( const CSphMatch & tMatch ) const override { return (!!tMatch.GetAttr(m_tNullMapLocator)) ^ (!m_bIsNull); }
+
+private:
+	bool			m_bIsNull = false;
+	CSphAttrLocator	m_tNullMapLocator;
+};
+
+
+JoinNullFilter_c::JoinNullFilter_c ( bool bIsNull, const CSphAttrLocator & tNullMapLocator )
+	: m_bIsNull ( bIsNull )
+	, m_tNullMapLocator ( tNullMapLocator )
+{}
+
+
+
+std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tSettings, const CSphAttrLocator & tNullMapLocator )
+{
+	return std::make_unique<JoinNullFilter_c> ( tSettings.m_bIsNull, tNullMapLocator );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////

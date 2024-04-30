@@ -1252,6 +1252,7 @@ public:
 	int					CommonOptimize ( OptimizeTask_t tTask );
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
 	bool				CompressOneChunk ( int iChunk, int* pAffected = nullptr );
+	bool				DedupOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				MergeTwoChunks ( int iA, int iB, int* pAffected = nullptr );
 	bool				MergeCanRun () const;
 	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAffected = nullptr );
@@ -9478,6 +9479,11 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 	return true;
 }
 
+bool RtIndex_c::DedupOneChunk ( int iChunkID, int* pAffected )
+{
+	return true;
+}
+
 // catch common cases where we can't work at all (erroneous settings, etc.), or can redirect to another action
 bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool& bResult, int* pAffected )
 {
@@ -9797,6 +9803,7 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 	case OptimizeTask_t::eDrop:
 	case OptimizeTask_t::eCompress:
 	case OptimizeTask_t::eSplit:
+	case OptimizeTask_t::eDedup:
 		if ( !CheckValidateChunk ( tTask.m_iFrom, iChunks, tTask.m_bByOrder ) )
 			return false;
 	default: break;
@@ -9928,6 +9935,7 @@ int RtIndex_c::CommonOptimize ( OptimizeTask_t tTask )
 	case OptimizeTask_t::eMerge: MergeTwoChunks ( tTask.m_iFrom, tTask.m_iTo, &iChunks ); return iChunks;
 	case OptimizeTask_t::eDrop: DropDiskChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
 	case OptimizeTask_t::eCompress: CompressOneChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
+	case OptimizeTask_t::eDedup: DedupOneChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
 	case OptimizeTask_t::eSplit: SplitOneChunk ( tTask.m_iFrom, tTask.m_sUvarFilter.cstr(), &iChunks ); return iChunks;
 	case OptimizeTask_t::eAutoOptimize:
 		bProgressive = true;

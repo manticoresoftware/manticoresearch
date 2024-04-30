@@ -74,6 +74,7 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 "FILES"				{ STORE_BOUNDS; return TOK_FILES; }
 "OPTION"			{ STORE_BOUNDS; return TOK_OPTION; }
 "COMPRESS"			{ STORE_BOUNDS; return TOK_COMPRESS; }
+"DEDUP"				{ STORE_BOUNDS; return TOK_DEDUP; }
 "SPLIT"				{ STORE_BOUNDS; return TOK_SPLIT; }
 "META"				{ STORE_BOUNDS; return TOK_META; }
 "TRACE"				{ STORE_BOUNDS; return TOK_TRACE; }

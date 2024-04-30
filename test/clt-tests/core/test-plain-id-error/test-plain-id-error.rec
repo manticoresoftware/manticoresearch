@@ -4,18 +4,18 @@ docker pull -q --platform linux/x86_64 ghcr.io/manticoresoftware/manticoresearch
 ––– output –––
 0
 ––– input –––
-docker pull -q --platform linux/x86_64 mysql:8.2 > /dev/null; echo $?
+docker pull -q --platform linux/x86_64 mysql:latest > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker pull -q --platform linux/x86_64 postgres:13.14 > /dev/null; echo $?
+docker pull -q --platform linux/x86_64 postgres:latest > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
 docker network create t_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -d --network=t_network -p 3306:3306 --platform linux/x86_64 --name mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=test mysql:8.2 > /dev/null; echo $?
+docker run -d --network=t_network -p 3306:3306 --platform linux/x86_64 --name mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=test mysql:latest > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -32,7 +32,7 @@ timeout 20 grep -m1 "can not redefine auto-defined 'id' attribute" <(docker logs
 ––– output –––
 ERROR: table 'idx_min': can not redefine auto-defined 'id' attribute.
 ––– input –––
-docker run -d --network=t_network -p 5432:5432 --platform linux/amd64 --name postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres  postgres:13.14 > /dev/null; echo $?
+docker run -d --network=t_network -p 5432:5432 --platform linux/amd64 --name postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres  postgres:latest > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -64,7 +64,9 @@ docker run -d --network=t_network --platform linux/x86_64 --name tsv -v ./test/c
 timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f tsv 2>&1)
 ––– output –––
 ERROR: tsvpipe: can not define auto-defined 'id' attributeERROR: table 'video': failed to configure some of the sources, will not index.
-
-# docker run --network=t_network --platform linux/x86_64 --name xml -v ./test/clt-tests/core/test-plain-id-error/xml.conf:/xml.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /xml.conf
-
-# timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f xml 2>&1)
+––– input –––
+docker run --network=t_network --platform linux/x86_64 --name xml -v ./test/clt-tests/core/test-plain-id-error/xml.conf:/xml.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /xml.conf
+––– output –––
+––– input –––
+timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f xml 2>&1)
+––– output –––

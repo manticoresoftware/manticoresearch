@@ -2851,14 +2851,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
-struct EscapeQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' ) ? 1 : 0;
-	}
-};
-
 using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;
 
 

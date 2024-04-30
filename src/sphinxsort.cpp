@@ -686,6 +686,16 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 	pRows->HeadEnd ( false, 0 );
 }
 
+struct SqlQuotator_t
+{
+	static constexpr BYTE EscapingSpace ( BYTE c )
+	{
+		return ( c == '\\' || c == '\'' || c == '\t' ) ? 1 : 0;
+	}
+};
+
+using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
+
 void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
 	auto& dRows = *pRows;
@@ -804,7 +814,10 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				JsonEscapedBuilder sTmp;
 				if ( pJson.second )
 					sphJsonFormat ( sTmp, pJson.first );
-				dRows.PutArray ( sTmp, false );
+				auto sJson = Str_t(sTmp);
+				SqlEscapedBuilder_c dEscaped;
+				dEscaped.FixupSpacedAndAppendEscapedNoQuotes ( sJson.first, sJson.second );
+				dRows.PutArray ( dEscaped, false );
 			}
 			break;
 		case SPH_ATTR_JSON_PTR:
@@ -816,7 +829,10 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 					auto dJson = sphUnpackPtrAttr ( pString );
 					sphJsonFormat ( sTmp, dJson.first );
 				}
-				dRows.PutArray ( sTmp, false );
+				auto sJson = Str_t ( sTmp );
+				SqlEscapedBuilder_c dEscaped;
+				dEscaped.FixupSpacedAndAppendEscapedNoQuotes ( sJson.first, sJson.second );
+				dRows.PutArray ( dEscaped, false );
 			}
 			break;
 

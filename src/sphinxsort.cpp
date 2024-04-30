@@ -669,12 +669,18 @@ ISphMatchSorter * CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tColl
 void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
 	pRows->HeadBegin ();
-	for ( int i : dOrder )
+	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& tCol = tSchema.GetAttr ( i );
+		const CSphColumnInfo& tCol = tSchema.GetAttr ( dOrder[i] );
 		if ( sphIsInternalAttr ( tCol ) )
 			continue;
-		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
+		if ( i == 0 )
+		{
+			assert (tCol.m_sName == "id");
+			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
+			continue;
+		}
+		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
 	}
 
 	pRows->HeadEnd ( false, 0 );
@@ -683,14 +689,17 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
 	auto& dRows = *pRows;
-	for ( int i : dOrder )
+	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& dAttr = tSchema.GetAttr ( i );
+		const CSphColumnInfo& dAttr = tSchema.GetAttr ( dOrder[i] );
 		if ( sphIsInternalAttr ( dAttr ) )
 			continue;
 
 		CSphAttrLocator tLoc = dAttr.m_tLocator;
 		ESphAttr eAttrType = dAttr.m_eAttrType;
+
+		if ( i == 0 )
+			eAttrType = SPH_ATTR_UINT64;
 
 		switch ( eAttrType )
 		{
@@ -750,7 +759,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			{
 				StringBuilder_c dStr;
 				auto dMVA = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
+				dStr << "(";
 				sphMVA2Str ( dMVA, eAttrType == SPH_ATTR_INT64SET, dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 				break;
 			}
@@ -759,7 +770,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_UINT32SET_PTR:
 			{
 				StringBuilder_c dStr;
+				dStr << "(";
 				sphPackedMVA2Str ( (const BYTE*)tMatch.GetAttr ( tLoc ), eAttrType == SPH_ATTR_INT64SET_PTR, dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 				break;
 			}
@@ -768,7 +781,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			{
 				StringBuilder_c dStr;
 				auto dFloatVec = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
+				dStr << "(";
 				sphFloatVec2Str ( dFloatVec, dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 			}
 			break;
@@ -776,7 +791,9 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_FLOAT_VECTOR_PTR:
 			{
 				StringBuilder_c dStr;
+				dStr << "(";
 				sphPackedFloatVec2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
+				dStr << ")";
 				dRows.PutArray ( dStr, false );
 			}
 			break;
@@ -787,7 +804,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				JsonEscapedBuilder sTmp;
 				if ( pJson.second )
 					sphJsonFormat ( sTmp, pJson.first );
-				dRows.PutArray ( sTmp );
+				dRows.PutArray ( sTmp, false );
 			}
 			break;
 		case SPH_ATTR_JSON_PTR:
@@ -799,7 +816,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 					auto dJson = sphUnpackPtrAttr ( pString );
 					sphJsonFormat ( sTmp, dJson.first );
 				}
-				dRows.PutArray ( sTmp );
+				dRows.PutArray ( sTmp, false );
 			}
 			break;
 

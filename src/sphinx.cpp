@@ -1204,6 +1204,7 @@ public:
 	RowID_t				GetRowidByDocid ( DocID_t tDocID ) const;
 	int					Kill ( DocID_t tDocID ) final;
 	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
+	int					KillDupes() final;
 	int					CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
 
@@ -2939,6 +2940,31 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 			KillHook ( tDoc );
 			return true;
 		} );
+
+	if ( iTotalKilled )
+		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
+
+	return iTotalKilled;
+}
+
+int CSphIndex_VLN::KillDupes()
+{
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	int iTotalKilled = 0;
+
+	RowID_t tRowID = INVALID_ROWID;
+	DocID_t tLastDocID = 0, tDocID = 0;
+
+	while ( tLookup.Read ( tDocID, tRowID ) )
+	{
+		if ( tDocID == tLastDocID )
+		{
+			m_tDeadRowMap.Set ( tRowID );
+			++iTotalKilled;
+			continue;
+		}
+		tLastDocID = tDocID;
+	}
 
 	if ( iTotalKilled )
 		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;

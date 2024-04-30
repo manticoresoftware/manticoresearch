@@ -1227,6 +1227,12 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 	}
 
+	if ( !pDistr->m_sCluster.IsEmpty() )
+	{
+		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster table '%s'", sIndex.cstr() );
+		return false;
+	}
+
 	g_pDistIndexes->Delete(sIndex);
 
 	return true;

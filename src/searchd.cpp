@@ -2851,14 +2851,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
-struct EscapeQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' ) ? 1 : 0;
-	}
-};
-
 using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;
 
 
@@ -14747,6 +14739,29 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	tOut.Ok();
 }
 
+void HandleMysqlDedup ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd )
+{
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
+	auto sIndex = tCmd.m_sParam;
+	auto pIndex = GetServed ( sIndex );
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
+	{
+		tOut.Error ( "DEDUP requires an existing RT table" );
+		return;
+	}
+
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eDedup;
+	tTask.m_iFrom = (int)tCmd.m_iPar1;
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
+	tTask.m_sIndex = std::move ( sIndex );
+
+	RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	tOut.Ok();
+}
+
 // command 'split <IDX> [chunk] N on @uservar [option...]'
 // IDX is tCmd.m_sParam
 // chunk is tCmd.m_iPar1
@@ -15161,6 +15176,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pComm
 	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
+	case Cmd_e::DEDUP: HandleMysqlDedup ( tOut, tCmd ); return;
 	case Cmd_e::SPLIT: HandleMysqlSplit ( tOut, tCmd ); return;
 	case Cmd_e::META: HandleMysqlDebugMeta ( tOut, tCmd, tProfile ); return;
 #if !_WIN32

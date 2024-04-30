@@ -1922,7 +1922,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
 
 		if ( tKey.m_pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
-			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+			tOut.Sprintf ( R"("key_as_string":%s)", tBuf.cstr() );
 		else
 			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 	}

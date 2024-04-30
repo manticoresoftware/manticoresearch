@@ -7297,7 +7297,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 }
 
 
-static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphString & sError, CSphString & sWarning )
+static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, CSphString & sError, CSphString & sWarning )
 {
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
@@ -7307,10 +7307,11 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema,
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 
-	if ( !TransformFilters ( tFlx, dTransformedFilters, sError ) )
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, sError ) )
 		return false;
 
 	tFlx.m_pFilters = &dTransformedFilters;
+	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
 
 	return tCtx.CreateFilters ( tFlx, sError, sWarning );
 }
@@ -7416,7 +7417,8 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 	if ( !dRamChunks.IsEmpty () )
 	{
 		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, true, tCtx, dTransformedFilters, tMeta.m_sError, tMeta.m_sWarning ) )
+		CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, true, tCtx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
@@ -7566,7 +7568,8 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 	if ( !dRamChunks.IsEmpty () )
 	{
 		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, false, tCtx, dTransformedFilters, tMeta.m_sError, tMeta.m_sWarning ) )
+		CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, false, tCtx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 

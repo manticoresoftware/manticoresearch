@@ -1050,11 +1050,19 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		return;
 
 	case ELEM_SCHEMA:
+	{
 		m_bInSchema = false;
 		m_tSchema.SetupFlags ( *this, false, nullptr );
+		// id attribute is auto added - can not redefine it in schema
+		if ( m_tSchema.GetAttr ( sphGetDocidName() ) )
+		{
+			Error ( "can not define auto-defined '%s' attribute", sphGetDocidName() );
+			return;
+		}
 		AddAutoAttrs ( m_sError, &m_dDefaultAttrs );
 		AllocDocinfo();
-		return;
+	}
+	return;
 
 	case ELEM_DOCUMENT:
 		m_bInDocument = false;

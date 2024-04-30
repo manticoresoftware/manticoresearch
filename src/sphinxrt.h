@@ -68,6 +68,7 @@ struct OptimizeTask_t
 		eSplit,
 		eMerge,
 		eAutoOptimize,
+		eDedup,
 	};
 
 	OptimizeVerb_e m_eVerb;

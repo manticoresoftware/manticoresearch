@@ -261,6 +261,8 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NONE, "debug close", "ask server to close connection from it's side" },
 	{ NONE, "debug compress <TBL> [chunk] <X> [option sync=1]",
 			"Compress disk chunk X of RT table <TBL> (wipe out deleted documents)" },
+	{ NONE, "debug dedup <TBL> [chunk] <X>",
+			"Kill duplicates in disk chunk X of RT table <TBL> (mark duplicates as killed)" },
 	{ NONE, "debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]",
 			"Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar" },
 	{ NO_WIN, "debug wait <cluster> [like 'xx'] [option timeout=3]", "wait <cluster> ready, but no more than 3 secs." },

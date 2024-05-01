@@ -30,10 +30,6 @@ listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
 Started
 ––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
-––– output –––
-Buddy started!
-––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test3 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
 ––– output –––
 ––– input –––

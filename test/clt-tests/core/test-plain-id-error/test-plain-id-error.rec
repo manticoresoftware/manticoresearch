@@ -65,8 +65,9 @@ timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -
 ––– output –––
 ERROR: tsvpipe: can not define auto-defined 'id' attributeERROR: table 'video': failed to configure some of the sources, will not index.
 ––– input –––
-docker run --network=t_network --platform linux/x86_64 --name xml -v ./test/clt-tests/core/test-plain-id-error/xml.conf:/xml.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /xml.conf
+docker run --network=t_network --platform linux/x86_64 --name xml -v ./test/clt-tests/core/test-plain-id-error/xml.conf:/xml.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /xml.conf > /dev/null;
 ––– output –––
 ––– input –––
 timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f xml 2>&1)
 ––– output –––
+ERROR: table 'idx': source 'min': can not define auto-defined 'id' attribute (line=1, pos=207, docid=0).

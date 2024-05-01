@@ -28,7 +28,7 @@ starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMV
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-Buddy started!
+Started
 ––– input –––
 if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
 ––– output –––

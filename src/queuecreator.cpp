@@ -733,6 +733,13 @@ void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 {
 	ARRAY_FOREACH ( i, dDependentCols )
 	{
+		if ( m_pSorterSchema->IsRemovedAttr ( dDependentCols[i] ) )
+		{
+			dDependentCols.RemoveFast ( i );
+			--i;
+			continue;
+		}
+
 		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
 
 		// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)

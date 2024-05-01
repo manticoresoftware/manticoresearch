@@ -413,7 +413,6 @@ jobs:
           - name: Core
             test_prefix: |-
               test/clt-tests/core/
-              test/clt-tests/core/test-plain-id-error/
               test/clt-tests/expected-errors/
           - name: Logstash
             test_prefix: test/clt-tests/logstash/logstash- 
@@ -425,6 +424,8 @@ jobs:
             test_prefix: test/clt-tests/replication/
           - name: Plugins
             test_prefix: test/clt-tests/plugins/
+          - name: Indexer error
+            test_prefix: test/clt-tests/test-plain-id-error/
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

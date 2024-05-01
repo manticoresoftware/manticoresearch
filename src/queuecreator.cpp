@@ -734,11 +734,7 @@ void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 	ARRAY_FOREACH ( i, dDependentCols )
 	{
 		if ( m_pSorterSchema->IsRemovedAttr ( dDependentCols[i] ) )
-		{
-			dDependentCols.RemoveFast ( i );
-			--i;
 			continue;
-		}
 
 		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
 
@@ -827,7 +823,7 @@ bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 	if ( !dDependentCols.GetLength() )
 		return tExprCol.IsColumnarExpr();
 
-	if ( dDependentCols.GetLength()==1 )
+	if ( dDependentCols.GetLength()==1 && !m_pSorterSchema->IsRemovedAttr ( dDependentCols[0] ) )
 	{
 		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr ( dDependentCols[0] );
 		if ( tColumnarAttr.IsColumnarExpr() )

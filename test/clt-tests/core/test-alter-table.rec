@@ -17,7 +17,7 @@ exc.txt
 stop.txt
 wordforms1.txt
 ––– input –––
-rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
+searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
 ––– output –––
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff

@@ -1524,7 +1524,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 		for ( int i=0; i<iCpDocs; i++ )
 		{
-			DocID_t tDelta = 0;
+			uint64_t tDelta = 0;
 			DocID_t tDocID = 0;
 			RowID_t tRowID = INVALID_ROWID;
 
@@ -1536,8 +1536,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			{
 				tDelta = tLookup.UnzipOffset();
 				tRowID = tLookup.GetDword();
-				if ( tDelta<0 )
-					m_tReporter.Fail ( "invalid docid delta " INT64_FMT " at row %u, checkpoint %d, doc %d, last docid " UINT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
+				if ( tDelta==0 )
+					m_tReporter.Fail ( "invalid docid delta " UINT64_FMT " at row %u, checkpoint %d, doc %d, last docid " UINT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
 				else
 					tDocID = tLastDocID + tDelta;
 

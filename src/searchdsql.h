@@ -395,5 +395,15 @@ struct ParsedOption_t
 	CSphString m_sValue;
 };
 
+struct LogStmtGuard_t
+{
+	LogStmtGuard_t ( const Str_t & sQuery, SqlStmt_e eStmt, bool bMulti );
+	LogStmtGuard_t ( const Str_t & sBody, int iRequestType, const SmallStringHash_T<CSphString> & hOption );
+
+	~LogStmtGuard_t ();
+
+	int64_t m_tmStarted = 0;
+	bool m_bLogDone = false;
+};
 
 #endif // _searchdsql_

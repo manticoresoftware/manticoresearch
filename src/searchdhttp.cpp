@@ -2497,6 +2497,9 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
+
+	LogStmtGuard_t tLogStmt ( sSrcQuery, eRequestType, hOptions );
+
 	if ( !pHandler )
 	{
 		if ( tRes.m_eEndpoint == SPH_HTTP_ENDPOINT_INDEX )

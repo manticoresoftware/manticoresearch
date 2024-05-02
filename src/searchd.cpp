@@ -3454,6 +3454,36 @@ static int64_t LogFilterStatementSphinxql ( Str_t sQuery, SqlStmt_e eStmt )
 	return tmStarted;
 }
 
+static int64_t LogFilterStatementHttp ( const Str_t & sBody, int iRequestType, const OptionsHash_t & hOption )
+{
+	if ( g_tLogStatements.IsEmpty() )
+		return 0;
+	if ( g_iQueryLogFile<0 || g_eLogFormat!=LOG_FORMAT_SPHINXQL || !IsFilled ( sBody ) )
+		return 0;
+	if ( session::IsQueryLogDisabled() && g_eLogLevel==SPH_LOG_INFO )
+		return 0;
+
+	CSphString * sEndpoint = hOption ( "full_url" );
+	const char * sMethod = http_method_str ( (http_method)iRequestType );
+
+	int64_t tmStarted = sphMicroTimer();
+
+	QuotationEscapedBuilder tBuf;
+	tBuf << "/* ";
+	FormatTimeConnClient ( tBuf );
+	tBuf << sMethod;
+	if ( sEndpoint )
+		tBuf << " " << *sEndpoint << " ";
+	tBuf << " */ ";
+	tBuf.FixupSpacesAndAppend ( sBody.first );
+	tBuf << ";\n";
+
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+
+	return tmStarted;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs )
@@ -16915,26 +16945,26 @@ static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t
 static const CSphString g_sLogDoneStmt = "/* DONE */";
 static const Str_t g_tLogDoneStmt = FromStr ( g_sLogDoneStmt );
 
-struct LogStmtGuard_t
+LogStmtGuard_t::LogStmtGuard_t ( const Str_t & sQuery, SqlStmt_e eStmt, bool bMulti )
 {
-	LogStmtGuard_t ( const Str_t & sQuery, SqlStmt_e eStmt, bool bMulti )
-	{
-		m_tmStarted = LogFilterStatementSphinxql ( sQuery, eStmt );
-		m_bLogDone = ( m_tmStarted && eStmt!=STMT_UPDATE && eStmt!=STMT_SELECT && !bMulti ); // update and select will log differently
-	}
+	m_tmStarted = LogFilterStatementSphinxql ( sQuery, eStmt );
+	m_bLogDone = ( m_tmStarted && eStmt!=STMT_UPDATE && eStmt!=STMT_SELECT && !bMulti ); // update and select will log differently
+}
 
-	~LogStmtGuard_t ()
-	{
-		if ( m_bLogDone )
-		{
-			int64_t tmDelta = sphMicroTimer() - m_tmStarted;
-			LogStatementSphinxql ( g_tLogDoneStmt, (int)( tmDelta / 1000 ) );
-		}
-	}
+LogStmtGuard_t::LogStmtGuard_t ( const Str_t & sBody, int iRequestType, const SmallStringHash_T<CSphString> & hOption )
+{
+	m_tmStarted = LogFilterStatementHttp ( sBody, iRequestType, hOption );
+	m_bLogDone = ( m_tmStarted );
+}
 
-	int64_t m_tmStarted = 0;
-	bool m_bLogDone = false;
-};
+LogStmtGuard_t::~LogStmtGuard_t ()
+{
+	if ( m_bLogDone )
+	{
+		int64_t tmDelta = sphMicroTimer() - m_tmStarted;
+		LogStatementSphinxql ( g_tLogDoneStmt, (int)( tmDelta / 1000 ) );
+	}
+}
 
 void ClientSession_c::FreezeLastMeta()
 {

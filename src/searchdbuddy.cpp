@@ -559,6 +559,8 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	// as Expect: 100-continue header added by curl library do not with the buddy
 	dHeaders.Add ( "Expect:" );
 
+	DaemonLogBuddyLine ( (Str_t)tBuddyQuery );
+
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
 

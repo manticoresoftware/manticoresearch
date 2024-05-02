@@ -48,7 +48,7 @@ jobs:
           run_args: --privileged
 
 
-  clt_indexer_latest_mysql_postgres:
+  clt_test_indexer_latest_mysql_postgres:
     name: Testing indexer on latest mysql and postgres
     runs-on: ubuntu-22.04
     steps:

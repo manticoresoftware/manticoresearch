@@ -15,6 +15,7 @@ on:
       - 'test/clt-tests/installation/**'
       - 'test/clt-tests/core/test-replace-into'
       - 'test/clt-tests/comparison-overhead-json-sql/**'
+      - 'test/clt-tests/indexer-latest-mysql-postgres/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

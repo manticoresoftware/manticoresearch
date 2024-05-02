@@ -46,16 +46,4 @@ jobs:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
           run_args: --privileged
-
-
-  clt_test_indexer_latest_mysql_postgres:
-    name: Testing indexer on latest mysql and postgres
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          image: manticoresearch/dind:v1
-          test_prefix: test/clt-tests/indexer-latest-mysql-postgres/
-          run_args: --privileged
+          

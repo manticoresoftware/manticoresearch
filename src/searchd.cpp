@@ -2851,14 +2851,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
-struct EscapeQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' ) ? 1 : 0;
-	}
-};
-
 using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;
 
 
@@ -9705,33 +9697,6 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE> & dDoc, const SchemaItem
 }
 
 
-static void FixParsedMva ( const CSphVector<int64_t> & dParsed, CSphVector<int64_t> & dMva, int iCount )
-{
-	if ( !iCount )
-		return;
-
-	// dParsed:
-	// 0 - iCount elements: offset to MVA values with leading MVA element count
-	// Could be not in right order
-
-	dMva.Resize ( 0 );
-	for ( int i=0; i<iCount; ++i )
-	{
-		int iOff = dParsed[i];
-		if ( !iOff )
-		{
-			dMva.Add ( 0 );
-			continue;
-		}
-
-		DWORD uMvaCount = dParsed[iOff];
-		int64_t * pMva = dMva.AddN ( uMvaCount + 1 );
-		*pMva++ = uMvaCount;
-		memcpy ( pMva, dParsed.Begin() + iOff + 1, sizeof(dMva[0]) * uMvaCount );
-	}
-}
-
-
 class PqRequestBuilder_c : public RequestBuilder_i
 {
 	const BlobVec_t &m_dDocs;
@@ -10081,7 +10046,7 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 	const CSphSchema & tSchema = pIndex->GetInternalSchema();
 	int iFieldsCount = tSchema.GetFieldsCount();
 
-	InsertDocData_t tDoc(tSchema);
+	InsertDocData_c tDoc(tSchema);
 
 	// set defaults
 	int iAttrsCount = tSchema.GetAttrsCount ();
@@ -10199,7 +10164,7 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 			}
 		}
 
-		FixParsedMva ( dMvaParsed, tDoc.m_dMvas, iMvaCounter );
+		tDoc.FixParsedMVAs ( dMvaParsed, iMvaCounter );
 
 		if ( !sMsg.ErrEmpty () )
 			break;
@@ -10704,7 +10669,7 @@ static bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dF
 
 /////////////////////////////////////////////////////////////////////
 
-class AttributeConverter_c : public InsertDocData_t
+class AttributeConverter_c : public InsertDocData_c
 {
 public:
 				AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning );
@@ -10741,7 +10706,7 @@ private:
 
 
 AttributeConverter_c::AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning )
-	: InsertDocData_t ( tSchema )
+	: InsertDocData_c ( tSchema )
 	, m_tSchema ( tSchema )
 	, m_pDocId ( tSchema.GetAttr ( sphGetDocidName() ) )
 	, m_dFieldAttrs ( dFieldAttrs )
@@ -10840,16 +10805,16 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 
 	if ( !tVal.m_pVals )
 	{
-		m_dMvas.Add(0);
+		AddMVALength(0);
 		return true;
 	}
 
 	auto & tAddVals = *tVal.m_pVals;
 	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
-		m_dMvas.Add ( tAddVals.GetLength() );
+		AddMVALength ( tAddVals.GetLength() );
 		for ( const auto & i : tAddVals )
-			m_dMvas.Add ( sphF2DW ( i.m_fValue ) );
+			AddMVAValue ( sphF2DW ( i.m_fValue ) );
 
 		return true;
 	}
@@ -10864,9 +10829,9 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 		m_sWarning.SetSprintf ( "MVA attribute %d at row %d: inserting float value", iCol, iRow );
 
 	tAddVals.Uniq();
-	m_dMvas.Add ( tAddVals.GetLength() );
+	AddMVALength ( tAddVals.GetLength() );
 	for ( const auto & i : tAddVals )
-		m_dMvas.Add ( i.m_iValue );
+		AddMVAValue ( i.m_iValue );
 
 	return true;
 }
@@ -10907,8 +10872,9 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 
 	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
+
 	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
-		m_dMvas.Add(0);
+		AddMVALength ( 0, true );
 
 	SqlInsert_t tDefaultVal;
 	tDefaultVal.m_iType = SqlInsert_t::CONST_INT;
@@ -10986,7 +10952,7 @@ void AttributeConverter_c::NewRow()
 {
 	m_dStrings.Resize(0);
 	m_tStrings.Reset();
-	m_dMvas.Resize(0);
+	ResetMVAs();
 }
 
 
@@ -14773,6 +14739,29 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	tOut.Ok();
 }
 
+void HandleMysqlDedup ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd )
+{
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
+	auto sIndex = tCmd.m_sParam;
+	auto pIndex = GetServed ( sIndex );
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
+	{
+		tOut.Error ( "DEDUP requires an existing RT table" );
+		return;
+	}
+
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eDedup;
+	tTask.m_iFrom = (int)tCmd.m_iPar1;
+	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
+	tTask.m_sIndex = std::move ( sIndex );
+
+	RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	tOut.Ok();
+}
+
 // command 'split <IDX> [chunk] N on @uservar [option...]'
 // IDX is tCmd.m_sParam
 // chunk is tCmd.m_iPar1
@@ -15187,6 +15176,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pComm
 	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
+	case Cmd_e::DEDUP: HandleMysqlDedup ( tOut, tCmd ); return;
 	case Cmd_e::SPLIT: HandleMysqlSplit ( tOut, tCmd ); return;
 	case Cmd_e::META: HandleMysqlDebugMeta ( tOut, tCmd, tProfile ); return;
 #if !_WIN32

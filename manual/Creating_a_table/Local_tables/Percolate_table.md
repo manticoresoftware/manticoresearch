@@ -21,7 +21,7 @@ What you need to keep in mind when creating a new percolate table is to specify 
 
 
 <!-- intro -->
-##### Creating a percolate table via MySQL protocol:
+##### Creating a percolate table via SQL:
 
 <!-- request SQL -->
 

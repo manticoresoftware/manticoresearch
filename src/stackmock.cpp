@@ -354,7 +354,7 @@ public:
 		m_pRtIndex->ProhibitSave();
 		m_pRtIndex->PostSetup();
 
-		InsertDocData_t tDoc ( m_pRtIndex->GetMatchSchema() );
+		InsertDocData_c tDoc ( m_pRtIndex->GetMatchSchema() );
 		tDoc.SetID ( 1 );
 		tDoc.m_dFields[0] = { "a b", 3 };
 

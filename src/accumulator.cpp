@@ -157,7 +157,7 @@ static void ResetTailHit ( CSphWordHit * pHit )
 		pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
 }
 
-void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
+void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
 {
 	MEMORY ( MEM_RT_ACCUM );
 
@@ -223,23 +223,25 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
 			{
-				const int64_t* pMva = &tDoc.m_dMvas[iMva];
-				int nValues = (int)*pMva++;
-				iMva += nValues + 1;
+				int iNumValues = 0;
+				bool bDefault = false;
+				const int64_t * pMva = tDoc.GetMVA(iMva);
+				std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
+				iMva += iNumValues + 1;
 
-				// assume 0-value knn as missing; fill with zeroes
-				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && !nValues )
+				// fill default/missing float_vector+knn attributes with zeroes
+				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && bDefault )
 				{
 					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
 					dTempKNN.ZeroVec();
 					pMva = dTempKNN.Begin();
-					nValues = dTempKNN.GetLength(); 
+					iNumValues = dTempKNN.GetLength(); 
 				}
 
 				if ( tColumn.IsColumnar() )
-					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, nValues );
+					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, nValues * sizeof ( int64_t ), sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
 			}
 			break;
 

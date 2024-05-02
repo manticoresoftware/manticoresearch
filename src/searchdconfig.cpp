@@ -808,7 +808,7 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 		CSphString sDest = i;
 		StripPath(sDest);
 		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
-		if ( i==sDest )
+		if ( RealPath ( i ) == RealPath ( sDest ) )
 			continue;
 
 		// can not overwrite existed destination file
@@ -1224,6 +1224,12 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 	if ( !pDistr )
 	{
 		sError.SetSprintf ( "DROP TABLE failed: unknown distributed table '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	if ( !pDistr->m_sCluster.IsEmpty() )
+	{
+		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster table '%s'", sIndex.cstr() );
 		return false;
 	}
 

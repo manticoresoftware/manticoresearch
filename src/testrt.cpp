@@ -94,7 +94,7 @@ void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 	int64_t tmMaxCommit = 0;
 	int iCommits = 0;
 
-	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
 	tDoc.m_dFields.Resize(g_iFieldsCount);
 
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();

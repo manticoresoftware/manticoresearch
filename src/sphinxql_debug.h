@@ -35,6 +35,7 @@ enum class Cmd_e : BYTE
 	FILES,
 	CLOSE,
 	COMPRESS,
+	DEDUP,
 	SPLIT,
 	WAIT,
 	WAIT_STATUS,

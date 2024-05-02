@@ -52,6 +52,7 @@
 %token <sValue>	TOK_OPTION
 %token <sValue>	TOK_CLOSE
 %token <sValue>	TOK_COMPRESS
+%token <sValue>	TOK_DEDUP
 %token <sValue>	TOK_SPLIT
 %token <sValue>	TOK_WAIT
 %token <sValue>	TOK_LIKE
@@ -87,6 +88,7 @@ debugcommand:
 	| drop			{ pParser->SetCommand ( Cmd_e::DROP ); }
 	| files			{ pParser->SetCommand ( Cmd_e::FILES ); }
 	| compress		{ pParser->SetCommand ( Cmd_e::COMPRESS ); }
+	| dedup			{ pParser->SetCommand ( Cmd_e::DEDUP ); }
 	| split			{ pParser->SetCommand ( Cmd_e::SPLIT ); }
 	| wait
 	| TOK_META		{ pParser->SetCommand ( Cmd_e::META ); }
@@ -99,7 +101,7 @@ debugcommand:
 ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
 	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SCHED | TOK_MERGE | TOK_FILES
-	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT | TOK_WAIT | TOK_LIKE | TOK_CURL
+	| TOK_STATUS | TOK_COMPRESS | TOK_DEDUP | TOK_SPLIT | TOK_WAIT | TOK_LIKE | TOK_CURL
 	;
 
 ident:
@@ -224,6 +226,15 @@ compress:
 	{
 		pParser->SetSParam ($2);
 		pParser->SetPar1 ( $4 );
+	}
+	;
+
+// command 'dedup <IDX> [chunk] N'
+dedup:
+	TOK_DEDUP ident chunk TOK_CONST_INT
+	{
+		pParser->SetSParam ($2);
+		pParser->SetPar1 ($4);
 	}
 	;
 

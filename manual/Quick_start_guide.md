@@ -79,7 +79,7 @@ By default Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for connections from other Manticore nodes and clients based on Manticore binary API
 
-More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/).   
+More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/).
 
 <!-- intro -->
 ##### Connect via MySQL:
@@ -228,7 +228,7 @@ Note that it is possible to omit creating a table with an explicit create statem
 More information about different ways to create a table can be found in our learning courses:
 * [Creating a RealTime table](https://play.manticoresearch.com/rtmode/)
 * [Creating a table from the MySQL source](https://play.manticoresearch.com/mysql/)
-* [Creating a table from the CSV source](https://play.manticoresearch.com/csv/) 
+* [Creating a table from the CSV source](https://play.manticoresearch.com/csv/)
 * [Creating a table using the auto schema mechanism](https://play.manticoresearch.com/autoschema/)
 * [Creating a table with Logstash/Beats](https://play.manticoresearch.com/logstash/)
 * [Creating a table with Fluentbit](https://play.manticoresearch.com/vectordev/)
@@ -333,7 +333,38 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("create table products(
 
 <!-- end -->
 
+
+You can also create a table that mirrors an existing one, with or without its data.
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+create table products LIKE old_products;
+```
+<!-- response -->
+
+```sql
+Query OK, 0 rows affected (0.02 sec)
+```
+
+<!-- intro -->
+##### SQL WITH DATA:
+<!-- request SQL -->
+
+```sql
+create table products LIKE old_products WITH DATA;
+```
+<!-- response -->
+
+```sql
+Query OK, 0 rows affected (0.02 sec)
+```
+
 <!-- example insert -->
+
 ## Add documents
 
 Let's now add few documents to the table:
@@ -546,7 +577,7 @@ indexReq = manticoreclient.NewInsertDocumentRequest("products", indexDoc)
 indexReq.SetId(2)
 apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
 
-indexDoc = map[string]interface{} {"content": "Text 3", "name": "Doc 3", "cat": 7 }    	
+indexDoc = map[string]interface{} {"content": "Text 3", "name": "Doc 3", "cat": 7 }
 indexReq = manticoreclient.NewInsertDocumentRequest("products", indexDoc)
 indexReq.SetId(3)
 apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
@@ -555,7 +586,7 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 <!-- end -->
 
 More details on the subject can be found here:
-* [Adding data to a plain table](https://play.manticoresearch.com/mysql/) 
+* [Adding data to a plain table](https://play.manticoresearch.com/mysql/)
 * [Adding data to a RealTime table](https://play.manticoresearch.com/rtintro/)
 
 
@@ -780,9 +811,9 @@ res = await searchApi.search({
 <!-- response typescript -->
 ```typescript
 {
-    "hits": 
+    "hits":
     {
-        "hits": 
+        "hits":
         [{
             "_id": "1",
             "_score": 1400,
@@ -817,9 +848,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- response Go -->
 ```go
 {
-    "hits": 
+    "hits":
     {
-        "hits": 
+        "hits":
         [{
             "_id": "1",
             "_score": 1400,

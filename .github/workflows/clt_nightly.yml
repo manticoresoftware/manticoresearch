@@ -110,6 +110,9 @@ jobs:
           - name: REPLACE INTO
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-replace-into
+          - name: INDEXER LATEST MYSQL POSTGRES
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

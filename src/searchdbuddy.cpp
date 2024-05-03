@@ -559,6 +559,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	// as Expect: 100-continue header added by curl library do not with the buddy
 	dHeaders.Add ( "Expect:" );
 
+	DaemonLogBuddyLine ( FROMS ( "request to buddy:" ) );
 	DaemonLogBuddyLine ( (Str_t)tBuddyQuery );
 
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
@@ -782,7 +783,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 		sCmd.Appendf ( "-v %s:/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
-	sCmd.Appendf ( "%s /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command
+	sCmd.Appendf ( "%s /buddy/src/main.php --debug", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command
 
 	return CSphString ( sCmd );
 }

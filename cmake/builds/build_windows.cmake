@@ -12,7 +12,7 @@ if (NOT installed)
 	include ( GNUInstallDirs )
 	SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}" )
 	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}" )
-
+	SET ( CMAKE_INSTALL_FULL_LOCALLIBDIR "usr/local/lib" )
 	set ( installed ON )
 endif ()
 

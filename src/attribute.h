@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -36,18 +36,24 @@ public:
 	virtual bool		Done ( CSphString & sError ) = 0;
 };
 
+struct TypedAttribute_t
+{
+	CSphString	m_sName;
+	ESphAttr	m_eType;
+};
+
 
 // create file-based blob row builder
-std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError );
+std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, int iBufferSize, CSphString & sError );
 
 // create file-based blob row builder with JSON already packed
-std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError );
+std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, int iBufferSize, CSphString & sError );
 
 // create mem-based blob row builder
 std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowBuilder ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool );
 
 // create mem-based blob row builder for updates
-std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated );
+std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, const CSphVector<TypedAttribute_t> & dAttrs, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated );
 
 // fetches a attribute data and its length from the pool
 const BYTE *		sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
@@ -79,6 +85,9 @@ bool				sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphS
 
 // return blob locator attribute name
 const char *		sphGetBlobLocatorName();
+
+// return null mask attribute name
+const char *		GetNullMaskAttrName();
 
 // current docid attribute name
 const char *		sphGetDocidName();
@@ -134,6 +143,8 @@ bool	sphIsInternalAttr ( const CSphString & sAttrName );
 bool	sphIsInternalAttr ( const CSphColumnInfo & tCol );
 void	sphMVA2Str ( ByteBlob_t dMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
+void	sphFloatVec2Str ( ByteBlob_t dFloatVec, StringBuilder_c & dStr );
+void	sphPackedFloatVec2Str ( const BYTE * pData, StringBuilder_c & dStr );
 
 /// check if tColumn is actually stored field (so, can't be used in filters/expressions)
 bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );

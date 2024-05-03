@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,10 @@
 //
 
 #include "num_conv.h"
+
+#if __has_include( <charconv>)
+#include <charconv>
+#endif
 
 inline void StringBuilder_c::AppendRawChunk ( Str_t sText ) // append without any commas
 {
@@ -111,7 +115,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( int iVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), iVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), iVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -120,7 +128,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( long iVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), iVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), iVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -129,7 +141,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( long long iVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), iVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), iVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -138,7 +154,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( unsigned int uVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), uVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -147,7 +167,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( unsigned long uVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), uVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -156,7 +180,11 @@ inline StringBuilder_c& StringBuilder_c::operator<< ( unsigned long long uVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
+#if __has_include( <charconv>)
+	SetPos ( std::to_chars ( end(), AfterEnd(), uVal ).ptr );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -201,7 +229,14 @@ inline void StringBuilder_c::NtoA ( INT uVal )
 	const int MAX_NUMERIC_STR = 22;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
+#if __has_include( <charconv>)
+	if constexpr ( iWidth == 0 && iPrec == 0 && cFill == ' ' )
+		SetPos ( std::to_chars ( end(), AfterEnd(), uVal, iBase ).ptr );
+	else
+		m_iUsed += sph::NtoA ( end(), uVal, iBase, iWidth, iPrec, cFill );
+#else
 	m_iUsed += sph::NtoA ( end(), uVal, iBase, iWidth, iPrec, cFill );
+#endif
 	m_szBuffer[m_iUsed] = '\0';
 }
 
@@ -267,9 +302,9 @@ inline void StringBuilder_c::LazyComma_c::Swap ( LazyComma_c & rhs ) noexcept
 }
 
 template<typename... Params>
-StringBuilder_c& StringBuilder_c::Sprint ( const Params&... tValues )
+StringBuilder_c& StringBuilder_c::Sprint ( Params&&... tValues )
 {
-	(void)std::initializer_list<int> { ( *this << tValues, 0 )... };
+	(void)std::initializer_list<int> { ( *this << std::forward<Params>(tValues), 0 )... };
 	return *this;
 }
 
@@ -294,14 +329,14 @@ inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal )
 }
 
 template<typename INT, int iPrec>
-inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal )
+inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec> tVal )
 {
 	tOut.template IFtoA<INT, iPrec>(tVal);
 	return tOut;
 }
 
 template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
-StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill>&& tVal )
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill> tVal )
 {
 	tOut.template NtoA<INT, iBase, iWidth, iPrec, cFill> ( tVal.m_tVal );
 	return tOut;

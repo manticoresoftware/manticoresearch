@@ -3,6 +3,9 @@
 
 <name>grouper at RT disk chunk</name>
 
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>
@@ -32,6 +35,14 @@ index rt2
 {
 	type = rt
 	path = <data_path/>/rt2
+	rt_field = title
+	rt_attr_json = j
+}
+
+index rt11
+{
+	type = rt
+	path = <data_path/>/rt11
 	rt_field = title
 	rt_attr_json = j
 }
@@ -115,6 +126,21 @@ FLUSH RAMCHUNK rt2;
 
 SELECT id, j.keywords FROM rt2 order by id asc;
 SELECT id, j.keywords FROM rt2 order by j.keywords asc;
+</sphinxql>
+
+<!-- regression group by multiple json filed vs alias -->
+<sphinxql>
+insert into rt11 (id, title, j) values
+	(1, 'test 1', '{i:1, k:2}' ),
+	(2, 'test 2', '{i:1, k:2}' );
+
+FLUSH RAMCHUNK rt11;
+
+SELECT j, j.i, j.k, groupby() g, group_concat(id) FROM rt11 GROUP BY j.i,j.k;
+SELECT j, j.i as i, j.k as k, groupby() g, group_concat(id) FROM rt11 GROUP BY i,k;
+
+SELECT j, j.i, groupby() g, group_concat(id) FROM rt11 GROUP BY j.i;
+SELECT j, j.i as i, groupby() g, group_concat(id) FROM rt11 GROUP BY i;
 
 </sphinxql>
 </queries>

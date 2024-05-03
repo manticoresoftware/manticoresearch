@@ -61,6 +61,20 @@ show tables;
 select * from distr;
 drop table test2;
 
+</sphinxql>
+
+<!-- regression distributed index creates but should returns error -->
+<sphinxql d="0">
+create table test11 ( title text, tag uint );
+create table distr_loc1 type='distributed' local='test_missed' local='test11' agent='<agent0_address/>:test1';
+show tables;
+create table distr_agent1 type='distributed' local='test11' agent='<agent0_address/>wrong_desc';
+show tables;
+create table distr_agent1 type='distributed' agent='<agent0_address/>wrong_desc';
+show tables;
+drop table test11;
+
 </sphinxql></queries>
+
 
 </test>

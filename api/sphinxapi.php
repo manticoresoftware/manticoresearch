@@ -7,6 +7,7 @@
 //
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -150,7 +151,7 @@ define ( "SPH_UPDATE_JSON",			3 );
 function sphPackI64 ( $v )
 {
 	assert ( is_numeric($v) );
-	
+
 	// x64
 	if ( PHP_INT_SIZE>=8 )
 	{
@@ -162,7 +163,7 @@ function sphPackI64 ( $v )
 	if ( is_int($v) )
 		return pack ( "NN", $v < 0 ? -1 : 0, $v );
 
-	// x32, bcmath	
+	// x32, bcmath
 	if ( function_exists("bcmul") )
 	{
 		if ( bccomp ( $v, 0 ) == -1 )
@@ -199,16 +200,16 @@ function sphPackI64 ( $v )
 function sphPackU64 ( $v )
 {
 	assert ( is_numeric($v) );
-	
+
 	// x64
 	if ( PHP_INT_SIZE>=8 )
 	{
 		assert ( $v>=0 );
-		
+
 		// x64, int
 		if ( is_int($v) )
 			return pack ( "NN", $v>>32, $v&0xFFFFFFFF );
-						  
+
 		// x64, bcmath
 		if ( function_exists("bcmul") )
 		{
@@ -216,12 +217,12 @@ function sphPackU64 ( $v )
 			$l = bcmod ( $v, 4294967296 );
 			return pack ( "NN", $h, $l );
 		}
-		
+
 		// x64, no-bcmath
 		$p = max ( 0, strlen($v) - 13 );
 		$lo = (int)substr ( $v, $p );
 		$hi = (int)substr ( $v, 0, $p );
-	
+
 		$m = $lo + $hi*1316134912;
 		$l = $m % 4294967296;
 		$h = $hi*2328 + (int)($m/4294967296);
@@ -232,7 +233,7 @@ function sphPackU64 ( $v )
 	// x32, int
 	if ( is_int($v) )
 		return pack ( "NN", 0, $v );
-	
+
 	// x32, bcmath
 	if ( function_exists("bcmul") )
 	{
@@ -245,7 +246,7 @@ function sphPackU64 ( $v )
 	$p = max(0, strlen($v) - 13);
 	$lo = (float)substr($v, $p);
 	$hi = (float)substr($v, 0, $p);
-	
+
 	$m = $lo + $hi*1316134912.0;
 	$q = floor($m / 4294967296.0);
 	$l = $m - ($q * 4294967296.0);
@@ -301,11 +302,11 @@ function sphUnpackU64 ( $v )
 	// x32, bcmath
 	if ( function_exists("bcmul") )
 		return bcadd ( $lo, bcmul ( $hi, "4294967296" ) );
-	
+
 	// x32, no-bcmath
 	$hi = (float)$hi;
 	$lo = (float)$lo;
-	
+
 	$q = floor($hi/10000000.0);
 	$r = $hi - $q*10000000.0;
 	$m = $lo + $r*4967296.0;
@@ -348,7 +349,7 @@ function sphUnpackI64 ( $v )
 			return $lo;
 		return sprintf ( "%.0f", $lo - 4294967296.0 );
 	}
-	
+
 	$neg = "";
 	$c = 0;
 	if ( $hi<0 )
@@ -357,7 +358,7 @@ function sphUnpackI64 ( $v )
 		$lo = ~$lo;
 		$c = 1;
 		$neg = "-";
-	}	
+	}
 
 	$hi = sprintf ( "%u", $hi );
 	$lo = sprintf ( "%u", $lo );
@@ -369,7 +370,7 @@ function sphUnpackI64 ( $v )
 	// x32, no-bcmath
 	$hi = (float)$hi;
 	$lo = (float)$lo;
-	
+
 	$q = floor($hi/10000000.0);
 	$r = $hi - $q*10000000.0;
 	$m = $lo + $r*4967296.0;
@@ -567,7 +568,7 @@ class SphinxClient
 			$this->_path = $host;
 			return;
 		}
-				
+
 		$this->_host = $host;
 		$port = intval($port);
 		assert ( 0<=$port && $port<65536 );
@@ -647,14 +648,14 @@ class SphinxClient
 			$fp = @fsockopen ( $host, $port, $errno, $errstr );
 		else
 			$fp = @fsockopen ( $host, $port, $errno, $errstr, $this->_timeout );
-		
+
 		if ( !$fp )
 		{
 			if ( $this->_path )
 				$location = $this->_path;
 			else
 				$location = "{$this->_host}:{$this->_port}";
-			
+
 			$errstr = trim ( $errstr );
 			$this->_error = "connection to $location failed (errno=$errno, msg=$errstr)";
 			$this->_connerror = true;
@@ -879,7 +880,7 @@ class SphinxClient
 			$this->_filters[] = array ( "type"=>SPH_FILTER_VALUES, "attr"=>$attribute, "exclude"=>$exclude, "values"=>$values );
 		}
 	}
-	
+
 	/// set string filter
 	/// only match records where $attribute value is equal
 	function SetFilterString ( $attribute, $value, $exclude=false )
@@ -887,20 +888,20 @@ class SphinxClient
 		assert ( is_string($attribute) );
 		assert ( is_string($value) );
 		$this->_filters[] = array ( "type"=>SPH_FILTER_STRING, "attr"=>$attribute, "exclude"=>$exclude, "value"=>$value );
-	}	
-	
+	}
+
 	/// set string list filter
 	function SetFilterStringList ( $attribute, $value, $exclude=false )
 	{
 		assert ( is_string($attribute) );
 		assert ( is_array($value) );
-		
+
 		foreach ( $value as $v )
 			assert ( is_string($v) );
-		
+
 		$this->_filters[] = array ( "type"=>SPH_FILTER_STRING_LIST, "attr"=>$attribute, "exclude"=>$exclude, "values"=>$value );
-	}	
-	
+	}
+
 
 	/// set range filter
 	/// only match records if $attribute value is beetwen $min and $max (inclusive)
@@ -999,7 +1000,7 @@ class SphinxClient
 		assert ( is_string ( $select ) );
 		$this->_select = $select;
 	}
-	
+
 	function SetQueryFlag ( $flag_name, $flag_value )
 	{
 		$known_names = array ( "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf", "global_idf", "low_priority" );
@@ -1012,10 +1013,10 @@ class SphinxClient
 		"global_idf" => array ( true, false ),
 		"low_priority" => array ( true, false )
 		);
-		
+
 		assert ( isset ( $flag_name, $known_names ) );
 		assert ( in_array( $flag_value, $flags[$flag_name], true ) || ( $flag_name=="max_predicted_time" && is_int ( $flag_value ) && $flag_value>=0 ) );
-		
+
 		if ( $flag_name=="reverse_scan" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 0, $flag_value==1 );
 		if ( $flag_name=="sort_method" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 1, $flag_value=="kbuffer" );
 		if ( $flag_name=="max_predicted_time" )
@@ -1029,7 +1030,7 @@ class SphinxClient
 		if ( $flag_name=="idf" && ( $flag_value=="tfidf_normalized" || $flag_value=="tfidf_unnormalized" ) )	$this->_query_flags = sphSetBit ( $this->_query_flags, 6, $flag_value=="tfidf_normalized" );
 		if ( $flag_name=="low_priority" ) $this->_query_flags = sphSetBit ( $this->_query_flags, 8, $flag_value );
 	}
-	
+
 	/// set outer order by parameters
 	function SetOuterSelect ( $orderby, $offset, $limit )
 	{
@@ -1051,12 +1052,12 @@ class SphinxClient
 		assert ( is_string($library) );
 		assert ( is_string($name) );
 		assert ( is_string($opts) );
-		
+
 		$this->_token_filter_library = $library;
 		$this->_token_filter_name = $name;
 		$this->_token_filter_opts = $opts;
 	}
-	
+
 	//////////////////////////////////////////////////////////////////////////////
 
 	/// clear all filters (for multi-queries)
@@ -1080,7 +1081,7 @@ class SphinxClient
     {
     	$this->_overrides = array ();
     }
-	
+
 	function ResetQueryFlag ()
 	{
 		$this->_query_flags = sphSetBit ( 0, 6, true ); // default idf=tfidf_normalized
@@ -1168,7 +1169,7 @@ class SphinxClient
 				case SPH_FILTER_FLOATRANGE:
 					$req .= $this->_PackFloat ( $filter["min"] ) . $this->_PackFloat ( $filter["max"] );
 					break;
-					
+
 				case SPH_FILTER_STRING:
 					$req .= pack ( "N", strlen($filter["value"]) ) . $filter["value"];
 					break;
@@ -1178,7 +1179,7 @@ class SphinxClient
 					foreach ( $filter["values"] as $value )
 						$req .= pack ( "N", strlen($value) ) . $value;
 					break;
-					
+
 				default:
 					assert ( 0 && "internal error: unhandled filter type" );
 			}
@@ -1244,18 +1245,18 @@ class SphinxClient
 
 		// select-list
 		$req .= pack ( "N", strlen($this->_select) ) . $this->_select;
-		
+
 		// max_predicted_time
 		if ( $this->_predictedtime>0 )
 			$req .= pack ( "N", (int)$this->_predictedtime );
-			
+
 		$req .= pack ( "N", strlen($this->_outerorderby) ) . $this->_outerorderby;
 		$req .= pack ( "NN", $this->_outeroffset, $this->_outerlimit );
 		if ( $this->_hasouter )
 			$req .= pack ( "N", 1 );
 		else
 			$req .= pack ( "N", 0 );
-		
+
 		// token_filter
 		$req .= pack ( "N", strlen($this->_token_filter_library) ) . $this->_token_filter_library;
 		$req .= pack ( "N", strlen($this->_token_filter_name) ) . $this->_token_filter_name;
@@ -1409,7 +1410,7 @@ class SphinxClient
 					if ( $type==SPH_ATTR_FLOAT )
 					{
 						list(,$uval) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-						list(,$fval) = unpack ( "f*", pack ( "L", $uval ) ); 
+						list(,$fval) = unpack ( "f*", pack ( "L", $uval ) );
 						$attrvals[$attr] = $fval;
 						continue;
 					}
@@ -1417,7 +1418,7 @@ class SphinxClient
 					// handle double
 					if ( $type==SPH_ATTR_DOUBLE )
 					{
-						$uval = sphUnpackI64 ( substr ( $response, $p, 8 ) ); $p += 8;				
+						$uval = sphUnpackI64 ( substr ( $response, $p, 8 ) ); $p += 8;
 						list(,$fval) = unpack ( "d*", pack ( "Q", $uval ) );
 						$attrvals[$attr] = $fval;
 						continue;
@@ -1446,11 +1447,11 @@ class SphinxClient
 					} else if ( $type==SPH_ATTR_STRING )
 					{
 						$attrvals[$attr] = substr ( $response, $p, $val );
-						$p += $val;						
+						$p += $val;
 					} else if ( $type==SPH_ATTR_FACTORS )
 					{
 						$attrvals[$attr] = substr ( $response, $p, $val-4 );
-						$p += $val-4;						
+						$p += $val-4;
 					} else
 					{
 						$attrvals[$attr] = sphFixUint($val);
@@ -1531,7 +1532,7 @@ class SphinxClient
 		if ( !isset($opts["passage_boundary"]) )	$opts["passage_boundary"] = "none";
 		if ( !isset($opts["emit_zones"]) )			$opts["emit_zones"] = false;
 		if ( !isset($opts["load_files_scattered"]) )		$opts["load_files_scattered"] = false;
-		
+
 
 		/////////////////
 		// build request
@@ -1831,7 +1832,7 @@ class SphinxClient
 
 		fclose ( $this->_socket );
 		$this->_socket = false;
-		
+
 		return true;
 	}
 

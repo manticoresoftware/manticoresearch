@@ -4,7 +4,66 @@
 
 `REPLACE` works similarly to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the previous document with the same ID as deleted before inserting a new one.
 
-For HTTP JSON protocol, two request formats are available: Manticore and Elasticsearch-like. You can find both examples in the provided examples.
+If you are looking for in-place updates, please see [this section](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
+
+## SQL REPLACE
+
+The syntax of the SQL `REPLACE` statement is as follows:
+
+**To replace the whole document:**
+```sql
+REPLACE INTO table [(column1, column2, ...)]
+    VALUES (value1, value2, ...)
+    [, (...)]
+```
+
+**To replace only selected fields:**
+```sql
+REPLACE INTO table
+    SET field1=value1[, ..., fieldN=valueN]
+    WHERE id = <id>
+```
+Note, you can filter only by id in this mode.
+
+See the examples for more details.
+
+## JSON REPLACE
+
+* `/replace`:
+  ```
+  POST /replace
+  {
+    "index": "<table name>",
+    "id": <document id>,
+    "doc":
+    {
+      "<field1>": <value1>,
+      ...
+      "<fieldN>": <valueN>
+    }
+  }
+  ```
+  `/index` is an alias endpoint and works the same.
+* Elasticsearch-like endpoint `<table>/_doc/<id>`:
+  ```
+  PUT/POST /<table name>/_doc/<id>
+  {
+    "<field1>": <value1>,
+    ...
+    "<fieldN>": <valueN>
+  }
+  ```
+* Partial replace:
+```
+POST /<table name>/_update/<id>
+{
+  "<field1>": <value1>,
+  ...
+  "<fieldN>": <valueN>
+}
+```
+
+See the examples for more details.
 
 <!-- intro -->
 ##### SQL:
@@ -14,7 +73,21 @@ For HTTP JSON protocol, two request formats are available: Manticore and Elastic
 REPLACE INTO products VALUES(1, "document one", 10);
 ```
 
-<!-- response -->
+<!-- response SQL -->
+
+```sql
+Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### REPLACE ... SET:
+<!-- request REPLACE ... SET -->
+
+```sql
+REPLACE INTO products SET description='HUAWEI Matebook 15', price=10 WHERE id = 55;
+```
+
+<!-- response REPLACE ... SET -->
 
 ```sql
 Query OK, 1 row affected (0.00 sec)
@@ -54,9 +127,9 @@ POST /replace
 ```
 
 <!-- intro -->
-##### Elasticsearch
+##### Elasticsearch-like
 
-<!-- request Elasticsearch -->
+<!-- request Elasticsearch-like -->
 
 ```json
 PUT /products/_doc/2
@@ -65,14 +138,14 @@ PUT /products/_doc/2
   "price": 20
 }
 
-POST /products/_doc/
+POST /products/_doc/3
 {
   "title": "product three",
   "price": 10
 }
 ```
 
-<!-- response Elasticsearch -->
+<!-- response Elasticsearch-like -->
 ```json
 {
 "_id":2,
@@ -86,11 +159,11 @@ POST /products/_doc/
 },
 "_type":"_doc",
 "_version":1,
-"result":"created"
+"result":"updated"
 }
 
 {
-"_id":2235747273424240642,
+"_id":3,
 "_index":"products",
 "_primary_term":1,
 "_seq_no":0,
@@ -101,9 +174,33 @@ POST /products/_doc/
 },
 "_type":"_doc",
 "_version":1,
-"result":"created"
+"result":"updated"
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch-like partial replace:
+
+<!-- request Elasticsearch-like partial -->
+
+```json
+POST /products/_update/55
+{
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
+}
+```
+
+<!-- response Elasticsearch-like partial -->
+```json
+{
+"_index":"products",
+"updated":1
+}
+```
+
 
 <!-- intro -->
 ##### PHP:
@@ -146,7 +243,7 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
 ```
 <!-- intro -->
 
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
@@ -191,7 +288,7 @@ class SuccessResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "document one");
 doc.Add("price", 10);
 InsertDocumentRequest docRequest = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
@@ -209,21 +306,61 @@ class SuccessResponse {
 }
 
 ```
-<!-- end -->
 
-`REPLACE` is available for both RT and PQ tables.
+<!-- intro -->
 
-When you run a `REPLACE`, the previous document is not removed, but it's marked as deleted, so the table size grows until chunk merging happens, and the marked documents won't be included. To force a chunk merge, use the [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+##### TypeScript:
 
-The syntax of the `REPLACE` statement is the same as the [INSERT statement syntax](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
-
-```sql
-REPLACE INTO table [(column1, column2, ...)]
-    VALUES (value1, value2, ...)
-    [, (...)]
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.replace({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 11', name: 'Doc 11', cat: 3 },
+});
 ```
 
-To use the HTTP JSON interface with `REPLACE`, use the `/replace` endpoint. There's also a synonym endpoint, `/index`.
+<!-- response TypeScript -->
+```json
+{
+    "_index":"test",
+    "_id":1,
+    "created":false
+    "result":"updated"
+    "status":200
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request Go -->
+``` go
+replaceDoc := map[string]interface{} {"content": "Text 11", "name": "Doc 11", "cat": 3}
+replaceRequest := manticoreclient.NewInsertDocumentRequest("test", replaceDoc)
+replaceRequest.SetId(1)
+res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequest(*replaceRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+    "_index":"test",
+    "_id":1,
+    "created":false
+    "result":"updated"
+    "status":200
+}
+```
+
+<!-- end -->
+
+`REPLACE` is available for real-time and percolate tables. You can't replace data in a plain table.
+
+When you run a `REPLACE`, the previous document is not removed, but it's marked as deleted, so the table size grows until chunk merging happens. To force a chunk merge, use the [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+
+## Bulk replace
 
 <!-- example bulk_replace -->
 
@@ -400,6 +537,100 @@ class BulkResponse {
     additionalProperties: {errors=false}
 }
 ```
+
+<!-- request TypeScript -->
+
+``` typescript
+replaceDocs = [
+  {
+    replace: {
+      index: 'test',
+      id: 1,
+      doc: { content: 'Text 11', cat: 1, name: 'Doc 11' },
+    },
+  },
+  {
+    replace: {
+      index: 'test',
+      id: 2,
+      doc: { content: 'Text 22', cat: 9, name: 'Doc 22' },
+    },
+  },
+];
+
+res = await indexApi.bulk(
+  replaceDocs.map((e) => JSON.stringify(e)).join("\n")
+);
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "items":
+  [
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":1,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    },
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":2,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+<!-- request Go -->
+
+``` go
+body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
+	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "items":
+  [
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":1,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    },
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":2,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
 <!-- end -->
 
 <!-- proofread -->

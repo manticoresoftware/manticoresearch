@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -113,7 +113,7 @@ void test_mysprintf ( const char* sFmt, int64_t iNum, const char* sResult )
 void test_sprintf ( const char* sFmt, int64_t iNum )
 {
 	char sBuf[50];
-	sprintf ( sBuf, sFmt, iNum );
+	snprintf ( sBuf, 49, sFmt, iNum );
 	test_mysprintf ( sFmt, iNum, sBuf );
 }
 

@@ -190,6 +190,36 @@ index idx_large
 	path = <data_path/>/idx_large
 }
 
+source test
+{
+    type = xmlpipe2
+    xmlpipe_command = cat <this_test/>/test_kl.xml
+    xmlpipe_fixup_utf8 = 1
+}
+
+index ancient 
+{
+    type = plain
+    source = test
+    path = <data_path/>/kl_ancient
+}
+
+index archive
+{
+    type = plain
+    source = test
+    path = <data_path/>/kl_archive
+    killlist_target = ancient
+}
+
+index year
+{
+    type = plain
+    source = test
+    path = <data_path/>/kl_year
+    killlist_target = archive, ancient
+}
+
 </config>
 
 <queries>
@@ -238,6 +268,16 @@ index idx_large
 
 <!-- regression field cut at max_xmlpipe2_field-1  -->
 <query index="idx_large">sometherelargewordgoeshere</query>
+
+<!-- regression for wrong killlist target after rotation -->
+<sphinxql>select * from archive</sphinxql>
+<sphinxql>select * from ancient</sphinxql>
+<sphinxql>select * from `year`</sphinxql>
+<sphinxql system="run-indexer" params="--rotate archive" sleep="2"/>
+<sphinxql>select * from archive</sphinxql>
+<sphinxql>select * from ancient</sphinxql>
+<sphinxql>select * from `year`</sphinxql>
+
 </queries>
 
 </test>

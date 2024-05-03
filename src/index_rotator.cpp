@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,26 +12,51 @@
 #include "index_rotator.h"
 #include "searchdaemon.h"
 #include "indexfiles.h"
+#include "detail/indexlink.h"
 
-CheckIndexRotate_c::CheckIndexRotate_c ( const ServedDesc_t& tServed )
+namespace {
+inline RotateFrom_e Check ( const CSphString& sPath ) noexcept
+{
+	switch ( ( IndexFiles_c ( sPath ).CheckHeader() ? 1 : 0 ) + ( IndexFiles_c ( sPath ).CheckHeader ( ".new" ) ? 2 : 0 ) )
+	{
+	case 0: return RotateFrom_e::NONE;
+	case 1: return RotateFrom_e::REENABLE;
+	case 2: return RotateFrom_e::NEW;
+	case 3: default: return RotateFrom_e::NEW_AND_OLD;
+	}
+}
+}
+
+
+CheckIndexRotate_c::CheckIndexRotate_c ( const CSphString& sPath )
 {
 	// check order:
 	// current_path/idx.new.sph		- rotation of current index
 	// current_path/idx.sph			- enable back current index
 
-	if ( IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader ( ".new" ) )
-		m_eRotateFrom = RotateFrom_e::NEW;
-
-	else if ( IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader() )
-		m_eRotateFrom = RotateFrom_e::REENABLE;
-
-	else
-		m_eRotateFrom = RotateFrom_e::NONE;
+	m_eRotateFrom = Check ( sPath );
 };
+
+CheckIndexRotate_c::CheckIndexRotate_c ( const ServedDesc_t& tServed ) : CheckIndexRotate_c ( tServed.m_sIndexPath )
+{
+};
+
+CheckIndexRotate_c::CheckIndexRotate_c ( const CSphString& sPath, eCheckLink eTag )
+{
+	m_eRotateFrom = Check ( RedirectToRealPath ( sPath ) );
+}
+
+CheckIndexRotate_c::CheckIndexRotate_c ( const ServedDesc_t& tServed, eCheckLink eTag )
+	: CheckIndexRotate_c ( tServed.m_sIndexPath, eTag ) {};
 
 bool CheckIndexRotate_c::RotateFromNew() const noexcept
 {
-	return m_eRotateFrom == RotateFrom_e::NEW;
+	return m_eRotateFrom == RotateFrom_e::NEW || m_eRotateFrom == RotateFrom_e::NEW_AND_OLD;
+}
+
+bool CheckIndexRotate_c::RotateReenable() const noexcept
+{
+	return m_eRotateFrom == RotateFrom_e::REENABLE || m_eRotateFrom == RotateFrom_e::NEW_AND_OLD;
 }
 
 bool CheckIndexRotate_c::NothingToRotate() const noexcept
@@ -53,7 +78,6 @@ protected:
 	}
 
 public:
-	virtual bool Rollback() { return true; };
 	std::pair<CSphString,bool> GetError() const
 	{
 		return { m_sError, m_bFatal };

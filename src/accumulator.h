@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -36,8 +36,7 @@ public:
 };
 
 // commands that got replicated, transactions
-enum class ReplicationCommand_e
-{
+enum class ReplCmd_e {
 	PQUERY_ADD = 0,
 	PQUERY_DELETE,
 	TRUNCATE,
@@ -52,7 +51,7 @@ enum class ReplicationCommand_e
 };
 
 struct CSphReconfigureSettings;
-struct InsertDocData_t;
+class InsertDocData_c;
 struct RtSegment_t;
 class MemoryWriter_c;
 
@@ -60,7 +59,8 @@ class MemoryWriter_c;
 struct ReplicationCommand_t
 {
 	// common
-	ReplicationCommand_e	m_eCommand { ReplicationCommand_e::TOTAL };
+	ReplCmd_e m_eCommand { ReplCmd_e::TOTAL };
+	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
 
@@ -84,7 +84,7 @@ struct ReplicationCommand_t
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
-std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
+std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
 
 class RtIndex_i;
 class ColumnarBuilderRT_i;
@@ -113,7 +113,7 @@ public:
 	void			CleanupPart();
 	void			Cleanup();
 
-	void			AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
+	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );
@@ -124,9 +124,12 @@ public:
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
 	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
-	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
+	const CSphString & GetIndexName() const { return m_sIndexName; }
+	int64_t			GetIndexId() const { return m_iIndexId; }
 
-	void			LoadRtTrx ( const BYTE * pData, int iLen, DWORD uVer );
+	ReplicationCommand_t * AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
+
+	void			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer );
 	void			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
 
 	const BYTE *	GetPackedKeywords() const;
@@ -141,7 +144,7 @@ private:
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
-	std::unique_ptr<ColumnarBuilderRT_i>	m_pColumnarBuilder;
+	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
@@ -149,12 +152,14 @@ private:
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
 	RtIndex_i *							m_pIndex = nullptr;		///< my current owner in this thread
 	int									m_iIndexGeneration = 0;
+	CSphString							m_sIndexName;
+	int64_t								m_iIndexId = 0;
 
 	void			ResetDict();
 	void			SetupDocstore();
 
 	// defined in sphinxrt.cpp
-	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>& );
+	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>&, CSphString& );
 };
 
 #endif // _accumulator_

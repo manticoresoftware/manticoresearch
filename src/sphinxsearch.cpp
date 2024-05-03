@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,11 +12,12 @@
 
 #include "sphinxsearch.h"
 #include "searchnode.h"
-#include "sphinxint.h"
+#include "querycontext.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "attribute.h"
 #include "conversion.h"
+#include "secondaryindex.h"
 #include "dict/dict_entry.h"
 #include "client_task_info.h"
 
@@ -125,12 +126,20 @@ static bool operator < ( RowID_t tRowID, const ZoneInfo_t & tZone )
 //////////////////////////////////////////////////////////////////////////
 typedef CSphFixedVector < CSphVector < ZoneInfo_t > > ZoneVVector_t;
 
+struct RankerSettings_t
+{
+	bool	m_bRowidLimits = false;
+	bool	m_bSkipQCache = false;
+	bool	m_bCollectHits = true;
+	RowIdBoundaries_t m_tBoundaries;
+};
+
 /// ranker interface
 /// ranker folds incoming hitstream into simple match chunks, and computes relevance rank
 class ExtRanker_c : public ISphRanker, public ISphZoneCheck
 {
 public:
-								ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits, bool bUseBM25 );
+								ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings, bool bUseBM25 );
 								~ExtRanker_c() override;
 	void						Reset ( const ISphQwordSetup & tSetup ) override;
 
@@ -189,35 +198,24 @@ protected:
 
 	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override
 	{
-		if ( eType==EXTRA_SET_BOUNDARIES || eType==EXTRA_SET_ITERATOR )
-		{
-			if ( !m_pRoot )
-				return true;
-
-			// if m_pOriginalRoot is not null, it means that it already holds the original root node
-			// so no need to modify it
-			ExtNode_i * pTopNode = nullptr;
-			bool bHadExtraNodes = false;
-			if ( m_pOriginalRoot )
-			{
-				pTopNode = m_pRoot.release();
-				bHadExtraNodes = true;
-			}
-			else
-			{
-				m_pOriginalRoot = m_pRoot.release();
-				pTopNode = m_pOriginalRoot;
-			}
-
-			if ( eType==EXTRA_SET_BOUNDARIES )
-				m_pRoot = CreateRowIdFilterNode ( pTopNode, *(const RowIdBoundaries_t*)ppResult, !bHadExtraNodes );
-			else
-				m_pRoot = CreatePseudoFTNode ( pTopNode, (RowidIterator_i*)*ppResult, !bHadExtraNodes );
-
+		if ( !m_pRoot )
 			return true;
-		}
 
-		return false;
+		switch ( eType )
+		{
+		case EXTRA_SET_ITERATOR:
+			assert ( !m_pOriginalRoot );
+			m_pOriginalRoot = m_pRoot.release();
+			m_pRoot = CreatePseudoFTNode ( m_pOriginalRoot, (RowidIterator_i*)*ppResult );
+			return true;
+
+		case EXTRA_SET_BOUNDARIES:
+			m_pRoot->SetRowidBoundaries ( *(const RowIdBoundaries_t*)ppResult );
+			return true;
+		
+		default:
+			return false;
+		}
 	}
 };
 
@@ -226,7 +224,7 @@ template <bool USE_BM25>
 class ExtRanker_T : public ExtRanker_c
 {
 public:
-								ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits );
+								ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings );
 
 	virtual const ExtDoc_t *	GetFilteredDocs ();
 };
@@ -245,8 +243,8 @@ protected:
 	const int *		m_pWeights = nullptr;
 
 public:
-	ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache )
-		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, bSkipQCache, false )
+	ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
+		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries } )
 	{}
 
 	int		GetMatches () override;
@@ -266,8 +264,8 @@ class ExtRanker_None_c : public ExtRanker_T<false>
 	using BASE = ExtRanker_T<false>;
 
 public:
-	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache )
-		: ExtRanker_T<false> ( tXQ, tSetup, bSkipQCache, false )
+	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
+		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries } )
 	{}
 
 	int		GetMatches () override;
@@ -281,7 +279,7 @@ class ExtRanker_State_T : public ExtRanker_T<USE_BM25>
 	using BASE = ExtRanker_T<USE_BM25>;
 
 public:
-					ExtRanker_State_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits = true );
+					ExtRanker_State_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings );
 	int				GetMatches () override;
 
 	bool InitState ( const CSphQueryContext & tCtx, CSphString & sError ) override
@@ -364,6 +362,8 @@ bool RenderKeywordNode ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 		tRes += "field_end";
 	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
 		tRes += "morphed";
+	if ( Bool ( tBson.ChildByName ( SZ_REGEX ) ) )
+		tRes += "regex";
 	auto tBoost = tBson.ChildByName ( SZ_BOOST );
 	if ( !IsNullNode ( tBoost ) )
 	{
@@ -434,6 +434,8 @@ bool RenderKeywordNodeDot ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 		tRes += "field_end";
 	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
 		tRes += "morphed";
+	if ( Bool ( tBson.ChildByName ( SZ_REGEX ) ) )
+		tRes += "regex";
 	auto tBoost = tBson.ChildByName ( SZ_BOOST );
 	if ( !IsNullNode ( tBoost ) )
 	{
@@ -539,11 +541,13 @@ void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
 		tWord.AddBool ( SZ_FIELD_END, true );
 	if ( tKeyword.m_bMorphed )
 		tWord.AddBool ( SZ_MORPHED, true );
+	if ( tKeyword.m_bRegex )
+		tWord.AddBool ( SZ_REGEX, true );
 	if ( tKeyword.m_fBoost!=1.0f )
 		tWord.AddDouble ( SZ_BOOST, tKeyword.m_fBoost );
 }
 
-void BuildProfileBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	using namespace bson;
 	tPlan.AddString ( SZ_TYPE, sphXQNodeToStr ( pNode ).cstr() );
@@ -567,7 +571,7 @@ void BuildProfileBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSph
 		for ( const auto & i : pNode->m_dChildren )
 		{
 			Obj_c tChild ( dChildren.StartObj () );
-			BuildProfileBson ( tChild, i, tSchema, dZones );
+			BuildPlanBson ( tChild, i, tSchema, dZones );
 		}
 	}
 }
@@ -600,20 +604,24 @@ CSphString sph::RenderBsonPlanBrief ( const bson::NodeHandle_t& dBson )
 Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	CSphVector<BYTE> dPlan;
-	bson::Root_c tPlan ( dPlan );
-	::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
+	{
+		bson::Root_c tPlan ( dPlan );
+		::BuildPlanBson ( tPlan, pNode, tSchema, dZones );
+	}
 	return dPlan;
 }
 
 
 void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
+	if ( m_eNeedPlan == PLAN_FLAVOUR::ENONE )
+		return;
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );
-	::BuildProfileBson ( tPlan, pRoot, tSchema, dZones );
+	::BuildPlanBson ( tPlan, pRoot, tSchema, dZones );
 }
 
-ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits, bool bUseBM25 )
+ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings, bool bUseBM25 )
 {
 	assert ( tSetup.m_pCtx );
 
@@ -627,8 +635,8 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 	assert ( tXQ.m_pRoot );
 	tSetup.m_pZoneChecker = this;
 	assert ( !m_pRoot );
-	m_pRoot.reset ( ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25 ) );
-	if ( m_pRoot && bCollectHits )
+	m_pRoot.reset ( ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25, tSettings.m_bRowidLimits ? &tSettings.m_tBoundaries : nullptr ) );
+	if ( m_pRoot && tSettings.m_bCollectHits )
 		m_pRoot->SetCollectHits();
 
 #if SPH_TREE_DUMP
@@ -638,7 +646,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	// we generally have three (!) trees for each query
 	// 1) parsed tree, a raw result of query parsing
-	// 2) transformed tree, with star expansions, morphology, and other transfomations
+	// 2) transformed tree, with star expansions, morphology, and other transformations
 	// 3) evaluation tree, with tiny keywords cache, and other optimizations
 	// tXQ.m_pRoot, passed to ranker from the index, is the transformed tree
 	// m_pRoot, internal to ranker, is the evaluation tree
@@ -670,24 +678,25 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		auto& pStartTerm = m_dZoneStartTerm.Add();
-		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
+		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false, tSettings.m_bRowidLimits ) );
 		assert ( pStartTerm );
 		pStartTerm->SetCollectHits();
 		m_dZoneStart[i] = nullptr;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		auto& pEndTerm = m_dZoneEndTerm.Add();
-		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
+		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false, tSettings.m_bRowidLimits ) );
 		assert ( pEndTerm );
 		pEndTerm->SetCollectHits();
 		m_dZoneEnd[i] = nullptr;
 	}
 
-	if ( QcacheGetStatus().m_iMaxBytes>0 && !bSkipQCache )
+	if ( QcacheGetStatus().m_iMaxBytes>0 && !tSettings.m_bSkipQCache )
 	{
 		m_pQcacheEntry = new QcacheEntry_c();
 		m_pQcacheEntry->m_iIndexId = m_pIndex->GetIndexId();
 	}
+
 	memset ( m_dMyDocs, 0, sizeof ( m_dMyDocs ) );
 }
 
@@ -747,7 +756,7 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 
 void ExtRanker_c::UpdateQcache ( int iMatches )
 {
-	if ( m_pQcacheEntry )
+	if ( m_pQcacheEntry && iMatches )
 	{
 		CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_UP );
 		for ( int i=0; i<iMatches; i++ )
@@ -1117,8 +1126,8 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 
 //////////////////////////////////////////////////////////////////////////
 template<bool USE_BM25>
-ExtRanker_T<USE_BM25>::ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits )
-	: ExtRanker_c ( tXQ, tSetup, bSkipQCache, bCollectHits, USE_BM25 )
+ExtRanker_T<USE_BM25>::ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
+	: ExtRanker_c ( tXQ, tSetup, tSettings, USE_BM25 )
 {}
 
 
@@ -1263,8 +1272,8 @@ int ExtRanker_None_c::GetMatches ()
 //////////////////////////////////////////////////////////////////////////
 
 template < typename STATE, bool USE_BM25 >
-ExtRanker_State_T<STATE,USE_BM25>::ExtRanker_State_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits )
-	: ExtRanker_T<USE_BM25> ( tXQ, tSetup, bSkipQCache, bCollectHits )
+ExtRanker_State_T<STATE,USE_BM25>::ExtRanker_State_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
+	: ExtRanker_T<USE_BM25> ( tXQ, tSetup, tSettings )
 {
 	// FIXME!!! move out the disable of m_bZSlist in case no zonespan nodes
 	if ( this->m_bZSlist )
@@ -1313,10 +1322,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 	{
 		pDocs = this->GetFilteredDocs ();
 		if ( !pDocs )
-		{
-			this->UpdateQcache(0);
 			return 0;
-		}
 
 		pHlist = RankerGetHits ( pProfile, this->m_pRoot.get(), pDocs );
 	}
@@ -2083,6 +2089,7 @@ bool FactorPool_c::FlushEntry ( SphFactorHashEntry_t * pEntry )
 
 void FactorPool_c::Flush()
 {
+	[[maybe_unused]] int iUsed = 0;
 	ARRAY_FOREACH ( i, m_dHash )
 	{
 		SphFactorHashEntry_t * pEntry = m_dHash[i];
@@ -2090,12 +2097,20 @@ void FactorPool_c::Flush()
 		{
 			SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 			bool bHead = !pEntry->m_pPrev;
+
+#ifndef NDEBUG
+			if ( pEntry->m_iRefCount )
+				iUsed++;
+#endif
+
 			if ( FlushEntry(pEntry) && bHead )
 				m_dHash[i] = pNext;
 
 			pEntry = pNext;
 		}
 	}
+
+	assert ( !m_dHash.GetLength() || iUsed+MAX_BLOCK_DOCS<=m_dHash.GetLength() );
 }
 
 
@@ -3449,7 +3464,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	tExprArgs.m_pUsesWeight = &bUsesWeight;
 	tExprArgs.m_pHook = &tHook;
 
-	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, sError, tExprArgs ); // FIXME!!! profile UDF here too
+	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, nullptr, sError, tExprArgs ); // FIXME!!! profile UDF here too
 	if ( !m_pExpr )
 		return false;
 	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )
@@ -4000,13 +4015,16 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 template <bool NEED_PACKEDFACTORS, bool HANDLE_DUPES>
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 {
-	if_const ( eType!=EXTRA_SET_BLOBPOOL && !NEED_PACKEDFACTORS )
+	if_const ( !( eType==EXTRA_SET_BLOBPOOL || eType==EXTRA_SET_COLUMNAR ) && !NEED_PACKEDFACTORS )
 		return false;
 
 	switch ( eType )
 	{
 		case EXTRA_SET_BLOBPOOL:
 			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, *ppResult );
+			return true;
+		case EXTRA_SET_COLUMNAR:
+			m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, *ppResult );
 			return true;
 		case EXTRA_SET_POOL_CAPACITY:
 			m_iPoolMatchCapacity = *(int*)ppResult;
@@ -4211,8 +4229,8 @@ class ExtRanker_Expr_T : public ExtRanker_State_T< RankerState_Expr_fn<NEED_PACK
 	using BASE = ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true >;
 
 public:
-	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, bool bSkipQCache )
-		: ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true > ( tXQ, tSetup, bSkipQCache )
+	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, const RankerSettings_t & tSettings )
+		: ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true > ( tXQ, tSetup, tSettings )
 	{
 		// tricky bit, we stash the pointer to expr here, but it will be parsed
 		// somewhat later during InitState() call, when IDFs etc are computed
@@ -4342,8 +4360,8 @@ class ExtRanker_Export_T : public ExtRanker_State_T<RankerState_Export_fn<HANDLE
 	using BASE = ExtRanker_State_T<RankerState_Export_fn<HANDLE_DUPES>, true>;
 
 public:
-	ExtRanker_Export_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, bool bSkipQCache )
-		: BASE ( tXQ, tSetup, bSkipQCache )
+	ExtRanker_Export_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, const RankerSettings_t & tSettings )
+		: BASE ( tXQ, tSetup, tSettings )
 	{
 		BASE::m_tState.m_sExpr = sExpr;
 		BASE::m_tState.m_pSchema = &tSchema;
@@ -4405,14 +4423,22 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 		uPayloadMask |= pIndex->GetMatchSchema().GetField(i).m_bPayload << i;
 
 	bool bGotDupes = HasQwordDupes ( tXQ.m_pRoot );
-	bool bSkipQCache = tCtx.m_bSkipQCache;
+
+	RankerSettings_t tRankerSettings;
+	tRankerSettings.m_bSkipQCache = tCtx.m_bSkipQCache;
 
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;
-	if ( !bSkipQCache )
+	if ( !tRankerSettings.m_bSkipQCache )
 		pCached = QcacheFind ( pIndex->GetIndexId(), tQuery, tSorterSchema );
+
 	if ( pCached )
 		return QcacheRanker ( pCached, tTermSetup );
+
+	// we need this for rankers that populate nodes with docs immediately after creation (e.g. payload nodes)
+	tRankerSettings.m_bRowidLimits = tQuery.m_dFilters.any_of ( []( auto & tFilter ){ return tFilter.m_sAttrName=="@rowid"; } );
+	if ( tRankerSettings.m_bRowidLimits ) 
+		GetRowIdFilter ( tQuery.m_dFilters, tCtx.m_iIndexTotalDocs, tRankerSettings.m_tBoundaries );
 
 	// setup eval-tree
 	std::unique_ptr<ExtRanker_c> pRanker;
@@ -4420,49 +4446,49 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
-				pRanker = std::make_unique<ExtRanker_State_T < RankerState_ProximityPayload_fn<true>, true >> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique<ExtRanker_State_T < RankerState_ProximityPayload_fn<true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 			else if ( tXQ.m_bSingleWord )
-				pRanker = std::make_unique<ExtRanker_WeightSum_c<WITH_BM25>> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique<ExtRanker_WeightSum_c<WITH_BM25>> ( tXQ, tTermSetup, tRankerSettings );
 			else if ( bGotDupes )
-				pRanker = std::make_unique<ExtRanker_State_T<RankerState_Proximity_fn<true, true>, true>> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique<ExtRanker_State_T<RankerState_Proximity_fn<true, true>, true>> ( tXQ, tTermSetup, tRankerSettings );
 			else
-				pRanker = std::make_unique<ExtRanker_State_T<RankerState_Proximity_fn<true, false>, true>> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique<ExtRanker_State_T<RankerState_Proximity_fn<true, false>, true>> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_BM25:
-			pRanker = std::make_unique < ExtRanker_WeightSum_c<WITH_BM25>> ( tXQ, tTermSetup, bSkipQCache );
+			pRanker = std::make_unique < ExtRanker_WeightSum_c<WITH_BM25>> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_NONE:
-			pRanker = std::make_unique < ExtRanker_None_c> ( tXQ, tTermSetup, bSkipQCache );
+			pRanker = std::make_unique < ExtRanker_None_c> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_WORDCOUNT:
-			pRanker = std::make_unique < ExtRanker_State_T < RankerState_Wordcount_fn, false >> ( tXQ, tTermSetup, bSkipQCache );
+			pRanker = std::make_unique < ExtRanker_State_T < RankerState_Wordcount_fn, false >> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_PROXIMITY:
 			if ( tXQ.m_bSingleWord )
-				pRanker = std::make_unique < ExtRanker_WeightSum_c<>> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_WeightSum_c<>> ( tXQ, tTermSetup, tRankerSettings );
 			else if ( bGotDupes )
-				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<false,true>, false >> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<false,true>, false >> ( tXQ, tTermSetup, tRankerSettings );
 			else
-				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<false,false>, false >> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<false,false>, false >> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_MATCHANY:
-			pRanker = std::make_unique < ExtRanker_State_T < RankerState_MatchAny_fn,  false>> ( tXQ, tTermSetup, bSkipQCache );
+			pRanker = std::make_unique < ExtRanker_State_T < RankerState_MatchAny_fn,  false>> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_FIELDMASK:
-			pRanker = std::make_unique < ExtRanker_State_T < RankerState_Fieldmask_fn, false >> ( tXQ, tTermSetup, bSkipQCache );
+			pRanker = std::make_unique < ExtRanker_State_T < RankerState_Fieldmask_fn, false >> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_SPH04:
 			if ( bGotDupes )
-				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<true>, true>> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<true>, true>> ( tXQ, tTermSetup, tRankerSettings );
 			else
-				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<false>, true>> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<false>, true>> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_EXPR:
@@ -4474,13 +4500,13 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				tTermSetup.m_bSetQposMask = true;
 				bool bNeedFactors = !!(tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE);
 				if ( bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			}
 			break;
 
@@ -4488,17 +4514,17 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 			// TODO: replace Export ranker to Expression ranker to remove duplicated code
 			tTermSetup.m_bSetQposMask = true;
 			if ( bGotDupes )
-				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			else
-				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			break;
 
 		default:
 			tMeta.m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int) tQuery.m_eRanker );
 			if ( bGotDupes )
-				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 			else
-				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,false>, false >> ( tXQ, tTermSetup, bSkipQCache );
+				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,false>, false >> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
 		case SPH_RANK_PLUGIN:
@@ -4507,7 +4533,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				// might be a case for query to distributed index
 				if ( p )
 				{
-					pRanker = std::make_unique < ExtRanker_State_T < RankerState_Plugin_fn, true >> ( tXQ, tTermSetup, bSkipQCache );
+					pRanker = std::make_unique < ExtRanker_State_T < RankerState_Plugin_fn, true >> ( tXQ, tTermSetup, tRankerSettings );
 					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)&p );
 					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuery.m_sUDRankerOpts.cstr() );
 				} else
@@ -4515,9 +4541,9 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 					// create default ranker in case of missed plugin
 					tMeta.m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", tQuery.m_sUDRanker.cstr() );
 					if ( bGotDupes )
-						pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, bSkipQCache );
+						pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 					else
-						pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,false>, true >> ( tXQ, tTermSetup, bSkipQCache );
+						pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,false>, true >> ( tXQ, tTermSetup, tRankerSettings );
 				}
 			}
 			break;
@@ -4650,7 +4676,7 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 {
 	ExtNode_i * pNode = nullptr;
 	if ( pRoot )
-		pNode = ExtNode_i::Create ( pRoot, tSetup, false );
+		pNode = ExtNode_i::Create ( pRoot, tSetup, false, nullptr );
 
 	if ( !pNode )
 		return nullptr;

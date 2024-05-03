@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,27 +28,27 @@ public:
 	void WriteSynonyms ( JsonEscapedBuilder & tOut ) const final;
 	void CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenizerClone eMode );
 
-	const char* GetTokenStart() const final
+	const char* GetTokenStart() const noexcept final
 	{
 		return (const char*)m_pTokenStart;
 	}
-	const char* GetTokenEnd() const final
+	const char* GetTokenEnd() const noexcept final
 	{
 		return (const char*)m_pTokenEnd;
 	}
-	const char* GetBufferPtr() const final
+	const char* GetBufferPtr() const noexcept final
 	{
 		return (const char*)m_pCur;
 	}
-	const char* GetBufferEnd() const final
+	const char* GetBufferEnd() const noexcept final
 	{
 		return (const char*)m_pBufferMax;
 	}
 	void SetBufferPtr ( const char* sNewPtr ) final;
-	uint64_t GetSettingsFNV() const final;
+	uint64_t GetSettingsFNV() const noexcept final;
 
 	bool SetBlendChars ( const char* sConfig, CSphString& sError ) final;
-	bool WasTokenMultiformDestination ( bool&, int& ) const final
+	bool WasTokenMultiformDestination ( bool&, int& ) const noexcept final
 	{
 		return false;
 	}

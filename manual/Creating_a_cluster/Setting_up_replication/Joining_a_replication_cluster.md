@@ -47,7 +47,7 @@ utilsApi.sql('JOIN CLUSTER posts AT \'10.12.1.35:9312\'')
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -143,7 +143,7 @@ utilsApi.sql('JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

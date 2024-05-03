@@ -18,9 +18,9 @@ include ( update_bundle )
 # still can do it for any specific requirements.
 
 # Versions of API headers we are need to build with.
-set ( NEED_COLUMNAR_API 21 )
-set ( NEED_SECONDARY_API 9 )
-
+set ( NEED_COLUMNAR_API 25 )
+set ( NEED_SECONDARY_API 14 )
+set ( NEED_KNN_API 3 )
 
 # Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.
 # Actual usage of columnar is solely defined by availability of the module named below. That module is build (or not built)
@@ -39,6 +39,7 @@ endif()
 
 set ( LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.${EXTENSION}" )
 set ( LIB_MANTICORE_SECONDARY "lib_manticore_secondary.${EXTENSION}" )
+set ( LIB_MANTICORE_KNN "lib_manticore_knn.${EXTENSION}" )
 
 macro ( backup_paths )
 	set ( _CMAKE_FIND_ROOT_PATH "${CMAKE_FIND_ROOT_PATH}" )
@@ -59,14 +60,19 @@ macro ( return_if_all_api_found )
 		set ( _HAS_SECONDARY ON )
 	endif ()
 
-	if (_HAS_COLUMNAR AND _HAS_SECONDARY)
+	if (TARGET columnar::knn_api)
+		set ( _HAS_KNN ON )
+	endif ()
+
+	if (_HAS_COLUMNAR AND _HAS_SECONDARY AND _HAS_KNN)
 		include ( FeatureSummary )
 		set_package_properties ( columnar PROPERTIES TYPE RUNTIME
-				DESCRIPTION "column-oriented storage library with a low memory footprint, designed to handle large volumes of data and a secondary index library"
+				DESCRIPTION "a column-oriented storage library with a low memory footprint, designed to handle large volumes of data, a secondary index library, and a k-nearest neighbor search library"
 				URL "https://github.com/manticoresoftware/columnar/"
 				)
 		trace ( columnar::columnar_api )
 		trace ( columnar::secondary_api )
+		trace ( columnar::knn_api )
 
 		# restore prev find paths to avoid polishing global scope
 		restore_paths()
@@ -81,18 +87,18 @@ if (TARGET columnar::columnar_api)
 endif ()
 
 # expected version
-set ( NEED_API_NUMERIC_VERSION "${NEED_COLUMNAR_API}.${NEED_SECONDARY_API}" )
-set ( AUTO_TAG "c${NEED_COLUMNAR_API}-s${NEED_SECONDARY_API}" )
+set ( NEED_API_NUMERIC_VERSION "${NEED_COLUMNAR_API}.${NEED_SECONDARY_API}.${NEED_KNN_API}" )
+set ( AUTO_TAG "c${NEED_COLUMNAR_API}-s${NEED_SECONDARY_API}-k${NEED_KNN_API}" )
 
 # set current path to modules in local usr
-set ( COLUMNAR_BUILD "${MANTICORE_BINARY_DIR}/usr/${AUTO_TAG}" )
+get_build ( COLUMNAR_BUILD "mcl/${AUTO_TAG}" )
 
 # store prev find paths to avoid polishing global scope
 backup_paths()
 
 append_prefix ( "${COLUMNAR_BUILD}" )
 
-find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_api secondary_api CONFIG )
+find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_api secondary_api knn_api CONFIG )
 return_if_all_api_found ()
 
 # Not found. get columnar src, extract columnar_api.
@@ -110,7 +116,7 @@ configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/columnar-imported.cmake.in column
 execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build )
 execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build )
 
-find_package ( columnar ${NEED_API_NUMERIC_VERSION} EXACT REQUIRED COMPONENTS columnar_api secondary_api CONFIG )
+find_package ( columnar ${NEED_API_NUMERIC_VERSION} EXACT REQUIRED COMPONENTS columnar_api secondary_api knn_api CONFIG )
 return_if_all_api_found ()
 
 # restore prev find paths to avoid polishing global scope

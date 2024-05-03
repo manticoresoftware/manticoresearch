@@ -82,7 +82,9 @@ private:
 	
 	void EmptyReply();
 
-	void ProcessMSearch ();
+	bool ProcessMSearch ();
+	bool ProcessSearch();
+
 	void ProcessEmptyHead();
 	bool ProcessKbnTableDoc();
 	void ProcessCat();
@@ -90,7 +92,6 @@ private:
 	void ProcessILM();
 	void ProcessCCR();
 	void ProcessKbnTableGet();
-	void ProcessSearch();
 	void ProcessCount();
 	bool ProcessInsert();
 	void ProcessInsertIntoIdx ( const CompatInsert_t & tIns );
@@ -299,7 +300,7 @@ static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 {
 	DocID_t tTmpID;
 	SqlStmt_t tStmt;
-	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, true, sError ) )
+	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, sError ) )
 		return false;
 
 	assert ( tTmpID>=0 );
@@ -828,6 +829,30 @@ static void FixupFilterType ( const CSphSchema & tSchema, nljson & tVal )
 	}
 }
 
+static void FixupValues ( const nljson::json_pointer & tQueryFilter, const CSphSchema & tSchema, nljson & tFullQuery )
+{
+	if ( !tFullQuery.contains ( tQueryFilter ) || !tFullQuery[tQueryFilter].size() )
+		return;
+
+	for ( auto & tVal : tFullQuery[tQueryFilter].items() )
+	{
+		if ( !tVal.value().is_object() )
+			continue;
+
+		if ( tVal.value().cbegin().key()=="match_phrase" )
+		{
+			FixupFilterMatchPhrase ( tSchema, tVal.value() );
+			continue;
+		}
+
+		if ( tVal.value().cbegin().key()=="equals" )
+		{
+			FixupFilterType ( tSchema, tVal.value().begin().value() );
+			continue;
+		}
+	}
+}
+
 static void FixupFilter ( const StrVec_t & dIndexes, nljson & tFullQuery )
 {
 	CSphSchema tSchema;
@@ -856,26 +881,9 @@ static void FixupFilter ( const StrVec_t & dIndexes, nljson & tFullQuery )
 
 	// FIXME!!! move into FixupFilterFeilds
 	nljson::json_pointer tQueryFilter ( "/query/bool/filter" );
-	if ( !tFullQuery.contains ( tQueryFilter ) )
-		return;
-
-	for ( auto & tVal : tFullQuery[tQueryFilter].items() )
-	{
-		if ( !tVal.value().is_object() )
-			continue;
-
-		if ( tVal.value().cbegin().key()=="match_phrase" )
-		{
-			FixupFilterMatchPhrase ( tSchema, tVal.value() );
-			continue;
-		}
-
-		if ( tVal.value().cbegin().key()=="equals" )
-		{
-			FixupFilterType ( tSchema, tVal.value().begin().value() );
-			continue;
-		}
-	}
+	FixupValues ( tQueryFilter, tSchema, tFullQuery );
+	nljson::json_pointer tQueryMustNot ( "/query/bool/must_not" );
+	FixupValues ( tQueryMustNot, tSchema, tFullQuery );
 }
 
 template<class T_FN>
@@ -1070,6 +1078,78 @@ static StrVec_t ExpandIndexes ( const CSphString & sSrcIndexes, CSphString & sRe
 	return dLocalIndexes;
 }
 
+static bool Ends ( const char * sSrc, const char * sSuffix )
+{
+	if ( !sSrc || !sSuffix )
+		return false;
+
+	auto iVal = (int)strlen ( sSrc );
+	auto iSuffix = (int)strlen ( sSuffix );
+	if ( iVal < iSuffix )
+		return false;
+	return strncmp ( sSrc + iVal - iSuffix, sSuffix, iSuffix ) == 0;
+}
+
+static const char g_sReplaceKw[] = ".keyword";
+
+static void FixupAggs ( const StrVec_t & dIndexes, nljson & tFullQuery )
+{
+	nljson::json_pointer tPathAggs ( "/aggs" );
+	if ( !tFullQuery.contains ( tPathAggs ) )
+		return;
+
+	CSphVector<nljson::json_pointer> dReplace;
+
+	for ( const auto & tAggItem : tFullQuery[tPathAggs].items() )
+	{
+		if ( !tAggItem.value().size() || !tAggItem.value().front().size() )
+			continue;
+
+		const auto & tVal = tAggItem.value().front().front();
+		if ( !tVal.is_string() )
+			continue;
+
+		const char * sVal = tVal.get_ptr<const nljson::string_t *>()->c_str();
+		if ( !Ends ( sVal, g_sReplaceKw ) )
+			continue;
+
+		nljson::json_pointer tPath = tPathAggs / tAggItem.key() / tAggItem.value().cbegin().key() / tAggItem.value().front().cbegin().key();
+		dReplace.Add ( tPath );
+	}
+
+	if ( dReplace.IsEmpty() )
+		return;
+
+	CSphSchema tSchema;
+	for ( const CSphString & sName : dIndexes )
+	{
+		auto tIndex ( GetServed ( sName ) );
+		if ( tIndex )
+		{
+			tSchema = RIdx_c( tIndex )->GetMatchSchema();
+			break;
+		}
+	}
+
+	if ( !tSchema.GetAttrsCount() )
+		return;
+
+	for ( const auto & tPath : dReplace )
+	{
+		const char * sAttr = tFullQuery[tPath].get_ptr<const nljson::string_t *>()->c_str();;
+		if ( tSchema.GetAttr ( sAttr ) )
+			continue;
+
+		int iLen = strlen ( sAttr );
+		CSphString sNameReplace;
+		sNameReplace.SetBinary ( sAttr, iLen - sizeof(g_sReplaceKw) + 1 );
+
+		const CSphColumnInfo * pCol = tSchema.GetAttr ( sNameReplace.cstr() );
+		if ( pCol && pCol->m_eAttrType==SPH_ATTR_STRING )
+			tFullQuery[tPath] = sNameReplace.cstr();
+	}
+}
+
 static CSphString g_sEmptySearch = R"(
 {
   "took": 0,
@@ -1093,8 +1173,6 @@ static CSphString g_sEmptySearch = R"(
 
 static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CSphString & sURL, CSphString & sRes )
 {
-	CSphString sError, sWarning;
-
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
 	if ( tReq.contains ( "index" ) )
@@ -1133,22 +1211,26 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	EscapeKibanaColumnNames ( dIndexes, tReq );
 	FixupKibana ( dIndexes, tReq );
 	FixupFilter ( dIndexes, tReq );
+	FixupAggs ( dIndexes, tReq );
 
-	JsonQuery_c tQuery;
+	ParsedJsonQuery_t tParsedQuery;
+	auto& tQuery = tParsedQuery.m_tQuery;
 	tQuery.m_eQueryType = QUERY_JSON;
 	tQuery.m_sRawQuery = tReq.dump().c_str();
+	tParsedQuery.m_bProfile = false;
 	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
-	bool bProfile = false;
-	if ( !sphParseJsonQuery ( tMntReq, tQuery, bProfile, sError, sWarning ) )
+
+	if ( !sphParseJsonQuery ( tMntReq, &tParsedQuery ) )
 	{
-		CompatWarning ( "%s at '%s' body '%s'", sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
+		const char * sError = TlsMsg::szError();
+		CompatWarning ( "%s at '%s' body '%s'", sError, sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 		sRes = JsonEncodeResultError ( sError, "parse_exception", 400 );
 		return false;
 	}
 
-	if ( !sWarning.IsEmpty() )
-		CompatWarning ( "%s", sWarning.cstr() );
+	if ( !tParsedQuery.m_sWarning.IsEmpty() )
+		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
 	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
 	tHandler->RunQueries();
@@ -1167,23 +1249,24 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		{
 			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 			bOk = false;
+			TlsMsg::Err ( pAggr->m_sError );
 		}
 	}
 
 	return bOk;
 }
 
-void HttpCompatHandler_c::ProcessMSearch ()
+bool HttpCompatHandler_c::ProcessMSearch ()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
 		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 	if ( !Ends ( GetBody(), "\n" ) )
 	{
 		ReportError ( "The msearch request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 
 	int64_t tmStarted = sphMicroTimer();
@@ -1196,12 +1279,16 @@ void HttpCompatHandler_c::ProcessMSearch ()
 
 	//bool bRestTotalHitsInt = IsTrue ( hOpts, "rest_total_hits_as_int" );
 
+	bool bParsedOk = true;
 	CSphVector<nljson> tSourceReq;
 	int iSourceLine = 0;
 	SplitNdJson ( GetBody(),
 		[&] ( const char * sLine, int iLen )
 		{
-			nljson tItem = nljson::parse ( sLine );
+			nljson tItem = nljson::parse ( sLine, nullptr, false );
+			if ( tItem.is_discarded() )
+				bParsedOk = false;
+
 			if ( ( iSourceLine%2 )==0 )
 			{
 				tSourceReq.Add ( tItem );
@@ -1213,10 +1300,10 @@ void HttpCompatHandler_c::ProcessMSearch ()
 		}
 	);
 
-	if ( iSourceLine<2 )
+	if ( iSourceLine<2 || !bParsedOk )
 	{
 		ReportError ( "Validation Failed: 1: no requests added;", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 
 	CSphFixedVector<CSphString> dRes ( tSourceReq.GetLength() );
@@ -1247,6 +1334,7 @@ void HttpCompatHandler_c::ProcessMSearch ()
 	tReply += "}";
 
 	BuildReply ( tReply, SPH_HTTP_STATUS_200 );
+	return true;
 }
 
 typedef CSphVector< std::pair < CSphString, int > > DocIdVer_t;
@@ -1812,7 +1900,9 @@ static int ProcessFilterSource ( const CSphString * sSourceFilter, nljson & tRes
 
 static void ProcessKbnResult ( const CSphString * sSourceFilter, const CSphString * sFilterPath, CSphString & sRes )
 {
-	nljson tRes = nljson::parse ( sRes.cstr() );
+	nljson tRes = nljson::parse ( sRes.cstr(), nullptr, false );
+	if ( tRes.is_discarded() )
+		return;
 
 	nljson::json_pointer tHits ( "/hits/hits" );
 	if ( !tRes.contains ( tHits ) )
@@ -1832,7 +1922,9 @@ static void ProcessKbnResult ( const CSphString * sSourceFilter, const CSphStrin
 		if ( tRawStr.empty() )
 			continue;
 
-		nljson tRawObj = nljson::parse ( tRawStr );
+		nljson tRawObj = nljson::parse ( tRawStr, nullptr, false );
+		if ( tRawObj.is_discarded() )
+			return;
 		
 		nljson & tSrc = tHit["_source"];
 		tSrc.merge_patch ( tRawObj );
@@ -1927,31 +2019,38 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	return true;
 }
 
-void HttpCompatHandler_c::ProcessSearch()
+bool HttpCompatHandler_c::ProcessSearch()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
 		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
-		return;
+		return false;
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
-	nljson tReq = nljson::parse ( GetBody().first );
+	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tReq.is_discarded())
+	{
+		ReportError ( "invalid body", "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
 
 	if ( EmulateIndexCount ( sIndex, tReq, GetResult() ) )
-		return;
+		return true;
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
-		BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_400 );
-		return;
+		const char * sError = TlsMsg::szError();
+		ReportError ( sError, "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
 	}
 
 	// filter_path and _source uri params
 	ProcessKbnResult ( GetOptions()( "_source" ), GetOptions()( "filter_path" ), sRes );
 
 	BuildReply ( FromStr ( sRes ), SPH_HTTP_STATUS_200 );
+	return true;
 }
 
 void HttpCompatHandler_c::ProcessCount()
@@ -1963,7 +2062,12 @@ void HttpCompatHandler_c::ProcessCount()
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
-	nljson tReq = nljson::parse ( GetBody().first );
+	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tReq.is_discarded())
+	{
+		ReportError ( "invalid body", "parse_exception", SPH_HTTP_STATUS_400 );
+		return;
+	}
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
@@ -1972,7 +2076,7 @@ void HttpCompatHandler_c::ProcessCount()
 		return;
 	}
 
-	nljson tRef = nljson::parse ( sRes.cstr() );
+	nljson tRef = nljson::parse ( sRes.cstr(), nullptr, false );
 	if ( !tRef.contains ( "error" ) )
 	{
 		// _count transform
@@ -2396,7 +2500,7 @@ void HttpCompatHandler_c::ProcessInsertIntoIdx ( const CompatInsert_t & tIns )
 	JsonObj_c tSource ( tIns.m_sBody.first );
 
 	CSphString sError;
-	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, false, sError ) && InsertDoc ( tStmt, sError ) );
+	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, sError ) && InsertDoc ( tStmt, sError ) );
 
 	if ( !bInserted )
 	{
@@ -2721,6 +2825,11 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		ReportMissedIndex ( GetUrlParts()[0] );
 		return true;
 	}
+	if ( IsEmpty ( GetBody() ) )
+	{
+		ReportError ( "Validation Failed: 1: script or doc is missing", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
 
 	nljson tUpd = nljson::parse ( GetBody().first );
 
@@ -2915,11 +3024,25 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 		}
 	}
 
-	nljson tTbl = nljson::parse ( GetBody().first );
+	if ( IsEmpty ( GetBody() ) )
+	{
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	nljson tTbl = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tTbl.is_discarded() )
+	{
+		ReportError ( "request body or source parameter is required", "parse_exception", SPH_HTTP_STATUS_400 );
+		return false;
+	}
 
 	// direct create index path (wo template)
 	if ( !tTbl.contains( "mappings" ) )
+	{
+		ReportError ( "request body mappings is required", "parse_exception", SPH_HTTP_STATUS_400 );
 		return false;
+	}
 
 	// need to delete table loaded by manticore but without meta at json file
 	DropTable ( sName );
@@ -3309,10 +3432,7 @@ void HttpCompatHandler_c::ProcessFields()
 bool HttpCompatHandler_c::ProcessEndpoints()
 {
 	if ( m_dUrlParts.GetLength() && m_dUrlParts.Last().Ends ( "_msearch" ) )
-	{
-		ProcessMSearch();
-		return true;
-	}
+		return ProcessMSearch();
 
 	if ( GetRequestType()==HTTP_GET || GetRequestType()==HTTP_HEAD )
 	{
@@ -3367,10 +3487,7 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 	}
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_search" )
-	{
-		ProcessSearch();
-		return true;
-	}
+		return ProcessSearch();
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_count" )
 	{
@@ -3593,6 +3710,7 @@ void HttpCompatHandler_c::SetLogFilter ( const CSphString & sVal )
 
 void HttpCompatBaseHandler_c::BuildReplyHead ( Str_t sRes, ESphHttpStatus eStatus )
 {
+	m_eHttpCode = eStatus;
 	HttpBuildReplyHead ( GetResult(), eStatus, sRes.first, sRes.second, IsHead() );
 }
 

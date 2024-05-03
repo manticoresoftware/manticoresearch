@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,8 @@
 //
 
 #pragma once
+
+#include "sphinxstd.h"
 
 #if _WIN32
 	#define RTLD_LAZY		0
@@ -36,7 +38,7 @@
 class ScopedHandle_c
 {
 public:
-	ScopedHandle_c ( void * pHandle )
+	explicit ScopedHandle_c ( void * pHandle )
 		: m_pHandle ( pHandle )
 	{}
 
@@ -56,4 +58,26 @@ public:
 private:
 	void * m_pHandle = nullptr;
 };
+
+template <typename T>
+bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
+{
+	pFunc = (T) dlsym ( pHandle, szFunc );
+	if ( !pFunc )
+	{
+		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
+		dlclose ( pHandle );
+		return false;
+	}
+
+	return true;
+}
+#else
+template <typename T>
+bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
+{
+	return false;
+}
 #endif // HAVE_DLOPEN
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath );

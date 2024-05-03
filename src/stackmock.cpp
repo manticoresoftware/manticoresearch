@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,6 +16,7 @@
 #include "coroutine.h"
 #include "searchdsql.h"
 #include "attribute.h"
+#include "querycontext.h"
 
 // hard-coded definitions to avoid probing (that is - to avoid confusing memcheck programs)
 // run searchd with --logdebug --console once, read values, then write them here and uncomment these lines
@@ -137,7 +138,7 @@ class CreateExprStackSize_c : public StackMeasurer_c
 		tParams.m_sExpr = m_sExpr.cstr();
 
 		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
-			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
 		} );
 
 		tParams.m_bSuccess = !!tParams.m_pExprBase;
@@ -193,7 +194,7 @@ class EvalExprStackSize_c : public CreateExprStackSize_c
 		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
 		CSphFixedVector<BYTE> dSafeStack { m_iComplexity * 100 * 1024 };
 		Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
-			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
 		});
 		}
 
@@ -353,7 +354,7 @@ public:
 		m_pRtIndex->ProhibitSave();
 		m_pRtIndex->PostSetup();
 
-		InsertDocData_t tDoc ( m_pRtIndex->GetMatchSchema() );
+		InsertDocData_c tDoc ( m_pRtIndex->GetMatchSchema() );
 		tDoc.SetID ( 1 );
 		tDoc.m_dFields[0] = { "a b", 3 };
 
@@ -405,12 +406,15 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> FilterCreationMeasureStack_c::
 ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> FullTextStackSize_c::MockMeasure()
 {
 	FullTextStackSize_c tCreateMeter;
-	auto x = tCreateMeter.MockMeasureStack ( 64 );
+	const int START = 128;
+	const int STEP = 64;
+	auto x = tCreateMeter.MockMeasureStack ( START );
 	for ( auto i=0; i<10; ++i )
 	{
 		if ( x.first )
 			return x;
-		x = tCreateMeter.MockMeasureStack ( 128 + 64 * i );
+
+		x = tCreateMeter.MockMeasureStack ( START + STEP * i );
 	}
 	return x;
 }

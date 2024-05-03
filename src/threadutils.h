@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -77,10 +77,13 @@ struct LowThreadDesc_t
 	CSphString			m_sThreadName;
 	std::atomic<void *>	m_pTaskInfo;	///< what kind of task I'm doing now (nullptr - idle, i.e. nothing)
 	std::atomic<void *> m_pHazards;		///< my hazard pointers
+	void *				m_pWorker = nullptr;	///< my coro worker (m.b. empty in generic threads)
+	StringBuilder_c		m_sThreadMsg;
+	std::atomic<StringBuilder_c*> m_pTlsMsg { &m_sThreadMsg };
 };
 
 // thread-local description available globaly from any thread
-LowThreadDesc_t& MyThd ();
+LowThreadDesc_t& MyThd () noexcept;
 
 // save name from my local LowThreadDesc into OS thread name
 void SetSysThreadName();
@@ -148,10 +151,10 @@ struct Scheduler_i
 	}
 
 	template<typename HANDLER>
-	void Schedule ( HANDLER handler, bool bVip );
+	void Schedule ( HANDLER handler, bool bVip ) noexcept;
 
 	template<typename HANDLER>
-	void ScheduleContinuation ( HANDLER handler );
+	void ScheduleContinuation ( HANDLER handler ) noexcept;
 };
 
 struct SchedulerWithBackend_i: public Scheduler_i
@@ -159,12 +162,19 @@ struct SchedulerWithBackend_i: public Scheduler_i
 	virtual bool SetBackend ( Scheduler_i* pBackend ) = 0;
 };
 
+struct NTasks_t { // snapshot length of Op queue
+	int iPri;
+	int iSec;
+};
+
 struct Worker_i: public Scheduler_i
 {
 	virtual int Works() const = 0;
+	virtual NTasks_t Tasks() const noexcept = 0;
+	virtual int CurTasks() const noexcept = 0;
 	virtual void StopAll () = 0;
 	virtual void DiscardOnFork() {}
-	virtual void IterateChildren ( ThreadFN & fnHandler ) {}
+	virtual void IterateChildren ( ThreadFN & fnHandler ) noexcept {}
 };
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i>;
@@ -257,6 +267,7 @@ namespace CrashLogger
 Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
 void StartGlobalWorkPool ();
+void StopGlobalWorkPool();
 
 /// schedule stop of the global thread pool
 void WipeGlobalSchedulerOnShutdownAndFork ();

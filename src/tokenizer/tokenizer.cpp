@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -100,7 +100,7 @@ CSphLowercaser& ISphTokenizer::StagingLowercaser()
 	return *pNewCreatedLC;
 }
 
-LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const
+LowercaserRefcountedConstPtr ISphTokenizer::GetLC() const noexcept
 {
 	assert ( m_pLC );
 	return m_pLC;
@@ -144,7 +144,7 @@ bool ISphTokenizer::EnableZoneIndexing ( CSphString& sError )
 	return AddSpecialsSPZ ( sSpecials, "index_zones", sError );
 }
 
-uint64_t ISphTokenizer::GetSettingsFNV() const
+uint64_t ISphTokenizer::GetSettingsFNV() const noexcept
 {
 	uint64_t uHash = GetLowercaser().GetFNV();
 

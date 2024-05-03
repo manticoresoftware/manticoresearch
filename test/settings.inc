@@ -12,7 +12,7 @@ $sd_log				= "searchd.log";
 $sd_split_logs		= false; // if we want one log per agent, its easier to investigate problems!
 $sd_query_log		= "query.log";
 $sd_network_timeout	= 5;
-$sd_max_children	= 30;
+$sd_max_children	= 100;
 $sd_pid_file		= "searchd.pid";
 
 $agent_address		= "127.0.0.1";
@@ -45,6 +45,8 @@ $g_usemarks = true; // that we mark the output of every test in the searchd.log 
 $g_strictverbose = false;
 $g_ssl = false;
 $g_secondary_loaded = false;
+$g_knn_loaded = false;
+$g_tzdata_loaded = false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 100;
@@ -103,7 +105,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded;
+	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
@@ -115,6 +117,8 @@ function CacheGuesses ()
 	if ( $g_ssl ) $text .= "global \$g_ssl; \$g_ssl = true;\n";
 	if ( $g_columnar_loaded ) $text .= "global \$g_columnar_loaded; \$g_columnar_loaded = true;\n";
     if ( $g_secondary_loaded ) $text .= "global \$g_secondary_loaded; \$g_secondary_loaded = true;\n";
+    if ( $g_knn_loaded ) $text .= "global \$g_knn_loaded; \$g_knn_loaded = true;\n";
+    if ( $g_tzdata_loaded ) $text .= "global \g_tzdata_loaded; \$g_tzdata_loaded = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }
@@ -214,6 +218,18 @@ function GuessSecondary()
 {
     global $g_secondary_loaded;
     $g_secondary_loaded = GuessFeature ( 'test_columnar.conf','secondary library not loaded', ' (secondary ');
+}
+
+function GuessKNN()
+{
+    global $g_knn_loaded;
+    $g_knn_loaded = GuessFeature ( 'test_columnar.conf','knn library not loaded', ' (knn ');
+}
+
+function GuessTzData()
+{
+	global $g_tz_data_loaded;
+	$g_tz_data_loaded = strpos( file_get_contents( testdir("searchd.log"), 'Error initializing time zones' ) ) === false;
 }
 
 function GetVersion ()

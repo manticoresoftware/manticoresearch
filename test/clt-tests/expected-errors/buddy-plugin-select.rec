@@ -1,0 +1,96 @@
+––– block: start-searchd –––
+––– input –––
+SELECT * FROM manticore.test;
+––– output –––
+––– input –––
+SELECT * FROM `manticore`.test;
+––– output –––
+––– input –––
+SELECT * FROM `Manticore`.test;
+––– output –––
+––– input –––
+SELECT * FROM information_schema.files;
+––– output –––
+ERROR 1064 (42000): No such table information_schema.files
+––– input –––
+SELECT * FROM information_schema.tables;
+––– output –––
+ERROR 1064 (42000): No such table information_schema.tables
+––– input –––
+SELECT * FROM information_schema.triggers;
+––– output –––
+ERROR 1064 (42000): No such table information_schema.triggers
+––– input –––
+SELECT * FROM information_schema.column_statistics;
+––– output –––
+ERROR 1064 (42000): No such table information_schema.column_statistics
+––– input –––
+SELECT * FROM information_schema.columns;
+––– output –––
+ERROR 1064 (42000): No such table information_schema.columns
+––– input –––
+SELECT * FROM test WHERE id = '1';
+––– output –––
+––– input –––
+SELECT * FROM test WHERE id IN ('1');
+––– output –––
+––– input –––
+SELECT COALESCE(name, '') = '' FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'name, '') = '''
+––– input –––
+SELECT * FROM test WHERE CONTAINS(text_field, 'NEAR((word1, word2), 3)');
+––– output –––
+ERROR 1064 (42000): P01: syntax error, unexpected '(' near '(text_field, 'NEAR((word1, word2), 3)')'
+––– input –––
+SELECT DISTINCT TABLE_SCHEMA from information_schema.TABLES;
+––– output –––
+ERROR 1064 (42000): P01: syntax error, unexpected DISTINCT near 'DISTINCT TABLE_SCHEMA from information_schema.TABLES'
+––– input –––
+SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND) AS date FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND)'
+––– input –––
+SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND) FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date) * 60 * 60 + MINUTE(date) * 60 + SECOND(date)) SECOND)'
+––– input –––
+SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date)*60 + MINUTE(date)) MINUTE) AS date FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date)*60 + MINUTE(date)) MINUTE)'
+––– input –––
+SELECT DATE_ADD(DATE(date), INTERVAL (HOUR(date)*60*60 + MINUTE(date)*60 + SECOND(date)) SECOND) FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL (HOUR(date)*60*60 + MINUTE(date)*60 + SECOND(date)) SECOND)'
+––– input –––
+SELECT DATE_ADD(DATE(date), INTERVAL HOUR(date) HOUR) AS date FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL HOUR(date) HOUR)'
+––– input –––
+SELECT DATE_ADD(DATE(date), INTERVAL HOUR(date) HOUR) FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(' near 'date), INTERVAL HOUR(date) HOUR)'
+––– input –––
+SELECT DATE(date) AS date FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date)'
+––– input –––
+SELECT DATE(date) FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date)'
+––– input –––
+SELECT DATE(DATE_SUB(date, INTERVAL DAYOFMONTH(date)-1 DAY)) AS date FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFMONTH(date)-1 DAY))'
+––– input –––
+SELECT DATE(DATE_SUB(date, INTERVAL DAYOFMONTH(date)-1 DAY)) FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFMONTH(date)-1 DAY))'
+––– input –––
+SELECT DATE(DATE_SUB(date, INTERVAL DAYOFYEAR(date)-1 DAY)) AS date FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFYEAR(date)-1 DAY))'
+––– input –––
+SELECT DATE(DATE_SUB(date, INTERVAL DAYOFYEAR(date)-1 DAY)) FROM test;
+––– output –––
+ERROR 1064 (42000): table test: parse error: P09: syntax error, unexpected '(', expecting $end near 'date_sub(date, INTERVAL DAYOFYEAR(date)-1 DAY))'

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,6 +14,7 @@
 #define _sphinxsort_
 
 #include "sortsetup.h"
+#include "queuecreator.h"
 
 namespace columnar
 {
@@ -129,6 +130,9 @@ public:
 
 	/// is it a sorter that uses precalculated data and does not require real matches?
 	virtual bool		IsPrecalc() const { return false; }
+
+	virtual bool		IsJoin() const { return false; }
+	virtual bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) { return true; }
 };
 
 
@@ -143,72 +147,20 @@ struct CmpPSortersByRandom_fn
 };
 
 
-class BlobPool_c
-{
-public:
-	virtual			~BlobPool_c() = default;
-	virtual void	SetBlobPool ( const BYTE * pBlobPool ) { m_pBlobPool = pBlobPool; }
-	const BYTE *	GetBlobPool () const { return m_pBlobPool; }
+void	SetAccurateAggregationDefault ( bool bEnabled );
+bool	GetAccurateAggregationDefault();
 
-protected:
-	const BYTE *	m_pBlobPool {nullptr};
-};
+void	SetDistinctThreshDefault ( int iThresh );
+int 	GetDistinctThreshDefault();
 
-/// groupby key type
-typedef int64_t SphGroupKey_t;
+int		ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT );
 
-/// base grouper (class that computes groupby key)
-class CSphGrouper : public BlobPool_c, public ISphRefcountedMT
-{
-public:
-	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
-	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
-	virtual void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const = 0;
-	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
-	virtual ESphAttr		GetResultType () const = 0;
-	virtual CSphGrouper *	Clone() const = 0;
-	virtual bool			IsMultiValue() const { return false; }
-	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
+ISphMatchSorter *	CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tCollection );
+ISphMatchSorter *	CreateDirectSqlQueue ( RowBuffer_i * pOutput, void ** ppOpaque1, void ** ppOpaque2, const StrVec_t & dColumns );
+ISphMatchSorter *	CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, int iMaxMatches, bool bFactors );
 
-protected:
-							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy
-};
-
-class DistinctFetcher_i : public ISphRefcountedMT
-{
-public:
-	virtual SphAttr_t		GetKey ( const CSphMatch & tMatch ) const = 0;
-	virtual void			GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const = 0;
-	virtual void			SetBlobPool ( const BYTE * pBlobPool ) = 0;
-	virtual void			SetColumnar ( const columnar::Columnar_i * pColumnar ) = 0;
-	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
-	virtual bool			IsMultiValue() const = 0;
-	virtual DistinctFetcher_i *	Clone() const = 0;
-};
-
-const char *	GetInternalAttrPrefix();
-int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
-bool			IsSortStringInternal ( const CSphString & sColumnName );
-bool			IsSortJsonInternal ( const CSphString & sColumnName );
-CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
-void			SetGroupingInUtcSort ( bool bGroupingInUtc );
-int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema );
-
-void			SetAccurateAggregationDefault ( bool bEnabled );
-bool			GetAccurateAggregationDefault();
-
-void			SetDistinctThreshDefault ( int iThresh );
-int 			GetDistinctThreshDefault();
-
-int				ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters );
-bool			HasImplicitGrouping ( const CSphQuery & tQuery );
-
-/// creates proper queue for given query
-/// may return NULL on error; in this case, error message is placed in sError
-/// if the pUpdate is given, creates the updater's queue and perform the index update
-/// instead of searching
-ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra = nullptr, QueryProfile_c * pProfile = nullptr );
-
-void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile );
+struct CSphGroupSorterSettings;
+struct PrecalculatedSorterResults_t;
+ISphMatchSorter *	CreateSorter ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors, bool bHasAggregates, const PrecalculatedSorterResults_t & tPrecalc );
 
 #endif // _sphinxsort_

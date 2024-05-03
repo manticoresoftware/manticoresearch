@@ -63,7 +63,7 @@ manticore-backup --config=path/to/manticore.conf --backup-dir=backupdir
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: all tables
@@ -102,7 +102,7 @@ manticore-backup --backup-dir=/mnt/backup/ --tables=products
 
 <!-- response Example -->
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file: /etc/manticoresearch/manticore.conf
 Tables to backup: products
@@ -135,7 +135,9 @@ Manticore versions:
 |-|-|
 | `--backup-dir=path` | This is the path to the backup directory where the backup will be stored. The directory must already exist. This argument is required and has no default value. On each backup run, manticore-backup will create a subdirectory in the provided directory with a timestamp in the name (`backup-[datetime]`), and will copy all required tables to it. So the `--backup-dir` is a container for all your backups, and it's safe to run the script multiple times.|
 | `--restore[=backup]` | Restore from `--backup-dir`. Just --restore lists available backups. `--restore=backup` will restore from `<--backup-dir>/backup`. |
-| `--config=/path/to/manticore.conf` | Path to Manticore config. This is optional. If it's not passed, a default one for your operating system will be used. It's used to get the host and port to communicate with the Manticore daemon. |
+| `--force` | Skip versions check on restore and gracefully restore the backup. |
+| `--disable-telemetry` | Pass this flag in case you want to disable sending anonymized metrics  to Manticore. You can also use environment variable TELEMETRY=0 |
+| `--config=/path/to/manticore.conf` | Path to the Manticore configuration. Optional. If not provided, a default configuration for your operating system will be used. Used to determine the host and port for communication with the Manticore daemon. The `manticore-backup` tool supports [dynamic configuration](../Server_settings/Scripted_configuration.md) files. You can specify the `--config` option multiple times if your configuration is spread across multiple files. |
 | `--tables=tbl1,tbl2, ...` | Semicolon-separated list of tables that you want to back up. To back up all tables, omit this argument. All the provided tables must exist in the Manticore instance you are backing up from, or the backup will fail. |
 | `--compress` | Whether the backed up files should be compressed. Not enabled by default. | optional |
 | `--unlock` | In rare cases when something goes wrong, tables can be left in a locked state. Use this argument to unlock them. |
@@ -204,7 +206,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -235,7 +237,7 @@ manticore-backup --backup-dir=/mnt/backup/ --restore=backup-20221007104044
 <!-- response Example -->
 
 ```bash
-Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 
 Manticore config file:
 Backup dir: /tmp/
@@ -261,27 +263,36 @@ Manticore config
 <!-- example mysqldump_backup -->
 To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
 
+Note, `mysqldump` is supported only for real-time tables.
+
 <!-- request SQL -->
 ```bash
-mysqldump -h0 -P9306 --all-databases > manticore_backup.sql
+mysqldump -h0 -P9306 manticore > manticore_backup.sql
+mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 ```
 
 Executing this command will produce a backup file named `manticore_backup.sql`. This file will hold all data and table schemas.
 
 <!-- end -->
+
 <!-- example mysqldump_restore -->
 ### Restore
 
 If you're looking to restore a Manticore Search database from a backup file, the mysql client is your tool of choice.
 
+Note, if you are restoring in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), you cannot drop and recreate tables directly. Therefore, you should:
+- Use `mysqldump` with the `-t` option to exclude `CREATE TABLE` statements from your backup.
+- Manually [TRUNCATE](../Emptying_a_table.md) the tables before proceeding with the restoration.
+
 <!-- request SQL -->
 ```bash
 mysql -h0 -P9306 < manticore_backup.sql
+mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
 This command enables you to restore everything from the `manticore_backup.sql` file.
-
 <!-- end -->
+
 ### Additional options
 
 Here are some more settings that can be used with mysqldump to tailor your backup:
@@ -292,4 +303,9 @@ Here are some more settings that can be used with mysqldump to tailor your backu
 
 For a comprehensive list of settings and their thorough descriptions, kindly refer to the [official MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html).
 
+### Notes
+
+We recommend specifying the `manticore` database explicitly when you plan to back up all databases, rather than using the `--all-databases` option.
+
+Keep in mind that `mysqldump` does not support backing up distributed tables. Additionally, it cannot back up tables that contain non-stored fields (consider using `manticore-backup` or the `BACKUP` SQL command).
 <!-- proofread -->

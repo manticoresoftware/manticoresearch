@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -31,8 +31,6 @@ bool LoadExFunctions ();
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
-
-extern int				g_iReadTimeoutS; // defined in searchd.cpp
 
 extern int64_t			g_iPingIntervalUs;
 extern DWORD			g_uHAPeriodKarmaS;		// by default use the last 1 minute statistic to determine the best HA agent
@@ -183,7 +181,7 @@ using HostDashboardRefPtr_t = CSphRefcountedPtr<HostDashboard_t>;
 using cHostDashboardRefPtr_t = CSphRefcountedPtr<const HostDashboard_t>;
 
 /// generic descriptor of remote host
-struct HostDesc_t : ISphNoncopyable
+struct HostDesc_t
 {
 	int m_iFamily = AF_INET;	///< TCP or UNIX socket
 	CSphString m_sAddr;			///< remote searchd host (used to update m_uAddr with resolver)
@@ -231,13 +229,13 @@ struct HostDashboard_t : public ISphRefcountedMT
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
 	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
-	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
-	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
+	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock ) = sphMicroTimer();    // updated when we get an answer from the host
+	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = sphMicroTimer();    // updated when we send a query to a host
 	int64_t m_iErrorsARow GUARDED_BY ( m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
 	DWORD m_uPingTripUS = 0;		// round-trip in uS. We send ping with current time, on receive answer compare with current time and fix that difference
 
 public:
-	explicit HostDashboard_t ( const HostDesc_t &tAgent );
+	explicit HostDashboard_t ( const HostDesc_t &tAgent = {});
 	int64_t EngageTime () const;
 	MetricsAndCounters_t &GetCurrentMetrics () REQUIRES ( m_dMetricsLock );
 	void GetCollectedMetrics ( HostMetricsSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dMetricsLock );
@@ -273,58 +271,17 @@ public:
 	const char *	m_szIndexName = nullptr;
 	const char *	m_szAgent = nullptr;
 
-	WarnInfo_c ( const char * szIndexName, const char *	szAgent, StrVec_t * pWarnings=nullptr )
-		: m_szIndexName ( szIndexName )
-		, m_szAgent ( szAgent )
-		, m_pWarnings ( pWarnings )
-	{}
+	WarnInfo_c ( const char * szIndexName, const char *	szAgent, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
-	void Warn ( const char * szFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, szFmt );
-
-		CSphString sWarning;
-		if ( m_szIndexName )
-			sWarning.SetSprintf ( "table '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
-		else
-			sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
-
-		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
-		sphInfo ( "%s", sWarning.cstr() );
-
-		if ( m_pWarnings )
-			m_pWarnings->Add(sWarning);
-
-		va_end ( ap );
-	}
+	void Warn ( const char * szFmt, ... ) const;
 
 	/// format an error message using idx and agent names from own context
 	/// \return always false, to simplify statements
-	bool ErrSkip ( const char * szFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, szFmt );
-
-		CSphString sWarning;
-
-		if ( m_szIndexName )
-			sWarning.SetSprintf ( "table '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
-		else
-			sWarning.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
-
-		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
-		sphWarning ( "%s", sWarning.cstr() );
-
-		if ( m_pWarnings )
-			m_pWarnings->Add(sWarning);
-
-		va_end ( ap );
-		return false;
-	}
+	bool ErrSkip ( const char * szFmt, ... ) const;
 
 private:
 	StrVec_t *		m_pWarnings = nullptr;
+	CSphString &	m_sError;
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
@@ -501,9 +458,15 @@ public:
 
 struct iQueryResult
 {
-	virtual ~iQueryResult() {}
+	virtual ~iQueryResult() = default;
 	virtual void Reset() = 0;
-	virtual bool HasWarnings() const = 0;
+	[[nodiscard]] virtual bool HasWarnings() const = 0;
+};
+
+struct DefaultQueryResult_t : public iQueryResult
+{
+	void Reset() final {}
+	[[nodiscard]] bool HasWarnings() const final { return false; }
 };
 
 /// remote agent connection (local per-query state)
@@ -550,6 +513,7 @@ public:
 	void TimeoutCallback ();
 	void AbortCallback();
 	bool CheckOrphaned();
+	void SetNoLimitReplySize();
 
 #if _WIN32
 	// move recv buffer to dOut, reinit mine.
@@ -573,15 +537,17 @@ private:
 	int			m_iDelay { g_iAgentRetryDelayMs };	///< delay between retries
 
 	// active timeout (directly used by poller)
+	int64_t			m_iPoolerTimeoutPeriodUS = -1;
 	int64_t			m_iPoolerTimeoutUS = -1;	///< m.b. query, or connect+query when TCP_FASTOPEN
 	ETimeoutKind 	m_eTimeoutKind { TIMEOUT_UNKNOWN };
 
 	// receiving buffer stuff
 	CSphFixedVector<BYTE>	m_dReplyBuf { 0 };
-	int			m_iReplySize = -1;    ///< how many reply bytes are there
+	int						m_iReplySize = -1;    ///< how many reply bytes are there
 	static const size_t	REPLY_HEADER_SIZE = 12;
 	CSphFixedVector<BYTE>	m_dReplyHeader { REPLY_HEADER_SIZE };
-	BYTE *		m_pReplyCur = nullptr;
+	BYTE *					m_pReplyCur = nullptr;
+	bool					m_bReplyLimitSize = true;
 
 	// sending buffer stuff
 	SmartOutputBuffer_t m_tOutput;		///< chain of blobs we're sending to a host
@@ -615,8 +581,8 @@ private:
 
 	bool StartNextRetry ();
 
-	void LazyTask ( int64_t iTimeoutMS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
-	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1 );
+	void LazyTask ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
+	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1, int64_t iTimeoutPeriodUS = -1 );
 	void ScheduleCallbacks ();
 	void DisableWrite();
 
@@ -682,12 +648,11 @@ struct DistributedIndex_t : public ISphRefcountedMT
 {
 	CSphVector<MultiAgentDescRefPtr_c> m_dAgents;	///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
-	int m_iAgentConnectTimeoutMs	{ g_iAgentConnectTimeoutMs };	///< in msec
-	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };		///< in msec
 	int m_iAgentRetryCount			= 0;			///< overrides global one
 	bool m_bDivideRemoteRanges		= false;		///< whether we divide big range onto agents or not
 	HAStrategies_e m_eHaStrategy	= HA_DEFAULT;	///< how to select the best of my agents
 	mutable ServedStats_c			m_tStats;
+	CSphString						m_sCluster;
 
 	// get hive of all index'es hosts (not agents, but hosts, i.e. all mirrors as simple vector)
 	void GetAllHosts ( VectorAgentConn_t &dTarget ) const;
@@ -713,10 +678,17 @@ struct DistributedIndex_t : public ISphRefcountedMT
 				pFunc ( dHost );
 	}
 
+	int GetAgentConnectTimeoutMs ( bool bRaw=false ) const;
+	int GetAgentQueryTimeoutMs ( bool bRaw=false ) const;
+	void SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs );
+	void SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs );
+	DistributedIndex_t * Clone() const;
+
 private:
 	~DistributedIndex_t() override;
 
-	mutable SharedPtr_t<CSphIndex>		m_pRtMadeFromDistrIndex;
+	int m_iAgentConnectTimeoutMs	= 0;	///< in msec, 0 means g_iAgentConnectTimeoutMs
+	int m_iAgentQueryTimeoutMs		= 0;	///< in msec, 0 means g_iAgentQueryTimeoutMs
 };
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
@@ -787,7 +759,7 @@ bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInf
 //! \param szIndexName - index we apply to
 //! \param tOptions - global options affecting agent
 //! \return configured multiagent, or null if failed
-MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings=nullptr );
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
 class RequestBuilder_i : public ISphNoncopyable
 {

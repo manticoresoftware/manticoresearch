@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -64,6 +64,7 @@ public:
 public:
 	void	RemoveStaticAttr ( int iAttr );
 	void	ResetRsetSchema();
+	bool	IsRemovedAttr ( int iAttr ) const;
 
 public:
 	/// swap in a subset of current attributes, with not necessarily (!) unique names

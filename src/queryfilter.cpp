@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,7 +14,7 @@
 
 #include "sphinxsearch.h"
 
-void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const ExpansionContext_t& tCtx )
+void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
 
@@ -54,7 +54,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 		{
 			dQposWildcards.Add ( iQpos );
 
-			ISphWordlist::Args_t tWordlist ( false, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+			ISphWordlist::Args_t tWordlist ( false, tCtx );
 			bool bExpanded = sphExpandGetWords ( (const char*)sWord, tCtx, tWordlist );
 
 			int iDocs = 0;
@@ -133,7 +133,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 		int iKeywordQpos = dKeywords[iTokenized].m_iQpos;
 
 		// do not transform expanded wild-cards
-		if ( !tSkipTransform.IsEmpty() && tSkipTransform.BitGet ( iKeywordQpos ) )
+		if ( tSkipTransform.BitGetOr ( iKeywordQpos ) )
 			continue;
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols

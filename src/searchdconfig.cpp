@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -13,6 +13,7 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
+#include "replication/configuration.h"
 #include "fileutils.h"
 #include "sphinxint.h"
 #include "coroutine.h"
@@ -49,6 +50,14 @@ CSphString GetDataDirInt()
 	return g_sDataDir;
 }
 
+CSphString GetDatadirPath ( const CSphString& sPath )
+{
+	if ( sPath.IsEmpty() )
+		return GetDataDirInt();
+
+	return SphSprintf ( "%s/%s", GetDataDirInt().cstr(), sPath.cstr() );
+}
+
 
 bool IsConfigless()
 {
@@ -62,7 +71,7 @@ const CSphVector<ClusterDesc_t> & GetClustersInt()
 }
 
 
-void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
+void ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !IsConfigless() )
 		return;
@@ -82,6 +91,14 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
 		}
 
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
+	}
+
+	if ( fnPathFix && hSearchd.Exists ( szBinlogKey ) )
+	{
+		CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
+		fnPathFix ( sBinlogPath );
+		hSearchd.Delete ( szBinlogKey );
+		hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
 	}
 }
 
@@ -120,8 +137,8 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 
 	CSphString sPath = GetPathForNewIndex ( m_sIndex );
 
-	StrVec_t dFiles;
 	StringBuilder_c sNewValue {" "};
+	StringBuilder_c sTmp;
 
 	// we assume that path has been stripped before
 	StrVec_t dValues = sphSplit ( sName.cstr(), sName.Length(), " \t," );
@@ -130,230 +147,165 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 		if ( !i.Length() )
 			continue;
 
-		CSphString & sNew = dFiles.Add();
-		sNew.SetSprintf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
-		sNewValue << sNew;
+		sTmp.Clear();
+		sTmp.Appendf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
+		sNewValue << RealPath ( sTmp.cstr() );
 	}
 
-	return RealPath ( sNewValue.cstr() );
+	return (CSphString)sNewValue;
 }
 
 
 //////////////////////////////////////////////////////////////////////////
-
 // parse and set cluster options into hash from single string
 void ClusterOptions_t::Parse ( const CSphString & sOptions )
 {
-	if ( sOptions.IsEmpty() )
-		return;
-
-	const char * sCur = sOptions.cstr();
-	while ( *sCur )
-	{
-		// skip leading spaces
-		while ( *sCur && sphIsSpace ( *sCur ) )
-			sCur++;
-
-		if ( !*sCur )
-			break;
-
-		// skip all name characters
-		const char * sNameStart = sCur;
-		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!='=' )
-			sCur++;
-
-		if ( !*sCur )
-			break;
-
-		// set name
-		CSphString sName;
-		sName.SetBinary ( sNameStart, int ( sCur - sNameStart ) );
-
-		// skip set char and space prior to values
-		while ( *sCur && ( sphIsSpace ( *sCur ) || *sCur=='=' ) )
-			sCur++;
-
-		// skip all value characters and delimiter
-		const char * sValStart = sCur;
-		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!=';' )
-			sCur++;
-
-		CSphString sVal;
-		sVal.SetBinary ( sValStart, int ( sCur - sValStart ) );
-
-		m_hOptions.Add ( sVal, sName );
-
-		// skip delimiter
-		if ( *sCur )
-			sCur++;
-	}
+	if ( !sOptions.IsEmpty() )
+		sph::ParseKeyValues ( sOptions.cstr(), [this] ( CSphString&& sIdent, const CSphString& sValue ) {	m_hOptions.Add ( sValue, std::move(sIdent) ); }, ";" );
 }
 
-
 // get string of cluster options with semicolon delimiter
-CSphString ClusterOptions_t::AsStr ( bool bSave ) const
+CSphString ClusterOptions_t::AsStr () const
 {
 	StringBuilder_c tBuf ( ";" );
 	for ( const auto& tOpt : m_hOptions )
-	{
-		// skip one time options on save
-		if ( bSave && tOpt.first == "pc.bootstrap" )
-			continue;
-
-		tBuf.Appendf ( "%s=%s", tOpt.first.cstr(), tOpt.second.cstr() );
-	}
+		tBuf.Sprintf ( "%s=%s", tOpt.first.cstr(), tOpt.second.cstr() );
 	return (CSphString)tBuf;
 }
 
+bool ClusterOptions_t::IsEmpty() const noexcept
+{
+	return m_hOptions.IsEmpty();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
-bool ClusterDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError )
+bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CSphString& sWarning )
 {
-	m_sName = tJson.Name();
-	if ( m_sName.IsEmpty() )
-	{
-		sError = "empty cluster name";
-		return false;
-	}
+	using namespace bson;
+	if ( sName.IsEmpty() )
+		return TlsMsg::Err ( "empty cluster name" );
 
-	// optional items such as: options and skipSst
-	CSphString sOptions;
-	if ( tJson.FetchStrItem ( sOptions, "options", sError, true ) )
-		m_tOptions.Parse(sOptions);
+	m_sName = sName;
+
+	m_dClusterNodes.Reset();
+	Bson_c tNodes { tBson.ChildByName ( "nodes" ) };
+	if ( tNodes.IsString() ) // old config - all nodes in one line, ','-separated
+		sphSplit ( m_dClusterNodes, String ( tNodes ).cstr(), "," );
 	else
-		sWarning = sError;
+		tNodes.ForEach ( [this] ( const NodeHandle_t& tNode ) { m_dClusterNodes.Add ( String ( tNode ) ); } );
 
-	if ( !tJson.FetchStrItem ( m_sClusterNodes, "nodes", sError, true ) )
-		return false;
+	m_tOptions.m_hOptions.Reset();
+	Bson_c tOptions { tBson.ChildByName ( "options" ) };
+	if ( tOptions.IsString() ) // old config - all options in one line, need to be parsed
+		m_tOptions.Parse ( String ( tOptions ) );
+	else
+		tOptions.ForEach ( [this] ( CSphString&& sName, const NodeHandle_t& tNode ) { m_tOptions.m_hOptions.Add ( String ( tNode ), sName ); } );
 
-	if ( !tJson.FetchStrItem ( m_sPath, "path", sError, true ) )
-		return false;
-
-	// set indexes prior replication init
-	JsonObj_c tIndexes = tJson.GetItem("indexes");
 	int iItem = 0;
-	for ( const auto & j : tIndexes )
-	{
-		if ( j.IsStr() )
-			m_dIndexes.Add ( j.StrVal() );
+	Bson_c ( tBson.ChildByName ( "indexes" ) ).ForEach ( [this,&iItem,&sWarning] ( const NodeHandle_t& tNode ) {
+		if ( IsString(tNode ) )
+			m_hIndexes.Add ( String ( tNode ));
 		else
 			sWarning.SetSprintf ( "table %d: name '%s' should be a string, skipped", iItem, m_sName.cstr() );
+		++iItem;
+	} );
 
-		iItem++;
-	}
-
+	m_sPath = String ( tBson.ChildByName ( "path" ) );
 	return true;
 }
 
-
-void ClusterDesc_t::Save ( JsonObj_c & tClusters ) const
+void operator<< ( JsonEscapedBuilder& tOut, const ClusterOptions_t& tOptions )
 {
-	JsonObj_c tItem;
-	tItem.AddStr ( "path", m_sPath );
-	tItem.AddStr ( "nodes", m_sClusterNodes );
-	tItem.AddStr ( "options", m_tOptions.AsStr(true) );
-
-	// index array
-	JsonObj_c tIndexes(true);
-	for ( const auto & i : m_dIndexes )
+	auto _ = tOut.ObjectW();
+	for ( const auto& tOpt : tOptions.m_hOptions )
 	{
-		JsonObj_c tStr = JsonObj_c::CreateStr(i);
-		tIndexes.AddItem(tStr);
+		if ( tOpt.first == "pc.bootstrap" ) // we always skip pc.bootstrap when store value into json
+			continue;
+
+		tOut.NamedString ( tOpt.first.cstr(), tOpt.second );
 	}
+}
 
-	tItem.AddItem ( "indexes", tIndexes );
-
-	tClusters.AddItem ( m_sName.cstr(), tItem );
+void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
+{
+	tOut.Named ( m_sName.cstr() );
+	auto _0 = tOut.ObjectW();
+	if ( !m_dClusterNodes.IsEmpty() )
+	{
+		tOut.Named ( "nodes" );
+		auto _1 = tOut.Array();
+		for_each ( m_dClusterNodes, [&tOut] ( const auto& sNode ) { tOut.String ( sNode ); } );
+	}
+	if ( !m_tOptions.IsEmpty() )
+		tOut.NamedVal ( "options", m_tOptions );
+	if ( !m_hIndexes.IsEmpty() )
+	{
+		tOut.Named ( "indexes" );
+		auto _1 = tOut.Array();
+		for_each ( m_hIndexes, [&tOut] ( const auto& tIndex ) { tOut.String ( tIndex.first ); } );
+	}
+	tOut.NamedStringNonEmpty ( "path", m_sPath );
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IndexDescDistr_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError )
+bool IndexDescDistr_t::Parse ( const bson::Bson_c& tBson, CSphString& sWarning )
 {
-	JsonObj_c tLocals = tJson.GetItem("locals");
-	for ( const auto & i : tLocals )
-	{
-		if ( !i.IsStr() )
+	using namespace bson;
+	Bson_c ( tBson.ChildByName ( "locals" ) ).ForEach ( [this,&sWarning] ( const NodeHandle_t& tNode ) {
+		if ( !IsString(tNode) )
 		{
 			sWarning = "lists of local tables must only contain strings, skipped";
-			continue;
+			return;
 		}
-
-		m_dLocals.Add ( i.StrVal() );
-	}
-
-	JsonObj_c tAgents = tJson.GetItem("agents");
-	for ( const auto & i : tAgents )
-	{
-		AgentConfigDesc_t & tNew = m_dAgents.Add();
-		if ( !i.FetchStrItem ( tNew.m_sConfig, "config", sError, false ) )
-			return false;
-
-		if ( !i.FetchBoolItem ( tNew.m_bBlackhole, "blackhole", sError, true ) )
-			return false;
-
-		if ( !i.FetchBoolItem ( tNew.m_bPersistent, "persistent", sError, true ) )
-			return false;
-	}
-
-	if ( !tJson.FetchIntItem ( m_iAgentConnectTimeout, "agent_connect_timeout", sError, true ) )
-		return false;
-
-	if ( !tJson.FetchIntItem ( m_iAgentQueryTimeout, "agent_query_timeout", sError, true ) )
-		return false;
-
-	if ( !tJson.FetchIntItem ( m_iAgentRetryCount, "agent_retry_count", sError, true ) )
-		return false;
-
-	if ( !tJson.FetchBoolItem ( m_bDivideRemoteRanges, "divide_remote_ranges", sError, true ) )
-		return false;
-
-	CSphString sHaStrategy;
-	if ( !tJson.FetchStrItem ( sHaStrategy, "ha_strategy", sError, true ) )
-		return false;
-
+		m_dLocals.Add ( String ( tNode ) );
+	} );
+	Bson_c ( tBson.ChildByName ( "agents" ) ).ForEach ( [this, &sWarning] ( const NodeHandle_t& tNode ) {
+		AgentConfigDesc_t& tNew = m_dAgents.Add();
+		auto tBson = bson::Bson_c { tNode };
+		tNew.m_sConfig = String ( tBson.ChildByName ( "config" ) );
+		tNew.m_bBlackhole = Bool ( tBson.ChildByName ( "blackhole" ) );
+		tNew.m_bPersistent = Bool ( tBson.ChildByName ( "persistent" ) );
+	} );
+	m_iAgentConnectTimeout = Int ( tBson.ChildByName( "agent_connect_timeout" ));
+	m_iAgentQueryTimeout = Int ( tBson.ChildByName ( "agent_query_timeout" ) );
+	m_iAgentRetryCount = Int ( tBson.ChildByName ( "agent_retry_count" ) );
+	m_bDivideRemoteRanges = Bool ( tBson.ChildByName ( "divide_remote_ranges" ) );
+	m_sHaStrategy = String ( tBson.ChildByName ( "ha_strategy" ), {} );
 	return true;
 }
 
-
-void IndexDescDistr_t::Save ( JsonObj_c & tIdx ) const
+void operator<< ( JsonEscapedBuilder& tOut, const AgentConfigDesc_t& tAgent )
 {
+	auto _ = tOut.ObjectW();
+	tOut.NamedString ( "config", tAgent.m_sConfig );
+	tOut.NamedVal ( "blackhole", tAgent.m_bBlackhole );
+	tOut.NamedVal ( "persistent", tAgent.m_bPersistent );
+}
+
+void IndexDescDistr_t::Save ( JsonEscapedBuilder& tOut ) const
+{
+	auto _0 = tOut.ObjectW();
+	tOut.NamedString ( "type", GetIndexTypeName ( IndexType_e::DISTR ) );
 	if ( !m_dLocals.IsEmpty() )
 	{
-		JsonObj_c tLocals(true);
-		for ( const auto & i : m_dLocals )
-		{
-			JsonObj_c tStr = JsonObj_c::CreateStr(i);
-			tLocals.AddItem(tStr);
-		}
-
-		tIdx.AddItem ( "locals", tLocals );
+		tOut.Named ( "locals" );
+		auto _ = tOut.Array();
+		for_each ( m_dLocals, [&tOut] ( const auto& sNode ) { tOut.String ( sNode ); } );
 	}
-
 	if ( !m_dAgents.IsEmpty() )
 	{
-		JsonObj_c tAgents(true);
-		for ( const auto & i : m_dAgents )
-		{
-			JsonObj_c tNew;
-			tNew.AddStr ( "config", i.m_sConfig );
-			tNew.AddBool ( "blackhole", i.m_bBlackhole );
-			tNew.AddBool ( "persistent", i.m_bPersistent );
-			tAgents.AddItem(tNew);
-		}
-
-		tIdx.AddItem ( "agents", tAgents );
+		tOut.Named ( "agents" );
+		auto _ = tOut.Array();
+		for_each ( m_dAgents, [&tOut] ( const auto& sNode ) { tOut << sNode; } );
 	}
 
-	tIdx.AddInt ( "agent_connect_timeout",	m_iAgentConnectTimeout);
-	tIdx.AddInt ( "agent_query_timeout",	m_iAgentQueryTimeout );
-	if ( m_iAgentRetryCount>0 )
-		tIdx.AddInt ( "agent_retry_count",	m_iAgentRetryCount );
-
-	tIdx.AddBool( "divide_remote_ranges",	m_bDivideRemoteRanges );
-
-	if ( !m_sHaStrategy.IsEmpty() )
-		tIdx.AddStr ( "ha_strategy",		m_sHaStrategy );
+	tOut.NamedValNonDefault ( "agent_connect_timeout", m_iAgentConnectTimeout, 0 );
+	tOut.NamedValNonDefault ( "agent_query_timeout", m_iAgentQueryTimeout, 0 );
+	tOut.NamedValNonDefault ( "agent_retry_count", m_iAgentRetryCount, 0 );
+	tOut.NamedVal ( "divide_remote_ranges", m_bDivideRemoteRanges );
+	tOut.NamedStringNonDefault ( "ha_strategy", m_sHaStrategy, {} );
 }
 
 
@@ -375,8 +327,10 @@ void IndexDescDistr_t::Save ( CSphConfigSection & hIndex ) const
 	}
 
 	CSphString sTmp;
-	hIndex.AddEntry ( "agent_connect_timeout",	sTmp.SetSprintf ( "%d", m_iAgentConnectTimeout ).cstr() );
-	hIndex.AddEntry ( "agent_query_timeout",	sTmp.SetSprintf ( "%d", m_iAgentQueryTimeout ).cstr() );
+	if ( m_iAgentConnectTimeout>0 )
+		hIndex.AddEntry ( "agent_connect_timeout",	sTmp.SetSprintf ( "%d", m_iAgentConnectTimeout ).cstr() );
+	if ( m_iAgentQueryTimeout>0 )
+		hIndex.AddEntry ( "agent_query_timeout",	sTmp.SetSprintf ( "%d", m_iAgentQueryTimeout ).cstr() );
 	if ( m_iAgentRetryCount > 0 )
 		hIndex.AddEntry ( "agent_retry_count",		sTmp.SetSprintf ( "%d", m_iAgentRetryCount ).cstr() );
 
@@ -388,70 +342,52 @@ void IndexDescDistr_t::Save ( CSphConfigSection & hIndex ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError )
+bool IndexDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CSphString& sWarning )
 {
-	m_sName = tJson.Name();
-	if ( m_sName.IsEmpty() )
-	{
-		sError = "empty table name";
-		return false;
-	}
+	using namespace bson;
+	if ( sName.IsEmpty() )
+		return TlsMsg::Err ( "empty table name" );
 
-	CSphString sType;
-	if ( !tJson.FetchStrItem ( sType, "type", sError ) )
-		return false;
+	m_sName = sName;
 
+	CSphString sType = String ( tBson.ChildByName ( "type" ) );
 	m_eType = TypeOfIndexConfig ( sType );
-	if ( m_eType==IndexType_e::ERROR_ )
+	if ( m_eType == IndexType_e::ERROR_ )
+		return TlsMsg::Err ( "type '%s' is invalid", sType.cstr() );
+
+	if ( m_eType != IndexType_e::DISTR )
 	{
-		sError.SetSprintf ( "type '%s' is invalid", sType.cstr() );
-		return false;
+		m_sPath = String ( tBson.ChildByName ( "path" ) );
+		MakeRelativePath ( m_sPath );
+		return true;
 	}
 
-	if ( m_eType==IndexType_e::DISTR )
-	{
-		bool bParseOk = m_tDistr.Parse ( tJson, sWarning, sError );
-		if ( !sError.IsEmpty() )
-			sError.SetSprintf ( "table %s: %s", m_sName.cstr(), sError.cstr() );
+	bool bParseOk = m_tDistr.Parse ( tBson, sWarning );
+	if ( TlsMsg::HasErr() )
+		TlsMsg::Err ( "table %s: %s", m_sName.cstr(), TlsMsg::szError() );
 
-		if ( !sWarning.IsEmpty() )
-			sWarning.SetSprintf ( "table %s: %s", m_sName.cstr(), sWarning.cstr() );
+	if ( !sWarning.IsEmpty() )
+		sWarning.SetSprintf ( "table %s: %s", m_sName.cstr(), sWarning.cstr() );
 
-		if ( !bParseOk )
-			return false;
-	}
-	else
-	{
-		if ( !tJson.FetchStrItem ( m_sPath, "path", sError ) )
-			return false;
-
-		MakeRelativePath(m_sPath);
-	}
-
-	return true;
+	return bParseOk;
 }
 
-
-void IndexDesc_t::Save ( JsonObj_c & tIndexes ) const
+void IndexDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 {
-	JsonObj_c tIdx;
-	tIdx.AddStr ( "type", GetTypeName ( m_eType ) );
+	tOut.Named ( m_sName.cstr() );
+	if ( m_eType == IndexType_e::DISTR )
+		return m_tDistr.Save ( tOut );
 
-	if ( m_eType==IndexType_e::DISTR )
-		m_tDistr.Save(tIdx);
-	else
-	{
-		CSphString sPath = m_sPath;
-		tIdx.AddStr ( "path", StripPath(sPath) );
-	}
-
-	tIndexes.AddItem ( m_sName.cstr(), tIdx );
+	auto _ = tOut.ObjectW();
+	tOut.NamedString ("type", GetIndexTypeName ( m_eType ) );
+	CSphString sPath = m_sPath;
+	tOut.NamedString ( "path", StripPath ( sPath ) );
 }
 
 
 void IndexDesc_t::Save ( CSphConfigSection & hIndex ) const
 {
-	hIndex.Add ( CSphVariant ( GetTypeName ( m_eType ).cstr() ), "type" );
+	hIndex.Add ( CSphVariant ( GetIndexTypeName ( m_eType ) ), "type" );
 
 	if ( m_eType==IndexType_e::DISTR )
 		m_tDistr.Save (hIndex);
@@ -468,7 +404,7 @@ void IndexDesc_t::Save ( CSphConfigSection & hIndex ) const
 //////////////////////////////////////////////////////////////////////////
 
 // read info about cluster and indexes from manticore.json and validate data
-static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
+static bool ConfigRead ( const CSphString& sConfigPath, CSphVector<ClusterDesc_t>& dClusters, CSphVector<IndexDesc_t>& dIndexes, CSphString& sError )
 {
 	if ( !sphIsReadable ( sConfigPath, nullptr ) )
 		return true;
@@ -481,8 +417,10 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 	if ( !iSize )
 		return true;
 
-	CSphFixedVector<BYTE> dData ( iSize+1 );
-	tConfigFile.GetBytes ( dData.Begin(), iSize );
+	CSphFixedVector<char> dJsonText ( iSize + 2 );
+	auto iRead = (int64_t)sphReadThrottled ( tConfigFile.GetFD(), dJsonText.begin(), iSize );
+	if ( iRead != iSize )
+		return false;
 
 	if ( tConfigFile.GetErrorFlag() )
 	{
@@ -490,93 +428,99 @@ static bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_
 		return false;
 	}
 
-	dData[iSize] = 0; // safe gap
-	JsonObj_c tRoot ( (const char*)dData.Begin() );
-	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
+	decltype ( dJsonText )::POLICY_T::Zero ( dJsonText.begin() + iSize, 2 ); // safe gap
+
+	CSphVector<BYTE> dBson;
+	if ( !sphJsonParse ( dBson, dJsonText.begin(), false, false, false, sError ) )
 		return false;
 
-	LoadCompatHttp ( (const char*)dData.Begin() );
-
-	JsonObj_c tIndexes = tRoot.GetItem("indexes");
-	for ( const auto & i : tIndexes )
+	using namespace bson;
+	Bson_c tBson ( dBson );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
+		sError = "Something wrong read from json config - it is either empty, either not root object.";
+		return false;
+	}
+
+	LoadCompatHttp ( (const char*)dJsonText.Begin() );
+
+	Bson_c ( tBson.ChildByName ( "indexes" ) ).ForEach ( [&dIndexes] ( CSphString&& sName, const NodeHandle_t& tNode ) {
+
+		Bson_c tNodeBson { tNode };
+
 		IndexDesc_t tIndex;
 		CSphString sWarning;
-		if ( !tIndex.Parse ( i, sWarning, sError ) )
+		if ( !tIndex.Parse ( tNodeBson, sName, sWarning ) )
 		{
-			sphWarning ( "table '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
-			return false;
+			sphWarning ( "table '%s'(%d) error: %s", sName.cstr(), dIndexes.GetLength(), TlsMsg::szError() );
+			return;
 		}
 
 		if ( !sWarning.IsEmpty() )
-			sphWarning ( "table '%s'(%d) warning: %s", i.Name(), dIndexes.GetLength(), sWarning.cstr() );
+			sphWarning ( "table '%s'(%d) warning: %s", sName.cstr(), dIndexes.GetLength(), sWarning.cstr() );
 
-		int iExists = dIndexes.GetFirst ( [&] ( const IndexDesc_t & tItem )
-		{
-			return ( tItem.m_sName==tIndex.m_sName ||
-				( ( tItem.m_eType==IndexType_e::PLAIN || tItem.m_eType==IndexType_e::RT ) && tItem.m_sPath==tIndex.m_sPath ) );
-		});
+		int iExists = dIndexes.GetFirst ( [&] ( const IndexDesc_t& tItem ) {
+			return ( tItem.m_sName == tIndex.m_sName || ( ( tItem.m_eType == IndexType_e::PLAIN || tItem.m_eType == IndexType_e::RT ) && tItem.m_sPath == tIndex.m_sPath ) );
+		} );
 
-		if ( iExists!=-1 )
+		if ( iExists != -1 )
 		{
-			const IndexDesc_t & tItem = dIndexes[iExists];
-			sphWarning ( "table with the same %s already exists: %s, %s, SKIPPED", ( tItem.m_sName==tIndex.m_sName ? "name" : "path" ), tIndex.m_sName.scstr(), tIndex.m_sPath.scstr() );
-			continue;
+			const IndexDesc_t& tItem = dIndexes[iExists];
+			sphWarning ( "table with the same %s already exists: %s, %s, SKIPPED", ( tItem.m_sName == tIndex.m_sName ? "name" : "path" ), tIndex.m_sName.scstr(), tIndex.m_sPath.scstr() );
+			return;
 		}
 
-		dIndexes.Add(tIndex);
-	}
+		dIndexes.Add ( tIndex );
+	} );
+
 
 	// check clusters
-	JsonObj_c tClusters = tRoot.GetItem("clusters");
-	for ( const auto & tIt : tClusters )
-	{
+	Bson_c ( tBson.ChildByName ( "clusters" ) ).ForEach ( [&dClusters] ( CSphString&& sName, const NodeHandle_t& tNode ) {
+
+		Bson_c tNodeBson { tNode };
 		ClusterDesc_t tCluster;
-	
-		CSphString sClusterError, sClusterWarning;
-		bool bParsed = tCluster.Parse ( tIt, sClusterWarning, sClusterError );
+		CSphString sClusterWarning;
+		bool bParsed = tCluster.Parse ( tNodeBson, sName, sClusterWarning );
 
 		if ( !sClusterWarning.IsEmpty() )
 			sphWarning ( "cluster '%s': %s", tCluster.m_sName.cstr(), sClusterWarning.cstr() );
 
 		if ( !bParsed )
 		{
-			sphWarning ( "cluster '%s': disabled at JSON config, %s", tCluster.m_sName.cstr(), sClusterError.cstr() );
-			continue;
+			sphWarning ( "cluster '%s': disabled at JSON config, %s", tCluster.m_sName.cstr(), TlsMsg::szError() );
+			return;
 		}
 
-		int iExists = dClusters.GetFirst ( [&] ( const ClusterDesc_t & tItem ) { return ( tItem.m_sName==tCluster.m_sName || tItem.m_sPath==tCluster.m_sPath ); } );
-		if ( iExists!=-1 )
+		int iExists = dClusters.GetFirst ( [&] ( const ClusterDesc_t& tItem ) { return ( tItem.m_sName == tCluster.m_sName || tItem.m_sPath == tCluster.m_sPath ); } );
+		if ( iExists != -1 )
 		{
-			const ClusterDesc_t & tItem = dClusters[iExists];
-			sphWarning ( "cluster with the same %s already exists: %s, %s, SKIPPED", ( tItem.m_sName==tCluster.m_sName ? "name" : "path" ), tCluster.m_sName.scstr(), tCluster.m_sPath.scstr() );
-			continue;
+			const ClusterDesc_t& tItem = dClusters[iExists];
+			sphWarning ( "cluster with the same %s already exists: %s, %s, SKIPPED", ( tItem.m_sName == tCluster.m_sName ? "name" : "path" ), tCluster.m_sName.scstr(), tCluster.m_sPath.scstr() );
+			return;
 		}
 
 		dClusters.Add ( tCluster );
-	}
+	} );
 
 	sphLogDebug ( "config loaded, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
-
 	return true;
 }
 
-
 static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<ClusterDesc_t> & dClusters, const CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
 {
-	JsonObj_c tRoot;
-	JsonObj_c tClusters;
-	for ( const auto & i : dClusters )
-		i.Save(tClusters);
-
-	tRoot.AddItem ( "clusters", tClusters );
-
-	JsonObj_c tIndexes;
-	for ( const auto & i : dIndexes )
-		i.Save(tIndexes);
-
-	tRoot.AddItem ( "indexes", tIndexes );
-	SaveCompatHttp ( tRoot );
+	JsonEscapedBuilder tOut;
+	tOut.ObjectWBlock();
+	tOut.Named ( "clusters" );
+	{
+		auto _ = tOut.Object();
+		for_each ( dClusters, [&tOut] ( const auto& tCluster ) { tCluster.Save ( tOut ); } );
+	}
+	tOut.Named ( "indexes" );
+	{
+		auto _ = tOut.Object();
+		for_each ( dIndexes, [&tOut] ( const auto& tIndex ) { tIndex.Save ( tOut ); } );
+	}
+	tOut.FinishBlocks();
 
 	CSphString sNew, sOld;
 	auto & sCur = sConfigPath;
@@ -587,8 +531,8 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	if ( !tConfigFile.OpenFile ( sNew, sError ) )
 		return false;
 
-	CSphString sConfigData = tRoot.AsString(true);
-	tConfigFile.PutBytes ( sConfigData.cstr(), sConfigData.Length() );
+	tConfigFile.PutString ( (Str_t)tOut );
+	assert ( bson::ValidateJson ( tOut.cstr() ) );
 	tConfigFile.CloseFile();
 	if ( tConfigFile.IsError() )
 		return false;
@@ -699,25 +643,7 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		IndexDesc_t & tIndex = dIndexes.Add();
 		tIndex.m_sName = tIt.first;
 		tIndex.m_eType = IndexType_e::DISTR;
-		const auto& tIdx = *tIt.second;
-
-		tIndex.m_tDistr.m_dLocals				= tIdx.m_dLocal;
-		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIdx.m_iAgentConnectTimeoutMs;
-		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIdx.m_iAgentQueryTimeoutMs;
-		tIndex.m_tDistr.m_iAgentRetryCount		= tIdx.m_iAgentRetryCount;
-		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIdx.m_bDivideRemoteRanges;
-		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIdx.m_eHaStrategy );
-
-		for ( const auto& i : tIdx.m_dAgents )
-		{
-			if ( !i || !i->GetLength() )
-				continue;
-
-			AgentConfigDesc_t & tAgent = tIndex.m_tDistr.m_dAgents.Add();
-			tAgent.m_sConfig		= i->GetConfigStr();
-			tAgent.m_bBlackhole		= (*i)[0].m_bBlackhole;
-			tAgent.m_bPersistent	= (*i)[0].m_bPersistent;
-		}
+		tIndex.m_tDistr = GetDistributedDesc ( *tIt.second );
 	}
 }
 
@@ -816,14 +742,12 @@ bool SaveConfigInt ( CSphString & sError )
 
 	ScopedCoroMutex_t tSaving ( g_tSaveInProgress );
 
-	if ( !ReplicationIsEnabled() && !IsConfigless() )
+	if ( !ReplicationEnabled() && !IsConfigless() )
 		return true;
-	
-	CSphVector<ClusterDesc_t> dClusters;
+
 
 	// save clusters and their indexes into JSON config on daemon shutdown
-	if ( ReplicationIsEnabled() )
-		ReplicationCollectClusters ( dClusters );
+	auto dClusters = ReplicationCollectClusters ();
 
 	CSphVector<IndexDesc_t> dIndexes;
 	CollectLocalIndexesInt ( dIndexes );
@@ -831,7 +755,7 @@ bool SaveConfigInt ( CSphString & sError )
 
 	if ( !ConfigWrite ( g_sConfigPath, dClusters, dIndexes, sError ) )
 	{
-		sphWarning ( "%s", sError.cstr() );
+		sphWarning ( "%s", TlsMsg::szError() );
 		return false;
 	}
 
@@ -884,8 +808,15 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 		CSphString sDest = i;
 		StripPath(sDest);
 		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
-		if ( i==sDest )
+		if ( RealPath ( i ) == RealPath ( sDest ) )
 			continue;
+
+		// can not overwrite existed destination file
+		if ( sphIsReadable ( sDest.cstr(), nullptr ) )
+		{
+			sError.SetSprintf ( "can not overwrite index file '%s'", sDest.cstr() );
+			return false;
+		}
 
 		if ( !CopyFile ( i, sDest, sError ) )
 			return false;
@@ -1004,7 +935,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit", "knn" };
 	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
@@ -1071,11 +1002,11 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 
 	DistributedIndexRefPtr_t pDefault ( new DistributedIndex_t );
 	CSphString sOpt;
-	if ( tDistr.m_iAgentConnectTimeoutMs!=pDefault->m_iAgentConnectTimeoutMs )
-		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.m_iAgentConnectTimeoutMs );
+	if ( tDistr.GetAgentConnectTimeoutMs ( true )!=pDefault->GetAgentConnectTimeoutMs ( true ) )
+		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.GetAgentConnectTimeoutMs ( true ) );
 
-	if ( tDistr.m_iAgentQueryTimeoutMs!=pDefault->m_iAgentQueryTimeoutMs )
-		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.m_iAgentQueryTimeoutMs );
+	if ( tDistr.GetAgentQueryTimeoutMs ( true )!=pDefault->GetAgentQueryTimeoutMs ( true ) )
+		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.GetAgentQueryTimeoutMs ( true ) );
 
 	if ( tDistr.m_iAgentRetryCount!=pDefault->m_iAgentRetryCount )
 		sRes << sOpt.SetSprintf ( "agent_retry_count='%d'", tDistr.m_iAgentRetryCount );
@@ -1296,6 +1227,12 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 	}
 
+	if ( !pDistr->m_sCluster.IsEmpty() )
+	{
+		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster table '%s'", sIndex.cstr() );
+		return false;
+	}
+
 	g_pDistIndexes->Delete(sIndex);
 
 	return true;
@@ -1313,7 +1250,47 @@ static void RemoveConfigIndex ( const CSphString & sIndex )
 		g_dCfgIndexes.Remove ( iIdx );
 }
 
-static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
+static sph::StringSet g_dAllowedExt = { "meta", "ram", "settings", "lock"};
+
+static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
+{
+	if ( !pMsg )
+		return true;
+
+	CSphString sIndexPath = GetPathForNewIndex ( sIndexName );
+	CSphString sSearchPath; 
+	sSearchPath.SetSprintf ( "%s/*", sIndexPath.cstr() );
+
+	StrVec_t dFiles = FindFiles ( sSearchPath.cstr(), false );
+
+	// no files in the index dir is ok
+	if ( dFiles.IsEmpty() )
+		return true;
+	
+	// some files removed at RT index dtor are ok
+	bool bAllAllowed = dFiles.all_of ( [&] ( const CSphString & sFile )
+	{
+		const char * sExt = GetExtension ( sFile );
+		return g_dAllowedExt[sExt];
+	});
+	if ( bAllAllowed )
+		return true;
+
+	StringBuilder_c sFiles ( ", " );
+	dFiles.for_each ( [&] ( CSphString & sFile)
+	{
+		const char * sExt = GetExtension ( sFile );
+		if ( !g_dAllowedExt[sExt] )
+			sFiles += StripPath ( sFile ).cstr();
+	});
+
+	sphWarning ( "index %s directory '%s' is not empty after table drop, clean up files manually: %s", sIndexName.cstr(), sIndexPath.cstr(), sFiles.cstr() );
+	pMsg->SetSprintf ( "index %s directory '%s' is not empty after table drop, clean up files manually: %s", sIndexName.cstr(), sIndexPath.cstr(), sFiles.cstr() );
+
+	return false;
+}
+
+static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
 	auto pServed = GetServed(sIndex);
@@ -1329,33 +1306,43 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 		return false;
 	}
 
-	WIdx_T<RtIndex_i*> pRt { pServed };
-	if ( !pRt )
+	// need to stop all long time write operation at the index as it will be dropped anyway
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unknown local table '%s'", sIndex.cstr() );
-		return false;
+		RIdx_T<RtIndex_i*> pRt ( pServed );
+		pRt->ProhibitSave();
 	}
 
-	// need to collect all external files prior to truncate as disk chunks could have different options for externals
-	StrVec_t dIndexFiles;
-	StrVec_t dExtFiles;
-	pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
+	// scope for index removal on exit
+	{
+		WIdx_T<RtIndex_i*> pRt { pServed };
+		if ( !pRt )
+		{
+			sError.SetSprintf ( "DROP TABLE failed: unknown local table '%s'", sIndex.cstr() );
+			return false;
+		}
 
-	if ( !pRt->Truncate(sError) )
-		return false;
+		// need to collect all external files prior to truncate as disk chunks could have different options for externals
+		StrVec_t dIndexFiles;
+		StrVec_t dExtFiles;
+		pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
 
-	DeleteRtIndex ( pRt, &dExtFiles );
-	RemoveConfigIndex ( sIndex );
+		if ( !pRt->Truncate(sError) )
+			return false;
 
+		DeleteRtIndex ( pRt, &dExtFiles );
+		RemoveConfigIndex ( sIndex );
+	}
+
+	ReportEmptyDir ( sIndex, pWarning );
 	return true;
 }
 
 
-bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError )
+bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
-	bool bLocal = !!GetServed(sIndex);
-	bool bDistr = !!GetDistr(sIndex);
+	bool bLocal = GetServed ( sIndex );
+	bool bDistr = GetDistr ( sIndex );
 	if ( bDistr )
 	{
 		if ( !DropDistrIndex ( sIndex, sError ) )
@@ -1363,7 +1350,7 @@ bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sErr
 	}
 	else if ( bLocal )
 	{
-		if ( !DropLocalIndex ( sIndex, sError ) )
+		if ( !DropLocalIndex ( sIndex, sError, pWarning ) )
 			return false;
 	}
 	else
@@ -1395,3 +1382,29 @@ RunIdx_e IndexIsServed ( const CSphString& sName )
 		return DISTR;
 	return NOTSERVED;
 }
+
+IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
+{
+	IndexDescDistr_t tIndex;
+
+	tIndex.m_dLocals				= tDist.m_dLocal;
+	tIndex.m_iAgentConnectTimeout	= tDist.GetAgentConnectTimeoutMs ( true );
+	tIndex.m_iAgentQueryTimeout		= tDist.GetAgentQueryTimeoutMs ( true );
+	tIndex.m_iAgentRetryCount		= tDist.m_iAgentRetryCount;
+	tIndex.m_bDivideRemoteRanges	= tDist.m_bDivideRemoteRanges;
+	tIndex.m_sHaStrategy			= HAStrategyToStr ( tDist.m_eHaStrategy );
+
+	for ( const auto & tAgentIt : tDist.m_dAgents )
+	{
+		if ( !tAgentIt || !tAgentIt->GetLength() )
+			continue;
+
+		AgentConfigDesc_t & tAgent = tIndex.m_dAgents.Add();
+		tAgent.m_sConfig		= tAgentIt->GetConfigStr();
+		tAgent.m_bBlackhole		= (*tAgentIt)[0].m_bBlackhole;
+		tAgent.m_bPersistent	= (*tAgentIt)[0].m_bPersistent;
+	}
+
+	return tIndex;
+}
+

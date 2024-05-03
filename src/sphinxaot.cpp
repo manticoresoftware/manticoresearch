@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -269,9 +269,9 @@ bool CMorphAutomat::LoadPak ( CSphReader & rd, int iCacheSize )
 
 #if !USE_LITTLE_ENDIAN
 	for ( int i=0; i< m_NodesCount; ++i )
-		FlipEndianess ( &m_pNodes[i].m_Data );
+		FlipEndianness ( &m_pNodes[i].m_Data );
 	for ( int i=0; i< m_RelationsCount; ++i )
-		FlipEndianess ( &m_pRelations[i].m_Data );
+		FlipEndianness ( &m_pRelations[i].m_Data );
 #endif
 
 	BuildChildrenCache ( iCacheSize );
@@ -908,6 +908,15 @@ static inline bool IsRuFreq3 ( BYTE * pWord )
 		|| iCode==0xE3EEE4 || iCode==0xF7F2EE || iCode==0xE1E5E7 ); // god, chto, bez
 }
 
+static inline bool IsRuNeed2 ( BYTE * pWord )
+{
+	if ( pWord[2]!=0 )
+		return false;
+	int iCode = ( ( pWord[0]<<8 ) + ( pWord[1] ) ) | 0x2020;
+	return ( iCode==0xECEC || iCode==0xF1EC || iCode==0xEAEC || iCode==0xEAE3 ); // mm, cm, km, kg
+}
+
+
 static inline bool IsEnFreq3 ( BYTE * )
 {
 	// stub
@@ -1313,7 +1322,7 @@ void sphAotLemmatizeRu ( StrVec_t & dLemmas, const BYTE * pWord )
 
 	if ( iFormLen<2 || IsRuFreq2(sForm) )
 		return;
-	if ( iFormLen<3 || IsRuFreq3(sForm) )
+	if ( ( iFormLen<3 || IsRuFreq3(sForm) ) && !IsRuNeed2(sForm) )
 		return;
 
 	DWORD FindResults[12]; // max results is like 6
@@ -1464,12 +1473,12 @@ public:
 	}
 
 
-	bool TokenIsBlended() const final
+	bool TokenIsBlended() const noexcept final
 	{
 		return m_iCurrent>=0 || m_pTokenizer->TokenIsBlended();
 	}
 
-	uint64_t GetSettingsFNV () const final
+	uint64_t GetSettingsFNV () const noexcept final
 	{
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash ^= (uint64_t)m_pWordforms;
@@ -1486,7 +1495,7 @@ public:
 		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_RU )
 	{}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
@@ -1616,7 +1625,7 @@ public:
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
@@ -1774,7 +1783,7 @@ class TokenizerUk_c : public CSphAotTokenizerTmpl
 
 public:
 	TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact );
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
 	BYTE * GetToken() final;
 };
 
@@ -1950,7 +1959,7 @@ TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict
 {
 }
 
-TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const
+TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const noexcept
 {
 	// this token filter must NOT be created as escaped
 	// it must only be used during indexing time, NEVER in searching time

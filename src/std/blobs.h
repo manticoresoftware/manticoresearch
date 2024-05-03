@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -24,7 +24,7 @@ inline bool IsValid ( const ByteBlob_t& dBlob )	noexcept { return IsEmpty ( dBlo
 
 /// blob of chars with length (for zero-copy string processing)
 using Str_t = std::pair<const char*, int>;
-const Str_t dEmptyStr { "", 0 };
+inline const Str_t dEmptyStr { "", 0 };
 
 // Str_t stuff
 [[nodiscard]] inline bool IsEmpty ( const Str_t& dBlob ) noexcept { return !dBlob.second; }

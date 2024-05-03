@@ -43,6 +43,8 @@ table <table name> {
   [rt_attr_multi_64 = <another multi-bigint (MVA) field name>]
   [rt_attr_float = <float field name>]
   [rt_attr_float = <another float field name>]
+  [rt_attr_float_vector = <float vector field name>]
+  [rt_attr_float_vector = <another float vector field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -269,6 +271,16 @@ Declares floating point attributes with single precision, 32-bit IEEE 754 format
 
 Value: field name. Multiple records allowed.
 
+#### rt_attr_float_vector
+
+```ini
+rt_attr_float_vector = image_vector
+```
+
+Declares a vector of floating-point values.
+
+Value: field name. Multiple records allowed.
+
 #### rt_attr_bool
 
 ```ini
@@ -416,6 +428,7 @@ For more information on data types, see [more about data types here](../../Creat
 | [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| integer	 | int, uint |
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| big integer	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | float  |   |
+| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | a vector of float values  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | multi-integer |   |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | multi-bigint  |   |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | boolean |   |
@@ -460,19 +473,19 @@ Values:
 * **rowwise (default)** - Doesn't change anything and uses the traditional row-wise storage for the table.
 
 
-# Other settings
+## Other settings
 The following settings are applicable for both real-time and plain tables, regardless of whether they are specified in a configuration file or set online using the `CREATE` or `ALTER` command.
 
-## Performance related
+### Performance related
 
-### Accessing table files
+#### Accessing table files
 Manticore supports two access modes for reading table data: seek+read and mmap.
 
 In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the`*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.
 
 In mmap access mode, the search server maps the table's file into memory using the `mmap` system call, and the OS caches the file contents. The options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock the table's data in memory using the`mlock` privileged call, which prevents the OS from swapping the cached data out to disk.
 
-To control which access mode to use, the options **access_plain_attrs**, **access_blob_attrs**, **access_doclists** and **access_hitlists**  are available, with the following values:
+To control which access mode to use, the options **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists** and **access_dict**  are available, with the following values:
 
 | Value | Description |
 | - | - |
@@ -484,10 +497,11 @@ To control which access mode to use, the options **access_plain_attrs**, **acces
 
 | Setting | Values | Description |
 | - | - | - |
-| access_plain_attrs  | mmap, **mmap_preread** (default), mlock | controls how `*.spa` (plain attributes) `*.spe` (skip lists) `*.spi` (word lists) `*.spt` (lookups) `*.spm` (killed docs) will be read |
+| access_plain_attrs  | mmap, **mmap_preread** (default), mlock | controls how `*.spa` (plain attributes) `*.spe` (skip lists) `*.spt` (lookups) `*.spm` (killed docs) will be read |
 | access_blob_attrs   | mmap, **mmap_preread** (default), mlock  | controls how `*.spb` (blob attributes) (string, mva and json attributes) will be read |
 | access_doclists   | **file** (default), mmap, mlock  | controls how `*.spd` (doc lists) data will be read |
 | access_hitlists   | **file** (default), mmap, mlock  | controls how `*.spp` (hit lists) data will be read |
+| access_dict   | mmap, **mmap_preread** (default), mlock  | controls how `*.spi` (dictionary) will be read |
 
 Here is a table which can help you select your desired mode:
 
@@ -498,6 +512,7 @@ Here is a table which can help you select your desired mode:
 | [columnar](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
 | doc lists | **file** (default) | mmap | no	| mlock |
 | hit lists | **file** (default) | mmap | no	| mlock |
+| dictionary | mmap | mmap | **mmap_preread** (default) | mlock |
 
 ##### The recommendations are:
 

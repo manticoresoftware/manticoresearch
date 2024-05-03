@@ -6,13 +6,18 @@ ENDIF ()
 
 project ( galera-prebuild NONE )
 
+include ( FetchContent )
+# SOURCE_SUBDIR set to unexistent folder, because wsrep sources include own CMakeLists.txt we don't need at all.
+FetchContent_Declare ( WSREP_POPULATE URL @WSREP_PLACE@ URL_MD5 @WSREP_SRC_MD5@ SOURCE_SUBDIR foo )
+FetchContent_MakeAvailable ( WSREP_POPULATE )
+
 include ( ExternalProject )
 ExternalProject_Add ( galera_populate
-		URL ${GALERA_PLACE}
-		URL_MD5 ${GALERA_SRC_MD5}
-		CMAKE_CACHE_ARGS -DWSREP_PATH:STRING=${WSREP_PATH} -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo -DGALERA_REV:STRING=${GALERA_REV}
-		BUILD_COMMAND "${CMAKE_COMMAND}" --build . --config RelWithDebInfo
-		INSTALL_COMMAND "${CMAKE_COMMAND}" --install . --config RelWithDebInfo --prefix "${GALERA_BUILD}"
+		URL @GALERA_PLACE@
+		URL_MD5 @GALERA_SRC_MD5@
+		CMAKE_CACHE_ARGS -DWSREP_PATH:STRING=${wsrep_populate_SOURCE_DIR} -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo -DGALERA_REV:STRING=@GALERA_REV@
+		BUILD_COMMAND "@CMAKE_COMMAND@" --build . --config RelWithDebInfo
+		INSTALL_COMMAND "@CMAKE_COMMAND@" --install . --config RelWithDebInfo --prefix "@GALERA_BUILD@"
 		)
 
 # file configured from cmake/galera-imported.cmake.in

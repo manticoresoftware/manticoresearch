@@ -1,0 +1,42 @@
+name: 📊 Code coverage test
+run-name: 📊 Code coverage test ${{ github.sha }}
+
+on:
+ workflow_run:
+   workflows: [ 🔬 Test ]
+   types: [ completed ]
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: coverage_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit_info:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Commit info
+    runs-on: ubuntu-22.04
+    steps:
+      - run: |
+          echo "# Coverage tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
+
+  simple_build:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    uses: ./.github/workflows/build_template.yml
+    with:
+      CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
+      CTEST_CONFIGURATION_TYPE: "Debug"
+      WITH_COVERAGE: 1
+
+  simple_test_coverage:
+    needs: simple_build
+    uses: ./.github/workflows/test_template.yml
+    with:
+      WITH_COVERAGE: 1
+      artifact_name: test_debug_coverage
+      build_artifact_name: build_jammy_Debug_x86_64
+      timeout: 20

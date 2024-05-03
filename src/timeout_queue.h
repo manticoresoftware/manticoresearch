@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,7 +27,7 @@ struct EnqueuedTimeout_t
 
 /// priority queue for timeouts - as CSphQueue,
 /// but specific (can resize, stores internal index in an object)
-class TimeoutQueue_c
+class TimeoutQueue_c final
 {
 	CSphTightVector<EnqueuedTimeout_t*> m_dQueue;
 

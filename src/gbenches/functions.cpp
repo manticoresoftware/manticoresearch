@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -263,7 +263,7 @@ static void BM_stdSprintf ( benchmark::State & st )
 {
 	char sBuf[40];
 	for ( auto _ : st )
-		sprintf ( sBuf, "%d", 1000000 );
+		snprintf ( sBuf, 39, "%d", 1000000 );
 	st.SetItemsProcessed ( st.iterations() );
 }
 
@@ -360,6 +360,122 @@ BENCHMARK_F ( bench_builder, Sprint_streaming )
 	st.SetLabel ( "own implementation using << (mostly inlined)" );
 	st.SetItemsProcessed ( st.iterations() );
 }
+
+class rand_numbers: public benchmark::Fixture
+{
+public:
+	void SetUp ( const ::benchmark::State& state )
+	{
+		dNumbers.Resize(1000);
+		sphSrand ( 0 );
+		for ( auto& iNum: dNumbers )
+		{
+			int64_t iVal = sphRand();
+			iVal = ( iVal << 32 ) | sphRand();
+			iNum = iVal;
+		}
+
+	}
+	CSphVector<int64_t> dNumbers;
+	char sBuf[32];
+};
+
+#if __has_include( <charconv>)
+#include <charconv>
+#endif
+template<typename T>
+inline static char* FormatInt ( char sBuf[32], T v )
+{
+	if ( sizeof ( T ) == 4 && v == INT_MIN )
+		return strncpy ( sBuf, "-2147483648", 32 );
+	if ( sizeof ( T ) == 8 && v == LLONG_MIN )
+		return strncpy ( sBuf, "-9223372036854775808", 32 );
+
+	bool s = ( v < 0 );
+	if ( s )
+		v = -v;
+
+	char* p = sBuf + 31;
+	*p = 0;
+	do
+	{
+		*--p = '0' + char ( v % 10 );
+		v /= 10;
+	} while ( v );
+	if ( s )
+		*--p = '-';
+	return p;
+}
+
+BENCHMARK_F ( rand_numbers, formatint )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( const auto dNum : dNumbers )
+			benchmark::DoNotOptimize ( FormatInt<int> ( sBuf, (int)dNum ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+BENCHMARK_F ( rand_numbers, ntoaint )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( const auto dNum : dNumbers )
+			benchmark::DoNotOptimize ( sph::NtoA ( sBuf, (int)dNum ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+#if __has_include( <charconv>)
+BENCHMARK_F ( rand_numbers, std_tocharsint )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( const auto dNum : dNumbers )
+			benchmark::DoNotOptimize ( std::to_chars ( sBuf, sBuf + 32, (int)dNum ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+#endif
+
+BENCHMARK_F ( rand_numbers, formatint64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( const auto dNum : dNumbers )
+			benchmark::DoNotOptimize ( FormatInt<int64_t> ( sBuf, dNum ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+BENCHMARK_F ( rand_numbers, ntoaint64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( const auto dNum : dNumbers )
+			benchmark::DoNotOptimize ( sph::NtoA ( sBuf, dNum ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+
+#if __has_include( <charconv>)
+BENCHMARK_F ( rand_numbers, std_tocharsint64 )
+( benchmark::State& st )
+{
+	for ( auto _ : st )
+	{
+		for ( const auto dNum : dNumbers )
+			benchmark::DoNotOptimize ( std::to_chars ( sBuf, sBuf + 32, dNum ) );
+	}
+	st.SetItemsProcessed ( st.iterations() );
+}
+#endif
 
 BENCHMARK_MAIN();
 

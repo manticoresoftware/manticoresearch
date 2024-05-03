@@ -1,17 +1,17 @@
 # Setting up replication
 
-With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate` and `rt` tables in Linux and macOS. However, Manticore Search packages for Windows do not provide replication support.
+With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate`, `rt` and `distributed` tables in Linux and macOS. However, Manticore Search packages for Windows do not provide replication support.
 
 Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 
-* True Multi-Master: Read and write to any node at any time.
-* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) No slave lag and no data loss after a node crash. 
-* Hot Standby: No downtime during failover (since there is no failover).
-* Tightly Coupled: All nodes hold the same state and no diverged data between nodes is allowed. 
-* Automatic Node Provisioning: No need to manually backup the database and restore it on a new node.
-* Easy to Use and Deploy. 
-* Detection and Automatic Eviction of Unreliable Nodes. 
-* Certification-based Replication.
+* True multi-master: read and write to any node at any time.
+* [Virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) no slave lag and no data loss after a node crash.
+* Hot standby: no downtime during failover (since there is no failover).
+* Tightly coupled: all nodes hold the same state and no diverged data between nodes is allowed.
+* Automatic node provisioning: no need to manually backup the database and restore it on a new node.
+* Easy to use and deploy.
+* Detection and automatic eviction of unreliable nodes.
+* Certification-based replication.
 
 To set up replication in Manticore Search:
 
@@ -23,13 +23,15 @@ If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) d
 
 ## Replication cluster
 
-A replication cluster is a group of nodes in which a write transaction is replicated. Replication is set up on a per-table basis, meaning that one table can only belong to one cluster. There is no limit on the number of tables that a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` on any percolate or real-time table that belongs to a cluster are replicated to all the other nodes in that cluster. Replication is multi-master, so writes to any node or multiple nodes simultaneously will work just as well.
+A replication cluster is a group of nodes in which a write transaction is replicated. Replication is set up on a per-table basis, meaning that one table can only belong to one cluster. There is no limit on the number of tables that a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` on any percolate or real-time table that belongs to a cluster are replicated to all the other nodes in that cluster. [Distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table) tables can also be part of the replication process. Replication is multi-master, so writes to any node or multiple nodes simultaneously will work just as well.
 
 To create a cluster, you can typically use the command [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) with `CREATE CLUSTER <cluster name>`, and to join a cluster, you can use [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) with `JOIN CLUSTER <cluster name> at 'host:port'`. However, in some rare cases, you may want to fine-tune the behavior of `CREATE/JOIN CLUSTER`. The available options are:
 
 ### name
 
 This option specifies the name of the cluster. It should be unique among all the clusters in the system.
+
+> **Note:** The maximum allowable hostname length for the `JOIN` command is **253** characters. If you exceed this limit, searchd will generate an error.
 
 ### path
 
@@ -48,7 +50,7 @@ The `options` option allows you to pass additional options directly to the Galer
 <!-- example write statements 1 -->
 When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:index_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
 
-In the HTTP interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
+In the JSON interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
 
 The [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for a table in a cluster should be valid as long as the [server_id](../../Server_settings/Searchd.md#server_id) is correctly configured.
 
@@ -139,7 +141,7 @@ indexApi.delete(deleteRequest);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "weekly_index", cluster:posts, id: 1, doc: doc);
@@ -557,7 +559,7 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);

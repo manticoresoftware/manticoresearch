@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>RT crash on drop then create table (part 1)</name>
+
+<requires><force-rt/></requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path/>
+	binlog_path = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+create table t1(f text);
+insert into t1(id,f) values(1,'s1');
+
+<!-- regression crash after drop then create the same table with binlog enabled -->
+create table t(f text);
+insert into t(id,f) values(2,'s2');
+drop table t;
+
+create table t(f text);
+alter table t rt_mem_limit='128M';
+drop table t;
+
+select * from t1 order by id asc;
+
+<!-- clean up-->
+drop table t1;
+
+</sphinxql>
+</queries>
+
+</test>

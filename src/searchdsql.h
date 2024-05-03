@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,7 +20,17 @@ template < typename T >
 class RefcountedVector_c : public CSphVector<T>, public ISphRefcountedMT
 {};
 
-using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> >;
+struct AttrValue_t
+{
+	int64_t m_iValue;
+	float	m_fValue;
+	bool	m_bFloat;
+
+	bool operator == ( const AttrValue_t & rhs ) const	{ return m_iValue==rhs.m_iValue && m_fValue==rhs.m_fValue && m_bFloat==rhs.m_bFloat; }
+	bool operator < ( const AttrValue_t & rhs ) const	{ return m_iValue<rhs.m_iValue; }
+};
+
+using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<AttrValue_t> >;
 
 
 /// parser view on a generic node
@@ -40,8 +50,10 @@ struct SqlNode_t
 
 	void					SetValueInt ( int64_t iValue );
 	void					SetValueInt ( uint64_t uValue, bool bNegative );
+	void					SetValueFloat ( float fValue );
 	int64_t					GetValueInt() const;
 	uint64_t				GetValueUint() const;
+	float					GetValueFloat() const	{ return m_fValue; }
 	void					CopyValueInt ( const SqlNode_t & tRhs );
 };
 
@@ -68,7 +80,7 @@ enum
 {
 	SPHINXQL_TOK_COUNT		= -1,
 	SPHINXQL_TOK_GROUPBY	= -2,
-	SPHINXQL_TOK_WEIGHT		= -3
+	SPHINXQL_TOK_WEIGHT		= -3,
 };
 
 
@@ -103,7 +115,7 @@ enum SqlStmt_e
 	STMT_FLUSH_RAMCHUNK,
 	STMT_SHOW_VARIABLES,
 	STMT_TRUNCATE_RTINDEX,
-	STMT_SELECT_SYSVAR,
+	STMT_SELECT_COLUMNS, // was STMT_SELECT_SYSVAR
 	STMT_SHOW_COLLATION,
 	STMT_SHOW_CHARACTER_SET,
 	STMT_OPTIMIZE_INDEX,
@@ -113,8 +125,9 @@ enum SqlStmt_e
 	STMT_SHOW_PROFILE,
 	STMT_ALTER_ADD,
 	STMT_ALTER_DROP,
+	STMT_ALTER_MODIFY,
 	STMT_SHOW_PLAN,
-	STMT_SELECT_DUAL,
+//	STMT_SELECT_DUAL, // deprecated to STMT_SELECT_COLUMNS as more general
 	STMT_SHOW_DATABASES,
 	STMT_CREATE_PLUGIN,
 	STMT_DROP_PLUGIN,
@@ -315,6 +328,7 @@ public:
 	}
 };
 
+enum class Option_e : BYTE;
 
 class SqlParserTraits_c : ISphNoncopyable
 {
@@ -332,18 +346,25 @@ public:
 	void			PushQuery();
 	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
+	float			ToFloat ( const SqlNode_t & tNode ) const { return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr ); }
 	void			ProcessParsingError ( const char* szMessage );
 	bool 			IsWrongSyntaxError() const noexcept;
 
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
+	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
 	void 			AddComment ( const SqlNode_t* tNode ) const;
 
 protected:
+	CSphVector<SqlStmt_t> &	m_dStmt;
+
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
 
-	CSphVector<SqlStmt_t> &	m_dStmt;
+	bool			CheckInteger ( const CSphString& sOpt, const CSphString& sVal ) const;
+	virtual bool	CheckOption ( Option_e eOption ) const;
 };
 
 

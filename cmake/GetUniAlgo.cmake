@@ -1,39 +1,23 @@
-# build UNIALGO at configure time
-cmake_minimum_required ( VERSION 3.1 FATAL_ERROR )
+cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
-set ( UNIALGO_LIBDIR "${MANTICORE_BINARY_DIR}/unialgo" )
-set ( UNIALGO_SRC "${MANTICORE_BINARY_DIR}/unialgo-src" )
-mark_as_advanced ( UNIALGO_SRC UNIALGO_LIBDIR )
+set ( UNIALGO_GITHUB "https://github.com/manticoresoftware/uni-algo/archive/refs/tags/v0.7.2.tar.gz" )
+set ( UNIALGO_BUNDLE "${LIBS_BUNDLE}/unialgo-v0.7.2.tar.gz" )
+set ( UNIALGO_SRC_MD5 "11f64b34000f3b98fa806d01eeeda70b" )
 
-include ( FetchContent )
-# check whether we have local copy (to not disturb network)
+include ( update_bundle )
 
-set(UNI_ALGO_DISABLE_NORM ON CACHE BOOL "")
-set(UNI_ALGO_DISABLE_PROP ON CACHE BOOL "")
-set(UNI_ALGO_DISABLE_BREAK_WORD ON CACHE BOOL "")
-set(UNI_ALGO_DISABLE_COLLATE  ON CACHE BOOL "")
-set(UNI_ALGO_DISABLE_NFKC_NFKD  ON CACHE BOOL "")
-set(UNI_ALGO_DISABLE_SHRINK_TO_FIT  ON CACHE BOOL "")
-set(UNI_ALGO_DISABLE_SHRINK_TO_FIT  ON CACHE BOOL "")
+# determine destination folder where we expect pre-built uni-algo
+find_package ( uni-algo QUIET CONFIG )
+return_if_target_found ( uni-algo::uni-algo "found ready (no need to build)" )
 
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW)
-endif()
+# not found. Populate and prepare sources
+select_nearest_url ( UNIALGO_PLACE uni-algo ${UNIALGO_BUNDLE} ${UNIALGO_GITHUB} )
+fetch_and_check ( uni-algo ${UNIALGO_PLACE} ${UNIALGO_SRC_MD5} UNIALGO_SRC )
 
-set ( UNIALGO_URL_GITHUB "https://github.com/manticoresoftware/uni-algo/archive/refs/tags/v0.7.2.tar.gz" )
-message ( STATUS "Use UNIALGO from github ${UNIALGO_URL_GITHUB}" )
-FetchContent_Declare ( unialgo
-		SOURCE_DIR "${UNIALGO_SRC}"
-		BINARY_DIR "${UNIALGO_LIBDIR}"
-		URL ${UNIALGO_URL_GITHUB}
-		GIT_TAG cmake-3.x-5.7
-		GIT_SHALLOW TRUE
-		)
+# build external project
+get_build ( UNIALGO_BUILD uni-algo )
+external_build ( uni-algo UNIALGO_SRC UNIALGO_BUILD UNI_ALGO_DISABLE_PROP=1 UNI_ALGO_DISABLE_BREAK_WORD=1 UNI_ALGO_DISABLE_COLLATE=1 UNI_ALGO_DISABLE_NFKC_NFKD=1 UNI_ALGO_DISABLE_SHRINK_TO_FIT=1 )
 
-FetchContent_GetProperties ( unialgo )
-if ( NOT unialgo_POPULATED )
-	FetchContent_Populate ( unialgo )
-	add_subdirectory ( ${unialgo_SOURCE_DIR} ${unialgo_BINARY_DIR} )
-endif ()
-mark_as_advanced ( FETCHCONTENT_FULLY_DISCONNECTED FETCHCONTENT_QUIET FETCHCONTENT_UPDATES_DISCONNECTED
-		FETCHCONTENT_SOURCE_DIR_UNIALGO FETCHCONTENT_UPDATES_DISCONNECTED_UNIALGO )
+# now it should find
+find_package ( uni-algo REQUIRED CONFIG )
+return_if_target_found ( uni-algo::uni-algo "was built and saved" )

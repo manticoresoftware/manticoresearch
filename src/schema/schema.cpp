@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,9 +16,6 @@
 #include "rset.h"
 #include "match.h"
 #include "indexsettings.h"
-
-
-//////////////////////////////////////////////////////////////////////////
 
 
 CSphSchema::CSphSchema ( CSphString sName )
@@ -355,11 +352,11 @@ bool CSphSchema::IsReserved ( const char* szToken )
 {
 	static const char * dReserved[] =
 	{
-		"AND", "AS", "BY", "COLUMNARSCAN", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
-		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "IS", "LIMIT",
-		"MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
-		"OFFSET", "OR", "ORDER", "REGEX", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
-		"TRUE", NULL
+		"AND", "AS", "BY", "COLUMNARSCAN", "DATE_ADD", "DATE_SUB", "DAY", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
+		"FACET", "FALSE", "FORCE", "FROM", "HOUR", "IGNORE", "IN", "INDEXES", "INNER", "INTERVAL", "IS", "JOIN", "KNN",
+		"LEFT", "LIMIT", "MINUTE", "MOD", "MONTH", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
+		"OFFSET", "ON", "OR", "ORDER", "QUARTER", "REGEX", "RELOAD", "SECOND", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
+		"TRUE", "WEEK", "YEAR", NULL
 	};
 
 	const char** p = dReserved;
@@ -561,6 +558,23 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 }
 
 
+void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
+{
+	SmallStringHash_T<int> hKNN;
+	ARRAY_FOREACH ( i, tSettings.m_dKNN )
+		hKNN.Add ( i, tSettings.m_dKNN[i].m_sName );
+
+	for ( auto & tAttr : m_dAttrs )
+	{
+		if ( !hKNN.Exists ( tAttr.m_sName ) )
+			continue;
+
+		int iId = hKNN[tAttr.m_sName];
+		tAttr.m_tKNN = tSettings.m_dKNN[iId];
+	}
+}
+
+
 void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings )
 {
 	bool bAllFieldsStored = false;
@@ -586,7 +600,10 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, St
 	}
 
 	if ( !bPQ )
+	{
 		SetupColumnarFlags ( tSettings, pWarnings );
+		SetupKNNFlags(tSettings);
+	}
 
 	bool bAllNonStored = false;
 	SmallStringHash_T<int> hColumnarNonStored;
@@ -634,6 +651,12 @@ bool CSphSchema::HasNonColumnarAttrs() const
 }
 
 
+bool CSphSchema::HasKNNAttrs() const
+{
+	return m_dAttrs.any_of ( [] ( const CSphColumnInfo& tAttr ) { return tAttr.IsIndexedKNN(); } );
+}
+
+
 bool CSphSchema::IsFieldStored ( int iField ) const
 {
 	return !!( m_dFields[iField].m_uFieldFlags & CSphColumnInfo::FIELD_STORED );
@@ -643,4 +666,31 @@ bool CSphSchema::IsFieldStored ( int iField ) const
 bool CSphSchema::IsAttrStored ( int iAttr ) const
 {
 	return !!( m_dAttrs[iAttr].m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	// first time schema setup?
+	if ( !pOldSchema )
+		return;
+
+	if ( tLocator.m_iBlobAttrId==-1 && tLocator.m_iBitCount==-1 )
+		return;
+
+	assert ( pNewSchema );
+	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = pOldSchema->GetAttr(i);
+		if ( tLocator==tAttr.m_tLocator )
+		{
+			const CSphColumnInfo * pAttrInNewSchema = pNewSchema->GetAttr ( tAttr.m_sName.cstr() );
+			if ( pAttrInNewSchema )
+			{
+				tLocator = pAttrInNewSchema->m_tLocator;
+				return;
+			}
+		}
+	}
 }

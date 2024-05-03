@@ -77,13 +77,18 @@
 * [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Installs a user-defined function (UDF)
 * [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - Drops a user-defined function (UDF)
 * [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - Installs a plugin
-* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md) - Drops a plugin
+* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - Installs a Buddy plugin
+* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - Drops a plugin
+* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - Drops a Buddy plugin
 * [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Reloads all plugins from a given library
+* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - Reactivates a previously disabled Buddy plugin
+* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - Deactivates an active Buddy plugin
 
 ##### Server status
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
 * [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Lists all currently active client threads
 * [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Lists server-wide variables and their values
+* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - Provides detailed version information of various components of the instance.
 
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Execute an SQL statement over HTTP JSON
@@ -96,7 +101,9 @@
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - Removes a document from a table
 * [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Executes multiple insert, update, or delete operations in a single call. Learn more about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
+* [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
 * [data types](Creating_a_table/Data_types.md)
@@ -109,6 +116,7 @@
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
+* [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
@@ -184,6 +192,7 @@
 * [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -213,11 +222,13 @@
 * [word^N](Searching/Full_text_matching/Operators.md#IDF-boost-modifier) - keyword IDF boost modifier
 * [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-operator) - NEAR, generalized proximity operator
 * [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-operator) - NOTNEAR, negative assertion operator
-* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
 * [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - PARAGRAPH operator
+* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
 * [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-limit-operator) - ZONE limit operator
 * [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) - ZONESPAN limit operator
 * [@@relaxed](Searching/Full_text_matching/Operators.md#Field-search-operator) - suppresses errors about missing fields
+* [t?st](Searching/Full_text_matching/Operators.md#Wildcard-operators) - wildcard operators
+* [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#REGEX-operator) - REGEX operator
 
 ## Functions
 ##### Mathematical
@@ -280,6 +291,7 @@
 ##### Date and time
 * [NOW()](Functions/Date_and_time_functions.md#NOW%28%29) - Returns current timestamp as an INTEGER
 * [CURTIME()](Functions/Date_and_time_functions.md#CURTIME%28%29) - Returns current time in local timezone
+* [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Returns current date in local timezone
 * [UTC_TIME()](Functions/Date_and_time_functions.md#UTC_TIME%28%29) - Returns current time in UTC timezone
 * [UTC_TIMESTAMP()](Functions/Date_and_time_functions.md#UTC_TIMESTAMP%28%29) - Returns current date/time in UTC timezone
 * [SECOND()](Functions/Date_and_time_functions.md#SECOND%28%29) - Returns integer second from the timestamp argument
@@ -287,10 +299,19 @@
 * [HOUR()](Functions/Date_and_time_functions.md#HOUR%28%29) - Returns integer hour from the timestamp argument
 * [DAY()](Functions/Date_and_time_functions.md#DAY%28%29) - Returns integer day from the timestamp argument
 * [MONTH()](Functions/Date_and_time_functions.md#MONTH%28%29) - Returns integer month from the timestamp argument
+* [QUARTER()](Functions/Date_and_time_functions.md#QUARTER%28%29) - Returns the integer quarter of the year from a timestamp argument
 * [YEAR()](Functions/Date_and_time_functions.md#YEAR%28%29) - Returns integer year from the timestamp argument
+* [DAYNAME()](Functions/Date_and_time_functions.md#DAYNAME%28%29) - Returns the weekday name for a given timestamp argument
+* [MONTHNAME()](Functions/Date_and_time_functions.md#MONTHNAME%28%29) - Returns the name of the month for a given timestamp argument
+* [DAYOFWEEK()](Functions/Date_and_time_functions.md#DAYOFWEEK%28%29) - Returns the integer weekday index for a given timestamp argument
+* [DAYOFYEAR()](Functions/Date_and_time_functions.md#DAYOFYEAR%28%29) - Returns the integer day of the year for a given timestamp argument
+* [YEARWEEK()](Functions/Date_and_time_functions.md#YEARWEEK%28%29) - Returns the integer year and the day code of the first day of current week for a given timestamp argument
 * [YEARMONTH()](Functions/Date_and_time_functions.md#YEARMONTH%28%29) - Returns integer year and month code from the timestamp argument
 * [YEARMONTHDAY()](Functions/Date_and_time_functions.md#YEARMONTHDAY%28%29) - Returns integer year, month and day code from the timestamp argument
 * [TIMEDIFF()](Functions/Date_and_time_functions.md#TIMEDIFF%28%29) - Returns difference between the timstamps
+* [DATEDIFF()](Functions/Date_and_time_functions.md#DATEDIFF%28%29) - Returns the number of days between two given timestamps
+* [DATE()](Functions/Date_and_time_functions.md#DATE%28%29) - Formats the date part from a timestamp argument
+* [TIME()](Functions/Date_and_time_functions.md#TIME%28%29) - Formats the time part from a timestamp argument
 * [DATE_FORMAT()](Functions/Date_and_time_functions.md#DATE_FORMAT%28%29) - Returns a formatted string based on the provided date and format arguments
 
 
@@ -306,6 +327,8 @@
 * [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
 *
 ##### Other
+* [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
+* [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
 * [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
 
 ## Common settings in configuration file
@@ -380,6 +403,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - Defines how table's doclists file is accessed
   * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Defines how table's hitlists file is accessed
   * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Defines how search server accesses table's plain attributes
+  * [access_dict](Server_settings/Searchd.md#access_dict) - Defines how table's dictionary file is accessed
   * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Remote agent connection timeout
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies the number of times Manticore tries to connect and query remote agents
@@ -447,6 +471,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [ssl_key](Server_settings/Searchd.md#ssl_key) - Path to SSL certificate key of the server
   * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Maximum common subtree document cache size
   * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Maximum common subtree hit cache size, per-query
+  * [timezone](Server_settings/Searchd.md#timezone) - Timezone used by date/time-related functions
   * [thread_stack](Server_settings/Searchd.md#thread_stack) - Maximum stack size for a job
   * [unlink_old](Server_settings/Searchd.md#unlink_old) - Whether to unlink .old table copies on successful rotation
   * [watchdog](Server_settings/Searchd.md#watchdog) - Whether to enable or disable Manticore server watchdog
@@ -547,7 +572,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HOUR, IGNORE, IN, INTERVAL, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MINUTE, MOD, MONTH, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, QUARTER, REGEX, RELOAD, SECOND, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE, WEEK, YEAR
 ```
 
 ## Documentation for old Manticore versions
@@ -583,9 +608,11 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [3.6.0](https://manual.manticoresearch.com/manticore-3-6-0/)
 * [4.0.2](https://manual.manticoresearch.com/manticore-4-0-2/)
 * [4.2.0](https://manual.manticoresearch.com/manticore-4-2-0/)
-* [5.0.0](https://manual.manticoresearch.com/manticore-5-0-0/)
-* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/)
-* [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/)
-* [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/)
-* [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/)
+* [5.0.0](https://manual.manticoresearch.com/manticore-5-0-0/). [Installation page](https://manticoresearch.com/install-5.0.0/)
+* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/). [Installation page](https://manticoresearch.com/install-5.0.2/)
+* [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/). [Installation page](https://manticoresearch.com/install-6.0.0/)
+* [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/). [Installation page](https://manticoresearch.com/install-6.0.2/)
+* [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/). [Installation page](https://manticoresearch.com/install-6.0.4/)
+* [6.2.0](https://manual.manticoresearch.com/manticore-6-2-0/). [Installation page](https://manticoresearch.com/install-6.2.0/)
+* [6.2.12](https://manual.manticoresearch.com/manticore-6-2-12/). [Installation page](https://manticoresearch.com/install-6.2.12/)
 <!-- proofread -->

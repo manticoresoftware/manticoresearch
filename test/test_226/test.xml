@@ -85,6 +85,66 @@ index fs1
 	path              = <data_path/>/fs1
 }
 
+source src_11
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT id, price, categories FROM test_table where id in (1,2,3,4)
+	sql_attr_uint     = price
+	sql_attr_multi    = uint categories from field
+}
+
+source src_12
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT id, price, categories FROM test_table where id in (6,7,8,9)
+	sql_attr_uint     = price
+	sql_attr_multi    = uint categories from field
+}
+
+index loc11
+{
+	source            = src_11
+	path              = <data_path/>/loc11
+}
+
+index loc12
+{
+	source            = src_12
+	path              = <data_path/>/loc12
+}
+
+index dist11
+{
+	type              = distributed
+	local             = loc11
+    local             = loc12
+}
+
+index dist12
+{
+	type              = distributed
+	local             = loc11
+    agent             = <my_address/>:loc12
+}
+
+source src_multi1
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_multi1
+	sql_attr_uint   = brand_id
+	sql_attr_json     = j
+}
+
+
+index multi1
+{
+	source            = src_multi1
+	path              = <data_path/>/multi1
+}
+
 
 </config>
 
@@ -145,6 +205,23 @@ insert into table_fs1 (id,title,s_color,j) values
 (3,'Product 3', 'green', '{x:[33,34],color:"green"}'),
 (4,'Product 4', 'red', '{x:[43,44],color:"red"}'),
 (5,'Product 5', 'blue', '{x:[53,54],color:"blue"}')
+</db_insert>
+
+<db_create>
+CREATE TABLE `table_multi1` (
+  `id` int(11),
+  `title` varchar(255),
+  `brand_id` int(11),
+  `j` varchar(255)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `table_multi1`;</db_drop>
+
+<db_insert>
+insert into table_multi1 (id,title,brand_id,j) values
+(1,'Product 1', 11, '{a:13, b:14}'),
+(2,'Product 2', 12, '{a:13, b:12}'),
+(3,'Product 3', 13, '{a:11, b:13}')
 </db_insert>
 
 <queries><sphinxql>
@@ -249,6 +326,17 @@ select id, j, s_color from fs1 facet s_color order by j.color desc;;
 
 <!-- group by JSON.field with string at select list vs multi-query -->
 select id, GROUPBY() as groupbystr, count(*) as c FROM facetdemo2 GROUP BY j['x'][0] ORDER BY groupbystr ASC; select id, GROUPBY() as groupbystr, count(*) as c FROM facetdemo2 GROUP BY j['a'][0] ORDER BY groupbystr ASC;
+
+<!-- facet MVA wrong from distributed with agents and local -->
+select * from dist11 facet categories order by FACET() asc;;
+select * from dist12 facet categories order by FACET() asc;;
+
+<!-- facet vs group by with multi grouper with JSON.field  -->
+select *, count(*) from multi1 facet brand_id, j.a order by id asc;;
+select *, count(*), brand_id, j.a from multi1 facet brand_id, j.a order by id asc;;
+select *, count(*) from multi1 group by brand_id, j.a order by id asc;;
+select *, count(*), brand_id, j.a from multi1 group by brand_id, j.a order by id asc;;
+
 </sphinxql></queries>
 
 </test>

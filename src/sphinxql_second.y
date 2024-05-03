@@ -3,6 +3,11 @@
 #pragma warning(push,1)
 #pragma warning(disable:4702) // unreachable code
 #endif
+
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
 %}
 
 %lex-param		{ class SqlSecondParser_c * pParser }
@@ -16,6 +21,7 @@
 %token	TOK_OFF
 %token	TOK_ON
 %token	TOK_QUOTED_STRING "string"
+%token	TOK_DOT_NUMBER ".number"
 
 %token	TOK_ATTACH
 %token	TOK_ATTRIBUTES
@@ -98,20 +104,36 @@ statement:
 
 //////////////////////////////////////////////////////////////////////////
 
-ident:
+ident_no_option:
 	TOK_ATTACH | TOK_ATTRIBUTES | TOK_CLUSTER | TOK_COMMITTED | TOK_COMPRESS | TOK_FLUSH | TOK_FREEZE | TOK_GLOBAL
 	| TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXES | TOK_ISOLATION | TOK_KILL | TOK_LEVEL | TOK_LIKE | TOK_LOGS | TOK_OFF
-	| TOK_ON | TOK_OPTION | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE
+	| TOK_ON | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE
 	| TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET | TOK_TABLE | TOK_TABLES | TOK_TO
 	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_WAIT | TOK_WITH | TOK_FROM | TOK_PLUGINS | TOK_RELOAD | TOK_SONAME
 	| TOK_TRUNCATE | TOK_IDENT
 	;
 
+ident:
+	ident_no_option
+	| TOK_OPTION
+	;
+
 ident_all:
 	ident
 	| TOK_TRANSACTION
+	;
 
+/// id of columns
+identcol:
+	ident
+	| identcol ':' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	;
 //////////////////////////////////////////////////////////////////////////
+
+like_filter:
+	// empty
+	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ($2 ); }
+	;
 
 set_string_value:
 	ident_all
@@ -174,8 +196,7 @@ one_or_more_indexes:
 set_global_stmt:
 	TOK_SET TOK_GLOBAL ident '=' '(' const_list ')'
 		{
-			pParser->SetStatement ( $3, SET_GLOBAL_UVAR );
-			pParser->m_pStmt->m_dSetValues = *$6.m_pValues;
+			pParser->SetStatement ( $3, SET_GLOBAL_UVAR, *$6.m_pValues );
 		}
 	| TOK_SET TOK_GLOBAL ident '=' set_string_value
 		{
@@ -189,8 +210,7 @@ set_global_stmt:
 		}
 	| TOK_SET index_or_table ident_all TOK_GLOBAL ident '=' '(' const_list ')'
 		{
-			pParser->SetStatement ( $5, SET_INDEX_UVAR );
-			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
+			pParser->SetStatement ( $5, SET_INDEX_UVAR, *$8.m_pValues );
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
 		}
 	| TOK_SET TOK_CLUSTER ident_all TOK_GLOBAL TOK_QUOTED_STRING '=' set_string_value
@@ -209,16 +229,21 @@ set_global_stmt:
 		}
 	;
 
-const_list:
+const_list_entry:
 	const_int
+	| const_float
+	;
+
+const_list:
+	const_list_entry
 		{
 			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
-			$$.m_pValues->Add ( $1.GetValueInt() );
+			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
+			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat() } ); 
 		}
-	| const_list ',' const_int
+	| const_list ',' const_list_entry
 		{
-			$$.m_pValues->Add ( $3.GetValueInt() );
+			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat() } );
 		}
 	;
 
@@ -233,6 +258,19 @@ const_int:
 			$$.m_iType = TOK_CONST_INT;
 			$$.SetValueInt ( $2.GetValueUint(), true );
 		}
+	;
+
+const_float:
+	const_float_unsigned		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
+	| '-' const_float_unsigned	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
+	;
+
+// fixme! That is non-consequetive behaviour.
+// in `select id*.1 a from indexrt where a>.4` - first .1 is part of expression and is passed
+// to expr parser. Second .4 is part of the filter - and is parsed immediately here.
+const_float_unsigned:
+	TOK_CONST_FLOAT			{ $$.m_fValue = $1.m_fValue; }
+	| TOK_DOT_NUMBER		{ $$.m_fValue = pParser->ToFloat ($1); }
 	;
 
 global_or_session:
@@ -369,11 +407,11 @@ opt_reload_index_from:
 	;
 
 reload_index:
-	TOK_RELOAD index_or_table ident_all opt_reload_index_from
+	TOK_RELOAD index_or_table ident_all
 		{
 			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);
-		}
+		} opt_reload_index_from opt_option_clause
 	;
 
 reload_indexes:
@@ -394,7 +432,7 @@ delete_cluster:
 	;
 
 freeze_indexes:
-	TOK_FREEZE one_or_more_indexes
+	TOK_FREEZE one_or_more_indexes like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_FREEZE;
 		}
@@ -419,6 +457,37 @@ kill_connid:
 			pParser->m_pStmt->m_iIntParam = $3.GetValueInt();
 		}
     ;
+
+//////////////////////////////////////////////////////////////////////////
+// common option clause
+
+opt_option_clause:
+	// empty
+	| TOK_OPTION option_list
+	;
+
+option_list:
+	option_item
+	| option_list ',' option_item
+	;
+
+option_item:
+	ident_no_option '=' identcol
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| ident_no_option '=' TOK_CONST_INT
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| ident_no_option '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	;
 
 
 %%

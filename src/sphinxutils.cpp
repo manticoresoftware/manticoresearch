@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,12 +20,13 @@
 #include "fileutils.h"
 #include "threadutils.h"
 #include "indexfiles.h"
+#include "datetime.h"
 
 #include <codecvt>
 #include <ctype.h>
 #include <fcntl.h>
 #include <errno.h>
-#if HAVE_EXECINFO_H
+#if __has_include(<execinfo.h>)
 #include <execinfo.h>
 #endif
 
@@ -43,18 +44,20 @@
 #include <glob.h>
 #endif
 
-#ifdef HAVE_SYS_PRCTL_H
+#if __has_include(<sys/prctl.h>)
+#define HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 
 #include "libutils.h"
 #include "coroutine.h"
 
-#ifdef HAVE_MALLOC_H
+#if __has_include (<malloc.h>)
 #include <malloc.h>
 #endif
 
-#ifdef HAVE_JEMALLOC_JEMALLOC_H
+#if __has_include(<jemalloc/jemalloc.h>)
+#define HAVE_JEMALLOC_JEMALLOC_H
 #include <jemalloc/jemalloc.h>
 #endif
 
@@ -741,6 +744,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "mssql_winauth",			0, NULL },
 	{ "mssql_unicode",			KEY_REMOVED, NULL },
 	{ "sql_query_pre",			KEY_LIST, NULL },
+	{ "sql_query_pre_all",		KEY_LIST, NULL },
 	{ "sql_query",				0, NULL },
 	{ "sql_query_range",		0, NULL },
 	{ "sql_range_step",			0, NULL },
@@ -874,6 +878,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_uint",			KEY_LIST, NULL },
 	{ "rt_attr_bigint",			KEY_LIST, NULL },
 	{ "rt_attr_float",			KEY_LIST, NULL },
+	{ "rt_attr_float_vector",	KEY_LIST, NULL },
 	{ "rt_attr_timestamp",		KEY_LIST, NULL },
 	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_attr_multi",			KEY_LIST, NULL },
@@ -906,6 +911,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "access_dict",			0, nullptr },
 	{ "stored_fields",			0, nullptr },
 	{ "stored_only_fields",		0, nullptr },
 	{ "docstore_block_size",	0, nullptr },
@@ -915,11 +921,12 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "columnar_no_fast_fetch", 0, nullptr },
 	{ "rowwise_attrs",			0, nullptr },
 	{ "columnar_strings_no_hash", 0, nullptr },
-	{ "columnar_compression_uint32", 0, nullptr },
-	{ "columnar_compression_int64", 0, nullptr },
-	{ "columnar_subblock",		0, nullptr },
+	{ "columnar_compression_uint32", KEY_REMOVED, nullptr },
+	{ "columnar_compression_int64", KEY_REMOVED, nullptr },
+	{ "columnar_subblock",		KEY_REMOVED, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
 	{ "engine_default",			0, nullptr },
+	{ "knn",					0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -952,6 +959,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_timeout",			KEY_DEPRECATED, "network_timeout" },
 	{ "network_timeout",		0, NULL },
 	{ "client_timeout",			0, NULL },
+	{ "reset_network_timeout_on_packet",			0, NULL },
 	{ "max_children",			KEY_REMOVED, NULL },
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			KEY_REMOVED, NULL },
@@ -1018,10 +1026,11 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "qcache_thresh_msec",		0, NULL },
 	{ "sphinxql_timeout",		0, NULL },
 	{ "hostname_lookup",		0, NULL },
-	{ "grouping_in_utc",		0, NULL },
+	{ "grouping_in_utc",		KEY_DEPRECATED, "timezone" },
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
+	{ "timezone",				0, NULL },
 	{ "data_dir",				0, NULL },
 	{ "node_address",			0, NULL },
 	{ "server_id",				0, NULL },
@@ -1029,7 +1038,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "access_dict",			0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
+	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },
 	{ "ssl_key",				0, nullptr },
 	{ "ssl_ca",					0, nullptr },
@@ -1049,6 +1060,19 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
 	{ "engine",					0, nullptr },
+	{ "join_cache_size",		0, nullptr },
+	{ "replication_connect_timeout",	0, NULL },
+	{ "replication_query_timeout",		0, NULL },
+	{ "replication_retry_delay",		0, NULL },
+	{ "replication_retry_count",		0, NULL },
+	{ "expansion_merge_threshold_docs",		0, NULL },
+	{ "expansion_merge_threshold_hits",		0, NULL },
+	{ "merge_buffer_attributes", 0, NULL },
+	{ "merge_buffer_columnar",	0, NULL },
+	{ "merge_buffer_storage",	0, NULL },
+	{ "merge_buffer_fulltext",	0, NULL },
+	{ "merge_buffer_dict",		0, NULL },
+	{ "merge_si_memlimit",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -2363,11 +2387,11 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 					// invoke standard sprintf
 					char sFormat[32] = { 0 };
 					memcpy ( sFormat, pF, sFmt - pF );
-					pOutput += sprintf ( Tail ( pOutput ), sFormat, fValue );
+					pOutput += snprintf ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, sFormat, fValue );
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( Tail ( pOutput ), (float)fValue );
+					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 
@@ -2416,21 +2440,21 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		va_end ( ap );
 	}
 
-	int PrintVarFloat ( char* sBuffer, float fVal )
+	int PrintVarFloat ( char* sBuffer, int iSize, float fVal )
 	{
-		int iLen = sprintf ( sBuffer, "%f", fVal );
+		int iLen = snprintf ( sBuffer, iSize, "%f", fVal );
 		auto fTest = strtof ( sBuffer, nullptr );
 		if ( fTest!=fVal )
-			return sprintf ( sBuffer, "%1.8f", fVal );
+			return snprintf ( sBuffer, iSize, "%1.8f", fVal );
 		return iLen;
 	}
 
-	int PrintVarDouble ( char* sBuffer, double fVal )
+	int PrintVarDouble ( char* sBuffer, int iSize, double fVal )
 	{
-		int iLen = sprintf ( sBuffer, "%f", fVal );
+		int iLen = snprintf ( sBuffer, iSize, "%f", fVal );
 		auto fTest = strtod ( sBuffer, nullptr );
 		if ( fTest!=fVal )
-			return sprintf ( sBuffer, "%1.8f", fVal );
+			return snprintf ( sBuffer, iSize, "%1.8f", fVal );
 		return iLen;
 	}
 
@@ -2511,7 +2535,7 @@ static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL
 static CSphString g_sBinaryName;
 static auto& g_bSafeGDB = getSafeGDB ();
 
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 static char g_sNameBuf[512] = {0};
 static char g_sPid[30] = { 0 };
 #endif
@@ -2556,7 +2580,7 @@ static bool DumpGdb ( int iFD )
 		sphSleepMsec (3*1000);
 		return true;
 	}
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 	int iPos = sphSafeInfo ( g_sPid, "%d", getpid () );
 	g_sPid[iPos-1] = '\0'; // make null-terminated from EOL string
 	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = '\0';
@@ -2571,7 +2595,7 @@ static bool DumpGdb ( int iFD )
 
 bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 {
-#if HAVE_SYS_PRCTL_H
+#ifdef HAVE_SYS_PRCTL_H
 	if ( IsDebuggerPresent ())
 		return false;
 
@@ -3109,14 +3133,21 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 }
 
 
-void sphConfigureCommon ( const CSphConfig & hConf )
+void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix )
 {
 	if ( !hConf("common") || !hConf["common"]("common") )
+	{
+		sphPluginInit ( nullptr );
 		return;
+	}
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	if ( hCommon ( "lemmatizer_base" ) )
+	{
+		if ( fnPathFix )
+			fnPathFix ( g_sLemmatizerBase );
 		g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
+	}
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;
@@ -3145,8 +3176,13 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 	bJsonAutoconvNumbers = ( hCommon.GetInt ( "json_autoconv_numbers", 0 )!=0 );
 	sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
 
-	if ( hCommon("plugin_dir") )
-		sphPluginInit ( hCommon["plugin_dir"].cstr() );
+	if ( hCommon( "plugin_dir" ) )
+	{
+		CSphString sPluginDir ( hCommon["plugin_dir"].cstr() );
+		if ( fnPathFix )
+			fnPathFix ( sPluginDir );
+		sphPluginInit ( sPluginDir.cstr() );
+	}
 }
 
 bool sphIsChineseCode ( int iCode )
@@ -3182,15 +3218,23 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 
 #if HAVE_DLOPEN
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath )
+void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char* szPath, bool bGlobal )
+{
+	if ( m_bReady || m_pLibrary )
+		return;
+
+	m_pLibrary = dlopen ( szPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
+	if ( !m_pLibrary )
+		sphLogDebug ( "dlopen(%s) failed", szPath );
+	else
+		sphLogDebug ( "dlopen(%s)=%p", szPath, m_pLibrary );
+}
+
+CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath, bool bGlobal )
 	: m_bReady ( false )
 	, m_pLibrary ( nullptr )
 {
-	m_pLibrary = dlopen ( sPath, RTLD_NOW | RTLD_GLOBAL );
-	if ( !m_pLibrary )
-		sphLogDebug ( "dlopen(%s) failed", sPath );
-	else
-		sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
+	CSphDynamicLibraryAlternative ( sPath, bGlobal );
 }
 
 CSphDynamicLibrary::~CSphDynamicLibrary()
@@ -3229,7 +3273,8 @@ bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, in
 
 #else
 
-CSphDynamicLibrary::CSphDynamicLibrary ( const char * ) {};
+void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char *, bool ) {};
+CSphDynamicLibrary::CSphDynamicLibrary ( const char *, bool ) {};
 bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return false; }
 CSphDynamicLibrary::~CSphDynamicLibrary() = default;
 
@@ -3399,7 +3444,12 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 
 namespace TlsMsg
 {
-	static thread_local StringBuilder_c sTlsMsgs;
+//	static thread_local StringBuilder_c sTlsMsgs;
+	inline StringBuilder_c& TlsMsgs() noexcept
+	{
+		return *Threads::MyThd().m_pTlsMsg.load ( std::memory_order_relaxed );
+	}
+
 
 	bool Err( const char* sFmt, ... )
 	{
@@ -3408,7 +3458,7 @@ namespace TlsMsg
 		va_start ( ap, sFmt );
 		sMsgs.vSprintf( sFmt, ap );
 		va_end ( ap );
-		sTlsMsgs.Swap ( sMsgs );
+		TlsMsgs().Swap ( sMsgs );
 		return false;
 	}
 
@@ -3416,21 +3466,28 @@ namespace TlsMsg
 	{
 		if (sMsg.IsEmpty())
 			return true;
-		sTlsMsgs << sMsg;
+		TlsMsgs() << sMsg;
 		return false;
 	}
 
-	void ResetErr() { sTlsMsgs.Clear(); }
-	StringBuilder_c& Err() { return sTlsMsgs; }
-	const char* szError() { return sTlsMsgs.cstr(); }
+	void ResetErr() { TlsMsgs().Clear(); }
+	StringBuilder_c& Err() { return TlsMsgs(); }
+	const char* szError() { return TlsMsgs().cstr(); }
 	void MoveError ( CSphString& sError )
 	{
-		if ( sTlsMsgs.IsEmpty())
+		if ( TlsMsgs().IsEmpty())
 			return;
-		sTlsMsgs.MoveTo(sError);
+		TlsMsgs().MoveTo(sError);
 	}
 
-	bool HasErr() { return !sTlsMsgs.IsEmpty(); }
+	CSphString MoveToString ()
+	{
+		CSphString sError;
+		TlsMsgs().MoveTo ( sError );
+		return sError;
+	}
+
+	bool HasErr() { return !TlsMsgs().IsEmpty(); }
 }
 
 const char * GetBaseName ( const CSphString & sFullPath )
@@ -3446,21 +3503,38 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-static std::atomic<int64_t> g_iUID { 1 };
-static int64_t g_iUidBase = 0;
+struct UUID_t
+{
+	std::atomic<int64_t> m_iUID { 1 };
+	int64_t m_iUidBase = 0;
+
+	int64_t Get ()
+	{
+		int64_t iVal = m_iUID.fetch_add (1, std::memory_order_relaxed);
+		int64_t iUID = m_iUidBase + iVal;
+		return iUID;
+	}
+};
+
+static UUID_t g_tUidShort;
+static UUID_t g_tIndexUid;
 
 int64_t UidShort()
 {
-	int64_t iVal = g_iUID.fetch_add (1, std::memory_order_relaxed);
-	int64_t iUID = g_iUidBase + iVal;
-	return iUID;
+	return g_tUidShort.Get();
+}
+
+int64_t GetIndexUid()
+{
+	return g_tIndexUid.Get();
 }
 
 void UidShortSetup ( int iServer, int iStarted )
 {
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
-	g_iUidBase = iSeed;
+	g_tUidShort.m_iUidBase = iSeed;
+	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
 }
 
@@ -3510,3 +3584,289 @@ int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
 	return std::mktime ( &tTM );
 }
 
+enum class DateMathOp_e
+{
+	Mod,
+	Add,
+	Sub,
+};
+
+typedef CSphOrderedHash<DateUnit_e, CSphString, CSphStrHashFunc, 32> DateMathUnitNames_t;
+
+static void DoDateMath ( DateMathOp_e eOp, DateUnit_e eUnit, int iVal, time_t & tDateTime );
+
+static DateMathUnitNames_t InitMathUnits()
+{
+	typedef std::pair<const char *, DateUnit_e> NamedUnit_t;
+	NamedUnit_t dUnits[] = {
+	// date math names
+	{"ms", DateUnit_e::ms }, {"s", DateUnit_e::sec}, {"m", DateUnit_e::minute}, {"h", DateUnit_e::hour}, {"d", DateUnit_e::day}, {"w", DateUnit_e::week}, {"M", DateUnit_e::month}, {"y", DateUnit_e::year},
+	// histogram names
+	{"minute", DateUnit_e::minute}, {"hour", DateUnit_e::hour}, {"day", DateUnit_e::day}, {"week", DateUnit_e::week}, {"month", DateUnit_e::month}, {"year", DateUnit_e::year}
+	};
+
+	DateMathUnitNames_t hRes;
+	for ( const auto & tUnit : dUnits )
+		hRes.Add ( tUnit.second, tUnit.first );
+	return hRes;
+}
+static DateMathUnitNames_t g_hDateMathUnits = InitMathUnits();
+
+static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
+{
+	const char * sCur = sMathExpr.first;
+	const char * sEnd = sCur + sMathExpr.second;
+
+	while ( sCur<sEnd && *sCur )
+	{
+		const int iOp = *sCur++;
+		DateMathOp_e eOp = DateMathOp_e::Mod;
+		if ( iOp=='/' )
+		{
+			eOp = DateMathOp_e::Mod;
+		} else if ( iOp=='+' )
+		{
+			eOp = DateMathOp_e::Add;
+		} else if ( iOp=='-' )
+		{
+			eOp = DateMathOp_e::Sub;
+		} else
+		{
+			return false;
+		}
+
+		int iNum = 1;
+		if ( !sphIsDigital ( *sCur ) )
+		{
+			iNum = 1;
+		} else
+		{
+			char * sNumEnd = nullptr;
+			iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+			sCur = sNumEnd;
+		}
+
+		// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
+		if ( eOp==DateMathOp_e::Mod && iNum!=1 )
+			return false;
+
+		const char * sUnitStart = sCur++;
+		while ( sCur<sEnd && sphIsAlphaOnly ( *sCur ) )
+			sCur++;
+		CSphString sUnit;
+		sUnit.SetBinary ( sUnitStart, sCur - sUnitStart );
+
+		DateUnit_e * pUnit = g_hDateMathUnits ( sUnit );
+		if ( !pUnit )
+			return false;
+
+		DoDateMath ( eOp, *pUnit, iNum, tDateTime );
+	}
+	return tDateTime;
+}
+
+bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime )
+{
+	if ( sMathExpr.IsEmpty() )
+		return false;
+
+	const char sNow[] = "now";
+	Str_t sExpr = FromStr ( sMathExpr );
+	if ( sMathExpr.Begins ( sNow ) )
+	{
+		tDateTime = iNow;
+		int iNowLen = sizeof ( sNow ) - 1;
+		sExpr.first += iNowLen;
+		sExpr.second -= iNowLen;
+	} else
+	{
+		CSphString sDateOnly;
+		const char * sFullDateDel = strstr ( sMathExpr.cstr(), "||" );
+		if ( !sFullDateDel )
+		{
+			sDateOnly = sMathExpr;
+			sExpr = Str_t(); // nothing else
+		} else
+		{
+			const int iDelimiterLen = 2;
+			int iOff = sFullDateDel - sMathExpr.cstr();
+			sDateOnly.SetBinary ( sMathExpr.cstr(), iOff );
+			sExpr = Str_t ( sFullDateDel + iDelimiterLen, sMathExpr.Length() - iOff - iDelimiterLen );
+		}
+
+		// We're going to just require ISO8601 timestamps, k?
+		tDateTime = GetUTC ( sDateOnly, sFormat );
+	}
+
+	if ( IsEmpty ( sExpr ) )
+		return true;
+
+	return ParseDateMath ( sExpr, tDateTime );
+}
+
+DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
+{
+	const char * sCur = sExpr.cstr();
+	const char * sEnd = sCur + sExpr.Length();
+
+	int iNum = 1;
+	if ( !sphIsDigital ( *sCur ) )
+	{
+		iNum = 1;
+	} else
+	{
+		char * sNumEnd = nullptr;
+		iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+		sCur = sNumEnd;
+	}
+
+	// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
+	if ( iNum!=1 )
+	{
+		sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a calendar interval", sExpr.cstr() );
+		return DateUnit_e::total_units;
+	}
+
+	const char * sUnitStart = sCur++;
+	while ( sCur<sEnd && sphIsAlphaOnly ( *sCur) )
+		sCur++;
+	CSphString sUnit;
+	sUnit.SetBinary ( sUnitStart, sCur - sUnitStart );
+
+	DateUnit_e * pUnit = g_hDateMathUnits ( sUnit );
+	if ( !pUnit )
+	{
+		sError.SetSprintf ( "unknown interval [%s]", sExpr.cstr() );
+		return DateUnit_e::total_units;
+	}
+
+	return *pUnit;
+}
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+{
+	if ( eUnit==DateUnit_e::ms )
+		return;
+
+	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	switch ( eUnit )
+	{
+	case DateUnit_e::sec:
+		tDateTime = ConvertTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::minute:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ) );
+	break;
+
+	case DateUnit_e::hour:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ) );
+	break;
+
+	case DateUnit_e::day:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ) );
+	break;
+
+	case DateUnit_e::week:
+	{
+		cctz::civil_day tWeekStart ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() );
+		if ( cctz::get_weekday ( tWeekStart )!=cctz::weekday::monday )
+			tWeekStart = cctz::prev_weekday ( tWeekStart, cctz::weekday::monday );
+		tDateTime = ConvertTime ( tWeekStart );
+	}
+	break;
+
+	case DateUnit_e::month:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ) );
+		break;
+
+	case DateUnit_e::year:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() ) );
+		break;
+
+	default:
+		break;
+	}
+}
+
+void DoDateMath ( DateMathOp_e eOp, DateUnit_e eUnit, int iVal, time_t & tDateTime )
+{
+	if ( eOp==DateMathOp_e::Mod )
+	{
+		RoundDate ( eUnit, tDateTime );
+		return;
+	}
+
+	if ( eOp==DateMathOp_e::Sub )
+		iVal = -iVal;
+
+	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	switch ( eUnit )
+	{
+	case DateUnit_e::ms:
+	{
+		int iMsLeft = iVal % 1000;
+		int iSec = iVal / 1000;
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() + iSec ) );
+		tDateTime += iMsLeft;
+	}
+	break;
+
+	case DateUnit_e::sec:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() + iVal ) );
+	break;
+
+	case DateUnit_e::minute:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() + iVal, tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::hour:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() + iVal, tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::day:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() + iVal, tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::week:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() + iVal*7, tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::month:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() + iVal, tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	case DateUnit_e::year:
+		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() + iVal, tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+	break;
+
+	default:
+		break;
+	}
+}
+
+static std::atomic<long> g_tIndexId { 0 };
+
+int64_t GenerateIndexId()
+{
+	return g_tIndexId.fetch_add ( 1, std::memory_order_relaxed );
+}
+
+void SetIndexId ( int64_t iId )
+{
+	g_tIndexId.store ( iId );
+}
+
+bool HasWildcards ( const char * sWord )
+{
+	if ( !sWord )
+		return false;
+
+	for ( ; *sWord; sWord++ )
+	{
+		if ( sphIsWild ( *sWord ) )
+			return true;
+	}
+
+	return false;
+}

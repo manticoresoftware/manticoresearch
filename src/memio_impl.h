@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,7 +12,7 @@
 
 
 template<typename VECTOR>
-void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn )
+inline void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn )
 {
 	int iCount = tIn.GetDword();
 	if ( !iCount )
@@ -22,7 +22,6 @@ void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn )
 	tIn.GetBytes ( dBuf.Begin(), (int)dBuf.GetLengthBytes() );
 }
 
-template<>
 inline void GetArray ( CSphVector<CSphString>& dBuf, MemoryReader_c& tIn )
 {
 	int iCount = tIn.GetDword();
@@ -98,14 +97,13 @@ inline void MemoryWriter_c::PutUint64 ( uint64_t uVal )
 
 
 template<typename T>
-void SaveArray ( const VecTraits_T<T>& dBuf, MemoryWriter_c& tOut )
+inline void SaveArray ( const VecTraits_T<T>& dBuf, MemoryWriter_c& tOut )
 {
 	tOut.PutDword ( dBuf.GetLength() );
 	if ( dBuf.GetLength() )
 		tOut.PutBytes ( dBuf.Begin(), dBuf.GetLengthBytes() );
 }
 
-template<>
 inline void SaveArray ( const VecTraits_T<CSphString>& dBuf, MemoryWriter_c& tOut )
 {
 	tOut.PutDword ( dBuf.GetLength() );

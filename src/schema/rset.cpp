@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -81,7 +81,7 @@ int CSphRsetSchema::GetAttrIndex ( const char* sName ) const
 	int iRes = m_pIndexSchema->GetAttrIndex ( sName );
 	if ( iRes >= 0 )
 	{
-		if ( m_dRemoved.Contains ( iRes ) )
+		if ( m_dRemoved.BinarySearch ( iRes ) )
 			return -1;
 		int iSub = 0;
 		ARRAY_FOREACH_COND ( i, m_dRemoved, iRes >= m_dRemoved[i] )
@@ -230,6 +230,10 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 	m_dRemoved.Uniq();
 }
 
+bool CSphRsetSchema::IsRemovedAttr ( int iAttr ) const
+{
+	return ( m_dRemoved.BinarySearch ( iAttr ) );
+}
 
 void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo>& dAttrs )
 {

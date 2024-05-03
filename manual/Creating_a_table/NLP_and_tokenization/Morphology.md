@@ -89,7 +89,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -170,7 +170,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -256,7 +256,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -301,9 +301,9 @@ table products {
 index_exact_words = {0|1}
 ```
 
-This option enables indexing of the original keywords along with the stemmed or remapped versions. The default value is 0, which means this feature is disabled.
+This option allows for the indexing of original keywords along with their morphologically modified versions. However, original keywords that are remapped by the [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) and [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md) cannot be indexed. The default value is 0, indicating that this feature is disabled by default.
 
-When `index_exact_words` is enabled, the raw keywords are added to the full-text index along with the stemmed or remapped versions. This allows the use of the [exact form operator](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language. Keep in mind that enabling this feature will increase the full-text index size and indexing time, but will not impact search performance.
+This allows the use of the [exact form operator](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language. Enabling this feature will increase the full-text index size and indexing time, but will not impact search performance.
 
 <!-- request SQL -->
 
@@ -341,7 +341,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

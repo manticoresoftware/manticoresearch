@@ -195,7 +195,7 @@ $client->search([
 searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -240,9 +240,9 @@ SearchResponse searchResponse = searchApi.search(searchRequest);
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
 var boolFilter = new BoolFilter();
-boolFilter.Must = new List<Object> { 
-    new EqualsFilter("author_id", 123), 
-    new InFilter("forum_id", new List<Object> {1,3,7}) 
+boolFilter.Must = new List<Object> {
+    new EqualsFilter("author_id", 123),
+    new InFilter("forum_id", new List<Object> {1,3,7})
 };
 searchRequest.AttrFilter = boolFilter;
 searchRequest.Sort = new List<Object> { new SortOrder("post_date", SortOrder.OrderEnum.Desc) };
@@ -414,7 +414,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -501,7 +501,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text indexed)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -593,7 +593,7 @@ $index->setName('products')->search('@title')->get();
 searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -666,7 +666,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, keys string)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -756,7 +756,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products ( title string attribute indexed )')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -847,7 +847,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price int)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -935,7 +935,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1025,7 +1025,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price bigint )')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1115,7 +1115,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, sold bool )')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1205,7 +1205,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, date timestamp)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1296,7 +1296,7 @@ utilsApi.sql('CREATE TABLE products(title text, coeff float)')
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1384,7 +1384,7 @@ searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"ep
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1417,8 +1417,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Expressions = new List<Object>{ 
-    new Dictionary<string, string> { {"ebs", "abs(a-b)"} } 
+searchRequest.Expressions = new List<Object>{
+    new Dictionary<string, string> { {"ebs", "abs(a-b)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 
@@ -1466,7 +1466,7 @@ $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1500,8 +1500,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Expressions = new List<Object> { 
-    new Dictionary<string, string> { {"ebs", "in(ceil(attr*100),200,250,350)"} } 
+searchRequest.Expressions = new List<Object> {
+    new Dictionary<string, string> { {"ebs", "in(ceil(attr*100),200,250,350)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
@@ -1552,7 +1552,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, data json)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1640,7 +1640,7 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1674,8 +1674,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Expressions = new List<Object> { 
-    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} } 
+searchRequest.Expressions = new List<Object> {
+    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
@@ -1728,7 +1728,7 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1770,8 +1770,8 @@ var searchRequest = new SearchRequest("forum", query);
 var rangeFilter = new RangeFilter("c");
 rangeFilter.Gt = 0;
 searchRequest.AttrFilter = rangeFilter;
-searchRequest.Expressions = new List<Object> { 
-    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} } 
+searchRequest.Expressions = new List<Object> {
+    new Dictionary<string, string> { {"idx", "indexof(x>2 for x in data.intarray)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
@@ -1819,7 +1819,7 @@ $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->ge
 searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1851,10 +1851,105 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Sort = new List<Object> { 
-    new SortOrder("double(data.myfloat)", SortOrder.OrderEnum.Desc) 
+searchRequest.Sort = new List<Object> {
+    new SortOrder("double(data.myfloat)", SortOrder.OrderEnum.Desc)
 };
 var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- end -->
+
+## Float vector
+
+<!-- example for creating float_vector -->
+
+Float vector attributes allow storing variable-length lists of floats. It's important to note that this concept differs from multi-valued attributes. Multi-valued attributes (MVAs) are essentially sets; they do not preserve value order, and duplicate values are not retained. In contrast, float vectors perform no additional processing on values during insertion.
+
+Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
+
+** Currently, `float_vector` fields can only be utilized in KNN search within real-time tables and the data type is not supported in any other functions or expressions, nor is it supported in plain tables. **
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, image_vector float_vector);
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+    'title'=>['type'=>'text'],
+	'image_vector'=>['type'=>'float_vector']
+]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### config:
+
+<!-- request config -->
+
+```ini
+table products
+{
+	type = rt
+	path = products
+
+	rt_field = title
+	stored_fields = title
+
+	rt_attr_float_vector = image_vector
+}
 ```
 
 <!-- end -->
@@ -1905,7 +2000,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1996,7 +2091,7 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -2078,7 +2173,7 @@ $index->setName('products')->search('')->sort('product_codes','asc','min')->get(
 searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -2111,8 +2206,8 @@ searchResponse = searchApi.search(searchRequest);
 ```clike
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("forum", query);
-searchRequest.Sort = new List<Object> { 
-    new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min) 
+searchRequest.Sort = new List<Object> {
+    new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min)
 };
 searchResponse = searchApi.search(searchRequest);
 ```
@@ -2313,7 +2408,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
  'took': 29}
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -2369,7 +2464,7 @@ class SearchResponse {
 <!-- request C# -->
 
 ```clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "first");
 doc.Add("product_codes", new List<Object> {4,2,1,3});
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
@@ -2444,7 +2539,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, values multi64))')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

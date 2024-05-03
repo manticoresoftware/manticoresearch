@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2008-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -112,12 +112,13 @@ public:
 struct HttpProcessResult_t
 {
 	ESphHttpEndpoint m_eEndpoint { SPH_HTTP_ENDPOINT_TOTAL };
+	ESphHttpStatus m_eReplyHttpCode = SPH_HTTP_STATUS_200;
 	bool m_bOk { false };
 	CSphString m_sError;
 };
 
 void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
 
 namespace bson {
 class Bson_c;
@@ -140,11 +141,13 @@ public:
 	void SetErrorFormat ( bool bNeedHttpResponse );
 	CSphVector<BYTE> & GetResult();
 	const CSphString & GetError () const;
+	ESphHttpStatus GetStatusCode () const;
 
 protected:
 	bool				m_bNeedHttpResponse {false};
 	CSphVector<BYTE>	m_dData;
 	CSphString			m_sError;
+	ESphHttpStatus		m_eHttpCode = SPH_HTTP_STATUS_200;
 
 	void ReportError ( const char * szError, ESphHttpStatus eStatus );
 	void ReportError ( ESphHttpStatus eStatus );

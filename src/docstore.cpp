@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
 #include "sphinxint.h"
-#include "exprtraits.h"
+
 
 enum BlockFlags_e : BYTE
 {
@@ -985,7 +985,7 @@ DocstoreBuilder_i::Doc_t::Doc_t ( const DocstoreDoc_t & tDoc )
 class DocstoreBuilder_c : public DocstoreBuilder_i, public DocstoreSettings_t
 {
 public:
-			DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings );
+			DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings, int iBufferSize );
 
 	bool	Init ( CSphString & sError );
 
@@ -1010,6 +1010,7 @@ private:
 	MemoryWriter2_c			m_tHeaderWriter;
 	CSphWriter				m_tWriter;
 	DocstoreFields_c		m_tFields;
+	int						m_iBufferSize = 0;
 	DWORD					m_uStoredLen = 0;
 	int						m_iNumBlocks = 0;
 	SphOffset_t				m_tHeaderOffset = 0;
@@ -1030,9 +1031,10 @@ private:
 };
 
 
-DocstoreBuilder_c::DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings )
+DocstoreBuilder_c::DocstoreBuilder_c ( CSphString sFilename, const DocstoreSettings_t & tSettings, int iBufferSize )
 	: m_sFilename ( std::move (sFilename) )
 	, m_tHeaderWriter ( m_dHeader )
+	, m_iBufferSize ( iBufferSize )
 {
 	*(DocstoreSettings_t*)this = tSettings;
 }
@@ -1044,6 +1046,7 @@ bool DocstoreBuilder_c::Init ( CSphString & sError )
 	if ( !m_pCompressor )
 		return false;
 
+	m_tWriter.SetBufferSize(m_iBufferSize);
 	return m_tWriter.OpenFile ( m_sFilename, sError );
 }
 
@@ -1904,188 +1907,6 @@ void DocstoreChecker_c::CheckBlock ( const Docstore_c::Block_t & tBlock )
 
 //////////////////////////////////////////////////////////////////////////
 
-template <bool POSTLIMIT>
-class Expr_GetStored_T : public ISphExpr
-{
-public:
-	Expr_GetStored_T ( CSphString sField, DocstoreDataType_e eDocstoreType, ESphAttr eAttrType )
-		: m_sField ( std::move(sField) )
-		, m_eDocstoreType ( eDocstoreType )
-		, m_eAttrType ( eAttrType )
-	{}
-
-	float Eval ( const CSphMatch & tMatch ) const final
-	{
-		assert ( m_eDocstoreType==DOCSTORE_ATTR );
-		assert ( m_eAttrType!=SPH_ATTR_STRING && m_eAttrType!=SPH_ATTR_UINT32SET && m_eAttrType!=SPH_ATTR_INT64SET && m_eAttrType!=SPH_ATTR_BIGINT );
-
-		DocstoreDoc_t tDoc;
-		VecTraits_T<const BYTE> tBlob = GetBlob ( tDoc, tMatch );
-		return tBlob.Begin() ? *(const float*)tBlob.Begin() : 0.0f;
-	}
-
-	int	IntEval ( const CSphMatch & tMatch ) const final
-	{
-		assert ( m_eDocstoreType==DOCSTORE_ATTR );
-
-		DocstoreDoc_t tDoc;
-		return ConvertBlobType<DWORD> ( GetBlob ( tDoc, tMatch ) );
-	}
-
-	int64_t	Int64Eval ( const CSphMatch & tMatch ) const final
-	{
-		assert ( m_eDocstoreType==DOCSTORE_ATTR );
-
-		DocstoreDoc_t tDoc;
-		if ( m_eAttrType==SPH_ATTR_UINT32SET_PTR || m_eAttrType==SPH_ATTR_INT64SET_PTR )
-			return (int64_t)sphPackPtrAttr ( GetBlob ( tDoc, tMatch ) );
-
-		return ConvertBlobType<int64_t> ( GetBlob ( tDoc, tMatch ) );
-	}
-
-	bool IsDataPtrAttr() const final	{ return sphIsBlobAttr(m_eAttrType); }
-	bool IsStored() const final			{ return !POSTLIMIT; }
-	bool UsesDocstore() const			{ return true; }
-
-	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
-	{
-		DocstoreDoc_t tDoc;
-		VecTraits_T<const BYTE> tRes = GetBlob ( tDoc, tMatch );
-		*ppStr = tDoc.m_dFields[0].LeakData();
-		return tRes.GetLength();
-	}
-
-	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final
-	{
-		return GetBlobPacked(tMatch);
-	}
-
-	void Command ( ESphExprCommand eCmd, void * pArg ) final
-	{
-		if ( eCmd!=SPH_EXPR_SET_DOCSTORE_DOCID )
-			return;
-
-		m_dFieldIds.Resize(0);
-		assert(pArg);
-		m_tSessionDocID = *(DocstoreSession_c::InfoDocID_t*)pArg;
-		assert ( m_tSessionDocID.m_pDocstore );
-		int iFieldId = m_tSessionDocID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
-		if ( iFieldId!=-1 )
-			m_dFieldIds.Add(iFieldId);
-	}
-
-	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final {}
-
-	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
-	{
-		EXPR_CLASS_NAME("Expr_GetStored_T");
-		CALC_STR_HASH(m_sField, m_sField.Length());
-		CALC_POD_HASHES(m_dFieldIds);
-		return CALC_DEP_HASHES();
-	}
-
-	ISphExpr * Clone () const final
-	{
-		return new Expr_GetStored_T ( m_sField, m_eDocstoreType, m_eAttrType );
-	}
-
-private:
-	CSphString					m_sField;
-	DocstoreDataType_e			m_eDocstoreType = DOCSTORE_TEXT;
-	ESphAttr					m_eAttrType = SPH_ATTR_INTEGER;
-	CSphVector<int>				m_dFieldIds;
-
-	DocstoreSession_c::InfoRowID_t	m_tSessionRowID;
-	DocstoreSession_c::InfoDocID_t	m_tSessionDocID;
-
-	VecTraits_T<const BYTE>	GetBlob ( DocstoreDoc_t & tDoc, const CSphMatch & tMatch ) const
-	{
-		if ( !m_tSessionDocID.m_pDocstore || !m_dFieldIds.GetLength() )
-			return { nullptr, 0 };
-
-		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
-		if ( m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, false ) )
-			return tDoc.m_dFields[0];
-
-		return { nullptr, 0 };
-	}
-
-	const BYTE * GetBlobPacked ( const CSphMatch & tMatch ) const
-	{
-		if ( !m_tSessionDocID.m_pDocstore || !m_dFieldIds.GetLength() )
-			return nullptr;
-
-		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
-		DocstoreDoc_t tDoc;
-		if ( m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, true ) )
-			return tDoc.m_dFields[0].LeakData();
-
-		return nullptr;
-	}
-
-	template <typename T>
-	T ConvertBlobType ( const VecTraits_T<const BYTE> & dBlob ) const
-	{
-		int64_t iValue = 0;
-		switch ( dBlob.GetLength() )
-		{
-		case 4:	iValue = *(const DWORD*)dBlob.Begin(); break;
-		case 8: iValue = *(const int64_t*)dBlob.Begin(); break;
-		default: break;
-		}
-
-		return (T)iValue;
-	}
-};
-
-template <>
-void Expr_GetStored_T<false>::Command ( ESphExprCommand eCmd, void * pArg )
-{
-	switch ( eCmd )
-	{
-	case SPH_EXPR_GET_COLUMNAR_COL:
-		*(CSphString*)pArg = m_sField;
-		break;
-
-	case SPH_EXPR_SET_DOCSTORE_ROWID:
-	{
-		m_dFieldIds.Resize(0);
-		assert(pArg);
-		m_tSessionRowID = *(DocstoreSession_c::InfoRowID_t*)pArg;
-		assert ( m_tSessionRowID.m_pDocstore );
-		int iFieldId = m_tSessionRowID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
-		if ( iFieldId!=-1 )
-			m_dFieldIds.Add(iFieldId);
-	}
-	break;
-
-	default:
-		break;
-	}
-}
-
-template <>
-VecTraits_T<const BYTE>	Expr_GetStored_T<false>::GetBlob ( DocstoreDoc_t & tDoc, const CSphMatch & tMatch ) const
-{
-	if ( !m_tSessionRowID.m_pDocstore || !m_dFieldIds.GetLength() )
-		return { nullptr, 0 };
-
-	tDoc = m_tSessionRowID.m_pDocstore->GetDoc ( tMatch.m_tRowID, &m_dFieldIds, m_tSessionRowID.m_iSessionId, false );
-	return tDoc.m_dFields[0];
-}
-
-template <>
-const BYTE * Expr_GetStored_T<false>::GetBlobPacked ( const CSphMatch & tMatch ) const
-{
-	if ( !m_tSessionRowID.m_pDocstore || !m_dFieldIds.GetLength() )
-		return nullptr;
-
-	DocstoreDoc_t tDoc = m_tSessionRowID.m_pDocstore->GetDoc ( tMatch.m_tRowID, &m_dFieldIds, m_tSessionRowID.m_iSessionId, true );
-	return tDoc.m_dFields[0].LeakData();
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 std::unique_ptr<Docstore_i> CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError )
 {
 	auto pDocstore = std::make_unique<Docstore_c>( iIndexId, sFilename );
@@ -2096,9 +1917,9 @@ std::unique_ptr<Docstore_i> CreateDocstore ( int64_t iIndexId, const CSphString 
 }
 
 
-std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError )
+std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, int iBufferSize, CSphString & sError )
 {
-	auto pBuilder = std::make_unique<DocstoreBuilder_c>( sFilename, tSettings );
+	auto pBuilder = std::make_unique<DocstoreBuilder_c>( sFilename, tSettings, iBufferSize );
 	if ( !pBuilder->Init(sError) )
 		return nullptr;
 
@@ -2136,15 +1957,4 @@ bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, in
 {
 	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount );
 	return tChecker.Check();
-}
-
-
-ISphExpr * CreateExpr_GetStoredField ( const CSphString & sName )
-{
-	return new Expr_GetStored_T<true> ( sName, DOCSTORE_TEXT, SPH_ATTR_STRING );
-}
-
-ISphExpr * CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr )
-{
-	return new Expr_GetStored_T<false> ( sName, DOCSTORE_ATTR, eAttr );
 }

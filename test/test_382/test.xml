@@ -36,13 +36,14 @@ index pq1
 	insert into pq1 (id,query,tags) values (1,'content', 't 1'),  (3,'content', 't 3');
 	select @@session.last_insert_id;
 	select LAST_INSERT_ID();
-	
+	select @@session.last_insert_id, LAST_INSERT_ID();
+
 	<!-- regression missed last insert id for auto-generated id -->
 	insert into rt1 (gid, title) values (101, 'test 101'), (121, 'test 121');
 	select LAST_INSERT_ID();
 	insert into rt1 (gid, title) values (131, 'test 131');
 	select @@session.last_insert_id;
-    
+
     <!-- regression auto-generated id for 0 ID -->
     insert into rt1 (id, gid, title) values (0, 301, 'test 301'), (0, 321, 'test 321');
     select * from rt1 order by id desc;

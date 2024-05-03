@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -449,8 +449,25 @@ SphOffset_t	CSphReader::GetFilesize() const
 	return sphGetFileSize ( m_iFD, nullptr );
 }
 
+#if TRACE_UNZIP
+std::array<std::atomic<uint64_t>, 5> CSphReader::m_dZip32Stats = { 0 };
+std::array<std::atomic<uint64_t>, 10> CSphReader::m_dZip64Stats = { 0 };
+
+DWORD CSphReader::UnzipInt()
+{
+	DWORD uRes = UnzipValueBE<DWORD> ( [this]() mutable { return GetByte(); } );
+	m_dZip32Stats[sphCalcZippedLen ( uRes ) - 1].fetch_add ( 1, std::memory_order_relaxed );
+	return uRes;
+}
 
 
+uint64_t CSphReader::UnzipOffset()
+{
+	uint64_t uRes = UnzipValueBE<uint64_t> ( [this]() mutable { return GetByte(); } );
+	m_dZip64Stats[sphCalcZippedLen ( uRes ) - 1].fetch_add ( 1, std::memory_order_relaxed );
+	return uRes;
+}
+#else
 DWORD CSphReader::UnzipInt()
 {
 	return UnzipValueBE<DWORD> ( [this]() mutable { return GetByte(); } );
@@ -461,7 +478,7 @@ uint64_t CSphReader::UnzipOffset()
 {
 	return UnzipValueBE<uint64_t> ( [this]() mutable { return GetByte(); } );
 }
-
+#endif
 
 CSphReader & CSphReader::operator = ( const CSphReader & rhs )
 {
@@ -821,7 +838,14 @@ static inline void ThrottleSleep()
 }
 
 
-bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError )
+bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
+{
+	WriteSize_fn fnChunkSize = []( int64_t iCount, int iChunkSize ) { return (int)Min ( iCount, iChunkSize ); };
+
+	return sphWriteThrottled ( iFD, pBuf, iCount, std::move( fnChunkSize ), sName, sError );
+}
+
+bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_fn && fnWriteSize, const char * sName, CSphString & sError )
 {
 	if ( iCount <= 0 )
 		return true;
@@ -847,7 +871,7 @@ bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* 
 		if ( pIOStats )
 			tmTimer = sphMicroTimer();
 
-		auto iToWrite = (int)Min ( iCount, iChunkSize );
+		int iToWrite = fnWriteSize ( iCount, iChunkSize );
 		int iWritten = ::write ( iFD, p, iToWrite );
 
 		if ( pIOStats )

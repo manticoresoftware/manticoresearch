@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -253,7 +253,8 @@ void SetDefaultThrottlingPeriodMS ( int tmPeriodMs );
 // -1 means 'use value of tmThrotleTimeQuantumMs'
 // 0 means 'don't throttle'
 // any other positive expresses throttling interval in milliseconds
-void SetThrottlingPeriod ( int tmPeriodMs = -1 );
+void SetThrottlingPeriodMS ( int tmPeriodMs = -1 );
+void SetThrottlingPeriodUS ( int64_t tmPeriodUs );
 int64_t GetThrottlingPeriodUS();
 
 // check if we run > ThrottleQuantum since last resume, or since timer restart
@@ -261,15 +262,15 @@ bool RuntimeExceeded() noexcept;
 const int64_t& GetNextTimePointUS() noexcept;
 
 // common throttle action - keep crash query and reschedule. Timer will be re-engaged on resume
-void RescheduleAndKeepCrashQuery();
+void RescheduleAndKeepCrashQuery ( bool bVip = false ) noexcept;
 
 // just re-engage timer, without rescheduling
 void RestartRuntime() noexcept;
 
-inline void ThrottleAndKeepCrashQuery()
+inline void ThrottleAndKeepCrashQuery ( bool bVip = false ) noexcept
 {
 	if ( RuntimeExceeded() )
-		RescheduleAndKeepCrashQuery();
+		RescheduleAndKeepCrashQuery ( bVip );
 }
 
 // yield and reschedule after given period of time (in milliseconds)

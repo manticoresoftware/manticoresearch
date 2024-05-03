@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sphinx:docset>
+ <sphinx:schema>
+  <sphinx:field name="text"/>
+ </sphinx:schema>
+ <sphinx:document id="1">
+  <text>Test</text>
+ </sphinx:document>
+ <sphinx:killlist>
+  <id>1</id>
+ </sphinx:killlist>
+</sphinx:docset>

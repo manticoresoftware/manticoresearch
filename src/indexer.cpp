@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -23,6 +23,7 @@
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
 #include "secondarylib.h"
+#include "knnlib.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -31,7 +32,6 @@
 #include <signal.h>
 
 #if _WIN32
-	#define snprintf	_snprintf
 	#define popen		_popen
 	#define RMODE "rb"
 
@@ -630,6 +630,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
 	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETA ( tParams.m_dQueryPreAll,		"sql_query_pre_all" );
 	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
 	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
@@ -1033,11 +1034,15 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			fprintf ( stdout, "WARNING: table '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
-		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && ( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
+		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 		{
 			tSettings.m_bIndexExactWords = true;
 			fprintf ( stdout, "WARNING: table '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
 		}
+
+		bool bExpandExact = ( tSettings.m_bIndexExactWords && ( tMutableSettings.m_iExpandKeywords & KWE_EXACT )==KWE_EXACT );
+		if ( !pDict->GetSettings().m_sMorphFields.IsEmpty() && !bExpandExact )
+			fprintf ( stdout, "WARNING: table '%s': morphology_skip_fields set, consider enable expand_keywords\n", szIndexName );
 
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 
@@ -1665,12 +1670,17 @@ static void MakeVersion()
 	if ( szColumnarVer )
 		sColumnar.SetSprintf ( " (columnar %s)", szColumnarVer );
 
-	const char * sSiVer = GetSecondaryVersionStr();
+	const char * szSiVer = GetSecondaryVersionStr();
 	CSphString sSi = "";
-	if ( sSiVer )
-		sSi.SetSprintf ( " (secondary %s)", sSiVer );
+	if ( szSiVer )
+		sSi.SetSprintf ( " (secondary %s)", szSiVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr() );
+	const char * szKNNVer = GetKNNVersionStr();
+	CSphString sKNN = "";
+	if ( szKNNVer )
+		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
 }
 
 static void ShowVersion()
@@ -1747,9 +1757,10 @@ int main ( int argc, char ** argv )
 	CheckWinInstall();
 #endif
 
-	CSphString sError, sErrorSI;
+	CSphString sError, sErrorSI, sErrorKNN;
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( sErrorSI );
+	bool bKNNError = !InitKNN ( sErrorKNN );
 	MakeVersion();
 
 	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
@@ -1891,8 +1902,12 @@ int main ( int argc, char ** argv )
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
 	if ( bSecondaryError )
 		sphWarning ( "Error initializing secondary index: %s", sErrorSI.cstr() );
+
+	if ( bKNNError )
+		sphWarning ( "Error initializing knn index: %s", sErrorKNN.cstr() );
 
 	if ( !isatty ( fileno(stdout) ) )
 		g_bProgress = false;
@@ -2082,7 +2097,10 @@ int main ( int argc, char ** argv )
 	}
 
 	sphShutdownWordforms ();
+
 	ShutdownColumnar();
+	ShutdownSecondary();
+	ShutdownKNN();
 
 	if ( !g_bQuiet )
 	{

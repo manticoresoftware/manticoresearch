@@ -8,9 +8,11 @@
 ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
+
+ALTER TABLE table MODIFY COLUMN column_name bigint
 ```
 
-This feature only supports adding one field at a time for RT tables. The supported data types are:
+This feature only supports adding one field at a time for RT tables or the expansion of an `int` column to `bigint`. The supported data types are:
 * `int` - integer attribute
 * `timestamp` - timestamp attribute
 * `bigint` - big integer attribute
@@ -31,7 +33,7 @@ This feature only supports adding one field at a time for RT tables. The support
 * Querying a table is impossible while a column is being added.
 * Newly created attribute's values are set to 0.
 * `ALTER` will not work for distributed tables and tables without any attributes.
-* `DROP COLUMN` will fail if a table has only one field.
+* You can't delete the `id` column.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
 * Adding/dropping full-text field is only supported in the [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
 
@@ -257,9 +259,11 @@ ALTER TABLE table REBUILD SECONDARY
 
 You can also use `ALTER` to rebuild secondary indexes in a given table. Sometimes, a secondary index can be disabled for the entire table or for one or multiple attributes within the table:
 * When an attribute is updated, its secondary index gets disabled.
-* If Manticore loads a table with outdated formatted secondary indexes, the secondary indexes will be disabled for the entire table.
+* If Manticore loads a table with an old version of secondary indexes that is no longer supported, the secondary indexes will be disabled for the entire table.
 
 `ALTER TABLE table REBUILD SECONDARY` rebuilds secondary indexes from attribute data and enables them again.
+
+Additionally, an old version of secondary indexes may be supported but will lack certain features. `REBUILD SECONDARY` can be used to update secondary indexes.
 
 <!-- request Example -->
 ```sql

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -96,7 +96,10 @@ bool			sphIsReadable ( const char * szFilename, CSphString * pError=NULL );
 bool			sphIsReadable ( const CSphString & sFilename, CSphString * pError = NULL );
 
 bool			sphFileExists ( const char * szFilename, CSphString * pError=nullptr );
+bool			sphFileExists ( const CSphString& sFilename, CSphString * pError=nullptr );
+
 bool			sphDirExists ( const char * szFilename, CSphString * pError=nullptr );
+bool			sphDirExists ( const CSphString& sFilename, CSphString * pError=nullptr );
 
 /// return size of file descriptor
 int64_t			sphGetFileSize ( int iFD, CSphString * sError = nullptr );
@@ -160,6 +163,8 @@ CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );
 
 CSphString		RealPath ( const CSphString& sPath );
+bool			IsSymlink ( const CSphString & sFile );
+bool			ResolveSymlink ( const CSphString & sFile, CSphString & sResult );
 
 class CSphWriter;
 void			SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t tValue );

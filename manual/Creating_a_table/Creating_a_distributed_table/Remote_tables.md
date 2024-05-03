@@ -135,6 +135,8 @@ The `agent_query_timeout` sets the amount of time that searchd will wait for a r
 
 After establishing a connection, `searchd` will wait for a maximum of agent_query_timeout for remote queries to complete. Note that this timeout is separate from the `agent_connection_timeout` and the total possible delay caused by a remote agent will be the sum of both values. If the agent_query_timeout is reached, the query will **not** be retried, instead, a warning will be produced.
 
+Note that behavior is also affected by [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet)
+
 ## agent_retry_count
 
 The `agent_retry_count` is an integer that specifies how many times Manticore will attempt to connect and query remote agents in a distributed table before reporting a fatal query error. It works similarly to `agent_retry_count` defined in the "searchd" section of the configuration file but applies specifically to the table.
@@ -173,7 +175,7 @@ client_timeout = 1h
 
 ### hostname_lookup
 
-The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to 'request' disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
 
 ### listen_tfo
 
@@ -213,7 +215,7 @@ To learn more about distributed snippets creation, see  [CALL SNIPPETS](../../Se
 
 ## Distributed percolate tables (DPQ tables)
 
-You can create a distributed table from multiple [percolate](../../Creating_a_table/Local_tables/Percolate_table.md) ables. The syntax for constructing this type of table is the same as for other distributed tables, and can include multiple`local` tables as well as `agents`.
+You can create a distributed table from multiple [percolate](../../Creating_a_table/Local_tables/Percolate_table.md) tables. The syntax for constructing this type of table is the same as for other distributed tables, and can include multiple`local` tables as well as `agents`.
 
 For DPQ, the operations of listing stored queries and searching through them (using [CALL PQ](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)) are transparent and work as if all the tables were one single local table. However, data manipulation statements such as `insert`, `replace`, `truncate` are not available.
 

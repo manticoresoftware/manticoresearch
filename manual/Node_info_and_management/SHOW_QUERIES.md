@@ -9,6 +9,7 @@ SHOW QUERIES
 
 - `id`: Query ID that can be used in [KILL](../Node_info_and_management/KILL.md) to terminate the query
 - `query`: Query statement or a portion of it
+- `time`: Time taken on command execution or how long ago the query was performed
 - `protocol`: [Connection protocol](../Server_settings/Searchd.md#listen), with possible values being `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)
 - `host`: Client's `ip:port`
 
@@ -20,12 +21,12 @@ mysql> SHOW QUERIES;
 
 <!-- response SQL -->
 ```
-+------+--------------+----------+-----------------+
-| id   | query        | protocol | host            |
-+--------------------------+-----------------------+
-|    6 | select       | http     | 127.0.0.1:41128 |
-|    4 | show queries | mysql    | 127.0.0.1:56672 |
-+------+--------------+----------+-----------------+
++------+--------------+---------+----------+-----------------+
+| id   | query        | time    | protocol | host            |
++------+--------------+---------+----------+-----------------+
+|  111 | select       | 5ms ago | http     | 127.0.0.1:58986 |
+|   96 | SHOW QUERIES | 255us   | mysql    | 127.0.0.1:33616 |
++------+--------------+---------+----------+-----------------+
 2 rows in set (0.61 sec)
 ```
 

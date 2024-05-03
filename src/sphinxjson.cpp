@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -169,6 +169,74 @@ int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen )
 		s += iChunk;
 	}
 	return int ( d - pTarget );
+}
+
+
+CSphString FormatJsonAsSortStr ( const BYTE * pVal, ESphJsonType eJson )
+{
+	if ( !pVal )
+		return "";
+
+	CSphString sVal;
+
+	// FIXME!!! make string length configurable for STRING and STRING_VECTOR to compare and allocate only Min(String.Length, CMP_LENGTH)
+	switch ( eJson )
+	{
+	case JSON_INT32:
+		sVal.SetSprintf ( "%d", sphJsonLoadInt ( &pVal ) );
+		break;
+	case JSON_INT64:
+		sVal.SetSprintf ( INT64_FMT, sphJsonLoadBigint ( &pVal ) );
+		break;
+	case JSON_DOUBLE:
+		sVal.SetSprintf ( "%f", sphQW2D ( sphJsonLoadBigint ( &pVal ) ) );
+		break;
+	case JSON_STRING:
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		sVal.SetBinary ( (const char *)pVal, iLen );
+		break;
+	}
+	case JSON_STRING_VECTOR:
+	{
+		int iTotalLen = sphJsonUnpackInt ( &pVal );
+		int iCount = sphJsonUnpackInt ( &pVal );
+
+		CSphFixedVector<BYTE> dBuf ( iTotalLen + 4 + iCount ); // data and tail GAP and space count
+		BYTE * pDst = dBuf.Begin();
+
+		// head element
+		if ( iCount )
+		{
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			memcpy ( pDst, pVal, iElemLen );
+			pDst += iElemLen;
+			pVal += iElemLen;
+		}
+
+		// tail elements separated by space
+		for ( int i=1; i<iCount; i++ )
+		{
+			*pDst++ = ' ';
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			memcpy ( pDst, pVal, iElemLen );
+			pDst += iElemLen;
+			pVal += iElemLen;
+		}
+
+		// filling junk space
+		while ( pDst<dBuf.Begin()+dBuf.GetLength() )
+			*pDst++ = '\0';
+
+		auto szValue = (char*)dBuf.LeakData();
+		sVal.Adopt ( &szValue );
+		break;
+	}
+	default:
+		break;
+	}
+
+	return sVal;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1264,13 +1332,9 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 }
 
 
-bool sphJsonNameSplit ( const char * sName, CSphString * sColumn )
+static bool FindNextSeparator ( const char * & pSep )
 {
-	if ( !sName )
-		return false;
-
 	// find either '[' or '.', what comes first
-	const char * pSep = sName;
 	while ( *pSep && *pSep!='.' && *pSep!='[' )
 	{
 		// check for invalid characters
@@ -1279,15 +1343,33 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn )
 		++pSep;
 	}
 
-	if ( !*pSep )
+	return *pSep;
+}
+
+
+bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * pColumn )
+{
+	if ( !szName )
 		return false;
 
-	int iSep = int ( pSep - sName );
-	if ( sColumn )
+	const char * pSep = szName;
+	if ( !FindNextSeparator(pSep) )
+		return false;
+
+	if ( szIndex && *pSep=='.' && !strncmp ( szIndex, szName, pSep - szName ) )
 	{
-		sColumn->SetBinary ( sName, iSep );
-		sColumn->Trim();
+		// this was not a json separator, but a dot between table name and column name
+		pSep++;
+		if ( !FindNextSeparator(pSep) )
+			return false;
 	}
+
+	if ( pColumn )
+	{
+		pColumn->SetBinary ( szName, pSep-szName );
+		pColumn->Trim();
+	}
+
 	return true;
 }
 
@@ -2171,10 +2253,7 @@ CSphString bson::String ( const NodeHandle_t &tLocator, CSphString sDefault )
 	if ( tLocator.second!=JSON_STRING )
 		return sDefault;
 
-	auto dBlob = bson::RawBlob ( tLocator );
-	CSphString sResult;
-	sResult.SetBinary ( dBlob.first, dBlob.second );
-	return sResult;
+	return CSphString { bson::RawBlob ( tLocator ) };
 }
 
 Str_t bson::ToStr ( const NodeHandle_t & tLocator )
@@ -2435,7 +2514,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction )
 	}
 }
 
-std::pair<const char *, int> bson::RawBlob ( const NodeHandle_t &tLocator )
+Str_t bson::RawBlob ( const NodeHandle_t &tLocator )
 {
 	if ( ::IsPODBlob ( tLocator ) )
 	{

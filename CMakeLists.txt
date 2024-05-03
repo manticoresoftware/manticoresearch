@@ -63,26 +63,6 @@ if (CXX_COMPILER_ID STREQUAL GNU AND CXX_COMPILER_VERSION VERSION_LESS 4.7.2)
 	message ( FATAL_ERROR "Gcc version error. Minspec is 4.7.2" )
 endif ()
 
-# On Macos with HOMEBREW plugin_dir should be set to /opt/homebrew/lib/manticore (or with another homebrew prefix)
-if(DEFINED HOMEBREW_PREFIX)
-	set(HARDCODED_PLUGIN_DIR "${HOMEBREW_PREFIX}/lib/manticore")
-# on Windows, plugin_dir should be relative usr/local/lib/manticore by default
-elseif (WIN32)
-	set(HARDCODED_PLUGIN_DIR "usr/local/lib/manticore")
-# on Linux - absolute /usr/local/lib/manticore
-elseif (APPLE)
-	if (APPLE_ARM)
-		set(HARDCODED_PLUGIN_DIR "/opt/homebrew/")
-	else()
-		set(HARDCODED_PLUGIN_DIR "/usr/local/")
-	endif()
-else()
-       set(HARDCODED_PLUGIN_DIR "/usr/local/lib/manticore")
-endif()
-
-# Pass the value of HARDCODED_PLUGIN_DIR to the C++ code
-add_definitions(-DHARDCODED_PLUGIN_DIR="${HARDCODED_PLUGIN_DIR}")
-
 # Collect string information which will be included into binaries
 include ( banner )
 bannervar ( DISTR_BUILD )
@@ -101,9 +81,6 @@ include ( CheckIncludeFile )
 if (NOT WIN32)
 	# Checking if mincore has unsigned 3-rd param
 	include ( mincore_test )
-	check_include_file ( "execinfo.h" HAVE_EXECINFO_H )
-	check_include_file ( "sys/eventfd.h" HAVE_SYS_EVENTFD_H )
-	check_include_file ( "sys/prctl.h" HAVE_SYS_PRCTL_H )
 	add_lib_for ( getaddrinfo_a anl lextra )
 	add_lib_for ( setsockopt socket lextra )
 	add_lib_for ( getaddrinfo "nsl;socket;resolv" lextra )
@@ -117,7 +94,6 @@ if (NOT WIN32)
 	check_function_exists ( backtrace HAVE_BACKTRACE )
 	check_function_exists ( backtrace_symbols HAVE_BACKTRACE_SYMBOLS )
 	check_function_exists ( mremap HAVE_MREMAP )
-	check_function_exists ( nanosleep HAVE_NANOSLEEP )
 	check_function_exists ( eventfd HAVE_EVENTFD )
 	check_function_exists ( kqueue HAVE_KQUEUE )
 	check_function_exists ( pthread_getname_np HAVE_PTHREAD_GETNAME_NP )
@@ -145,7 +121,6 @@ if (STATIC_BINARY)
 	# options for clang/gcc c and c++
 	target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-static> )
 	set ( HAVE_DLOPEN 0 CACHE BOOL "" FORCE )
-	set ( HAVE_DLERROR 0 CACHE BOOL "" FORCE )
 	set ( HAVE_GETADDRINFO_A 0 CACHE BOOL "" FORCE )
 	set ( WITH_ODBC 0 CACHE BOOL "" FORCE )
 	set ( WITH_MYSQL 0 CACHE BOOL "" FORCE )
@@ -161,19 +136,12 @@ elseif (NOT WIN32)
 	endif ()
 	set ( CMAKE_REQUIRED_LIBRARIES "${CMAKE_DL_LIBS}" )
 	check_symbol_exists ( dlopen "dlfcn.h" HAVE_DLOPEN )
-	check_symbol_exists ( dlerror "dlfcn.h" HAVE_DLERROR )
 else ()
 	set ( HAVE_DLOPEN 1 CACHE BOOL "Use emulated dlopen" FORCE )
-	set ( HAVE_DLERROR 1 CACHE BOOL "Use emulated dlerror" FORCE )
 endif ()
 
 include ( TestBigEndian ) # fixme! That is deprecated in cmake 3.20 in favor to CMAKE_<LANG>_BYTE_ORDER var
 test_big_endian ( USE_BIG_ENDIAN )
-
-check_include_file ( "sys/types.h" HAVE_SYS_TYPES_H )
-check_include_file ( "stdint.h" HAVE_STDINT_H )
-check_include_file ( "inttypes.h" HAVE_INTTYPES_H )
-check_include_file ( "malloc.h" HAVE_MALLOC_H )
 
 target_compile_options ( lextra INTERFACE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:-D_CRT_SECURE_NO_WARNINGS -wd4996 -wd4706 -wd4244 -wd4702 -wd4577> )
 
@@ -222,7 +190,7 @@ endif (COVERAGE_TEST)
 
 # options for clang in C++
 target_compile_options ( lextra INTERFACE $<${CLANGCXX}:
-		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof> )
+		-Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof -Wc++11-narrowing> )
 
 # Checking for unaligned RAM access
 if (CMAKE_CROSSCOMPILING)
@@ -262,6 +230,9 @@ with_get ( re2 "RE2" "a regular expression library" )
 set ( WITH_STEMMER_FORCE_STATIC 1 CACHE BOOL "force to compile stemmer from sources" )
 with_get ( stemmer "Stemmer" "stemming library (Snowball)" )
 
+get_dep ( nlohmann_json NLJSON "JSON for Modern C++ library" )
+get_dep ( uni-algo UniAlgo "unicode algorithm implementation for C/C++" )
+
 # Check for ICU build
 set ( WITH_ICU_FORCE_STATIC 1 CACHE BOOL "force to compile ICU from sources" )
 if (STATIC_BINARY)
@@ -270,17 +241,17 @@ if (STATIC_BINARY)
 endif ()
 with_get ( icu "ICU" "International Components for Unicode" )
 
+include ( GetCCTZ )
+target_link_libraries ( lextra INTERFACE cctz::cctz )
+
+include ( GetxxHash )
+target_link_libraries ( lextra INTERFACE xxHash::xxhash )
+
 # Support for OpenSSL
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
 
 trace ( OpenSSL::Crypto )
-
-# Presence of Jemalloc headers
-check_include_file ( "jemalloc/jemalloc.h" HAVE_JEMALLOC_JEMALLOC_H )
-
-# Presence of Valgrind headers
-check_include_file ( "valgrind/valgrind.h" HAVE_VALGRIND_VALGRIND_H )
 
 # Support for ZLIB
 with_menu ( ZLIB "zlib" "for compressed data and networking" )
@@ -329,9 +300,6 @@ with_menu ( PostgreSQL "pgsql" "for indexing postgresql sources with indexer" )
 dl_package ( PostgreSQL "pgsql" )
 win_install ( PostgreSQL indexer )
 
-include(GetNLJSON)
-include(GetUniAlgo)
-
 # Storing compiler version
 set ( COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}" )
 diag ( COMPILER )
@@ -358,11 +326,14 @@ diag ( OS_UNAME )
 
 diag ( SPLIT )
 
-configure_file ( "COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY )
+configure_file ( "LICENSE" "${MANTICORE_BINARY_DIR}/LICENSE" COPYONLY )
 
 # Common all-packages info
 include ( ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake )
 include ( CommonInfo )
+
+include( builds/VersionDeps )
+message("EXECUTOR image: manticoresearch/manticore-executor:${EXECUTOR_VERNUM}")
 
 # set final paths for build
 set ( only_set_paths ON )
@@ -375,10 +346,11 @@ if (NOT installed) # GNUInstallDirs wasn't yet included...
 	if (WIN32)
 		set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc" )
 		SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}" )
+		SET ( CMAKE_INSTALL_FULL_LOCALLIBDIR "usr/local/lib" )
 		install ( DIRECTORY api doc contrib DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 		install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 		install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR} COMPONENT common )
-		install ( FILES COPYING INSTALL manticore.conf.in DESTINATION . COMPONENT common )
+		install ( FILES LICENSE INSTALL manticore.conf.in DESTINATION . COMPONENT common )
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log COMPONENT searchd )
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR} COMPONENT common )
 		if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
@@ -388,6 +360,7 @@ if (NOT installed) # GNUInstallDirs wasn't yet included...
 		set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore" )
 		configure_config ( lib/manticore )
 		SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
+		SET ( CMAKE_INSTALL_FULL_LOCALLIBDIR "${CMAKE_INSTALL_FULL_LIBDIR}" )
 		install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
 		install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT common )
@@ -428,7 +401,7 @@ if (installed)
 endif ()
 
 cmake_print_variables ( CMAKE_INSTALL_PREFIX )
-foreach (var BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR LOCALSTATEDIR RUNSTATEDIR LIBDIR INCLUDEDIR OLDINCLUDEDIR DATAROOTDIR DATADIR INFODIR LOCALEDIR MANDIR DOCDIR)
+foreach (var BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR LOCALSTATEDIR RUNSTATEDIR LIBDIR INCLUDEDIR OLDINCLUDEDIR DATAROOTDIR DATADIR INFODIR LOCALEDIR MANDIR DOCDIR LOCALLIBDIR)
 	cmake_print_variables ( CMAKE_INSTALL_${var} CMAKE_INSTALL_FULL_${var} )
 endforeach ()
 

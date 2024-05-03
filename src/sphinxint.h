@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -37,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 64;				///< bumped to 64 since header is now stored as json
+const DWORD		INDEX_FORMAT_VERSION		= 65;				///< added .spknn
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -89,6 +89,7 @@ extern bool g_bJsonKeynamesToLowercase;
 #define SZ_BOOST			"n"
 #define SZ_ZONES            "o"
 #define SZ_ZONESPANS        "p"
+#define SZ_REGEX			"r"
 
 /// generic COM-like uids
 enum ExtraData_e
@@ -114,7 +115,8 @@ enum ExtraData_e
 
 	EXTRA_GET_POOL_SIZE,
 	EXTRA_SET_BOUNDARIES,
-	EXTRA_SET_ITERATOR
+	EXTRA_SET_ITERATOR,
+	EXTRA_SET_COLUMNAR,
 };
 
 /// generic COM-like interface
@@ -139,79 +141,9 @@ class ISphMatchSorter;
 
 enum QueryDebug_e
 {
-	QUERY_DEBUG_NO_PAYLOAD = 1<<0
+	QUERY_DEBUG_NO_PAYLOAD = 1<<0,
+	QUERY_DEBUG_NO_LOG = 1<<1
 };
-
-class Docstore_i;
-
-/// per-query search context
-/// everything that index needs to compute/create to process the query
-class CSphQueryContext : public ISphNoncopyable
-{
-public:
-	// searching-only, per-query
-	const CSphQuery &			m_tQuery;
-
-	int							m_iWeights = 0;					///< search query field weights count
-	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
-
-	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE }; ///< whether we need to calculate packed factors (and some extra options)
-
-	std::unique_ptr<ISphFilter>	m_pFilter;
-	std::unique_ptr<ISphFilter>	m_pWeightFilter;
-
-	bool						m_bSkipQCache = false;			///< whether do not cache this query
-
-	struct CalcItem_t
-	{
-		CSphAttrLocator			m_tLoc;					///< result locator
-		ESphAttr				m_eType { SPH_ATTR_NONE};	///< result type
-		ISphExprRefPtr_c		m_pExpr;		///< evaluator (non-owned)
-	};
-	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
-	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping
-	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
-
-	IntVec_t					m_dCalcFilterPtrAttrs;	///< items to free after computing filter stage
-	IntVec_t					m_dCalcSortPtrAttrs;	///< items to free after computing sort stage
-
-	const void *							m_pIndexData = nullptr;	///< backend specific data
-	QueryProfile_c *						m_pProfile = nullptr;
-	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
-	int64_t									m_iTotalDocs = 0;
-
-public:
-	explicit CSphQueryContext ( const CSphQuery & q );
-			~CSphQueryContext ();
-
-	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );
-	bool	SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema & tInSchema, const ISphSchema & tSchema, const BYTE * pBlobPool, const columnar::Columnar_i * pColumnar, const CSphVector<const ISphSchema *> & dInSchemas );
-	bool	CreateFilters ( CreateFilterContext_t& tCtx, CSphString &sError, CSphString &sWarning );
-
-	void	CalcFilter ( CSphMatch & tMatch ) const;
-	void	CalcSort ( CSphMatch & tMatch ) const;
-	void	CalcFinal ( CSphMatch & tMatch ) const;
-	void	CalcItem ( CSphMatch & tMatch, const CalcItem_t & tCalc ) const;
-
-	void	FreeDataFilter ( CSphMatch & tMatch ) const;
-	void	FreeDataSort ( CSphMatch & tMatch ) const;
-
-	// note that RT index bind pools at segment searching, not at time it setups context
-	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
-	void	SetBlobPool ( const BYTE * pBlobPool );
-	void	SetColumnar ( const columnar::Columnar_i * pColumnar );
-	void	SetDocstore ( const Docstore_i * pDocstore, int64_t iDocstoreSessionId );
-
-	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
-	void	ResetFilters();
-
-private:
-	CSphVector<UservarIntSet_c>		m_dUserVals;
-
-	void	AddToFilterCalc ( const CalcItem_t & tCalc );
-	void	AddToSortCalc ( const CalcItem_t & tCalc );
-};
-
 
 // collect valid schemas from sorters, excluding one
 CSphVector<const ISphSchema *> SorterSchemas ( const VecTraits_T<ISphMatchSorter *> & dSorters, int iSkipSorter );
@@ -362,7 +294,7 @@ public:
 
 /// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
 template < typename T, typename U >
-int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
+FORCE_INLINE int FindSpan ( const VecTraits_T<T> & dVec, U tRef, int iSmallTreshold=8 )
 {
 	// empty vector
 	if ( !dVec.GetLength() )
@@ -746,6 +678,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 
 		case SPH_ATTR_UINT32SET:	return "mva";
 		case SPH_ATTR_INT64SET:		return "mva64";
+		case SPH_ATTR_FLOAT_VECTOR:	return "float_vector";
 		default:					return "unknown";
 	}
 }
@@ -786,6 +719,7 @@ inline const char * sphRtTypeDirective ( ESphAttr eType )
 
 		case SPH_ATTR_UINT32SET:	return "rt_attr_multi";
 		case SPH_ATTR_INT64SET:		return "rt_attr_multi64";
+		case SPH_ATTR_FLOAT_VECTOR:	return "rt_attr_float_vector";
 		default:					return nullptr;
 	}
 }
@@ -877,7 +811,6 @@ int				ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError );
 int				ConsiderStackAbsolute ( const struct XQNode_t* pRoot );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
-bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );
 
@@ -895,6 +828,18 @@ bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings& tSettings, const FilenameBuilder_i* pFilenameBuilder, StrVec_t& dFiles );
 
+struct BuildBufferSettings_t
+{
+	int m_iSIMemLimit		= 128*1024*1024;
+	int m_iBufferAttributes = 8*1024*1024;
+	int m_iBufferStorage	= 8*1024*1024;
+	int m_iBufferColumnar	= 1*1024*1024;
+	int m_iBufferFulltext	= 8*1024*1024;
+	int m_iBufferDict		= 16*1024*1024;
+};
+
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError );
+
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );
 
@@ -904,8 +849,6 @@ void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVec
 const char * CheckFmtMagic ( DWORD uHeader );
 bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const KillListTargets_c & tTargets, CSphString & sError );
 void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTargets_c & tTargets );
-extern const char * g_sTagInfixBlocks;
-extern const char * g_sTagInfixEntries;
 
 template < typename VECTOR >
 int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
@@ -964,13 +907,13 @@ int sphDictCmpStrictly ( const char* pStr1, int iLen1, const char* pStr2, int iL
 template <typename CP>
 int sphCheckpointCmp ( const char * sWord, int iLen, const CP & tCP )
 {
-	return sphDictCmp ( sWord, iLen, tCP.m_sWord, (int) strlen ( tCP.m_sWord ) );
+	return sphDictCmp ( sWord, iLen, tCP.m_szWord, (int) strlen ( tCP.m_szWord ) );
 }
 
 template <typename CP>
 int sphCheckpointCmpStrictly ( const char * sWord, int iLen, const CP & tCP )
 {
-	return sphDictCmpStrictly ( sWord, iLen, tCP.m_sWord, (int)strlen ( tCP.m_sWord ) );
+	return sphDictCmpStrictly ( sWord, iLen, tCP.m_szWord, (int)strlen ( tCP.m_szWord ) );
 }
 
 template<typename CP>
@@ -1059,10 +1002,10 @@ struct ISphSubstringPayload
 
 
 // levenstein distance for words
-int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 );
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 // levenstein distance for unicode codepoints
-int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 );
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2, CSphVector<int> & dTmp );
 
 struct Slice_t
 {
@@ -1154,25 +1097,32 @@ public:
 
 void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
 
+struct ExpansionTrait_t
+{
+	int				m_iExpansionLimit = 0;
+	bool			m_bHasExactForms = false;
+	ESphHitless		m_eHitless = SPH_HITLESS_NONE;
+	cRefCountedRefPtrGeneric_t	m_pIndexData;
+};
+
+using RegexTerm_t = std::pair <CSphString, XQNode_t *>;
+class DictTerm2Expanded_i;
+struct ExpansionContext_t;
 
 class ISphWordlist
 {
 public:
-	struct Args_t : public ISphNoncopyable
+	struct Args_t : public ExpansionTrait_t, ISphNoncopyable
 	{
 		CSphVector<SphExpanded_t>	m_dExpanded;
 		const bool					m_bPayload;
-		int							m_iExpansionLimit;
-		const bool					m_bHasExactForms;
-		const ESphHitless			m_eHitless;
 
-		ISphSubstringPayload *		m_pPayload;
+		std::unique_ptr<ISphSubstringPayload> m_pPayload { nullptr };
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
-		cRefCountedRefPtrGeneric_t	m_pIndexData;
+		ExpansionStats_t &			m_tExpansionStats;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, cRefCountedRefPtrGeneric_t pIndexData );
-		~Args_t ();
+		Args_t ( bool bPayload, ExpansionContext_t & tCtx );
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
 
@@ -1183,8 +1133,18 @@ public:
 	virtual ~ISphWordlist () {}
 	virtual void GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const = 0;
 	virtual void GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const = 0;
+	virtual void ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecTraits_T< std::unique_ptr<DictTerm2Expanded_i> > & dConverters ) const = 0;
 };
 
+class DictTerm2Expanded_i
+{
+public:
+	DictTerm2Expanded_i() = default;
+	virtual ~DictTerm2Expanded_i() = default;
+	virtual void Convert ( ISphWordlist::Args_t & tArgs ) = 0;
+};
+
+using VecExpandConv_t = VecTraits_T< std::unique_ptr<DictTerm2Expanded_i> >;
 
 class CSphScopedPayload
 {
@@ -1201,23 +1161,22 @@ private:
 	CSphVector<ISphSubstringPayload *> m_dPayloads;
 };
 
-
-struct ExpansionContext_t
+struct ExpansionContext_t : public ExpansionTrait_t
 {
 	const ISphWordlist * m_pWordlist	= nullptr;
 	BYTE * m_pBuf						= nullptr;
 	CSphQueryResultMeta * m_pResult		= nullptr;
 	int m_iMinPrefixLen					= 0;
 	int m_iMinInfixLen					= 0;
-	int m_iExpansionLimit				= 0;
-	bool m_bHasExactForms				= false;
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
-	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
 	int m_iCutoff = -1;
-	cRefCountedRefPtrGeneric_t m_pIndexData;
+	ExpansionStats_t m_tExpansionStats;
 
-	bool					m_bOnlyTreeFix = false;
+	bool								m_bOnlyTreeFix = false;
+	CSphVector<RegexTerm_t>				m_dRegexTerms;
+	
+	void AggregateStats ();
 };
 
 struct GetKeywordsSettings_t
@@ -1238,13 +1197,12 @@ inline int sphGetExpansionMagic ( int iDocs, int iHits )
 {
 	return ( iHits<=256 ? 1 : iDocs + 1 ); // magic threshold; mb make this configurable?
 }
-inline bool sphIsExpandedPayload ( int iDocs, int iHits )
-{
-	return ( iHits<=256 || iDocs<32 ); // magic threshold; mb make this configurable?
-}
+bool sphIsExpandedPayload ( int iDocs, int iHits );
 bool sphHasExpandableWildcards ( const char * sWord );
 bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tWordlist );
-
+bool ExpandRegex ( ExpansionContext_t & tCtx, CSphString & sError );
+void ExpandedMergeThdDocs ( int iDocs );
+void ExpandedMergeThdHits ( int iHits );
 
 template<typename T>
 struct ExpandedOrderDesc_T
@@ -1318,47 +1276,30 @@ void localtime_r ( const time_t * clock, struct tm * res );
 void gmtime_r ( const time_t * clock, struct tm * res );
 #endif
 
-struct InfixBlock_t
-{
-	union
-	{
-		const char *	m_sInfix;
-		DWORD			m_iInfixOffset;
-	};
-	DWORD				m_iOffset;
-};
-
-
-/// infix hash builder
-class ISphInfixBuilder
-{
-public:
-	explicit		ISphInfixBuilder() {}
-	virtual			~ISphInfixBuilder() {}
-	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint, bool bHasMorphology ) = 0;
-	virtual void	SaveEntries ( CSphWriter & wrDict ) = 0;
-	virtual int64_t	SaveEntryBlocks ( CSphWriter & wrDict ) = 0;
-	virtual int		GetBlocksWordsSize () const = 0;
-};
-
-
-std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError );
-bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints );
-// calculate length, upto iInfixCodepointBytes chars from infix start
-int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointBytes );
-
-
 /// compute utf-8 character length in bytes from its first byte
 inline int sphUtf8CharBytes ( BYTE uFirst )
 {
-	switch ( uFirst>>4 )
-	{
-		case 12: return 2; // 110x xxxx, 2 bytes
-		case 13: return 2; // 110x xxxx, 2 bytes
-		case 14: return 3; // 1110 xxxx, 3 bytes
-		case 15: return 4; // 1111 0xxx, 4 bytes
-		default: return 1; // either 1 byte, or invalid/unsupported code
-	}
+	// 110x xxxx, 2 bytes
+	// 1110 xxxx, 3 bytes
+	// 1111 0xxx, 4 bytes
+	// others - either 1 byte, or invalid/unsupported code
+
+	static const std::array<BYTE, 16> dValues { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4 };
+	return dValues[uFirst >> 4];
+}
+
+// calculate length, upto iInfixCodepointBytes chars from infix start
+inline int sphGetInfixLength ( const char* sInfix, int iBytes, int iInfixCodepointBytes )
+{
+	if ( iInfixCodepointBytes == 1 )
+		return Min ( 6, iBytes );
+
+	int iCharsLeft = 6;
+	const char* s = sInfix;
+	const char* sMax = sInfix + iBytes;
+	while ( iCharsLeft-- && s < sMax )
+		s += sphUtf8CharBytes ( *s );
+	return (int)( s - sInfix );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1372,13 +1313,11 @@ struct RemapXSV_t
 	int m_iTag {-1};
 };
 
-void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-
 // internals attributes are last no need to send them
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );
 
 
-inline void FlipEndianess ( DWORD* pData )
+inline void FlipEndianness ( DWORD* pData )
 {
 	BYTE* pB = (BYTE*)pData;
 	BYTE a = pB[0];
@@ -1473,7 +1412,5 @@ int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
 void sphFormatCurrentTime ( StringBuilder_c& sOut );
 
 CSphString sphCurrentUtcTime ( );
-
-bool IsGroupbyMagic ( const CSphString & s );
 
 #endif // _sphinxint_

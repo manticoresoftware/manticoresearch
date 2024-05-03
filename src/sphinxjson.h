@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,8 +15,9 @@
 
 #include "sphinxutils.h"
 #include "sphinxdefs.h"
+#include "grouper.h"
 
-struct ISphExpr;
+class ISphExpr;
 
 /// supported JSON value types
 enum ESphJsonType : BYTE
@@ -221,10 +222,10 @@ struct EscapeJsonString_t
 
 };
 
-const StrBlock_t dJsonObj { FROMS ( "," ), FROMS ( "{" ), FROMS ( "}" ) }; // json object
-const StrBlock_t dJsonArr { FROMS ( "," ), FROMS ( "[" ), FROMS ( "]" ) }; // json array
-const StrBlock_t dJsonObjW { FROMS ( ",\n" ), FROMS ( "{\n" ), FROMS ( "\n}" ) }; // json object with formatting
-const StrBlock_t dJsonArrW { FROMS ( ",\n" ), FROMS ( "[\n" ), FROMS ( "\n]" ) }; // json array with formatting
+inline const StrBlock_t dJsonObj { FROMS ( "," ), FROMS ( "{" ), FROMS ( "}" ) }; // json object
+inline const StrBlock_t dJsonArr { FROMS ( "," ), FROMS ( "[" ), FROMS ( "]" ) }; // json array
+inline const StrBlock_t dJsonObjW { FROMS ( ",\n" ), FROMS ( "{\n" ), FROMS ( "\n}" ) }; // json object with formatting
+inline const StrBlock_t dJsonArrW { FROMS ( ",\n" ), FROMS ( "[\n" ), FROMS ( "\n]" ) }; // json array with formatting
 
 class JsonEscapedBuilder : public EscapedStringBuilder_T<EscapeJsonString_t>
 {
@@ -234,7 +235,7 @@ public:
 	ScopedComma_c Named ( const char * sName )
 	{
 		Base_T::FixupSpacedAndAppendEscaped ( sName );
-		AppendRawChunk ( {":", 1} );
+		AppendRawChunk ( FROMS ( ":" ) );
 		SkipNextComma ();
 		return { *this, nullptr };
 	}
@@ -261,7 +262,7 @@ public:
 
 	int NamedBlock( const char* sName )
 	{
-		Base_T::FixupSpacedAndAppendEscaped( sName );
+		FixupSpacedAndAppendEscaped( sName );
 		AppendRawChunk( { ":", 1 } );
 		SkipNextComma();
 		return MuteBlock();
@@ -290,13 +291,13 @@ public:
 	void NamedString ( const char* szName, const char* szValue )
 	{
 		Named ( szName );
-		Base_T::FixupSpacedAndAppendEscaped ( szValue );
+		FixupSpacedAndAppendEscaped ( szValue );
 	}
 
 	void NamedString ( const char* szName, Str_t sValue )
 	{
 		Named ( szName );
-		Base_T::FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
+		FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
 	}
 
 	void NamedString ( const char* szName, const CSphString& sValue )
@@ -307,6 +308,12 @@ public:
 	void NamedStringNonEmpty ( const char* szName, const CSphString& sValue )
 	{
 		if ( !sValue.IsEmpty() )
+			NamedString ( szName, sValue );
+	}
+
+	void NamedStringNonDefault ( const char* szName, const CSphString& sValue, CSphString sDefault )
+	{
+		if ( sValue!=sDefault )
 			NamedString ( szName, sValue );
 	}
 
@@ -322,6 +329,27 @@ public:
 	{
 		if ( tValue != tDefault )
 			NamedVal ( szName, tValue );
+	}
+
+	void String ( const char* szValue )
+	{
+		FixupSpacedAndAppendEscaped ( szValue );
+	}
+
+	void String ( Str_t sValue )
+	{
+		FixupSpacedAndAppendEscaped ( sValue.first, sValue.second );
+	}
+
+	void String ( const CSphString& sValue )
+	{
+		FixupSpacedAndAppendEscaped ( sValue.cstr() );
+	}
+
+	void StringNonEmpty ( const CSphString& sValue )
+	{
+		if ( !sValue.IsEmpty() )
+			String ( sValue );
 	}
 
 	// non-escaped.
@@ -383,8 +411,8 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 /// find value by index in SphinxBSON blob, return associated type
 ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );
 
-/// extract object part from the name; return false if not JSON name
-bool sphJsonNameSplit ( const char * sName, CSphString * sColumn=nullptr );
+/// extract object part from the name; return false if not JSON name. szIndex is the possible name of joined index
+bool sphJsonNameSplit ( const char * szName, const char * szIndex = nullptr, CSphString * pColumn = nullptr );
 
 /// compute node size, in bytes
 /// returns -1 when data itself is required to compute the size, but pData is NULL
@@ -555,7 +583,7 @@ using CondNamedAction_f = std::function<bool ( CSphString&& sName, const NodeHan
 void ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction );
 
 // suitable for strings and vectors of pods as int, int64, double.
-std::pair<const char*, int> RawBlob ( const NodeHandle_t &tLocator );
+Str_t RawBlob ( const NodeHandle_t &tLocator );
 
 // many internals might be represented as vector
 template<typename BLOB> VecTraits_T<BLOB> Vector ( const NodeHandle_t &tLocator )
@@ -807,6 +835,182 @@ public:
 int sphJsonUnescape ( char ** pEscaped, int iLen );
 int sphJsonUnescape1 ( char ** pEscaped, int iLen );
 int JsonUnescape ( char * pTarget, const char * pEscaped, int iLen );
+CSphString FormatJsonAsSortStr ( const BYTE * pVal, ESphJsonType eJson );
+
+template <typename PUSH>
+static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPush )
+{
+	int iLen;
+	char szBuf[32];
+	SphGroupKey_t uGroupKey;
+
+	ESphJsonType eJson = sphJsonUnpackType ( iValue );
+	const BYTE * pValue = pBlobPool + sphJsonUnpackOffset ( iValue );
+
+	switch ( eJson )
+	{
+	case JSON_ROOT:
+	{
+		iLen = sphJsonNodeSize ( JSON_ROOT, pValue );
+		bool bEmpty = iLen==5; // mask and JSON_EOF
+		uGroupKey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
+		return fnPush ( bEmpty ? nullptr : &iValue, uGroupKey );
+	}
+
+	case JSON_STRING:
+	case JSON_OBJECT:
+	case JSON_MIXED_VECTOR:
+		iLen = sphJsonUnpackInt ( &pValue );
+		uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
+		return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
+
+	case JSON_STRING_VECTOR:
+	{
+		bool bRes = false;
+		sphJsonUnpackInt ( &pValue );
+		iLen = sphJsonUnpackInt ( &pValue );
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iNewValue = sphJsonPackTypeOffset ( JSON_STRING, pValue-pBlobPool );
+
+			int iStrLen = sphJsonUnpackInt ( &pValue );
+			uGroupKey = sphFNV64 ( pValue, iStrLen );
+			bRes |= fnPush ( &iNewValue, uGroupKey );
+			pValue += iStrLen;
+		}
+		return bRes;
+	}
+
+	case JSON_INT32:
+#if __has_include( <charconv>)
+		*std::to_chars ( szBuf, szBuf + 32, (int)sphGetDword ( pValue ) ).ptr = '\0';
+		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
+#else
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphGetDword ( pValue ) ) ) );
+#endif
+
+	case JSON_INT64:
+#if __has_include( <charconv>)
+		*std::to_chars ( szBuf, szBuf + 32, sphJsonLoadBigint ( &pValue ) ).ptr = '\0';
+		return fnPush ( &iValue, sphFNV64 ( szBuf ) );
+#else
+		return fnPush ( &iValue, sphFNV64 ( (BYTE*)FormatInt ( szBuf, (int)sphJsonLoadBigint ( &pValue ) ) ) );
+#endif
+
+	case JSON_DOUBLE:
+		snprintf ( szBuf, sizeof(szBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+		return fnPush ( &iValue, sphFNV64 ( (const BYTE*)szBuf ) );
+
+	case JSON_INT32_VECTOR:
+	{
+		bool bRes = false;
+		iLen = sphJsonUnpackInt ( &pValue );
+		auto p = (const int*)pValue;
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iPacked = sphJsonPackTypeOffset ( JSON_INT32, (const BYTE*)p-pBlobPool );
+			uGroupKey = *p++;
+			bRes |= fnPush ( &iPacked, uGroupKey );
+		}
+		return bRes;
+	}
+
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		bool bRes = false;
+		iLen = sphJsonUnpackInt ( &pValue );
+		auto p = (const int64_t*)pValue;
+		ESphJsonType eType = eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
+		for ( int i=0;i<iLen;i++ )
+		{
+			int64_t iPacked = sphJsonPackTypeOffset ( eType, (const BYTE*)p-pBlobPool );
+			uGroupKey = *p++;
+			bRes |= fnPush ( &iPacked, uGroupKey );
+		}
+		return bRes;
+	}
+
+	case JSON_TRUE:
+	case JSON_FALSE:
+		uGroupKey = eJson;
+		return fnPush ( &iValue, uGroupKey );
+
+	default:
+		uGroupKey = 0;
+		iValue = 0;
+		return fnPush ( &iValue, uGroupKey );
+	}
+}
+
+template <typename PUSH>
+void PushJsonFieldPtr ( const BYTE * pVal, ESphJsonType eJson, PUSH && fnPush )
+{
+	if ( !pVal )
+		return;
+
+	switch ( eJson )
+	{
+	case JSON_INT32:
+		fnPush ( sphFNV64 ( sphJsonLoadInt(&pVal) ) );
+		break;
+
+	case JSON_INT64:
+	case JSON_DOUBLE:
+		fnPush ( sphFNV64 ( sphJsonLoadBigint(&pVal) ) );
+		break;
+
+	case JSON_STRING:
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		fnPush ( sphFNV64 ( pVal, iLen ) );
+	}
+	break;
+
+	case JSON_INT32_VECTOR:
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		int iSize = eJson==JSON_INT32_VECTOR ? 1 : 2;
+		int iVals = sphJsonUnpackInt ( &pVal );
+		if ( !iVals )
+			break;
+
+		auto * pValues = (const int*)pVal;
+		for ( int i = 0; i < iVals; i++ )
+		{
+			fnPush ( sphFNV64(*pValues) );
+			pValues += iSize;
+		}
+	}
+	break;
+
+	case JSON_STRING_VECTOR:
+		{
+		sphJsonUnpackInt ( &pVal ); // total length
+		int iCount = sphJsonUnpackInt ( &pVal );
+
+		// head element
+		if ( iCount )
+		{
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			fnPush ( sphFNV64 ( pVal, iElemLen ) );
+			pVal += iElemLen;
+		}
+
+		// tail elements separated by space
+		for ( int i=1; i<iCount; i++ )
+		{
+			int iElemLen = sphJsonUnpackInt ( &pVal );
+			fnPush ( sphFNV64 ( pVal, iElemLen ) );
+			pVal += iElemLen;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+}
 
 #endif // _sphinxjson_
 

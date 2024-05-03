@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -81,7 +81,9 @@ struct CreateFilterContext_t
 	CSphVector<UservarIntSet_c>	m_dUserVals;
 
 	const HistogramContainer_c * m_pHistograms = nullptr;
+	const SI::Index_i *			m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
+	CSphString					m_sJoinIdx;
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
 		: m_pSchema ( pSchema ) {}
@@ -299,6 +301,8 @@ struct RowIdBoundaries_t
 
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
-bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
+bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
+bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError );
+int64_t	EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx );
 
 #endif // _sphinxfilter_

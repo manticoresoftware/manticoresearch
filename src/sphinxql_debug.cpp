@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -164,7 +164,7 @@ CSphString DebugCommand_t::sOpt ( const char * szName, const char * szDefault ) 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_debugparser ( YYSTYPE * lvalp, void * yyscanner, SqlDebugParser_c * pParser )
 
-#include "flexsphinxqldebug.c"
+#include "flexsphinxql_debug.c"
 
 static void yyerror ( SqlDebugParser_c* pParser, const char* szMessage )
 {
@@ -261,6 +261,8 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NONE, "debug close", "ask server to close connection from it's side" },
 	{ NONE, "debug compress <TBL> [chunk] <X> [option sync=1]",
 			"Compress disk chunk X of RT table <TBL> (wipe out deleted documents)" },
+	{ NONE, "debug dedup <TBL> [chunk] <X>",
+			"Kill duplicates in disk chunk X of RT table <TBL> (mark duplicates as killed)" },
 	{ NONE, "debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]",
 			"Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar" },
 	{ NO_WIN, "debug wait <cluster> [like 'xx'] [option timeout=3]", "wait <cluster> ready, but no more than 3 secs." },

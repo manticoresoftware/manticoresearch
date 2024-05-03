@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,6 @@
 #include "attribute.h"
 #include "indexing_sources/source_stats.h"
 #include "match.h"
-
 
 CSphColumnInfo::CSphColumnInfo ( const char* sName, ESphAttr eType )
 	: m_sName ( sName )
@@ -64,6 +63,19 @@ bool CSphColumnInfo::IsStoredExpr() const
 {
 	return m_pExpr.Ptr() && m_pExpr->IsStored();
 }
+
+
+bool CSphColumnInfo::IsIndexedKNN() const
+{
+	return m_uAttrFlags & ATTR_INDEXED_KNN;
+}
+
+
+bool CSphColumnInfo::IsJoined() const
+{
+	return m_uAttrFlags & ATTR_JOINED;
+}
+
 
 
 CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )

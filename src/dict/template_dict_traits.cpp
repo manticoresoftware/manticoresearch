@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -216,8 +216,10 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 	{
 		char buf[20];
 		char buf_all[20];
-		sprintf ( buf, "lemmatize_%s", AOT_LANGUAGES[j] );		   // NOLINT
-		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		snprintf ( buf, 19, "lemmatize_%s", AOT_LANGUAGES[j] );		   // NOLINT
+		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		buf[19] = '\0';
+		buf_all[19] = '\0';
 
 		if ( iLength == 12 && !strncmp ( szMorph, buf, iLength ) )
 		{
@@ -452,7 +454,7 @@ bool TemplateDictTraits_c::HasState() const
 #endif
 }
 
-void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile )
+void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c & pTokenizer, bool bStripFile )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -488,6 +490,9 @@ void TemplateDictTraits_c::LoadStopwords ( const char* sFiles, const TokenizerRe
 			*pCur++ = '\0';
 
 		CSphString sFileName = sName;
+		if ( pFilenameBuilder )
+			sFileName = pFilenameBuilder->GetFullPath ( sFileName );
+
 		bool bGotFile = sphIsReadable ( sFileName );
 		if ( !bGotFile )
 		{
@@ -841,7 +846,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 				// sort forms by files and length
 				// but do not sort if we're loading embedded
 				if ( iFileId >= 0 )
-					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) {
+					pWordforms->m_pForms.Sort ( Lesser ( [] ( const CSphMultiform* pA, const CSphMultiform* pB ) noexcept {
 						assert ( pA && pB );
 						return ( pA->m_iFileId == pB->m_iFileId ) ? pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength() : pA->m_iFileId > pB->m_iFileId;
 					} ) );

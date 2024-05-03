@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -104,8 +104,8 @@ public:
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
-	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-	void			Load ( const bson::Bson_c& tNode, CSphEmbeddedFiles& tEmbeddedFiles, CSphString& sWarning );
+	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
+	void			Load ( const bson::Bson_c & tNode, CSphEmbeddedFiles& tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void			DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -176,6 +176,8 @@ public:
 	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
 	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
 
+	CSphVector<NamedKNNSettings_t> m_dKNN;		///< knn index settings
+
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
 	int GetMinPrefixLen ( bool bWordDict ) const;
 	void SetMinPrefixLen ( int iMinPrefixLen );
@@ -241,7 +243,7 @@ enum ESphBigram : BYTE
 };
 
 
-class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t, public columnar::Settings_t
+class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
@@ -272,6 +274,7 @@ public:
 private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
 	bool			ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError );
+	bool			ParseKNNSettings ( const CSphConfigSection & hIndex, CSphString & sError );
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
 };
 
@@ -294,6 +297,7 @@ enum class MutableName_e
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
 	ACCESS_HITLISTS,
+	ACCESS_DICT,
 	READ_BUFFER_DOCS,
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
@@ -310,6 +314,7 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
+	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
 
@@ -363,9 +368,11 @@ bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const 
 
 struct CreateTableAttr_t
 {
-	CSphColumnInfo	m_tAttr;
-	bool			m_bFastFetch = true;
-	bool			m_bStringHash = true;
+	CSphColumnInfo			m_tAttr;
+	bool					m_bFastFetch = true;
+	bool					m_bStringHash = true;
+	bool					m_bKNN = false;
+	knn::IndexSettings_t	m_tKNN;
 };
 
 struct NameValueStr_t
@@ -394,7 +401,7 @@ public:
 	bool			Contains ( const char * szName ) const;
 	void			RemoveKeys ( const CSphString & sName );
 	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
-	StrVec_t 		GetFiles() const;
+	StrVec_t 		GetFiles();
 	bool			CheckPaths();
 
 	const CSphConfigSection &	AsCfg() const;
@@ -411,6 +418,7 @@ private:
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetDefaults();
 };
 
@@ -455,5 +463,7 @@ void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDic
 
 void SetDefaultAttrEngine ( AttrEngine_e eEngine );
 AttrEngine_e GetDefaultAttrEngine();
+
+bool ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty );
 
 #endif // _indexsettings_

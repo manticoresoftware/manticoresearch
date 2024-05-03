@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 #include "attrindex_builder.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
+#include "dict/infix/infix_builder.h"
 
 namespace legacy
 {
@@ -184,6 +185,7 @@ public:
 
 	void GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const override {}
 	void GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const override {}
+	void ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const override {}
 
 private:
 	bool								m_bWordDict = false;
@@ -663,9 +665,9 @@ bool Wordlist_t::Preread ( const char * sName, DWORD uVersion, bool bWordDict, C
 
 		// FIXME!!! store and load that explicitly
 		if ( iInfixCount )
-			m_iWordsEnd = uInfixOffset - strlen ( g_sTagInfixEntries );
+			m_iWordsEnd = uInfixOffset - g_sTagInfixEntries.second;
 		else
-			m_iWordsEnd -= strlen ( g_sTagInfixEntries );
+			m_iWordsEnd -= g_sTagInfixEntries.second;
 	}
 
 	if ( tReader.GetErrorFlag() )
@@ -1061,7 +1063,8 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	std::unique_ptr<BlobRowBuilder_i> pBlobRowBuilder;
 	if ( pBlobLocatorAttr )
 	{
-		pBlobRowBuilder = sphCreateBlobRowJsonBuilder ( m_tSchema, sSPB, tIndex.m_tSettings.m_tBlobUpdateSpace, sError );
+		BuildBufferSettings_t tSettings; // use default buffer settings
+		pBlobRowBuilder = sphCreateBlobRowJsonBuilder ( m_tSchema, sSPB, tIndex.m_tSettings.m_tBlobUpdateSpace, tSettings.m_iBufferAttributes, sError );
 		if ( !pBlobRowBuilder )
 			return false;
 	}

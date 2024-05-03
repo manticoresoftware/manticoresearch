@@ -106,7 +106,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -187,7 +187,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -292,7 +292,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -351,6 +351,8 @@ Blended characters list. Optional, default is empty.
 
 Blended characters are indexed as both separators and valid characters. For example, when `&` is defined as a blended character and `AT&T` appears in an indexed document, three different keywords will be indexed, `at&t`, `at` and `t`.
 
+Additionally, blended characters can influence indexing in such a way that keywords are indexed as if the blended characters were not typed at all. This behavior is particularly evident when `blend_mode = trim_all` is specified. For example, the phrase `some_thing` will be indexed as `some`, `something`, and `thing` with `blend_mode = trim_all`.
+
 Care should be taken when using blended characters as defining a character as blended means that it is no longer a separator.
 * Therefore, if you put a comma to the `blend_chars` and search for `dog,cat`, it will treat that as a single token `dog,cat`. If `dog,cat` was **not** indexed as `dog,cat`, but left as `dog cat` only, then it will not match.
 * Hence, this behavior should be controlled with the [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting.
@@ -396,7 +398,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, 
 ```
 
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -506,7 +508,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -592,7 +594,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -684,7 +686,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -773,7 +775,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -851,7 +853,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -937,7 +939,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1031,7 +1033,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1120,7 +1122,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1168,21 +1170,21 @@ dict = {keywords|crc}
 ```
 
 <!-- example dict -->
-The keywords dictionary type. Known values are 'crc' and 'keywords'. Optional, default is 'keywords'.
+The type of keywords dictionary used is identified by one of two known values, 'crc' or 'keywords'. This is optional, with 'keywords' as the default.
 
-Keywords dictionary mode (dict=keywords), (greatly) reduces indexing impact and enable substring searches on huge collections. That mode is supported both for plain and RT tables.
+Using the keywords dictionary mode (dict=keywords) can significantly decrease the indexing burden and enable substring searches on extensive collections. This mode can be utilized for both plain and RT tables.
 
-CRC dictionaries never store the original keyword text in the index. Instead, keywords are replaced with their control sum value (calculated using FNV64) both when searching and indexing, and that value is used internally in the index.
+CRC dictionaries do not store the original keyword text in the index. Instead, they replace keywords with a control sum value (computed using FNV64) during both searching and indexing processes. This value is used internally within the index. This approach has two disadvantages:
+* Firstly, there's a risk of control sum collisions between different keywords pairs. This risk grows in proportion to the number of unique keywords in the index. Nonetheless, this concern is minor as the probability of a single FNV64 collision in a dictionary of 1 billion entries is roughly 1 in 16, or 6.25 percent. Most dictionaries will have far fewer than a billion keywords given that a typical spoken human language has between 1 and 10 million word forms.
+* Secondly, and more crucially, it's not straightforward to perform substring searches with control sums. Manticore addressed this issue by pre-indexing all possible substrings as separate keywords (see [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). This method even has an added advantage of matching substrings in the fastest way possible. Yet, pre-indexing all substrings significantly increases the index size (often by factors of 3-10x or more) and subsequently affects the indexing time, making substring searches on large indexes rather impractical.
 
-That approach has two drawbacks. First, there is a chance of control sum collision between several pairs of different keywords, growing quadratically with the number of unique keywords in the index. However, it is not a big concern as a chance of a single FNV64 collision in a dictionary of 1 billion entries is approximately 1:16, or 6.25 percent. And most dictionaries will be much more compact that a billion keywords, as a typical spoken human language has in the region of 1 to 10 million word forms.) Second, and more importantly, substring searches are not directly possible with control sums. Manticore alleviated that by pre-indexing all the possible substrings as separate keywords (see [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). That actually has an added benefit of matching substrings in the quickest way possible. But at the same time pre-indexing all substrings increases the index size a lot (factors of 3-10x and even more would not be unusual) and impacts the indexing time respectively, rendering substring searches on big indexes rather impractical.
+The keywords dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
 
-Keywords dictionary fixes both these drawbacks. It stores the keywords in the index and performs search-time wildcard expansion. For example, a search for a 'test\*'prefix could internally expand to 'test|tests|testing' query based on the dictionary contents. That expansion is fully transparent to the application, except that the separate per-keyword statistics for all the actually matched keywords would now also be reported.
+For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) only function with `dict=keywords`.
 
-For substring (infix) search extended wildcards may be used. Special symbols like '?' and '%' are supported along with substring (infix) search (e.g. "t?st\*","run%","\*abc\*"). Note, however, these wildcards work only with dict=keywords, and not elsewhere.
+Indexing with a keywords dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, keywords). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 
-Indexing with keywords dictionary should be 1.1x to 1.3x slower compared to regular, non-substring indexing - but times faster compared to substring indexing (either prefix or infix). Index size should only be slightly bigger that than of the regular non-substring table, with a 1..10% percent total difference. Regular keyword searching time must be very close or identical across all three discussed index kinds (CRC non-substring, CRC substring, keywords). Substring searching time can vary greatly depending on how many actual keywords match the given substring (in other words, into how many keywords does the search term expand). The maximum number of keywords matched is restricted by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
-
-Essentially, keywords and CRC dictionaries represent the two different trade-off substring searching decisions. You can choose to either sacrifice indexing time and index size in favor of top-speed worst-case searches (CRC dictionary), or only slightly impact indexing time but sacrifice worst-case searching time when the prefix expands into very many keywords (keywords dictionary).
+In summary, keywords and CRC dictionaries offer two different trade-off decisions for substring searching. You can opt to either sacrifice indexing time and index size to achieve the fastest worst-case searches (CRC dictionary), or minimally impact indexing time but sacrifice worst-case searching time when the prefix expands into a high number of keywords (keywords dictionary).
 
 <!-- request SQL -->
 
@@ -1218,7 +1220,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1336,7 +1338,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1430,7 +1432,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1520,7 +1522,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1604,7 +1606,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1686,7 +1688,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1777,7 +1779,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1864,7 +1866,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1915,13 +1917,13 @@ regexp_filter = (blue|red) => color
 ```
 
 <!-- example regexp_filter -->
-Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regexps.
+Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regular expressions. The regular expressions engine used by Manticore Search is Google's RE2, which is known for its speed and safety. For detailed information on the syntax supported by RE2, you can visit the [RE2 syntax guide](https://github.com/google/re2/wiki/Syntax).
 
 In certain applications such as product search, there can be many ways to refer to a product, model, or property. For example, `iPhone 3gs` and `iPhone 3 gs` (or even `iPhone3 gs`) are very likely to refer to the same product. Another example could be different ways to express a laptop screen size, such as `13-inch`, `13 inch`, `13"`, or `13in`.
 
 Regexps provide a mechanism to specify rules tailored to handle such cases. In the first example, you could possibly use a wordforms file to handle a handful of iPhone models, but in the second example, it's better to specify rules that would normalize "13-inch" and "13in" to something identical.
 
-Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing, even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
+Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing (including [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)), even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
 
 <!-- request SQL -->
 
@@ -1958,7 +1960,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

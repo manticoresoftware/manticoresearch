@@ -12,6 +12,7 @@ if (NOT installed)
 	include ( GNUInstallDirs )
 	SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}/manticore" )
 	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/manticore" ) # will be used also in the app
+	SET ( CMAKE_INSTALL_FULL_LOCALLIBDIR "${CMAKE_INSTALL_PREFIX}usr/local/lib" )
 	set ( installed ON )
 	diag ( CPACK_PACKAGING_INSTALL_PREFIX CMAKE_INSTALL_PREFIX )
 endif ()
@@ -25,6 +26,7 @@ set ( CPACK_GENERATOR RPM )
 
 # Parse version dependencies from file and assign it to vars
 include( builds/VersionDeps )
+set ( DEP_TZDATA_VERSION "${TZDATA_VERNUM}_${TZDATA_VERDATE}.${TZDATA_VERHASH}" )
 set ( DEP_BUDDY_VERSION "${BUDDY_VERNUM}_${BUDDY_VERDATE}.${BUDDY_VERHASH}" )
 set ( DEP_BACKUP_VERSION "${BACKUP_VERNUM}_${BACKUP_VERDATE}.${BACKUP_VERHASH}" )
 
@@ -42,7 +44,7 @@ set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 set ( CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR} )
 
 set ( CPACK_RPM_SEARCHD_PACKAGE_NAME "manticore-server-core" )
-set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}, manticore-tzdata => ${DEP_TZDATA_VERSION}, manticore-tzdata < ${TZDATA_VERNUM_MAX}" )
 set ( CPACK_RPM_SEARCHD_INSTALL_WITH_EXEC ON )
 set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx" )
 
@@ -59,7 +61,7 @@ set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
 set ( CPACK_RPM_DEVEL_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
-set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata.rpm" )
+set ( CPACK_RPM_ICUDATA_FILE_NAME "manticore-icudata-65l.rpm" )
 set ( CPACK_RPM_ICUDATA_PACKAGE_ARCHITECTURE noarch )
 
 set ( CPACK_RPM_COMMON_PACKAGE_NAME "manticore-common" )
@@ -108,12 +110,13 @@ set ( CPACK_RPM_SPEC_MORE_DEFINE
 %define manticore_user manticore
 %define manticore_group manticore" )
 
-SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
+SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 3 (GPL3)" )
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
 set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
 set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
+set ( dirtools "${MANTICORE_BINARY_DIR}/config/tools" )
 
 # server (service)
 set ( CPACK_RPM_SERVER_BUILDREQUIRES "systemd-units" )
@@ -124,6 +127,11 @@ set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )
 
 # common
 set ( CPACK_RPM_COMMON_POST_INSTALL_SCRIPT_FILE "${dircommon}/manticore.post" )
+
+# tools
+set ( CPACK_RPM_TOOLS_BUILDREQUIRES "systemd-units" )
+set ( CPACK_RPM_TOOLS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.postun" )
+set ( CPACK_RPM_TOOLS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.preun" )
 
 # now get system paths. These variables are used in configure substitutions below
 set ( CMAKE_INSTALL_LIB "lib" )
@@ -138,6 +146,9 @@ configure_file ( ${SCR}/manticore-core.post.in "${dircore}/manticore.post" @ONLY
 configure_file ( ${SCR}/manticore-server.post.in "${dirserver}/manticore.post" @ONLY )
 configure_file ( ${SCR}/manticore.tmpfiles.in "${MANTICORE_BINARY_DIR}/manticore.tmpfiles" @ONLY )
 configure_file ( ${SCR}/manticore.service.in "${dirserver}/manticore.service" @ONLY )
+configure_file ( ${SCR}/manticore-indexer.service.in "${dirtools}/manticore-indexer.service" @ONLY )
+configure_file ( ${SCR}/manticore-indexer@.service.in "${dirtools}/manticore-indexer@.service" @ONLY )
+configure_file ( ${SCR}/manticore-indexer_global.default.in "${dirtools}/manticore-indexer_global" @ONLY )
 
 # installation
 
@@ -145,6 +156,7 @@ configure_file ( ${SCR}/manticore.service.in "${dirserver}/manticore.service" @O
 # CMAKE_INSTALL_SYSCONFDIR					etc 					/etc
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT searchd RENAME manticore )
+install ( FILES ${dirtools}/manticore-indexer_global DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT tools )
 
 
 # stuff going to /var
@@ -160,6 +172,8 @@ install ( FILES ${MANTICORE_BINARY_DIR}/manticore.tmpfiles DESTINATION ${CMAKE_I
 
 # stuff that should go to /lib -> actually to /usr/lib
 install ( FILES "${dirserver}/manticore.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT server )
+install ( FILES "${dirtools}/manticore-indexer.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT tools )
+install ( FILES "${dirtools}/manticore-indexer@.service" DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system COMPONENT tools )
 
 # binaries go to /usr/bin (here is only new cluster, rest is in main file, installing targets)
 # CMAKE_INSTALL_BINDIR						usr/bin 				/usr/bin
@@ -173,10 +187,10 @@ GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_DOCDIR CMAKE_INSTAL
 # stuff going to /usr/share/man, /usr/share/doc
 # CMAKE_INSTALL_MANDIR						usr/share/man 			/usr/share/man
 # CMAKE_INSTALL_DOCDIR						usr/share/doc/manticore /usr/share/doc/manticore
-install ( FILES doc/indexer.1 doc/indextool.1 doc/spelldump.1 doc/wordbreaker.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
+install ( FILES doc/indexer.1 doc/indextool.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
 install ( FILES doc/searchd.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT searchd )
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common RENAME manticore.conf.dist )
-install ( FILES COPYING INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
+install ( FILES LICENSE INSTALL DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT common )
 install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools )
 
 # stuff going to /usr/share/manticore

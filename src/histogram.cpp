@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -14,6 +14,7 @@
 #include "sphinxint.h"
 #include "conversion.h"
 #include <math.h>
+#include <algorithm>
 
 template <typename T>
 struct HSBucket_T
@@ -493,11 +494,11 @@ int HistogramStreamed_T<T>::LerpCounter ( int iBucket, T tVal ) const
 	const HSBucket_T<T> & tBucketR = m_dBuckets[iBucket+1];
 	assert ( tBucketL.m_tCentroid<=tVal && tVal<=tBucketR.m_tCentroid );
 
-	double fDistL = (double)tVal - (double)tBucketL.m_tCentroid;
-	double fDist = (double)tBucketR.m_tCentroid - (double)tBucketL.m_tCentroid;
+	T tDistL = tVal - tBucketL.m_tCentroid;
+	T tDist = tBucketR.m_tCentroid - tBucketL.m_tCentroid;
 
-	double fLerp = fDistL / fDist;
-	assert ( fLerp>=0.0 && fLerp<=1.0 );
+	double fLerp = (double)tDistL / (double)tDist;
+	fLerp = std::clamp ( fLerp, 0.0, 1.0 ); //clamp instead of assert as it runs out of bounds at INT64_MAX
 
 	return int ( fLerp * tBucketR.m_iCount + ( 1.0f - fLerp ) * tBucketL.m_iCount );
 }
@@ -532,16 +533,23 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	tEstimate.m_iTotal = tEstimate.m_iCount = GetNumValues();
 
-	CommonFilterSettings_t tFixedSettings = tFilter;
-	if ( TYPE==HISTOGRAM_STREAMED_FLOAT )
-		FixupFilterSettings ( tFilter, SPH_ATTR_FLOAT, tFixedSettings );
+	CommonFilterSettings_t tFS = tFilter;
+	ESphAttr eAttrType;
+	switch ( TYPE )
+	{
+	case HISTOGRAM_STREAMED_UINT32:	eAttrType = SPH_ATTR_INTEGER; break;
+	case HISTOGRAM_STREAMED_FLOAT:	eAttrType = SPH_ATTR_FLOAT; break;
+	default:						eAttrType = SPH_ATTR_BIGINT; break;
+	}
 
-	switch ( tFixedSettings.m_eType )
+	FixupFilterSettings ( tFilter, eAttrType, tFS );
+
+	switch ( tFS.m_eType )
 	{
 	case SPH_FILTER_VALUES:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
 
-		if ( tFilter.m_bExclude )
+		if ( tFS.m_bExclude )
 			return false;
 
 		tEstimate = EstimateValues ( tFilter.GetValues() );
@@ -549,18 +557,18 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 
 	case SPH_FILTER_RANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_iMinValue, (T)tFixedSettings.m_iMaxValue );
+		tEstimate = EstimateRangeFilter ( tFS.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_iMinValue, (T)tFS.m_iMaxValue );
 		return true;
 
 	case SPH_FILTER_FLOATRANGE:
 		assert ( TYPE==HISTOGRAM_STREAMED_FLOAT );
-		tEstimate = EstimateRangeFilter ( tFilter.m_bExclude, tFilter.m_bHasEqualMin, tFilter.m_bHasEqualMax, tFilter.m_bOpenLeft, tFilter.m_bOpenRight, (T)tFixedSettings.m_fMinValue, (T)tFixedSettings.m_fMaxValue );
+		tEstimate = EstimateRangeFilter ( tFS.m_bExclude, tFS.m_bHasEqualMin, tFS.m_bHasEqualMax, tFS.m_bOpenLeft, tFS.m_bOpenRight, (T)tFS.m_fMinValue, (T)tFS.m_fMaxValue );
 		return true;
 
 	case SPH_FILTER_STRING:
 	case SPH_FILTER_STRING_LIST:
 	{
-		if ( tFilter.m_bExclude )
+		if ( tFS.m_bExclude )
 			return false;
 
 		int iItemsCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );
@@ -711,14 +719,9 @@ HistogramRset_t HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool 
 	{
 		tEstimate.m_iCount++;
 		if ( bOpenLeft )
-		{
 			tEstimate.m_iTotal += m_dBuckets[iStartBucket].m_iCount;
-		} else
-		{
-			int iMinCount = LerpCounter ( iStartBucket, tMin );
-			// substract from total range with tMin value and add more preceise counter
-			tEstimate.m_iTotal = tEstimate.m_iTotal - m_dBuckets[iStartBucket+1].m_iCount / 2 + iMinCount;
-		}
+		else
+			tEstimate.m_iTotal += LerpCounter ( iStartBucket, tMin );
 	}
 
 	T tDelta = m_tMaxValue - m_tMinValue;
@@ -932,24 +935,7 @@ std::unique_ptr<Histogram_i> CreateHistogram ( const CSphString & sAttr, ESphAtt
 }
 
 
-int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const HistogramContainer_c * pHistogramContainer )
-{
-	if ( !pHistogramContainer )
-		return INT64_MAX;
-
-	Histogram_i * pHistogram = pHistogramContainer->Get ( tSettings.m_sAttrName );
-	if ( !pHistogram || pHistogram->IsOutdated() )
-		return INT64_MAX;
-
-	HistogramRset_t tEstimate;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
-		return INT64_MAX;
-
-	return tEstimate.m_iTotal;
-}
-
-
-void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema )
+void BuildCreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrColumnar_t> & dAttrsForHistogram, const ISphSchema & tSchema )
 {
 	int iColumnar = 0;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -959,15 +945,46 @@ void CreateHistograms ( HistogramContainer_c & tHistograms, CSphVector<PlainOrCo
 		if ( pHistogram )
 		{
 			tHistograms.Add ( std::move ( pHistogram ) );
-			PlainOrColumnar_t & tNewAttr = dAttrsForHistogram.Add();
-			tNewAttr.m_eType = tAttr.m_eAttrType;
-			if ( tAttr.IsColumnar() )
-				tNewAttr.m_iColumnarId = iColumnar;
-			else
-				tNewAttr.m_tLocator = tAttr.m_tLocator;
+			dAttrsForHistogram.Add ( PlainOrColumnar_t ( tAttr, iColumnar ) );
 		}
 
 		if ( tAttr.IsColumnar() )
 			iColumnar++;
+	}
+}
+
+
+void BuildStoreHistograms ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, HistogramContainer_c & tHistograms )
+{
+	for ( int iAttr=0; iAttr<dAttrs.GetLength(); iAttr++ )
+	{
+		const PlainOrColumnar_t & tSrc = dAttrs[iAttr];
+
+		switch ( tSrc.m_eType )
+		{
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+		{
+			const BYTE * pSrc = nullptr;
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
+			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
+			for ( int iVal=0; iVal<iValues; iVal++ )
+				tHistograms.Insert ( iAttr, pSrc[iVal] );
+		}
+		break;
+
+		case SPH_ATTR_STRING:
+		{
+			const BYTE * pSrc = nullptr;
+			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
+			SphAttr_t uHash = sphCRC32 ( pSrc, iBytes );
+			tHistograms.Insert ( iAttr, uHash );
+		}
+		break;
+
+		default:
+			tHistograms.Insert ( iAttr, tSrc.Get ( tRowID, pRow, dIterators ) );
+			break;
+		}
 	}
 }

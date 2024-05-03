@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -212,7 +212,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	bool bRes = SqlQuery ( sRes );
 
 	if ( !bRes )
-		sError.SetSprintf ( "sql_range_query: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
+		sError.SetSprintf ( "sql_query_range: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
 
 	SafeDeleteArray ( sRes );
 	return bRes;
@@ -454,6 +454,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 {
 	assert ( m_bSqlConnected );
 
+	if ( !QueryPreAll ( sError ) )
+		return false;
+
 	// run pre-queries
 	ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
 	{
@@ -498,8 +501,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	// some post-query setup
 	m_tSchema.Reset();
 
-	for ( int i=0; i<SPH_MAX_FIELDS; ++i )
-		m_dUnpack[i] = SPH_UNPACK_NONE;
+	for (auto & i : m_dUnpack)
+		i = SPH_UNPACK_NONE;
 
 	m_iSqlFields = SqlNumFields(); // for rowdump
 
@@ -519,10 +522,10 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		CSphColumnInfo tCol ( sName );
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
-			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
+		{
+			const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
+			if ( !strcasecmp ( tCol.m_sName.cstr(), tAttr.m_sName.cstr() ) )
 			{
-				const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
-
 				tCol.m_eAttrType = tAttr.m_eAttrType;
 				assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
 
@@ -533,6 +536,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 				dFound[j] = true;
 				break;
 			}
+			if ( !strcasecmp ( sphGetDocidName(), tAttr.m_sName.cstr() ) )
+				LOC_ERROR ( "can not redefine auto-defined '%s' attribute", tAttr.m_sName.cstr() );
+		}
 
 		for ( auto & tJoined : m_tParams.m_dJoinedFields )
 			if ( tJoined.m_sName==sName )
@@ -556,6 +562,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_bIndexed )
 		{
+			if ( m_tSchema.GetField ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "field '%s' is added twice", tCol.m_sName.cstr() );
+
 			m_tSchema.AddField ( tCol );
 			ARRAY_FOREACH ( k, m_tParams.m_dUnpack )
 			{
@@ -582,6 +591,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		{
 			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
 				LOC_ERROR ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+			if ( m_tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "attribute '%s' is added twice", tCol.m_sName.cstr() );
 
 			m_tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
 		}
@@ -648,6 +659,23 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 	// log it
 	DumpRowsHeader();
+	return true;
+}
+
+bool CSphSource_SQL::QueryPreAll ( CSphString& sError )
+{
+	// run pre-queries
+	ARRAY_FOREACH ( i, m_tParams.m_dQueryPreAll )
+	{
+		if ( !SqlQuery ( m_tParams.m_dQueryPreAll[i].cstr() ) )
+		{
+			sError.SetSprintf ( "sql_query_pre_all[%d]: %s (DSN=%s)", i, SqlError(), m_sSqlDSN.cstr() );
+			SqlDisconnect();
+			return false;
+		}
+//		sphWarn ( "query_pre_app %d: %s", i, m_tParams.m_dQueryPreAll[i].cstr() );
+		SqlDismissResult();
+	}
 	return true;
 }
 
@@ -1033,6 +1061,9 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr, CSphString & sError )
 	if ( !(tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET ) )
 		return false;
 
+	if ( !QueryPreAll ( sError ) )
+		return false;
+
 	CSphString sPrefix;
 	switch ( tAttr.m_eSrc )
 	{
@@ -1351,6 +1382,9 @@ bool CSphSource_SQL::FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::u
 		return true;
 	}
 
+	if ( !QueryPreAll ( sError ) )
+		return false;
+
 	dJoinedOffsets.Resize(m_tSchema.GetFieldsCount());
 	CSphWriter tWriter;
 	tWriter.SetFile ( tFile, nullptr, sError );
@@ -1494,8 +1528,9 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 				iStartPos = tReader.UnzipInt();
 
 			DWORD uLength = tReader.UnzipInt();
-			m_dJoinedField.Resize(uLength);
+			m_dJoinedField.Resize(uLength+1);
 			tReader.GetBytes ( m_dJoinedField.Begin(), uLength );
+			m_dJoinedField[uLength] = '\0';
 
 			// lets skip joined document totally if there was no such document ID returned by main query
 			const IDPair_t * pIdPair = m_dAllIds.BinarySearch ( bind ( &IDPair_t::m_tDocID ), tDocId );

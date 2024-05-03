@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,15 +13,15 @@
 
 #include "searchdaemon.h"
 
-class ConfigReloader_c : public ISphNoncopyable
+class ConfigReloader_c final : public ISphNonCopyMovable
 {
 	class Impl_c;
-	Impl_c* m_pImpl;
+	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
-	ConfigReloader_c ( HashOfServed_c& hDeferred );
+	explicit ConfigReloader_c ( HashOfServed_c& hDeferred );
 	~ConfigReloader_c();
 
-	void LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex );
-	void IssuePlainOldRotation();
+	void LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex ) noexcept;
+	void IssuePlainOldRotation() noexcept;
 };

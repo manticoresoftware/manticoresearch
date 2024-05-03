@@ -155,10 +155,10 @@ $VLG = getenv('VLG');
 
 $python = getenv('python');
 if (!$python)
-	$python = "/usr/bin/python";
+  $python = file_exists("/usr/bin/python3")?"/usr/bin/python3":"/usr/bin/python";
 
 if (!$windows && !is_executable($python) && !$ctest)
-	die("ubertest needs python support; install python");
+	die("ubertest needs python support; install python\n");
 
 $cygwin = false;
 if ( $locals['scriptdir']!=$locals['testdir'] )
@@ -219,6 +219,7 @@ if ( !$g_guesscached ) {
 	GuessSSL();
 	GuessColumnar();
 	GuessSecondary();
+	GuessKNN();
 	if ( !$force_guess )
 		CacheGuesses();
 }

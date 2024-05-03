@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -47,6 +47,12 @@ typename std::common_type<T, U>::type Max ( T a, U b )
 	using common_type = typename std::common_type<T, U>::type;
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? b : a;
 }
+
+inline int sphRoundUp ( int iValue, int iLimit )
+{
+	return ( iValue + iLimit - 1 ) & ~( iLimit - 1 );
+}
+
 #define SafeDelete( _x )		do { if ( _x ) { delete ( _x ); ( _x ) = nullptr; } } while ( 0 )
 #define SafeDeleteArray( _x )	do { if ( _x ) { delete[] ( _x ); ( _x ) = nullptr; } } while ( 0 )
 #define SafeReleaseAndZero( _x)	do { if ( _x ) { ( _x )->Release(); ( _x ) = nullptr; } } while ( 0 )
@@ -68,7 +74,7 @@ class ISphNoncopyable
 public:
 	ISphNoncopyable() = default;
 	ISphNoncopyable ( const ISphNoncopyable& ) = delete;
-	const ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
+	ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
 };
 
 /// prevent move
@@ -78,6 +84,16 @@ public:
 	ISphNonmovable() = default;
 	ISphNonmovable ( ISphNonmovable&& ) noexcept = delete;
 	ISphNonmovable& operator= ( ISphNonmovable&& ) noexcept = delete;
+};
+
+/// prevent copy and move
+class ISphNonCopyMovable
+{
+public:
+	ISphNonCopyMovable() = default;
+	ISphNonCopyMovable ( const ISphNonCopyMovable& ) = delete;
+	ISphNonCopyMovable ( ISphNonCopyMovable&& ) = delete;
+	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
 };
 
 // implement moving ctr and moving= using swap-and-release

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,11 +17,11 @@
 #include <stdio.h>
 
 // for 64-bit types
-#if HAVE_STDINT_H
-#include <stdint.h>
+#if __has_include(<cstdint>)
+#include <cstdint>
 #endif
 
-#if HAVE_SYS_TYPES_H
+#if __has_include(<sys/types.h>)
 #include <sys/types.h>
 #endif
 
@@ -51,7 +51,9 @@
 
 #define strcasecmp strcmpi
 #define strncasecmp _strnicmp
-#define snprintf _snprintf
+#if _MSC_VER < 1900
+	#define snprintf _snprintf
+#endif
 #define strtoll _strtoi64
 #define strtoull _strtoui64
 

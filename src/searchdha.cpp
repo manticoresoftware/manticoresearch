@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -82,9 +82,7 @@ HostDashboard_t::HostDashboard_t ( const HostDesc_t & tHost )
 {
 	assert ( !tHost.m_pDash );
 	m_tHost.CloneFromHost ( tHost );
-	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer ();
-	for ( auto & dMetric : m_dPeriodicMetrics )
-		dMetric.m_dMetrics.Reset ();
+	for_each ( m_dPeriodicMetrics, [] ( auto& dMetric ) { dMetric.m_dMetrics.Reset(); } );
 }
 
 HostDashboard_t::~HostDashboard_t ()
@@ -281,6 +279,54 @@ static bool IsIpAddress ( const char * sURL )
 			return false;
 	}
 	return true;
+}
+
+WarnInfo_c::WarnInfo_c ( const char * szIndexName, const char *	szAgent, CSphString & sError, StrVec_t * pWarnings )
+	: m_szIndexName ( szIndexName )
+	, m_szAgent ( szAgent )
+	, m_pWarnings ( pWarnings )
+	, m_sError ( sError )
+{}
+
+void WarnInfo_c::Warn ( const char * szFmt, ... ) const
+{
+	va_list ap;
+	va_start ( ap, szFmt );
+
+	CSphString sWarning;
+	if ( m_szIndexName )
+		sWarning.SetSprintf ( "table '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
+	else
+		sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
+
+	sWarning.SetSprintfVa ( sWarning.cstr(), ap );
+	sphInfo ( "%s", sWarning.cstr() );
+
+	if ( m_pWarnings )
+		m_pWarnings->Add(sWarning);
+
+	va_end ( ap );
+}
+
+bool WarnInfo_c::ErrSkip ( const char * szFmt, ... ) const
+{
+	va_list ap;
+	va_start ( ap, szFmt );
+
+	CSphString sMsg;
+
+	if ( m_szIndexName )
+		sMsg.SetSprintf ( "table '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
+	else
+		sMsg.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
+
+	sMsg.SetSprintfVa ( sMsg.cstr(), ap );
+	sphWarning ( "%s", sMsg.cstr() );
+
+	m_sError = sMsg;
+
+	va_end ( ap );
+	return false;
 }
 
 /// Set flag m_bNeedResolve if address is AF_INET, host is not empty and not plain IP address,
@@ -1296,13 +1342,13 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, CSphString & sError, StrVec_t * pWarnings )
 {
 	MultiAgentDescRefPtr_c pRes;
 	CSphVector<AgentDesc_t *> tMirrors;
 	AT_SCOPE_EXIT ( [&tMirrors] { tMirrors.for_each( [] ( auto * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
-	WarnInfo_c tWI ( szIndexName, szAgent, pWarnings );
+	WarnInfo_c tWI ( szIndexName, szAgent, sError, pWarnings );
 
 	if ( ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
 		pRes = MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );
@@ -1459,7 +1505,7 @@ void IOVec_c::StepForward ( size_t uStep )
 	}
 }
 
-static void SafeCloseSocket ( int & iFD )
+void SafeCloseSocket ( int & iFD )
 {
 	if ( iFD>=0 )
 		sphSockClose ( iFD );
@@ -1631,8 +1677,9 @@ void AgentConn_t::SendingState ()
 	{
 		track_processing_time ( *this );
 		State ( Agent_e::HEALTHY );
-		m_iPoolerTimeoutUS = MonoMicroTimer() + m_iMyQueryTimeoutMs * 1000;
-		LazyDeleteOrChange ( m_iPoolerTimeoutUS ); // assign new time value, don't touch the handler
+		m_iPoolerTimeoutPeriodUS = m_iMyQueryTimeoutMs* 1000;
+		m_iPoolerTimeoutUS = MonoMicroTimer() + m_iPoolerTimeoutPeriodUS;
+		LazyDeleteOrChange ( m_iPoolerTimeoutUS, m_iPoolerTimeoutPeriodUS ); // assign new time value, don't touch the handler
 	}
 }
 
@@ -1650,7 +1697,7 @@ bool AgentConn_t::StartNextRetry ()
 	}
 
 	if ( m_iRetries--<0 )
-		return m_bManyTries ? Fail ( "retries limit exceeded" ) : false;
+		return m_bManyTries && Fail ( "retries limit exceeded" );
 
 	sphLogDebugA ( "%d Connection %p, host %s, pers=%d", m_iStoreTag, this, m_tDesc.GetMyUrl().cstr(), m_tDesc.m_bPersistent );
 
@@ -1686,7 +1733,7 @@ bool AgentConn_t::SwitchBlackhole ()
 // initialize read/write task
 void AgentConn_t::ScheduleCallbacks ()
 {
-	LazyTask ( m_iPoolerTimeoutUS, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
+	LazyTask ( m_iPoolerTimeoutUS, m_iPoolerTimeoutPeriodUS, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
 }
 
 void FirePoller (); // forward definition
@@ -1997,7 +2044,8 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 		sphLogDebugA ( "%d sendmsg/connectx returned %d", m_iStoreTag, ( size_t ) iRes );
 		sphLogDebugv ( "TFO send succeeded, %zu bytes sent", ( size_t ) iRes );
 		// now 'connect' and 'query' merged, so timeout became common.
-		m_iPoolerTimeoutUS += m_iMyQueryTimeoutMs * 1000;
+		m_iPoolerTimeoutPeriodUS = m_iMyQueryTimeoutMs* 1000;
+		m_iPoolerTimeoutUS += m_iPoolerTimeoutPeriodUS;
 		gStats().m_iAgentConnectTFO.fetch_add ( 1, std::memory_order_relaxed );
 		return SendQuery ( iRes ) ? 1 : -1;
 	}
@@ -2177,8 +2225,8 @@ static bool RunRemoteTask ( AgentConn_t * pConnection, RequestBuilder_i * pQuery
 void AgentConn_t::GenericInit ( RequestBuilder_i * pQuery, ReplyParser_i * pParser,
 								Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
 {
-	sphLogDebugA ( "%d GenericInit() pBuilder %p, parser %p, retries %d, delay %d, ref=%d",
-		m_iStoreTag, pQuery, pParser, iQueryRetry, iQueryDelay, ( int ) GetRefcount ());
+	sphLogDebugA ( "%d GenericInit() pBuilder %p, parser %p, retries %d(%d), delay %d(%d), ref=%d",
+		m_iStoreTag, pQuery, pParser, iQueryRetry, m_iRetries, iQueryDelay, m_iDelay, ( int ) GetRefcount ());
 	if ( iQueryDelay>=0 )
 		m_iDelay = iQueryDelay;
 
@@ -2228,7 +2276,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 			{
 				// can't start right now; need to postpone until timeout
 				sphLogDebugA ( "%d postpone DoQuery() for %d msecs", m_iStoreTag, m_iDelay );
-				LazyTask ( MonoMicroTimer () + 1000 * m_iDelay, false );
+				LazyTask ( MonoMicroTimer () + 1000 * m_iDelay, 1000*m_iDelay, false );
 				return;
 			}
 		}
@@ -2252,7 +2300,8 @@ bool AgentConn_t::DoQuery()
 		m_bConnectHandshake = false;
 		m_pReplyCur += sizeof ( int );
 		m_iStartQuery = iNow; /// copied from old behaviour
-		m_iPoolerTimeoutUS = iMonoNow + m_iMyQueryTimeoutMs * 1000;
+		m_iPoolerTimeoutPeriodUS = m_iMyQueryTimeoutMs* 1000;
+		m_iPoolerTimeoutUS = iMonoNow + m_iPoolerTimeoutPeriodUS;
 		return SendQuery ();
 	}
 
@@ -2269,7 +2318,8 @@ bool AgentConn_t::DoQuery()
 	}
 
 	sphLogDebugA ( "%d branch for not established. Timeout " INT64_FMT, m_iStoreTag, m_iMyQueryTimeoutMs );
-	m_iPoolerTimeoutUS = iMonoNow + 1000 * m_iMyConnectTimeoutMs;
+	m_iPoolerTimeoutPeriodUS = 1000 * m_iMyConnectTimeoutMs;
+	m_iPoolerTimeoutUS = iMonoNow + m_iPoolerTimeoutPeriodUS;
 	if ( !m_tDesc.m_bNeedResolve )
 		return EstablishConnection ();
 
@@ -2445,10 +2495,8 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 
 				sphLogDebugA ( "%d Header (Status=%d, Version=%d, answer need %d bytes)", m_iStoreTag, uStat, uVer, iReplySize );
 
-				if ( iReplySize<0
-					|| iReplySize>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
-					return Fatal ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)"
-								   , uStat, iReplySize, g_iMaxPacketSize );
+				if ( iReplySize<0 || ( m_bReplyLimitSize && iReplySize>g_iMaxPacketSize ) ) // FIXME! add reasonable max packet len too
+					return Fatal ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)", uStat, iReplySize, g_iMaxPacketSize );
 
 				// allocate buf for reply
 				InitReplyBuf ( iReplySize );
@@ -2476,6 +2524,11 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 
 	ScheduleCallbacks();
 	return true;
+}
+
+void AgentConn_t::SetNoLimitReplySize()
+{
+	m_bReplyLimitSize = false;
 }
 
 // when full blob with expected size is received...
@@ -2594,7 +2647,9 @@ struct TaskNet_t:
 	enum IO : BYTE { NO = 0, RW = 1, RO = 2 };
 
 	AgentConn_t *	m_pPayload	= nullptr;	// ext conn we hold
-	int64_t			m_iPlannedTimeout = 0;	// asked timeout (-1 - delete task, 0 - no changes; >0 - set value)
+	int64_t			m_iPlannedTimeoutUS = 0;	// asked timeout (-1 - delete task, 0 - no changes; >0 - set value)
+	int64_t 		m_iLastActivityTm = -1;	// used with reset-on-packet timeout
+	int64_t			m_iTimeoutPeriodUS = -1;	// used to restore timeout
 	int				m_ifd = -1;
 	int 			m_iStoredfd = -1;		// helper to find original fd if socket was closed
 	int				m_iTickProcessed=0;		// tick # to detect and avoid reading callback in same loop with write
@@ -3142,7 +3197,7 @@ private:
 		}
 
 		bool bApply = pTask->m_ifd != -1;
-		if ( pTask->m_ifd == -1 )
+		if ( !bApply )
 			sphLogDebugL ( "L kqueue not called since sock is closed" );
 		else {
 			auto iRes = kevent ( m_iEFD, tEv, nEvs, nullptr, 0, nullptr );
@@ -3262,7 +3317,7 @@ private:
 
 		assert ( pTask->m_iTimeoutTimeUS!=0);
 
-		if ( pTask->m_iPlannedTimeout<0 ) // process delete.
+		if ( pTask->m_iPlannedTimeoutUS<0 ) // process delete.
 		{
 			sphLogDebugL ( "L finally remove task %p", pTask );
 			m_dTimeouts.Remove ( pTask );
@@ -3276,9 +3331,9 @@ private:
 		if ( pTask->m_uIOChanged )
 			events_change_io ( pTask );
 
-		if ( pTask->m_iPlannedTimeout )
+		if ( pTask->m_iPlannedTimeoutUS )
 		{
-			pTask->m_iTimeoutTimeUS = std::exchange ( pTask->m_iPlannedTimeout, 0 );
+			pTask->m_iTimeoutTimeUS = std::exchange ( pTask->m_iPlannedTimeoutUS, 0 );
 			m_dTimeouts.Change ( pTask );
 			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (" INT64_FMT ") is changed one", pTask, pTask->m_iTimeoutTimeUS, ( pTask->m_iTimeoutTimeUS - MonoMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
@@ -3327,7 +3382,7 @@ private:
 				break;
 	}
 
-	/// abandon and release all tiemouted events.
+	/// abandon and release all timeouted events.
 	/// \return next active timeout (in uS), or -1 for infinite.
 	bool HasTimeoutActions() REQUIRES ( LazyThread )
 	{
@@ -3337,9 +3392,22 @@ private:
 			auto* pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTimeUS>0 );
 
-			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - MonoMicroTimer ();
+			auto iMonoTime = MonoMicroTimer();
+			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - iMonoTime;
 			if ( m_iNextTimeoutUS>0 )
 				return bHasTimeout;
+
+			if ( g_bTimeoutEachPacket )
+			{
+				auto iTimeoutFromLastActivity = pTask->m_iLastActivityTm + pTask->m_iTimeoutPeriodUS;
+				if ( iTimeoutFromLastActivity > iMonoTime )
+				{
+					pTask->m_iTimeoutTimeUS = iTimeoutFromLastActivity;
+					m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - iMonoTime;
+					m_dTimeouts.Change ( pTask );
+					return bHasTimeout;
+				}
+			}
 
 			bHasTimeout = true;
 
@@ -3476,6 +3544,8 @@ private:
 			auto pConn = pTask->m_pPayload;
 			if ( pConn && pTask->m_uIOActive && !IsTickProcessed ( pTask ) )
 			{
+				assert ( pTask );
+				pTask->m_iLastActivityTm = MonoMicroTimer();
 				if ( bError )
 				{
 					sphLogDebugL ( "L error action %p, waited " INT64_FMT, pTask, iWaited );
@@ -3546,18 +3616,18 @@ public:
 	}
 
 	/// New task (only applied to fresh connections; skip already enqueued)
-	bool EnqueueNewTask ( AgentConn_t * pConnection, int64_t iTimeoutMS, BYTE uActivateIO )
+	bool EnqueueNewTask ( AgentConn_t * pConnection, int64_t iTimeoutUS, int64_t iTimeoutPeriodUS, BYTE uActivateIO )
 	{
 		if ( pConnection->m_pPollerTask )
 			return false;
 
 		TaskNet_t * pTask = CreateNewTask ( pConnection );
 		assert ( pTask );
-		assert ( iTimeoutMS>0 );
+		assert ( iTimeoutUS>0 );
 
 		// check for same timeout as we have. Avoid dupes, if so.
 
-		pTask->m_iPlannedTimeout = iTimeoutMS;
+		pTask->m_iPlannedTimeoutUS = iTimeoutUS;
 		if ( uActivateIO )
 			pTask->m_uIOChanged = uActivateIO;
 
@@ -3569,22 +3639,25 @@ public:
 			events_change_io ( pTask );
 #endif
 
-		sphLogDebugv ( "- %d EnqueueNewTask %p (%p) " INT64_FMT " Us, IO(%d->%d), sock %d", pConnection->m_iStoreTag, pTask, pConnection, iTimeoutMS, pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->m_iSock );
+		sphLogDebugv ( "- %d EnqueueNewTask %p (%p) " INT64_FMT " Us, IO(%d->%d), sock %d", pConnection->m_iStoreTag, pTask, pConnection, iTimeoutUS, pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->m_iSock );
 		AddToQueue ( pTask, pConnection->InNetLoop () );
 
 		return true;
 	}
 
-	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutUS )
+	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutUS, int64_t iTimeoutPeriodUS )
 	{
 		auto pTask = ( TaskNet_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
+
+		pTask->m_iTimeoutPeriodUS = iTimeoutPeriodUS;
+		pTask->m_iLastActivityTm = MonoMicroTimer();
 
 		// check for same timeout as we have. Avoid dupes, if so.
 		if ( !iTimeoutUS || pTask->m_iTimeoutTimeUS==iTimeoutUS )
 			return;
 
-		pTask->m_iPlannedTimeout = iTimeoutUS;
+		pTask->m_iPlannedTimeoutUS = iTimeoutUS;
 
 		// case of delete: pConn socket m.b. already closed and ==-1. Actualize it right now.
 		if ( iTimeoutUS<0 )
@@ -3630,22 +3703,22 @@ LazyNetEvents_c & LazyPoller ()
 }
 
 //! Add or change task for poller.
-void AgentConn_t::LazyTask ( int64_t iTimeoutMS, bool bHardTimeout, BYTE uActivateIO )
+void AgentConn_t::LazyTask ( int64_t iTimeoutUS, int64_t iTimeoutPeriodUS, bool bHardTimeout, BYTE uActivateIO )
 {
-	assert ( iTimeoutMS>0 );
+	assert ( iTimeoutUS>0 );
 
 	m_bNeedKick = !InNetLoop();
 	m_eTimeoutKind = bHardTimeout ? TIMEOUT_HARD : TIMEOUT_RETRY;
-	LazyPoller ().EnqueueNewTask ( this, iTimeoutMS, uActivateIO );
+	LazyPoller ().EnqueueNewTask ( this, iTimeoutUS, iTimeoutPeriodUS, uActivateIO );
 }
 
-void AgentConn_t::LazyDeleteOrChange ( int64_t iTimeoutMS )
+void AgentConn_t::LazyDeleteOrChange ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS )
 {
 	// skip del/change for not scheduled conns
 	if ( !m_pPollerTask )
 		return;
 
-	LazyPoller ().ChangeDeleteTask ( this, iTimeoutMS );
+	LazyPoller ().ChangeDeleteTask ( this, iTimeoutMS, iTimeoutPeriodUS );
 }
 
 

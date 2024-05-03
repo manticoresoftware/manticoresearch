@@ -5,49 +5,60 @@ SHOW META [ LIKE pattern ]
 ```
 
 <!-- example show meta -->
-`SHOW META` is an SQL statement that displays extra meta-information about the processed query, including query time and keyword statistics. The syntax is:
+`SHOW META` is an SQL statement that displays additional meta-information about the processed query, including the query time, keyword statistics, and information about the secondary indexes used. The syntax is:
+
+The included items are:
+* `total`: The number of matches actually retrieved and sent to the client.
+* `total_found`: The estimated total number of matches for the query in the index.
+* `total_relation`: If Manticore cannot calculate the exact `total` value, this field will display `total_relation: gte`, indicating that the actual count is **Greater Than or Equal** to `total_found`. If the `total` value is precise, `total_relation: eq` will be shown.
+* `time`: The duration (in seconds) it took to process the search query.
+* `keyword[N]`: The n-th keyword used in the search query. Note that the keyword can be presented as a wildcard, e.g., `abc*`.
+* `docs[N]`: The total number of documents (or records) containing the n-th keyword from the search query. If the keyword is presented as a wildcard, this value represents the sum of documents for all expanded sub-keywords, potentially exceeding the actual number of matched documents.
+* `hits[N]`: The total number of occurrences (or hits) of the n-th keyword across all documents.
+* `index`: Information about the utilized index (e.g., secondary index).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5;
-SHOW META;
+SELECT id, story_author FROM hn_small WHERE MATCH('one|two|three') and comment_ranking > 2 limit 5;
+show meta;
 ```
 
 <!-- response SQL -->
 
 ```sql
-+--------+--------------+
-| id     | story_author |
-+--------+--------------+
-| 300263 | throwaway37  |
-| 713503 | mahmud       |
-| 716804 | mahmud       |
-| 776906 | jimbokun     |
-| 753332 | foxhop       |
-+--------+--------------+
-5 rows in set (0.01 sec)
++---------+--------------+
+| id      | story_author |
++---------+--------------+
+|  151171 | anewkid      |
+|  302758 | bks          |
+|  805806 | drRoflol     |
+| 1099245 | tnorthcutt   |
+|  303252 | whiten       |
++---------+--------------+
+5 rows in set (0.00 sec)
 
-+----------------+--------+
-| Variable_name  | Value  |
-+----------------+--------+
-| total          | 5      |
-| total_found    | 266385 |
-| total_relation | eq     |
-| time           | 0.012  |
-| keyword[0]     | one    |
-| docs[0]        | 224387 |
-| hits[0]        | 310327 |
-| keyword[1]     | three  |
-| docs[1]        | 18181  |
-| hits[1]        | 21102  |
-| keyword[2]     | two    |
-| docs[2]        | 63251  |
-| hits[2]        | 75961  |
-+----------------+--------+
-13 rows in set (0.00 sec)
++----------------+---------------------------------------+
+| Variable_name  | Value                                 |
++----------------+---------------------------------------+
+| total          | 5                                     |
+| total_found    | 2308                                  |
+| total_relation | eq                                    |
+| time           | 0.001                                 |
+| keyword[0]     | one                                   |
+| docs[0]        | 224387                                |
+| hits[0]        | 310327                                |
+| keyword[1]     | three                                 |
+| docs[1]        | 18181                                 |
+| hits[1]        | 21102                                 |
+| keyword[2]     | two                                   |
+| docs[2]        | 63251                                 |
+| hits[2]        | 75961                                 |
+| index          | comment_ranking:SecondaryIndex (100%) |
++----------------+---------------------------------------+
+14 rows in set (0.00 sec)
 ```
 
 <!-- end -->
@@ -302,7 +313,7 @@ SHOW META LIKE 'multiplier';
 
 When the [cost-based query optimizer](../Searching/Cost_based_optimizer.md) chooses to use `DocidIndex`, `ColumnarScan`, or `SecondaryIndex` instead of a plain filter, this is reflected in the `SHOW META` command.
 
-The `index` variable displays the names and types of secondary indexes used during query execution. The percentage indicates how many disk chunks (in the case of an RT index) or pseudo shards (in the case of a plain index) utilized the secondary index.
+The `index` variable displays the names and types of secondary indexes used during query execution. The percentage indicates how many disk chunks (in the case of an RT table) or pseudo shards (in the case of a plain table) utilized the secondary index.
 
 <!-- intro -->
 ##### SQL:

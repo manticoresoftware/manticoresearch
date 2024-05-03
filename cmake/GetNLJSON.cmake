@@ -1,35 +1,23 @@
-# build NLJSON plugin at configure time
-cmake_minimum_required ( VERSION 3.1 FATAL_ERROR )
+cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
-set ( NLJSON_LIBDIR "${MANTICORE_BINARY_DIR}/nljson" )
-set ( NLJSON_SRC "${MANTICORE_BINARY_DIR}/nljson-src" )
-mark_as_advanced ( NLJSON_SRC NLJSON_LIBDIR )
+set ( NLJSON_GITHUB "http://github.com/nlohmann/json/archive/refs/tags/v3.10.5.tar.gz" )
+set ( NLJSON_BUNDLE "${LIBS_BUNDLE}/nljson-v3.10.5.tar.gz" )
+set ( NLJSON_SRC_MD5 "5b946f7d892fa55eabec45e76a20286b" )
 
-include ( FetchContent )
-# check whether we have local copy (to not disturb network)
+include ( update_bundle )
 
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-set(JSON_MultipleHeaders ON CACHE BOOL "")
-set(JSON_GlobalUDLs OFF CACHE BOOL "")
+# determine destination folder where we expect pre-built nljson
+find_package ( nlohmann_json QUIET CONFIG )
+return_if_target_found ( nlohmann_json::nlohmann_json "found ready (no need to build)" )
 
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW)
-endif()
+# not found. Populate and prepare sources
+select_nearest_url ( NLJSON_PLACE nlohmann_json ${NLJSON_BUNDLE} ${NLJSON_GITHUB} )
+fetch_and_check ( nlohmann_json ${NLJSON_PLACE} ${NLJSON_SRC_MD5} NLJSON_SRC )
 
-set ( NLJSON_URL_GITHUB "http://github.com/nlohmann/json/archive/refs/tags/v3.10.5.zip" )
-message ( STATUS "Use nljson from github ${NLJSON_URL_GITHUB}" )
-FetchContent_Declare ( nljson
-		SOURCE_DIR "${NLJSON_SRC}"
-		BINARY_DIR "${NLJSON_LIBDIR}"
-		URL ${NLJSON_URL_GITHUB}
-		GIT_TAG cmake-3.x-5.7
-		GIT_SHALLOW TRUE
-		)
+# build external project
+get_build ( NLJSON_BUILD nlohmann_json )
+external_build ( nlohmann_json NLJSON_SRC NLJSON_BUILD JSON_BuildTests=0 JSON_MultipleHeaders=1 JSON_GlobalUDLs=0 )
 
-FetchContent_GetProperties ( nljson )
-if ( NOT nljson_POPULATED )
-	FetchContent_Populate ( nljson )
-	add_subdirectory ( ${nljson_SOURCE_DIR} ${nljson_BINARY_DIR} )
-endif ()
-mark_as_advanced ( FETCHCONTENT_FULLY_DISCONNECTED FETCHCONTENT_QUIET FETCHCONTENT_UPDATES_DISCONNECTED
-		FETCHCONTENT_SOURCE_DIR_NLJSON FETCHCONTENT_UPDATES_DISCONNECTED_NLJSON )
+# now it should find
+find_package ( nlohmann_json REQUIRED CONFIG )
+return_if_target_found ( nlohmann_json::nlohmann_json "was built and saved" )

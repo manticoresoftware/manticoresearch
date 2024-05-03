@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,6 +25,7 @@
 struct DiskDictTraits_c: TemplateDictTraits_c
 {
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) override;
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) override;
 	void DictEntry ( const DictEntry_t& tEntry ) override;
 	void DictEndEntries ( SphOffset_t iDoclistOffset ) override;
 	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) override;

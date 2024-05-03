@@ -1,0 +1,5 @@
+––– input –––
+manticore-backup --version
+––– output –––
+Copyright (c) #!/\d{4}(?:-\d{4})?/!#, Manticore Software LTD (https://manticoresearch.com)
+Manticore Backup version: %{SEMVER}

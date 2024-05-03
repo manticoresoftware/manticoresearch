@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -139,8 +139,8 @@ protected:
 	/// iSpace limits max quantity of data (limited by g_iMaxPacketSize), however m.b. ignored by compressed backends
 	int				AppendData ( int iNeed, int iSpace, bool bIntr );
 
-	/// internal - return place available to not exceed iHardLimit. Dispose consumed data, if necesary.
-	int				GetRoomForTail ( int iHardLimit );
+	/// internal - return place available to not exceed m_iMaxPacketSize. Dispose consumed data, if necesary.
+	int			GetRoomForTail();
 
 	/// internal - discard processed data, then ensure at least iSpace is available, and return blob for it.
 	/// ReadFromBackend on return will process results right way, nothing will be lost or ignored.

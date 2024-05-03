@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#include "bitcount.h"
 #include <utility>
 #include <cstring>
 
@@ -20,9 +21,20 @@ BitVec_T<T, STATICBITS>::BitVec_T ( int iElements )
 }
 
 template<typename T, int STATICBITS>
-BitVec_T<T, STATICBITS>::~BitVec_T()
+BitVec_T<T, STATICBITS>::BitVec_T ( T * pData, int iElements )
 {
 	if ( m_pData != m_dStatic )
+		SafeDeleteArray(m_pData);
+
+	m_iElements = iElements;
+	m_pData = pData;
+	m_bOwnStorage = false;
+}
+
+template<typename T, int STATICBITS>
+BitVec_T<T, STATICBITS>::~BitVec_T()
+{
+	if ( m_pData != m_dStatic && m_bOwnStorage )
 		SafeDeleteArray ( m_pData );
 }
 
@@ -116,12 +128,20 @@ void BitVec_T<T, STATICBITS>::Set()
 }
 
 template<typename T, int STATICBITS>
-bool BitVec_T<T, STATICBITS>::BitGet ( int iIndex ) const
+bool BitVec_T<T, STATICBITS>::BitGet ( int iIndex ) const noexcept
 {
 	assert ( m_pData );
 	assert ( iIndex >= 0 );
 	assert ( iIndex < m_iElements );
 	return ( m_pData[iIndex >> SHIFT] & ( 1ULL << ( iIndex & MASK ) ) ) != 0; // NOLINT
+}
+
+template<typename T, int STATICBITS>
+bool BitVec_T<T, STATICBITS>::BitGetOr ( int iIndex, bool bAlternative ) const noexcept
+{
+	if ( m_pData && iIndex >= 0 && iIndex < m_iElements )
+		return ( m_pData[iIndex >> SHIFT] & ( 1ULL << ( iIndex & MASK ) ) ) != 0; // NOLINT
+	return bAlternative;
 }
 
 template<typename T, int STATICBITS>
@@ -141,7 +161,7 @@ void BitVec_T<T, STATICBITS>::BitClear ( int iIndex )
 }
 
 template<typename T, int STATICBITS>
-const T* BitVec_T<T, STATICBITS>::Begin() const
+const T* BitVec_T<T, STATICBITS>::Begin() const noexcept
 {
 	return m_pData;
 }
@@ -153,20 +173,20 @@ T* BitVec_T<T, STATICBITS>::Begin()
 }
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::GetSizeBytes() const
+int BitVec_T<T, STATICBITS>::GetSizeBytes() const noexcept
 {
 	return CalcStorage() * sizeof ( T );
 }
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::GetSize() const
+int BitVec_T<T, STATICBITS>::GetSize() const noexcept
 {
 	return m_iElements;
 }
 
 
 template<typename T, int STATICBITS>
-bool BitVec_T<T, STATICBITS>::IsEmpty() const
+bool BitVec_T<T, STATICBITS>::IsEmpty() const noexcept
 {
 	if ( !m_pData )
 		return true;
@@ -175,7 +195,7 @@ bool BitVec_T<T, STATICBITS>::IsEmpty() const
 }
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::BitCount() const
+int BitVec_T<T, STATICBITS>::BitCount() const noexcept
 {
 	int iBitSet = 0;
 	for ( int i = 0; i < CalcStorage(); i++ )
@@ -185,7 +205,7 @@ int BitVec_T<T, STATICBITS>::BitCount() const
 }
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::Scan ( int iStart )
+int BitVec_T<T, STATICBITS>::Scan ( int iStart ) const
 {
 	assert ( iStart < m_iElements );
 
@@ -207,7 +227,7 @@ int BitVec_T<T, STATICBITS>::Scan ( int iStart )
 
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::ScanBit ( int iIndex, int iStart )
+int BitVec_T<T, STATICBITS>::ScanBit ( int iIndex, int iStart ) const
 {
 	T uData = m_pData[iIndex];
 	for ( int i = iStart; i < SIZEBITS; i++ )
@@ -218,7 +238,14 @@ int BitVec_T<T, STATICBITS>::ScanBit ( int iIndex, int iStart )
 }
 
 template<typename T, int STATICBITS>
-int BitVec_T<T, STATICBITS>::CalcStorage() const
+int BitVec_T<T, STATICBITS>::CalcStorage() const noexcept
 {
 	return ( m_iElements + SIZEBITS - 1 ) / SIZEBITS;
+}
+
+template<typename T, int STATICBITS>
+void BitVec_T<T, STATICBITS>::Negate()
+{
+	for ( int i = 0; i < CalcStorage(); i++ )
+		m_pData[i] = ~m_pData[i];
 }

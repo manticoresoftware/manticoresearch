@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>REGEX filter and expression</name>
+<name>REGEX filter, expression and full-text operator</name>
 
 <requires><re2/></requires>
 
@@ -40,6 +40,7 @@ index rt1
 	rt_field		= title
 	rt_attr_string = title
 	rt_attr_json = j
+    min_prefix_len = 1
 	dict = keywords
 }
 
@@ -47,6 +48,21 @@ index test_d
 {
 	type = distributed
 	agent = <my_address/>:rt1
+}
+
+index rt2
+{
+	type 			= rt
+	path			= <data_path/>/rt2
+	docinfo = extern
+	rt_mem_limit = 8M
+	rt_attr_uint	= idd
+	rt_field		= title
+	rt_attr_string = title
+	rt_attr_json = j
+    min_prefix_len = 1
+	dict = keywords
+    charset_table = non_cjk, U+00AB, U+00BB
 }
 </config>
 
@@ -76,6 +92,37 @@ SELECT id, REGEX(to_string(j.price), '5]') as c, title, j FROM test_d WHERE c>0;
 SELECT id, title, j FROM rt1 WHERE REGEX(j.doc, 'is | of');
 SELECT id, title, j FROM test_d WHERE REGEX(j.doc, 'core of');
 SELECT id, title, j FROM test_d WHERE REGEX(title, 'test?');
+
+<!-- regex full text operator -->
+INSERT INTO rt1 (id, title) VALUES (5, 'do it tell blue'), (6, 'tests of the best');
+INSERT INTO rt1 (id, title) VALUES (7, 'done test redline'), (8, 'testing bloom');
+
+SELECT id, title FROM rt1 WHERE MATCH (' ( REGEX(/te.*/) it ) | ( REGEX(/t.?e/) ) ') ORDER BY id ASC;
+FLUSH RAMCHUNK rt1;
+
+INSERT INTO rt1 (id, title) VALUES (11, 'tost it'), (12, 'top the box');
+FLUSH RAMCHUNK rt1;
+INSERT INTO rt1 (id, title) VALUES (15, 'tost15 it'), (65, 'top16 the box');
+
+SELECT id, title FROM rt1 WHERE MATCH (' ( REGEX(/t.*\d*/) | REGEX(/.{3}t/) ) it ') ORDER BY id ASC;
+
+<!-- regex full text inside complex operators -->
+SELECT id, title FROM rt1 WHERE MATCH (' it REGEX(/te.*/) ') ORDER BY id ASC;
+SELECT id, title FROM rt1 WHERE MATCH (' " it REGEX(/te.*/) " ') ORDER BY id ASC;
+SELECT id, title FROM rt1 WHERE MATCH (' " it REGEX(/te.*/) of "/2 ') ORDER BY id ASC;
+SELECT id, title FROM rt1 WHERE MATCH (' " do REGEX(/te.*/) "~3 ') ORDER BY id ASC;
+INSERT INTO rt1 (id, title) VALUES (20, 'R U ON E');
+select * from rt1 where match(' "REGEX(/u/) REGEX(/on/) REGEX(/e/)" ') ORDER BY id ASC;
+
+<!-- regex full text vs utf8 encoding -->
+INSERT INTO rt2 (id, title) VALUES (31, 'smartlane'), (32, ' «smartlane» ');
+SELECT id, title FROM rt2 WHERE MATCH ('REGEX(/.{0,1}smartlane.{0,1}/) ') ORDER BY id ASC;
+truncate table rt2;
+insert into rt2 (id, title) VALUES (33, 'ю'),  (34, 'юф');
+select id, title from rt2 where match(' REGEX(/.{1}/) ');
+select id, title from rt2 where match(' REGEX(/.{2}/) ');
+
+
 </sphinxql></queries>
 
 </test>

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,6 +14,7 @@
 
 #include "client_task_info.h"
 #include "coroutine.h"
+#include "std/sys.h"
 
 using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
@@ -60,7 +61,7 @@ bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeT
 	}
 
 	iStackNeeded = (int)iCalculatedStack + 32*1024;
-	iStackNeeded = sphRoundUp( iStackNeeded, sphGetMemPageSize() ); // round up to memory page.
+	iStackNeeded = sphRoundUp( iStackNeeded, GetMemPageSize() ); // round up to memory page.
 
 	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
 	session::ExpandDesiredStack ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ));

@@ -166,6 +166,21 @@ index idx_xml1
 	path = <data_path/>/idx_xml1
 }
 
+source test10
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+}
+
+index test10
+{
+	source			= test10
+	path			= <data_path/>/test10
+    expand_keywords = 1
+}
+
 </config>
 
 <db_create>
@@ -306,7 +321,7 @@ create table table_quorum_tail_2
 	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/6 like ' );
 	select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/7 like ' );
 
-	select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount;
+	select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount, cutoff=0;
 	</sphinxql>
 
 	<!-- regression - expand_keywords got lost for disk chunks of RT ndex -->
@@ -328,6 +343,10 @@ create table table_quorum_tail_2
 
 		<!-- regression field end hits vs duplicated doc, MOVED to separete test 238 to pass rt mode -->
 		select id, weight() w FROM idx_xml1 WHERE MATCH('\"missed go3\" | (go3 go4)') OPTION ranker=expr('top(lcs)');
+        
+		<!-- regression crash on ranker expr with large query got expanded -->
+		select id FROM idx_xml1 WHERE MATCH('( always_present adv1 | brand1 | coord1 | final1 | kladv1 | \"medv1 but1\" | amb1 | amb2 | \"asist1 final1\" | \"asist1    mana1\" | bevel1 | \"hoof1 veko1\" | \"mana1 veko1\" | veko1adv1 | acc2 | rel3 | sup4 | \"ins5 sa6 medv1\" | \"in7 coord1\" | \"tec8 sup9 medv1\" | \"tec10 adv1\" | \"tec10 medv1\" -sup9er)') OPTION ranker=expr('1');
+       
 	</sphinxql>
 </queries>
 

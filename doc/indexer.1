@@ -1,396 +1,249 @@
 '\" t
 .\"     Title: indexer
 .\"    Author: [see the "Author" section]
-.\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
-.\"      Date: 12/13/2018
 .\"    Manual: Manticore Search
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "INDEXER" "1" "12/13/2018" "Manticore Search" "Manticore Search"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
+.TH "INDEXER" "1" "04/01/2024" "Manticore Search" ""
 .SH "NAME"
-indexer \- Manticore Search fulltext index generator
+indexer \- Manticore Search Indexer Tool
 .SH "SYNOPSIS"
-.HP \w'\fBindexer\fR\ 'u
-\fBindexer\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-rotate] [\-\-noprogress | \-\-quiet] [\-\-all | \fIINDEX\fR | \fI\&.\&.\&.\fR]
-.HP \w'\fBindexer\fR\ 'u
-\fBindexer\fR \-\-buildstops\ \fIOUTPUTFILE\fR \fICOUNT\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-noprogress | \-\-quiet] [\-\-all | \fIINDEX\fR | \fI\&.\&.\&.\fR]
-.HP \w'\fBindexer\fR\ 'u
-\fBindexer\fR \-\-merge\ \fIMAIN_INDEX\fR \fIDELTA_INDEX\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-rotate] [\-\-noprogress | \-\-quiet]
-.SH "DESCRIPTION"
+sudo \-u manticore indexer ...
+.SH DESCRIPTION
 .PP
-Manticore Search is a collection of programs that aim to provide high quality fulltext search\&.
+The \fB\fCindexer\fR tool is used to create plain tables in Manticore Search. It has a general syntax of:
 .PP
-\fBindexer\fR
-is the first of the two principle tools as part of Manticore Search\&. Invoked from either the command line directly, or as part of a larger script,
-\fBindexer\fR
-is solely responsible for gathering the data that will be searchable\&.
-.PP
-The calling syntax for indexer is as follows:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer [OPTIONS] [indexname1 [indexname2 [\&.\&.\&.]]]
+indexer [OPTIONS] [table_name1 [table_name2 [...]]]
 .fi
-.if n \{\
 .RE
-.\}
 .PP
-Essentially you would list the different possible indexes (that you would later make available to search) in
-sphinx\&.conf, so when calling
-\fBindexer\fR, as a minimum you need to be telling it what index (or indexes) you want to index\&.
+When creating tables with \fB\fCindexer\fR, the generated table files must be made with permissions that allow \fB\fCsearchd\fR to read, write, and delete them. In case of the official Linux packages, \fB\fCsearchd\fR runs under the \fB\fCmanticore\fR user. Therefore, \fB\fCindexer\fR must also run under the \fB\fCmanticore\fR user:
 .PP
-If
-sphinx\&.conf
-contained details on 2 indexes,
-\fImybigindex\fR
-and
-\fImysmallindex\fR, you could do the following:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer mybigindex
-$ indexer mysmallindex mybigindex
+sudo \-u manticore indexer ...
 .fi
-.if n \{\
 .RE
-.\}
 .PP
-As part of the configuration file,
-sphinx\&.conf, you specify one or more indexes for your data\&. You might call
-\fBindexer\fR
-to reindex one of them, ad\-hoc, or you can tell it to process all indexes \- you are not limited to calling just one, or all at once, you can always pick some combination of the available indexes\&.
-.SH "OPTIONS"
+If you are running \fB\fCsearchd\fR differently, you might need to omit \fB\fCsudo \-u manticore\fR\&. Just make sure that the user under which your \fB\fCsearchd\fR instance is running has read/write permissions to the tables generated using \fB\fCindexer\fR\&.
 .PP
-The majority of the options for
-\fBindexer\fR
-are given in the configuration file, however there are some options you might need to specify on the command line as well, as they can affect how the indexing operation is performed\&. These options are:
+To create a plain table, you need to list the 
+.BR table (s) 
+you want to process. For example, if your \fB\fCmanticore.conf\fR file contains details on two tables, \fB\fCmybigindex\fR and \fB\fCmysmallindex\fR, you could run:
 .PP
-\fB\-\-all\fR
-.RS 4
-Tells
-\fBindexer\fR
-to update every index listed in
-sphinx\&.conf, instead of listing individual indexes\&. This would be useful in small configurations, or cron\-type or maintenance jobs where the entire index set will get rebuilt each day, or week, or whatever period is best\&.
-.sp
-Example usage:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer \-\-config /home/myuser/sphinx\&.conf \-\-all
+sudo \-u manticore indexer mysmallindex mybigindex
 .fi
-.if n \{\
-.RE
-.\}
 .RE
 .PP
-\fB\-\-buildstops\fR \fIoutfile\&.txt\fR \fINUM\fR
-.RS 4
-Reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed\&. In other words, it produces a list of all the searchable terms that are becoming part of the index\&. Note; it does not update the index in question, it simply processes the data \*(Aqas if\*(Aq it were indexing, including running queries defined with
-\fIsql_query_pre\fR
-or
-\fIsql_query_post\fR\&.
-outputfile\&.txt
-will contain the list of words, one per line, sorted by frequency with most frequent first, and
-\fINUM\fR
-specifies the maximum number of words that will be listed; if sufficiently large to encompass every word in the index, only that many words will be returned\&. Such a dictionary list could be used for client application features around "Did you mean\&.\&.\&." functionality, usually in conjunction with
-\fB\-\-buildfreqs\fR, below\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
+You can also use wildcard tokens to match table names:
+.RS
+.IP \(bu 2
+\fB\fC?\fR matches any single character
+.IP \(bu 2
+\fB\fC*\fR matches any count of any characters
+.IP \(bu 2
+\fB\fC%\fR matches none or any single character
+.RE
+.PP
+.RS
 .nf
-$ indexer myindex \-\-buildstops word_freq\&.txt 1000
+sudo \-u manticore indexer indexpart*main \-\-rotate
 .fi
-.if n \{\
-.RE
-.\}
-.sp
-This would produce a document in the current directory,
-word_freq\&.txt
-with the 1,000 most common words in \*(Aqmyindex\*(Aq, ordered by most common first\&. Note that the file will pertain to the last index indexed when specified with multiple indexes or
-\fB\-\-all\fR
-(i\&.e\&. the last one listed in the configuration file)
 .RE
 .PP
-\fB\-\-buildfreqs\fR
-.RS 4
-Used in pair with
-\fB\-\-buildstops\fR
-(and is ignored if
-\fB\-\-buildstops\fR
-is not specified)\&. As
-\fB\-\-buildstops\fR
-provides the list of words used within the index,
-\fB\-\-buildfreqs\fR
-adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent\&. It will also help with developing "Did you mean\&.\&.\&." features where you can how much more common a given word compared to another, similar one\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
+The exit codes for indexer are as follows:
+.RS
+.IP \(bu 2
+0: everything went OK
+.IP \(bu 2
+1: there was a problem while indexing (and if \fB\fC\-\-rotate\fR was specified, it was skipped) or an operation emitted a warning
+.IP \(bu 2
+2: indexing went OK, but the \fB\fC\-\-rotate\fR attempt failed
+.RE
+.PP
+Also, you can run \fB\fCindexer\fR via a systemctl unit file:
+.PP
+.RS
 .nf
-$ indexer myindex \-\-buildstops word_freq\&.txt 1000 \-\-buildfreqs
+systemctl start \-\-no\-block manticore\-indexer
 .fi
-.if n \{\
-.RE
-.\}
-.sp
-This would produce the
-word_freq\&.txt
-as above, however after each word would be the number of times it occurred in the index in question\&.
 .RE
 .PP
-\fB\-\-config\fR\ \&\fICONFIGRILE\fR, \fB\-c\fR\ \&\fICONFIGFILE\fR
-.RS 4
-Use the given file as configuration\&. Normally, it will look for
-sphinx\&.conf
-in the installation directory (e\&.g\&./usr/local/sphinx/etc/sphinx\&.conf
-if installed into
-/usr/local/sphinx), followed by the current directory you are in when calling indexer from the shell\&. This is most of use in shared environments where the binary files are installed somewhere like
-/usr/local/sphinx/
-but you want to provide users with the ability to make their own custom Manticore Search set\-ups, or if you want to run multiple instances on a single server\&. In cases like those you could allow them to create their own
-sphinx\&.conf
-files and pass them to
-\fBindexer\fR
-with this option\&.
-.sp
-For example:
-.sp
-.if n \{\
-.RS 4
-.\}
+Or, in case you want to build a specific table:
+.PP
+.RS
 .nf
-$ indexer \-\-config /home/myuser/sphinx\&.conf myindex
+systemctl start \-\-no\-block manticore\-indexer@specific\-table\-name
 .fi
-.if n \{\
-.RE
-.\}
 .RE
 .PP
-\fB\-\-dump\-rows\fR \fIFILE\fR
-.RS 4
-Dumps rows fetched by SQL source(s) into the specified file, in a MySQL compatible syntax\&. Resulting dumps are the exact representation of data as received by indexer and help to repeat indexing\-time issues\&.
+Find more information about scheduling \fB\fCindexer\fR via systemd below.
+.SH OPTIONS
+.RS
+.IP \(bu 2
+\fB\fC\-\-config <file>\fR (\fB\fC\-c <file>\fR for short) tells \fB\fCindexer\fR to use the given file as its configuration. Normally, it will look for \fB\fCmanticore.conf\fR in the installation directory (e.g. \fB\fC/etc/manticoresearch/manticore.conf\fR), followed by the current directory you are in when calling \fB\fCindexer\fR from the shell. This is most useful in shared environments where the binary files are installed in a global folder, e.g. \fB\fC/usr/bin/\fR, but you want to provide users with the ability to make their own custom Manticore set\-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own \fB\fCmanticore.conf\fR files and pass them to \fB\fCindexer\fR with this option. For example:
 .RE
 .PP
-\fB\-\-merge\fR \fIDST\-INDEX\fR \fISRC\-INDEX\fR
-.RS 4
-Physically merge together two indexes\&. For example if you have a main+delta scheme, where the main index rarely changes, but the delta index is rebuilt frequently, and
-\fB\-\-merge\fR
-would be used to combine the two\&. The operation moves from right to left \- the contents of
-\fISRC\-INDEX\fR
-get examined and physically combined with the contents of
-\fIDST\-INDEX\fR
-and the result is left in
-\fIDST\-INDEX\fR\&. In pseudo\-code, it might be expressed as:
-\fIDST\-INDEX\fR
-+=
-\fISRC\-INDEX\fR
-.sp
-An example:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer \-\-merge main delta \-\-rotate
+  sudo \-u manticore indexer \-\-config /home/myuser/manticore.conf mytable
 .fi
-.if n \{\
 .RE
-.\}
-.sp
-In the above example, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the above to call
-\fBindexer\fR
-to combine the contents of the delta into the main index and rotate the indexes\&.
+.RS
+.IP \(bu 2
+\fB\fC\-\-all\fR tells \fB\fCindexer\fR to update every table listed in \fB\fCmanticore.conf\fR instead of listing individual tables. This would be useful in small configurations or cron\-kind or maintenance jobs where the entire table set will get rebuilt each day or week or whatever period is best. Please note that since \fB\fC\-\-all\fR tries to update all found tables in the configuration, it will issue a warning if it encounters RealTime tables and the exit code of the command will be \fB\fC1\fR not \fB\fC0\fR even if the plain tables finished without issue. Example usage:
 .RE
 .PP
-\fB\-\-merge\-dst\-range\fR \fIATTR\fR \fIMIN\fR \fIMAX\fR
-.RS 4
-Run the filter range given upon merging\&. Specifically, as the merge is applied to the destination index (as part of
-\fB\-\-merge\fR, and is ignored if
-\fB\-\-merge\fR
-is not specified),
-\fBindexer\fR
-will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index\&. This could be used for example, in an index where there is a \*(Aqdeleted\*(Aq attribute, where 0 means \*(Aqnot deleted\*(Aq\&. Such an index could be merged with:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer \-\-merge main delta \-\-merge\-dst\-range deleted 0 0
+  sudo \-u manticore indexer \-\-config /home/myuser/manticore.conf \-\-all
 .fi
-.if n \{\
 .RE
-.\}
-.sp
-Any documents marked as deleted (value 1) would be removed from the newly\-merged destination index\&. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final index\&.
-.RE
-.PP
-\fB\-\-merge\-killlists\fR, \fB\-\-merge\-klists\fR
-.RS 4
-Used in pair with
-\fB\-\-merge\fR\&. Usually when merging
-\fBindexer\fR
-uses kill\-list of source index (i\&.e\&., the one which is merged into) as the filter to wipe out the matching docs from the destination index\&. At the same time the kill\-list of the destination itself isn\*(Aqt touched at all\&. When using
-\fB\-\-merge\-killlists\fR, (or it shorter form
-\fB\-\-merge\-klists\fR) the
-\fBindexer\fR
-will not filter the dst\-index docs with src\-index killlist, but it will merge their kill\-lists together, so the final result index will have the kill\-list containing the merged source kill\-lists\&.
+.RS
+.IP \(bu 2
+\fB\fC\-\-rotate\fR is used for rotating tables. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. \fB\fC\-\-rotate\fR creates a second table, parallel to the first (in the same place, simply including \fB\fC\&.new\fR in the filenames). Once complete, \fB\fCindexer\fR notifies \fB\fCsearchd\fR via sending the \fB\fCSIGHUP\fR signal, and the \fB\fCsearchd\fR will attempt to rename the tables (renaming the existing ones to include \fB\fC\&.old\fR and renaming the \fB\fC\&.new\fR to replace them), and then will start serving from the newer files. Depending on the setting of \fB\fCseamless_rotate\fR there may be a slight delay in being able to search the newer tables. In case multiple tables are rotated at once which are chained by \fB\fCkilllist_target\fR relations rotation will start with the tables that are not targets and finish with the ones at the end of target chain. Example usage:
 .RE
 .PP
-\fB\-\-noprogress\fR
-.RS 4
-Don\*(Aqt display progress details as they occur; instead, the final status details (such as documents indexed, speed of indexing and so on are only reported at completion of indexing\&. In instances where the script is not being run on a console (or \*(Aqtty\*(Aq), this will be on by default\&.
-.sp
-Example usage:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer \-\-rotate \-\-all \-\-noprogress
+  sudo \-u manticore indexer \-\-rotate \-\-all
 .fi
-.if n \{\
 .RE
-.\}
-.RE
-.PP
-\fB\-\-print\-queries\fR
-.RS 4
-Prints out SQL queries that indexer sends to the database, along with SQL connection and disconnection events\&. That is useful to diagnose and fix problems with SQL sources\&.
+.RS
+.IP \(bu 2
+\fB\fC\-\-quiet\fR tells \fB\fCindexer\fR ot to output anything, unless there is an error. This is mostly used for cron\-type or other scripted jobs where the output is irrelevant or unnecessary, except in the event of some kind of error. Example usage:
 .RE
 .PP
-\fB\-\-quiet\fR
-.RS 4
-Tells
-\fBindexer\fR
-not to output anything, unless there is an error\&. Again, most used for cron\-type, or other script jobs where the output is irrelevant or unnecessary, except in the event of some kind of error\&.
-.sp
-Example usage:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer \-\-rotate \-\-all \-\-quiet
+  sudo \-u manticore indexer \-\-rotate \-\-all \-\-quiet
 .fi
-.if n \{\
 .RE
-.\}
+.RS
+.IP \(bu 2
+\fB\fC\-\-noprogress\fR does not display progress details as they occur. Instead, the final status details (such as documents indexed, speed of indexing and so on are only reported at completion of indexing. In instances where the script is not being run on a console (or 'tty'), this will be on by default. Example usage:
 .RE
 .PP
-\fB\-\-rotate\fR
-.RS 4
-Used for rotating indexes\&. Unless you have the situation where you can take the search function offline without troubling users, you will almost certainly need to keep search running whilst indexing new documents\&.
-\fB\-\-rotate\fR
-creates a second index, parallel to the first (in the same place, simply including
-\&.new
-in the filenames)\&. Once complete,
-\fBindexer\fR
-notifies
-\fBsearchd\fR
-via sending the
-\fISIGHUP\fR
-signal, and
-\fBsearchd\fR
-will attempt to rename the indexes (renaming the existing ones to include
-\&.old
-and renaming the
-\&.new
-to replace them), and then start serving from the newer files\&. Depending on the setting of
-\fBseamless_rotate\fR, there may be a slight delay in being able to search the newer indexes\&.
-.sp
-Example usage:
-.sp
-.if n \{\
-.RS 4
-.\}
+.RS
 .nf
-$ indexer \-\-rotate \-\-all
+  sudo \-u manticore indexer \-\-rotate \-\-all \-\-noprogress
 .fi
-.if n \{\
 .RE
-.\}
-.RE
-.PP
-\fB\-\-sighup\-each\fR
-.RS 4
-is useful when you are rebuilding many big indexes, and want each one rotated into
-\fBsearchd\fR
-as soon as possible\&. With
-\fB\-\-sighup\-each\fR,
-\fBindexer\fR
-will send a
-\fISIGHUP\fR
-signal to
-\fBsearchd\fR
-after successfully completing the work on each index\&. (The default behavior is to send a single
-\fISIGHUP\fR
-after all the indexes were built\&.)
+.RS
+.IP \(bu 2
+\fB\fC\-\-buildstops <outputfile.text> <N>\fR reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the table. Note, it does not update the table in question, it simply processes the data as if it were indexing, including running queries defined with \fB\fCsql_query_pre\fR or \fB\fCsql_query_post\fR\&. \fB\fCoutputfile.txt\fR will contain the list of words, one per line, sorted by frequency with most frequent first, and \fB\fCN\fR specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the table, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with \fB\fC\-\-buildfreqs\fR, below. Example:
 .RE
 .PP
-\fB\-\-verbose [debug|debugv|debugvv]\fR
-.RS 4
-Guarantees that every row that caused problems indexing (duplicate, zero, or missing document ID; or file field IO issues; etc) will be reported\&. By default, this option is off, and problem summaries may be reported instead\&.
-.sp
-Extra optional params (debug, debugv, debugvv) also switches debug output from different parts of indexing process\&.
+.RS
+.nf
+  sudo \-u manticore indexer mytable \-\-buildstops word_freq.txt 1000
+.fi
+.RE
+.IP
+This would produce a document in the current directory, \fB\fCword_freq.txt\fR, with the 1,000 most common words in 'mytable', ordered by most common first. Note that the file will pertain to the last table indexed when specified with multiple tables or \fB\fC\-\-all\fR (i.e. the last one listed in the configuration file)
+.RS
+.IP \(bu 2
+\fB\fC\-\-buildfreqs\fR works with \fB\fC\-\-buildstops\fR (and is ignored if \fB\fC\-\-buildstops\fR is not specified). As \fB\fC\-\-buildstops\fR provides the list of words used within the table, \fB\fC\-\-buildfreqs\fR adds the quantity present in the table, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean…" features where you need to know how much more common a given word compared to another, similar one. For example:
 .RE
 .PP
-\fB\-\-help\fR, \fB\-h\fR
-.RS 4
-List all of the parameters that can be called in your particular build of
-\fBindexer\fR\&.
+.RS
+.nf
+  sudo \-u manticore indexer mytable \-\-buildstops word_freq.txt 1000 \-\-buildfreqs
+.fi
+.RE
+.IP
+This would produce the \fB\fCword_freq.txt\fR as above, however after each word would be the number of times it occurred in the table in question.
+.RS
+.IP \(bu 2
+\fB\fC\-\-merge <dst\-table> <src\-table>\fR is used for physically merging tables together, for example if you have a \fB\fCmain+delta scheme\fR, where the main table rarely changes, but the delta table is rebuilt frequently, and \fB\fC\-\-merge\fR would be used to combine the two. The operation moves from right to left \- the contents of \fB\fCsrc\-table\fR get examined and physically combined with the contents of \fB\fCdst\-table\fR and the result is left in \fB\fCdst\-table\fR\&. In pseudo\-code, it might be expressed as: \fB\fCdst\-table += src\-table\fR An example:
 .RE
 .PP
-\fB\-v\fR
-.RS 4
-show version information of your particular build of
-\fBindexer\fR\&.
+.RS
+.nf
+  sudo \-u manticore indexer \-\-merge main delta \-\-rotate
+.fi
+.RE
+.IP
+In the above example, where the main is the master, rarely modified table, and the delta is more frequently modified one, you might use the above to call \fB\fCindexer\fR to combine the contents of the delta into the main table and rotate the tables.
+.RS
+.IP \(bu 2
+\fB\fC\-\-merge\-dst\-range <attr> <min> <max>\fR runs the filter range given upon merging. Specifically, as the merge is applied to the destination table (as part of \fB\fC\-\-merge\fR, and is ignored if \fB\fC\-\-merge\fR is not specified), \fB\fCindexer\fR will also filter the documents ending up in the destination table, and only documents will pass through the filter given will end up in the final table. This could be used for example, in a table where there is a 'deleted' attribute, where 0 means 'not deleted'. Such a table could be merged with:
+.RE
+.PP
+.RS
+.nf
+  sudo \-u manticore indexer \-\-merge main delta \-\-merge\-dst\-range deleted 0 0
+.fi
+.RE
+.IP
+Any documents marked as deleted (value 1) will be removed from the newly\-merged destination table. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final table.
+.RS
+.IP \(bu 2
+\-\-\fB\fCmerge\-killlists\fR (and its shorter alias \fB\fC\-\-merge\-klists\fR) changes the way kill lists are processed when merging tables. By default, both kill lists get discarded after a merge. That supports the most typical main+delta merge scenario. With this option enabled, however, kill lists from both tables get concatenated and stored into the destination table. Note that a source (delta) table kill list will be used to suppress rows from a destination (main) table at all times.
+.IP \(bu 2
+\fB\fC\-\-keep\-attrs\fR allows to reuse existing attributes on reindexing. Whenever the table is rebuilt, each new document id is checked for presence in the "old" table, and if it already exists, its attributes are transferred to the "new" table; if not found, attributes from the new table are used. If the user has updated attributes in the table, but not in the actual source used for the table, all updates will be lost when reindexing; using \fB\fC\-\-keep\-attrs\fR enables saving the updated attribute values from the previous table. It is possible to specify a path for table files to be used instead of the reference path from the config:
+.RE
+.PP
+.RS
+.nf
+  sudo \-u manticore indexer mytable \-\-keep\-attrs=/path/to/index/files
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-keep\-attrs\-names=<attributes list>\fR allows you to specify attributes to reuse from an existing table on reindexing. By default, all attributes from the existing table are reused in the new table:
+.RE
+.PP
+.RS
+.nf
+  sudo \-u manticore indexer mytable \-\-keep\-attrs=/path/to/table/files \-\-keep\-attrs\-names=update,state
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-dump\-rows <FILE>\fR dumps rows fetched by SQL 
+.BR source (s) 
+into the specified file, in a MySQL compatible syntax. The resulting dumps are the exact representation of data as received by \fB\fCindexer\fR and can help repeat indexing\-time issues. The command performs fetching from the source and creates both table files and the dump file.
+.IP \(bu 2
+\fB\fC\-\-print\-rt <rt_index> <table>\fR outputs fetched data from the source as INSERTs for a real\-time table. The first lines of the dump will contain the real\-time fields and attributes (as a reflection of the plain table fields and attributes). The command performs fetching from the source and creates both table files and the dump output. The command can be used as \fB\fCsudo \-u manticore indexer \-c manticore.conf \-\-print\-rt indexrt indexplain > dump.sql\fR\&. Only SQL\-based sources are supported. MVAs are not supported.
+.IP \(bu 2
+\fB\fC\-\-sighup\-each\fR  is useful when you are rebuilding many big tables and want each one rotated into \fB\fCsearchd\fR as soon as possible. With \fB\fC\-\-sighup\-each\fR, \fB\fCindexer\fR will send the SIGHUP signal to searchd after successfully completing work on each table. (The default behavior is to send a single SIGHUP after all the tables are built).
+.IP \(bu 2
+\fB\fC\-\-nohup\fR is useful when you want to check your table with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on. Table files are renamed to .tmp. Use indextool to rename table files to .new and rotate it. Example usage:
+.RE
+.PP
+.RS
+.nf
+  sudo \-u manticore indexer \-\-rotate \-\-nohup mytable
+  sudo \-u manticore indextool \-\-rotate \-\-check mytable
+.fi
+.RE
+.RS
+.IP \(bu 2
+\fB\fC\-\-print\-queries\fR prints out SQL queries that \fB\fCindexer\fR sends to the database, along with SQL connection and disconnection events. That is useful to diagnose and fix problems with SQL sources.
+.IP \(bu 2
+\fB\fC\-\-help\fR (\fB\fC\-h\fR for short) lists all the parameters that can be called in \fB\fCindexer\fR\&.
+.IP \(bu 2
+\fB\fC\-v\fR shows \fB\fCindexer\fR version.
 .RE
 .SH "AUTHOR"
 .PP
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2023 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2024 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
-Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"
 .PP
 \fBsearchd\fR(1),
-\fBsearch\fR(1),
-\fBindextool\fR(1),
-\fBspelldump\fR(1)
+\fBindextool\fR(1)
 .PP
-Manticore Search and it\*(Aqs programs are documented fully by the
-\fIManticore Search reference manual\fR
-available in
-/usr/share/doc/manticore\&.
+Manticore Search and its related programs are thoroughly documented
+in the \fIManticore Search reference manual\fR, which is accessible
+at https://manual.manticoresearch.com/

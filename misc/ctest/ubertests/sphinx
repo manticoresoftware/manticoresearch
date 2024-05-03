@@ -1,6 +1,0 @@
-(
-    "db-host"=>"127.0.0.1",
-    "db-user"=>"test",
-    'lemmatizer_base'=>'/work/aot',
-    'odbc_driver'=>'/mysql-connector-odbc-5.3.9-linux-ubuntu16.04-x86-64bit/lib/libmyodbc5w.so'
-)

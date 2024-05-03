@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -352,14 +352,6 @@ TEST ( functions, strinbguilder_appendf )
 	ASSERT_STREQ (
 		sRes.cstr(), "12345678this is my rifle this is my gun int=123 float=456.789000 string=helloworld" );
 }
-
-struct EscapeQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' ) ? 1 : 0;
-	}
-};
 
 
 using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;

@@ -1,0 +1,24 @@
+//
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2001-2016, Andrew Aksyonoff
+// Copyright (c) 2008-2016, Sphinx Technologies Inc
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
+#pragma once
+
+#include "sphinxstd.h"
+
+struct SplitData_t
+{
+	int64_t m_iMetric = 0;
+	int		m_iThreadCap = 0;
+};
+
+void	DistributeThreadsOverIndexes ( IntVec_t & dThreads, const CSphVector<SplitData_t> & dSplitData, int iConcurrency );
+int		CalcMaxThreadsPerIndex ( int iConcurrency, int iNumIndexes );

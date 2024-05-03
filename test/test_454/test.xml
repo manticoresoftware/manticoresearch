@@ -24,6 +24,16 @@ index test1
 	rt_field = content
     rt_attr_uint = int_col
 }
+
+
+index test_bool
+{
+    type = rt
+    path = <data_path/>/test_bool
+    rt_field = title
+    rt_attr_uint = icol
+    rt_attr_bool = bcol
+}
 </config>
 
 <httpqueries>
@@ -105,6 +115,36 @@ index test1
 </bulk>
 
 <query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+<!-- regression table create with invalid arguments -->
+<query endpoint="_sys/test" method="put">{"some": "name", "no_mapping":{}}</query>
+<!-- regression table create with empty body -->
+<query endpoint="_sys/test" method="put"></query>
+
+<!-- regression bool value -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test_bool", "_id" : "11" } }
+{ "bcol" : 1 }
+{ "index" : { "_index" : "test_bool", "_id" : "12" } }
+{ "bcol" : "1" }
+{ "index" : { "_index" : "test_bool", "_id" : "13" } }
+{ "bcol" : "10" }
+{ "index" : { "_index" : "test_bool", "_id" : "14" } }
+{ "bcol" : "true" }
+{ "index" : { "_index" : "test_bool", "_id" : "15" } }
+{ "bcol" : "True" }
+{ "index" : { "_index" : "test_bool", "_id" : "16" } }
+{ "bcol" : "falsE" }
+</bulk>
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_bool", "id" : 21, "doc": { "bcol" : 1 } } }
+{ "insert" : { "index" : "test_bool", "id" : 22, "doc": { "bcol" : "true" } } }
+{ "insert" : { "index" : "test_bool", "id" : 23, "doc": { "bcol" : "True" } } }
+{ "insert" : { "index" : "test_bool", "id" : 24, "doc": { "bcol" : "false" } } }
+</query>
+
+<query endpoint="search">{ "index": "test_bool", "query": { "match_all": {} }, "sort": [ { "id":"asc"} ] }</query>
 
 </httpqueries>
 

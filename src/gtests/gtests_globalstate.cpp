@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -63,11 +63,11 @@ public:
 		Tracer::Init();
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
-		auto iThreads = sphCpuThreadsCount();
+		auto iThreads = GetNumLogicalCPUs();
 		//		iThreads = 1; // uncomment if want to run all coro tests in single thread
 		SetMaxChildrenThreads ( iThreads );
-		WipeGlobalSchedulerOnShutdownAndFork();
 		StartGlobalWorkPool();
+		WipeGlobalSchedulerOnShutdownAndFork();
 #if _WIN32
 		// init WSA on Windows
 	WSADATA wsa_data;
@@ -85,6 +85,7 @@ public:
 	{
 		unlink ( g_sTmpfile );
 		unlink ( g_sMagickTmpfile );
+		StopGlobalWorkPool();
 	}
 };
 

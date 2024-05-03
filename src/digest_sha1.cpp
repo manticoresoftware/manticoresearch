@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -53,10 +53,10 @@ public:
 		EVP_DigestUpdate ( m_dCtx, data, len );
 	}
 
-	void Final ( BYTE digest[SHA1_SIZE] )
+	void Final ( HASH20_t& tDigest )
 	{
 		unsigned int uLen = SHA1_SIZE;
-		EVP_DigestFinal_ex ( m_dCtx, digest, &uLen );
+		EVP_DigestFinal_ex ( m_dCtx, tDigest.data(), &uLen );
 		EVP_MD_CTX_destroy ( m_dCtx );
 	}
 
@@ -66,9 +66,8 @@ private:
 #else
 	void Init()
 	{
-		const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
-		memcpy ( state, dInit, sizeof ( state ) );
-		count[0] = count[1] = 0;
+		state = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
+		count.fill ( 0 );
 	}
 
 	void Update ( const BYTE* data, int len )
@@ -82,7 +81,7 @@ private:
 		{
 			i = 64 - j;
 			memcpy ( &buffer[j], data, i );
-			Transform ( buffer );
+			Transform ( buffer.data() );
 			for ( ; i + 63 < len; i += 64 )
 				Transform ( data + i );
 			j = 0;
@@ -91,25 +90,26 @@ private:
 		memcpy ( &buffer[j], &data[i], len - i );
 	}
 
-	void Final ( BYTE digest[SHA1_SIZE] )
+	void Final ( HASH20_t& tDigest )
 	{
-		BYTE finalcount[8];
-		for ( auto i = 0; i < 8; i++ )
+		std::array<BYTE,8> finalcount;
+		for ( auto i = 0; i < 8; ++i )
 			finalcount[i] = (BYTE)( ( count[( i >= 4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
 									& 255 ); // endian independent
 		Update ( (const BYTE*)"\200", 1 );	 // add padding
 		while ( ( count[0] & 504 ) != 448 )
 			Update ( (const BYTE*)"\0", 1 );
-		Update ( finalcount, 8 ); // should cause a SHA1_Transform()
-		for ( auto i = 0; i < SHA1_SIZE; i++ )
-			digest[i] = (BYTE)( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
+		Update ( finalcount.data(), 8 ); // should cause a SHA1_Transform()
+		for ( auto i = 0; i < SHA1_SIZE; ++i )
+			tDigest[i] = (BYTE)( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
 	}
 
 private:
 	static constexpr int SHA1_BUF_SIZE = 64;
 
-	DWORD state[5], count[2];
-	BYTE buffer[SHA1_BUF_SIZE];
+	std::array<DWORD,5> state;
+	std::array<DWORD,2> count;
+	std::array<BYTE, SHA1_BUF_SIZE> buffer;
 
 	void Transform ( const BYTE buf[SHA1_BUF_SIZE] )
 	{
@@ -148,6 +148,13 @@ private:
 		state[4] += e;
 	}
 #endif
+public:
+	HASH20_t FinalHash()
+	{
+		HASH20_t dDigest {};
+		Final ( dDigest );
+		return dDigest;
+	}
 };
 
 
@@ -167,23 +174,28 @@ void SHA1_c::Update ( const BYTE* pData, int iLen )
 	m_pImpl->Update ( pData, iLen );
 }
 
-void SHA1_c::Final ( BYTE digest[HASH20_SIZE] )
+void SHA1_c::Final ( HASH20_t& tDigest )
 {
-	m_pImpl->Final ( digest );
+	m_pImpl->Final ( tDigest );
+}
+
+HASH20_t SHA1_c::FinalHash()
+{
+	return m_pImpl->FinalHash ();
 }
 
 CSphString BinToHex ( const BYTE * pHash, int iLen )
 {
-	const char * sDigits = "0123456789abcdef";
+	static constexpr std::array<char,16> sDigits { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 	if ( !iLen )
 		return "";
 
 	CSphString sRes;
 	int iStrLen = 2*iLen+2;
 	sRes.Reserve ( iStrLen );
-	char * sHash = const_cast<char *> (sRes.cstr ());
+	auto * sHash = const_cast<char *> (sRes.cstr ());
 
-	for ( int i=0; i<iLen; i++ )
+	for ( int i=0; i<iLen; ++i )
 	{
 		*sHash++ = sDigits[pHash[i] >> 4];
 		*sHash++ = sDigits[pHash[i] & 0x0f];
@@ -197,13 +209,17 @@ CSphString BinToHex ( const VecTraits_T<BYTE> & dHash )
 	return BinToHex ( dHash.Begin(), dHash.GetLength() );
 }
 
+CSphString BinToHex ( const std::array<BYTE, HASH20_SIZE>& dHash )
+{
+	return BinToHex ( dHash.data(), HASH20_SIZE );
+}
+
 CSphString CalcSHA1 ( const void * pData, int iLen )
 {
-	CSphFixedVector<BYTE> dHashValue ( HASH20_SIZE );
 	SHA1_c dHasher;
 	dHasher.Init();
 	dHasher.Update ( (const BYTE*)pData, iLen );
-	dHasher.Final ( dHashValue.begin() );
+	auto dHashValue = dHasher.FinalHash();
 	return BinToHex ( dHashValue );
 }
 
@@ -213,7 +229,6 @@ bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sE
 	if ( tFile.GetFD()<0 )
 		return false;
 
-	CSphFixedVector<BYTE> dHashValue ( HASH20_SIZE );
 	SHA1_c dHasher;
 	dHasher.Init();
 
@@ -231,7 +246,7 @@ bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sE
 		iOff += iLen;
 	}
 
-	dHasher.Final ( dHashValue.Begin() );
+	auto dHashValue = dHasher.FinalHash();
 	sRes = BinToHex ( dHashValue );
 	return true;
 }
@@ -242,14 +257,9 @@ bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sE
 //////////////////////////////////////////////////////////////////////////
 
 WriterWithHash_c::WriterWithHash_c()
+	: m_pHasher { std::make_unique<SHA1_c>() }
 {
-	m_pHasher = new SHA1_c;
 	m_pHasher->Init();
-}
-
-WriterWithHash_c::~WriterWithHash_c ()
-{
-	SafeDelete ( m_pHasher );
 }
 
 void WriterWithHash_c::Flush()
@@ -262,12 +272,6 @@ void WriterWithHash_c::Flush()
 	}
 }
 
-const BYTE * WriterWithHash_c::GetHASHBlob () const
-{
-	assert ( m_bHashDone );
-	return m_dHashValue;
-}
-
 void WriterWithHash_c::CloseFile ()
 {
 	assert ( !m_bHashDone );
@@ -276,21 +280,24 @@ void WriterWithHash_c::CloseFile ()
 	m_bHashDone = true;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // TaggedHash20_t - string tag (filename) with 20-bytes binary hash
 //////////////////////////////////////////////////////////////////////////
 
-const BYTE TaggedHash20_t::m_dZeroHash[HASH20_SIZE] = { 0 };
+//const std::array<BYTE, HASH20_SIZE> TaggedHash20_t::m_dZeroHash {};
 
 // by tag + hash
 TaggedHash20_t::TaggedHash20_t ( const char* sTagName, const BYTE* pHashValue )
 	: m_sTagName ( sTagName )
 {
-	if ( !pHashValue )
-		pHashValue = m_dZeroHash;
-	memcpy ( m_dHashValue, pHashValue, HASH20_SIZE );
+	if ( pHashValue )
+		memcpy ( m_dHashValue.data(), pHashValue, HASH20_SIZE );
 }
+
+TaggedHash20_t::TaggedHash20_t ( const char* sTag, const HASH20_t& dHashValue )
+	: m_sTagName ( sTag )
+	, m_dHashValue { dHashValue }
+{}
 
 // serialize to FIPS form
 CSphString TaggedHash20_t::ToFIPS () const
@@ -314,14 +321,16 @@ CSphString TaggedHash20_t::ToFIPS () const
 	return sResult.cstr();
 }
 
-inline BYTE hex_char ( unsigned char c )
+namespace {
+inline BYTE hex_char ( unsigned char c ) noexcept
 {
 	if ( c>=0x30 && c<=0x39 )
 		return c - '0';
-	else if ( c>=0x61 && c<=0x66 )
+	if ( c>=0x61 && c<=0x66 )
 		return c - 'a' + 10;
 	assert ( false && "broken hex num - expected digits and a..f letters in the num" );
 	return 0;
+}
 }
 
 // de-serialize from FIPS, returns len of parsed chunk of sFIPS or -1 on error
@@ -354,5 +363,5 @@ int TaggedHash20_t::FromFIPS ( const char * sFIPS )
 bool TaggedHash20_t::operator== ( const BYTE * pRef ) const
 {
 	assert ( pRef );
-	return !memcmp ( m_dHashValue, pRef, HASH20_SIZE );
+	return !memcmp ( m_dHashValue.data(), pRef, HASH20_SIZE );
 }

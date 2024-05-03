@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -335,6 +335,72 @@ uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash ( RowID_t tRowID ) const
 	return m_fnHashCalc ( pStr, iLen, SPH_FNV64_SEED );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+class FilterStringCmpColumnar_c : public ColumnarFilter_c
+{
+public:
+				FilterStringCmpColumnar_c ( const CSphString & sAttrName, ESphCollation eCollation, bool bEquals, EStrCmpDir eStrCmpDir );
+	bool		Eval ( const CSphMatch & tMatch ) const final;
+	void		SetRefString ( const CSphString * pRef, int iCount ) final;
+	void		SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
+	bool		CanExclude() const final { return true; }
+
+private:
+	SphStringCmp_fn			m_fnStrCmp;
+	bool					m_bExclude = false;
+	EStrCmpDir				m_eStrCmpDir;
+	CSphFixedVector<BYTE>	m_dVal { 0 };
+};
+
+FilterStringCmpColumnar_c::FilterStringCmpColumnar_c ( const CSphString & sAttrName, ESphCollation eCollation, bool bExclude, EStrCmpDir eStrCmpDir )
+	: ColumnarFilter_c ( sAttrName )
+	, m_fnStrCmp { GetStringCmpFunc ( eCollation ) }
+	, m_bExclude ( bExclude )
+	, m_eStrCmpDir ( eStrCmpDir )
+{
+}
+
+bool FilterStringCmpColumnar_c::Eval ( const CSphMatch & tMatch ) const
+{
+	const BYTE * pStr = nullptr;
+	int iLen = m_pIterator->Get ( tMatch.m_tRowID, pStr );
+
+	int iCmpResult = m_fnStrCmp ( { pStr, iLen }, m_dVal, false );
+	switch ( m_eStrCmpDir )
+	{
+		case EStrCmpDir::LT: return ( m_bExclude ? iCmpResult>=0 : iCmpResult<0 );
+		case EStrCmpDir::GT: return ( m_bExclude ? iCmpResult<=0 : iCmpResult>0 );
+		case EStrCmpDir::EQ:
+		default:
+			assert (false && "unexpected: EStrCmpDir::EQ should not be here!");
+			return false;
+	}
+}
+
+void FilterStringCmpColumnar_c::SetRefString ( const CSphString * pRef, int iCount )
+{
+	assert ( iCount<2 );
+	const char * sVal = ( pRef ? pRef->cstr() : nullptr );
+	int iLen = ( pRef ? pRef->Length() : 0 );
+	m_dVal.Reset ( iLen );
+	memcpy ( m_dVal.Begin(), sVal, iLen );
+}
+
+void FilterStringCmpColumnar_c::SetColumnar ( const columnar::Columnar_i * pColumnar )
+{
+	if ( !pColumnar )
+	{
+		m_pIterator.reset();
+		return;
+	}
+
+	columnar::IteratorHints_t tHints;
+	tHints.m_bNeedStringHashes = false;
+
+	std::string sError; // fixme! report errors
+	m_pIterator = CreateColumnarIterator( pColumnar, m_sAttrName.cstr(), sError, tHints, nullptr );
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -624,7 +690,12 @@ static std::unique_ptr<ISphFilter> CreateColumnarFilterPlain ( int iAttr, const 
 
 	case SPH_FILTER_RANGE:		return CreateColumnarRangeFilter<SphAttr_t> ( sAttrName, tSettings );
 	case SPH_FILTER_FLOATRANGE:	return CreateColumnarRangeFilter<float> ( sAttrName, tSettings );
-	case SPH_FILTER_STRING:		return std::make_unique<Filter_StringColumnar_T<false>> ( sAttrName, eCollation, !tSettings.m_bExclude );
+	case SPH_FILTER_STRING:
+		if ( tSettings.m_eStrCmpDir==EStrCmpDir::EQ )
+			return std::make_unique<Filter_StringColumnar_T<false>> ( sAttrName, eCollation, !tSettings.m_bExclude );
+		else
+			return std::make_unique<FilterStringCmpColumnar_c> ( sAttrName, eCollation, tSettings.m_bExclude, tSettings.m_eStrCmpDir );
+
 	case SPH_FILTER_STRING_LIST:return std::make_unique<Filter_StringColumnar_T<true>> ( sAttrName, eCollation, !tSettings.m_bExclude );
 
 	default:

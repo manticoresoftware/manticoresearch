@@ -1,0 +1,103 @@
+name: Test Template
+
+on:
+  workflow_call:
+    inputs:
+      WITH_COVERAGE:
+        required: false
+        type: number
+        default: 0
+      CTEST_START:
+        required: false
+        type: number
+        default: 1
+      CTEST_END:
+        required: false
+        type: number
+        default: 999999
+      artifact_name:
+        required: true
+        type: string
+      build_artifact_name:
+        required: true
+        type: string
+      timeout:
+        required: false
+        type: number
+        default: 60
+      xml_command:
+        required: false
+        type: string
+        default: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests.xml ../misc/junit/ctest2junit.xsl Test.xml"
+
+jobs:
+  test:
+    name: ${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: ${{ inputs.timeout }}
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: manticoresearch/ubertests_ctest:3263_mar_2024
+      env:
+        DIAGNOSTIC: 1
+        CACHEB: ../cache
+        NO_BUILD: 1
+        CTEST_START: ${{ inputs.CTEST_START }}
+        CTEST_END: ${{ inputs.CTEST_END }}
+        # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
+        # CTEST_REGEX: test_234
+        WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
+        LIBS_BUNDLE:
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Tests container entrypoint
+        run: bash /entry_point.sh &
+
+      - name: Check out cache before building
+        uses: actions/cache@v3.3.1
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: build_linux_x86_64
+
+      - name: Download build artifacts
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: .
+
+      - name: List files
+        run: find .
+
+      - name: 🚀 Test
+        id: test
+        # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        continue-on-error: true
+
+      - name: List build files
+        if: always()
+        run: find build
+        continue-on-error: true
+
+      - name: Remember status
+        if: always()
+        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.artifact_name }}
+
+      - name: Prepare test report xmls
+        if: always()
+        continue-on-error: true
+        run: ${{ inputs.xml_command }}
+
+      - name: Upload test artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/*log build/status*"

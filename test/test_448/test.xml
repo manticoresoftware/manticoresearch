@@ -37,13 +37,13 @@ searchd
 	insert into a2 values ( 5,  'a2_tag5', 5 );
 
 	create table a2b ( title text, huge bigint, tag integer, flt float );
-	insert into a2b values ( 1, 'a2b_tag1', 1, 0.0, 0 );
-	insert into a2b values ( 10,'a2b_tag1', 1, 0.0, 0 );
-	insert into a2b values ( 11,'a2b_tag1', 1, 0.0, 0 );
-	insert into a2b values ( 2, 'a2b_tag2', 2, 0.0, 0 );
-	insert into a2b values ( 3, 'a2b_tag3', 3, 0.0, 0 );
-	insert into a2b values ( 4, 'a2b_tag4', 4, 0.0, 0 );
-	insert into a2b values ( 5, 'a2b_tag5', 5, 0.0, 0 );
+	insert into a2b values ( 1, 'a2b_tag1', 0, 1, 0.0 );
+	insert into a2b values ( 10,'a2b_tag1', 0, 1, 0.0 );
+	insert into a2b values ( 11,'a2b_tag1', 0, 1, 0.0 );
+	insert into a2b values ( 2, 'a2b_tag2', 0, 2, 0.0 );
+	insert into a2b values ( 3, 'a2b_tag3', 0, 3, 0.0 );
+	insert into a2b values ( 4, 'a2b_tag4', 0, 4, 0.0 );
+	insert into a2b values ( 5, 'a2b_tag5', 0, 5, 0.0 );
 
 	select * from a1 order by id asc;
 	select * from a2 order by id asc;
@@ -74,6 +74,33 @@ searchd
 	drop table a2b;
 	drop table distr;
 </sphinxql>
+
+<!-- regression crash at global sorters on clean up of data attributes -->
+<sphinxql>
+create table t1 ( title text, tag integer );
+insert into t1 (id, tag, title ) values
+( 90, 1355011, 'a90'),
+( 92, 1355011, 'a92'),
+( 94, 1355011, 'a94'),
+( 96, 1355011, 'a96'),
+( 98, 1355011, 'a98');
+
+create table t2 ( title text, tag integer );
+insert into t2 (id, tag, title ) values
+( 1, 1354935, 'b1' );
+
+FLUSH RAMCHUNK t1;
+FLUSH RAMCHUNK t2;
+
+SELECT *, COUNT(DISTINCT id) from t1, t2 GROUP BY id limit 1 option threads=1, max_matches=1;
+SELECT *, COUNT(DISTINCT id) from t1, t2 GROUP BY id limit 1 option threads=1, max_matches=2;
+SELECT *, COUNT(DISTINCT id) from t1, t2 GROUP BY id limit 2 option threads=1, max_matches=2;
+SELECT *, COUNT(*) from t1, t2 GROUP BY id limit 2 option threads=1, max_matches=2;
+
+drop table t1;
+drop table t2;
+</sphinxql>
+
 </queries>
 
 </test>

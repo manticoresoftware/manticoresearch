@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -19,6 +19,11 @@ public:
 	virtual			~CostEstimate_i() = default;
 	virtual float	CalcQueryCost() = 0;
 };
+
+float EstimateMTCost ( float fCost, int iThreads );
+float EstimateMTCostCS ( float fCost, int iThreads );
+float EstimateMTCostSI ( float fCost, int iThreads );
+float EstimateMTCostSIFT ( float fCost, int iThreads );
 
 struct SecondaryIndexInfo_t
 {
@@ -42,7 +47,9 @@ namespace SI
 struct SelectIteratorCtx_t
 {
 	const CSphQuery &						m_tQuery;
-	const ISphSchema &						m_tSchema;
+	const CSphVector<CSphFilterSettings> &	m_dFilters;
+	const ISphSchema &						m_tIndexSchema;
+	const ISphSchema &						m_tSorterSchema;
 	const HistogramContainer_c *			m_pHistograms = nullptr;
 	columnar::Columnar_i *					m_pColumnar = nullptr;
 	SI::Index_i *							m_pSI = nullptr;
@@ -51,8 +58,9 @@ struct SelectIteratorCtx_t
 	int										m_iThreads = 1;
 	bool									m_bCalcPushCost = true;
 	bool									m_bFromIterator = false;
+	float									m_fDocsLeft = 1.0f;
 
-			SelectIteratorCtx_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
+			SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
 
 	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
 	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;
@@ -60,7 +68,7 @@ struct SelectIteratorCtx_t
 };
 
 struct NodeEstimate_t;
-CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx );
+CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff );
 float				CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
 
 #endif // _costestimate_

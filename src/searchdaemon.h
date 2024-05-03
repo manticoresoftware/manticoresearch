@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -100,11 +100,11 @@
 #include "coroutine.h"
 #include "conversion.h"
 
-#define SPHINXAPI_PORT            9312
-#define SPHINXQL_PORT            9306
-#define SPH_ADDRESS_SIZE        sizeof("000.000.000.000")
-#define SPH_ADDRPORT_SIZE        sizeof("000.000.000.000:00000")
-#define NETOUTBUF                8192
+constexpr int SPHINXAPI_PORT	= 9312;
+constexpr int SPHINXQL_PORT		= 9306;
+constexpr int SPH_ADDRESS_SIZE	= sizeof("000.000.000.000");
+constexpr int SPH_ADDRPORT_SIZE	= sizeof("000.000.000.000:00000");
+constexpr int NETOUTBUF			= 8192;
 
 volatile bool& sphGetGotSighup() noexcept;
 volatile bool& sphGetGotSigusr1() noexcept;
@@ -117,6 +117,7 @@ volatile bool& sphGetGotSigusr2() noexcept;
 // these are in searchd.cpp
 extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
+extern bool g_bTimeoutEachPacket;
 
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
@@ -149,7 +150,7 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_SUGGEST		= 15,
 	SEARCHD_COMMAND_JSON		= 16,
 	SEARCHD_COMMAND_CALLPQ 		= 17,
-	SEARCHD_COMMAND_CLUSTERPQ	= 18,
+	SEARCHD_COMMAND_CLUSTER		= 18,
 	SEARCHD_COMMAND_GETFIELD	= 19,
 
 	SEARCHD_COMMAND_TOTAL,
@@ -161,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 20
+	VER_COMMAND_SEARCH_MASTER = 21
 };
 
 
@@ -169,7 +170,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x123, // 1.35
+	VER_COMMAND_SEARCH		= 0x126, // 1.38
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x101,
@@ -180,7 +181,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTERPQ	= 0x106,
+	VER_COMMAND_CLUSTER		= 0x108,
 	VER_COMMAND_GETFIELD	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
@@ -223,7 +224,7 @@ private:
 
 public:
 	explicit CheckLike( const char* sPattern );
-	bool Match( const char* sValue );
+	bool Match( const char* sValue ) const noexcept;
 };
 
 using Generator_fn = std::function<CSphString ( void )>;
@@ -249,6 +250,7 @@ public:
 	// returns true, if single value matches
 	bool MatchAdd( const char* sValue );
 	bool MatchAddf ( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
+	bool Matchf ( const char* sTemplate, ... ) const noexcept __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 	// unconditionally add formatted
 	void Addf ( const char * sValueTmpl, ... );
@@ -260,12 +262,13 @@ public:
 	void MatchTupletFn ( const char * sKey, GeneratorS_fn && fnValuePrinter );
 };
 
-CSphString GetTypeName ( IndexType_e eType );
+const char* GetIndexTypeName ( IndexType_e eType );
 IndexType_e TypeOfIndexConfig ( const CSphString & sType );
 
 // forwards from searchd
 bool CheckPort( int iPort, CSphString * pFatal=nullptr );
 ListenerDesc_t ParseListener ( const char * sSpec, CSphString * pFatal=nullptr );
+ListenerDesc_t ParseResolveListener ( const char* sSpec, bool bResolve = true, CSphString* pFatal = nullptr );
 
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK SOCKET WRAPPERS
@@ -281,6 +284,7 @@ void sphSetSockReuseAddr ( int );
 void sphSetSockReusePort ( int );
 void sphSetSockTFO ( int );
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
+void SafeCloseSocket ( int & iFD );
 
 /** \brief wrapper over getaddrinfo
 Invokes getaddrinfo for given host which perform name resolving (dns).
@@ -382,6 +386,18 @@ public:
 	void WriteInt ( int64_t iOff, int iValue ) // int in network file order
 	{
 		WriteT<int> ( iOff, htonl ( iValue ) );
+	}
+
+	void WriteLSBDword ( int64_t iOff, DWORD v )
+	{
+#if USE_LITTLE_ENDIAN
+		WriteT<DWORD> ( iOff, v );
+#else
+		WriteT<BYTE> ( iOff, (BYTE)( v & 0xff ) );
+		WriteT<BYTE> ( iOff+1, (BYTE)( ( v >> 8 ) & 0xff ) );
+		WriteT<BYTE> ( iOff+2, (BYTE)( ( v >> 16 ) & 0xff ) );
+		WriteT<BYTE> ( iOff+3, (BYTE)( ( v >> 24 ) & 0xff ) );
+#endif
 	}
 
 	BYTE* ReservePlace ( int64_t iPlace )
@@ -533,6 +549,8 @@ public:
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }
 	void			ResetError();
+	int				GetMaxPacketSize() const { return m_iMaxPacketSize; }
+	void			SetMaxPacketSize( int iMaxPacketSize );
 
 protected:
 	const BYTE *	m_pBuf;
@@ -557,6 +575,7 @@ protected:
 private:
 	CSphString		m_sError;
 	bool			m_bError = false;
+	int				m_iMaxPacketSize = g_iMaxPacketSize;
 };
 
 /// simple memory request buffer
@@ -711,43 +730,32 @@ struct ServedDesc_t : public ISphRefcountedMT
 	// mutable is one which can be insert/replace
 	static bool IsMutable ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return pServed->m_eType==IndexType_e::RT || pServed->m_eType==IndexType_e::PERCOLATE;
+		return pServed && ( pServed->m_eType == IndexType_e::RT || pServed->m_eType == IndexType_e::PERCOLATE );
 	}
 
 	// local is one stored locally on disk
 	static bool IsLocal ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return IsMutable ( pServed ) || pServed->m_eType==IndexType_e::PLAIN;
+		return pServed && ( IsMutable ( pServed ) || pServed->m_eType == IndexType_e::PLAIN );
 	}
 
 	// cluster is one which can deals with replication
 	static bool IsCluster ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return !pServed->m_sCluster.IsEmpty ();
+		return pServed && !pServed->m_sCluster.IsEmpty();
 	}
 
 	// CanSelect is one which supports select ... from (at least full-scan).
 	static bool IsSelectable ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return IsFT ( pServed ) || pServed->m_eType==IndexType_e::PERCOLATE;
+		return pServed  && ( IsFT ( pServed ) || pServed->m_eType == IndexType_e::PERCOLATE );
 	}
 
 	// FT is one which supports full-text searching
 	static bool IsFT ( const ServedDesc_t* pServed )
 	{
-		if ( !pServed )
-			return false;
-		return pServed->m_eType==IndexType_e::PLAIN
-			|| pServed->m_eType==IndexType_e::RT
-			|| pServed->m_eType==IndexType_e::DISTR; // fixme! distrs not necessary ft.
+		return pServed && ( pServed->m_eType == IndexType_e::PLAIN || pServed->m_eType == IndexType_e::RT || pServed->m_eType == IndexType_e::DISTR );
+		// fixme! distrs not necessary ft.
 	}
 };
 
@@ -833,6 +841,11 @@ public:
 		assert ( pServed );
 		m_tRunningIndex.m_tLock.ReadLock();
 	}
+
+	RIdx_T ( RIdx_T && rhs )
+		: m_pServedKeeper ( std::move(rhs.m_pServedKeeper) )
+		, m_tRunningIndex ( std::move(rhs.m_tRunningIndex) )
+	{}
 
 	~RIdx_T () RELEASE () { m_tRunningIndex.m_tLock.Unlock(); }
 
@@ -1184,10 +1197,10 @@ bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, CSphIndex* pIndex, int& iUpdate );
 void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bNeedWlock );
 
 enum class RotateFrom_e : BYTE;
-bool PreloadKlistTarget ( const ServedDesc_t& tServed, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
+bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t& dKlistTarget );
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
-void ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, StrVec_t* pWarnings = nullptr );
+bool ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, CSphString & sError, StrVec_t* pWarnings = nullptr );
 void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
 
 volatile bool& sphGetSeamlessRotate() noexcept;
@@ -1399,9 +1412,9 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery );
 void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, bool bCommit );
 bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
-bool sphCheckWeCanModify ( const char* szStmt, RowBuffer_i& tOut );
+bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 
-bool				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
+void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonObj_c & tRoot );
@@ -1433,9 +1446,12 @@ namespace session
 	VecTraits_T<int64_t> LastIds();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
+	void SetDeprecatedEOF ( bool bDeprecatedEOF );
+	bool GetDeprecatedEOF();
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+int GetDaemonLogBufSize ();
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );
@@ -1462,35 +1478,12 @@ struct PercolateOptions_t
 struct CPqResult; // defined in sphinxpq.h
 
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
-void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc
-							   , CPqResult &tResult );
-
-void SendArray ( const VecTraits_T<CSphString> & dBuf, ISphOutputBuffer & tOut );
-void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn );
-
-template <typename T>
-void SendArray ( const VecTraits_T<T> & dBuf, ISphOutputBuffer & tOut )
-{
-	tOut.SendInt ( dBuf.GetLength() );
-	if ( dBuf.GetLength() )
-		tOut.SendBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
-}
-
-template<typename T>
-void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
-{
-	int iCount = tIn.GetInt();
-	if ( !iCount )
-		return;
-
-	dBuf.Reset ( iCount );
-	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
-}
-
+void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc, CPqResult &tResult );
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( ESphHttpStatus eStatus );
+ESphHttpStatus HttpGetStatusCodes ( int iStatus );
 void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
@@ -1512,6 +1505,45 @@ enum MysqlColumnType_e
 	MYSQL_COL_UINT64	= 508
 };
 
+
+inline constexpr MysqlColumnType_e ESphAttr2MysqlColumn ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
+	case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
+	case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
+	case SPH_ATTR_BIGINT: return MYSQL_COL_LONGLONG;
+	case SPH_ATTR_UINT64: return MYSQL_COL_UINT64;
+	default: return MYSQL_COL_STRING;
+	}
+}
+
+// streamed version - used to map columns with streamed select; hacks mysqldump
+inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
+	case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
+	case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
+	case SPH_ATTR_BIGINT: return MYSQL_COL_LONGLONG;
+	case SPH_ATTR_UINT64: return MYSQL_COL_UINT64;
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_INT64SET_PTR: return MYSQL_COL_LONG; // long is treated as a number without interpretation (just copied from input to output)
+	case SPH_ATTR_JSON:
+	case SPH_ATTR_JSON_PTR: return MYSQL_COL_DECIMAL; // decimal is treaded as string without internal escaping
+	default: return MYSQL_COL_STRING;
+	}
+}
 
 class RowBuffer_i : public ISphNoncopyable
 {
@@ -1551,14 +1583,17 @@ public:
 	virtual bool Commit() = 0;
 
 	// wrappers for popular packets
-	virtual void Eof ( bool bMoreResults=false, int iWarns=0 ) = 0;
+	virtual void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) = 0;
+	inline void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
+	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
+	inline void Eof () { return Eof ( false ); }
 
-	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
+	virtual void Error ( const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 
 	virtual void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, int64_t iLastInsertId=0 ) = 0;
 
-	// Header of the table with defined num of columns
-	virtual void HeadBegin ( int iColumns ) = 0;
+	// Header of the table
+	virtual void HeadBegin () = 0;
 
 	virtual bool HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
 
@@ -1590,7 +1625,7 @@ public:
 		PutString ( (Str_t)sMsg );
 	}
 
-	void PutTimeAsString ( int64_t tmVal )
+	void PutTimeAsString ( int64_t tmVal, const char* szSuffix = nullptr )
 	{
 		if ( tmVal==-1 )
 		{
@@ -1598,7 +1633,10 @@ public:
 			return;
 		}
 		StringBuilder_c sTime;
-		sTime.Sprintf ("%t", tmVal);
+		if ( szSuffix )
+			sTime.Sprintf ("%t%s", tmVal, szSuffix);
+		else
+			sTime.Sprintf ( "%t", tmVal );
 		PutString ( sTime );
 	}
 
@@ -1609,7 +1647,7 @@ public:
 		PutString ( sTime );
 	}
 
-	void ErrorEx ( const char * sStmt, const char * sTemplate, ... )
+	void ErrorEx ( const char * sTemplate, ... )
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1618,10 +1656,10 @@ public:
 		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( sStmt, sBuf, MYSQL_ERR_PARSE_ERROR );
+		Error ( sBuf, MYSQL_ERR_PARSE_ERROR );
 	}
 
-	void ErrorAbsent ( const char * sStmt, const char * sTemplate, ... )
+	void ErrorAbsent ( const char * sTemplate, ... )
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1630,7 +1668,7 @@ public:
 		vsnprintf ( sBuf, sizeof ( sBuf ), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( sStmt, sBuf, MYSQL_ERR_NO_SUCH_TABLE );
+		Error ( sBuf, MYSQL_ERR_NO_SUCH_TABLE );
 	}
 
 	// popular pattern of 2 columns of data
@@ -1661,10 +1699,10 @@ public:
 		return Commit();
 	}
 
-	// Fire he header for table with iSize string columns
+	// Fire the header for table with given string columns
 	bool HeadOfStrings ( std::initializer_list<const char*> dNames )
 	{
-		HeadBegin ( (int) dNames.size() );
+		HeadBegin ();
 		for ( const char* szCol : dNames )
 			HeadColumn ( szCol );
 		return HeadEnd ();
@@ -1672,7 +1710,7 @@ public:
 
 	bool HeadOfStrings ( const VecTraits_T<CSphString>& sNames )
 	{
-		HeadBegin ( (int) sNames.GetLength() );
+		HeadBegin ();
 		for ( const auto& sName : sNames )
 			HeadColumn ( sName.cstr() );
 		return HeadEnd ();
@@ -1681,7 +1719,7 @@ public:
 	// table of 2 columns (we really often use them!)
 	bool HeadTuplet ( const char * pLeft, const char * pRight )
 	{
-		HeadBegin ( 2 );
+		HeadBegin ();
 		HeadColumn ( pLeft );
 		HeadColumn ( pRight );
 		return HeadEnd();
@@ -1707,6 +1745,12 @@ public:
 
 	virtual const CSphString & GetError() const { return m_sError; }
 	virtual bool IsError() const { return m_bError; }
+
+	void Reset()
+	{
+		m_bError = false;
+		m_sError = "";
+	}
 
 protected:
 	bool m_bError = false;

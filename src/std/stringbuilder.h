@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,8 +25,8 @@
 using StrBlock_t = std::tuple<Str_t, Str_t, Str_t>;
 
 // common patterns
-const StrBlock_t dEmptyBl { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
-const StrBlock_t dBracketsComma { FROMS(","), FROMS("("), FROMS(")") }; // collection in brackets, comma separated
+inline const StrBlock_t dEmptyBl { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
+inline const StrBlock_t dBracketsComma { FROMS(","), FROMS("("), FROMS(")") }; // collection in brackets, comma separated
 
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
@@ -109,6 +109,7 @@ public:
 	// support for sph::Sprintf - emulate POD 'char*'
 	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }
 	inline void					operator += ( int64_t i ) { GrowEnough ( i ); m_iUsed += i; }
+	inline void 		SetPos ( const char* sPos ) { assert (sPos>=m_szBuffer && sPos<m_szBuffer+m_iSize); m_iUsed = sPos-m_szBuffer; }; // helper. sPos must point inside existing buf
 
 	// append 1 char despite any blocks.
 	inline void			RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
@@ -127,7 +128,7 @@ public:
 
 	// arbitrary output all params according to their << implementations (inlined in compile time).
 	template<typename... Params>
-	StringBuilder_c &	Sprint ( const Params&... tParams );
+	StringBuilder_c& Sprint ( Params&&... tParams );
 
 	// comma manipulations
 	// start new comma block; return index of it (for future possible reference in FinishBlocks())
@@ -144,6 +145,7 @@ public:
 
 	inline char *		begin() const { return m_szBuffer; }
 	inline char *		end () const { return m_szBuffer + m_iUsed; }
+	inline char *		AfterEnd () const { return m_szBuffer + m_iSize; }
 
 	// shrink, if necessary, to be able to fit at least iLen more chars
 	void GrowEnough ( int iLen );
@@ -212,10 +214,10 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, timespan_t tVal );
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal );
 
 template<typename INT, int iPrec>
-StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec>&& tVal );
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec> tVal );
 
 template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
-StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill>&& tVal );
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWidth, iPrec, cFill> tVal );
 
 // helpers
 inline void Grow ( StringBuilder_c& tBuilder, int iInc )
@@ -228,7 +230,11 @@ inline char* Tail ( StringBuilder_c& tBuilder )
 	return tBuilder.end();
 }
 
+CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim = "," ) noexcept;
 
-CSphString ConcatWarnings ( StrVec_t & dWarnings );
+inline CSphString ConcatWarnings ( const VecTraits_T<CSphString>& tVec ) noexcept
+{
+	return StrVec2Str ( tVec, "; " );
+}
 
 #include "stringbuilder_impl.h"

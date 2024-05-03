@@ -1,6 +1,6 @@
 # Transactions
 
-Manticore supports basic transactions for deleting and inserting data into real-time and percolate tables. Each change to a table is first saved in an internal changeset and then actually committed to the table. By default, each command is wrapped in an individual automatic transaction, making it transparent: you simply 'insert' something and can see the inserted result after it completes, without worrying about transactions. However, this behavior can be explicitly managed by starting and committing transactions manually.
+Manticore supports basic transactions for deleting and inserting data into real-time and percolate tables, except when attempting to write to a distributed table which includes a real-time or percolate table. Each change to a table is first saved in an internal changeset and then actually committed to the table. By default, each command is wrapped in an individual automatic transaction, making it transparent: you simply 'insert' something and can see the inserted result after it completes, without worrying about transactions. However, this behavior can be explicitly managed by starting and committing transactions manually.
 
 Transactions are supported for the following commands:
 * [INSERT](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
@@ -43,7 +43,7 @@ The `ROLLBACK` statement rolls back the current transaction, canceling all its c
 
 ## Transactions in /bulk
 
-When using the [/bulk JSON endpoint](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents), you can force a batch of documents to be committed by adding an empty line after them.
+When using one of the `/bulk` JSON endpoints ( [bulk insert](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents), [bulk replace](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=JSON#Bulk-replace), [bulk delete](../Data_creation_and_modification/Deleting_documents.md?client=JSON#Bulk-deletion) ), you can force a batch of documents to be committed by adding an empty line after them.
 
 ## Examples
 

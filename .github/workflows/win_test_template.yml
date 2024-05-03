@@ -1,0 +1,101 @@
+name: Windows Test Template
+
+on:
+  workflow_call:
+    inputs:
+      CTEST_START:
+        required: false
+        type: number
+        default: 1
+      CTEST_END:
+        required: false
+        type: number
+        default: 999999
+      artifact_name:
+        required: true
+        type: string
+
+jobs:
+  test_windows:
+    name: ${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+    runs-on: windows-2022
+    env:
+      CACHEB: "../cache"
+      LIBS_BUNDLE: "../bundle"
+      BOOST_ROOT: "../boost_1_75_0"
+      CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
+      CTEST_CONFIGURATION_TYPE: Debug
+      CTEST_START: ${{ inputs.CTEST_START }}
+      CTEST_END: ${{ inputs.CTEST_END }}
+      # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
+      # CTEST_REGEX: test_234
+      NO_BUILD: 1
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        with:
+          name: build_windows_Debug_x64
+          path: .
+      - name: Check out Windows bundle cache
+        uses: actions/cache@v3.3.1
+        with:
+          path: |
+            bundle
+            boost_1_75_0
+          enableCrossOsArchive: true
+          key: win_bundle
+      - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks
+        run: rm C:\tools\zstd\zstd.exe
+      - name: Check out cache
+        uses: actions/cache@v3.3.1
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: build_windows_x64
+      - name: Copy libraries close to the binaries
+        run: |
+          cp bundle/mysql-x64/lib/libmysql* build/src/Debug/
+          cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
+          cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
+      - name: Setup Flex and Bison
+        run: Install-ChocoPackage winflexbison
+      - name: Run mysql
+        run: |
+          C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
+          C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --install mysql
+          net start mysql
+          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
+      # TODO: Uncomment the below if there's no more OpenSSL in the runner like it happened in Sep 2023 (https://github.com/actions/runner-images/issues/8344)
+      # - name: Install OpenSSL
+      #   run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1
+      - name: Setup PHP and mysqli
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli
+      - name: 🚀 Test
+        id: test
+        # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        # Add -VV to ctest to display extra debug info
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        continue-on-error: true
+      - name: Remember status
+        if: always()
+        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+        continue-on-error: true
+      - name: Prepare test results
+        if: always()
+        run: |
+          mkdir build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+          cp -r build/Testing/2*/*.xml build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
+          mv build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+        continue-on-error: true
+      - name: Upload test artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status*"

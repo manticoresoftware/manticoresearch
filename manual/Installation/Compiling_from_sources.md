@@ -8,7 +8,9 @@ To prepare [official release and development packages](https://repo.manticoresea
 * `DISTR`: the target platform
 * `arch`: the architecture
 * `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
-* Use the CI yaml file as a reference to find the other environment variables you might need to use - https://github.com/manticoresoftware/manticoresearch/blob/master/dist/gitlab-release.yml
+* Use the CI workflow files as a reference to find the other environment variables you might need to use:
+  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
 
 To find possible values for `DISTR` and `arch`, you can use the directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a reference, as it includes sysroots for all supported combinations.
 
@@ -19,7 +21,7 @@ cmake -DPACK=1 /path/to/sources
 cmake --build .
 ```
 
-For example, to create the same RedHat 7 package as the official one, but without the embedded ICU and its large datafile, you can execute the following (assuming that the sources are placed in `/manticore/sources/` on the host):
+For instance, to create a package for RHEL7-compatible operating systems that is similar to the official version Manticore Core Team provides, you should execute the following commands in the directory containing the Manticore Search sources. This directory is the root of a cloned repository from https://github.com/manticoresoftware/manticoresearch:
 
 ```bash
 docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
@@ -27,15 +29,17 @@ docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/s
 -e DISTR=rhel7 \
 -e boost=boost_rhel_feb17 \
 -e sysroot=roots_nov22 \
--v /manticore/sources:/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:clang15_cmake3243 bash
+-v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+manticoresearch/external_toolchain:clang16_cmake3263 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
-RELEASE_TAG="noicu"
 mkdir build && cd build
-cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG -DWITH_ICU_FORCE_STATIC=0 ..
-cmake --build . --target package
+cmake -DPACK=1 ..
+
+cmake --build .
+# or if you want to build packages:
+# cmake --build . --target package
 ```
 The long source directory path is required or it may fail to build the sources.
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -18,7 +18,7 @@
 
 #include <memory>
 
-std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationCommand_e eCommand, CSphString sIndex, CSphString sCluster )
+std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster )
 {
 	auto pCmd = std::make_unique<ReplicationCommand_t>();
 	pCmd->m_eCommand = eCommand;
@@ -27,10 +27,10 @@ std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplicationComman
 	return pCmd;
 }
 
-ReplicationCommand_t* RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, CSphString sIndex, CSphString sCluster )
+ReplicationCommand_t* RtAccum_t::AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster )
 {
 	// all writes to RT index go as single command to serialize accumulator
-	if ( eCmd == ReplicationCommand_e::RT_TRX && !m_dCmd.IsEmpty() && m_dCmd.Last()->m_eCommand == ReplicationCommand_e::RT_TRX )
+	if ( eCmd == ReplCmd_e::RT_TRX && !m_dCmd.IsEmpty() && m_dCmd.Last()->m_eCommand == ReplCmd_e::RT_TRX )
 		return m_dCmd.Last().get();
 
 	m_dCmd.Add ( MakeReplicationCommand ( eCmd, std::move ( sIndex ), std::move ( sCluster ) ) );
@@ -116,6 +116,8 @@ void RtAccum_t::Cleanup()
 	m_uAccumDocs = 0;
 	m_iAccumBytes = 0;
 	m_dAccumKlist.Reset();
+	m_sIndexName = CSphString();
+	m_iIndexId = 0;
 
 	m_dCmd.Reset();
 }
@@ -155,7 +157,7 @@ static void ResetTailHit ( CSphWordHit * pHit )
 		pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
 }
 
-void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
+void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
 {
 	MEMORY ( MEM_RT_ACCUM );
 
@@ -190,6 +192,8 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
+	CSphVector<int64_t> dTempKNN;
+
 	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
@@ -217,15 +221,27 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
-				const int64_t* pMva = &tDoc.m_dMvas[iMva];
-				int nValues = (int)*pMva++;
-				iMva += nValues + 1;
+				int iNumValues = 0;
+				bool bDefault = false;
+				const int64_t * pMva = tDoc.GetMVA(iMva);
+				std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
+				iMva += iNumValues + 1;
+
+				// fill default/missing float_vector+knn attributes with zeroes
+				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && bDefault )
+				{
+					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
+					dTempKNN.ZeroVec();
+					pMva = dTempKNN.Begin();
+					iNumValues = dTempKNN.GetLength(); 
+				}
 
 				if ( tColumn.IsColumnar() )
-					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, nValues );
+					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, nValues * sizeof ( int64_t ), sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
 			}
 			break;
 
@@ -480,12 +496,14 @@ void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 }
 
 
-void RtAccum_t::SetIndex ( RtIndex_i* pIndex )
+void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	assert ( pIndex );
 	m_iIndexGeneration = pIndex->GetAlterGeneration();
 	m_pIndex = pIndex;
 	m_pBlobWriter.reset();
+	m_sIndexName = pIndex->GetName();
+	m_iIndexId = pIndex->GetIndexId();
 
 	const CSphSchema& tSchema = pIndex->GetInternalSchema();
 	if ( tSchema.HasBlobAttrs() )
@@ -509,9 +527,9 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID = 0;
 }
 
-void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen, DWORD uVer )
+void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 {
-	MemoryReader_c tReader ( pData, iLen );
+	MemoryReader_c tReader ( tTrx );
 	m_bReplace = !!tReader.GetVal<BYTE>();
 	tReader.GetVal ( m_uAccumDocs );
 	if ( uVer>=0x106 )

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>alter modify column in rt-mode</name>
+
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path path="data0"/>
+	binlog_path = #
+}
+</config>
+
+<queries>
+	<sphinxql>
+		drop table if exists t;
+		create table t(a int);
+		insert into t values(1, 9223372036854775805);
+		insert into t values(3, -1);
+		desc t;
+		select * from t;
+		alter table t add column a bigint;
+		desc t;
+		alter table t modify column a bigint;
+		desc t;
+		alter table t modify column unexisting bigint;
+		desc t;
+		insert into t values(2, 9223372036854775805);
+		select * from t;
+		desc t;
+		drop table t;
+		<!-- stuff with column named 'modify' -->
+		create table t(modify int);
+		insert into t values(1, 10);
+		desc t;
+		alter table t add column modify bigint;
+		desc t;
+		alter table t modify column modify bigint;
+		desc t;
+		select * from t;
+		drop table t;
+		<!-- stuff with table named 'modify' -->
+		create table modify(a int);
+		insert into modify values(1, 10);
+		desc modify;
+		alter table modify add column a bigint;
+		desc modify;
+		alter table modify modify column a bigint;
+		desc modify;
+		select * from modify;
+		drop table modify;
+		<!-- stuff with table named 'modify' and column named 'modify' -->
+		create table modify(modify int);
+		insert into modify values(1, 10);
+		desc modify;
+		alter table modify add column modify bigint;
+		desc modify;
+		alter table modify modify column modify bigint;
+		desc modify;
+		select * from modify;
+		drop table modify;
+	</sphinxql>
+</queries>
+</test>

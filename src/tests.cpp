@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -577,9 +577,13 @@ static float GetEstimatedCost ( CSphQuery & tQuery, CSphIndex * pIndex, Secondar
 		dSIInfo[i].m_eType = eType;
 	}
 
-	int iCutoff = ApplyImplicitCutoff ( tQuery, {} );
-	SelectIteratorCtx_t tCtx ( tQuery, pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->GetColumnar(), pIndex->Debug_GetSI(), iCutoff, tStats.m_iTotalDocuments, 1 );
-	std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dSIInfo, tCtx ) );
+	int iCutoff = ApplyImplicitCutoff ( tQuery, {}, false );
+	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, pIndex->GetMatchSchema(), pIndex->GetMatchSchema(), pIndex->Debug_GetHistograms(), pIndex->GetColumnar(), pIndex->Debug_GetSI(), iCutoff, tStats.m_iTotalDocuments, 1 );
+	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::ANALYZER; } );
+	if ( iNumIterators > 1 )
+		iCutoff = -1;
+
+	std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dSIInfo, tCtx, iCutoff ) );
 	return pEstimate->CalcQueryCost();
 }
 

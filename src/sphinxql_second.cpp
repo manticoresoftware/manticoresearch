@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -40,7 +40,8 @@ public:
 		return sResult;
 	}
 
-	void SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
+	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
+	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, const RefcountedVector_c<AttrValue_t> & dValues );
 };
 
 void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
@@ -50,12 +51,23 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
 	ToString ( m_pStmt->m_sSetName, tName );
 }
 
+
+void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, const RefcountedVector_c<AttrValue_t> & dValues )
+{
+	SetStatement ( tName, eSet );
+	
+	auto & dSV = m_pStmt->m_dSetValues;
+	dSV.Resize ( dValues.GetLength() );
+	ARRAY_FOREACH ( i, dValues )
+		dSV[i] = dValues[i].m_iValue;
+}
+
 #define YYSTYPE SqlNode_t
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_secondparser ( YYSTYPE* lvalp, void* yyscanner, SqlSecondParser_c* pParser )
 
-#include "flexsphinxqlsecond.c"
+#include "flexsphinxql_second.c"
 
 static void yyerror ( SqlParserTraits_c* pParser, const char* szMessage )
 {

@@ -14,14 +14,15 @@
   <a href="https://slack.manticoresearch.com">Slack</a> •
   <a href="https://t.me/manticoresearch_en">Telegram (En)</a> •
   <a href="https://t.me/manticore_chat">Telegram (Ru)</a> •
-  <a href="https://twitter.com/manticoresearch">Twitter</a>
+  <a href="https://twitter.com/manticoresearch">Twitter</a> •
+  <a href="https://github.com/manticoresoftware/manticoresearch/discussions/categories/feedback">User feedback</a>
 </h3>
 
 <p>&nbsp;</p>
 
 # Introduction
 
-[![License: GPLv2](https://img.shields.io/badge/license-GPL%20V2-green?style=plastic)](COPYING)
+[![License: GPLv3 or later](https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic)](LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic)](https://twitter.com/manticoresearch)
 [![Slack](https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic)](http://slack.manticoresearch.com/)
 [![Docker pulls](https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic)](https://github.com/manticoresoftware/docker)
@@ -46,7 +47,7 @@ Manticore Search is an easy to use open source fast database for search. Good al
 * Performant secondary indexes are automatically created, saving you time and effort.
 * The cost-based query optimizer optimizes search queries for optimal performance.
 * Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
-* With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/go-sdk), integration with Manticore Search becomes easy.
+* With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/manticoresearch-go), integration with Manticore Search becomes easy.
 * Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management.
 * Built in C++, Manticore Search starts quickly and uses minimal RAM, with low-level optimizations contributing to its impressive performance.
 * With real-time inserts, newly added documents are immediately accessible.
@@ -68,6 +69,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
+  - [Vector search](https://manual.manticoresearch.com/Searching/dev/KNN)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
   - A wide range of functions for filtering and data manipulation
@@ -110,6 +112,12 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
+  - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
+  - [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/)
+  - [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/)
+  - [Logstash/Filebeat](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)
+  - [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/)
+  - [Mysqldump](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)
   - [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)
 
 # Installation
@@ -145,10 +153,10 @@ Read [the full instruction for the docker image](https://github.com/manticoresof
 
 ## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
 
-### YUM repo for RHEL/Centos/Amazon Linux
+### YUM repo for RHEL/Centos/Amazon/Oracle Linux
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
+sudo yum install manticore manticore-extra
 ```
 
 ### APT repo for Ubuntu/Debian/Mint
@@ -156,20 +164,16 @@ sudo yum install manticore manticore-columnar-lib
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-columnar-lib
+sudo apt install manticore manticore-extra
 ```
 
 ### Homebrew on MacOS
 ```
-brew install manticoresearch
+brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 ### Windows
 See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
-
-### MacOS tarball
-See [instruction here](https://manual.manticoresearch.com/Installation/MacOS#From-tarball-with-binaries).
-
 
 # Documentation and community sites
 
@@ -200,8 +204,10 @@ Should your company require any help - we provide full-cycle services in the are
 [More details here](https://manticoresearch.com/services/)
 
 # ❤️ How you can support Manticore Search
-
-Manticore Search is a GPLv2-licensed Open Source project with development made possible by support from our core team, contributors, and sponsors. Building premium Open Source software is not easy. If you would like to make sure Manticore Search stays free, here is how you can help the project:
+Manticore Search is an Open Source project with development made possible by support from our core team, contributors, and sponsors. Building premium Open Source software is not easy. If you would like to make sure Manticore Search stays free, here is how you can help the project:
 
 * [Donation through PayPal](https://www.paypal.me/manticoresearch)
 * [Become our client and let us help you](https://manticoresearch.com/services)
+
+# License
+Manticore Search is distributed under [GPLv3 or later](./LICENSE). Manticore Search uses and re-distributes other open-source components. Please check the [component licenses](./component-licenses) directory for details.

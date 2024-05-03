@@ -1,0 +1,42 @@
+name: 🪞 Mirror
+run-name: 🪞 Mirror ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - master
+      - maintenance-release
+      - 'manticore-*'
+
+# waits until the previous workflow run to finish when a new one appears
+concurrency:
+  group: mirror_${{ github.ref }}
+
+jobs:
+
+  to_gitlab:
+    name: Sync to GitLab
+    if: github.repository == 'manticoresoftware/manticoresearch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Commit info
+        run: |
+          echo "# Syncing commit ${{ github.sha }} to GitLab" >> $GITHUB_STEP_SUMMARY
+          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - name: Sync to Gitlab
+        run: |
+          echo "${{ secrets.GITLAB_SSH_KEY }}" > /tmp/ssh.key
+          chmod 600 /tmp/ssh.key
+          git remote add gitlab git@gitlab.com:manticoresearch/dev.git
+          git checkout ${{ github.ref }}
+          GIT_SSH_COMMAND='ssh -i /tmp/ssh.key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -F /dev/null' git fetch gitlab
+          GIT_SSH_COMMAND='ssh -i /tmp/ssh.key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -F /dev/null' git push -u gitlab ${{ github.ref }}
+        shell: bash

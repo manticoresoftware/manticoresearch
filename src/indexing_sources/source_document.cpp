@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -95,6 +95,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarni
 	m_dColumnarNonStoredAttrs = tSettings.m_dColumnarNonStoredAttrs;
 	m_dRowwiseAttrs = tSettings.m_dRowwiseAttrs;
 	m_dColumnarStringsNoHash = tSettings.m_dColumnarStringsNoHash;
+	m_dKNN = tSettings.m_dKNN;
 	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;
 	m_eEngine = tSettings.m_eEngine;
 
@@ -399,11 +400,23 @@ bool AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
 
 bool CSphSource::AddAutoAttrs ( CSphString & sError, StrVec_t * pDefaults )
 {
+	int iSchemaId = m_tSchema.GetAttrIndex ( sphGetDocidName() );
+
 	// id is the first attr
-	if ( m_tSchema.GetAttr ( sphGetDocidName() ) )
+	if ( iSchemaId!=-1 )
 	{
-		assert ( m_tSchema.GetAttrIndex ( sphGetDocidName() )==0 );
-		assert ( m_tSchema.GetAttr ( sphGetDocidName() )->m_eAttrType==SPH_ATTR_BIGINT );
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( iSchemaId );
+		if ( iSchemaId!=0 )
+		{
+			sError.SetSprintf ( "can not define auto-defined '%s' attribute", tCol.m_sName.cstr() );
+			return false;
+		}
+		if  ( tCol.m_eAttrType!=SPH_ATTR_BIGINT )
+		{
+			sError.SetSprintf ( "can not define auto-defined '%s' attribute with the wrong type '%s', should be '%s'", tCol.m_sName.cstr(), AttrType2Str ( tCol.m_eAttrType ), AttrType2Str ( SPH_ATTR_BIGINT ) );
+			return false;
+		}
+
 	} else
 	{
 		CSphColumnInfo tCol ( sphGetDocidName() );
@@ -661,7 +674,9 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 
 	// FIELDEND_MASK at last token stream should be set for HEAD token too
 	iBlendedHitsStart = -1;
-	bool bMorphDisabled = ( m_tMorphFields.GetSize()>0 && !m_tMorphFields.BitGet ( m_tState.m_iField ) );
+
+	// bMorphDisabled introduced in e0f8754e
+	bool bMorphDisabled = !m_tMorphFields.BitGetOr ( m_tState.m_iField, true );
 
 	// index words only
 	while ( ( m_iMaxHits==0 || m_tHits.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
@@ -689,27 +704,27 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 		}
 
 		ESphTokenMorph eMorph = m_pTokenizer->GetTokenMorph();
-		if ( m_bIndexExactWords && eMorph!=SPH_TOKEN_MORPH_GUESS )
+		if ( m_bIndexExactWords && eMorph != SPH_TOKEN_MORPH_GUESS )
 		{
 			auto iBytes = strlen ( (const char*)sWord );
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			sBuf[iBytes+1] = '\0';
-		}
+			sBuf[iBytes + 1] = '\0';
 
-		if ( m_bIndexExactWords && ( eMorph==SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled ) )
-		{
-			// can not use GetWordID here due to exception vs missed hit, ie
-			// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary
-			// that causes error at hit sorting phase \ dictionary HitblockPatch
-			if ( !m_pDict->GetSettings().m_bStopwordsUnstemmed )
-				m_pDict->ApplyStemmers ( sWord );
+			if ( eMorph == SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled )
+			{
+				// can not use GetWordID here due to exception vs missed hit, ie
+				// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary
+				// that causes error at hit sorting phase \ dictionary HitblockPatch
+				if ( !m_pDict->GetSettings().m_bStopwordsUnstemmed )
+					m_pDict->ApplyStemmers ( sWord );
 
-			if ( !m_pDict->IsStopWord ( sWord ) )
-				m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
+				if ( !m_pDict->IsStopWord ( sWord ) )
+					m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
 
-			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
-			continue;
+				m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
+				continue;
+			}
 		}
 
 		SphWordID_t iWord = ( eMorph==SPH_TOKEN_MORPH_GUESS )

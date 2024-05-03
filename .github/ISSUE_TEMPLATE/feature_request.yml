@@ -1,0 +1,38 @@
+name: 🌟 Feature Request
+description: Submit a proposal for a new Manticore Search feature or enhancement
+body:
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Proposal:"
+      description: >
+        Please describe your proposal in detail.
+        Include why you believe this feature should be added to Manticore Search and what use cases it supports.
+        If applicable, add any examples or code snippets inside triple backticks to clarify your proposal.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "## Thank you for completing the form! If you are interested in sponsoring the development of this feature, consider our [professional services](https://manticoresearch.com/services/)."
+  - type: textarea
+    id: checklist
+    attributes:
+      label: "Checklist:"
+      description: >
+        **For Manticore Team Use Only** — Please do not edit this section. This checklist will be completed by the Manticore team as they manage the issue.
+      value: |
+        <sup>To be completed by the assignee. Check off tasks that have been completed or are not applicable.</sup>
+        <details>
+
+        - [ ] Task estimated
+        - [ ] Specification created, reviewed and approved
+        - [ ] Implementation completed
+        - [ ] Tests developed
+        - [ ] Documentation updated
+        - [ ] Documentation proofread
+        - [ ] Changelog updated
+        - [x] OpenAPI YAML updated and issue created to rebuild clients
+
+        </details>
+    validations:
+      required: true

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -50,11 +50,11 @@ protected:
 	bool m_bError = false; // FIXME? sort of redundant, but states are a mess
 
 	AggregateHit_t m_tHit;				///< currently decoded hit
-	BYTE m_sKeyword[MAX_KEYWORD_BYTES]; ///< currently decoded hit keyword (in keywords dict mode)
+	std::array<BYTE, MAX_KEYWORD_BYTES> m_sKeyword; ///< currently decoded hit keyword (in keywords dict mode)
 
 #ifndef NDEBUG
 	SphWordID_t m_iLastWordID = 0;
-	BYTE m_sLastKeyword[MAX_KEYWORD_BYTES];
+	std::array<BYTE, MAX_KEYWORD_BYTES> m_sLastKeyword;
 #endif
 
 	int m_iFile = -1;				   ///< my file

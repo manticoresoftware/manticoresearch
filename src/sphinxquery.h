@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -31,6 +31,7 @@ struct XQKeyword_t
 	bool				m_bExcluded = false;	///< excluded by query (rval to operator NOT)
 	bool				m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
 	void *				m_pPayload = nullptr;
+	bool				m_bRegex = false;
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -253,7 +254,7 @@ public:
 		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_OR && m_eOp!=SPH_QUERY_PHRASE
 			&& m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM )); // words are only allowed in these node types
 		assert ( ( m_dWords.GetLength()==1 && ( m_eOp==SPH_QUERY_AND || m_eOp==SPH_QUERY_OR ) ) ||
-			m_dWords.GetLength()!=1 ); // 1-word leaves must be of AND | OR types
+			m_dWords.GetLength()!=1 ); // 1-word leaves must be of AND | OR
 
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
@@ -306,7 +307,7 @@ public:
 	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const = 0;
 	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
 		TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson,
-		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const = 0;
+		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const = 0;
 };
 
 class PluginQueryTokenFilter_c;
@@ -325,7 +326,7 @@ public:
 	void			Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings );
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed );
+	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed );
 
 	const CSphSchema * GetSchema() const { return m_pSchema; }
 	DictRefPtr_c&	GetDict() { return m_pDict; }
@@ -391,7 +392,7 @@ std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser();
 /// a) we do not always have an actual real index class, and
 /// b) might need to tweak stuff even we do
 /// FIXME! remove either pQuery or sQuery
-bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings );
+bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );
 
 // perform boolean optimization on tree
 void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );
@@ -399,10 +400,14 @@ void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );
 /// analyze vector of trees and tag common parts of them (to cache them later)
 int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
+XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery );
+
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
 bool	IsAllowOnlyNot();
 
 CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
+
+int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  );
 
 #endif // _sphinxquery_

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -47,6 +47,8 @@ NodeEstimate_t & NodeEstimate_t::operator+= ( const NodeEstimate_t & tRhs )
 	m_iTerms += tRhs.m_iTerms;
 	return *this;
 }
+
+static void FixupMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec * pMorphFields );
 
 //////////////////////////////////////////////////////////////////////////
 void XQParseHelper_c::SetString ( const char * szString )
@@ -355,12 +357,13 @@ static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned
 	return TransformOnlyNot ( pNode, dSpawned );
 }
 
-XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed )
+XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
 	FixupDestForms ();
 	DeleteNodesWOFields ( pRoot );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
+	FixupMorphOnlyFields ( pRoot, pMorphFields );
 	FixupNulls ( pRoot );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
@@ -712,6 +715,51 @@ const StrVec_t & XQParseHelper_c::GetZone() const
 	return m_pParsed->m_dZones;
 }
 
+static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
+{
+	if ( !pNode )
+		return;
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		TransformMorphOnlyFields ( pNode->m_dChildren[i], tMorphDisabledFields );
+
+	if ( pNode->m_dSpec.IsEmpty () || pNode->m_dWords.IsEmpty () )
+		return;
+
+	const XQLimitSpec_t & tSpec = pNode->m_dSpec;
+	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
+	{
+		int iField=tMorphDisabledFields.Scan ( 0 );
+		while ( iField<tMorphDisabledFields.GetSize() )
+		{
+			if ( pNode->m_dSpec.m_dFieldMask.Test ( iField ) )
+			{
+				pNode->m_dWords.for_each ( [] ( XQKeyword_t & tKw )
+					{
+						if ( !tKw.m_sWord.IsEmpty() && !tKw.m_sWord.Begins( "=" ) && !tKw.m_sWord.Begins("*") && !tKw.m_sWord.Ends("*") )
+							tKw.m_sWord.SetSprintf ( "=%s", tKw.m_sWord.cstr() );
+					});
+			}
+
+			if ( ( iField+1 )<tMorphDisabledFields.GetSize() )
+				iField=tMorphDisabledFields.Scan ( iField+1 );
+			else
+				break;
+		}
+	}
+}
+
+static void FixupMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec * pMorphFields )
+{
+	if ( !pNode || !pMorphFields || pMorphFields->IsEmpty() )
+		return;
+
+	// set the only fields with the morphology_skip_fields option to use bitvec::scan
+	CSphBitvec tMorphDisabledFields ( *pMorphFields );
+	tMorphDisabledFields.Negate(); 
+	TransformMorphOnlyFields ( pNode, tMorphDisabledFields );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class XQParser_t : public XQParseHelper_c
@@ -724,7 +772,7 @@ public:
 					~XQParser_t() override;
 
 public:
-	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c & pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
@@ -799,6 +847,9 @@ public:
 
 protected:
 	bool			HandleFieldBlockStart ( const char * & pPtr ) override;
+
+private:
+	XQNode_t *		ParseRegex ( const char * pStart );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -979,6 +1030,7 @@ XQNode_t * XQNode_t::Clone ()
 	pRet->m_dWords = m_dWords;
 	pRet->m_iOpArg = m_iOpArg;
 	pRet->m_iAtomPos = m_iAtomPos;
+	pRet->m_iUser = m_iUser;
 	pRet->m_bVirtuallyPlain = m_bVirtuallyPlain;
 	pRet->m_bNotWeighted = m_bNotWeighted;
 	pRet->m_bPercentOp = m_bPercentOp;
@@ -1134,6 +1186,36 @@ int XQParser_t::ParseZone ( const char * pZone )
 	// unhandled case
 	Error ( "internal error, unhandled case in ParseZone()" );
 	return -1;
+}
+
+XQNode_t * XQParser_t::ParseRegex ( const char * sStart )
+{
+	assert ( sStart );
+	int iDel = *sStart++;
+	const char * sEnd = m_pTokenizer->GetBufferEnd ();
+	const char * sToken = sStart;
+
+	while ( sStart<sEnd )
+	{
+		const char * sNextDel = (const char *)memchr ( sStart, iDel, sEnd-sStart );
+		if ( !sNextDel )
+			break;
+
+		if ( sNextDel+1<sEnd && sNextDel[1]==')' )
+		{
+			// spawn token node
+			XQNode_t * pNode = AddKeyword ( nullptr, 0 );
+			pNode->m_dWords[0].m_sWord.SetBinary ( sToken, sNextDel-sToken );
+			pNode->m_dWords[0].m_bRegex = true;
+			// skip the whole expression
+			m_pTokenizer->SetBufferPtr ( sNextDel+2 );
+			return pNode;
+		}
+		sStart = sNextDel+1;
+	}
+
+	// not a complete REGEX(/term/)
+	return nullptr;
 }
 
 
@@ -1375,6 +1457,19 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_tPendingToken.iZoneVec = iVec;
 			m_iAtomPos -= 1;
 			break;
+		}
+
+		// handle REGEX
+		if ( !bMultiDest && p && !strncmp ( p, "REGEX(", 6 ) )
+		{
+			// we just lexed our REGEX token
+			XQNode_t * pRegex = ParseRegex ( p+6 );
+			if ( pRegex )
+			{
+				m_tPendingToken.pNode = pRegex;
+				m_iPendingType = TOK_REGEX;
+				break;
+			}
 		}
 
 		// count [ * ] at phrase node for qpos shift
@@ -1772,7 +1867,7 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	assert ( pTokenizer->IsQueryTok() );
@@ -1845,7 +1940,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	if ( pQuery )
 		bNotOnlyAllowed |= pQuery->m_bNotOnlyAllowed;
 
-	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), bNotOnlyAllowed );
+	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), pMorphFields, bNotOnlyAllowed );
 	if ( !pNewRoot )
 	{
 		Cleanup();
@@ -2019,10 +2114,10 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 }
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings );
+	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings, pMorphFields );
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )
@@ -2577,6 +2672,19 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 
 	return iOrder;
 }
+
+
+XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery )
+{
+	XQQuery_t * pQuery = new XQQuery_t;
+	pQuery->m_dZones		= tQuery.m_dZones;
+	pQuery->m_bNeedSZlist	= tQuery.m_bNeedSZlist;
+	pQuery->m_bSingleWord	= tQuery.m_bSingleWord;
+	pQuery->m_bEmpty		= tQuery.m_bEmpty;
+	pQuery->m_pRoot			= tQuery.m_pRoot ? tQuery.m_pRoot->Clone() : nullptr;
+	return pQuery;
+}
+
 
 bool XqTreeComparator_t::IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNode2 )
 {
@@ -4459,7 +4567,7 @@ class QueryParserPlain_c : public QueryParser_i
 public:
 	bool IsFullscan ( const XQQuery_t & tQuery ) const override;
 	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson,
-		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const override;
+		const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const override;
 };
 
 
@@ -4469,9 +4577,9 @@ bool QueryParserPlain_c::IsFullscan ( const XQQuery_t & /*tQuery*/ ) const
 }
 
 
-bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings ) const
+bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
-	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings );
+	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings, pMorphFields );
 }
 
 
@@ -4480,3 +4588,7 @@ std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser()
 	return std::make_unique<QueryParserPlain_c>();
 }
 
+int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
+{
+	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
+}

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -920,24 +920,24 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 	{
 		CSphWordlistCheckpoint tRefCP = dCheckpoints[i];
 		const CSphWordlistCheckpoint & tCP = m_tWordlist.m_dCheckpoints[i];
-		const int iLen = bWordDict ? (int) strlen ( tCP.m_sWord ) : 0;
+		const int iLen = bWordDict ? (int) strlen ( tCP.m_szWord ) : 0;
 		if ( bWordDict )
-			tRefCP.m_sWord = dCheckpointWords.Begin() + tRefCP.m_uWordID;
-		if ( bWordDict && ( tRefCP.m_sWord[0]=='\0' || tCP.m_sWord[0]=='\0' ) )
+			tRefCP.m_szWord = dCheckpointWords.Begin() + tRefCP.m_uWordID;
+		if ( bWordDict && ( tRefCP.m_szWord[0]=='\0' || tCP.m_szWord[0]=='\0' ) )
 		{
 			m_tReporter.Fail ( "empty checkpoint %d (read_word=%s, read_len=%u, readpos=" INT64_FMT ", calc_word=%s, calc_len=%u, calcpos=" INT64_FMT ")",
-				i, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), (int64_t)tCP.m_iWordlistOffset,
-				tRefCP.m_sWord, (DWORD)strlen ( tRefCP.m_sWord ), (int64_t)tRefCP.m_iWordlistOffset );
+				i, tCP.m_szWord, (DWORD)strlen ( tCP.m_szWord ), (int64_t)tCP.m_iWordlistOffset,
+				tRefCP.m_szWord, (DWORD)strlen ( tRefCP.m_szWord ), (int64_t)tRefCP.m_iWordlistOffset );
 
-		} else if ( sphCheckpointCmpStrictly ( tCP.m_sWord, iLen, tCP.m_uWordID, bWordDict, tRefCP ) || tRefCP.m_iWordlistOffset!=tCP.m_iWordlistOffset )
+		} else if ( sphCheckpointCmpStrictly ( tCP.m_szWord, iLen, tCP.m_uWordID, bWordDict, tRefCP ) || tRefCP.m_iWordlistOffset!=tCP.m_iWordlistOffset )
 		{
 			if ( bWordDict )
 			{
 				m_tReporter.Fail ( "checkpoint %d differs (read_word=%s, readpos=" INT64_FMT ", calc_word=%s, calcpos=" INT64_FMT ")",
 					i,
-					tCP.m_sWord,
+					tCP.m_szWord,
 					(int64_t)tCP.m_iWordlistOffset,
-					tRefCP.m_sWord,
+					tRefCP.m_szWord,
 					(int64_t)tRefCP.m_iWordlistOffset );
 			} else
 			{

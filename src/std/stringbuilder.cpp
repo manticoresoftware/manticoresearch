@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -270,7 +270,7 @@ StringBuilder_c& StringBuilder_c::operator<< ( double fVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
-	m_iUsed += sprintf ( end(), "%f", fVal );
+	m_iUsed += snprintf ( end(), 31, "%f", fVal );
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -279,7 +279,7 @@ StringBuilder_c& StringBuilder_c::operator<< ( float fVal )
 {
 	InitAddPrefix();
 	GrowEnough ( 32 );
-	m_iUsed += sph::PrintVarFloat ( end(), fVal );
+	m_iUsed += sph::PrintVarFloat ( end(), 31, fVal );
 	m_szBuffer[m_iUsed] = '\0';
 	return *this;
 }
@@ -291,7 +291,7 @@ void StringBuilder_c::FtoA ( float fVal )
 	const int MAX_NUMERIC_STR = 64;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::PrintVarFloat ( (char*)m_szBuffer + m_iUsed, fVal );
+	int iLen = sph::PrintVarFloat ( (char*)m_szBuffer + m_iUsed, MAX_NUMERIC_STR, fVal );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }
@@ -304,7 +304,7 @@ void StringBuilder_c::DtoA ( double fVal )
 	const int MAX_NUMERIC_STR = 64;
 	GrowEnough ( MAX_NUMERIC_STR + 1 );
 
-	int iLen = sph::PrintVarDouble ( (char*)m_szBuffer + m_iUsed, fVal );
+	int iLen = sph::PrintVarDouble ( (char*)m_szBuffer + m_iUsed, MAX_NUMERIC_STR, fVal );
 	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }
@@ -345,13 +345,9 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 }
 
 
-CSphString ConcatWarnings ( StrVec_t & dWarnings )
+CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim ) noexcept
 {
-	dWarnings.Uniq();
-
-	StringBuilder_c sRes ( "; " );
-	for ( const auto & i : dWarnings )
-		sRes << i;
-
-	return sRes.cstr();
+	StringBuilder_c tOut ( szDelim );
+	tVec.Apply ( [&tOut] ( const CSphString& sNode ) { tOut << sNode; } );
+	return CSphString { tOut };
 }

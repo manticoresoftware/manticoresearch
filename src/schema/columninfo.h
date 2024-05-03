@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,15 @@
 #include "sphinxdefs.h"
 #include "locator.h"
 #include "sphinxexpr.h"
+#include "knn/knn.h"
+
+class CSphWriter;
+class CSphReader;
+
+struct NamedKNNSettings_t : public knn::IndexSettings_t
+{
+	CSphString		m_sName;
+};
 
 /// source column info
 struct CSphColumnInfo
@@ -34,7 +43,9 @@ struct CSphColumnInfo
 		ATTR_NONE				= 0,
 		ATTR_COLUMNAR			= 1 << 0,
 		ATTR_COLUMNAR_HASHES	= 1 << 1,
-		ATTR_STORED				= 1 << 2
+		ATTR_STORED				= 1 << 2,
+		ATTR_INDEXED_KNN		= 1 << 3,
+		ATTR_JOINED				= 1 << 4
 	};
 
 	CSphString		m_sName;							///< column name
@@ -60,6 +71,8 @@ struct CSphColumnInfo
 	DWORD			m_uAttrFlags = ATTR_NONE;			///< attribute storage spec
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;	///< used together with per-table engine specs to determine attribute storage
 
+	knn::IndexSettings_t m_tKNN;								///< knn index settings
+
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 
 	/// handy ctor
@@ -75,6 +88,8 @@ struct CSphColumnInfo
 	bool HasStringHashes() const;
 	bool IsColumnarExpr() const;
 	bool IsStoredExpr() const;
+	bool IsIndexedKNN() const;
+	bool IsJoined() const;
 };
 
 

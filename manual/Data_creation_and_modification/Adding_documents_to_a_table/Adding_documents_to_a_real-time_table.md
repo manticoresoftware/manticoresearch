@@ -773,6 +773,29 @@ POST /insert
   }
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch:
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/1
+{
+  "title": "shoes",
+  "sizes" : [40, 41, 42, 43]
+}
+```
+
+Or, alternatively
+```json
+POST /products/_doc/
+{
+  "title": "shoes",
+  "sizes" : [40, 41, 42, 43]
+}
+```
+
+
 <!-- intro -->
 ##### PHP
 <!-- request PHP -->
@@ -834,7 +857,7 @@ var sqlresult = indexApi.Insert(newdoc);
 
 <!-- example JSON_insert -->
 ## Inserting JSON
-JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
+JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL or JSON) or as a JSON object (via the JSON interface).
 
 <!-- intro -->
 ### Examples
@@ -877,6 +900,35 @@ POST /insert
   }
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch:
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/1
+{
+  "title": "shoes",
+  "meta" : {
+    "size": 41,
+    "color": "red"
+  }
+}
+```
+
+Or, alternatively
+```json
+POST /products/_doc/
+{
+  "title": "shoes",
+  "meta" : {
+    "size": 41,
+    "color": "red"
+  }
+}
+```
+
+
 <!-- intro -->
 ##### PHP
 Consider JSON just as string:

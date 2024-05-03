@@ -81,7 +81,11 @@ Two"}')
 
 <!-- expected to fail since non-url encoded -->
 <query endpoint="sql" method="post">query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+<!-- the following won't work since curl 7.78.0. Related curl option is CURLUALLOWSPACE.
+This is to be commented out until there's a way to pass CURLUALLOWSPACE in php binding for curl.
+Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 <query endpoint="sql" method="get">query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+-->
 
 <!-- expected to fail, since mode=raw now means only common output -->
 <query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>

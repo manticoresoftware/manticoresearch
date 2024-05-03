@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -89,7 +89,7 @@ public:
 	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
+	bool AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
@@ -124,11 +124,11 @@ public:
 	// plain index stub
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const override;
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
-	void				GetStatus ( CSphIndexStatus* pRes ) const override;
+	void				GetStatus ( CSphIndexStatus* pRes ) const final;
 
 	void				IndexDeleted() override { m_bIndexDeleted = true; }
-	void				ProhibitSave() override { m_bSaveDisabled = true; }
-	void				EnableSave() override { m_bSaveDisabled = false; }
+	void				ProhibitSave() final;
+	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
@@ -143,7 +143,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 9;				///< META in json format
+	static const DWORD				META_VERSION = 10;				///< META in json format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -151,7 +151,7 @@ private:
 	int								m_iMaxCodepointLength = 0;
 	int64_t							m_iSavedTID = 0;
 	int64_t							m_tmSaved = 0;
-	bool							m_bSaveDisabled = false;
+	int								m_iDisabledCounter = 0;
 	bool							m_bHasFiles = false;
 	bool							m_bIndexDeleted = false;
 
@@ -185,6 +185,7 @@ private:
 	void PostSetupUnl () REQUIRES ( m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
 	SharedPQSlice_t GetStoredUnl () const REQUIRES_SHARED ( m_tLock );
+	bool IsSaveDisabled() const noexcept;
 
 	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
 
@@ -609,16 +610,16 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 		if ( pCheckpoint )
 		{
 			// there could be valid data prior 1st checkpoint that should be unpacked and checked
-			auto iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
-			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen )==0 && iPrefix==iNameLen) )
+			auto iNameLen = (int) strnlen ( pCheckpoint->m_szWord, SPH_MAX_KEYWORD_LEN );
+			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_szWord, iNameLen )==0 && iPrefix==iNameLen) )
 				tChPoint.m_uOff = pCheckpoint->m_iOffset;
 
 			// find the last checkpoint that meets prefix condition ( ie might be a span of terms that splat to a couple of checkpoints )
 			++pCheckpoint;
 			while ( pCheckpoint<=pLast )
 			{
-				iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
-				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen );
+				iNameLen = (int) strnlen ( pCheckpoint->m_szWord, SPH_MAX_KEYWORD_LEN );
+				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_szWord, iNameLen );
 				if ( iCmp==0 && iPrefix==iNameLen )
 					tChPoint.m_uOff = pCheckpoint->m_iOffset;
 				if ( iCmp<0 )
@@ -771,7 +772,7 @@ bool PercolateIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString* pError )
 }
 
 
-bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
+bool PercolateIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
 	if ( !BindAccum ( pAcc, &sError ) )
 		return false;
@@ -1529,7 +1530,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto tJobContext = dCtx.CloneNewContext();
 		sphLogDebug ( "DoMatchDocuments cloned context %d", tJobContext.second );
 		auto& tCtx = tJobContext.first;
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while (true)
 		{
 			sphLogDebugv ( "DoMatchDocuments %d, iJob: %d", tJobContext.second, iJob );
@@ -1576,7 +1577,8 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAcc, PercolateMatchResult_t
 
 	pAcc->Sort();
 
-	RtSegment_t * pSeg = CreateSegment ( pAcc, PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords );
+	CSphString sError;
+	RtSegment_t * pSeg = CreateSegment ( pAcc, PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords, sError );
 	assert ( !pSeg || pSeg->m_uRows>0 );
 	assert ( !pSeg || pSeg->m_tAliveRows>0 );
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen,
@@ -1658,6 +1660,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 	pRes->m_iStackNeed = iMaxStack;
 	pRes->m_iStackBase = StoredQuery_t::m_iStackBaseRequired;
+	pRes->m_iLockCount = m_iDisabledCounter;
 }
 
 class XQTreeCompressor_t
@@ -1822,7 +1825,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	std::unique_ptr<QueryParser_i> tParser = g_pCreateQueryParser ( !tArgs.m_bQL );
 
 	// right tokenizer created at upper level
-	if ( !tParser->ParseQuery ( *tParsed, sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings ) )
+	if ( !tParser->ParseQuery ( *tParsed, sQuery, nullptr, pTokenizer, pTokenizer, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 	{
 		sError = tParsed->m_sParseError;
 		return nullptr;
@@ -1921,7 +1924,7 @@ static void SaveInsertDeleteQueries_T ( const VecTraits_T<QUERY> & dNewQueries, 
 
 	tWriter.ZipInt ( dNewQueries.GetLength() );
 	for ( StoredQuery_i* pQuery : dNewQueries )
-		SaveStoredQuery ( *pQuery, tWriter );
+		SaveStoredQueryImpl ( *pQuery, tWriter );
 }
 
 template<typename QUERY>
@@ -2094,7 +2097,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
 		CSphString sError;
-		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, GetName(), true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
+		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, { GetName(), m_iIndexId }, true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
@@ -2117,11 +2120,11 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 	{
 		switch ( pCmd->m_eCommand )
 		{
-		case ReplicationCommand_e::PQUERY_ADD:
+		case ReplCmd_e::PQUERY_ADD:
 			dNewQueries.Add ( pCmd->m_pStored.release() );
 			break;
 
-		case ReplicationCommand_e::PQUERY_DELETE:
+		case ReplCmd_e::PQUERY_DELETE:
 			if ( pCmd->m_dDeleteQueries.GetLength() )
 				dDeleteQueries.Append ( pCmd->m_dDeleteQueries );
 			else
@@ -2606,7 +2609,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
-	tDictSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastWarning );
+	tDictSettings.Load ( rdMeta, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
 
 	// initialize AOT if needed
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
@@ -2717,7 +2720,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings"), tEmbeddedFiles, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
-	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, m_sLastWarning );
+	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
 
 	// initialize AOT if needed
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
@@ -2767,6 +2770,9 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
+	auto tIndexId = tBson.ChildByName ( "index_id" );
+	if ( !IsNullNode ( tIndexId ) )
+		m_iIndexId = Int ( tIndexId );
 
 	// queries
 	auto tQueriesNode = tBson.ChildByName ( "pqs" );
@@ -2865,7 +2871,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery );
 void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown )
 {
 	// sanity check
-	if ( m_iLockFD<0 || m_bSaveDisabled )
+	if ( m_iLockFD<0 || IsSaveDisabled() )
 		return;
 
 	// write new meta
@@ -2905,6 +2911,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	sNewMeta.NamedVal ( "tid", m_iTID );
+	// meta v.10
+	sNewMeta.NamedVal ( "index_id", m_iIndexId );
 
 	{
 		sNewMeta.Named ( "pqs" );
@@ -2935,7 +2943,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( GetName(), m_iTID, bShutdown );
+	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, bShutdown, false );
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 }
@@ -3044,7 +3052,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
 {
 	CSphString sError;
-	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, GetName(), false, sError, [&tSetup] ( Writer_i & tWriter ) {
+	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, { GetName(), m_iIndexId }, false, sError, [&tSetup] ( Writer_i & tWriter ) {
 		// reconfigure data
 		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
 		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );
@@ -3100,7 +3108,7 @@ bool PercolateIndex_c::IsFlushNeed() const
 	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
 		return false;
 
-	return !m_bSaveDisabled;
+	return !IsSaveDisabled();
 
 }
 
@@ -3128,10 +3136,25 @@ bool PercolateIndex_c::ForceDiskChunk()
 	return true;
 }
 
+bool PercolateIndex_c::IsSaveDisabled() const noexcept
+{
+	return m_iDisabledCounter > 0;
+}
+
+void PercolateIndex_c::ProhibitSave()
+{
+	++m_iDisabledCounter;
+}
+void PercolateIndex_c::EnableSave()
+{
+	if ( IsSaveDisabled() )
+		--m_iDisabledCounter;
+}
+
 void PercolateIndex_c::LockFileState ( StrVec_t & dFiles )
 {
 	ForceRamFlush ( "forced" );
-	m_bSaveDisabled = true;
+	++m_iDisabledCounter;
 
 	GetIndexFiles ( dFiles, dFiles );
 }
@@ -3365,6 +3388,7 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( bWordDict && IsStarDict ( bWordDict ) );
+	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	return Explain ( tArgs );
 }
@@ -3501,7 +3525,7 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 }
 
 template<typename WRITER>
-void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
+void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 {
 	tWriter.ZipOffset ( tQuery.m_iQUID );
 	tWriter.ZipInt ( tQuery.m_bQL );
@@ -3728,9 +3752,9 @@ void LoadStoredQueryJson ( StoredQueryDesc_t & tQuery, const bson::Bson_c & tNod
 	}
 }
 
-void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery )
+void LoadStoredQuery ( ByteBlob_t tData, StoredQueryDesc_t& tQuery )
 {
-	MemoryReader_c tReader ( pData, iLen );
+	MemoryReader_c tReader { tData };
 	LoadStoredQuery ( PQ_META_VERSION_MAX, tQuery, tReader );
 }
 
@@ -3739,15 +3763,14 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & 
 	LoadStoredQuery<CSphReader> ( uVersion, tQuery, tReader );
 }
 
-void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut )
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, MemoryWriter_c& tWriter )
 {
-	MemoryWriter_c tWriter ( dOut );
-	SaveStoredQuery ( tQuery, tWriter );
+	SaveStoredQueryImpl<MemoryWriter_c> ( tQuery, tWriter );
 }
 
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter )
 {
-	SaveStoredQuery<CSphWriter> ( tQuery, tWriter );
+	SaveStoredQueryImpl<CSphWriter> ( tQuery, tWriter );
 }
 
 template<typename READER>
@@ -3760,9 +3783,9 @@ void LoadDeleteQuery_T ( CSphVector<int64_t> & dQueries, CSphString & sTags, REA
 	sTags = tReader.GetString();
 }
 
-void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags )
+void LoadDeleteQuery ( ByteBlob_t tData, CSphVector<int64_t> & dQueries, CSphString & sTags )
 {
-	MemoryReader_c tReader ( pData, iLen );
+	MemoryReader_c tReader ( tData );
 	LoadDeleteQuery_T ( dQueries, sTags, tReader );
 }
 
@@ -3781,9 +3804,8 @@ void SaveDeleteQuery_T ( const VecTraits_T<int64_t>& dQueries, const char* sTags
 	tWriter.PutString ( sTags );
 }
 
-void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, CSphVector<BYTE>& dOut )
+void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, MemoryWriter_c& tWriter )
 {
-	MemoryWriter_c tWriter ( dOut );
 	SaveDeleteQuery_T ( dQueries, sTags, tWriter );
 }
 

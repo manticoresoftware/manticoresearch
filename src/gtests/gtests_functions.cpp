@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -105,8 +105,7 @@ TEST ( Misc, SpanSearch )
 TEST( functions, TaggedHash20_t )
 {
 	const char * sFIPS = "45f44fd2db02b08b4189abf21e90edd712c9616d *rt_full.ram\n";
-	const BYTE bytescheck[HASH20_SIZE] = { 0x45, 0xf4, 0x4f, 0xd2, 0xdb, 0x02, 0xb0, 0x8b, 0x41, 0x89, 0xab, 0xf2
-										   , 0x1e, 0x90, 0xed, 0xd7, 0x12, 0xc9, 0x61, 0x6d };
+	const HASH20_t bytescheck { 0x45, 0xf4, 0x4f, 0xd2, 0xdb, 0x02, 0xb0, 0x8b, 0x41, 0x89, 0xab, 0xf2, 0x1e, 0x90, 0xed, 0xd7, 0x12, 0xc9, 0x61, 0x6d };
 	const char * namecheck = "rt_full.ram";
 
 	TaggedHash20_t tHash ( "HelloFips" );
@@ -117,7 +116,7 @@ TEST( functions, TaggedHash20_t )
 	tHash.FromFIPS ( sFIPS );
 	ASSERT_TRUE ( tHash.m_sTagName==namecheck );
 
-	ASSERT_TRUE ( 0==memcmp ( tHash.m_dHashValue, bytescheck, HASH20_SIZE ) );
+	ASSERT_EQ ( tHash.m_dHashValue, bytescheck );
 
 	sFips = tHash.ToFIPS ();
 	ASSERT_TRUE ( sFips==sFIPS );
@@ -1822,7 +1821,7 @@ int iCompared;
 int make_partition (DWORD iPivot, int iNeedElems, VecTraits_T<DWORD> dData )
 {
 //	printf ( "iPivot=%d, need %d, has %d\n", iPivot, iNeedElems, dData.GetLength() );
-	int iPass = 0;
+//	int iPass = 0;
 	auto cmp = Lesser ( [] ( int a, int b ) {
 		++iCompared;
 		return a>b;
@@ -1863,7 +1862,7 @@ int make_partition (DWORD iPivot, int iNeedElems, VecTraits_T<DWORD> dData )
 //		iPivot = dData[(a+b)/2];
 		iPivot = dData[( a*3+b ) / 4]; // ( a*(COEF-1)+b)/COEF
 //		printf ( "a=%d, b=%d, pivot=%d\n", a,b,iPivot );
-		++iPass;
+//		++iPass;
 	}
 
 //	printf ( "partitioning completed in %d passes, %d comparisions, new pivot %d\n", iPass, iCompared, iPivot );

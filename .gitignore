@@ -63,10 +63,18 @@
 /doc/Makefile
 
 # /test
-/test/test_*/report.txt
+/test/test_*/report.*
 /test/test_*/Conf
 /test/data
 /test/localsettings.inc
+/test/error_all.txt
+/test/guess.txt
+/test/query.log
+/test/searchd.log
+/test/clt-tests/**/*.rep
+/test/clt-tests/**/*.deb
+/clt
+/test/clt-tests/*repo.noarch.deb.*
 
 # /test/ql/
 /test/ql/data/*.log
@@ -74,7 +82,6 @@
 /test/ql/*.class
 /test/ql/*.exe
 
+# misc
+/cache
 /local_*_src.txt
-/tests/*.rep
-/clt
-

@@ -65,7 +65,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) min_prefix_len = \'3\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -168,7 +168,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) min_infix_len = \'3\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -346,7 +346,7 @@ $index->create([
 utilsApi.sql('CREATE TABLE products(title text, price float) expand_keywords = \'1\'')
 ```
 <!-- intro -->
-##### javascript:
+##### Javascript:
 
 <!-- request javascript -->
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -35,6 +35,7 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the table" },
 	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"table runtime settings" },
 	{ SPH_EXT_SPIDX,	".spidx",	62,	true,	true,	"secondary index" },
+	{ SPH_EXT_SPKNN,	".spknn",	65,	true,	true,	"knn index" }
 };
 
 

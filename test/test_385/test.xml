@@ -19,6 +19,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data0"/>
 	server_id = <agent_id/>
+    query_log_commands = 1
 }
 </agent0>
 <agent1>
@@ -27,6 +28,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
+    query_log_commands = 1
 }
 </agent1>
 
@@ -119,7 +121,7 @@ ALTER CLUSTER test ADD rt1;
 </sphinxql>
 
 <sphinxql d="1">
-	debug wait test status 2 like 'state' option 'timeout'=30;
+	debug wait loc status 2 like 'state' option 'timeout'=30;
 	SELECT * FROM loc:rt1;
 	flush ramchunk rt1;
 	SHOW INDEX rt1 STATUS LIKE 'disk_chunks';
@@ -127,7 +129,6 @@ ALTER CLUSTER test ADD rt1;
 
 <!-- cleanup -->
 <sphinxql d="0">
-	ALTER CLUSTER loc DROP rt1;
 	DELETE CLUSTER loc;
 	DROP TABLE rt1;
 </sphinxql>

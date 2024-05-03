@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,10 +28,10 @@ int ZipToPtrBE ( BYTE* pData, T tValue );
 
 // big-endian (most significant septets first)
 template<typename T, typename READER>
-std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER fnGet );
+std::enable_if_t<sizeof ( T ) == 4, T> UnzipValueBE ( READER&& fnGet );
 
 template<typename T, typename READER>
-std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER fnGet );
+std::enable_if_t<sizeof ( T ) == 8, T> UnzipValueBE ( READER&& fnGet );
 
 // big-endian (most significant septets first)
 DWORD UnzipIntBE ( const BYTE*& pBuf );

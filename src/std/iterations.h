@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,19 +13,19 @@
 #pragma once
 
 template<typename CONTAINER, typename FILTER>
-inline bool all_of ( const CONTAINER& dData, FILTER&& cond );
+inline bool all_of ( const CONTAINER& dData, FILTER cond );
 
 template<typename CONTAINER, typename FILTER>
-inline bool any_of ( const CONTAINER& dData, FILTER&& cond );
+inline bool any_of ( const CONTAINER& dData, FILTER cond );
 
 template<typename CONTAINER, typename FILTER>
-inline bool none_of ( const CONTAINER& dData, FILTER&& cond );
+inline bool none_of ( const CONTAINER& dData, FILTER cond );
 
 template<typename CONTAINER, typename FILTER>
-inline int64_t count_of ( const CONTAINER& dData, FILTER&& cond );
+inline int64_t count_of ( const CONTAINER& dData, FILTER cond );
 
 template<typename CONTAINER, typename ACTION>
-void for_each ( CONTAINER& dData, ACTION&& fnAction );
+void for_each ( CONTAINER&& dData, ACTION fnAction );
 
 #define ARRAY_FOREACH( _index, _array ) \
 	for ( int _index = 0; _index < _array.GetLength(); ++_index )

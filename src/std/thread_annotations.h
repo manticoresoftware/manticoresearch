@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -91,3 +91,11 @@
 // Replaced by RELEASE and RELEASE_SHARED
 #define UNLOCK_FUNCTION( ... ) \
     THREAD_ANNOTATION_ATTRIBUTE__ ( unlock_function ( __VA_ARGS__ ) )
+
+#if defined( __clang__ )
+#define LIKELY [[likely]]
+#define UNLIKELY [[unlikely]]
+#else
+#define LIKELY
+#define UNLIKELY
+#endif

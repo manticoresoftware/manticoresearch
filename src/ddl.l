@@ -29,10 +29,11 @@
 %}
 
 DIGIT				[0-9]
+ALPHA				[a-zA-Z_]
 ID					[a-zA-Z_@][a-zA-Z_0-9]*
+TABLEID			    {ALPHA}[a-zA-Z_0-9]*
 SPACE				[ \t\n\r]
 EXPONENT			[eE](\+|-)?{DIGIT}+
-ALPHA				[a-zA-Z_]+
 
 %option prefix="yy3"
 %option noyywrap
@@ -68,9 +69,13 @@ ALPHA				[a-zA-Z_]+
 "EXISTS"			{ YYSTOREBOUNDS; return TOK_EXISTS; }
 "FAST_FETCH"		{ YYSTOREBOUNDS; return TOK_FAST_FETCH; }
 "FLOAT"				{ YYSTOREBOUNDS; return TOK_FLOAT; }
+"FLOAT_VECTOR"		{ YYSTOREBOUNDS; return TOK_FLOAT_VECTOR; }
 "FROM"				{ YYSTOREBOUNDS; return TOK_FROM; }
 "FUNCTION"			{ YYSTOREBOUNDS; return TOK_FUNCTION; }
 "HASH"				{ YYSTOREBOUNDS; return TOK_HASH; }
+"HNSW_EF_CONSTRUCTION" { YYSTOREBOUNDS; return TOK_HNSW_EF_CONSTRUCTION; }
+"HNSW_M" 			{ YYSTOREBOUNDS; return TOK_HNSW_M; }
+"HNSW_SIMILARITY" 	{ YYSTOREBOUNDS; return TOK_HNSW_SIMILARITY; }
 "IMPORT"			{ YYSTOREBOUNDS; return TOK_IMPORT; }
 "INDEXED"			{ YYSTOREBOUNDS; return TOK_INDEXED; }
 "INTEGER"			{ YYSTOREBOUNDS; return TOK_INTEGER; }
@@ -79,7 +84,10 @@ ALPHA				[a-zA-Z_]+
 "JOIN"				{ YYSTOREBOUNDS; return TOK_JOIN; }
 "JSON"				{ YYSTOREBOUNDS; return TOK_JSON; }
 "KILLLIST_TARGET"	{ YYSTOREBOUNDS; return TOK_KILLLIST_TARGET; }
+"KNN_DIMS"			{ YYSTOREBOUNDS; return TOK_KNN_DIMS; }
+"KNN_TYPE"			{ YYSTOREBOUNDS; return TOK_KNN_TYPE; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
+"MODIFY"			{ YYSTOREBOUNDS; return TOK_MODIFY; }
 "MULTI"				{ YYSTOREBOUNDS; return TOK_MULTI; }
 "MULTI64"			{ YYSTOREBOUNDS; return TOK_MULTI64; }
 "NOT"				{ YYSTOREBOUNDS; return TOK_NOT; }
@@ -103,6 +111,10 @@ ALPHA				[a-zA-Z_]+
 
 {DIGIT}+\.{DIGIT}*{EXPONENT}?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 {DIGIT}+			{ YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
+
+{TABLEID}           { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
+`{TABLEID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; }
+`{DIGIT}+{TABLEID}`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
 
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -20,11 +20,10 @@ struct CSphString;
 bool			InitSecondary ( CSphString & sError );
 void			ShutdownSecondary();
 const char *	GetSecondaryVersionStr();
-int				GetSecondaryStorageVersion();
 bool			IsSecondaryLibLoaded();
 
 SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );
-std::unique_ptr<SI::Builder_i>	CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, CSphString & sError );
+std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError );
 
 enum class SIDefault_e
 {

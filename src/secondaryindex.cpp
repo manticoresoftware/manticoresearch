@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2018-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -190,8 +190,11 @@ bool IteratorState_T<T,ROWID_LIMITS>::RewindTo ( RowID_t tRowID )
 {
 	assert ( !m_bStopped );
 
-	if ( tRowID>*(m_pRowIDMax-1) && !WarmupDocs(tRowID) )
-		return false;
+	while ( tRowID>*(m_pRowIDMax-1) )
+	{
+		if ( !WarmupDocs(tRowID) )
+			return false;
+	}
 
 	const RowID_t * pRowID = m_pRowID;
 
@@ -361,24 +364,6 @@ bool RowidIterator_Intersect_T<T,ROWID_LIMITS>::AdvanceIterators()
 template <typename T, bool ROWID_LIMITS>
 void RowidIterator_Intersect_T<T,ROWID_LIMITS>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
 {
-	std::vector<common::IteratorDesc_t> dIteratorDesc;
-	for ( const auto & i : BASE::m_dIterators )
-		i.m_pIterator->AddDesc(dIteratorDesc);
-
-	for ( const auto & i : dIteratorDesc )
-		dDesc.Add ( { i.m_sAttr.c_str(), i.m_sType.c_str() } );
-}
-
-template <>
-void RowidIterator_Intersect_T<RowidIterator_i,true>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
-{
-	for ( const auto & i : BASE::m_dIterators )
-		i.m_pIterator->AddDesc(dDesc);
-}
-
-template <>
-void RowidIterator_Intersect_T<RowidIterator_i,false>::AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const
-{
 	for ( const auto & i : BASE::m_dIterators )
 		i.m_pIterator->AddDesc(dDesc);
 }
@@ -516,7 +501,7 @@ public:
 	bool	HintRowID ( RowID_t tRowID ) override { return m_pIterator->HintRowID(tRowID); }
 	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override;
 	int64_t	GetNumProcessed() const override { return m_pIterator->GetNumProcessed(); }
-	void	SetCutoff ( int iCutoff ) override {}
+	void	SetCutoff ( int iCutoff ) override { m_pIterator->SetCutoff(iCutoff); }
 	bool	WasCutoffHit() const override { return false; }
 	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override;
 
@@ -668,18 +653,22 @@ static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, con
 	if ( !tCtx.m_pHistograms )
 		return;
 
-	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
 	{
-		const CSphFilterSettings & tFilter = tCtx.m_tQuery.m_dFilters[i];
+		const CSphFilterSettings & tFilter = tCtx.m_dFilters[i];
 		const Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tFilter.m_sAttrName );
+		auto & tSIInfo = dSIInfo[i];
 		if ( !pHistogram )
+		{
+			tSIInfo.m_iTotalValues = tCtx.m_iTotalDocs;
+			tSIInfo.m_iRsetEstimate = tCtx.m_iTotalDocs;
 			continue;
+		}
 
 		HistogramRset_t tEstimate;
-		auto & tSIInfo = dSIInfo[i];
 		tSIInfo.m_bUsable = pHistogram->EstimateRsetSize ( tFilter, tEstimate );
-		tSIInfo.m_iRsetEstimate = tEstimate.m_iTotal;
 		tSIInfo.m_iTotalValues = pHistogram->GetNumValues();
+		tSIInfo.m_iRsetEstimate = tSIInfo.m_bUsable ? tEstimate.m_iTotal : tSIInfo.m_iTotalValues;
 		tSIInfo.m_bHasHistograms = true;
 	}
 }
@@ -687,13 +676,13 @@ static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, con
 
 static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
-	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
 	{
 		if ( !dSIInfo[i].m_bUsable )
 			continue;
 
 		bool bForce = false;
-		if ( !HaveLookup( tCtx.m_tQuery.m_dFilters[i], tCtx.m_tQuery.m_dIndexHints, bForce ) )
+		if ( !HaveLookup( tCtx.m_dFilters[i], tCtx.m_tQuery.m_dIndexHints, bForce ) )
 			continue;
 
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::LOOKUP );
@@ -703,18 +692,18 @@ static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 }
 
 
-static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, bool bCheckUsable = true )
 {
 	if ( !tCtx.m_pHistograms )
 		return;
 
-	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
 	{
-		if ( !dSIInfo[i].m_bUsable )
+		if ( bCheckUsable && !dSIInfo[i].m_bUsable )
 			continue;
 
 		bool bForce = false;
-		if ( !HaveSI ( tCtx.m_tQuery.m_dFilters[i], tCtx, bForce ) )
+		if ( !HaveSI ( tCtx.m_dFilters[i], tCtx, bForce ) )
 			continue;
 
 		if ( bForce )
@@ -727,13 +716,13 @@ static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const 
 
 static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
-	ARRAY_FOREACH ( i, tCtx.m_tQuery.m_dFilters )
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
 	{
 		if ( !dSIInfo[i].m_bUsable )
 			continue;
 
 		bool bForce = false;
-		if ( !HaveAnalyzer ( tCtx.m_tQuery.m_dFilters[i], tCtx, bForce ) )
+		if ( !HaveAnalyzer ( tCtx.m_dFilters[i], tCtx, bForce ) )
 			continue;
 
 		if ( bForce )
@@ -744,8 +733,38 @@ static void MarkAvailableAnalyzers ( CSphVector<SecondaryIndexInfo_t> & dSIInfo,
 		// this belongs in the CBO, but for now let's just remove the option to evaluate FILTER if ANALYZER is present
 		// as ANALYZERs are always faster than FILTERs
 		dSIInfo[i].m_dCapabilities.RemoveValue ( SecondaryIndexType_e::FILTER );
+		if ( dSIInfo[i].m_eType==SecondaryIndexType_e::FILTER )
+			dSIInfo[i].m_eType = SecondaryIndexType_e::ANALYZER;
 	}
 }
+
+
+static void MarkAvailableOptional ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+		if ( tCtx.m_dFilters[i].m_bOptional )
+			dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::NONE );
+}
+
+
+static void RemoveOptionalColumnar ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
+{
+	// if we have a columnar attribute and it's capabilities are limited to only "filter" and "none"
+	// then we disabled columnarscan and secondaryindex via index hints
+	// such filters need to be removed
+	ARRAY_FOREACH ( i, tCtx.m_dFilters )
+	{
+		auto & tSIInfo = dSIInfo[i];
+		auto & tFilter = tCtx.m_dFilters[i];
+
+		if ( tSIInfo.m_dCapabilities.GetLength()==2 && tSIInfo.m_dCapabilities[0]==SecondaryIndexType_e::FILTER && tSIInfo.m_dCapabilities[1]==SecondaryIndexType_e::NONE && tCtx.IsEnabled_Analyzer(tFilter) )
+		{
+			tSIInfo.m_dCapabilities.RemoveFast(0);
+			tSIInfo.m_eType = SecondaryIndexType_e::NONE;
+		}
+	}
+}
+
 
 static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
 {
@@ -762,7 +781,7 @@ static void ForceSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo )
 static void DisableRowidFilters ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
 	ARRAY_FOREACH ( i, dSIInfo )
-		if ( tCtx.m_tQuery.m_dFilters[i].m_sAttrName=="@rowid" )
+		if ( tCtx.m_dFilters[i].m_sAttrName=="@rowid" )
 			dSIInfo[i].m_dCapabilities.Resize(0);
 }
 
@@ -772,7 +791,7 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 	ARRAY_FOREACH ( i, dSIInfo )
 	{
 		auto & tSIInfo = dSIInfo[i];
-		auto & tFilter = tCtx.m_tQuery.m_dFilters[i];
+		auto & tFilter = tCtx.m_dFilters[i];
 
 		bool bHaveAnalyzers = tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::ANALYZER; } );
 		bool bHaveSI		= tSIInfo.m_dCapabilities.any_of ( []( auto eCapability ){ return eCapability==SecondaryIndexType_e::INDEX; } );
@@ -785,7 +804,7 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 
 			CreateFilterContext_t tCFCtx;
 			tCFCtx.m_pFilters	= &dFilter;
-			tCFCtx.m_pSchema	= &tCtx.m_tSchema;
+			tCFCtx.m_pSchema	= &tCtx.m_tIndexSchema;
 			tCFCtx.m_pColumnar	= tCtx.m_pColumnar;
 			tCFCtx.m_eCollation	= tCtx.m_tQuery.m_eCollation;
 			tCFCtx.m_bScan		= true;
@@ -797,28 +816,12 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 				continue;
 
 			common::Filter_t tColumnarFilter;
-			if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tSchema, sWarning ) )
+			if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tIndexSchema, sWarning ) )
 				continue;
 
 			tSIInfo.m_iPartialColumnarMinMax = tCtx.m_pColumnar->EstimateMinMax ( tColumnarFilter, *tCFCtx.m_pFilter );
 		}
 	}
-}
-
-
-static bool IsWideRange ( const CSphFilterSettings & tFilter )
-{
-	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
-		return true;
-
-	if ( tFilter.m_eType!=SPH_FILTER_RANGE )
-		return false;
-
-	if ( tFilter.m_bOpenLeft || tFilter.m_bOpenRight )
-		return true;
-
-	const int WIDE_RANGE_THRESH=10000;
-	return ( tFilter.m_iMaxValue-tFilter.m_iMinValue ) >= WIDE_RANGE_THRESH;
 }
 
 
@@ -830,7 +833,7 @@ static uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t
 
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
-	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tSchema, sWarning ) )
+	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tIndexSchema, sWarning ) )
 		return 0;
 
 	return tCtx.m_pSI->GetNumIterators(tColumnarFilter);
@@ -842,7 +845,7 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 	ARRAY_FOREACH ( i, dSIInfo )
 	{
 		auto & tSIInfo = dSIInfo[i];
-		tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tCtx.m_tQuery.m_dFilters[i], tSIInfo.m_iRsetEstimate, tCtx );
+		tSIInfo.m_uNumSIIterators = CalcNumSIIterators ( tCtx.m_dFilters[i], tSIInfo.m_iRsetEstimate, tCtx );
 	}
 }
 
@@ -850,7 +853,7 @@ static void FetchNumSIIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tFilter, const SecondaryIndexInfo_t & tSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
 {
 	CSphString sWarning;
-	const auto * pAttr = tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr() );
+	const auto * pAttr = tCtx.m_tIndexSchema.GetAttr ( tHint.m_sIndex.cstr() );
 	if ( !pAttr )
 	{
 		sWarning.SetSprintf ( "hint error: '%s' attribute not found", tHint.m_sIndex.cstr() );
@@ -890,7 +893,7 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 			}
 			else
 			{
-				const auto * pAttr = tCtx.m_tSchema.GetAttr ( tHint.m_sIndex.cstr()) ;
+				const auto * pAttr = tCtx.m_tIndexSchema.GetAttr ( tHint.m_sIndex.cstr()) ;
 				if ( !pAttr->IsColumnar() && !pAttr->IsColumnarExpr() )
 				{
 					sWarning.SetSprintf ( "hint error: attribute '%s' is not columnar", tHint.m_sIndex.cstr() );
@@ -945,7 +948,7 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 
 static void CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
 {
-	const auto & dFilters = tCtx.m_tQuery.m_dFilters;
+	const auto & dFilters = tCtx.m_dFilters;
 	for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
 	{
 		int iFilter = -1;
@@ -983,7 +986,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 {
 	fBestCost = FLT_MAX;
 
-	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_tQuery.m_dFilters.GetLength() );
+	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_dFilters.GetLength() );
 	ARRAY_FOREACH ( i, dSIInfo )
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::FILTER );
 
@@ -1008,6 +1011,8 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	MarkAvailableLookup ( dSIInfo, tCtx );
 	MarkAvailableSI ( dSIInfo, tCtx );
 	MarkAvailableAnalyzers ( dSIInfo, tCtx );
+	MarkAvailableOptional ( dSIInfo, tCtx );
+	RemoveOptionalColumnar ( dSIInfo, tCtx );
 	ForceSI(dSIInfo);
 	DisableRowidFilters ( dSIInfo, tCtx );
 	FetchPartialColumnarMinMax ( dSIInfo, tCtx );
@@ -1019,18 +1024,16 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	dCapabilities.ZeroVec();
 	dBest.ZeroVec();
 
-	// if we don't have any options, no need to do cost calculation
-	if ( dSIInfo.all_of ( []( const auto & tSIInfo ){ return tSIInfo.m_dCapabilities.GetLength()==1; } ) )
-		return dSIInfo;
-
 	const int MAX_TRIES = 1024;
 	for ( int iTry = 0; iTry < MAX_TRIES; iTry++ )
 	{
 		for ( int i = 0; i < dCapabilities.GetLength(); i++ )
 			dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities.GetLength() ? dSIInfo[i].m_dCapabilities[dCapabilities[i]] : SecondaryIndexType_e::NONE;
 
-		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfo, tCtx ) );
-
+		// don't use cutoff if we have more than one filter
+		int iCutoff = dSIInfo.GetLength() > 1 ? -1 : tCtx.m_iCutoff;
+		
+		std::unique_ptr<CostEstimate_i> pCostEstimate ( CreateCostEstimate ( dSIInfo, tCtx, iCutoff ) );
 		float fCost = pCostEstimate->CalcQueryCost();
 		if ( fCost < fBestCost )
 		{
@@ -1046,6 +1049,14 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 		dSIInfo[i].m_eType = dSIInfo[i].m_dCapabilities.GetLength() ? dSIInfo[i].m_dCapabilities[dBest[i]] : SecondaryIndexType_e::NONE;
 
 	return dSIInfo;
+}
+
+
+bool HaveAvailableSI ( const SelectIteratorCtx_t & tCtx )
+{
+	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_dFilters.GetLength() );
+	MarkAvailableSI ( dSIInfo, tCtx, false );
+	return dSIInfo.any_of ( []( auto & tInfo ){ return tInfo.m_dCapabilities.any_of ( []( auto eType ){ return eType==SecondaryIndexType_e::INDEX; } ); } );
 }
 
 
@@ -1081,15 +1092,6 @@ RowidIterator_i * CreateIteratorWrapper ( common::BlockIterator_i * pIterator, c
 		return new RowidIterator_Wrapper_T<true> ( pIterator, pBoundaries );
 	else
 		return new RowidIterator_Wrapper_T<false> ( pIterator );
-}
-
-
-RowidIterator_i * CreateIteratorIntersect ( std::vector<common::BlockIterator_i *> & dIterators, const RowIdBoundaries_t * pBoundaries )
-{
-	if ( pBoundaries )
-		return new RowidIterator_Intersect_T<common::BlockIterator_i, true> ( &dIterators[0], (int)dIterators.size(), pBoundaries );
-	else
-		return new RowidIterator_Intersect_T<common::BlockIterator_i, false> ( &dIterators[0], (int)dIterators.size() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1238,7 +1240,7 @@ class SIIteratorCreator_c
 public:
 						SIIteratorCreator_c ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
 
-	CSphVector<RowidIterator_i *> Create();
+	RowIteratorsWithEstimates_t Create();
 
 private:
 	const SI::Index_i *						m_pSIIndex = nullptr;
@@ -1332,9 +1334,9 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 }
 
 
-CSphVector<RowidIterator_i *> SIIteratorCreator_c::Create()
+RowIteratorsWithEstimates_t SIIteratorCreator_c::Create()
 {
-	std::vector<std::pair<RowidIterator_i *, int64_t>> dRes;
+	RowIteratorsWithEstimates_t dRes;
 
 	ARRAY_FOREACH ( i, m_dSIInfo )
 	{
@@ -1349,23 +1351,23 @@ CSphVector<RowidIterator_i *> SIIteratorCreator_c::Create()
 			continue;
 		
 		RowidIterator_i * pIt = CreateRowIdIteratorFromSI ( dFilterIt, tFilter );
-		dRes.push_back ( { pIt, iRsetSize } );
+		dRes.Add ( { pIt, iRsetSize } );
 		tSIInfo.m_bCreated = true;
 	}
 
-	std::sort ( dRes.begin(), dRes.end(), []( auto tA, auto tB ) { return tA.second < tB.second; } );
-	CSphVector<RowidIterator_i*> dIterators;
-	for ( auto & i : dRes )
-		dIterators.Add ( i.first );
-
-	return dIterators;
+	return dRes;
 }
 
 
-CSphVector<RowidIterator_i *> CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
+RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
 {
 	if ( !pSIIndex )
 		return {};
+
+	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan
+	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::ANALYZER; } );
+	if ( iNumIterators > 1 )
+		iCutoff = -1;
 
 	SIIteratorCreator_c tCreator ( pSIIndex, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff );
 	return tCreator.Create();
@@ -1382,6 +1384,8 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 			continue;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+			continue;
+		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tCol.IsIndexedKNN() )
 			continue;
 
 		common::StringHash_fn fnStringCalcHash = nullptr;
@@ -1405,51 +1409,44 @@ static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISc
 		const CSphColumnInfo * pAttr = tSchema.GetAttr ( i.m_sName.c_str() );
 		assert(pAttr);
 
-		PlainOrColumnar_t & tDstAttr = dDstAttrs.Add();
-		tDstAttr.m_eType = pAttr->m_eAttrType;
-
+		dDstAttrs.Add ( PlainOrColumnar_t ( *pAttr, iColumnar ) );
 		if ( pAttr->IsColumnar() )
-			tDstAttr.m_iColumnarId = iColumnar++;
-		else
-			tDstAttr.m_tLocator = pAttr->m_tLocator;
+			iColumnar++;
 	}
 }
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema& tSchema, CSphBitvec& tSIAttrs, const CSphString& sFile, CSphString& sError )
+
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, int iBufferSize, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
-	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, sError );
+	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, iBufferSize, sError );
 }
 
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, int iBufferSize, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	CSphBitvec tSIAttrs ( tSchema.GetAttrsCount() );
 	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
 	GetAttrsProxy ( tSchema, tSISchema, dAttrs );
 
-	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, sError );
+	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, iBufferSize, sError );
 }
 
 
-void BuilderStoreAttrs ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
+void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
 {
 	for ( int i = 0; i < dAttrs.GetLength(); i++ )
 	{
 		const PlainOrColumnar_t & tSrc = dAttrs[i];
 
+		const BYTE * pSrc = nullptr;
 		switch ( tSrc.m_eType )
 		{
 		case SPH_ATTR_UINT32SET:
-		case SPH_ATTR_INT64SET:
-		{
-			const BYTE * pSrc = nullptr;
-			int iBytes = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc );
-			int iValues = iBytes / ( tSrc.m_eType==SPH_ATTR_UINT32SET ? sizeof(DWORD) : sizeof(int64_t) );
-			if ( tSrc.m_eType==SPH_ATTR_UINT32SET )
 			{
+				int iValues = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc ) / sizeof(DWORD);
 				// need a 64-bit array as input. so we need to convert our 32-bit array to 64-bit entries
 				dTmp.Resize ( iValues );
 				ARRAY_FOREACH ( i, dTmp )
@@ -1457,8 +1454,24 @@ void BuilderStoreAttrs ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * 
 
 				pBuilder->SetAttr ( i, dTmp.Begin(), iValues );
 			}
-			else
+			break;
+
+		case SPH_ATTR_INT64SET:
+			{
+				int iValues = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc ) / sizeof(int64_t);
 				pBuilder->SetAttr ( i, (const int64_t*)pSrc, iValues );
+			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR:
+		{
+			int iValues = tSrc.Get ( tRowID, pRow, pPool, dIterators, pSrc ) / sizeof(float);
+			// need a 64-bit array as input. so we need to convert our 32-bit array to 64-bit entries
+			dTmp.Resize ( iValues );
+			ARRAY_FOREACH ( i, dTmp )
+				dTmp[i] = sphF2DW ( ((float*)pSrc)[i] );
+
+			pBuilder->SetAttr ( i, dTmp.Begin(), iValues );
 		}
 		break;
 

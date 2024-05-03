@@ -1,0 +1,536 @@
+name: 🔬 Test
+run-name: 🔬 Test ${{ github.sha }}
+
+#on: workflow_call
+
+on:
+  push:
+    branches:
+      - master
+      - manticore-*
+    paths-ignore:
+      - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - 'manual/**'
+      - 'cmake/GetGALERA.cmake'
+      - 'galera_packaging/**'
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: test_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  commit_info:
+    name: Commit info
+    runs-on: ubuntu-22.04
+    steps:
+      - run: |
+          echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
+
+  win_bundle:
+    name: Windows supplementary files preparation
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out cache
+        id: cache
+        uses: actions/cache@v3.3.1
+        with:
+          path: |
+            bundle
+            boost_1_75_0
+          enableCrossOsArchive: true
+          key: win_bundle
+          lookup-only: true
+      - name: Extract Windows bundle from Windows sysroot
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_apr15/sysroot_windows_x64.tar.xz
+          tar -xvf sysroot_windows_x64.tar.xz
+          mv diskc/winbundle bundle
+      - name: Extract Boost to put it to the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
+          tar -xf boost_1_75_0.tgz
+
+  build_linux_debug:
+    name: Linux debug build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      CTEST_CONFIGURATION_TYPE: "Debug"
+      artifact_name: debug_build
+
+  test_linux_debug:
+    name: Linux debug mode tests
+    needs: build_linux_debug
+    uses: ./.github/workflows/test_template.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [1_100, 101_200, 201_330, 331_400, 401_500, 501_600, 601_700, 701_800, 801_870, 871_and_on]
+        include:
+          - name: 1_100
+            start: 1
+            end: 100
+          - name: 101_200
+            start: 101
+            end: 200
+          - name: 201_330
+            start: 201
+            end: 330
+          - name: 331_400
+            start: 331
+            end: 400
+          - name: 401_500
+            start: 401
+            end: 500
+          - name: 501_600
+            start: 501
+            end: 600
+          - name: 601_700
+            start: 601
+            end: 700
+          - name: 701_800
+            start: 701
+            end: 800
+          - name: 801_870
+            start: 801
+            end: 870
+          - name: 871_and_on
+            start: 871
+            end: 999999
+    with:
+      CTEST_START: ${{ matrix.start }}
+      CTEST_END: ${{ matrix.end }}
+      build_artifact_name: debug_build
+      artifact_name: debug_test_${{ matrix.name }}
+      xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
+      timeout: 10
+
+  debug_tests_report:
+    name: Debug mode tests summary and report
+    needs: test_linux_debug
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download test report artifacts 1_100
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_1_100
+          path: .
+      - name: Download test report artifacts 101_200
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_101_200
+          path: .
+      - name: Download test report artifacts 201_330
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_201_330
+          path: .
+      - name: Download test report artifacts 331_400
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_331_400
+          path: .
+      - name: Download test report artifacts 401_500
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_401_500
+          path: .
+      - name: Download test report artifacts 501_600
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_501_600
+          path: .
+      - name: Download test report artifacts 601_700
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_601_700
+          path: .
+      - name: Download test report artifacts 701_800
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_701_800
+          path: .
+      - name: Download test report artifacts 801_870
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_801_870
+          path: .
+      - name: Download test report artifacts 871_and_on
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: debug_test_871_and_on
+          path: .
+      - name: Publish test results
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        continue-on-error: true
+        with:
+          check_name: Linux debug test results
+          files: build/junit*.xml
+          compare_to_earlier_commit: false
+          comment_mode: failures
+      - name: Per-test results
+        # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        run: |
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
+        shell: bash
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: debug_test_resuls
+          path: build
+
+  build_linux_release:
+    name: Linux release build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      artifact_name: release_build
+
+  test_linux_release:
+    name: Linux release mode tests
+    needs: build_linux_release
+    uses: ./.github/workflows/test_template.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [1_100, 101_200, 201_330, 331_400, 401_500, 501_600, 601_700, 701_800, 801_870, 871_and_on]
+        include:
+          - name: 1_100
+            start: 1
+            end: 100
+          - name: 101_200
+            start: 101
+            end: 200
+          - name: 201_330
+            start: 201
+            end: 330
+          - name: 331_400
+            start: 331
+            end: 400
+          - name: 401_500
+            start: 401
+            end: 500
+          - name: 501_600
+            start: 501
+            end: 600
+          - name: 601_700
+            start: 601
+            end: 700
+          - name: 701_800
+            start: 701
+            end: 800
+          - name: 801_870
+            start: 801
+            end: 870
+          - name: 871_and_on
+            start: 871
+            end: 999999
+    with:
+      CTEST_START: ${{ matrix.start }}
+      CTEST_END: ${{ matrix.end }}
+      build_artifact_name: release_build
+      artifact_name: release_test_${{ matrix.name }}
+      xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
+      timeout: 10
+
+  release_tests_report:
+    name: Release mode tests summary and report
+    needs: test_linux_release
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download test report artifacts 1_100
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_1_100
+          path: .
+      - name: Download test report artifacts 101_200
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_101_200
+          path: .
+      - name: Download test report artifacts 201_330
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_201_330
+          path: .
+      - name: Download test report artifacts 331_400
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_331_400
+          path: .
+      - name: Download test report artifacts 401_500
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_401_500
+          path: .
+      - name: Download test report artifacts 501_600
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_501_600
+          path: .
+      - name: Download test report artifacts 601_700
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_601_700
+          path: .
+      - name: Download test report artifacts 701_800
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_701_800
+          path: .
+      - name: Download test report artifacts 801_870
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_801_870
+          path: .
+      - name: Download test report artifacts 871_and_on
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: release_test_871_and_on
+          path: .
+      - name: Publish test results
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        continue-on-error: true
+        with:
+          check_name: Linux release test results
+          files: build/junit*.xml
+          compare_to_earlier_commit: false
+          comment_mode: failures
+      - name: Per-test results
+        # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        run: |
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
+        shell: bash
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: release_test_resuls
+          path: build
+
+  pack_jammy:
+    name: Jammy x86_64 package
+    uses: ./.github/workflows/build_template.yml
+    with:
+      DISTR: jammy
+      arch: x86_64
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 ..
+        cmake --build . --target package
+      cache_key: pack_jammy_x86_64
+      artifact_list: "build/manticore*deb"
+
+  build_test_kit_docker:
+    name: Test Kit docker image
+    needs: pack_jammy
+    runs-on: ubuntu-22.04
+    env:
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      REPO_OWNER: ${{ github.repository_owner }}
+    outputs:
+      out-build: ${{ steps.build.outputs.build_image }}
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download built x86_64 Ubuntu Jammy packages
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: build_jammy_RelWithDebInfo_x86_64
+          path: .
+      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
+      # - run: |
+      #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
+      #     unzip build_jammy_RelWithDebInfo_x86_64.zip
+      #     tar -xvf artifact.tar
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Building docker
+        id: build
+        run: |
+          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
+          echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+      - name: Upload docker image artifact
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: manticore_test_kit.img
+          path: manticore_test_kit.img
+
+
+  clt:
+    name: CLT
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        test-suite:
+          - name: Core
+            test_prefix: |-
+              test/clt-tests/core/
+              test/clt-tests/expected-errors/
+          - name: Logstash
+            test_prefix: test/clt-tests/logstash/logstash- 
+          - name: mysqldump
+            test_prefix: |-
+              test/clt-tests/mysqldump/mysql/
+              test/clt-tests/mysqldump/maria/
+          - name: Replication
+            test_prefix: test/clt-tests/replication/
+          - name: Plugins
+            test_prefix: test/clt-tests/plugins/
+    steps:
+      - uses: manticoresoftware/clt@0.1.23
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          comment_mode: failures
+
+  build_aarch64:
+    name: Linux aarch64 build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      arch: aarch64
+      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cache_key: build_jammy_aarch64
+
+  build_freebsd:
+    name: FreeBSD x86_64 build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      DISTR: freebsd13
+      boost: none
+      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cache_key: build_freebsd_x86_64
+
+  build_windows:
+    name: Windows x64 build
+    uses: ./.github/workflows/build_template.yml
+    with:
+      DISTR: windows
+      arch: x64
+      sysroot: roots_apr15
+      CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+      CTEST_CONFIGURATION_TYPE: Debug
+      cache_key: build_windows_x64
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
+
+  test_windows:
+    name: Windows tests
+    needs: [build_windows, win_bundle]
+    uses: ./.github/workflows/win_test_template.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [1_400, 401_650, 651_and_on]
+        include:
+          - name: 1_400
+            start: 1
+            end: 400
+          - name: 401_650
+            start: 401
+            end: 650
+          - name: 651_and_on
+            start: 651
+            end: 999999
+    with:
+      CTEST_START: ${{ matrix.start }}
+      CTEST_END: ${{ matrix.end }}
+      artifact_name: windows_test_${{ matrix.name }}
+
+  windows_tests_report:
+    name: Windows tests summary and report
+    needs: test_windows
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/ubertests_ctest:3263_jammy
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Download test report artifacts 1_400
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: windows_test_1_400
+          path: .
+      - name: Download test report artifacts 401_650
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: windows_test_401_650
+          path: .
+      - name: Download test report artifacts 651_and_on
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: windows_test_651_and_on
+          path: .
+      - name: Convert the XML to JUnit format
+        run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
+        shell: bash
+      - name: Publish test results
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        with:
+          check_name: Windows test results
+          compare_to_earlier_commit: false
+          files: build/xml_*/junit_tests.xml
+          comment_mode: failures
+      - name: Per-test results
+        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        run: |
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'
+        shell: bash
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: windows_test_resuls
+          path: build

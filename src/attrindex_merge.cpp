@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "killlist.h"
 #include "attrindex_builder.h"
 #include "secondarylib.h"
+#include "knnmisc.h"
 #include "attrindex_merge.h"
 
 class AttrMerger_c::Impl_c
@@ -24,6 +25,8 @@ class AttrMerger_c::Impl_c
 	AttrIndexBuilder_c						m_tMinMax;
 	HistogramContainer_c					m_tHistograms;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
+	std::unique_ptr<knn::Builder_i>			m_pKNNBuilder;
+	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
 	CSphWriter								m_tWriterSPA;
 	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
@@ -35,6 +38,7 @@ class AttrMerger_c::Impl_c
 	MergeCb_c & 							m_tMonitor;
 	CSphString &							m_sError;
 	int64_t									m_iTotalDocs;
+	BuildBufferSettings_t					m_tBufferSettings;
 
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
@@ -52,15 +56,22 @@ private:
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
+		, m_tBufferSettings ( tSettings )
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles );
+
+	void AddCreatedFiles ( const CSphIndex * pDstIndex, StrVec_t * pCreatedFiles )
+	{
+		if ( pCreatedFiles )
+			m_dCreatedFiles.for_each ( [pCreatedFiles, pDstIndex] ( auto eExt ) { pCreatedFiles->Add ( pDstIndex->GetTmpFilename ( eExt ) ); } );
+	}
 };
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
@@ -71,14 +82,14 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( pDstIndex->GetMatchSchema().HasBlobAttrs() )
 	{
-		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
+		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_tBufferSettings.m_iBufferAttributes, m_sError );
 		if ( !m_pBlobRowBuilder )
 			return false;
 	}
 
 	if ( pDstIndex->GetDocstore() )
 	{
-		m_pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( pDstIndex, SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_sError );
+		m_pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( pDstIndex, SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_tBufferSettings.m_iBufferStorage, m_sError );
 		if ( !m_pDocstoreBuilder )
 			return false;
 
@@ -93,14 +104,21 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( pDstIndex->GetMatchSchema().HasColumnarAttrs() )
 	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), pDstIndex->GetSettings(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_sError );
+		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_tBufferSettings.m_iBufferColumnar, m_sError );
 		if ( !m_pColumnarBuilder )
+			return false;
+	}
+
+	if ( pDstIndex->GetMatchSchema().HasKNNAttrs() )
+	{
+		m_pKNNBuilder = BuildCreateKNN ( pDstIndex->GetMatchSchema(), m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		if ( !m_pKNNBuilder )
 			return false;
 	}
 
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( m_tBufferSettings.m_iSIMemLimit, pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_tBufferSettings.m_iBufferStorage, m_sError );
 		if ( !m_pSIdxBuilder )
 			return false;
 	}
@@ -108,7 +126,7 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	m_tMinMax.Init ( pDstIndex->GetMatchSchema() );
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
-	CreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->GetMatchSchema() );
+	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->GetMatchSchema() );
 
 	m_tResultRowID = 0;
 	return true;
@@ -154,7 +172,13 @@ bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex
 		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+			BuildStoreSI ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		}
+
+		if ( m_pKNNBuilder && !BuildStoreKNN ( tRowID, nullptr, nullptr, dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+		{
+			m_sError = m_pKNNBuilder->GetError().c_str();
+			return false;
 		}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
@@ -225,12 +249,19 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 		if ( m_pSIdxBuilder )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuilderStoreAttrs ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+			BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		}
+
+		if ( m_pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+		{
+			m_sError = m_pKNNBuilder->GetError().c_str();
+			return false;
 		}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
+
 	return true;
 }
 
@@ -302,18 +333,21 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 		return false;
 	}
 
+	if ( m_pKNNBuilder && !m_pKNNBuilder->Save ( GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN ).cstr(), m_tBufferSettings.m_iBufferStorage, sError ) )
+	{
+		m_sError = sError.c_str();
+		return false;
+	}
+
 	if ( !WriteDeadRowMap ( GetTmpFilename ( pDstIndex, SPH_EXT_SPM ), m_tResultRowID, m_sError ) )
 		return false;
-
-	if ( pCreatedFiles )
-		m_dCreatedFiles.for_each ( [pCreatedFiles, pDstIndex] ( auto eExt ) { pCreatedFiles->Add ( pDstIndex->GetTmpFilename ( eExt ) ); } );
 
 	return true;
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;
@@ -330,7 +364,9 @@ bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<R
 
 bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
 {
-	return m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
+	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
+	m_pImpl->AddCreatedFiles ( pDstIndex, pCreatedFiles );
+	return bOk;
 }
 
 
@@ -381,7 +417,7 @@ bool SiBuilder_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const V
 			return false;
 
 		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuilderStoreAttrs ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		BuildStoreSI ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 	}
 	return true;
 }
@@ -408,7 +444,7 @@ bool SiBuilder_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTrait
 			return false;
 
 		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuilderStoreAttrs ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 	}
 	return true;
 }
@@ -419,7 +455,9 @@ bool SiBuilder_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<R
 	if ( IsSecondaryLibLoaded() )
 	{
 		m_sFilename = tIndex.GetTmpFilename ( SPH_EXT_SPIDX );
-		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, tIndex.GetMatchSchema(), m_sFilename, m_dSiAttrs, m_sError );
+
+		BuildBufferSettings_t tSettings; // use default buffer settings
+		m_pSIdxBuilder = CreateIndexBuilder ( tSettings.m_iSIMemLimit, tIndex.GetMatchSchema(), m_sFilename, m_dSiAttrs, tSettings.m_iBufferStorage, m_sError );
 	} else
 	{
 		m_sError = "secondary index library not loaded";

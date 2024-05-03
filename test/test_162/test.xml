@@ -60,6 +60,21 @@ index plain1
 	source			= src1
 	path			= <data_path/>/plain1
 }
+
+source src2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, idd2, str1 FROM test_table1
+	sql_attr_uint	= idd1
+}
+
+index plain2
+{
+	source			= src2
+	path			= <data_path/>/plain2
+}
 </config>
 
 <db_create>
@@ -143,6 +158,15 @@ select sum(idd1) as idd1, idd1+0 as s3 from plain where match('the | eats | bird
 
 select sum(idd1) as idd1, idd1+0 as s3 from plain1 order by id asc;
 select sum(idd1) as i1, sum(idd2) as i2, i1+i2 as s3 from plain1 order by id asc;
+
+<!-- regression aggregate alias shadows index attribute -->
+select sum(idd1) as idd1 from plain2;
+select min(idd1) as idd1 from plain2;
+select max(idd1) as idd1 from plain2;
+select avg(idd1) as idd1 from plain2;
+
+<!-- regression aggregate alias shadows the first attribute -->
+select min(idd1) as id from plain2;
 
 </sphinxql></queries>
 

@@ -220,7 +220,7 @@ create table products LIKE old_products;
 ```
 <!-- response -->
 
-```sql
+```
 Query OK, 0 rows affected (0.02 sec)
 ```
 
@@ -233,10 +233,10 @@ create table products LIKE old_products WITH DATA;
 ```
 <!-- response -->
 
-```sql
+```
 Query OK, 0 rows affected (0.02 sec)
 ```
-
+<!-- end -->
 
 ### 👍 What you can do with a real-time table:
 * [Add documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).

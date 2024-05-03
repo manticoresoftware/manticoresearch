@@ -165,6 +165,8 @@ select min(idd1) as idd1 from plain2;
 select max(idd1) as idd1 from plain2;
 select avg(idd1) as idd1 from plain2;
 
+<!-- regression aggregate alias shadows the first attribute -->
+select min(idd1) as id from plain2;
 
 </sphinxql></queries>
 

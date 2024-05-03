@@ -3,6 +3,7 @@
 # Version 6.3.0 (preparing for release)
 While 6.3.0 is being prepared for release, use the dev version which includes all the below changes - https://mnt.cr/dev/nightly
 
+Changelog note markdown
 ### Major changes
 * [Issue #839](https://github.com/manticoresoftware/manticoresearch/issues/839) Implemented [float_vector](Creating_a_table/Data_types.md#Float-vector) data type; implemented [vector search](Searching/KNN.md#KNN-vector-search).
 * [Issue #1673](https://github.com/manticoresoftware/manticoresearch/issues/1673) INNER/LEFT JOIN
@@ -64,6 +65,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #2010](https://github.com/manticoresoftware/manticoresearch/issues/2010) Disabled logging of queries from Buddy unless `log_level=debug` is set
 * [Issue #2035](https://github.com/manticoresoftware/manticoresearch/issues/2035) Linux Mint 21.3 suppport
 * [Issue #2056](https://github.com/manticoresoftware/manticoresearch/issues/2056) Manticore couldn't be built with Mysql 8.3+
+* [Issue #2112](https://github.com/manticoresoftware/manticoresearch/issues/2112) `DEBUG DEDUP` command for real-time table chunks that can experience duplicate entries after attaching a plain table containing duplicates
 * [Issue #218](https://github.com/manticoresoftware/manticoresearch-buddy/issues/218) Handle `@timestamp` column as timestamp
 * [Issue #252](https://github.com/manticoresoftware/manticoresearch-buddy/issues/250) Implemented logic to enable/disable buddy plugins
 * [Issue #254](https://github.com/manticoresoftware/manticoresearch-buddy/issues/254) Updated composer to a fresher version where recent CVEs are fixed
@@ -73,7 +75,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 
 ### Breaking changes and deprecations
 * ⚠️[Issue #1436](https://github.com/manticoresoftware/manticoresearch/issues/1436) Improved the master-agent search protocol (version updated). If you are running Manticore Search in a distributed environment with multiple instances, make sure to first upgrade the agents, then the masters.
-* ⚠️[Issue #1572](https://github.com/manticoresoftware/manticoresearch/issues/1572) Improved replication protocol. If you are running a replication cluster, you need to:
+* ⚠️[Issue #1572](https://github.com/manticoresoftware/manticoresearch/issues/1572) Added replication of distributed tables and updated the replication protocol. If you are running a replication cluster, you need to:
   - First, cleanly stop all your nodes
   - Then, start the node that was stopped last with `--new-cluster`, using the tool `manticore_new_cluster` in Linux.
   - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
@@ -118,7 +120,6 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit cdc3](https://github.com/manticoresoftware/manticoresearch/commit/cdc38085145cd1025b96fcac2a46188a0425d9e1) Added missing config key (skiplist_cache_size)
 * [Commit cf6e](https://github.com/manticoresoftware/manticoresearch/commit/cf6ec3bfdc3f0990fb31ff53822b2331a6667727) Fixed crash at the expression ranker with large complex query.
 * [Commit e513](https://github.com/manticoresoftware/manticoresearch/commit/e5139ba75eef7223df375ae3cc3f138fa7d925f1) Fixed fulltext CBO vs invalid index hints
-* [Commit e87f](https://github.com/manticoresoftware/columnar/commit/e87f088b458d4c5b1b6159fc72ed0d57b786891a) Fixed SI iterator being hinted at an already processed block
 * [Commit eb05](https://github.com/manticoresoftware/manticoresearch/commit/eb0514b3a6f57f278252b0724eebd112ec116e0f) Interrupt preread on shutdown for faster shutdown
 * [Commit f945](https://github.com/manticoresoftware/manticoresearch/commit/f94555a293cfa51004ff81135b8bd8500b955115) Changed stack calculation for fulltext queries to avoid a crash in case of a complex query
 * [Issue #1262](https://github.com/manticoresoftware/manticoresearch/issues/1262) Fixed a crash of the indexer when indexing an SQL source with multiple columns having the same name.
@@ -183,10 +184,12 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1994](https://github.com/manticoresoftware/manticoresearch/issues/1994) wrong external files
 * [Issue #2021](https://github.com/manticoresoftware/manticoresearch/issues/2021) A few manticore-executor processes could be left running after stopping Manticore.
 * [Issue #2029](https://github.com/manticoresoftware/manticoresearch/issues/2029) Crash using Levenshtein Distance
-* [Issue #2045](https://github.com/manticoresoftware/manticoresearch/issues/2045) Grouping by multiple fields returns incorrect results
+* [Issue #2037](https://github.com/manticoresoftware/manticoresearch/issues/2037) Got error after multiple max operator ran on an empty index
 * [Issue #2052](https://github.com/manticoresoftware/manticoresearch/issues/2052) crash on multi-group with JSON.field
 * [Issue #2067](https://github.com/manticoresoftware/manticoresearch/issues/2067) Manticore was crashing on incorrect request to _update
 * [Issue #2069](https://github.com/manticoresoftware/manticoresearch/issues/2069) Fixed an issue with string filter comparators for closed ranges in the JSON interface
+* [Issue #2082](https://github.com/manticoresoftware/manticoresearch/issues/2082) `alter` failed when the data_dir path was located on a symlink
+* [Issue #2102](https://github.com/manticoresoftware/manticoresearch/pull/2102) Improved special handling of SELECT queries in mysqldump to ensure the resulting INSERT statements are compatible with Manticore
 * [Issue #223](https://github.com/manticoresoftware/manticoresearch-buddy/issues/223) Proper error when trying to insert a document w/o schema and w/o column names
 * [Issue #239](https://github.com/manticoresoftware/manticoresearch-buddy/issues/239) Auto-schema multi-line insert could fail.
 * [Issue #399](https://github.com/manticoresoftware/manticoresearch/issues/399) Added an error message on indexing if an id attribute is declared at the data source.
@@ -205,10 +208,13 @@ Various improvements: improved versions check and streaming ZSTD decompression; 
 * [Issue #91](https://github.com/manticoresoftware/manticoresearch-backup/pull/91) Added defattr to prevent unusual user permissions in files after installation on RHEL
 * [Issue #91](https://github.com/manticoresoftware/manticoresearch-backup/pull/91) Added extra chown to ensure files default to the root user in Ubuntu
 
-### Related with the columnar storage
+### Related with MCL (columnar, secondary, knn libs)
+* [Commit f104](https://github.com/manticoresoftware/columnar/commit/f104a4709bbb144140d09a09bc0fc1db1895e331) Vector search support
+* [Commit 2169](https://github.com/manticoresoftware/columnar/commit/216953beef6676f7e34c9f6f1a30c5980d746710) Fixed cleanup of temporary files during the interrupted setup of the secondary index build. This resolves the issue where the daemon exceeded the open files limit when creating `tmp.spidx` files
 * [Commit 709b](https://github.com/manticoresoftware/columnar/commit/709b9acaaac97d9a1ca8796892f9ad432021c785) Use separate streamvbyte library for columnar and SI
 * [Commit 1c26](https://github.com/manticoresoftware/manticoresearch/commit/1c2623763ced14bb94ad624dde9614a938408d89) Added a warning that columnar storage doesn't support json attrs
 * [Commit 574c](https://github.com/manticoresoftware/manticoresearch/commit/574c023152564fa72092c18ebd1f594abfd4b6d7) Fixed a crash on saving a disk chunk with mixed rowwise and columnar storage
+* [Commit e87f](https://github.com/manticoresoftware/columnar/commit/e87f088b458d4c5b1b6159fc72ed0d57b786891a) Fixed SI iterator being hinted at an already processed block
 * [Issue #1474](https://github.com/manticoresoftware/manticoresearch/issues/1474) Update is broken for rowwise MVA column with columnar engine
 * [Issue #1510](https://github.com/manticoresoftware/manticoresearch/issues/1510) Fixed crash when aggregating to a columnar attribute used in `HAVING`.
 * [Issue #1519](https://github.com/manticoresoftware/manticoresearch/issues/1519) Fixed crash in `expr` ranker on using columnar attribute.
@@ -221,6 +227,7 @@ Various improvements: improved versions check and streaming ZSTD decompression; 
 * [Commit a27c](https://github.com/manticoresoftware/docker/commit/a27c048dd9e73d8d6bea8d9a4830cafb486b82c5) Fixed query logging to stdout
 * [Issue #38](https://github.com/manticoresoftware/docker/issues/38) Mute BUDDY warnings if EXTRA is not set
 * [Issue #71](https://github.com/manticoresoftware/docker/pull/71) Fixed hostname in `manticore.conf.sh`
+* [Commit 3acd](https://github.com/manticoresoftware/columnar/commit/3acd6714ffce103447d7931dfc75bb1a7449f340) Fixed data unpacking in SI
 
 # Version 6.2.12
 Released: August 23rd 2023

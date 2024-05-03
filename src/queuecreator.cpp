@@ -1049,10 +1049,6 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
 
-	// remove original column
-	if ( iSorterAttr>=0 )
-		m_pSorterSchema->RemoveStaticAttr(iSorterAttr);
-
 	if ( !SetupAggregateExpr ( tExprCol, tItem.m_sExpr, uQueryPackedFactorFlags ) )
 		return false;
 
@@ -1067,6 +1063,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		// NOTE, "final" stage might need to be fixed up later
 		// we'll do that when parsing sorting clause
 		m_pSorterSchema->AddAttr ( tExprCol, true );
+
+		// remove original column after new attribute added or shadows this one
+		if ( iSorterAttr>=0 )
+			m_pSorterSchema->RemoveStaticAttr ( iSorterAttr );
 	}
 	else // some aggregate
 	{
@@ -1082,6 +1082,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 
 		if ( !bColumnarAggregate )
 			UpdateAggregateDependencies ( tExprCol );
+
+		// remove original column after new attribute added or shadows this one
+		if ( iSorterAttr>=0 )
+			m_pSorterSchema->RemoveStaticAttr ( iSorterAttr );
 	}
 
 	m_hQueryDups.Add ( tExprCol.m_sName );

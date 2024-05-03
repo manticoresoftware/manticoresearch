@@ -14,7 +14,15 @@ In the typical scenario, indexer does the following:
 * Writes the table files
 * (Optional) Informs the search server about the new table which triggers table rotation
 
-## Indexer tool  
+## Integrations
+
+ManticoreSearch currently offers three integrations that allow the consumption of data from external sources into [RT tables](Creating_a_table/Local_tables/Real-time_table):
+
+* [Logstash](Integration/Logstash.md)
+* [Filebeat](Integration/Filebeat.md)
+* [Kafka](Integration/Kafka.md)
+
+## Indexer tool
 The `indexer` tool is used to create plain tables in Manticore Search. It has a general syntax of:
 
 ```shell
@@ -223,7 +231,7 @@ mem_limit = 256M
 
 Plain table building RAM usage limit. Optional, default is 128 MB. Enforced memory usage limit that the `indexer` will not go above. Can be specified in bytes, or kilobytes (using K postfix), or megabytes (using M postfix); see the example. This limit will be automatically raised if set to an extremely low value causing I/O buffers to be less than 8 KB; the exact lower bound for that depends on the built data size. If the buffers are less than 256 KB, a warning will be produced.
 
-The maximum possible limit is 2047M. Too low values can hurt plain table building speed, but 256M to 1024M should be enough for most, if not all datasets. Setting this value too high can cause SQL server timeouts. During the document collection phase, there will be periods when the memory buffer is partially sorted and no communication with the database is performed; and the database server can timeout. You can resolve that either by raising timeouts on the SQL server side or by lowering `mem_limit`.  
+The maximum possible limit is 2047M. Too low values can hurt plain table building speed, but 256M to 1024M should be enough for most, if not all datasets. Setting this value too high can cause SQL server timeouts. During the document collection phase, there will be periods when the memory buffer is partially sorted and no communication with the database is performed; and the database server can timeout. You can resolve that either by raising timeouts on the SQL server side or by lowering `mem_limit`.
 
 #### on_file_field_error
 
@@ -245,7 +253,7 @@ Note that with `on_file_field_error = skip_document` documents will only be igno
 
 ```ini
 write_buffer = 4M
-```    
+```
 
 Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final table files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
 
@@ -262,7 +270,7 @@ ignore_non_plain = 1
 ### Schedule indexer via systemd
 
 There are two approaches to scheduling indexer runs. The first way is the classical method of using crontab. The second way is using a systemd timer with a user-defined schedule. To create the timer unit files, you should place them in the appropriate directory where systemd looks for such unit files. On most Linux distributions, this directory is typically `/etc/systemd/system`. Here's how to do it:
-	
+
 1. Create a timer unit file for your custom schedule:
 ```shell
 cat << EOF > /etc/systemd/system/manticore-indexer@.timer

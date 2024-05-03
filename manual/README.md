@@ -78,7 +78,7 @@
             * [• Merging tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
             * [• Killlists in plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
             * [• Attaching a plain table to RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
-            * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)        
+            * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
         * [• Rotating a table](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
     * [⪢ Updating documents]
         * [• REPLACE vs UPDATE](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)
@@ -114,7 +114,7 @@
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
     * [• K-nearest neighbor vector search](Searching/KNN.md)
-* [• Updating table schema and settings](Updating_table_schema_and_settings.md)    
+* [• Updating table schema and settings](Updating_table_schema_and_settings.md)
 * [⪢ Functions](Functions.md)
     * [• Mathematical functions](Functions/Mathematical_functions.md)
     * [• Searching and ranking functions](Functions/Searching_and_ranking_functions.md)
@@ -169,6 +169,7 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [Kafka](Integration/Kafka.md)
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)

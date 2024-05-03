@@ -207,6 +207,37 @@ POST /your_table_name/_mapping -d '
 ```
 <!-- end -->
 
+
+You can also create a table that mirrors an existing one, with or without its data.
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+create table products LIKE old_products;
+```
+<!-- response -->
+
+```sql
+Query OK, 0 rows affected (0.02 sec)
+```
+
+<!-- intro -->
+##### SQL WITH DATA:
+<!-- request SQL -->
+
+```sql
+create table products LIKE old_products WITH DATA;
+```
+<!-- response -->
+
+```sql
+Query OK, 0 rows affected (0.02 sec)
+```
+
+
 ### 👍 What you can do with a real-time table:
 * [Add documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * Update attributes and full-text fields using the [Update](../../Quick_start_guide.md#Update) process.

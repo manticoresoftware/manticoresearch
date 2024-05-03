@@ -1,41 +1,41 @@
-# Reading from Kafka (queue support)
+# Reading from Kafka (Queue Support)
 
-<!-- example kafka_queues -->
+<!-- Example: Kafka Queues -->
 
-Now via Buddy plugin ManticoreSearch can consume messages from Kafka broker
+ManticoreSearch can now consume messages from a Kafka broker through the Buddy plugin.
 
-For surfaces, you only need to define `source`, `destination table` and `materialized view` (alias `mv`).
+To get started, you only need to define the `source`, `destination table`, and `materialized view` (alias `mv`).
 
 ## Workflow:
 
-1. Worker consume messages from Kafka's broker.
-2. Then **map** them by schema defined in source.
-3. Stack in batch
-4. Put in buffer table.
-5. Applies query from MV to buffer table
-6. Write results to destination table
-7. Truncates buffer table
+1. Workers ingest messages from the Kafka broker.
+2. These messages are then mapped according to the schema defined in the source.
+3. Messages are organized into batches.
+4. Subsequently, they are placed into a buffer table.
+5. The materialized view's query is executed on the buffer table.
+6. The results are subsequently written to the destination table.
+7. Lastly, the buffer table is truncated.
 
 ## Source
 
-`Source` allow you to define `broker`, `topic_list`, `consumer group` and describe internal message structure.
+The `source` allows you to define the `broker`, `topic list`, `consumer group`, and describe the internal message structure.
 
 #### Schema
 
-Schema can be defined with standard manticore fields (int, float, text, json, multi, etc).
+The schema can be defined with standard Manticore fields (`int`, `float`, `text`, `json`, etc).
 
-Keys in schema case-insensitive, so there no difference between keys `Products`, `products`, `PrOdUcTs`. All them
-converted to lower case.
+```sql
+CREATE SOURCE <source name> [(column type, ...)] [source_options]
+```
 
-Preferably to have id field in schema.
-This allows you control duplicates in table in case something went wrong.
+Keys in the schema are case-insensitive, so there is no difference between keys like `Products`, `products`, `PrOdUcTs`.
+All of them are converted to **lowercase**.
 
-
-<!-- intro -->
+<!-- Intro -->
 
 ##### SQL:
 
-<!-- request SQL -->
+<!-- Request SQL -->
 
 ```sql
 CREATE SOURCE kafka
@@ -48,86 +48,90 @@ num_consumers='2'
 batch=50
 ```
 
-<!-- response -->
+<!-- Response -->
 
-```sql
+```
 Query OK, 2 rows affected (0.02 sec)
 ```
 
-<!-- end -->
-
+<!-- End -->
 
 #### Options
 
-| Option           | Accepted values       | description                                                                                                                                                                       |
-|------------------|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `type`           | Kafka                 | Source type. Now only Kafka suported                                                                                                                                              |
-| `broker_list`    | host(ip):port [, ...] | Kafka's broker url                                                                                                                                                                |
-| `topic_list`     | string [, ...]        | List of Kafka topics for consuming                                                                                                                                                |
-| `consumer_group` | string                | Kafka's consumer group. Default `manticore`                                                                                                                                       |
-| `num_consumers`  | int                   | Count of workers                                                                                                                                                                  |
-| `batch`          | int                   | Count of messages stacking before processing. Default `100`. In case timeout occured and worker didn't consume desired amount of messages it will process what he already consume |
+| Option           | Accepted Values   | Description                                                                                                                                                                       |
+|------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`           | Kafka             | Source type. Currently, only Kafka is supported.                                                                                                                                              |
+| `broker_list`    | host:port [, ...] | Kafka broker URL.                                                                                                                                                                |
+| `topic_list`     | string [, ...]    | List of Kafka topics for consumption.                                                                                                                                              |
+| `consumer_group` | string            | Kafka consumer group. Default is `manticore`.                                                                                                                                       |
+| `num_consumers`  | int               | Number of workers.                                                                                                                                                                  |
+| `batch`          | int               | Number of messages stacked before processing. Default is `100`. In case of a timeout and workers didn't consume the desired amount of messages, they will process what they have already consumed. |
 
-### Destination table
+### Destination Table
 
-Just regular table where you store your results
+This is a regular table where you store your results.
 
-<!-- intro -->
+<!-- Intro -->
 
 ##### SQL:
 
-<!-- request SQL -->
+<!-- Request SQL -->
 
 ```sql
-CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi);
+CREATE TABLE destination_kafka
+(id bigint, name text, short_name text, received_at text, size multi);
 ```
 
-<!-- response -->
+<!-- Response -->
 
-```sql
+```
 Query OK, 0 rows affected (0.02 sec)
 ```
 
-<!-- end -->
+<!-- End -->
 
 ### Materialized View
 
-Materialized table allow you to perform some modifications with received message.
-Like renaming fields, applying some ManticoreSearch functions, sorting, grouping and other stuff
+A materialized view allows you to perform modifications to received messages, such as renaming fields, applying some ManticoreSearch functions, sorting, grouping, and other operations.
 
-However, it's just regular query from buffer to destination tables, so you can use all Manticore syntax for processing
-this queries
+However, it's just a regular query from the buffer to destination tables, so you can use all Manticore syntax for processing these queries.
 
-<!-- intro -->
+```
+CREATE MATERIALIZED VIEW <materialized view name>
+TO <destination table name> AS
+SELECT [column|function [as <new name>], ...] FROM <source name>
+```
+
+<!-- Intro -->
 
 ##### SQL:
 
-<!-- request SQL -->
+<!-- Request SQL -->
 
 ```sql
 CREATE MATERIALIZED VIEW view_table
 TO destination_kafka AS
-SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka
+SELECT id, term as name, abbrev as short_name,
+       UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka
 
 ```
 
-<!-- response -->
+<!-- Response -->
 
 ```sql
 Query OK, 2 rows affected (0.02 sec)
 ```
 
-<!-- end -->
+<!-- End -->
 
-Consider that buffer table truncates after each batch iterations, so you should avoid calculation like AVG, or something
-like this.
-In worst case you will bound by batch size (or timeout limit)
+Keep in mind that the buffer table truncates after each batch iteration, so you should avoid calculations like AVG or anything similar.
+In the worst case, you will be bound by the batch size (or timeout limit).
 
-### Mapping
+### Mapping Fields
 
-In examples above we have next mapping:
+For easy comprehension, we provide the following mapping table of examples above:
 
-| Kafka           | Source   | Buffer   | MV                             | destination |
+| Kafka           | Source   | Buffer   | MV                             | Destination |
 |-----------------|----------|----------|--------------------------------|-------------|
 | id              | id       | id       | id                             | id          |
 | term            | term     | term     | term as name                   | name        |
@@ -136,22 +140,120 @@ In examples above we have next mapping:
 | -               | -        |          | UTC_TIMESTAMP() as received_at | received_at |
 | GlossDef	       | GlossDef | GlossDef | GlossDef.size as size          | size        |
 
-### Altering mvs
+### Listing
 
-You can suspend consuming by altering materialized view. In case removing source and not deleting mv, it will suspend
-automatically till you recreate source with same name
+The current plugin enables you to list sources and views, as well as obtain comprehensive details about the desired resource.
 
-Now we support only mv altering. To change source parameters you should drop it and recreate again.
+<!-- Intro -->
 
-Deleting a table is possible only when the server is running in the RT mode. It is possible to delete RT tables, PQ
-tables and distributed tables.
+##### SQL:
 
-### Restart searchd
+<!-- Request SQL -->
 
-In case searchd unexpected stop - everything burn and explode.. graceful shutdown???
+```sql
+SHOW SOURCES
+```
 
-We commit offset after each batch|timeout processing. But it can be cases when daemon died when we applying mv query. In that case you riscs to get some duplicates, if you don't have id fields.
+<!-- Response -->
+
+```
++-------+
+| name  |
++-------+
+| kafka |
++-------+
+```
+
+<!-- End -->
+
+<!-- Intro -->
+
+##### SQL:
+
+<!-- Request SQL -->
+
+```sql
+show source kafka;
+```
+
+<!-- Response -->
+
+```
++--------+---------------------------------------------------------+
+| Source | Create Table                                            |
++--------+---------------------------------------------------------+
+| kafka  | CREATE SOURCE kafka                                     |
+|        | (id bigint, term text, abbrev text, GlossDef json)      |
+|        | type='kafka'                                            |
+|        | broker_list='kafka:9092'                                |
+|        | topic_list='my-data'                                    |
+|        | consumer_group='manticore'                              |
+|        | num_consumers='2'                                       |
+|        | batch=50                                                |
++--------+---------------------------------------------------------+
+```
+
+<!-- End -->
+
+<!-- Intro -->
+
+##### SQL:
+
+<!-- Request SQL -->
+
+```sql
+SHOW MVS
+```
+
+<!-- Response -->
+
+```
++------------+
+| name       |
++------------+
+| view_table |
++------------+
+```
+
+<!-- End -->
 
 
+<!-- Intro -->
 
-<!-- proofread -->
+##### SQL:
+
+<!-- Request SQL -->
+
+```sql
+SHOW MV view_table
+```
+
+<!-- Response -->
+
+```
++------------+--------------------------------------------------------------------------------------------------------+-----------+
+| View       | Create Table                                                                                           | suspended |
++------------+--------------------------------------------------------------------------------------------------------+-----------+
+| view_table | CREATE MATERIALIZED VIEW view_table TO destination_kafka AS                                            | 0         |
+|            | SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size   |           |
+|            | FROM kafka                                                                                             |           |
++------------+--------------------------------------------------------------------------------------------------------+-----------+
+```
+
+<!-- End -->
+
+### Altering Materialized Views
+
+You can suspend consumption by altering `materialized views`.
+If you remove the `source` and do not delete the MV, it will automatically suspend until you recreate the source with the same name.
+
+Currently, only altering MVs is supported. To change `source` parameters, you should drop it and recreate it again.
+
+### Restarting Searchd
+
+Offsets are committed after each batch/timeout processing.
+However, in scenarios where the daemon unexpectedly ceases during the execution of the materialized view (MV) query,
+the risk of receiving duplicates emerges. Therefore, it's advisable to include an id field in the schema.
+This allows for the **automatic management of duplicates** within the table, should any issues arise.
+
+<!-- Proofread -->

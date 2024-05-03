@@ -220,7 +220,7 @@ create table products LIKE old_products;
 ```
 <!-- response -->
 
-```sql
+```
 Query OK, 0 rows affected (0.02 sec)
 ```
 
@@ -233,7 +233,7 @@ create table products LIKE old_products WITH DATA;
 ```
 <!-- response -->
 
-```sql
+```
 Query OK, 0 rows affected (0.02 sec)
 ```
 <!-- end -->

@@ -78,6 +78,7 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+#include "rust_hello_world.h"
 
 extern "C"
 {
@@ -21477,6 +21478,9 @@ inline int mainimpl ( int argc, char **argv )
 	g_pLogger() = sphLog;
 	sphBacktraceSetBinaryName ( argv[0] );
 	GeodistInit();
+	hello_from_rust();
+	const char* text = "sample text for interop traversal";
+	const_char_ptr_to_stdout_by_rust ( text );
 
 #if _WIN32
 	int iNameIndex = -1;

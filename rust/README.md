@@ -43,11 +43,11 @@ int main ( int argc, char ** argv )
   target_include_directories(_rust_hello_world INTERFACE include)
   add_library(manticore-rs::hello_world ALIAS _rust_hello_world)
   ```
-  Change "_rust_hello_world" and "hello_world" to yours.
-  Notice that "_rust_hello_world" should be linked to 
+  Change "rust_hello_world" and "hello_world" to yours. 
+  Notice that "rust_hello_world" should be linked to 
   ```
   [package]
-  name = "_rust_hello_world" 
+  name = "rust_hello_world" 
   ``` 
 - Make directory named "include" and place header file inside. Refer to rust_hello_world project 
   example.

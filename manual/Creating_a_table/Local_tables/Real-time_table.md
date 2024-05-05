@@ -207,9 +207,14 @@ POST /your_table_name/_mapping -d '
 ```
 <!-- end -->
 
+
 #### CREATE TABLE LIKE:
 
 You can also create a table that mirrors an existing one, with or without its data.
+
+```sql
+CREATE TABLE table_name LIKE old_table_name [WITH DATA]
+```
 
 <!-- example create-like -->
 
@@ -227,12 +232,12 @@ Query OK, 0 rows affected (0.02 sec)
 ```
 <!-- intro -->
 ##### SQL WITH DATA:
-<!-- request SQL -->
+<!-- request SQL WITH DATA -->
 
-```sql
+```sql with data
 create table products LIKE old_products WITH DATA;
 ```
-<!-- response SQL -->
+<!-- response SQL WITH DATA -->
 
 ```
 Query OK, 0 rows affected (0.02 sec)

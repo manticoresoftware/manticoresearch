@@ -207,7 +207,6 @@ POST /your_table_name/_mapping -d '
 ```
 <!-- end -->
 
-#### CREATE TABLE LIKE:
 
 #### CREATE TABLE LIKE:
 
@@ -227,19 +226,16 @@ CREATE TABLE table_name LIKE old_table_name [WITH DATA]
 create table products LIKE old_products;
 ```
 <!-- response SQL -->
-
 ```
 Query OK, 0 rows affected (0.02 sec)
 ```
 <!-- intro -->
 ##### SQL WITH DATA:
 <!-- request SQL WITH DATA -->
-
 ```sql with data
 create table products LIKE old_products WITH DATA;
 ```
 <!-- response SQL WITH DATA -->
-
 ```
 Query OK, 0 rows affected (0.02 sec)
 ```

@@ -207,6 +207,7 @@ POST /your_table_name/_mapping -d '
 ```
 <!-- end -->
 
+#### CREATE TABLE LIKE:
 
 #### CREATE TABLE LIKE:
 

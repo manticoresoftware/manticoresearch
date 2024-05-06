@@ -12,7 +12,7 @@
 <config>
 searchd
 {
-	<searchd_Settings/>
+	<searchd_settings/>
 	data_dir = <data_path/>
 }
 </config>

@@ -135,12 +135,12 @@ Via the HTTP JSON interface, the query result is sent as a JSON document. Exampl
     "hits":
     [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": { "gid": 11 }
       },
       {
-        "_id": "2",
+        "_id": 2,
         "_score": 1,
         "_source": { "gid": 12 }
       }

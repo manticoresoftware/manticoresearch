@@ -73,21 +73,21 @@ select *, a + b alias from test order by alias desc;
 	    "total_relation": "eq",
 	    "hits": [
 	      {
-	        "_id": "5406864699109146628",
+	        "_id": 5406864699109146628,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 1"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146629",
+	        "_id": 5406864699109146629,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 2"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146630",
+	        "_id": 5406864699109146630,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 3"
@@ -225,21 +225,21 @@ You can also specify the sort order explicitly:
 	    "total_relation": "eq",
 	    "hits": [
 	      {
-	        "_id": "5406864699109146632",
+	        "_id": 5406864699109146632,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 5"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146631",
+	        "_id": 5406864699109146631,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 4"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146630",
+	        "_id": 5406864699109146630,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 3"
@@ -384,21 +384,21 @@ You can also use another syntax and specify the sort order via the `order` prope
 	    "total_relation": "eq",
 	    "hits": [
 	      {
-	        "_id": "5406864699109146632",
+	        "_id": 5406864699109146632,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 5"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146631",
+	        "_id": 5406864699109146631,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 4"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146630",
+	        "_id": 5406864699109146630,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 3"
@@ -542,21 +542,21 @@ Sorting by MVA attributes is also supported in JSON queries. Sorting mode can be
 	    "total_relation": "eq",
 	    "hits": [
 	      {
-	        "_id": "5406864699109146631",
+	        "_id": 5406864699109146631,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 4"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146629",
+	        "_id": 5406864699109146629,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 2"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146628",
+	        "_id": 5406864699109146628,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 1"
@@ -695,21 +695,21 @@ When sorting on an attribute, match weight (score) calculation is disabled by de
 	    "total_relation": "eq",
 	    "hits": [
 	      {
-	        "_id": "5406864699109146631",
+	        "_id": 5406864699109146631,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 4"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146629",
+	        "_id": 5406864699109146629,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 2"
 	        }
 	      },
 	      {
-	        "_id": "5406864699109146628",
+	        "_id": 5406864699109146628,
 	        "_score": 2319,
 	        "_source": {
 	          "title": "Test document 1"

@@ -182,7 +182,7 @@ POST /search
 		"hits":
 		[
 			{
-				"_id":"1",
+				"_id": 1,
 				"_score":1,
 				"_knn_dist":0.28146550,
 				"_source":
@@ -192,7 +192,7 @@ POST /search
 				}
 			},
 			{
-				"_id":"2",
+				"_id": 2,
 				"_score":1,
 				"_knn_dist":0.81527930,
 				"_source":
@@ -286,7 +286,7 @@ POST /search
 		"hits":
 		[
 			{
-				"_id":"2",
+				"_id": 2,
 				"_score":1643,
 				"_knn_dist":0.81527930,
 				"_source":
@@ -369,7 +369,7 @@ POST /search
 		"hits":
 		[
 			{
-				"_id":"2",
+				"_id": 2,
 				"_score":1643,
 				"_knn_dist":0.81527930,
 				"_source":

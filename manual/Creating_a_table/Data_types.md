@@ -2310,7 +2310,7 @@ POST /search
       "total":1,
       "hits":[
          {
-            "_id":"1",
+            "_id": 1,
             "_score":1,
             "_source":{
                "product_codes":[
@@ -2419,7 +2419,7 @@ res = await searchApi.search({"index":"products","query":{"match_all":{}}});
 <!-- response javascript -->
 
 ```javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"product_codes":[1,2,3,4],"title":"first"}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1,"_source":{"product_codes":[1,2,3,4],"title":"first"}}]}}
 ```
 <!-- intro -->
 ##### java:

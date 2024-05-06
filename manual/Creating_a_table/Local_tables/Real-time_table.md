@@ -207,6 +207,34 @@ POST /your_table_name/_mapping -d '
 ```
 <!-- end -->
 
+
+#### CREATE TABLE LIKE:
+
+<!-- example create-like -->
+
+You can create a copy of a real-time table, with or without its data. Please note that if the table is large, copying it with data may take some time. Copying works in synchronous mode, but if the connection is dropped, it will continue in the background.
+
+```sql
+CREATE TABLE table_name LIKE old_table_name [WITH DATA]
+```
+
+<!-- intro -->
+##### Example:
+<!-- request SQL -->
+
+```sql
+create table products LIKE old_products;
+```
+
+<!-- intro -->
+##### Example (WITH DATA):
+<!-- request Example (WITH DATA) -->
+```sql
+create table products LIKE old_products WITH DATA;
+```
+
+<!-- end -->
+
 ### 👍 What you can do with a real-time table:
 * [Add documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * Update attributes and full-text fields using the [Update](../../Quick_start_guide.md#Update) process.

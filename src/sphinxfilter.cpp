@@ -20,6 +20,7 @@
 #include "stackmock.h"
 #include "conversion.h"
 #include "geodist.h"
+#include "joinsorter.h"
 #include "secondarylib.h"
 
 #include <boost/icl/interval.hpp>
@@ -1290,9 +1291,9 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 }
 
 
-static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, CSphString & sError )
+static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, const CSphString * pJoinIdx, CSphString & sError )
 {
-	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, sError, tExprArgs );
+	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, pJoinIdx, sError, tExprArgs );
 	if ( pExpr && pExpr->UsesDocstore() )
 	{
 		sError.SetSprintf ( "unsupported filter on field '%s' (filters are supported only on attributes, not stored fields)", sAttrName.cstr() );
@@ -1427,8 +1428,26 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 }
 
 
-static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,
-	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
+static void TryToCreateJoinNullFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CommonFilterSettings_t & tFixedSettings )
+{
+	if ( pFilter )
+		return;
+
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
+
+	int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
+	if ( iAttr<0 )
+		return;
+
+	const CSphColumnInfo * pAttrMask = tCtx.m_pSchema->GetAttr ( GetNullMaskAttrName() );
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+	if ( ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED ) && pAttrMask && tFixedSettings.m_eType==SPH_FILTER_NULL )
+		pFilter = CreateJoinNullFilter ( tSettings, pAttrMask->m_tLocator );
+}
+
+
+static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -1452,12 +1471,11 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter>& pFilter, 
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	tExprArgs.m_eCollation = tCtx.m_eCollation;
-	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, sError );
+	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, pJoinIdx, sError );
 }
 
 
-static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName,
-	CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
+static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName, CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -1634,10 +1652,38 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 }
 
 
-static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified )
+static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree )
 {
 	if ( tCtx.m_sJoinIdx.IsEmpty() )
 		return;
+
+	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pSchema, tCtx.m_sJoinIdx.cstr() );
+
+	bool bHaveNullFilters = false;
+	for ( const auto & i : dRightFilters )
+		bHaveNullFilters |= dModified[i.first].m_eType==SPH_FILTER_NULL;
+
+	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() && dRightFilters.GetLength() && ( bHaveNullFilters || dRightFilters.GetLength()!=dModified.GetLength() ) )
+	{
+		// mixed joined and non-joined filters; they will be handled in join sorter
+		// remove all filters from the query (keep the @rowid/pseudo_sharding filter)
+		bool bHaveRowIdFilter = false;
+		CSphFilterSettings tRowIdFilter;
+		for ( auto & i : dModified )
+			if ( i.m_sAttrName=="@rowid" )
+			{
+				bHaveRowIdFilter = true;
+				tRowIdFilter = i;
+			}
+
+		dModified.Resize(0);
+		dModifiedTree.Resize(0);
+
+		if ( bHaveRowIdFilter )
+			dModified.Add(tRowIdFilter);
+
+		return;
+	}
 
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", tCtx.m_sJoinIdx.cstr() );
@@ -1651,7 +1697,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError )
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
@@ -1665,7 +1711,14 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 			return false;
 	}
 
-	RemoveJoinFilters ( tCtx, dModified );
+	if ( tCtx.m_pFilterTree )
+	{
+		dModifiedTree.Resize ( tCtx.m_pFilterTree->GetLength() );
+		ARRAY_FOREACH ( i, (*tCtx.m_pFilterTree) )
+			dModifiedTree[i] = (*tCtx.m_pFilterTree)[i];
+	}
+
+	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
@@ -2004,7 +2057,8 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 	if ( !FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName, sError ) )
 		return nullptr;
 
-	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
+	TryToCreateJoinNullFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings );
+	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, sError, sWarning );
 	TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 
 	SetFilterLocator ( pFilter, tSettings, tCtx, sAttrName );

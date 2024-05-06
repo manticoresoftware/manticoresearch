@@ -168,7 +168,7 @@ POST /search
    "hits" : {
       "hits" : [
          {
-            "_id" : "668018",
+            "_id": 668018,
             "_score" : 3579,
             "_source" : {
                "story_author" : "IgorPartola",
@@ -206,7 +206,7 @@ POST /search
    "hits" : {
       "hits" : [
          {
-            "_id" : "807160",
+            "_id": 807160,
             "_score" : 2599,
             "_source" : {
                "story_author" : "rbanffy",
@@ -241,7 +241,7 @@ POST /search
   "hits" : {
       "hits" : [
          {
-            "_id" : "807160",
+            "_id": 807160,
             "_score" : 2566,
             "_source" : {
                "story_author" : "rbanffy",
@@ -436,7 +436,7 @@ resp, httpRes, err := search.SearchRequest(*searchRequest).Execute()
   "hits": {
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2566,
         "_source": {
           "content": "This is a test document 1",

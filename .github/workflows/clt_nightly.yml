@@ -16,6 +16,7 @@ on:
       - 'test/clt-tests/core/test-replace-into'
       - 'test/clt-tests/comparison-overhead-json-sql/**'
       - 'test/clt-tests/id-attribute-error-during-indexing/**'
+      - 'test/clt-tests/indexer-latest-mysql-postgres/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -113,6 +114,9 @@ jobs:
           - name: Id attribute error during indexing
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/id-attribute-error-during-indexing/test-id-attribute-error-during-indexing
+          - name: Indexer latest MYSQL POSTGRES
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

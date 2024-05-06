@@ -79,7 +79,7 @@ echo -n "$WIN_REPO$TZDATA_PACKAGE_NAME" >"${NSIS_BUILD_DIR}/tzdata_src.txt"
 echo -e "${GREEN}Run nsis build$NC"
 makensis "$NSIS_BUILD_DIR/nsisscript.nsi"
 
-COMMIT_DATE=$(git show -s --date=short --format=%cd $CI_COMMIT_SHORT_SHA | sed 's/-//g' | cut -c 3-8)
+COMMIT_DATE=$(git show -s --date=format-local:"%y%m%d%H" --format=%cd $CI_COMMIT_SHORT_SHA)
 
 if [ -f "$NSIS_BUILD_DIR/manticore_installer.exe" ]; then
   echo "mv $NSIS_BUILD_DIR/manticore_installer.exe /builds/manticoresearch/dev/build/manticore-$MANTICORE_VERSION-$COMMIT_DATE-$CI_COMMIT_SHORT_SHA-x64.exe"

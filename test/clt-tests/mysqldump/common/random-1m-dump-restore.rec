@@ -12,14 +12,6 @@ mysql -h0 -P9306 -e 'show tables'
 ––– input –––
 mysql -h0 -P9306 -e 'select count(*) from t'
 ––– output –––
-+-------+------+
-| Index | Type |
-+-------+------+
-| t     | rt   |
-+-------+------+
-––– input –––
-mysql -h0 -P9306 -e 'select count(*) from t'
-––– output –––
 +----------+
 | count(*) |
 +----------+

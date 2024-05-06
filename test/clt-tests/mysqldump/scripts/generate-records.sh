@@ -19,7 +19,7 @@ for ($i = 0; $i < $argv[1]; $i++) {
       echo ";\n";
     }
 
-    echo 'insert into t (id, f, a, b, j, m, s, e, d, v, fv) values ';
+echo 'insert into t (id, f, a, b, j, m, s, e, d, v, fv) values ';
   } else {
     echo ',';
   }
@@ -38,5 +38,5 @@ for ($i = 0; $i < $argv[1]; $i++) {
   $rand11 = rand();
   $s = str_repeat('b', rand(0,100));
 
-  echo "(" . ++$id . ", '$s', $rand1, $rand2, '{\"a\": [$rand3,$rand4], \"b\": $rand5}', ($rand6,$rand7,$rand8), '$s', $rand85, $rand9, ($rand10, $rand10), ($rand11))";
+echo "(" . ++$id . ", '$s', $rand1, $rand2, '{\"a\": [$rand3,$rand4], \"b\": $rand5}', ($rand6,$rand7,$rand8), '$s', $rand85, $rand9, ($rand10, $rand10), ($rand11))";
 }

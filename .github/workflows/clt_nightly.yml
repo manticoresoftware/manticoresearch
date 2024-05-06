@@ -107,7 +107,7 @@ jobs:
           - name: JSON vs SQL perf
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
-          - name: RELACE INTO
+          - name: REPLACE INTO
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-replace-into
           - name: Indexer latest MYSQL POSTGRES

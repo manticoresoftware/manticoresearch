@@ -7,7 +7,7 @@ FREEZE tbl1[, tbl2, ...]
 ```
 
 `FREEZE` readies a real-time/plain table for a secure [backup](../Securing_and_compacting_a_table/Backup_and_restore.md). Specifically, it:
-1. Deactivates table compaction. If the table is currently being compacted, `FREEZE` will interrupt it.
+1. Deactivates table compaction. If the table is currently being compacted, `FREEZE` will gracefully interrupt it.
 2. Transfers the current RAM chunk to a disk chunk.
 3. Flushes attributes.
 4. Disables implicit operations that could modify the disk files.

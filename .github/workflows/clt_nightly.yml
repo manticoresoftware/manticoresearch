@@ -113,10 +113,10 @@ jobs:
           - name: Indexer latest MYSQL POSTGRES
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres
-            run_args: --privileged
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:
           test_prefix: ${{ matrix.test_prefix }}
           image: ${{ matrix.image }}
           comment_mode: failures
+          run_args: --privileged

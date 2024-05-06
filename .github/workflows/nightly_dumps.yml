@@ -46,4 +46,3 @@ jobs:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
           run_args: --privileged
-          

@@ -25,6 +25,7 @@ searchd
 	flush ramchunk t;
 	replace into t values (10000000000000000000);
 	select * from t;
+	drop table t;
 </sphinxql>
 </queries>
 

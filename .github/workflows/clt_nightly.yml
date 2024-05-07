@@ -12,6 +12,7 @@ on:
   pull_request:
     branches: [ master ]
     paths:
+      - '.github/workflows/clt_nightly.yml'
       - 'test/clt-tests/installation/**'
       - 'test/clt-tests/core/test-replace-into'
       - 'test/clt-tests/comparison-overhead-json-sql/**'

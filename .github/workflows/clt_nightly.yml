@@ -72,6 +72,9 @@ jobs:
           - name: Bookworm release installation
             image: debian:bookworm
             test_prefix: test/clt-tests/installation/deb-release-         
+          - name: Noble release installation
+            image: ubuntu:noble
+            test_prefix: test/clt-tests/installation/deb-release-
           - name: Centos 7 upgrade to dev
             image: centos:7
             test_prefix: test/clt-tests/installation/rhel-dev-u
@@ -104,6 +107,9 @@ jobs:
             test_prefix: test/clt-tests/installation/deb-dev-u
           - name: Bookworm upgrade to dev
             image: debian:bookworm
+            test_prefix: test/clt-tests/installation/deb-dev-update
+          - name: Noble upgrade to dev
+            image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
           - name: JSON vs SQL perf
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest

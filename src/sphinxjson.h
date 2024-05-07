@@ -509,8 +509,9 @@ public:
 	bool			IsStr() const;
 	bool			IsArray() const;
 	bool			Empty() const;
-	const char *	Name() const;
 	bool			IsNull() const;
+	const char *	Name() const;
+	const char *	TypeName() const;
 
 	int64_t			IntVal() const;
 	bool			BoolVal() const;

@@ -185,9 +185,42 @@ POST /sql?mode=raw -d "query=desc%20test"
 <!-- end -->
 
 <!-- example SQL_over_HTTP_4 -->
-### /cli
-While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is tabular, similar to the one returned by  MySQL console.
 
+### /cli_json
+
+While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also
+endpoint `/cli_json` which makes it easier to maintain a Manticore instance via curl or your browser manually. It
+accepts
+POST and GET HTTP methods. Everything after `/cli_json?` will be decoded by Manticore, even if you don't escape it
+manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the
+necessity of encoding it. Everything in POST method is taken by Manticore as is without decoding. The response is in JSON format, similar to sql resultset. It includes "columns" elem with description of the schema, "data" with dataset, and summary as "total", "error", and "warning" nodes.
+
+<!-- request HTTP -->
+
+```bash
+POST /cli_json -d "desc test"
+```
+
+<!-- response HTTP -->
+
+```json
+[{
+"columns":[{"Field":{"type":"string"}},{"Type":{"type":"string"}},{"Properties":{"type":"string"}}],
+"data":[
+{"Field":"id","Type":"bigint","Properties":""},
+{"Field":"body","Type":"text","Properties":"indexed stored"},
+{"Field":"title","Type":"string","Properties":""}
+],
+"total":3,
+"error":"",
+"warning":""
+}]
+```
+
+<!-- end -->
+
+### /cli
+The `/cli` endpoint provides the same functionality as `/cli_json`, but return response format is tabular, similar to the one returned by MySQL console.
 
 <!-- request HTTP -->
 
@@ -216,36 +249,6 @@ POST /cli -d "desc test"
 <!-- end -->
 
 <!-- example SQL_over_HTTP_cli_json -->
-
-### /cli_json
-
-The `/cli_json` endpoint provides the same functionality as `/cli` , but returns the response in JSON format.
-
-
-<!-- request HTTP -->
-
-```bash
-POST /cli_json -d "desc test"
-```
-
-<!-- response HTTP -->
-
-```json
-[{
-"columns":[{"Field":{"type":"string"}},{"Type":{"type":"string"}},{"Properties":{"type":"string"}}],
-"data":[
-{"Field":"id","Type":"bigint","Properties":""},
-{"Field":"body","Type":"text","Properties":"indexed stored"},
-{"Field":"title","Type":"string","Properties":""}
-],
-"total":3,
-"error":"",
-"warning":""
-}]
-```
-
-<!-- end -->
-
 
 ### Keep-alive
 

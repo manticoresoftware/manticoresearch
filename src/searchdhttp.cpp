@@ -579,7 +579,14 @@ void UriPercentReplace ( Str_t & sEntity, bool bAlsoPlus )
 	sEntity.second = int ( pDst - sEntity.first );
 }
 
-void StoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
+void StoreRawQuery ( OptionsHash_t& hOptions, CSphString sRawBody )
+{
+	if ( sRawBody.IsEmpty() )
+		return;
+	hOptions.Add ( std::move ( sRawBody ), "raw_query" );
+}
+
+void DecodeAndStoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
 {
 	if ( IsEmpty ( sWholeData ) )
 		return;
@@ -589,7 +596,8 @@ void StoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
 	Str_t sRaw { sRawBody.cstr(), sWholeData.second }; // FromStr implies strlen(), but we don't need it
 	UriPercentReplace ( sRaw, false );				   // avoid +-decoding
 	*const_cast<char*> ( sRaw.first + sRaw.second ) = '\0';
-	hOptions.Add ( std::move ( sRawBody ), "raw_query" );
+
+	StoreRawQuery ( hOptions, std::move ( sRawBody ));
 }
 
 void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
@@ -678,7 +686,7 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 	{
 		Str_t sRawGetQuery { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len };
 		if ( m_eType == HTTP_GET )
-			StoreRawQuery ( m_hOptions, sRawGetQuery );
+			DecodeAndStoreRawQuery ( m_hOptions, sRawGetQuery );
 		ParseList ( sRawGetQuery, m_hOptions );
 	}
 
@@ -2387,8 +2395,12 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 		auto sWholeData = tSource.ReadAll();
 		if ( tSource.GetError() )
 			return nullptr;
-		StoreRawQuery ( tOptions, sWholeData );
-		HttpRequestParser_c::ParseList ( sWholeData, tOptions );
+		if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL )
+		{
+			DecodeAndStoreRawQuery ( tOptions, sWholeData );
+			HttpRequestParser_c::ParseList ( sWholeData, tOptions );
+		} else
+			StoreRawQuery ( tOptions, { sWholeData } );
 	}
 
 	switch ( eEndpoint )
@@ -2415,17 +2427,9 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 	case SPH_HTTP_ENDPOINT_CLI_JSON:
 		{
 			pOption = tOptions ( "raw_query" );
-			if ( pOption )
-			{
-				SetQuery ( FromStr (*pOption) );
-			} else
-			{
-				SetQuery ( tSource.ReadAll() );
-			}
-			if ( tSource.GetError() )
-				return nullptr;
-			else
-				return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
+			auto tQuery = pOption ? FromStr ( *pOption ) : dEmptyStr;
+			SetQuery ( std::move ( tQuery ) );
+			return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
 		}
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:

@@ -3572,16 +3572,53 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 	return iNew;
 }
 
+static const char * g_dDateTimeFormats[] = {
+	"%Y-%m-%dT%H:%M:%E*S%Z",
+	"%Y-%m-%d'T'%H:%M:%S%Z",
+	"%Y-%m-%dT%H:%M:%E*S",
+	"%Y-%m-%dT%H:%M:%s",
+	"%Y-%m-%dT%H:%M",
+	"%Y-%m-%dT%H",
+	"%Y-%m-%d",
+	"%Y-%m",
+	"%Y"
+};
 
-int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
+int64_t GetUTC ( const CSphString & sTime, const char * pFormat )
 {
-	std::tm tTM = {};
-	std::stringstream sTimeStream (  sTime.cstr() );
-	sTimeStream >> std::get_time ( &tTM, sFormat.cstr() );
-	if ( sTimeStream.fail() )
-		return -1;
+	if ( sTime.IsEmpty() )
+		return 0;
 
-	return std::mktime ( &tTM );
+	const cctz::time_zone & tTZ = GetTimeZoneUTC();
+	std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> tRes;
+
+	if ( pFormat && *pFormat )
+	{
+		if ( cctz::parse ( pFormat, sTime.cstr(), tTZ, &tRes ) )
+			return tRes.time_since_epoch().count();
+	} else
+	{
+		const char * sCur = sTime.cstr();
+		bool bNumbers = true;
+		while ( *sCur && bNumbers )
+		{
+			bNumbers = ( *sCur>='0' && *sCur<='9' );
+			sCur++;
+		}
+		// should be timestamp with only numeric values and at least 10 symbols
+		if ( bNumbers && (sCur-sTime.cstr())>=10 )
+			return strtoul ( sTime.cstr(), NULL, 10 );
+
+		// loop from the built-in formats from longest to shortest and try one by one
+
+		for ( const char * pFmt : g_dDateTimeFormats )
+		{
+			if ( cctz::parse ( pFmt, sTime.cstr(), tTZ, &tRes ) )
+				return tRes.time_since_epoch().count();
+		}
+	}
+
+	return 0;
 }
 
 enum class DateMathOp_e
@@ -3665,7 +3702,7 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 	return tDateTime;
 }
 
-bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime )
+bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime )
 {
 	if ( sMathExpr.IsEmpty() )
 		return false;
@@ -3695,7 +3732,7 @@ bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, i
 		}
 
 		// We're going to just require ISO8601 timestamps, k?
-		tDateTime = GetUTC ( sDateOnly, sFormat );
+		tDateTime = GetUTC ( sDateOnly );
 	}
 
 	if ( IsEmpty ( sExpr ) )

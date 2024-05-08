@@ -274,7 +274,7 @@ enum
 	MYSQL_COM_SET_OPTION	= 27
 };
 
-static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, MysqlErrors_e iErr )
+static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
 {
 	if ( IsEmpty ( sError ) )
 		sError = FROMS("(null)");
@@ -289,25 +289,25 @@ static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_
 		sErr[sError.second-1] = '.';
 		sErr[sError.second] = '\0';
 	}
-	int iError = iErr; // pretend to be mysql syntax error for now
+	auto uError = (WORD)eErr; // pretend to be mysql syntax error for now
 
 	// send packet header
 	SQLPacketHeader_c tHdr { tOut, uPacketID };
 	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
-	tOut.SendByte ( (BYTE)( iError & 0xff ) );
-	tOut.SendByte ( (BYTE)( iError>>8 ) );
+	tOut.SendByte ( (BYTE)( uError & 0xff ) );
+	tOut.SendByte ( (BYTE)( uError>>8 ) );
 
 	// send sqlstate (1 byte marker, 5 byte state)
-	switch ( iErr )
+	switch ( eErr )
 	{
-		case MYSQL_ERR_SERVER_SHUTDOWN:
-		case MYSQL_ERR_UNKNOWN_COM_ERROR:
+		case EMYSQL_ERR::SERVER_SHUTDOWN:
+		case EMYSQL_ERR::UNKNOWN_COM_ERROR:
 			tOut.SendBytes ( "#08S01", 6 );
 			break;
-		case MYSQL_ERR_NO_SUCH_TABLE:
+		case EMYSQL_ERR::NO_SUCH_TABLE:
 			tOut.SendBytes ( "#42S02", 6 );
 			break;
-		case MYSQL_ERR_NO_SUCH_THREAD:
+		case EMYSQL_ERR::NO_SUCH_THREAD:
 			tOut.SendBytes ( "#HY000", 6 );
 			break;
 		default:
@@ -625,11 +625,11 @@ public:
 	}
 	using RowBuffer_i::Eof;
 
-	void Error ( const char * sError, MysqlErrors_e iErr ) override
+	void Error ( const char * sError, EMYSQL_ERR eErr ) override
 	{
 		m_bError = true;
 		m_sError = sError;
-		SendMysqlErrorPacket ( m_tOut, m_uPacketID, FromSz(sError), iErr );
+		SendMysqlErrorPacket ( m_tOut, m_uPacketID, FromSz(sError), eErr );
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
@@ -998,7 +998,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 			StringBuilder_c sError;
 			sError << "unknown command (code=" << uMysqlCmd << ")";
 			LogSphinxqlError ( "", Str_t ( sError ) );
-			SendMysqlErrorPacket ( tOut, uPacketID, Str_t(sError), MYSQL_ERR_UNKNOWN_COM_ERROR );
+			SendMysqlErrorPacket ( tOut, uPacketID, Str_t(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 			break;
 	}
 
@@ -1152,7 +1152,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 				LogNetError ( sError.cstr(), bNotError );
 				if ( !bNotError )
 				{
-					SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+					SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 					pOut->Flush ();
 				}
 				return;
@@ -1178,7 +1178,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			{
 				sError.SetSprintf ( "failed to receive MySQL request body, expected length %d, %s", iPacketLen, ( pIn->GetError() ? pIn->GetErrorMessage().cstr() : sphSockError() ) );
 				LogNetError ( sError.cstr() );
-				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				pOut->Flush ();
 				return;
 			}
@@ -1208,7 +1208,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( IsMaxedOut() )
 			{
 				LogNetError ( g_sMaxedOutMessage.first );
-				SendMysqlErrorPacket ( *pOut, uPacketID, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( *pOut, uPacketID, g_sMaxedOutMessage, EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				pOut->Flush ();
 				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 				break;

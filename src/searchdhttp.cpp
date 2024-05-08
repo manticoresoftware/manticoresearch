@@ -33,68 +33,83 @@ static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // ve
 #define LOG_COMPONENT_HTTP ""
 #define HTTPINFO LOGMSG ( VERBOSE_DEBUG, HTTP, HTTP )
 
-static const char * g_dHttpStatus[] = { "100 Continue", "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "404 Not Found", "405 Method Not Allowed", "409 Conflict", "413 Request Entity Too Large", "500 Internal Server Error", "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
-
-STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
-
 extern CSphString g_sStatusVersion;
 
 static const Str_t g_sDataDisabled = FROMS("-");
 Str_t Data2Log ( Str_t tMsg ) { return ( g_iLogHttpData ? Str_t ( tMsg.first, Min ( tMsg.second, g_iLogHttpData ) ) : g_sDataDisabled ); }
 Str_t Data2Log ( ByteBlob_t tMsg ) { return ( g_iLogHttpData ? Str_t ( (const char *)tMsg.first, Min ( tMsg.second, g_iLogHttpData ) ) : g_sDataDisabled ); }
 
-int HttpGetStatusCodes ( ESphHttpStatus eStatus )
+int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept
 {
 	switch ( eStatus )
 	{
-	case SPH_HTTP_STATUS_100: return 100;
-	case SPH_HTTP_STATUS_200: return 200;
-	case SPH_HTTP_STATUS_206: return 206;
-	case SPH_HTTP_STATUS_400: return 400;
-	case SPH_HTTP_STATUS_403: return 403;
-	case SPH_HTTP_STATUS_404: return 404;
-	case SPH_HTTP_STATUS_405: return 405;
-	case SPH_HTTP_STATUS_409: return 409;
-	case SPH_HTTP_STATUS_413: return 413;
-	case SPH_HTTP_STATUS_500: return 500;
-	case SPH_HTTP_STATUS_501: return 501;
-	case SPH_HTTP_STATUS_503: return 503;
-	case SPH_HTTP_STATUS_526: return 526;
-	default: return 503;
+	case EHTTP_STATUS::_100: return 100;
+	case EHTTP_STATUS::_200: return 200;
+	case EHTTP_STATUS::_206: return 206;
+	case EHTTP_STATUS::_400: return 400;
+	case EHTTP_STATUS::_403: return 403;
+	case EHTTP_STATUS::_404: return 404;
+	case EHTTP_STATUS::_405: return 405;
+	case EHTTP_STATUS::_409: return 409;
+	case EHTTP_STATUS::_413: return 413;
+	case EHTTP_STATUS::_500: return 500;
+	case EHTTP_STATUS::_501: return 501;
+	case EHTTP_STATUS::_503: return 503;
+	case EHTTP_STATUS::_526: return 526;
 	};
 };
 
-ESphHttpStatus HttpGetStatusCodes ( int iStatus )
+EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept
 {
 	switch ( iStatus )
 	{
-	case 100: return SPH_HTTP_STATUS_100;
-	case 200: return SPH_HTTP_STATUS_200;
-	case 206: return SPH_HTTP_STATUS_206;
-	case 400: return SPH_HTTP_STATUS_400;
-	case 403: return SPH_HTTP_STATUS_403;
-	case 404: return SPH_HTTP_STATUS_404;
-	case 405: return SPH_HTTP_STATUS_405;
-	case 409: return SPH_HTTP_STATUS_409;
-	case 413: return SPH_HTTP_STATUS_413;
-	case 500: return SPH_HTTP_STATUS_500;
-	case 501: return SPH_HTTP_STATUS_501;
-	case 503: return SPH_HTTP_STATUS_503;
-	case 526: return SPH_HTTP_STATUS_526;
+	case 100: return EHTTP_STATUS::_100;
+	case 200: return EHTTP_STATUS::_200;
+	case 206: return EHTTP_STATUS::_206;
+	case 400: return EHTTP_STATUS::_400;
+	case 403: return EHTTP_STATUS::_403;
+	case 404: return EHTTP_STATUS::_404;
+	case 405: return EHTTP_STATUS::_405;
+	case 409: return EHTTP_STATUS::_409;
+	case 413: return EHTTP_STATUS::_413;
+	case 500: return EHTTP_STATUS::_500;
+	case 501: return EHTTP_STATUS::_501;
+	case 503: return EHTTP_STATUS::_503;
+	case 526: return EHTTP_STATUS::_526;
 
-	default: return SPH_HTTP_STATUS_503;
+	default: return EHTTP_STATUS::_503;
+	};
+}
+
+inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
+{
+	switch ( eStatus )
+	{
+	case EHTTP_STATUS::_100: return "100 Continue";
+	case EHTTP_STATUS::_200: return "200 OK";
+	case EHTTP_STATUS::_206: return "206 Partial Content";
+	case EHTTP_STATUS::_400: return "400 Bad Request";
+	case EHTTP_STATUS::_403: return "403 Forbidden";
+	case EHTTP_STATUS::_404: return "404 Not Found";
+	case EHTTP_STATUS::_405: return "405 Method Not Allowed";
+	case EHTTP_STATUS::_409: return "409 Conflict";
+	case EHTTP_STATUS::_413: return "413 Request Entity Too Large";
+	case EHTTP_STATUS::_500: return "500 Internal Server Error";
+	case EHTTP_STATUS::_501: return "501 Not Implemented";
+	case EHTTP_STATUS::_503: return "503 Service Unavailable";
+	case EHTTP_STATUS::_526: return "526 Invalid SSL Certificate";
 	};
 }
 
 extern CSphString g_sMySQLVersion;
 
-static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml, bool bHeadReply )
+static void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml, bool bHeadReply )
 {
 	assert ( sBody && iBodyLen );
 
 	const char * sContent = ( bHtml ? "text/html" : "application/json" );
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", g_dHttpStatus[eCode], g_sMySQLVersion.cstr(), sContent, iBodyLen );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName(eCode), g_sMySQLVersion.cstr(), sContent, iBodyLen );
 
 	int iHeaderLen = sHttp.Length();
 	int iBufLen = iHeaderLen;
@@ -106,18 +121,18 @@ static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, con
 		memcpy ( dData.Begin() + iHeaderLen, sBody, iBodyLen );
 }
 
-void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml )
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml )
 {
 	HttpBuildReply ( dData, eCode, sBody, iBodyLen, bHtml, false );
 }
 
-void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply )
+void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply )
 {
 	HttpBuildReply ( dData, eCode, sBody, iBodyLen, false, bHeadReply );
 }
 
 
-void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
+void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError )
 {
 	JsonObj_c tErr;
 	tErr.AddStr ( "error", szError );
@@ -131,7 +146,7 @@ struct Endpoint_t
 	const char* m_szName2;
 };
 
-static Endpoint_t g_dEndpoints[] =
+static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 	{
 		{ "index.html", nullptr },
 		{ "sql", nullptr },
@@ -149,18 +164,16 @@ static Endpoint_t g_dEndpoints[] =
 		{ "_bulk", nullptr }
 };
 
-STATIC_ASSERT ( sizeof ( g_dEndpoints ) / sizeof ( g_dEndpoints[0] ) == SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );
-
-ESphHttpEndpoint StrToHttpEndpoint ( const CSphString& sEndpoint )
+EHTTP_ENDPOINT StrToHttpEndpoint ( const CSphString& sEndpoint ) noexcept
 {
-	if ( sEndpoint.Begins ( g_dEndpoints[SPH_HTTP_ENDPOINT_PQ].m_szName1 ) || sEndpoint.Begins ( g_dEndpoints[SPH_HTTP_ENDPOINT_PQ].m_szName2 ) )
-		return SPH_HTTP_ENDPOINT_PQ;
+	if ( sEndpoint.Begins ( g_dEndpoints[(int)EHTTP_ENDPOINT::PQ].m_szName1 ) || sEndpoint.Begins ( g_dEndpoints[(int)EHTTP_ENDPOINT::PQ].m_szName2 ) )
+		return EHTTP_ENDPOINT::PQ;
 
-	for ( int i = 0; i < SPH_HTTP_ENDPOINT_TOTAL; ++i )
+	for ( int i = 0; i < (int)EHTTP_ENDPOINT::TOTAL; ++i )
 		if ( sEndpoint == g_dEndpoints[i].m_szName1 || ( g_dEndpoints[i].m_szName2 && sEndpoint == g_dEndpoints[i].m_szName2 ) )
-			return ESphHttpEndpoint ( i );
+			return EHTTP_ENDPOINT ( i );
 
-	return SPH_HTTP_ENDPOINT_TOTAL;
+	return EHTTP_ENDPOINT::TOTAL;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -421,17 +434,17 @@ public:
 
 ///////////////////////////////////////////////////////////////////////
 
-CSphString HttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
+CSphString HttpEndpointToStr ( EHTTP_ENDPOINT eEndpoint )
 {
-	assert ( eEndpoint >= SPH_HTTP_ENDPOINT_INDEX && eEndpoint < SPH_HTTP_ENDPOINT_TOTAL );
-	return g_dEndpoints[eEndpoint].m_szName1;
+	assert ( eEndpoint < EHTTP_ENDPOINT::TOTAL );
+	return g_dEndpoints[(int)eEndpoint].m_szName1;
 }
 
-void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, Str_t sReply, bool bHtml )
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml )
 {
 	const char * sContent = ( bHtml ? "text/html" : "application/json" );
 	StringBuilder_c sHttp;
-	sHttp.Sprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", g_dHttpStatus[eCode], g_sStatusVersion.cstr(), sContent, sReply.second );
+	sHttp.Sprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", HttpGetStatusName ( eCode ), g_sStatusVersion.cstr(), sContent, sReply.second );
 
 	dData.Reserve ( sHttp.GetLength() + sReply.second );
 	dData.Append ( (Str_t)sHttp );
@@ -847,7 +860,7 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
 	StringBuilder_c sIndexPage;
 	sIndexPage.Appendf ( g_sIndexPage, g_sStatusVersion.cstr() );
-	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, (Str_t)sIndexPage, true );
+	HttpBuildReply ( dData, EHTTP_STATUS::_200, (Str_t)sIndexPage, true );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -891,8 +904,8 @@ public:
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		CSphString sEndpoint = tReq.GetString();
-		ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( sEndpoint );
-		if ( eEndpoint!=SPH_HTTP_ENDPOINT_JSON_UPDATE && eEndpoint!=SPH_HTTP_ENDPOINT_JSON_DELETE )
+		EHTTP_ENDPOINT eEndpoint = StrToHttpEndpoint ( sEndpoint );
+		if ( eEndpoint!=EHTTP_ENDPOINT::JSON_UPDATE && eEndpoint!=EHTTP_ENDPOINT::JSON_DELETE )
 			return false;
 
 		DWORD uLength = tReq.GetDword();
@@ -900,7 +913,7 @@ public:
 		tReq.GetBytes ( dResult.Begin(), (int)uLength );
 		dResult[uLength] = '\0';
 
-		return sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==SPH_HTTP_ENDPOINT_JSON_UPDATE );
+		return sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE );
 	}
 
 protected:
@@ -942,7 +955,7 @@ class HttpErrorReporter_c final : public StmtErrorReporter_i
 public:
 	void			Ok ( int iAffectedRows, const CSphString & /*sWarning*/, int64_t /*iLastInsertId*/ ) final { m_iAffected = iAffectedRows; }
 	void			Ok ( int iAffectedRows, int /*nWarnings*/ ) final { m_iAffected = iAffectedRows; }
-	void			ErrorEx ( MysqlErrors_e iErr, const char * sError ) final;
+	void			ErrorEx ( EMYSQL_ERR eErr, const char * sError ) final;
 	RowBuffer_i * 	GetBuffer() final { return nullptr; }
 
 	bool			IsError() const { return m_bError; }
@@ -956,7 +969,7 @@ private:
 };
 
 
-void HttpErrorReporter_c::ErrorEx ( MysqlErrors_e /*iErr*/, const char * sError )
+void HttpErrorReporter_c::ErrorEx ( EMYSQL_ERR /*iErr*/, const char * sError )
 {
 	m_bError = true;
 	m_sError = sError;
@@ -970,7 +983,7 @@ StmtErrorReporter_i * CreateHttpErrorReporter()
 //////////////////////////////////////////////////////////////////////////
 // all the handlers for http queries
 
-void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData )
+void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData )
 {
 	if ( bNeedHttpResponse )
 		HttpBuildReply ( dData, eStatus, sResult, false );
@@ -997,18 +1010,18 @@ const CSphString & HttpHandler_c::GetError () const
 	return m_sError;
 }
 
-ESphHttpStatus HttpHandler_c::GetStatusCode() const
+EHTTP_STATUS HttpHandler_c::GetStatusCode() const
 {
 	return m_eHttpCode;
 }
 
-void HttpHandler_c::ReportError ( const char * szError, ESphHttpStatus eStatus )
+void HttpHandler_c::ReportError ( const char * szError, EHTTP_STATUS eStatus )
 {
 	m_sError = szError;
 	ReportError ( eStatus );
 }
 
-void HttpHandler_c::ReportError ( ESphHttpStatus eStatus )
+void HttpHandler_c::ReportError ( EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
 	if ( m_bNeedHttpResponse )
@@ -1020,7 +1033,7 @@ void HttpHandler_c::ReportError ( ESphHttpStatus eStatus )
 	}
 }
 
-void HttpHandler_c::FormatError ( ESphHttpStatus eStatus, const char * sError, ... )
+void HttpHandler_c::FormatError ( EHTTP_STATUS eStatus, const char * sError, ... )
 {
 	va_list ap;
 	va_start ( ap, sError );
@@ -1039,25 +1052,25 @@ void HttpHandler_c::FormatError ( ESphHttpStatus eStatus, const char * sError, .
 	}
 }
 
-void HttpHandler_c::BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
+void HttpHandler_c::BuildReply ( const CSphString & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
 	ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
 }
 
-void HttpHandler_c::BuildReply ( const char* szResult, ESphHttpStatus eStatus )
+void HttpHandler_c::BuildReply ( const char* szResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
 	ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
 }
 
-void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
+void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
 	ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
 }
 
-void HttpHandler_c::BuildReply ( Str_t sResult, ESphHttpStatus eStatus )
+void HttpHandler_c::BuildReply ( Str_t sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
 	ReplyBuf ( sResult, eStatus, m_bNeedHttpResponse, m_dData );
@@ -1068,12 +1081,12 @@ bool HttpHandler_c::CheckValid ( const ServedIndex_c* pServed, const CSphString&
 {
 	if ( !pServed )
 	{
-		FormatError ( SPH_HTTP_STATUS_500, "no such table '%s'", sIndex.cstr () );
+		FormatError ( EHTTP_STATUS::_500, "no such table '%s'", sIndex.cstr () );
 		return false;
 	}
 	if ( pServed->m_eType!=eType )
 	{
-		FormatError ( SPH_HTTP_STATUS_500, "table '%s' is not %s", sIndex.cstr(), GetIndexTypeName ( eType ) );
+		FormatError ( EHTTP_STATUS::_500, "table '%s' is not %s", sIndex.cstr(), GetIndexTypeName ( eType ) );
 		return false;
 	}
 	return true;
@@ -1367,7 +1380,7 @@ public:
 		AggrResult_t * pRes = tHandler->GetResult ( 0 );
 		if ( !pRes->m_sError.IsEmpty() )
 		{
-			ReportError ( pRes->m_sError.cstr(), SPH_HTTP_STATUS_500 );
+			ReportError ( pRes->m_sError.cstr(), EHTTP_STATUS::_500 );
 			return false;
 		}
 
@@ -1381,7 +1394,7 @@ public:
 			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
 
 		CSphString sResult = EncodeResult ( dAggsRes, bNeedProfile ? &tProfile : nullptr );
-		BuildReply ( sResult, SPH_HTTP_STATUS_200 );
+		BuildReply ( sResult, EHTTP_STATUS::_200 );
 
 		return true;
 	}
@@ -1429,13 +1442,13 @@ protected:
 		const CSphString * pRawQl = m_tOptions ( "query" );
 		if ( !pRawQl || pRawQl->IsEmpty() )
 		{
-			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
+			ReportError ( "query missing", EHTTP_STATUS::_400 );
 			return nullptr;
 		}
 
 		if ( !sphParseSqlQuery ( FromStr ( *pRawQl ), m_dStmt, m_sError, SPH_COLLATION_DEFAULT ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( EHTTP_STATUS::_400 );
 			return nullptr;
 		}
 
@@ -1448,14 +1461,14 @@ protected:
 
 			if ( tStmt.m_eStmt!=STMT_SELECT )
 			{
-				ReportError ( "only SELECT queries are supported", SPH_HTTP_STATUS_501 );
+				ReportError ( "only SELECT queries are supported", EHTTP_STATUS::_501 );
 				return nullptr;
 			}
 		}
 
 		if ( m_dStmt.GetLength()>1 && !bFacet )
 		{
-			ReportError ( "only FACET multiple queries supported", SPH_HTTP_STATUS_501 );
+			ReportError ( "only FACET multiple queries supported", EHTTP_STATUS::_501 );
 			return nullptr;
 		}
 		if ( bFacet )
@@ -1610,7 +1623,7 @@ public:
 		m_dBuf.FinishBlock ( false ); // root object
 	}
 
-	void Error ( const char * szError, MysqlErrors_e iErr ) override
+	void Error ( const char * szError, EMYSQL_ERR ) override
 	{
 		auto _ = m_dBuf.Object ( false );
 		DataFinish ( 0, szError, nullptr );
@@ -1788,7 +1801,7 @@ public:
 		TRACE_CONN ( "conn", "HttpRawSqlHandler_c::Process" );
 		if ( IsEmpty ( m_sQuery ) )
 		{
-			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
+			ReportError ( "query missing", EHTTP_STATUS::_400 );
 			return false;
 		}
 
@@ -1799,10 +1812,10 @@ public:
 		session::Execute ( m_sQuery, tOut );
 		if ( tOut.IsError() )
 		{
-			ReportError ( tOut.GetError().scstr(), SPH_HTTP_STATUS_500 );
+			ReportError ( tOut.GetError().scstr(), EHTTP_STATUS::_500 );
 			return false;
 		}
-		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
+		BuildReply ( tOut.Finish(), EHTTP_STATUS::_200 );
 		return true;
 	}
 };
@@ -1825,7 +1838,7 @@ public:
 
 		if ( !sphParseJsonQuery ( m_sQuery, &m_tParsed ) )
 		{
-			ReportError ( TlsMsg::szError(), SPH_HTTP_STATUS_400 );
+			ReportError ( TlsMsg::szError(), EHTTP_STATUS::_400 );
 			return nullptr;
 		}
 
@@ -1938,16 +1951,16 @@ public:
 		DocID_t tDocId = 0;
 		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, m_sError ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( EHTTP_STATUS::_400 );
 			return false;
 		}
 
-		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? SPH_HTTP_ENDPOINT_JSON_REPLACE : SPH_HTTP_ENDPOINT_JSON_INSERT );
+		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? EHTTP_ENDPOINT::JSON_REPLACE : EHTTP_ENDPOINT::JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
 
 		CSphString sResult = tResult.AsString();
-		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
+		BuildReply ( sResult, bResult ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 );
 
 		return bResult;
 	}
@@ -2001,18 +2014,18 @@ public:
 		SqlStmt_t tStmt;
 		tStmt.m_bJson = true;
 		tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
-		tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
+		tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_UPDATE );
 
 		DocID_t tDocId = 0;
 		if ( !ParseQuery ( tStmt, tDocId ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( EHTTP_STATUS::_400 );
 			return false;
 		}
 
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
-		BuildReply ( tResult.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 );
+		BuildReply ( tResult.AsString(), bResult ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 );
 
 		return bResult;
 	}
@@ -2040,7 +2053,7 @@ public:
 protected:
 	bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId ) final
 	{
-		tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
+		tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
 		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, m_sError );
 	}
 
@@ -2169,15 +2182,15 @@ public:
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
 
-		auto FinishBulk = [&, this] ( ESphHttpStatus eStatus = SPH_HTTP_STATUS_TOTAL ) {
+		auto FinishBulk = [&, this] ( EHTTP_STATUS eStatus = EHTTP_STATUS::_200 ) {
 			JsonObj_c tRoot;
 			tRoot.AddItem ( "items", tResults );
 			tRoot.AddInt ( "current_line", iCurLine );
 			tRoot.AddInt ( "skipped_lines", iCurLine - iLastTxStartLine );
 			tRoot.AddBool ( "errors", !bResult );
 			tRoot.AddStr ( "error", m_sError.IsEmpty() ? "" : m_sError );
-			if ( eStatus == SPH_HTTP_STATUS_TOTAL )
-				eStatus = bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500;
+			if ( eStatus == EHTTP_STATUS::_200 && !bResult )
+				eStatus = EHTTP_STATUS::_500;
 			BuildReply ( tRoot.AsString(), eStatus );
 			HTTPINFO << "inserted  " << iCurLine;
 			return bResult;
@@ -2234,7 +2247,7 @@ public:
 			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
 			{
 				HTTPINFO << "inserted " << iCurLine << ", error: " << m_sError;
-				return FinishBulk ( SPH_HTTP_STATUS_400 );
+				return FinishBulk ( EHTTP_STATUS::_400 );
 			}
 
 			if ( sTxnIdx.IsEmpty() )
@@ -2265,20 +2278,20 @@ public:
 				break;
 
 			case STMT_UPDATE:
-				tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
+				tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_UPDATE );
 				bResult = ProcessUpdate ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError );
 				if ( bResult )
 					m_iUpdates += GetLastUpdated();
 				break;
 
 			case STMT_DELETE:
-				tStmt.m_sEndpoint = HttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
+				tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
 				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError );
 				break;
 
 			default:
 				HTTPINFO << "inserted  " << iCurLine << ", got unknown statement:" << (int)tStmt.m_eStmt;
-				return FinishBulk ( SPH_HTTP_STATUS_400 );
+				return FinishBulk ( EHTTP_STATUS::_400 );
 			}
 
 			if ( !bResult || !session::IsInTrans() )
@@ -2313,7 +2326,7 @@ private:
 	{
 		if ( !m_tOptions.Exists ( "content-type" ) )
 		{
-			ReportError ( "Content-Type must be set", SPH_HTTP_STATUS_400 );
+			ReportError ( "Content-Type must be set", EHTTP_STATUS::_400 );
 			return false;
 		}
 
@@ -2321,7 +2334,7 @@ private:
 		auto dParts = sphSplit ( sContentType.cstr(), ";" );
 		if ( dParts.IsEmpty() || dParts[0] != "application/x-ndjson" )
 		{
-			ReportError ( "Content-Type must be application/x-ndjson", SPH_HTTP_STATUS_400 );
+			ReportError ( "Content-Type must be application/x-ndjson", EHTTP_STATUS::_400 );
 			return false;
 		}
 
@@ -2375,10 +2388,10 @@ public:
 private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
 	bool Validate();
-	void ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly );
+	void ReportLogError ( const char * sError, const char * sErrorType , EHTTP_STATUS eStatus, bool bLogOnly );
 };
 
-static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
+static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pOption = nullptr;
 	sQuery = dEmptyStr;
@@ -2390,12 +2403,12 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 	};
 
 	// SPH_HTTP_ENDPOINT_SQL SPH_HTTP_ENDPOINT_CLI SPH_HTTP_ENDPOINT_CLI_JSON these endpoints url-encoded, all others are plain json, and we don't want to waste time pre-parsing them
-	if ( eEndpoint==SPH_HTTP_ENDPOINT_SQL || eEndpoint==SPH_HTTP_ENDPOINT_CLI || eEndpoint==SPH_HTTP_ENDPOINT_CLI_JSON )
+	if ( eEndpoint== EHTTP_ENDPOINT::SQL || eEndpoint== EHTTP_ENDPOINT::CLI || eEndpoint== EHTTP_ENDPOINT::CLI_JSON )
 	{
 		auto sWholeData = tSource.ReadAll();
 		if ( tSource.GetError() )
 			return nullptr;
-		if ( eEndpoint == SPH_HTTP_ENDPOINT_SQL )
+		if ( eEndpoint == EHTTP_ENDPOINT::SQL )
 		{
 			DecodeAndStoreRawQuery ( tOptions, sWholeData );
 			HttpRequestParser_c::ParseList ( sWholeData, tOptions );
@@ -2405,7 +2418,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 
 	switch ( eEndpoint )
 	{
-	case SPH_HTTP_ENDPOINT_SQL:
+	case EHTTP_ENDPOINT::SQL:
 		{
 			bool bRawMode = false;
 			pOption = tOptions ( "mode" );
@@ -2435,8 +2448,8 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 			}
 		}
 
-	case SPH_HTTP_ENDPOINT_CLI:
-	case SPH_HTTP_ENDPOINT_CLI_JSON:
+	case EHTTP_ENDPOINT::CLI:
+	case EHTTP_ENDPOINT::CLI_JSON:
 		{
 			pOption = tOptions ( "raw_query" );
 			auto tQuery = pOption ? FromStr ( *pOption ) : dEmptyStr;
@@ -2444,52 +2457,52 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 			return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
 		}
 
-	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
+	case EHTTP_ENDPOINT::JSON_SEARCH:
 		SetQuery ( tSource.ReadAll() );
 		return std::make_unique<HttpHandler_JsonSearch_c> ( sQuery, tOptions ); // json
 
-	case SPH_HTTP_ENDPOINT_JSON_INDEX:
-	case SPH_HTTP_ENDPOINT_JSON_CREATE:
-	case SPH_HTTP_ENDPOINT_JSON_INSERT:
-	case SPH_HTTP_ENDPOINT_JSON_REPLACE:
+	case EHTTP_ENDPOINT::JSON_INDEX:
+	case EHTTP_ENDPOINT::JSON_CREATE:
+	case EHTTP_ENDPOINT::JSON_INSERT:
+	case EHTTP_ENDPOINT::JSON_REPLACE:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
 		else
-			return std::make_unique<HttpHandler_JsonInsert_c> ( sQuery, eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE ); // json
+			return std::make_unique<HttpHandler_JsonInsert_c> ( sQuery, eEndpoint==EHTTP_ENDPOINT::JSON_INDEX || eEndpoint==EHTTP_ENDPOINT::JSON_REPLACE ); // json
 
-	case SPH_HTTP_ENDPOINT_JSON_UPDATE:
+	case EHTTP_ENDPOINT::JSON_UPDATE:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
 		else
 			return std::make_unique<HttpHandler_JsonUpdate_c> ( sQuery ); // json
 
-	case SPH_HTTP_ENDPOINT_JSON_DELETE:
+	case EHTTP_ENDPOINT::JSON_DELETE:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
 		else
 			return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery ); // json
 
-	case SPH_HTTP_ENDPOINT_JSON_BULK:
+	case EHTTP_ENDPOINT::JSON_BULK:
 		return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
 
-	case SPH_HTTP_ENDPOINT_PQ:
+	case EHTTP_ENDPOINT::PQ:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
 		else
 			return std::make_unique<HttpHandlerPQ_c> ( sQuery, tOptions ); // json
 
-	case SPH_HTTP_ENDPOINT_ES_BULK:
+	case EHTTP_ENDPOINT::ES_BULK:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
 		else
 			return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
 
-	case SPH_HTTP_ENDPOINT_TOTAL:
+	case EHTTP_ENDPOINT::TOTAL:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
@@ -2515,18 +2528,18 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
 	{
-		if ( tRes.m_eEndpoint == SPH_HTTP_ENDPOINT_INDEX )
+		if ( tRes.m_eEndpoint == EHTTP_ENDPOINT::INDEX )
 		{
 			HttpHandlerIndexPage ( dResult );
 		} else
 		{
 			DumpHttp ( eRequestType, sEndpoint, tSource.ReadAll() );
-			tRes.m_eReplyHttpCode = SPH_HTTP_STATUS_501;
+			tRes.m_eReplyHttpCode = EHTTP_STATUS::_501;
 			if ( tSource.GetError() )
 			{
 				tRes.m_sError = tSource.GetErrorMessage();
 				if ( tRes.m_sError.Begins ( "length out of bounds" ) )
-					tRes.m_eReplyHttpCode = SPH_HTTP_STATUS_413;
+					tRes.m_eReplyHttpCode = EHTTP_STATUS::_413;
 			} else
 			{
 				tRes.m_sError.SetSprintf ( "/%s - unsupported endpoint", sEndpoint.cstr() );
@@ -2536,7 +2549,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 		return tRes;
 	}
 	// will be processed by buddy right after source data got parsed
-	if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
+	if ( tRes.m_eEndpoint == EHTTP_ENDPOINT::CLI )
 		return tRes;
 
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
@@ -2575,16 +2588,16 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		pSource = std::make_unique<RawSocketStream_c> ( &tIn, iFullLength );
 	}
 
-	ESphHttpEndpoint eEndpoint = StrToHttpEndpoint ( m_hOptions["endpoint"] );
-	if ( IsLogManagementEnabled() && eEndpoint==SPH_HTTP_ENDPOINT_TOTAL && m_sEndpoint.Ends ( "_bulk" ) )
-		eEndpoint = SPH_HTTP_ENDPOINT_ES_BULK;
+	EHTTP_ENDPOINT eEndpoint = StrToHttpEndpoint ( m_sEndpoint );
+	if ( IsLogManagementEnabled() && eEndpoint==EHTTP_ENDPOINT::TOTAL && m_sEndpoint.Ends ( "_bulk" ) )
+		eEndpoint = EHTTP_ENDPOINT::ES_BULK;
 
 	Str_t sSrcQuery;
 	HttpProcessResult_t tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 
-void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
+void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError )
 {
 	JsonObj_c tErr;
 	tErr.AddStr ( "error", szError );
@@ -2659,7 +2672,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 		auto & tDoc = dDocs.Add();
 		if ( !bson::JsonObjToBson ( tJsonDoc, tDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
 		{
-			ReportError ( "Bad cjson", SPH_HTTP_STATUS_400 );
+			ReportError ( "Bad cjson", EHTTP_STATUS::_400 );
 			return false;
 		}
 	}
@@ -2668,7 +2681,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 	JsonObj_c tJsonDocs = tPercolate.GetArrayItem ( "documents", m_sError, true );
 	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2677,14 +2690,14 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 		auto & tDoc = dDocs.Add();
 		if ( !bson::JsonObjToBson ( i, tDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
 		{
-			ReportError ( "Bad cjson", SPH_HTTP_STATUS_400 );
+			ReportError ( "Bad cjson", EHTTP_STATUS::_400 );
 			return false;
 		}
 	}
 
 	if ( dDocs.IsEmpty() )
 	{
-		ReportError ( "no documents found", SPH_HTTP_STATUS_400 );
+		ReportError ( "no documents found", EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2703,7 +2716,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 
 	JsonEscapedBuilder sRes;
 	EncodePercolateMatchResult ( tResult.m_dResult, tResult.m_dDocids, sIndex, sRes );
-	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
+	BuildReply ( sRes, EHTTP_STATUS::_200 );
 
 	return true;
 }
@@ -2733,7 +2746,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 		bQueryQL = false;
 		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, m_sError, sWarning ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( EHTTP_STATUS::_400 );
 			return false;
 		}
 
@@ -2743,7 +2756,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 
 	if ( !sQuery || *sQuery=='\0' )
 	{
-		ReportError ( "no query found", SPH_HTTP_STATUS_400 );
+		ReportError ( "no query found", EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2754,7 +2767,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", m_sError, true );
 	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2765,13 +2778,13 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 	JsonObj_c tFilters = tRoot.GetStrItem ( "filters", m_sError, true );
 	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
 	if ( tFilters && !bQueryQL && tQuery.m_dFilters.GetLength() )
 	{
-		ReportError ( "invalid combination of SphinxQL and query filter provided", SPH_HTTP_STATUS_501 );
+		ReportError ( "invalid combination of SphinxQL and query filter provided", EHTTP_STATUS::_501 );
 		return false;
 	}
 
@@ -2787,7 +2800,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 
 		if ( !PercolateParseFilters ( tFilters.SzVal(), SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetInternalSchema (), dFilters, dFilterTree, m_sError ) )
 		{
-			ReportError ( SPH_HTTP_STATUS_400 );
+			ReportError ( EHTTP_STATUS::_400 );
 			return false;
 		}
 	} else
@@ -2832,12 +2845,12 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 
 	if ( !bOk )
 	{
-		ReportError ( SPH_HTTP_STATUS_500 );
+		ReportError ( EHTTP_STATUS::_500 );
 	} else
 	{
 		StringBuilder_c sRes;
 		EncodePercolateQueryResult ( bReplace, sIndex, iID, sRes );
-		BuildReply ( sRes, SPH_HTTP_STATUS_200 );
+		BuildReply ( sRes, EHTTP_STATUS::_200 );
 	}
 
 	return bOk;
@@ -2869,7 +2882,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", m_sError, true );
 	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2880,7 +2893,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	JsonObj_c tUidsArray = tRoot.GetArrayItem ( "id", m_sError, true );
 	if ( !m_sError.IsEmpty() )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2889,7 +2902,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 
 	if ( !sTags.GetLength() && !pCmd->m_dDeleteQueries.GetLength() )
 	{
-		ReportError ( "no tags or id field arrays found", SPH_HTTP_STATUS_400 );
+		ReportError ( "no tags or id field arrays found", EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2904,14 +2917,14 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 
 	if ( !bOk )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "%s", m_sError.cstr() );
+		FormatError ( EHTTP_STATUS::_400, "%s", m_sError.cstr() );
 		return false;
 	}
 
 	StringBuilder_c tOut;
 	tOut.Sprintf (R"({"took":%d,"timed_out":false,"deleted":%d,"total":%d,"failures":[]})",
 		( int ) ( tmTotal / 1000 ), iDeleted, iDeleted );
-	BuildReply ( tOut, SPH_HTTP_STATUS_200 );
+	BuildReply ( tOut, EHTTP_STATUS::_200 );
 
 	return true;
 }
@@ -2922,7 +2935,7 @@ bool HttpHandlerPQ_c::Process()
 	CSphString * sEndpoint = m_tOptions ( "endpoint" );
 	if ( !sEndpoint || sEndpoint->IsEmpty() )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "invalid empty endpoint, should be pq/index_name/operation");
+		FormatError ( EHTTP_STATUS::_400, "invalid empty endpoint, should be pq/index_name/operation");
 		return false;
 	}
 
@@ -2935,7 +2948,7 @@ bool HttpHandlerPQ_c::Process()
 	sphSplit ( dPoints, sEndpointMethod, "/" );
 	if ( dPoints.GetLength()<2 )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "invalid endpoint '%s', should be pq/index_name/operation", sEndpoint->scstr() );
+		FormatError ( EHTTP_STATUS::_400, "invalid endpoint '%s', should be pq/index_name/operation", sEndpoint->scstr() );
 		return false;
 	}
 
@@ -2966,7 +2979,7 @@ bool HttpHandlerPQ_c::Process()
 	const JsonObj_c tRoot ( m_sQuery );
 	if ( !tRoot )
 	{
-		ReportError ( "bad JSON object", SPH_HTTP_STATUS_400 );
+		ReportError ( "bad JSON object", EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2976,7 +2989,7 @@ bool HttpHandlerPQ_c::Process()
 	if ( eOp==PercolateOp_e::UNKNOWN )
 	{
 		m_sError.SetSprintf ( "invalid percolate operation '%s', should be one of 'search' or 'doc' or '_delete_by_query'", sOp.cstr() );
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2984,14 +2997,14 @@ bool HttpHandlerPQ_c::Process()
 	JsonObj_c tQuery = tRoot.GetObjItem ( "query", m_sError, ( eOp==PercolateOp_e::DEL ) );
 	if ( !tQuery && ( eOp!=PercolateOp_e::DEL ) )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
 	JsonObj_c tPerc = ( ( eOp==PercolateOp_e::SEARCH ) ? tQuery.GetObjItem ( "percolate", m_sError ) : JsonNull );
 	if ( ( eOp==PercolateOp_e::SEARCH ) && !tPerc )
 	{
-		ReportError ( SPH_HTTP_STATUS_400 );
+		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -3156,10 +3169,10 @@ char * SkipSpace ( char * p )
 	return p;
 }
 
-static CSphString sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
+static CSphString sphHttpEndpointToStr ( EHTTP_ENDPOINT eEndpoint )
 {
-	assert ( eEndpoint>=SPH_HTTP_ENDPOINT_INDEX && eEndpoint<SPH_HTTP_ENDPOINT_TOTAL );
-	return g_dEndpoints[eEndpoint].m_szName1;
+	assert ( eEndpoint < EHTTP_ENDPOINT::TOTAL );
+	return g_dEndpoints[(int)eEndpoint].m_szName1;
 }
 
 bool Ends ( const Str_t tVal, const char * sSuffix )
@@ -3174,7 +3187,7 @@ bool Ends ( const Str_t tVal, const char * sSuffix )
 	return strncmp ( tVal.first + tVal.second - iSuffix, sSuffix, iSuffix )==0;
 }
 
-void HttpHandlerEsBulk_c::ReportLogError ( const char * sError, const char * sErrorType , ESphHttpStatus eStatus, bool bLogOnly )
+void HttpHandlerEsBulk_c::ReportLogError ( const char * sError, const char * sErrorType , EHTTP_STATUS eStatus, bool bLogOnly )
 {
 	if ( !bLogOnly )
 		ReportError ( sError, sErrorType, eStatus );
@@ -3196,7 +3209,7 @@ bool HttpHandlerEsBulk_c::Validate()
 	CSphString * pOptContentType = GetOptions() ( "content-type" );
 	if ( !pOptContentType )
 	{
-		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( "Content-Type must be set", "illegal_argument_exception", EHTTP_STATUS::_400, false );
 		return false;
 	}
 
@@ -3205,18 +3218,18 @@ bool HttpHandlerEsBulk_c::Validate()
 	if ( !dOptContentType.Contains ( "application/x-ndjson" ) && !dOptContentType.Contains ( "application/json" ) )
 	{
 		sError.SetSprintf ( "Content-Type header [%s] is not supported", pOptContentType->cstr() );
-		ReportLogError ( sError.cstr(), "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( sError.cstr(), "illegal_argument_exception", EHTTP_STATUS::_400, false );
 		return false;
 	}
 
 	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportLogError ( "request body is required", "parse_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( "request body is required", "parse_exception", EHTTP_STATUS::_400, false );
 		return false;
 	}
 	if ( !Ends ( GetBody(), "\n" ) )
 	{
-		ReportLogError ( "The bulk request must be terminated by a newline [\n]", "illegal_argument_exception", SPH_HTTP_STATUS_400, false );
+		ReportLogError ( "The bulk request must be terminated by a newline [\n]", "illegal_argument_exception", EHTTP_STATUS::_400, false );
 		return false;
 	}
 
@@ -3254,7 +3267,7 @@ bool HttpHandlerEsBulk_c::Process()
 			BulkDoc_t & tDoc = dDocs.Add();
 			if ( !ParseMetaLine ( tLine.first, tDoc, sError ) )
 			{
-				ReportLogError ( sError.cstr(), "action_request_validation_exception", SPH_HTTP_STATUS_400, false );
+				ReportLogError ( sError.cstr(), "action_request_validation_exception", EHTTP_STATUS::_400, false );
 				return false;
 			}
 			if ( tDoc.m_sAction=="delete" )
@@ -3294,10 +3307,10 @@ bool HttpHandlerEsBulk_c::Process()
 	tRoot.AddItem ( "items", tItems );
 	tRoot.AddBool ( "errors", !bOk );
 	tRoot.AddInt ( "took", 1 ); // FIXME!!! add delta
-	BuildReply ( tRoot.AsString(), ( bOk ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_409 ) );
+	BuildReply ( tRoot.AsString(), ( bOk ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 ) );
 
 	if ( !bOk )
-		ReportLogError ( "failed to commit", "", SPH_HTTP_STATUS_400, true );
+		ReportLogError ( "failed to commit", "", EHTTP_STATUS::_400, true );
 
 	return bOk;
 }
@@ -3405,13 +3418,13 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				break;
 
 			case STMT_UPDATE:
-				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
+				tStmt.m_sEndpoint = sphHttpEndpointToStr ( EHTTP_ENDPOINT::JSON_UPDATE );
 				bAction = ProcessUpdate ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError );
 				bUpdate = true;
 				break;
 
 			case STMT_DELETE:
-				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
+				tStmt.m_sEndpoint = sphHttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
 				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError );
 				break;
 

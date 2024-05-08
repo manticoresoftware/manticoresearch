@@ -1,5 +1,5 @@
 ––– input –––
-echo "a > b" > /var/lib/manticore/wordforms1.txt; echo "c > d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop.txt
+echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop.txt
 ––– output –––
 ––– input –––
 ls -1 /var/lib/manticore/
@@ -47,7 +47,7 @@ tag integer
 ) exceptions='/var/lib/manticore/tbl/exc.txt' stopwords='/var/lib/manticore/tbl/stop.txt' wordforms='/var/lib/manticore/tbl/wordforms1.txt' |
 +-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE new_tbl LIKE tbl WITH DATA;"
+mysql -h0 -P9306 -e 'CREATE TABLE `new_tbl` LIKE `tbl` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM new_tbl; SHOW CREATE TABLE new_tbl;"
@@ -81,4 +81,22 @@ cat /var/lib/manticore/new_tbl/stopwords_0.txt
 abcstop
 ––– input –––
 cat /var/lib/manticore/new_tbl/wordforms_0.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `new_tbl2` LIKE `new_tbl` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM new_tbl2; SHOW CREATE TABLE new_tbl2;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `new_tbl3` LIKE `tbl` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM new_tbl3; SHOW CREATE TABLE new_tbl3;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl; CREATE TABLE tbl (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `new_tbl4` LIKE `tbl` WITH DATA;'
 ––– output –––

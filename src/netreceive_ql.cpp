@@ -302,16 +302,16 @@ static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_
 	{
 		case EMYSQL_ERR::SERVER_SHUTDOWN:
 		case EMYSQL_ERR::UNKNOWN_COM_ERROR:
-			tOut.SendBytes ( "#08S01", 6 );
+			tOut.SendBytes ( FROMS ( "#08S01" ) );
 			break;
 		case EMYSQL_ERR::NO_SUCH_TABLE:
-			tOut.SendBytes ( "#42S02", 6 );
+			tOut.SendBytes ( FROMS ( "#42S02" ) );
 			break;
 		case EMYSQL_ERR::NO_SUCH_THREAD:
-			tOut.SendBytes ( "#HY000", 6 );
+			tOut.SendBytes ( FROMS ( "#HY000" ) );
 			break;
 		default:
-			tOut.SendBytes ( "#42000", 6 );
+			tOut.SendBytes ( FROMS ( "#42000" ) );
 			break;
 	}
 

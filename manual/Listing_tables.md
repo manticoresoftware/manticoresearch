@@ -308,7 +308,7 @@ SHOW CREATE TABLE tbl\G
        Table: tbl
 Create Table: CREATE TABLE tbl (
 f text indexed stored
-) charset_table='non_cjk,cjk' morphology='icu_chinese'
+) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
 <!-- end -->

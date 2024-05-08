@@ -9,7 +9,7 @@ To perform these operations correctly, Manticore must know:
 
 You can configure these settings on a per-table basis using the  [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies an array that maps letter characters to their case-folded versions (or any other characters that you prefer). Characters that are not present in the array are considered to be non-letters and will be treated as word separators during indexing or searching in this table.
 
-The default character set is `non_cjk`, which includes [most languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
+The default character set is `non_cont`, which includes [most languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
 
 You can also define text pattern replacement rules. For example, with the following rules:
 
@@ -28,7 +28,7 @@ You can learn more about [regexp_filter here](../../Creating_a_table/NLP_and_tok
 
 ```ini
 # default
-charset_table = non_cjk
+charset_table = non_cont
 
 # only English and Russian letters
 charset_table = 0..9, A..Z->a..z, _, a..z, \
@@ -38,11 +38,11 @@ U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 charset_table = 0..9, english, _
 
 # you can override character mappings by redefining them, e.g. for case insensitive search with German umlauts you can use:
-charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
+charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
 ```
 
 <!-- example charset_table -->
-`charset_table` specifies an array that maps letter characters to their case folded versions (or any other characters if you like). The default character set is `non_cjk` which includes most non-CJK languages.
+`charset_table` specifies an array that maps letter characters to their case folded versions (or any other characters if you like). The default character set is `non_cont` which includes most languages with [non-continous](https://en.wikipedia.org/wiki/Scriptio_continua) scripts.
 
 `charset_table` is a workhorse of Manticore's tokenization process, which extracts keywords from document text or query text. It controls what characters are accepted as valid and how they should be transformed (e.g. whether case should be removed or not).
 
@@ -58,16 +58,16 @@ charset_table uses a comma-separated list of mappings to declare characters as v
 
 For characters with codes from 0 to 32, and those in the range of 127 to 8-bit ASCII and Unicode characters, Manticore always treats them as separators. To avoid configuration file encoding issues, 8-bit ASCII characters and Unicode characters must be specified in `U+XXX` form, where `XXX` is a hexadecimal code point number. The minimal accepted Unicode character code is `U+0021`.
 
-If the default mappings are insufficient for your needs, you can redefine the character mappings by specifying them again with another mapping. For example, if the built-in `non_cjk` array includes characters `Ä` and `ä` and maps them both to the ASCII character `a`, you can redefine those characters by adding the Unicode code points for them, like this:
+If the default mappings are insufficient for your needs, you can redefine the character mappings by specifying them again with another mapping. For example, if the built-in `non_cont` array includes characters `Ä` and `ä` and maps them both to the ASCII character `a`, you can redefine those characters by adding the Unicode code points for them, like this:
 
 ```
-charset_table = non_cjk,U+00E4,U+00C4
+charset_table = non_cont,U+00E4,U+00C4
 ```
 
 for case sensitive search or
 
 ```
-charset_table = non_cjk,U+00E4,U+00C4->U+00E4
+charset_table = non_cont,U+00E4,U+00C4->U+00E4
 ```
 
 for case insensitive search.
@@ -150,8 +150,8 @@ table products {
 Besides definitions of characters and mappings, there are several built-in aliases that can be used. Current aliases are:
 * `english`
 * `russian`
-* `non_cjk`
-* `cjk`
+* `non_cont`
+* `cont`
 
 <!-- request SQL -->
 
@@ -227,7 +227,7 @@ table products {
 ```
 <!-- end -->
 
-If you want to support different languages in your search, it can be a laborious task to define sets of valid characters and folding rules for all of them. We have simplified this for you by providing default charset tables, `non_cjk` and `cjk`, that cover non-CJK and CJK (Chinese, Japanese, Korean) languages respectively. In most cases, these charsets should be sufficient for your needs.
+If you want to support different languages in your search, it can be a laborious task to define sets of valid characters and folding rules for all of them. We have simplified this for you by providing default charset tables, `non_cont` and `cont`, that cover languages with non-continuous and continuous (Chinese, Japanese, Korean, Thai) scripts, respectively. In most cases, these charsets should be sufficient for your needs.
 
 Please note that the following languages are currently **not** supported:
 * Assamese
@@ -254,19 +254,19 @@ All other languages listed in the [Unicode languages
 list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/) are supported by default.
 
 <!-- example charset_table 3 -->
-To work with both cjk and non-cjk languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/CJK.md) for Chinese):
+To work with both cont and non-cont languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/CJK.md) for Chinese):
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'
 ```
 
 <!-- request JSON -->
 
 ```JSON
 POST /cli -d "
-CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'"
 ```
 
 <!-- request PHP -->
@@ -278,9 +278,9 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'charset_table' => 'non_cjk',
+             'charset_table' => 'non_cont',
              'ngram_len' => '1',
-             'ngram_chars' => 'cjk'
+             'ngram_chars' => 'cont'
         ]);
 ```
 <!-- intro -->
@@ -289,7 +289,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -297,7 +297,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'n
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'');
 ```
 
 <!-- intro -->
@@ -306,7 +306,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
 ```
 
 <!-- intro -->
@@ -315,16 +315,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  charset_table       = non_cjk
+  charset_table       = non_cont
   ngram_len           = 1
-  ngram_chars         = cjk
+  ngram_chars         = cont
 
   type = rt
   path = tbl
@@ -334,7 +334,7 @@ table products {
 ```
 <!-- end -->
 
-If you do not require support for cjk-languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+If you do not require support for cont-languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
 options. For more information on these options, refer to the corresponding documentation sections.
 
 To map one character to multiple characters or vice versa, you can use [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.
@@ -643,25 +643,25 @@ ngram_len = 1
 <!-- example ngram_len -->
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram indexing). Known values are 0 and 1.
 
-N-grams provide basic CJK (Chinese, Japanese, Korean) support for unsegmented texts. The issue with CJK searching is that there may be no clear separators between the words. In some cases, you may not want to use dictionary-based segmentation [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/CJK.md). In those cases, n-gram segmentation might work well too.
+N-grams provide basic continuous script support for unsegmented texts. The issue with searching in languages using continuous scripts is that there may be no clear separators between the words. In some cases, you may not want to use dictionary-based segmentation [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/CJK.md). In those cases, n-gram segmentation might work well too.
 
-When this feature is enabled, streams of CJK (or any other characters defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) are indexed as N-grams. For example, if the incoming text is "ABCDEF" (where A to F represent some CJK characters) and ngram_len is 1, it will be indexed as if it were "A B C D E F". Only ngram_len=1 is currently supported. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; others will not be affected.
+When this feature is enabled, streams of such languages (or any other characters defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) are indexed as N-grams. For example, if the incoming text is "ABCDEF" (where A to F represent some language characters) and ngram_len is 1, it will be indexed as if it were "A B C D E F". Only ngram_len=1 is currently supported. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; others will not be affected.
 
 Note that if the search query is segmented, i.e. there are separators between individual words, then wrapping the words in quotes and using extended mode will result in proper matches being found even if the text was **not** segmented. For instance, assume that the original query is `BC DEF`. After wrapping in quotes on the application side, it should look like `"BC" "DEF"` (*with* quotes). This query will be passed to Manticore and internally split into 1-grams too, resulting in `"B C" "D E F"` query, still with quotes that are the phrase matching operator. And it will match the text even though there were no separators in the text.
 
-Even if the search query is not segmented, Manticore should still produce good results, thanks to phrase-based ranking: it will pull closer phrase matches (which in the case of N-gram CJK words can mean closer multi-character word matches) to the top.
+Even if the search query is not segmented, Manticore should still produce good results, thanks to phrase-based ranking: it will pull closer phrase matches (which in the case of N-gram words can mean closer multi-character word matches) to the top.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
 POST /cli -d "
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -673,7 +673,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'ngram_chars' => 'cjk',
+             'ngram_chars' => 'cont',
              'ngram_len' => '1'
         ]);
 ```
@@ -683,7 +683,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -691,7 +691,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
@@ -700,7 +700,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
 ```
 
 <!-- intro -->
@@ -709,14 +709,14 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk'
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  ngram_chars = cjk
+  ngram_chars = cont
   ngram_len = 1
 
   type = rt
@@ -730,9 +730,9 @@ table products {
 ### ngram_chars
 
 ```ini
-ngram_chars = cjk
+ngram_chars = cont
 
-ngram_chars = cjk, U+3000..U+2FA1F
+ngram_chars = cont, U+3000..U+2FA1F
 ```
 
 <!-- example ngram_chars -->
@@ -821,14 +821,14 @@ Also you can use an alias for our default N-gram table as in the example. It sho
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
 POST /cli -d "
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -840,7 +840,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'ngram_chars' => 'cjk',
+             'ngram_chars' => 'cont',
              'ngram_len' => '1'
         ]);
 ```
@@ -850,7 +850,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -858,7 +858,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
@@ -866,7 +866,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
 ```
 
 <!-- intro -->
@@ -874,14 +874,14 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk'
 
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  ngram_chars = cjk
+  ngram_chars = cont
   ngram_len = 1
 
   type = rt

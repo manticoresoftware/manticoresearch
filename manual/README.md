@@ -27,7 +27,7 @@
     * [⪢ NLP and tokenization]
         * [• Data tokenization](Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
         * [• Supported languages](Creating_a_table/NLP_and_tokenization/Supported_languages.md)
-        * [• CJK](Creating_a_table/NLP_and_tokenization/CJK.md)
+        * [• Languages with continuous scripts](Creating_a_table/NLP_and_tokenization/CJK.md)
         * [• Low-level tokenization](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
         * [• Wildcard searching settings](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md)
         * [• Ignoring stop words](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)

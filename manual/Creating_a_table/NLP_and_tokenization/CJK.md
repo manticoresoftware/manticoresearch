@@ -1,8 +1,8 @@
-# Chinese, Japanese and Korean (CJK) languages
+# Chinese, Japanese and Korean (CJK) and Thai languages
 
-Manticore provides built-in support for indexing CJK texts, allowing you to process CJK texts in two different ways:
+Manticore provides built-in support for indexing languages with [continuous scripts](https://en.wikipedia.org/wiki/Scriptio_continua) (i.e., languages that does not use spaces or other marks between the words or sentences), allowing you to process texts in these languages in two different ways:
 
-<!-- example cjk 1 -->
+<!-- example cont 1 -->
 1. Precise segmentation using the ICU library. Currently, only Chinese is supported.
 
 
@@ -12,14 +12,14 @@ Manticore provides built-in support for indexing CJK texts, allowing you to proc
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'
+CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'
 ```
 
 <!-- request JSON -->
 
 ```http
 POST /cli -d "
-CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'"
+CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'"
 ```
 
 <!-- request PHP -->
@@ -31,7 +31,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-            'charset_table' => 'cjk',
+            'charset_table' => 'cont',
             'morphology' => 'icu_chinese'
         ]);
 ```
@@ -42,7 +42,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cont\' morphology = \'icu_chinese\'')
 ```
 
 <!-- intro -->
@@ -51,7 +51,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'c
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cont\' morphology = \'icu_chinese\'');
 ```
 
 <!-- intro -->
@@ -60,7 +60,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'");
 ```
 
 <!-- intro -->
@@ -69,14 +69,14 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cj
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'");
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  charset_table = cjk
+  charset_table = cont
   morphology = icu_chinese
   
   type = rt
@@ -87,9 +87,9 @@ table products {
 ```
 <!-- end -->
 
-<!-- example cjk 2 -->
+<!-- example cont 2 -->
 2. Basic support using the N-gram options [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-For each CJK language, there are separate character set tables (`chinese`, `korean`, `japanese`) that can be used, or you can use the common `cjk` character set table. 
+For each language using continuous script, there are separate character set tables (`chinese`, `korean`, `japanese`, 'thai') that can be used, or you can use the common `cont` character set table to support all CJK and Thai languages at once. 
 
 
 <!-- intro -->
@@ -98,14 +98,14 @@ For each CJK language, there are separate character set tables (`chinese`, `kore
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'
 ```
 
 <!-- request JSON -->
 
 ```http
 POST /cli -d "
-CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'"
 ```
 
 <!-- request PHP -->
@@ -117,9 +117,9 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'charset_table' => 'non_cjk',
+             'charset_table' => 'non_cont',
              'ngram_len' => '1',
-             'ngram_chars' => 'cjk'
+             'ngram_chars' => 'cont'
         ]);
 ```
 
@@ -129,7 +129,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -137,7 +137,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'n
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'');
 ```
 <!-- intro -->
 ##### java:
@@ -145,7 +145,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
 ```
 
 <!-- intro -->
@@ -154,16 +154,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  charset_table = non_cjk
+  charset_table = non_cont
   ngram_len = 1
-  ngram_chars = cjk
+  ngram_chars = cont
 
   type = rt
   path = tbl
@@ -173,7 +173,7 @@ table products {
 ```
 <!-- end -->
 
-<!-- example cjk 3 -->
+<!-- example cont 3 -->
 Additionally, there is built-in support for Chinese [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)  with the alias `zh`.
 
 

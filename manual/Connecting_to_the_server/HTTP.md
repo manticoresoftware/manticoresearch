@@ -114,9 +114,9 @@ POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%
 <!-- end -->
 
 <!-- example SQL_over_HTTP_2 -->
-### /sql?mode=raw
+### /sql?mode=raw and /sql?raw_response=true
 
-`/sql` endpoint also has a special mode **"raw"**, which allows to send **any valid sphinxql queries including multi-queries**. The returned value is a json array of one or more result sets.
+`/sql` endpoint also has a special mode **"raw"**, which allows to send **any valid sphinxql queries including multi-queries**. The returned value is a json array of one or more result sets. "Raw" mode is activated by providing option `mode=raw`, or `raw_response=true`.
 
 <!-- request HTTP -->
 ```bash

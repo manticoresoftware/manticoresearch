@@ -118,6 +118,10 @@ Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 
 <!-- statement with characters in col need to be escaped-->
 <query endpoint="sql" method="post">mode=raw&amp;query=select concat('"', 'a')</query>
+<query endpoint="sql" method="post">raw_response=true&amp;query=select concat('"', 'a')</query>
+
+<query endpoint="sql?mode=raw" method="post">query=select concat('"', 'a')</query>
+<query endpoint="sql?raw_response=true" method="post">query=select concat('"', 'a')</query>
 
 </queries>
 

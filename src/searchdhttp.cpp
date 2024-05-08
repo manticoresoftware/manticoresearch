@@ -2406,21 +2406,33 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( ESphHttpEndpoint eEndp
 	switch ( eEndpoint )
 	{
 	case SPH_HTTP_ENDPOINT_SQL:
-		pOption = tOptions ( "mode" );
-		if ( pOption && *pOption=="raw" )
 		{
-			auto pQuery = tOptions ( "query" );
-			if ( pQuery )
-				SetQuery ( FromStr ( *pQuery ) );
-			return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
-		}
-		else
-		{
-			pOption = tOptions ( "raw_query" );
+			bool bRawMode = false;
+			pOption = tOptions ( "mode" );
 			if ( pOption )
-				SetQuery ( FromStr (*pOption) );
+				bRawMode = *pOption == "raw";
+			else
+			{
+				pOption = tOptions ( "raw_response" );
+				if ( pOption )
+					bRawMode = *pOption == "true";
+			}
 
-			return std::make_unique<HttpSearchHandler_SQL_c> ( tOptions ); // non-json
+			if ( bRawMode )
+			{
+				auto pQuery = tOptions ( "query" );
+				if ( pQuery )
+					SetQuery ( FromStr ( *pQuery ) );
+				return std::make_unique<HttpRawSqlHandler_c> ( sQuery, tOptions ); // non-json
+			}
+			else
+			{
+				pOption = tOptions ( "raw_query" );
+				if ( pOption )
+					SetQuery ( FromStr (*pOption) );
+
+				return std::make_unique<HttpSearchHandler_SQL_c> ( tOptions ); // non-json
+			}
 		}
 
 	case SPH_HTTP_ENDPOINT_CLI:

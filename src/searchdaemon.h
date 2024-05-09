@@ -1489,7 +1489,8 @@ void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char *
 using HttpOptionsHash_t = SmallStringHash_T<CSphString>;
 struct http_parser;
 
-void UriPercentReplace ( Str_t & sEntity, bool bAlsoPlus=true );
+enum class Replace_e : bool { NoPlus = false, WithPlus = true };
+void UriPercentReplace ( Str_t& sEntity, Replace_e ePlus = Replace_e::WithPlus );
 void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody );
 
 enum MysqlColumnType_e

@@ -562,14 +562,14 @@ inline int Chars2Hex ( const char* pSrc )
 	return iRes < 0 ? iRes : iRes + Char2Hex ( *pSrc ) * 16;
 }
 
-void UriPercentReplace ( Str_t & sEntity, bool bAlsoPlus )
+void UriPercentReplace ( Str_t & sEntity, Replace_e ePlus )
 {
 	if ( IsEmpty ( sEntity ) )
 		return;
 
 	const char* pSrc = sEntity.first;
 	auto* pDst = const_cast<char*> ( pSrc );
-	char cPlus = bAlsoPlus ? ' ' : '+';
+	char cPlus = ((bool)ePlus) ? ' ' : '+';
 	auto* pEnd = pSrc + sEntity.second;
 	while ( pSrc < pEnd )
 	{
@@ -607,7 +607,7 @@ void DecodeAndStoreRawQuery ( OptionsHash_t& hOptions, const Str_t& sWholeData )
 	// store raw query
 	CSphString sRawBody ( sWholeData );				   // copy raw data, important!
 	Str_t sRaw { sRawBody.cstr(), sWholeData.second }; // FromStr implies strlen(), but we don't need it
-	UriPercentReplace ( sRaw, false );				   // avoid +-decoding
+	UriPercentReplace ( sRaw, Replace_e::NoPlus );				   // avoid +-decoding
 	*const_cast<char*> ( sRaw.first + sRaw.second ) = '\0';
 
 	StoreRawQuery ( hOptions, std::move ( sRawBody ));

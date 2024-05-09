@@ -1165,7 +1165,20 @@ table products
 
 <!-- example for timestamps  -->
 
-Timestamp type represents unix timestamps which is stored as a 32-bit integer. The difference is that [time and date](../Functions/Date_and_time_functions.md) functions are available for the timestamp type.
+Timestamp type represents unix timestamps which is stored as a 32-bit integer. The difference is that [time and date](../Functions/Date_and_time_functions.md) functions are available for the timestamp type. There is a conversion from the string value according to the rules:
+
+- 'numbers' without delimiters, at least 10 symbols in length, convert into timestamps as is
+- '%Y-%m-%dT%H:%M:%E*S%Z'
+- '%Y-%m-%d'T'%H:%M:%S%Z'
+- '%Y-%m-%dT%H:%M:%E*S'
+- '%Y-%m-%dT%H:%M:%s'
+- '%Y-%m-%dT%H:%M'
+- '%Y-%m-%dT%H'
+- '%Y-%m-%d'
+- '%Y-%m'
+- '%Y'
+
+The meaning of the conversion specifiers can be found in the `strptime` manual with `cctz` library extensions.
 
 <!-- intro -->
 ##### SQL:

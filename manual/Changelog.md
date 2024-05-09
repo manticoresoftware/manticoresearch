@@ -10,6 +10,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Commit 7a55](https://github.com/manticoresoftware/manticoresearch/commit/7a5508424) Running Manticore in Windows now requires Docker to run Buddy.
 * [Issue #1541](https://github.com/manticoresoftware/manticoresearch/issues/1541) Added a [REGEX](Searching/Full_text_matching/Operators.md#REGEX-operator) full-text operator.
 * [Issue #1569](https://github.com/manticoresoftware/manticoresearch/issues/1569) Binary log is now written with transaction granularity.
+* [Issue #2091](https://github.com/manticoresoftware/manticoresearch/issues/2091) Ubuntu Noble 24.04 support.
 * [Commit 514d](https://github.com/manticoresoftware/manticoresearch/commit/514d35b497f4bdb20b6473ff963752a978a4bb8d) Revamp of time operations for better performance and new date/time functions:
   - [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Returns current date in local timezone
   - [QUARTER()](Functions/Date_and_time_functions.md#QUARTER%28%29) - Returns the integer quarter of the year from a timestamp argument
@@ -46,6 +47,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #146](https://github.com/manticoresoftware/manticoresearch/issues/1456) Meta information in MySQL response.
 * [Issue #1494](https://github.com/manticoresoftware/manticoresearch/issues/1494) [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION).
 * [Issue #1582](https://github.com/manticoresoftware/manticoresearch/issues/1582) Support of [deleting documents by id array](Data_creation_and_modification/Deleting_documents.md?client=JSON#Deleting-documents) via JSON.
+* [Issue #1589](https://github.com/manticoresoftware/manticoresearch/issues/1589) Improve error "unsupported value type".
 * [Issue #1634](https://github.com/manticoresoftware/manticoresearch/issues/1634) Added Buddy version into `SHOW STATUS`.
 * [Issue #1641](https://github.com/manticoresoftware/manticoresearch/issues/1641) Match requests optimisation in case of zero docs for a keyword.
 * [Issue #1712](https://github.com/manticoresoftware/manticoresearch/issues/1712) Added conversion to bool attribute from the string value of "true" and "false" on posting data.
@@ -71,7 +73,6 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #340](https://github.com/manticoresoftware/manticoresearch/issues/340) Minor optimization in Manticore systemd unit related with `RuntimeDirectory`.
 * [Issue #51](https://github.com/manticoresoftware/executor/issues/51) Added rdkafka support and updated to PHP 8.3.3.
 * [Issue #527](https://github.com/manticoresoftware/manticoresearch/issues/527) Support of [attaching](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md#Attaching-table---general-syntax) an RT table.
-* [Issue #2107](https://github.com/manticoresoftware/manticoresearch/issues/2107) Treating document IDs as numbers in /search responses
 
 ### Breaking changes and deprecations
 * ⚠️[Issue #1436](https://github.com/manticoresoftware/manticoresearch/issues/1436) Improved the master-agent search protocol (version updated). If you are running Manticore Search in a distributed environment with multiple instances, make sure to first upgrade the agents, then the masters.
@@ -84,6 +85,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * ⚠️[Commit e235](https://github.com/manticoresoftware/manticoresearch-backup/commit/e23585a) manticore-backup doesn't backup `plugin_dir` anymore.
 * ⚠️[Issue #171](https://github.com/manticoresoftware/manticoresearch-buddy/issues/155) Migrated Buddy to Swoole to improve performance and stability. When switching to the new version, ensure all Manticore packages are updated.
 * ⚠️[Issue #196](https://github.com/manticoresoftware/manticoresearch-buddy/pull/205) Merged all core plugins into Buddy and changed the core logic.
+* ⚠️[Issue #2107](https://github.com/manticoresoftware/manticoresearch/issues/2107) Treating document IDs as numbers in `/search` responses.
 * ⚠️[Issue #38](https://github.com/manticoresoftware/executor/issues/38) Added Swoole, disabled ZTS, and removed the parallel extension.
 
 ### Replication-related changes

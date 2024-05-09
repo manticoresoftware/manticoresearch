@@ -1,45 +1,37 @@
-# Reading from Kafka (Queue Support)
+# Syncing with Kafka
 
-<!-- Example: Kafka Queues -->
+Manticore Search can efficiently consume messages from a Kafka broker, enabling real-time data indexing and search capabilities.
 
-ManticoreSearch can now consume messages from a Kafka broker through the Buddy plugin.
-
-To get started, you only need to define the `source`, `destination table`, and `materialized view` (alias `mv`).
-
-## Workflow:
-
-1. Workers ingest messages from the Kafka broker.
-2. These messages are then mapped according to the schema defined in the source.
-3. Messages are organized into batches.
-4. Subsequently, they are placed into a buffer table.
-5. The materialized view's query is executed on the buffer table.
-6. The results are subsequently written to the destination table.
-7. Lastly, the buffer table is truncated.
+To get started, you need:
+1. **Define the source:** Specify the Kafka topic from which Manticore Search will read messages. This involves setting up connection details such as the broker's host, port, and topic name.
+2. **Destination table:** Designate a Manticore real-time table where the data from Kafka will be stored.
+3. **Create a materialized view:** Establish a materialized view (`mv`) to define the transformation and mapping of data from Kafka to the destination table in Manticore Search. This includes specifying field mappings, data transformations, and any filters or conditions to apply to the incoming data stream.
 
 ## Source
 
-The `source` allows you to define the `broker`, `topic list`, `consumer group`, and describe the internal message structure.
+<!-- example kafka_source -->
+
+The `source` configuration allows you to define the `broker`, `topic list`, `consumer group`, and the internal message structure.
 
 #### Schema
 
-The schema can be defined with standard Manticore fields (`int`, `float`, `text`, `json`, etc).
+Define the schema using standard Manticore fields such as `int`, `float`, `text`, `json`, etc.
 
 ```sql
 CREATE SOURCE <source name> [(column type, ...)] [source_options]
 ```
 
-Keys in the schema are case-insensitive, so there is no difference between keys like `Products`, `products`, `PrOdUcTs`.
-All of them are converted to **lowercase**.
+All keys in the schema are case-insensitive, meaning there is no difference between Products, products, or PrOdUcTs. They are all converted to lowercase.
 
-<!-- Intro -->
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
 CREATE SOURCE kafka
-    (id bigint, term text, abbrev text, GlossDef json)
+(id bigint, term text, abbrev text, GlossDef json)
 type='kafka'
 broker_list='kafka:9092'
 topic_list='my-data'
@@ -48,53 +40,58 @@ num_consumers='2'
 batch=50
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```
 Query OK, 2 rows affected (0.02 sec)
 ```
 
-<!-- End -->
+<!-- end -->
 
 #### Options
 
-| Option           | Accepted Values   | Description                                                                                                                                                                       |
-|------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `type`           | Kafka             | Source type. Currently, only Kafka is supported.                                                                                                                                              |
-| `broker_list`    | host:port [, ...] | Kafka broker URL.                                                                                                                                                                |
-| `topic_list`     | string [, ...]    | List of Kafka topics for consumption.                                                                                                                                              |
-| `consumer_group` | string            | Kafka consumer group. Default is `manticore`.                                                                                                                                       |
-| `num_consumers`  | int               | Number of workers.                                                                                                                                                                  |
-| `batch`          | int               | Number of messages stacked before processing. Default is `100`. In case of a timeout and workers didn't consume the desired amount of messages, they will process what they have already consumed. |
+| Option | Accepted Values | Description |
+|-|-|-|
+| `type` | `kafka` | Specifies the source type. Currently, only `kafka` is supported. |
+| `broker_list` | host:port [, ...] | Specifies the Kafka broker URLs. |
+| `topic_list` | string [, ...] | Lists the Kafka topics to consume from. |
+| `consumer_group`| string | Defines the Kafka consumer group. Default is `manticore`. |
+| `num_consumers` | int | Specifies the number of consumer processes to handle messages. |
+| `batch` | int | Sets the number of messages to accumulate before processing. Default is `100`. Processes what's available at timeout otherwise. |
 
-### Destination Table
+### Destination table
 
-This is a regular table where you store your results.
+<!-- example kafka_destination -->
 
-<!-- Intro -->
+The destination table is a regular real-time table where the results of Kafka message processing are stored. This table should be defined to match the schema requirements of the incoming data and optimized for the query performance needs of your application. Read more about creating real-time tables [here](../Creating_a_table/Local_tables/Real-time_table.md#Creating-a-real-time-table:).
+
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
 CREATE TABLE destination_kafka
 (id bigint, name text, short_name text, received_at text, size multi);
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```
 Query OK, 0 rows affected (0.02 sec)
 ```
 
-<!-- End -->
+<!-- end -->
 
-### Materialized View
+### Materialized view
 
-A materialized view allows you to perform modifications to received messages, such as renaming fields, applying some ManticoreSearch functions, sorting, grouping, and other operations.
+<!-- example kafka_mv -->
 
-However, it's just a regular query from the buffer to destination tables, so you can use all Manticore syntax for processing these queries.
+A materialized view allows you to transform incoming messages from Kafka. You can rename fields, apply various Manticore Search functions, and conduct sorting, grouping, and other advanced data manipulation operations.
+
+Essentially, a materialized view functions like a standard query that transfers data from the Kafka source to the destination table. This enables the use of the full range of Manticore Search syntax to tailor these queries according to your specific needs. Ensure the fields you refer to in the `select` match the fields in the source.
+
 
 ```
 CREATE MATERIALIZED VIEW <materialized view name>
@@ -102,11 +99,11 @@ TO <destination table name> AS
 SELECT [column|function [as <new name>], ...] FROM <source name>
 ```
 
-<!-- Intro -->
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
 CREATE MATERIALIZED VIEW view_table
@@ -116,45 +113,49 @@ SELECT id, term as name, abbrev as short_name,
 
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```sql
 Query OK, 2 rows affected (0.02 sec)
 ```
 
-<!-- End -->
+<!-- end -->
 
-Keep in mind that the buffer table truncates after each batch iteration, so you should avoid calculations like AVG or anything similar.
-In the worst case, you will be bound by the batch size (or timeout limit).
+When data is transferred from Kafka to Manticore Search, it is handled in batches, which are cleared after each iteration. This setup means that aggregate calculations that require continuity of data, such as `AVG` or similar functions, should be approached cautiously. These functions might not perform as expected if they span multiple batches because each batch processes data independently.
 
-### Mapping Fields
+### Mapping fields
 
 For easy comprehension, we provide the following mapping table of examples above:
 
-| Kafka           | Source   | Buffer   | MV                             | Destination |
-|-----------------|----------|----------|--------------------------------|-------------|
-| id              | id       | id       | id                             | id          |
-| term            | term     | term     | term as name                   | name        |
-| unnecessary key | -        | -        |                                |             |
-| abbrev          | abbrev   | abbrev   | abbrev as short_name           | short_name  |
-| -               | -        |          | UTC_TIMESTAMP() as received_at | received_at |
-| GlossDef	       | GlossDef | GlossDef | GlossDef.size as size          | size        |
+| Kafka | Source | Buffer | MV | Destination |
+|-|-|-|-|-|
+| id | id | id | id | id |
+| term | term | term | term as name | name |
+| unnecessary key | - | - | | |
+| abbrev | abbrev | abbrev | abbrev as short_name | short_name |
+| - | - | | `UTC_TIMESTAMP()`` as received_at | received_at |
+| GlossDef | GlossDef | GlossDef | GlossDef.size as size | size |
 
 ### Listing
 
-The current plugin enables you to list sources and views, as well as obtain comprehensive details about the desired resource.
+<!-- example kafka_listing -->
 
-<!-- Intro -->
+To list and inspect the configuration of sources and materialized views within Manticore Search, use the following commands:
+- `SHOW SOURCES`: Lists all the sources configured in the system.
+- `SHOW MVS`: Lists all materialized views.
+- `SHOW MV view_table`: Provides comprehensive details about a specific materialized view.
+
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
 SHOW SOURCES
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```
 +-------+
@@ -164,19 +165,21 @@ SHOW SOURCES
 +-------+
 ```
 
-<!-- End -->
+<!-- end -->
 
-<!-- Intro -->
+<!-- example kafka_create_source -->
+
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
-show source kafka;
+SHOW SOURCE kafka;
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```
 +--------+---------------------------------------------------------+
@@ -193,19 +196,21 @@ show source kafka;
 +--------+---------------------------------------------------------+
 ```
 
-<!-- End -->
+<!-- end -->
 
-<!-- Intro -->
+<!-- example kafka_view -->
+
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
 SHOW MVS
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```
 +------------+
@@ -215,20 +220,21 @@ SHOW MVS
 +------------+
 ```
 
-<!-- End -->
+<!-- end -->
 
+<!-- example kafka_show -->
 
-<!-- Intro -->
+<!-- intro -->
 
 ##### SQL:
 
-<!-- Request SQL -->
+<!-- request SQL -->
 
 ```sql
 SHOW MV view_table
 ```
 
-<!-- Response -->
+<!-- response -->
 
 ```
 +------------+--------------------------------------------------------------------------------------------------------+-----------+
@@ -240,20 +246,28 @@ SHOW MV view_table
 +------------+--------------------------------------------------------------------------------------------------------+-----------+
 ```
 
-<!-- End -->
+<!-- end -->
 
-### Altering Materialized Views
+### Altering materialized views
 
-You can suspend consumption by altering `materialized views`.
+You can suspend consumption by altering materialized views.
 If you remove the `source` and do not delete the MV, it will automatically suspend until you recreate the source with the same name.
 
-Currently, only altering MVs is supported. To change `source` parameters, you should drop it and recreate it again.
+Currently, only altering materalized views is supported. To change `source` parameters, you should drop it and recreate it.
 
-### Restarting Searchd
+### Troubleshooting
 
-Offsets are committed after each batch/timeout processing.
-However, in scenarios where the daemon unexpectedly ceases during the execution of the materialized view (MV) query,
-the risk of receiving duplicates emerges. Therefore, it's advisable to include an id field in the schema.
-This allows for the **automatic management of duplicates** within the table, should any issues arise.
+#### Duplicated entries
+Offsets in Kafka are committed after each batch or upon timeout processing. However, if the daemon unexpectedly stops during the execution of the materialized view query, there is a potential risk of duplicated entries in the data received. To mitigate this, it is advisable to include an `id` field in your schema. This field acts as a unique identifier, allowing Manticore Search to automatically manage and prevent duplicates within the table if disruptions occur.
 
-<!-- Proofread -->
+### How it works internally
+
+1. **Initialization of worker:** Once you configure a source and a materialized view, Manticore Search initializes a dedicated worker to handle data ingestion from the specified Kafka broker.
+2. **Message mapping:** As messages arrive, they are mapped according to the schema provided in the source configuration. This mapping transforms the raw message data into a structured format suitable for processing.
+3. **Batch organization:** Incoming messages are grouped into batches to optimize processing efficiency. The size of these batches can be configured based on your performance and latency requirements.
+4. **Buffering:** The batches of mapped data are temporarily stored in a buffer table. This allows for efficient bulk operations in the subsequent stages.
+5. **Executing materialized view logic:** The logic defined in the materialized view is applied to the data in the buffer table. This may include transformations, aggregations, or filtering operations.
+6. **Data transfer:** After processing, the results are written to the destination real-time table where they are stored permanently or until further processing.
+7. **Cleanup:** To maintain efficiency and prevent data redundancy, the buffer table is truncated after each batch is processed, clearing the way for the next set of data.
+
+<!-- proofread -->

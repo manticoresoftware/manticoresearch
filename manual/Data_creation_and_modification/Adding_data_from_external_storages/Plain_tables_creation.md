@@ -14,14 +14,6 @@ In the typical scenario, indexer does the following:
 * Writes the table files
 * (Optional) Informs the search server about the new table which triggers table rotation
 
-## Integrations
-
-ManticoreSearch currently offers three integrations that allow the consumption of data from external sources into [RT tables](Creating_a_table/Local_tables/Real-time_table):
-
-* [Logstash](Integration/Logstash.md)
-* [Filebeat](Integration/Filebeat.md)
-* [Kafka](Integration/Kafka.md)
-
 ## Indexer tool
 The `indexer` tool is used to create plain tables in Manticore Search. It has a general syntax of:
 

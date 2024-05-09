@@ -1,0 +1,69 @@
+––– input –––
+echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop.txt
+––– output –––
+––– input –––
+ls -1 /var/lib/manticore/
+––– output –––
+exc.txt
+stop.txt
+wordforms1.txt
+––– input –––
+searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+Started
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (1, 'zxczxc', 77);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM table1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE table1;"
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `table2` LIKE `table1` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table2; SHOW CREATE TABLE table2;"
+––– output –––
+––– input –––
+cat /var/lib/manticore/table2/exceptions.txt
+––– output –––
+––– input –––
+cat /var/lib/manticore/table2/stopwords_0.txt
+––– output –––
+––– input –––
+cat /var/lib/manticore/table2/wordforms_0.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE table1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `table3` LIKE `table2` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `table4` LIKE `table1` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––

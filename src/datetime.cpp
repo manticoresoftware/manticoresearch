@@ -364,9 +364,7 @@ int CalcWeekNumber ( const cctz::civil_second & tTime, uint32_t uFlags )
 	return iDays/7 + 1;
 }
 
-static CSphString g_sCompatDateFormat ( "%Y-%m-%dT%H:%M:%S" ); // YYYY-mm-dd'T'HH:mm:ss.SSS'Z'
-
-const CSphString & CompatDateFormat()
+const cctz::time_zone & GetTimeZoneUTC()
 {
-	return g_sCompatDateFormat;
+	return g_hTimeZoneUTC;
 }

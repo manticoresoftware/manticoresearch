@@ -7784,8 +7784,8 @@ public:
 
 		case SPH_ATTR_TIMESTAMP:
 		{
-			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING && StrEq ( pName->cstr(), "@timestamp" ) )
-				tAttr = GetUTC ( tVal.m_sVal, CompatDateFormat() );
+			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING )
+				tAttr = GetUTC ( tVal.m_sVal );
 			else
 				tAttr = ToInt(tVal);
 		}

@@ -63,7 +63,7 @@
     * [⪢ Adding documents to a table]
         * [✔ Adding documents to a real-time table](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
         * [Adding rules to a percolate table](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
-    * [⪢ Adding data from external storages]
+    * [⪢ Adding data from external storages](Data_creation_and_modification/Adding_data_from_external_storages.md)
         * [Plain tables creation](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
         * [⪢ Fetching from databases]
             * [Introduction](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction.md)
@@ -78,7 +78,7 @@
             * [• Merging tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
             * [• Killlists in plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
             * [• Attaching a plain table to RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
-            * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)        
+            * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
         * [• Rotating a table](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
     * [⪢ Updating documents]
         * [• REPLACE vs UPDATE](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)
@@ -114,7 +114,7 @@
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
     * [• K-nearest neighbor vector search](Searching/KNN.md)
-* [• Updating table schema and settings](Updating_table_schema_and_settings.md)    
+* [• Updating table schema and settings](Updating_table_schema_and_settings.md)
 * [⪢ Functions](Functions.md)
     * [• Mathematical functions](Functions/Mathematical_functions.md)
     * [• Searching and ranking functions](Functions/Searching_and_ranking_functions.md)
@@ -169,6 +169,7 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [Kafka](Integration/Kafka.md)
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)

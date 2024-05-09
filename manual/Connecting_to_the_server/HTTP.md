@@ -61,8 +61,8 @@ searchd {
 
 Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
-* `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format. The query parameter should be URL-encoded.
-* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. The `query` parameter should also be URL-encoded.
+* `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format.
+* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql.
 * The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter should not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
 
 
@@ -72,7 +72,9 @@ Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
 `/sql` accepts an **SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query** via HTTP JSON interface.
 
-Query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
+Endpoint accepts both GET and POST requests, and also combo of them (when some params attached to endpoint, like `/sql?mode=raw`, which is usually treated as GET request, and the rest came in body of POST request).
+Query payload may be defined either as 'query' param, in this case it **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error. 'query' param may be defined both in GET and POST requests.
+Also query may be defined as raw POST body, in this case it **must not** be URL encoded.
 
 It returns a JSON response which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
 
@@ -183,6 +185,30 @@ POST /sql?mode=raw -d "query=desc%20test"
 ]
 ```
 <!-- end -->
+
+In terms of curl CLI you may use one of the following syntax:
+
+* `curl localhost:6780/sql?query=SELECT%20%2A%20FROM%20test` <- query via GET request, urlencoded
+* `curl localhost:6780/sql -d 'query=SELECT%20%2A%20FROM%20test'` <- query via POST request, urlencoded
+* `curl localhost:6780/sql -d 'mode=raw&query=SELECT%20%2A%20FROM%20test'` <- raw query via POST request, urlencoded
+* `curl localhost:6780/sql -d 'raw_response=true&query=SELECT%20%2A%20FROM%20test'` <- new syntax raw query via POST
+  request, urlencoded
+* `curl localhost:6780/sql -d 'mode=raw&query=SELECT * FROM test'` <- raw query via POST request, not urlencoded
+* `curl localhost:6780/sql -d 'raw_response=true&query=SELECT * FROM test'` <- new syntax raw query via POST
+  request, not urlencoded
+* `curl localhost:6780/sql -d 'SELECT * FROM test'` <- query via POST request body, not urlencoded
+* `curl localhost:6780/sql?mode-raw -d 'query=SELECT%20%2A%20FROM%20test'` <- combo raw query via GET mode and POST
+  query body, urlencoded
+* `curl localhost:6780/sql?raw_response=true -d 'query=SELECT%20%2A%20FROM%20test'` <- combo new syntax raw query via
+  GET mode and POST query, urlencoded
+* `curl localhost:6780/sql?mode=raw -d 'SELECT * FROM test'` <- combo raw query via GET mode and POST request body, not
+  urlencoded
+* `curl localhost:6780/sql?raw_response=true -d 'SELECT * FROM test'` <- combo raw new syntax via GET raw_response and
+  POST request body, not urlencoded
+
+As a summary, query can be defined via GET or POST method:
+* `curl "localhost:6780/sql[?mode=raw|?raw_response=true]&query={URL_ENCODED_QUERY}"`
+* `curl localhost:6780/sql[?mode=raw|?raw_response=true] -d "[query={URL_ENCODED_QUERY}|{NOT_URL_ENCODED_QUERY}]"`
 
 <!-- example SQL_over_HTTP_4 -->
 

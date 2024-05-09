@@ -2410,8 +2410,16 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 			return nullptr;
 		if ( eEndpoint == EHTTP_ENDPOINT::SQL )
 		{
-			DecodeAndStoreRawQuery ( tOptions, sWholeData );
-			HttpRequestParser_c::ParseList ( sWholeData, tOptions );
+			const std::array<Str_t, 3> sQueries { FROMS ( "query=" ), FROMS ( "mode=raw&query=" ), FROMS ( "raw_response=true&query=" ) };
+			if ( std::any_of ( sQueries.cbegin(), sQueries.cend(), [&sWholeData] ( const Str_t& S ) { return sWholeData.second >= S.second && 0 == memcmp ( sWholeData.first, S.first, S.second ); } ) )
+			{
+				DecodeAndStoreRawQuery ( tOptions, sWholeData );
+				HttpRequestParser_c::ParseList ( sWholeData, tOptions );
+			} else
+			{
+				StoreRawQuery ( tOptions, { sWholeData } );
+				tOptions.Add ( sWholeData, "query" );
+			}
 		} else
 			StoreRawQuery ( tOptions, { sWholeData } );
 	}

@@ -609,7 +609,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1513686608316989452",
+        "_id": 1513686608316989452,
         "_score": 1680,
         "_source": {
           "price": 7.99,
@@ -694,7 +694,7 @@ res = await searchApi.search({"index":"products","query":{"query_string":"@title
 ```
 <!-- response javascript -->
 ```javascript
-{"hits": {"hits": [{"_id": "1513686608316989452",
+{"hits": {"hits": [{"_id": 1513686608316989452,
                     "_score": 1680,
                     "_source": {"title": "Pet Hair Remover Glove", "price":7.99},
                     "highlight":{"title":["Pet <b>Hair Remover</b> Glove"]}}],
@@ -784,7 +784,7 @@ res = await searchApi.search({
     {
         "hits": 
         [{
-            "_id": "1",
+            "_id": 1,
             "_score": 1400,
             "_source": {"content":"Text 1","name":"Doc 1","cat":1},
             "highlight": {"content":["<b>Text 1</b>"]}
@@ -821,7 +821,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
     {
         "hits": 
         [{
-            "_id": "1",
+            "_id": 1,
             "_score": 1400,
             "_source": {"content":"Text 1","name":"Doc 1","cat":1},
             "highlight": {"content":["<b>Text 1</b>"]}

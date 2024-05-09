@@ -91,7 +91,7 @@ POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%
     "total_relation": "eq",
     "hits": [
       {
-        "_id": "2",
+        "_id": 2,
         "_score": 2356,
         "_source": {
           "subject": "php manticore",
@@ -99,7 +99,7 @@ POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%
         }
       },
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2356,
         "_source": {
           "subject": "php manticore",

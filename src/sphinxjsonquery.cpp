@@ -1255,7 +1255,7 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 
 		} else
 		{
-			sError = "unsupported value type";
+			sError.SetSprintf ( "unsupported value type '%s' in field '%s'", tItem.TypeName(), tItem.Name() );
 			return false;
 		}
 	}
@@ -1357,7 +1357,7 @@ bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 
 		if ( !bFloat && !bInt && !bBool && !bString && !bArray && !bObject )
 		{
-			sError = "unsupported value type";
+			sError.SetSprintf ( "unsupported value type '%s' in field '%s'", tItem.TypeName(), tItem.Name() );
 			return false;
 		}
 

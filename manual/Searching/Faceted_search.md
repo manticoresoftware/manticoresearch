@@ -161,7 +161,7 @@ POST /search -d '
     "total": 10000,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "price": 197,
@@ -174,7 +174,7 @@ POST /search -d '
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "price": 805,
@@ -402,7 +402,7 @@ res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"lim
 ```
 <!-- response Javascript -->
 ```javascript
-{"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
+{"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id": 1,"_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id": 2,"_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id": 3,"_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id": 4,"_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id": 5,"_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
 
 ```
 
@@ -506,7 +506,7 @@ res =  await searchApi.search({
     "total": 5,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "content": "Text 1",
@@ -516,7 +516,7 @@ res =  await searchApi.search({
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "content": "Text 5",
@@ -583,7 +583,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
     "total": 5,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "content": "Text 1",
@@ -593,7 +593,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "content": "Text 5",
@@ -820,7 +820,7 @@ POST /search -d '
     "total": 10000,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "price": 197,
@@ -834,7 +834,7 @@ POST /search -d '
       },
  ...
       {
-        "_id": "20",
+        "_id": 20,
         "_score": 1,
         "_source": {
           "price": 227,
@@ -1003,7 +1003,7 @@ res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"exp
 ```
 <!-- response Javascript -->
 ```javascript
-{"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six","price_range":0}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four","price_range":3}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six","price_range":0}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five","price_range":3}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two","price_range":4}},{"_id":"6","_score":1,"_source":{"price":420,"brand_id":2,"brand_name":"Brand Two","categories":[10,11],"title":"Product Two One","property":"Six","price_range":2}},{"_id":"7","_score":1,"_source":{"price":412,"brand_id":9,"brand_name":"Brand Nine","categories":[10],"title":"Product Four Nine","property":"Eight","price_range":2}},{"_id":"8","_score":1,"_source":{"price":300,"brand_id":9,"brand_name":"Brand Nine","categories":[13,14,15],"title":"Product Eight Four","property":"Five","price_range":1}},{"_id":"9","_score":1,"_source":{"price":728,"brand_id":1,"brand_name":"Brand One","categories":[11],"title":"Product Nine Six","property":"Four","price_range":3}},{"_id":"10","_score":1,"_source":{"price":622,"brand_id":3,"brand_name":"Brand Three","categories":[10,11],"title":"Product Six Seven","property":"Two","price_range":3}},{"_id":"11","_score":1,"_source":{"price":462,"brand_id":5,"brand_name":"Brand Five","categories":[10,11],"title":"Product Ten Two","property":"Eight","price_range":2}},{"_id":"12","_score":1,"_source":{"price":939,"brand_id":7,"brand_name":"Brand Seven","categories":[12,13],"title":"Product Nine Seven","property":"Six","price_range":4}},{"_id":"13","_score":1,"_source":{"price":948,"brand_id":8,"brand_name":"Brand Eight","categories":[12],"title":"Product Ten One","property":"Six","price_range":4}},{"_id":"14","_score":1,"_source":{"price":900,"brand_id":9,"brand_name":"Brand Nine","categories":[12,13,14],"title":"Product Ten Nine","property":"Three","price_range":4}},{"_id":"15","_score":1,"_source":{"price":224,"brand_id":3,"brand_name":"Brand Three","categories":[13],"title":"Product Two Six","property":"Four","price_range":1}},{"_id":"16","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[12],"title":"Product Two Four","property":"Six","price_range":3}},{"_id":"17","_score":1,"_source":{"price":510,"brand_id":2,"brand_name":"Brand Two","categories":[10],"title":"Product Ten Two","property":"Seven","price_range":2}},{"_id":"18","_score":1,"_source":{"price":702,"brand_id":10,"brand_name":"Brand Ten","categories":[12,13],"title":"Product Nine One","property":"Three","price_range":3}},{"_id":"19","_score":1,"_source":{"price":836,"brand_id":4,"brand_name":"Brand Four","categories":[10,11,12],"title":"Product Four Five","property":"Two","price_range":4}},{"_id":"20","_score":1,"_source":{"price":227,"brand_id":3,"brand_name":"Brand Three","categories":[12,13],"title":"Product Three Four","property":"Ten","price_range":1}}]}}
+{"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id": 1,"_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six","price_range":0}},{"_id": 2,"_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four","price_range":3}},{"_id": 3,"_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six","price_range":0}},{"_id": 4,"_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five","price_range":3}},{"_id": 5,"_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two","price_range":4}},{"_id": 6,"_score":1,"_source":{"price":420,"brand_id":2,"brand_name":"Brand Two","categories":[10,11],"title":"Product Two One","property":"Six","price_range":2}},{"_id": 7,"_score":1,"_source":{"price":412,"brand_id":9,"brand_name":"Brand Nine","categories":[10],"title":"Product Four Nine","property":"Eight","price_range":2}},{"_id": 8,"_score":1,"_source":{"price":300,"brand_id":9,"brand_name":"Brand Nine","categories":[13,14,15],"title":"Product Eight Four","property":"Five","price_range":1}},{"_id": 9,"_score":1,"_source":{"price":728,"brand_id":1,"brand_name":"Brand One","categories":[11],"title":"Product Nine Six","property":"Four","price_range":3}},{"_id": 10,"_score":1,"_source":{"price":622,"brand_id":3,"brand_name":"Brand Three","categories":[10,11],"title":"Product Six Seven","property":"Two","price_range":3}},{"_id": 11,"_score":1,"_source":{"price":462,"brand_id":5,"brand_name":"Brand Five","categories":[10,11],"title":"Product Ten Two","property":"Eight","price_range":2}},{"_id": 12,"_score":1,"_source":{"price":939,"brand_id":7,"brand_name":"Brand Seven","categories":[12,13],"title":"Product Nine Seven","property":"Six","price_range":4}},{"_id": 13,"_score":1,"_source":{"price":948,"brand_id":8,"brand_name":"Brand Eight","categories":[12],"title":"Product Ten One","property":"Six","price_range":4}},{"_id": 14,"_score":1,"_source":{"price":900,"brand_id":9,"brand_name":"Brand Nine","categories":[12,13,14],"title":"Product Ten Nine","property":"Three","price_range":4}},{"_id": 15,"_score":1,"_source":{"price":224,"brand_id":3,"brand_name":"Brand Three","categories":[13],"title":"Product Two Six","property":"Four","price_range":1}},{"_id": 16,"_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[12],"title":"Product Two Four","property":"Six","price_range":3}},{"_id": 17,"_score":1,"_source":{"price":510,"brand_id":2,"brand_name":"Brand Two","categories":[10],"title":"Product Ten Two","property":"Seven","price_range":2}},{"_id": 18,"_score":1,"_source":{"price":702,"brand_id":10,"brand_name":"Brand Ten","categories":[12,13],"title":"Product Nine One","property":"Three","price_range":3}},{"_id": 19,"_score":1,"_source":{"price":836,"brand_id":4,"brand_name":"Brand Four","categories":[10,11,12],"title":"Product Four Five","property":"Two","price_range":4}},{"_id": 20,"_score":1,"_source":{"price":227,"brand_id":3,"brand_name":"Brand Three","categories":[12,13],"title":"Product Three Four","property":"Ten","price_range":1}}]}}
 ```
 
 <!-- request Java -->
@@ -1097,7 +1097,7 @@ res =  await searchApi.search({
     "total": 5,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "content": "Text 1",
@@ -1108,7 +1108,7 @@ res =  await searchApi.search({
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "content": "Text 5",
@@ -1167,7 +1167,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
     "total": 5,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "content": "Text 1",
@@ -1178,7 +1178,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "content": "Text 5",
@@ -1838,42 +1838,42 @@ POST /search -d '
     "total_relation": "eq",
     "hits": [
       {
-        "_id": "1515697460415037554",
+        "_id": 1515697460415037554,
         "_score": 1,
         "_source": {
           "a": 1
         }
       },
       {
-        "_id": "1515697460415037555",
+        "_id": 1515697460415037555,
         "_score": 1,
         "_source": {
           "a": 2
         }
       },
       {
-        "_id": "1515697460415037556",
+        "_id": 1515697460415037556,
         "_score": 1,
         "_source": {
           "a": 2
         }
       },
       {
-        "_id": "1515697460415037557",
+        "_id": 1515697460415037557,
         "_score": 1,
         "_source": {
           "a": 3
         }
       },
       {
-        "_id": "1515697460415037558",
+        "_id": 1515697460415037558,
         "_score": 1,
         "_source": {
           "a": 3
         }
       },
       {
-        "_id": "1515697460415037559",
+        "_id": 1515697460415037559,
         "_score": 1,
         "_source": {
           "a": 3
@@ -2003,7 +2003,7 @@ POST /search -d '
     "total": 10000,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "price": 197,
@@ -2016,7 +2016,7 @@ POST /search -d '
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "price": 805,
@@ -2174,7 +2174,7 @@ res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"lim
 ```
 <!-- response Javascript -->
 ```javascript
-{"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id":"1","_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id":"2","_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id":"3","_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id":"4","_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id":"5","_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
+{"took":0,"timed_out":false,"hits":{"total":10000,"hits":[{"_id": 1,"_score":1,"_source":{"price":197,"brand_id":10,"brand_name":"Brand Ten","categories":[10],"title":"Product Eight One","property":"Six"}},{"_id": 2,"_score":1,"_source":{"price":671,"brand_id":6,"brand_name":"Brand Six","categories":[12,13,14],"title":"Product Nine Seven","property":"Four"}},{"_id": 3,"_score":1,"_source":{"price":92,"brand_id":3,"brand_name":"Brand Three","categories":[13,14,15],"title":"Product Five Four","property":"Six"}},{"_id": 4,"_score":1,"_source":{"price":713,"brand_id":10,"brand_name":"Brand Ten","categories":[11],"title":"Product Eight Nine","property":"Five"}},{"_id": 5,"_score":1,"_source":{"price":805,"brand_id":7,"brand_name":"Brand Seven","categories":[11,12,13],"title":"Product Ten Three","property":"Two"}}]}}
 
 ```
 
@@ -2273,7 +2273,7 @@ res =  await searchApi.search({
     "total": 5,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "content": "Text 1",
@@ -2283,7 +2283,7 @@ res =  await searchApi.search({
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "content": "Text 5",
@@ -2346,7 +2346,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
     "total": 5,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 1,
         "_source": {
           "content": "Text 1",
@@ -2356,7 +2356,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
       },
  ...
       {
-        "_id": "5",
+        "_id": 5,
         "_score": 1,
         "_source": {
           "content": "Text 5",

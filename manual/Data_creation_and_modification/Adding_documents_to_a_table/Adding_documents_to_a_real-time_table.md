@@ -420,7 +420,7 @@ GET /search
     "total": 1,
     "hits": [
       {
-        "_id": "1657860156022587406",
+        "_id": 1657860156022587406,
         "_score": 1,
         "_source": {
           "price": 0,
@@ -643,7 +643,7 @@ POST /_bulk
       "index": {
         "_index": "products",
         "_type": "doc",
-        "_id": "0",
+        "_id": 0,
         "_version": 1,
         "result": "created",
         "_shards": {
@@ -660,7 +660,7 @@ POST /_bulk
       "create": {
         "_index": "products",
         "_type": "doc",
-        "_id": "3",
+        "_id": 3,
         "_version": 1,
         "result": "created",
         "_shards": {

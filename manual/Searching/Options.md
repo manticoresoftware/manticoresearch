@@ -87,7 +87,7 @@ POST /search
     "total_relation": "eq",
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 10500,
         "_source": {
           "title": "hello",

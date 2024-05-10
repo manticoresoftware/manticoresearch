@@ -10,27 +10,8 @@
 // did not, you can find it at http://www.gnu.org
 //
 
-#include "charset_definition_parser.h"
-
-class CSphCharsetDefinitionParser
-{
-	StringBuilder_c m_sError;
-	const char* m_pCurrent = nullptr;
-	static CSphVector<CharsetAlias_t> m_dCharsetAliases;
-
-	bool Error ( const char* szMessage );
-	void SkipSpaces();
-	bool IsEof();
-	bool CheckEof();
-	int ParseCharsetCode();
-	bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges );
-
-public:
-	bool Parse ( const char* sConfig, CSphVector<CSphRemapRange>& dRanges );
-	CSphString GetLastError();
-	static const CSphVector<CharsetAlias_t>& GetCharsetAliases();
-	static bool InitCharsetAliasTable ( CSphString& sError );
-};
+//#include "charset_definition_parser.h"
+#include "tok_internals.h"
 
 CSphVector<CharsetAlias_t> CSphCharsetDefinitionParser::m_dCharsetAliases;
 
@@ -119,16 +100,28 @@ int CSphCharsetDefinitionParser::ParseCharsetCode()
 	return iCode;
 }
 
-bool CSphCharsetDefinitionParser::AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges )
+bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges, CSphString* pError )
 {
 	if ( tRange.m_iRemapStart < 0x20 )
 	{
-		Error ( SphSprintf ( "dest range (U+%x) below U+20, not allowed", tRange.m_iRemapStart ).cstr() );
+		if ( pError )
+			pError->SetSprintf ( "dest range (U+%x) below U+20, not allowed", tRange.m_iRemapStart );
 		return false;
 	}
 
 	tRange.m_iOrder = dRanges.GetLength();
 	dRanges.Add ( tRange );
+	return true;
+}
+
+bool CSphCharsetDefinitionParser::AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges )
+{
+	CSphString sError;
+	if ( !::AddRange ( tRange, dRanges, &sError ) )
+	{
+		Error ( sError.cstr() );
+		return false;
+	}
 	return true;
 }
 
@@ -169,6 +162,124 @@ bool CSphCharsetDefinitionParser::InitCharsetAliasTable ( CSphString& sError )
 
 	m_dCharsetAliases.SwapData ( dAliases );
 	return true;
+}
+
+void RebaseRange ( CSphRemapRange& dRange, int iNewStart )
+{
+	dRange.m_iRemapStart = iNewStart + dRange.m_iRemapStart - std::exchange ( dRange.m_iStart, iNewStart );
+}
+
+void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges )
+{
+	// need a stable sort with the desc order of the mappings
+	// to keep the last mapping definition and merge into it all next entries (entries defined prior to the last mapping)
+	for ( bool bKeepGoing = true; bKeepGoing; )
+	{
+		bKeepGoing = false;
+		// first stage - we flatten all the ranges
+		dRanges.Sort();
+		CSphVector<CSphRemapRange> dExtraRanges;
+		for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
+		{
+			auto& dFirst = dRanges[i];
+			auto& dSecond = dRanges[i+1];
+
+			assert ( dFirst.m_iStart <= dSecond.m_iStart ); // because vec is sorted
+
+			if ( dFirst.m_iEnd < dSecond.m_iStart ) // no intersection, bail
+				continue;
+
+			if ( dFirst.m_iStart == dSecond.m_iStart )
+			{
+				if ( dFirst.m_iEnd == dSecond.m_iEnd )
+				{
+					if ( dFirst.m_iOrder < dSecond.m_iOrder ) // ranges are the same - keep one with bigger m_iOrder
+						std::swap ( dFirst, dSecond );
+					dRanges.Remove ( i + 1 );
+					--i;
+					bKeepGoing = true;
+					continue;
+				}
+
+				if ( dFirst.m_iEnd > dSecond.m_iEnd )
+					std::swap ( dFirst, dSecond );
+
+				assert ( dFirst.m_iEnd < dSecond.m_iEnd );
+				// 11
+				// 222 => produce 11, 22 and extra tail 2
+				dExtraRanges.Add ( dSecond );
+				RebaseRange ( dExtraRanges.Last(), dFirst.m_iEnd + 1 );
+				dSecond.m_iEnd = dFirst.m_iEnd;
+				continue;
+			}
+
+			// 111...
+			//  22...
+			assert ( dFirst.m_iStart < dSecond.m_iStart );
+			if ( dFirst.m_iEnd < dSecond.m_iEnd )
+			{
+				// 111
+				//  222 => produce head 1, head 22 and extra middle 11, and tail 2
+				dExtraRanges.Add ( dFirst );
+				RebaseRange ( dExtraRanges.Last(), dSecond.m_iStart );
+				dExtraRanges.Add ( dSecond );
+				RebaseRange ( dExtraRanges.Last(), dFirst.m_iEnd + 1 );
+				dSecond.m_iEnd = std::exchange ( dFirst.m_iEnd, dSecond.m_iStart - 1 );
+				continue;
+			}
+
+			if ( dFirst.m_iEnd == dSecond.m_iEnd )
+			{
+				// 111
+				//  22 => produce head 1, and extra middle 11
+				dExtraRanges.Add ( dFirst );
+				RebaseRange ( dExtraRanges.Last(), dSecond.m_iStart );
+				dFirst.m_iEnd = dSecond.m_iStart - 1;
+				continue;
+			}
+
+			assert ( dFirst.m_iEnd > dSecond.m_iEnd );
+
+			// 1111
+			//  22 => produce head 1, extra middle 11 and tail 1
+			dExtraRanges.Add ( dFirst );
+			dExtraRanges.Last().m_iEnd = dSecond.m_iEnd;
+			RebaseRange ( dExtraRanges.Last(), dSecond.m_iStart );
+			dExtraRanges.Add ( dFirst );
+			RebaseRange ( dExtraRanges.Last(), dSecond.m_iEnd + 1 );
+			dFirst.m_iEnd = dSecond.m_iStart - 1;
+		}
+		dRanges.Append ( dExtraRanges );
+		bKeepGoing |= !dExtraRanges.IsEmpty();
+	}
+	dRanges.Sort();
+
+#define PARANOID 1
+#ifndef NDEBUG
+#if PARANOID
+	for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
+	{
+		auto& dFirst = dRanges[i];
+		auto& dSecond = dRanges[i + 1];
+		assert ( dFirst.m_iStart <= dFirst.m_iEnd );
+		assert ( dSecond.m_iStart <= dSecond.m_iEnd );
+		assert ( dFirst.m_iEnd < dSecond.m_iStart );
+	}
+#endif
+#endif
+	// stage 2 - merge sibling ranges. Reuse order as 'delta'
+	for ( auto& dRange : dRanges ) dRange.m_iOrder = dRange.m_iRemapStart - dRange.m_iStart;
+	for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
+	{
+		auto& dFirst = dRanges[i];
+		auto& dSecond = dRanges[i + 1];
+		if ( dFirst.m_iEnd + 1 == dSecond.m_iStart && dFirst.m_iOrder == dSecond.m_iOrder )
+		{
+			dFirst.m_iEnd = dSecond.m_iEnd;
+			dRanges.Remove ( i + 1 );
+			--i;
+		}
+	}
 }
 
 bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRemapRange>& dRanges )
@@ -350,20 +461,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		++m_pCurrent;
 	}
 
-	// need a stable sort with the desc order of the mappings
-	// to keep the last mapping definition and merge into it all next entries (entries defined prior to the last mapping)
-	dRanges.Sort();
-	for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
-	{
-		if ( dRanges[i].m_iEnd >= dRanges[i + 1].m_iStart )
-		{
-			// FIXME! add an ambiguity check
-			dRanges[i].m_iEnd = Max ( dRanges[i].m_iEnd, dRanges[i + 1].m_iEnd );
-			dRanges.Remove ( i + 1 );
-			--i;
-		}
-	}
-
+	MergeIntersectedRanges ( dRanges );
 	return true;
 }
 

@@ -254,7 +254,7 @@ void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges )
 	}
 	dRanges.Sort();
 
-#define PARANOID 1
+#define PARANOID 0
 #ifndef NDEBUG
 #if PARANOID
 	for ( int i = 0; i < dRanges.GetLength() - 1; ++i )

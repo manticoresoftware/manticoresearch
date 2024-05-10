@@ -857,7 +857,7 @@ static std::unique_ptr<CSphIndex> TryToPreallocPq ( const CSphString & sIndex, c
 }
 
 
-static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
+static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, const CSphString & sFromPath, StrVec_t & dCopied, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
 {
 	bPQ = false;
 
@@ -875,11 +875,8 @@ static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sN
 		bPQ = true;
 	}
 
-	if ( !pIndex->CopyExternalFiles ( 0, dCopied ) )
-	{
-		sError = pIndex->GetLastError();
+	if ( !pIndex->CopyExternalFiles ( -1, sFromPath, dCopied, sError ) )
 		return false;
-	}
 
 	return true;
 }
@@ -925,7 +922,8 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 		dWipe.Add(sDest);
 	}
 
-	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dWipe, bPQ, dWarnings, sError ) )
+	CSphString sFromPath = GetPathOnly ( sPathToIndex );
+	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, sFromPath, dWipe, bPQ, dWarnings, sError ) )
 		return false;
 
 	dWipe.Reset();

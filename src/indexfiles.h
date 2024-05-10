@@ -104,3 +104,5 @@ public:
 	// if prev op fails with fatal error - log the message and terminate
 	CSphString FatalMsg(const char * szMsg=nullptr);
 };
+
+bool FixupCopyExternalFiles ( const CSphString & sDstPath, const CSphString & sSrcPath, int iPostfix, ISphTokenizer * pTokenizer, CSphDict * pDict, StrVec_t & dCopied, CSphString & sError );

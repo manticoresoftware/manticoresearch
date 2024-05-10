@@ -1332,7 +1332,7 @@ public:
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
-	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
+	bool				CopyExternalFiles ( int iPostfix, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError ) final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -10300,74 +10300,21 @@ void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const Filename
 	dExt.Uniq(); // might be duplicates of tok \ dict files from disk chunks
 }
 
-bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
+bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError )
 {
-	struct Rename_t
-	{
-		CSphString m_sSrc;
-		CSphString m_sDst;
-	};
-
-	CSphVector<Rename_t> dExtFiles;
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
-	{
-		const char * szRenameTo = "exceptions.txt";
-		dExtFiles.Add ( { m_pTokenizer->GetSettings().m_sSynonymsFile, szRenameTo } );
-		const_cast<CSphTokenizerSettings &>(m_pTokenizer->GetSettings()).m_sSynonymsFile = szRenameTo;
-	}
-
-	if ( m_pDict )
-	{
-		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
-		if ( !sStopwords.IsEmpty() )
-		{
-			StringBuilder_c sNewStopwords(" ");
-			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
-			ARRAY_FOREACH ( i, dStops )
-			{
-				CSphString sTmp;
-				sTmp.SetSprintf ( "stopwords_%d.txt", i );
-				dExtFiles.Add ( { dStops[i], sTmp } );
-
-				sNewStopwords << sTmp;
-			}
-
-			const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_sStopwords = sNewStopwords.cstr();
-		}
-
-		StrVec_t dNewWordforms;
-		ARRAY_FOREACH ( i, m_pDict->GetSettings().m_dWordforms )
-		{
-			CSphString sTmp;
-			sTmp.SetSprintf ( "wordforms_%d.txt", i );
-			dExtFiles.Add( { m_pDict->GetSettings().m_dWordforms[i], sTmp } );
-			dNewWordforms.Add(sTmp);
-		}
-
-		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
-	}
-
-	CSphString sPathOnly = GetPathOnly ( GetFilebase() );
-	for ( const auto & i : dExtFiles )
-	{
-		CSphString sDest;
-		sDest.SetSprintf ( "%s%s", sPathOnly.cstr(), i.m_sDst.cstr() );
-		if ( !CopyFile ( i.m_sSrc, sDest, m_sLastError ) )
-			return false;
-
-		dCopied.Add(sDest);
-	}
+	CSphString sDstPath = GetPathOnly ( GetFilebase() );
+	if ( !FixupCopyExternalFiles ( sDstPath, sFromPath, -1, m_pTokenizer.Ptr(), m_pDict.Ptr(), dCopied, sError ) )
+		return false;
 
 	SaveMeta();
 
 	auto pDiskChunks = m_tRtChunks.DiskChunks();
 	auto& dDiskChunks = *pDiskChunks;
 	ARRAY_FOREACH ( i, dDiskChunks )
-		if ( !dDiskChunks[i]->CastIdx().CopyExternalFiles ( i, dCopied ) )
-		{
-			m_sLastError = dDiskChunks[i]->Cidx().GetLastError();
+	{
+		if ( !dDiskChunks[i]->CastIdx().CopyExternalFiles ( i, sFromPath, dCopied, sError ) )
 			return false;
-		}
+	}
 
 	return true;
 }

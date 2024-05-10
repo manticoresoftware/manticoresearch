@@ -14,6 +14,26 @@
 
 #include "charset_definition_parser.h"
 
+struct RemapRangeTagged_t: public CSphRemapRange
+{
+	int m_iTag = -1;
+
+	RemapRangeTagged_t() = default;
+	explicit RemapRangeTagged_t ( const CSphRemapRange& tRange )
+		: CSphRemapRange { tRange }
+	{}
+};
+
+// need a stable sort with the desc order
+inline bool operator< ( const RemapRangeTagged_t& a, const RemapRangeTagged_t& b )
+{
+	if ( a.m_iStart == b.m_iStart )
+		return ( a.m_iTag > b.m_iTag );
+
+	return ( a.m_iStart < b.m_iStart );
+}
+
+
 class CSphCharsetDefinitionParser
 {
 	StringBuilder_c m_sError;
@@ -25,7 +45,7 @@ class CSphCharsetDefinitionParser
 	bool IsEof();
 	bool CheckEof();
 	int ParseCharsetCode();
-	bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges );
+	bool AddRange ( CSphRemapRange tRange, CSphVector<RemapRangeTagged_t>& dRanges );
 
 public:
 	bool Parse ( const char* sConfig, CSphVector<CSphRemapRange>& dRanges );
@@ -34,5 +54,6 @@ public:
 	static bool InitCharsetAliasTable ( CSphString& sError );
 };
 
-void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges );
-bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges, CSphString* pError = nullptr );
+// used in tests
+void MergeIntersectedRanges ( CSphVector<RemapRangeTagged_t>& dRanges );
+bool AddRange ( CSphRemapRange tRange, CSphVector<RemapRangeTagged_t>& dRanges, CSphString* pError = nullptr );

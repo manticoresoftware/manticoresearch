@@ -1190,7 +1190,7 @@ TEST_F ( QueryParser, test_NOT )
 
 TEST ( Charsets, MergeRanges )
 {
-	CSphVector<CSphRemapRange> dRanges;
+	CSphVector<RemapRangeTagged_t> dRanges;
 	AddRange ( { 100, 200, 103 }, dRanges );
 	AddRange ( { 110, 190, 120 }, dRanges );
 	AddRange ( { 120, 180, 121 }, dRanges );

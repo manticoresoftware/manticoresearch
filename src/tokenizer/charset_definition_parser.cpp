@@ -100,7 +100,7 @@ int CSphCharsetDefinitionParser::ParseCharsetCode()
 	return iCode;
 }
 
-bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges, CSphString* pError )
+bool AddRange ( CSphRemapRange tRange, CSphVector<RemapRangeTagged_t>& dRanges, CSphString* pError )
 {
 	if ( tRange.m_iRemapStart < 0x20 )
 	{
@@ -109,12 +109,12 @@ bool AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges, CSph
 		return false;
 	}
 
-	tRange.m_iOrder = dRanges.GetLength();
-	dRanges.Add ( tRange );
+	dRanges.Add ( RemapRangeTagged_t { tRange } );
+	dRanges.Last().m_iTag = dRanges.GetLength();
 	return true;
 }
 
-bool CSphCharsetDefinitionParser::AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges )
+bool CSphCharsetDefinitionParser::AddRange ( CSphRemapRange tRange, CSphVector<RemapRangeTagged_t>& dRanges )
 {
 	CSphString sError;
 	if ( !::AddRange ( tRange, dRanges, &sError ) )
@@ -169,7 +169,7 @@ void RebaseRange ( CSphRemapRange& dRange, int iNewStart )
 	dRange.m_iRemapStart = iNewStart + dRange.m_iRemapStart - std::exchange ( dRange.m_iStart, iNewStart );
 }
 
-void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges )
+void MergeIntersectedRanges ( CSphVector<RemapRangeTagged_t>& dRanges )
 {
 	// need a stable sort with the desc order of the mappings
 	// to keep the last mapping definition and merge into it all next entries (entries defined prior to the last mapping)
@@ -178,7 +178,7 @@ void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges )
 		bKeepGoing = false;
 		// first stage - we flatten all the ranges
 		dRanges.Sort();
-		CSphVector<CSphRemapRange> dExtraRanges;
+		CSphVector<RemapRangeTagged_t> dExtraRanges;
 		for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
 		{
 			auto& dFirst = dRanges[i];
@@ -193,7 +193,7 @@ void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges )
 			{
 				if ( dFirst.m_iEnd == dSecond.m_iEnd )
 				{
-					if ( dFirst.m_iOrder < dSecond.m_iOrder ) // ranges are the same - keep one with bigger m_iOrder
+					if ( dFirst.m_iTag < dSecond.m_iTag ) // ranges are the same - keep one with bigger m_iOrder
 						std::swap ( dFirst, dSecond );
 					dRanges.Remove ( i + 1 );
 					--i;
@@ -267,13 +267,13 @@ void MergeIntersectedRanges ( CSphVector<CSphRemapRange>& dRanges )
 	}
 #endif
 #endif
-	// stage 2 - merge sibling ranges. Reuse order as 'delta'
-	for ( auto& dRange : dRanges ) dRange.m_iOrder = dRange.m_iRemapStart - dRange.m_iStart;
+	// stage 2 - merge sibling ranges. Reuse tag as 'delta'
+	for ( auto& dRange : dRanges ) dRange.m_iTag = dRange.m_iRemapStart - dRange.m_iStart;
 	for ( int i = 0; i < dRanges.GetLength() - 1; ++i )
 	{
 		auto& dFirst = dRanges[i];
 		auto& dSecond = dRanges[i + 1];
-		if ( dFirst.m_iEnd + 1 == dSecond.m_iStart && dFirst.m_iOrder == dSecond.m_iOrder )
+		if ( dFirst.m_iEnd + 1 == dSecond.m_iStart && dFirst.m_iTag == dSecond.m_iTag )
 		{
 			dFirst.m_iEnd = dSecond.m_iEnd;
 			dRanges.Remove ( i + 1 );
@@ -286,6 +286,13 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 {
 	m_pCurrent = sConfig;
 	dRanges.Reset();
+	CSphVector<RemapRangeTagged_t> dOrderedRanges;
+
+	AT_SCOPE_EXIT([&dRanges,&dOrderedRanges]() {
+		dRanges.Resize ( dOrderedRanges.GetLength() );
+		ARRAY_CONSTFOREACH ( i, dOrderedRanges )
+			dRanges[i] = (CSphRemapRange)dOrderedRanges[i]; // slice out m_iTag
+	});
 
 	// do parse
 	while ( *m_pCurrent )
@@ -314,7 +321,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 
 			for ( const auto& dRemap : tCur.m_dRemaps )
 			{
-				if ( !AddRange ( dRemap, dRanges ) )
+				if ( !AddRange ( dRemap, dOrderedRanges ) )
 					return false;
 			}
 		}
@@ -331,7 +338,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		if ( !*m_pCurrent || *m_pCurrent == ',' )
 		{
 			// stray char
-			if ( !AddRange ( CSphRemapRange ( iStart, iStart, iStart ), dRanges ) )
+			if ( !AddRange ( { iStart, iStart, iStart }, dOrderedRanges ) )
 				return false;
 
 			if ( IsEof() )
@@ -348,7 +355,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 			int iDest = ParseCharsetCode();
 			if ( iDest < 0 )
 				return false;
-			if ( !AddRange ( CSphRemapRange ( iStart, iStart, iDest ), dRanges ) )
+			if ( !AddRange ( { iStart, iStart, iDest }, dOrderedRanges ) )
 				return false;
 
 			// it's either end of line now, or must be followed by comma
@@ -380,7 +387,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		// stray range?
 		if ( !*m_pCurrent || *m_pCurrent == ',' )
 		{
-			if ( !AddRange ( CSphRemapRange ( iStart, iEnd, iStart ), dRanges ) )
+			if ( !AddRange ( { iStart, iEnd, iStart }, dOrderedRanges ) )
 				return false;
 
 			if ( IsEof() )
@@ -394,9 +401,9 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		{
 			for ( int i = iStart; i < iEnd; i += 2 )
 			{
-				if ( !AddRange ( CSphRemapRange ( i, i, i + 1 ), dRanges ) )
+				if ( !AddRange ( { i, i, i + 1 }, dOrderedRanges ) )
 					return false;
-				if ( !AddRange ( CSphRemapRange ( i + 1, i + 1, i + 1 ), dRanges ) )
+				if ( !AddRange ( { i + 1, i + 1, i + 1 }, dOrderedRanges ) )
 					return false;
 			}
 
@@ -451,7 +458,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		}
 
 		// remapped ok
-		if ( !AddRange ( CSphRemapRange ( iStart, iEnd, iRemapStart ), dRanges ) )
+		if ( !AddRange ( { iStart, iEnd, iRemapStart }, dOrderedRanges ) )
 			return false;
 
 		if ( IsEof() )
@@ -461,7 +468,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 		++m_pCurrent;
 	}
 
-	MergeIntersectedRanges ( dRanges );
+	MergeIntersectedRanges ( dOrderedRanges );
 	return true;
 }
 

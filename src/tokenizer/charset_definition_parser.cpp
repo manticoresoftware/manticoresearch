@@ -100,7 +100,7 @@ int CSphCharsetDefinitionParser::ParseCharsetCode()
 			iCode = iCode * 16 + HexDigit ( *p++ );
 		}
 		while ( isspace ( *p ) )
-			p++;
+			++p;
 
 	} else
 	{
@@ -112,7 +112,7 @@ int CSphCharsetDefinitionParser::ParseCharsetCode()
 
 		iCode = *p++;
 		while ( isspace ( *p ) )
-			p++;
+			++p;
 	}
 
 	m_pCurrent = p;
@@ -121,17 +121,15 @@ int CSphCharsetDefinitionParser::ParseCharsetCode()
 
 bool CSphCharsetDefinitionParser::AddRange ( CSphRemapRange tRange, CSphVector<CSphRemapRange>& dRanges )
 {
-	if ( tRange.m_iRemapStart >= 0x20 )
+	if ( tRange.m_iRemapStart < 0x20 )
 	{
-		tRange.m_iOrder = dRanges.GetLength();
-		dRanges.Add ( tRange );
-		return true;
+		Error ( SphSprintf ( "dest range (U+%x) below U+20, not allowed", tRange.m_iRemapStart ).cstr() );
+		return false;
 	}
 
-	CSphString sError;
-	sError.SetSprintf ( "dest range (U+%x) below U+20, not allowed", tRange.m_iRemapStart );
-	Error ( sError.cstr() );
-	return false;
+	tRange.m_iOrder = dRanges.GetLength();
+	dRanges.Add ( tRange );
+	return true;
 }
 
 // Charsets relocated to folder 'charsets', each one in separate .txt file.
@@ -159,7 +157,7 @@ bool CSphCharsetDefinitionParser::InitCharsetAliasTable ( CSphString& sError )
 			auto iChunkLen = (int)strlen ( globalaliases[iCurAliasChunk] );
 			char* szChunk = dConcat.AddN ( iChunkLen );
 			memcpy ( szChunk, globalaliases[iCurAliasChunk], iChunkLen );
-			iCurAliasChunk++;
+			++iCurAliasChunk;
 		}
 
 		dConcat.Add ( 0 );
@@ -201,11 +199,11 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 			// skip to next definition
 			m_pCurrent += tCur.m_iNameLen;
 			if ( *m_pCurrent && *m_pCurrent == ',' )
-				m_pCurrent++;
+				++m_pCurrent;
 
-			ARRAY_FOREACH ( iDef, tCur.m_dRemaps )
+			for ( const auto& dRemap : tCur.m_dRemaps )
 			{
-				if ( !AddRange ( tCur.m_dRemaps[iDef], dRanges ) )
+				if ( !AddRange ( dRemap, dRanges ) )
 					return false;
 			}
 		}
@@ -227,7 +225,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 
 			if ( IsEof() )
 				break;
-			m_pCurrent++;
+			++m_pCurrent;
 			continue;
 		}
 
@@ -276,7 +274,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 
 			if ( IsEof() )
 				break;
-			m_pCurrent++;
+			++m_pCurrent;
 			continue;
 		}
 
@@ -349,7 +347,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char* sConfig, CSphVector<CSphRe
 			break;
 		if ( *m_pCurrent != ',' )
 			return Error ( "expected ','" );
-		m_pCurrent++;
+		++m_pCurrent;
 	}
 
 	// need a stable sort with the desc order of the mappings

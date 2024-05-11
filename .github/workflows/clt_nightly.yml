@@ -63,6 +63,9 @@ jobs:
           - name: Jammy release installation
             image: ubuntu:jammy
             test_prefix: test/clt-tests/installation/deb-release-
+          - name: Noble release installation
+            image: ubuntu:noble
+            test_prefix: test/clt-tests/installation/deb-release-
           - name: Buster release installation
             image: debian:buster
             test_prefix: test/clt-tests/installation/deb-release-

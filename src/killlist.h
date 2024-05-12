@@ -142,11 +142,11 @@ void Intersect ( READER1& tReader1, READER2& tReader2, FUNCTOR&& fnFunctor )
 
 	while ( bHaveDocs1 && bHaveDocs2 )
 	{
-		if ( tDocID1 < tDocID2 )
+		if ( (uint64_t)tDocID1 < (uint64_t)tDocID2 )
 		{
 			tReader1.HintDocID ( tDocID2 );
 			bHaveDocs1 = tReader1.Read ( tDocID1, tRowID1 );
-		} else if ( tDocID1 > tDocID2 )
+		} else if ( (uint64_t)tDocID1 > (uint64_t)tDocID2 )
 		{
 			tReader2.HintDocID ( tDocID1 );
 			bHaveDocs2 = tReader2.ReadDocID ( tDocID2 );

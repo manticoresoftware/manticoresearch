@@ -1352,10 +1352,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	SetDefaults();
 
-	if ( !CheckPaths() )
-		return false;
-
-	return true;
+	return CheckPaths();
 }
 
 

@@ -79,6 +79,8 @@ By default Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for connections from other Manticore nodes and clients based on Manticore binary API
 
+More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/).   
+
 <!-- intro -->
 ##### Connect via MySQL:
 
@@ -222,6 +224,15 @@ Let's now create a table called "products" with 2 fields:
 * price - of type "float"
 
 Note that it is possible to omit creating a table with an explicit create statement. For more information, see [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+
+More information about different ways to create a table can be found in our learning courses:
+* [Creating a RealTime table](https://play.manticoresearch.com/rtmode/)
+* [Creating a table from the MySQL source](https://play.manticoresearch.com/mysql/)
+* [Creating a table from the CSV source](https://play.manticoresearch.com/csv/) 
+* [Creating a table using the auto schema mechanism](https://play.manticoresearch.com/autoschema/)
+* [Creating a table with Logstash/Beats](https://play.manticoresearch.com/logstash/)
+* [Creating a table with Fluentbit](https://play.manticoresearch.com/vectordev/)
+* [Creating a table using the Vector.dev agent](https://play.manticoresearch.com/vectordev/)
 
 <!-- intro -->
 ##### SQL:
@@ -543,6 +554,11 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 
 <!-- end -->
 
+More details on the subject can be found here:
+* [Adding data to a plain table](https://play.manticoresearch.com/mysql/) 
+* [Adding data to a RealTime table](https://play.manticoresearch.com/rtintro/)
+
+
 <!-- example search -->
 ## Search
 
@@ -593,7 +609,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1513686608316989452",
+        "_id": 1513686608316989452,
         "_score": 1680,
         "_source": {
           "price": 7.99,
@@ -678,7 +694,7 @@ res = await searchApi.search({"index":"products","query":{"query_string":"@title
 ```
 <!-- response javascript -->
 ```javascript
-{"hits": {"hits": [{"_id": "1513686608316989452",
+{"hits": {"hits": [{"_id": 1513686608316989452,
                     "_score": 1680,
                     "_source": {"title": "Pet Hair Remover Glove", "price":7.99},
                     "highlight":{"title":["Pet <b>Hair Remover</b> Glove"]}}],
@@ -768,7 +784,7 @@ res = await searchApi.search({
     {
         "hits": 
         [{
-            "_id": "1",
+            "_id": 1,
             "_score": 1400,
             "_source": {"content":"Text 1","name":"Doc 1","cat":1},
             "highlight": {"content":["<b>Text 1</b>"]}
@@ -805,7 +821,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
     {
         "hits": 
         [{
-            "_id": "1",
+            "_id": 1,
             "_score": 1400,
             "_source": {"content":"Text 1","name":"Doc 1","cat":1},
             "highlight": {"content":["<b>Text 1</b>"]}
@@ -818,6 +834,11 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 }
 ```
 <!-- end -->
+
+More information on different search options available in Manticore can be found in our learning courses:
+* [Faceted search](https://play.manticoresearch.com/faceting/)
+* [Geo search](https://play.manticoresearch.com/geosearch/)
+* [Searching for similar documents](https://play.manticoresearch.com/mlt/)
 
 <!-- example update -->
 ## Update

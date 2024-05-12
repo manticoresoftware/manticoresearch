@@ -23,8 +23,8 @@ jobs:
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
-  clt_test_supported_myqldump_versions:
-    name: Testing supported myqldump versions
+  clt_test_supported_mysqldump_versions:
+    name: Testing supported mysqldump versions
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout

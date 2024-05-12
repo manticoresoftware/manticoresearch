@@ -1900,7 +1900,9 @@ static int ProcessFilterSource ( const CSphString * sSourceFilter, nljson & tRes
 
 static void ProcessKbnResult ( const CSphString * sSourceFilter, const CSphString * sFilterPath, CSphString & sRes )
 {
-	nljson tRes = nljson::parse ( sRes.cstr() );
+	nljson tRes = nljson::parse ( sRes.cstr(), nullptr, false );
+	if ( tRes.is_discarded() )
+		return;
 
 	nljson::json_pointer tHits ( "/hits/hits" );
 	if ( !tRes.contains ( tHits ) )
@@ -1920,7 +1922,9 @@ static void ProcessKbnResult ( const CSphString * sSourceFilter, const CSphStrin
 		if ( tRawStr.empty() )
 			continue;
 
-		nljson tRawObj = nljson::parse ( tRawStr );
+		nljson tRawObj = nljson::parse ( tRawStr, nullptr, false );
+		if ( tRawObj.is_discarded() )
+			return;
 		
 		nljson & tSrc = tHit["_source"];
 		tSrc.merge_patch ( tRawObj );
@@ -2058,7 +2062,12 @@ void HttpCompatHandler_c::ProcessCount()
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
-	nljson tReq = nljson::parse ( GetBody().first );
+	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tReq.is_discarded())
+	{
+		ReportError ( "invalid body", "parse_exception", SPH_HTTP_STATUS_400 );
+		return;
+	}
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
@@ -2067,7 +2076,7 @@ void HttpCompatHandler_c::ProcessCount()
 		return;
 	}
 
-	nljson tRef = nljson::parse ( sRes.cstr() );
+	nljson tRef = nljson::parse ( sRes.cstr(), nullptr, false );
 	if ( !tRef.contains ( "error" ) )
 	{
 		// _count transform
@@ -2815,6 +2824,11 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	{
 		ReportMissedIndex ( GetUrlParts()[0] );
 		return true;
+	}
+	if ( IsEmpty ( GetBody() ) )
+	{
+		ReportError ( "Validation Failed: 1: script or doc is missing", "action_request_validation_exception", SPH_HTTP_STATUS_400 );
+		return false;
 	}
 
 	nljson tUpd = nljson::parse ( GetBody().first );

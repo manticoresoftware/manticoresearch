@@ -28,12 +28,12 @@ class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
 
-struct InsertDocData_t
+class InsertDocData_c
 {
+public:
 	CSphMatch							m_tDoc;
 	CSphVector<VecTraits_T<const char>>	m_dFields;
 	CSphVector<const char*>				m_dStrings;
-	CSphVector<int64_t>					m_dMvas;
 
 	CSphAttrLocator						m_tDocIDLocator;
 
@@ -41,10 +41,22 @@ struct InsertDocData_t
 	int									m_iColumnarID = -1;
 	int64_t								m_iTotalBytes = 0;
 
-										explicit InsertDocData_t ( const ISphSchema & tSchema );
+										explicit InsertDocData_c ( const ISphSchema & tSchema );
 
 	void								SetID ( SphAttr_t tDocID );
 	SphAttr_t							GetID() const;
+
+	void								AddMVALength ( int iLength, bool bDefault=false );
+	void								AddMVAValue ( int64_t iValue )						{ m_dMvas.Add(iValue); }
+	void								ResetMVAs()											{ m_dMvas.Resize(0); }
+	const int64_t *						GetMVA ( int iMVA ) const							{ return m_dMvas.Begin()+iMVA; }
+	void								FixParsedMVAs ( const CSphVector<int64_t> & dParsed, int iCount );
+	static std::pair<int, bool>			ReadMVALength ( const int64_t * & pMVA );
+
+private:
+	static const uint64_t DEFAULT_FLAG = 1ULL << 63;
+
+	CSphVector<int64_t>					m_dMvas;
 };
 
 struct OptimizeTask_t
@@ -56,6 +68,7 @@ struct OptimizeTask_t
 		eSplit,
 		eMerge,
 		eAutoOptimize,
+		eDedup,
 	};
 
 	OptimizeVerb_e m_eVerb;
@@ -103,7 +116,7 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) = 0;
+	virtual bool AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes

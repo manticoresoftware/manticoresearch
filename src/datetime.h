@@ -13,6 +13,7 @@
 
 #include "sphinxstd.h"
 #include "cctz/civil_time.h"
+#include "cctz/time_zone.h"
 
 enum class TimeUnit_e
 {
@@ -62,6 +63,6 @@ FORCE_INLINE cctz::civil_second ConvertGroupbyTime ( time_t tTime )
 		return ConvertTime(tTime);
 }
 
-const CSphString & CompatDateFormat();
+const cctz::time_zone & GetTimeZoneUTC();
 
 #endif // _datetime_

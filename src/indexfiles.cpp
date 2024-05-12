@@ -16,6 +16,7 @@
 #include "fileio.h"
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "tokenizer/tokenizer.h"
 
 static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 {
@@ -311,6 +312,98 @@ bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 	{
 		i = tReader.GetString();
 		tReader.GetDword();	// skip flags
+	}
+
+	return true;
+}
+
+
+bool FixupCopyExternalFiles ( const CSphString & sDstPath, const CSphString & sSrcPath, int iPostfix, ISphTokenizer * pTokenizer, CSphDict * pDict, StrVec_t & dCopied, CSphString & sError )
+{
+	struct Rename_t
+	{
+		CSphString m_sSrc;
+		CSphString m_sDst;
+	};
+
+	CSphVector<Rename_t> dExtFiles;
+	if ( pTokenizer && !pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
+	{
+		const char * szRenameTo = "exceptions.txt";
+		auto & tItem = dExtFiles.Add();
+		tItem.m_sSrc = pTokenizer->GetSettings().m_sSynonymsFile;
+		tItem.m_sDst = szRenameTo;
+
+		CSphTokenizerSettings tSettings = pTokenizer->GetSettings();
+		tSettings.m_sSynonymsFile = szRenameTo;
+		pTokenizer->Setup ( tSettings );
+	}
+
+	if ( pDict )
+	{
+		const CSphString & sStopwords = pDict->GetSettings().m_sStopwords;
+		if ( !sStopwords.IsEmpty() )
+		{
+			StringBuilder_c sNewStopwords(" ");
+			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
+			ARRAY_FOREACH ( i, dStops )
+			{
+				auto & tItem = dExtFiles.Add();
+				tItem.m_sSrc = dStops[i];
+				if ( iPostfix!=-1 )
+					tItem.m_sDst.SetSprintf ( "stopwords_chunk%d_%d.txt", iPostfix, i );
+				else
+					tItem.m_sDst.SetSprintf ( "stopwords_%d.txt", i );
+
+				sNewStopwords << tItem.m_sDst;
+			}
+
+			CSphDictSettings tSettings = pDict->GetSettings();
+			tSettings.m_sStopwords = sNewStopwords.cstr();
+			pDict->Setup ( tSettings );
+		}
+
+		if ( pDict->GetSettings().m_dWordforms.GetLength() )
+		{
+			StrVec_t dNewWordforms;
+			ARRAY_FOREACH ( i, pDict->GetSettings().m_dWordforms )
+			{
+				auto & tItem = dExtFiles.Add();
+				tItem.m_sSrc = pDict->GetSettings().m_dWordforms[i];
+				if ( iPostfix!=-1 )
+					tItem.m_sDst.SetSprintf ( "wordforms_chunk%d_%d.txt", iPostfix, i );
+				else
+					tItem.m_sDst.SetSprintf ( "wordforms_%d.txt", i );
+
+				dNewWordforms.Add ( tItem.m_sDst );
+			}
+
+			CSphDictSettings tSettings = pDict->GetSettings();
+			tSettings.m_dWordforms = dNewWordforms;
+			pDict->Setup ( tSettings );
+		}
+	}
+
+	StringBuilder_c sDst;
+	StringBuilder_c sSrc;
+	for ( const auto & tItem : dExtFiles )
+	{
+		sDst.Clear();
+		if ( !IsPathAbsolute ( tItem.m_sDst ) )
+			sDst.Appendf ( "%s%s", sDstPath.cstr(), tItem.m_sDst.cstr() );
+		else
+			sDst << tItem.m_sDst.cstr();
+
+		sSrc.Clear();
+		if ( !IsPathAbsolute ( tItem.m_sSrc ) )
+			sSrc.Appendf ( "%s%s", sSrcPath.cstr(), tItem.m_sSrc.cstr() );
+		else
+			sSrc << tItem.m_sSrc;
+
+		if ( !CopyFile ( sSrc.cstr(), sDst.cstr(), sError ) )
+			return false;
+
+		dCopied.Add ( CSphString ( sDst ) );
 	}
 
 	return true;

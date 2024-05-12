@@ -34,8 +34,9 @@ inline bool OmitEof() noexcept
 /////////////////////////////////////////////////////////////////////////////
 /// how many bytes this int will occupy in proto mysql
 template<typename INT>
-inline int SqlSizeOf ( INT iLen ) noexcept
+inline int SqlSizeOf ( INT _iLen ) noexcept
 {
+	auto iLen = (uint64_t)_iLen;
 	if ( iLen < 251 )
 		return 1;
 	if ( iLen <= 0xffff )

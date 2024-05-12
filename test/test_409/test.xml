@@ -110,15 +110,21 @@ debug wait test status 13 like 'state' option 'timeout'=30;
 SELECT * FROM dist1 order by id asc;
 </sphinxql>
 
+<!-- error on drop distributed table that is still part of the cluster -->
+<sphinxql d="1">
+DROP table dist1;
+ALTER CLUSTER test drop dist1;
+DROP table dist1;
+</sphinxql>
+
+
 <!-- cleanup -->
 <sphinxql d="0">
-	ALTER CLUSTER test DROP dist1;
 	ALTER CLUSTER test DROP rt_st1;
 	ALTER CLUSTER test DROP rt_many1;
 	ALTER CLUSTER test DROP rt_many2;
 	ALTER CLUSTER test DROP rt_st2;
 	ALTER CLUSTER test DROP pq_st2;
-	DROP TABLE dist1;
 	DROP TABLE rt_st1;
 	DROP TABLE rt_many1;
 	DROP TABLE rt_many2;

@@ -1,0 +1,4 @@
+––– input –––
+ps aux | grep -q '[s]earchd'; echo $?
+––– output –––
+0

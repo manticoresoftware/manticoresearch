@@ -15,7 +15,6 @@ searchd
 {
     <searchd_settings/>
     data_dir = <data_path/>
-	binlog_path = <data_path/>
 }
 </config>
 
@@ -41,6 +40,30 @@ select id from tbl1 join tbl2 on tbl1.id=tbl2.tbl1_id order by id asc;
 
 drop table tbl2;
 drop table tbl1;
+
+<!-- create tables with columnar storage -->
+create table join1 ( id bigint, title text, string_id integer, tmp string attribute, j json ) engine='columnar';
+create table join2 ( id bigint, title text, name string attribute, j json ) engine='columnar';
+
+insert into join1 values (1, 'title1', 1, 'tmp1', '{"a":1,"table":"join1"}');
+insert into join1 values (2, 'title2', 2, 'tmp2', '{"b":2,"table":"join1"}');
+insert into join1 values (3, 'title3', 3, 'tmp3', '{"c":3,"table":"join1"}');
+insert into join1 values (4, 'title4', 4, 'tmp4', '{"d":4,"table":"join1"}');
+
+insert into join2 values (1, 'title1', 'name1', '{"a":1,"table":"join2"}');
+insert into join2 values (2, 'title2', 'name2', '{"b":2,"table":"join2"}');
+insert into join2 values (3, 'title3', 'name3', '{"b":2,"table":"join2"}');
+
+<!-- mixed filters from left and right tables; columnar storage -->
+select * from join1 inner join join2 on join1.string_id = join2.id where join2.name = 'name1' or id=2 order by id asc;
+
+<!-- mixed filters from left and right tables; one filter is json; columnar storage -->
+select * from join1 inner join join2 on join1.string_id = join2.id where id=1 or join2.j.b=2 order by id asc;
+
+<!-- cleanup -->
+drop table join1;
+drop table join2;
+
 </sphinxql>
 </queries>
 

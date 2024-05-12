@@ -186,12 +186,13 @@ jobs:
           name: debug_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux debug test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -327,12 +328,13 @@ jobs:
           name: release_test_871_and_on
           path: .
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         continue-on-error: true
         with:
           check_name: Linux release test results
           files: build/junit*.xml
           compare_to_earlier_commit: false
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
@@ -400,71 +402,35 @@ jobs:
           path: manticore_test_kit.img
 
 
-  clt_core_test:
-    name: CLT test of core logic of Manticore Search
+  clt:
+    name: CLT
     needs: build_test_kit_docker
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        test-suite:
+          - name: Core
+            test_prefix: |-
+              test/clt-tests/core/
+              test/clt-tests/expected-errors/
+          - name: Logstash
+            test_prefix: test/clt-tests/logstash/logstash- 
+          - name: mysqldump
+            test_prefix: |-
+              test/clt-tests/mysqldump/mysql/
+              test/clt-tests/mysqldump/maria/
+          - name: Replication
+            test_prefix: test/clt-tests/replication/
+          - name: Plugins
+            test_prefix: test/clt-tests/plugins/
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.1.23
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
-          test_prefix: test/clt-tests/core/
-
-  clt_logstash_test:
-    name: CLT test on Logstash and Filebeat
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/logstash/logstash-
-
-  clt_mysqldump_mysql_test:
-    name: CLT test on mysqldump features for MySQL
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/mysqldump/mysql/
-
-  clt_mysqldump_maria_test:
-    name: CLT test on mysqldump features for MariaDB
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/mysqldump/maria/
-
-  clt_expected_errors_test:
-    name: CLT test on expected errors in Searchd for Buddy
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/expected-errors/
-
-  clt_restarting_replication_nodes:
-    name: CLT test on replication node restart
-    needs: build_test_kit_docker
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt@0.1.21
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: test/clt-tests/replication/
+          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          comment_mode: failures
 
   build_aarch64:
     name: Linux aarch64 build
@@ -549,11 +515,12 @@ jobs:
         run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
         shell: bash
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
           check_name: Windows test results
           compare_to_earlier_commit: false
           files: build/xml_*/junit_tests.xml
+          comment_mode: failures
       - name: Per-test results
         # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |

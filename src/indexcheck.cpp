@@ -1509,13 +1509,13 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 		tCp.m_tOffset = tLookup.GetOffset();
 		tLastDocID = tCp.m_tBaseDocID;
 
-		if ( tPrevCp.m_tBaseDocID>=tCp.m_tBaseDocID )
-			m_tReporter.Fail ( "descending docid at checkpoint %d, previous docid " INT64_FMT " docid " INT64_FMT, iCp, tPrevCp.m_tBaseDocID, tCp.m_tBaseDocID );
+		if ( (uint64_t)tPrevCp.m_tBaseDocID>=(uint64_t)tCp.m_tBaseDocID )
+			m_tReporter.Fail ( "descending docid at checkpoint %d, previous docid " UINT64_FMT " docid " UINT64_FMT, iCp, tPrevCp.m_tBaseDocID, tCp.m_tBaseDocID );
 
 		tLookup.SeekTo ( tCp.m_tOffset, sizeof(DWORD) * 3 * iDocsPerCheckpoint );
 
 		int iCpDocs = iDocsPerCheckpoint;
-		// last checkpoint might have less docs
+		// last checkpoint might have fewer docs
 		if ( iCp==iCheckpoints-1 )
 		{
 			int iLefover = ( iDocs % iDocsPerCheckpoint );
@@ -1524,7 +1524,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 		for ( int i=0; i<iCpDocs; i++ )
 		{
-			DocID_t tDelta = 0;
+			uint64_t tDelta = 0;
 			DocID_t tDocID = 0;
 			RowID_t tRowID = INVALID_ROWID;
 
@@ -1536,8 +1536,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			{
 				tDelta = tLookup.UnzipOffset();
 				tRowID = tLookup.GetDword();
-				if ( tDelta<0 )
-					m_tReporter.Fail ( "invalid docid delta " INT64_FMT " at row %u, checkpoint %d, doc %d, last docid " INT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
+				if ( tDelta==0 )
+					m_tReporter.Fail ( "invalid docid delta " UINT64_FMT " at row %u, checkpoint %d, doc %d, last docid " UINT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
 				else
 					tDocID = tLastDocID + tDelta;
 
@@ -1557,7 +1557,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 				dRowids.BitSet ( tRowID );
 
 				if ( tDocID!=sphGetDocID ( dRow.Begin() ) )
-					m_tReporter.Fail ( "invalid docid " INT64_FMT "(" INT64_FMT ") at row %u, checkpoint %d, doc %d, last docid " INT64_FMT,
+					m_tReporter.Fail ( "invalid docid " UINT64_FMT "(" UINT64_FMT ") at row %u, checkpoint %d, doc %d, last docid " UINT64_FMT,
 						tDocID, sphGetDocID ( dRow.Begin() ), tRowID, iCp, i, tLastDocID );
 			}
 
@@ -1579,7 +1579,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 			DocID_t tDocID = sphGetDocID ( dRow.Begin() );
 		
-			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, m_iNumRows, tDocID );
+			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " UINT64_FMT, i, m_iNumRows, tDocID );
 		}
 	}
 }

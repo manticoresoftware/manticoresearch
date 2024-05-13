@@ -218,6 +218,31 @@ mysql> show meta;
 
 <!-- end -->
 
+## Renaming RT tables
+
+<!-- example Renaming RT tables -->
+
+This approach enables the renaming **only Real-Time (RT)** tables.
+The general syntax for renaming a table is as follows:
+
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+<!-- proofread -->
+
 ## Updating table FT settings in plain mode
 
 <!-- example ALTER RECONFIGURE -->

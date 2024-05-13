@@ -30,6 +30,6 @@ namespace SkipCache
 {
 	void DeleteAll ( int64_t iIndexId );
 	void Release ( SkipCacheKey_t tKey );
-	bool Find ( SkipCacheKey_t tKey, SkipData_t* pData );
+	bool Find ( SkipCacheKey_t tKey, SkipData_t * & pData );
 	bool Add ( SkipCacheKey_t tKey, SkipData_t* pData );
 }

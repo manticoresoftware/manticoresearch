@@ -1,40 +1,31 @@
 ––– input –––
-yum install -y --skip-broken mariadb mariadb105 which > /dev/null 2>&1; echo $?
+echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop.txt
 ––– output –––
-0
 ––– input –––
-yum install -y -q https://repo.manticoresearch.com/manticore-repo.noarch.rpm > /dev/null 2>&1; echo $?
+ls -1 /var/lib/manticore/
 ––– output –––
-0
+binlog
+exc.txt
+manticore.json
+state.sql
+stop.txt
+wordforms1.txt
 ––– input –––
-yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS table1; CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
 ––– output –––
-0
 ––– input –––
-yum install -y -q binutils > /dev/null 2>&1; echo $?
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (1, 'zxczxc', 77); FLUSH RAMCHUNK table1;"
 ––– output –––
-0
 ––– input –––
-manticore-executor -v
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (2, 'srthh', 88); FLUSH RAMCHUNK table1;"
 ––– output –––
-PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (ZTS)
-Copyright (c) The PHP Group
-Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
-––– block: start-searchd-release –––
-––– block: check-version/export-current-version –––
-––– block: check-version/ex-sw-wf –––
 ––– input –––
-yum -y --enablerepo manticore-dev update manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera > /dev/null 2>&1; echo $?
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (3, 'srthgrth', 99); FLUSH RAMCHUNK table1;"
 ––– output –––
-0
-––– block: stop-searchd-dev –––
-––– block: start-searchd-dev –––
-––– block: check-version/export-new-version –––
-––– block: check-version/comparison-version –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table1; SHOW CREATE TABLE table1;"
 ––– output –––
-+--------+------+
+ +--------+------+
 | Index  | Type |
 +--------+------+
 | table1 | rt   |

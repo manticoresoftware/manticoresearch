@@ -1,5 +1,5 @@
 backup 1.3.5 24041602 b58f2be
-buddy 2.3.7 24050817 2b6e7d0
+buddy 2.3.7 24051014 3513bfb
 mcl 2.2.5 240417 478fff2
 executor 1.1.3 24040213 d2d9454
 tzdata 0.9.9 240410 fbe4b1c

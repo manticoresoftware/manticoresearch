@@ -65,7 +65,7 @@ runs:
         repo_url=${{ github.server_url }}/${{ github.repository }}
         changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" ${{ steps.commit.outputs.original_commit }}..HEAD)
         name=${{ inputs.name }}
-        version_string=${{ inputs.version }}
+        version_string="${{ inputs.version }}"
         branch="update-${name}-version"
         title="Update ${name} version"
         commit="Bump ${name} version to: ${version_string}"

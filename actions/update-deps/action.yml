@@ -9,11 +9,6 @@ inputs:
     description: |-
       Version string to use and update in deps.txt.
     required: true
-  ref:
-    description: |-
-      The branch name or ref to the original repo we test that we will checkout.
-      Optional and by default we use default branch of it.
-    required: false
 
 runs:
   using: "composite"
@@ -21,7 +16,7 @@ runs:
     - name: Checkout the calling repo
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.ref }}
+        ref: ${{ github.ref }}
         path: repository
 
     - name: Checkout manticoreseach

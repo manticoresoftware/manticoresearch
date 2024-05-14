@@ -9,6 +9,10 @@ inputs:
     description: |-
       Version string to use and update in deps.txt.
     required: true
+  token:
+    description: |-
+      Github token to use for the pull request.
+    required: true
 
 runs:
   using: "composite"
@@ -83,7 +87,7 @@ runs:
       uses: peter-evans/create-pull-request@v6
       with:
         path: manticoresearch
-        token: ${{ secrets.PR_TOKEN }}
+        token: ${{ inputs.token }}
         commit-message: ${{ steps.commit-message.outputs.commit }}
         title: ${{ steps.commit-message.outputs.title }}
         body-path: ${{ steps.commit-message.outputs.body-path }}

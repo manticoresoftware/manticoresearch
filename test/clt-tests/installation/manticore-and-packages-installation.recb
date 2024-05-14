@@ -15,6 +15,10 @@ yum install -y -q binutils > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
+yum install -y procps > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 manticore-executor -v
 ––– output –––
 PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (ZTS)

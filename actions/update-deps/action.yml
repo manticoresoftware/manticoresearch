@@ -18,6 +18,7 @@ runs:
       env:
         GH_REPOSITORY_REF: ${{ github.ref }}
       with:
+        fetch-depth: 50
         ref: ${{ env.GH_REPOSITORY_REF }}
         path: repository
 

@@ -15,8 +15,10 @@ runs:
   steps:
     - name: Checkout the calling repo
       uses: actions/checkout@v4
+      env:
+        GH_REPOSITORY_REF: ${{ github.ref }}
       with:
-        ref: ${{ github.ref }}
+        ref: ${{ env.GH_REPOSITORY_REF }}
         path: repository
 
     - name: Checkout manticoreseach

@@ -3589,14 +3589,13 @@ int64_t GetUTC ( const CSphString & sTime, const char * pFormat )
 	if ( sTime.IsEmpty() )
 		return 0;
 
-	const cctz::time_zone & tTZ = GetTimeZoneUTC();
-	std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> tRes;
-
+	time_t tConverted = 0;
 	if ( pFormat && *pFormat )
 	{
-		if ( cctz::parse ( pFormat, sTime.cstr(), tTZ, &tRes ) )
-			return tRes.time_since_epoch().count();
-	} else
+		if ( ParseAsLocalTime ( pFormat, sTime, tConverted ) )
+			return tConverted;
+	}
+	else
 	{
 		const char * sCur = sTime.cstr();
 		bool bNumbers = true;
@@ -3610,12 +3609,9 @@ int64_t GetUTC ( const CSphString & sTime, const char * pFormat )
 			return strtoul ( sTime.cstr(), NULL, 10 );
 
 		// loop from the built-in formats from longest to shortest and try one by one
-
 		for ( const char * pFmt : g_dDateTimeFormats )
-		{
-			if ( cctz::parse ( pFmt, sTime.cstr(), tTZ, &tRes ) )
-				return tRes.time_since_epoch().count();
-		}
+			if ( ParseAsLocalTime ( pFmt, sTime, tConverted ) )
+				return tConverted;
 	}
 
 	return 0;

@@ -83,7 +83,7 @@ runs:
       uses: peter-evans/create-pull-request@v6
       with:
         path: manticoresearch
-        token: ${{ github.token }}
+        token: ${{ secrets.PR_TOKEN }}
         commit-message: ${{ steps.commit-message.outputs.commit }}
         title: ${{ steps.commit-message.outputs.title }}
         body-path: ${{ steps.commit-message.outputs.body-path }}

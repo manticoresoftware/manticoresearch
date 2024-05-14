@@ -34,7 +34,7 @@ jobs:
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
   clt-ubuntu:
-    name: CLT
+    name: CLT-Ubuntu
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false 
@@ -133,7 +133,7 @@ jobs:
           run_args: --privileged 
           
   clt-macos:
-    name: CLT
+    name: CLT-MacOS
     runs-on: macos-14
     strategy:
       fail-fast: false 

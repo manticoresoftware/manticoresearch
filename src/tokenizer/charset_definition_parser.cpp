@@ -193,9 +193,8 @@ void MergeIntersectedRanges ( CSphVector<RemapRangeTagged_t>& dRanges )
 			{
 				if ( dFirst.m_iEnd == dSecond.m_iEnd )
 				{
-					if ( dFirst.m_iTag < dSecond.m_iTag ) // ranges are the same - keep one with bigger m_iOrder
-						std::swap ( dFirst, dSecond );
-					dRanges.Remove ( i + 1 );
+					assert ( dSecond.m_iTag < dFirst.m_iTag ); // because of sorting order
+					dRanges.Remove ( i + 1 ); // ranges are the same - keep one with bigger tag
 					--i;
 					bKeepGoing = true;
 					continue;

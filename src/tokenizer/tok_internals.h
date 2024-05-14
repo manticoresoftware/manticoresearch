@@ -24,7 +24,7 @@ struct RemapRangeTagged_t: public CSphRemapRange
 	{}
 };
 
-// need a stable sort with the desc order
+// need a stable sort with the major tag first
 inline bool operator< ( const RemapRangeTagged_t& a, const RemapRangeTagged_t& b )
 {
 	if ( a.m_iStart == b.m_iStart )

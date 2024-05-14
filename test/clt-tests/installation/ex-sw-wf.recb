@@ -2,16 +2,7 @@
 echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop.txt
 ––– output –––
 ––– input –––
-ls -1 /var/lib/manticore/
-––– output –––
-binlog
-exc.txt
-manticore.json
-state.sql
-stop.txt
-wordforms1.txt
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS table1; CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+mysql -h0 -P9306 -e "CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (1, 'zxczxc', 77); FLUSH RAMCHUNK table1;"

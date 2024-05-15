@@ -13,6 +13,8 @@
 #include "libutils.h"
 #include "fileutils.h"
 
+#include <optional>
+
 #if _WIN32
 void * dlsym ( void * lib, const char * name )
 {

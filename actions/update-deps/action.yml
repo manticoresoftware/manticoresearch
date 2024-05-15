@@ -74,7 +74,7 @@ runs:
         title="🆕 Update ${name} version"
         commit="Bump ${name} version to: ${version_string}"
         body_path=$(mktemp)
-        echo "Update [${name}](${repo_url}) version to: ${version_string}" > "$body_path"
+        echo "Update [${name}](${repo_url}) version to: ${version_string} which includes" > "$body_path"
         echo >> "$body_path"
         echo "$changes" >> "$body_path"
         echo "branch=$branch" >> $GITHUB_OUTPUT

@@ -33,8 +33,8 @@ jobs:
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
-  clt-ubuntu:
-    name: CLT-Ubuntu
+  clt-amd64:
+    name: CLT-Amd64
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false 
@@ -132,8 +132,8 @@ jobs:
           comment_mode: failures
           run_args: --privileged 
           
-  clt-macos:
-    name: CLT-MacOS
+  clt-arm64:
+    name: CLT-Arm64
     runs-on: macos-14
     strategy:
       fail-fast: false 

@@ -44,18 +44,31 @@ const char * dlerror()
 
 #endif // _WIN32
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath )
+std::optional<CSphString> TryPath ( const CSphString& sFullpath, int iVersion )
 {
+	// first try versioned variant. So, that non-versioned libs from 'ancient age' doesn't suppress new one one
+	auto sVersionedFullPath = SphSprintf ( "%s.%i", sFullpath.cstr(), iVersion );
+	if ( sphFileExists ( sVersionedFullPath.cstr() ) )
+		return sVersionedFullPath;
+
 	if ( sphFileExists ( sFullpath.cstr() ) )
 		return sFullpath;
+
+	return std::nullopt;
+}
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion )
+{
+	auto sAnyPath = TryPath ( sFullpath, iVersion );
+	if ( sAnyPath )
+		return sAnyPath.value();
 
 #if _WIN32
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	CSphString sPath;
 	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
-	if ( sphFileExists ( sPath.cstr() ) )
-		return sPath;
+	sAnyPath = TryPath ( sPath, iVersion );
 #endif
 
-	return "";
+	return sAnyPath.value_or("");
 }

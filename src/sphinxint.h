@@ -1349,7 +1349,7 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 
 	auto pCur = (const BYTE*)tBuf.GetReadPtr();
 	const BYTE * pEnd = pCur + tBuf.GetLengthBytes();
-	const int iHalfPage = 2048;
+	const int iHalfPage = GetMemPageSize()/2;
 
 	g_uHash = 0xff;
 	for ( ; pCur<pEnd; pCur+=iHalfPage )

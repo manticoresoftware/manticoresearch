@@ -1056,7 +1056,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #if !_WIN32
 	if ( bValidQuery )
 	{
-		size_t iPageSize = getpagesize();
+		size_t iPageSize = GetMemPageSize();
 
 		// FIXME! That is too complex way, remove all of this and just move query dump to the bottom
 		// remove also mincore_test.cmake, it's invokation from CMakeLists.txt and HAVE_UNSIGNED_MINCORE

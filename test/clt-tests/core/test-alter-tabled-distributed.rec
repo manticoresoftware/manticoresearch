@@ -12,17 +12,50 @@ listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
 Started
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE local_dist type='distributed' local='index1' local='index2';"
+mysql -h0 -P9306 -e "CREATE TABLE index1(f text, s string); insert into index1 values(1,'abc','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "alter table `dist` agent='127.0.0.1:9312:remote_index' local='t3';"
+mysql -h0 -P9306 -e "CREATE TABLE index2(f text, s string); insert into index2 values(2,'def','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES"
+mysql -h0 -P9306 -e "CREATE TABLE index3(f text, s string); insert into index3 values(3,'ghi','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE dist_table RENAME TO new_dist_table;"
+mysql -h0 -P9306 -e "CREATE TABLE index4(f text, s string); insert into index4 values(4,'jkl','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES"
+mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index1' local='index2';"
 ––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++--------+-------+
+| Agent  | Type  |
++--------+-------+
+| index1 | local |
+| index2 | local |
++--------+-------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table local='index1' local='index3';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++--------+-------+
+| Agent  | Type  |
++--------+-------+
+| index1 | local |
+| index3 | local |
++--------+-------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table agent='127.0.0.1:9312:remote_index' local='index4';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++-----------------------------+----------+
+| Agent                       | Type     |
++-----------------------------+----------+
+| index4                      | local    |
+| 127.0.0.1:9312:remote_index | remote_1 |
++-----------------------------+----------+

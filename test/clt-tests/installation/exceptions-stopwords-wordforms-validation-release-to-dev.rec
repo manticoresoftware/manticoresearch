@@ -1,0 +1,36 @@
+––– block: manticore-and-packages-installation –––
+––– block: start-searchd-release –––
+––– block: check-version/export-current-version –––
+––– block: ex-sw-wf –––
+––– input –––
+yum -y --enablerepo manticore-dev update manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– block: stop-searchd-dev –––
+––– block: start-searchd-dev –––
+––– block: check-version/export-new-version –––
+––– block: check-version/comparison-version –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table1; SHOW CREATE TABLE table1;"
+––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
++--------+------+
++------+----------+------+
+| id   | title    | tag  |
++------+----------+------+
+|    2 | srthh    |   88 |
+|    1 | zxczxc   |   77 |
+|    3 | srthgrth |   99 |
++------+----------+------+
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                  |
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table1 | CREATE TABLE table1 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table1/exc.txt' stopwords='/var/lib/manticore/table1/stop.txt' wordforms='/var/lib/manticore/table1/wordforms1.txt' |
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

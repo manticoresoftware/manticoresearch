@@ -1,0 +1,28 @@
+––– input –––
+searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+Started
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE local_dist type='distributed' local='index1' local='index2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "alter table `dist` agent='127.0.0.1:9312:remote_index' local='t3';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table RENAME TO new_dist_table;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––

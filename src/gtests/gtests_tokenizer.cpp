@@ -1188,7 +1188,105 @@ TEST_F ( QueryParser, test_NOT )
 	}
 }
 
-TEST ( Charsets, MergeRanges )
+TEST ( Charsets, Merge_noIntersection )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 201, 300, 120 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 103 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 201 );
+	EXPECT_EQ ( dFoo.m_iEnd, 300 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+}
+
+TEST ( Charsets, Merge_SameRange )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 100, 200, 120 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 1 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+}
+
+TEST ( Charsets, Merge_FirstEndLonger )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 102 }, dRanges );
+	AddRange ( { 100, 200, 101 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 1 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+}
+
+TEST ( Charsets, Merge_intersection )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 101 }, dRanges );
+	AddRange ( { 110, 160, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 160 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+}
+
+TEST ( Charsets, Merge_intersectionSameEnd )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 101 }, dRanges );
+	AddRange ( { 110, 150, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+}
+
+TEST ( Charsets, Merge_intersectionFullCover )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 160, 101 }, dRanges );
+	AddRange ( { 110, 150, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 3 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+	dFoo = dRanges[2];
+	EXPECT_EQ ( dFoo.m_iStart, 151 );
+	EXPECT_EQ ( dFoo.m_iEnd, 160 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 152 );
+}
+
+TEST ( Charsets, ComplexMergeRanges )
 {
 	CSphVector<RemapRangeTagged_t> dRanges;
 	AddRange ( { 100, 200, 103 }, dRanges );

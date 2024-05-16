@@ -9163,7 +9163,7 @@ bool CSphIndex_VLN::PreallocWordlist()
 	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
 		return false;
 
-	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=1 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
+	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=18 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
 		sphWarning ( "wordlist size mismatch (size=%zu, checkpoints=%d)", m_tWordlist.m_tBuf.GetLengthBytes(), m_tWordlist.m_dCheckpoints.GetLength() );
 
 	// make sure checkpoints are loadable

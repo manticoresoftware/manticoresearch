@@ -7,7 +7,8 @@
 * [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Copies a table
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
-* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuild-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Updates/recovers secondary indexes
 * [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
 * [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
 * [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table

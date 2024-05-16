@@ -396,11 +396,8 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 	tReader.Close();
 
-	// mapping up only wordlist without meta (checkpoints, infixes, etc)
-	if ( !m_tBuf.Setup ( sName, sError ) )
-		return false;
-
-	return true;
+	// mapping up only wordlist without meta (checkpoints, infixes, etc.)
+	return m_tBuf.Setup ( sName, sError );
 }
 
 

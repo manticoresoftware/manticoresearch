@@ -7954,10 +7954,9 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		CSphString sError;
 		Tokenizer::AddPluginFilterTo ( pTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !pError->IsEmpty() )
+		if ( pError && !pError->IsEmpty() )
 		{
-			if ( pError )
-				*pError = sError;
+			*pError = sError;
 			return false;
 		}
 		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )

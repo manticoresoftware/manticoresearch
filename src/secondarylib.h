@@ -23,7 +23,7 @@ const char *	GetSecondaryVersionStr();
 bool			IsSecondaryLibLoaded();
 
 SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );
-std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int64_t iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError );
+std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError );
 
 enum class SIDefault_e
 {

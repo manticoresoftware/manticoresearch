@@ -7785,12 +7785,7 @@ public:
 		case SPH_ATTR_TIMESTAMP:
 		{
 			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING )
-			{
-				if ( IsQuotedInt(tVal.m_sVal) )
-					tAttr = ToInt(tVal);
-				else
-					tAttr = GetUTC ( tVal.m_sVal );
-			}
+				tAttr = GetUTC ( tVal.m_sVal );
 			else
 				tAttr = ToInt(tVal);
 		}
@@ -7822,15 +7817,6 @@ public:
 		tVal.SetValueInt(0);
 		CSphString sError;
 		SetAttr ( tMatch, tLoc, nullptr, tVal, eTargetType, false, sError );
-	}
-
-	static bool IsQuotedInt ( const CSphString & sStr )
-	{
-		const char * szStr = sStr.cstr();
-		while ( isdigit(*szStr) )
-			szStr++;
-
-		return szStr > sStr.cstr() && !*szStr;
 	}
 };
 

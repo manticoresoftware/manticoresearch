@@ -905,7 +905,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
 	}
 
-	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" ) && isset ( $set["rows"] ) )
+	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" || $set["http_endpoint"]=="cli_json" ) && isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
 		{
@@ -925,6 +925,9 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 						$entry["Properties"] = RemoveColumnarProperty ( $entry["Properties"] );
 				}
 			}
+
+			if ( isset ( $row["columns"] ) )
+				usort ( $row['columns'], function($a, $b) { return strcmp ( array_key_first($a), array_key_first($b) ); } );
 		}
 
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );

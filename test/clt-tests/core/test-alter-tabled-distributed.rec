@@ -59,3 +59,21 @@ mysql -h0 -P9306 -e "DESC dist_table"
 | index4                      | local    |
 | 127.0.0.1:9312:remote_index | remote_1 |
 +-----------------------------+----------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index3 local='index1' local='index3';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC index3"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE products(title text, meta json) type='pq';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE products local='index1' local='index3';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC products"
+––– output –––

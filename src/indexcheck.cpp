@@ -449,12 +449,9 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	if ( !m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
-		return false;
-
+	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
 	// FIXME! add more header checks
 
-	return true;
 }
 
 bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
@@ -517,12 +514,8 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
-		return false;
-
+	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
 	// FIXME! add more header checks
-
-	return true;
 }
 
 

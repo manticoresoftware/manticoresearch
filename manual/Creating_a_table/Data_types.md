@@ -1180,6 +1180,8 @@ The timestamp type represents Unix timestamps, which are stored as 32-bit intege
 
 The meanings of these conversion specifiers are detailed in the [strptime manual](https://man7.org/linux/man-pages/man3/strptime.3.html), except for `%E*S`, which stands for milliseconds.
 
+Note that auto-conversion of timestamps is not supported in plain tables.
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

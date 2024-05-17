@@ -3589,33 +3589,26 @@ int64_t GetUTC ( const CSphString & sTime, const char * pFormat )
 	if ( sTime.IsEmpty() )
 		return 0;
 
-	const cctz::time_zone & tTZ = GetTimeZoneUTC();
-	std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> tRes;
+	const char * szCur = sTime.cstr();
+	while ( isdigit(*szCur) )
+		szCur++;
 
+	// should be timestamp with only numeric values and at least 5 symbols
+	if ( !*szCur && (szCur-sTime.cstr())>4 )
+		return strtoul ( sTime.cstr(), nullptr, 10 );
+
+	time_t tConverted = 0;
 	if ( pFormat && *pFormat )
 	{
-		if ( cctz::parse ( pFormat, sTime.cstr(), tTZ, &tRes ) )
-			return tRes.time_since_epoch().count();
-	} else
+		if ( ParseAsLocalTime ( pFormat, sTime, tConverted ) )
+			return tConverted;
+	}
+	else
 	{
-		const char * sCur = sTime.cstr();
-		bool bNumbers = true;
-		while ( *sCur && bNumbers )
-		{
-			bNumbers = ( *sCur>='0' && *sCur<='9' );
-			sCur++;
-		}
-		// should be timestamp with only numeric values and at least 10 symbols
-		if ( bNumbers && (sCur-sTime.cstr())>=10 )
-			return strtoul ( sTime.cstr(), NULL, 10 );
-
 		// loop from the built-in formats from longest to shortest and try one by one
-
 		for ( const char * pFmt : g_dDateTimeFormats )
-		{
-			if ( cctz::parse ( pFmt, sTime.cstr(), tTZ, &tRes ) )
-				return tRes.time_since_epoch().count();
-		}
+			if ( ParseAsLocalTime ( pFmt, sTime, tConverted ) )
+				return tConverted;
 	}
 
 	return 0;

@@ -109,6 +109,8 @@ index rt1
 	</sphinxql>
     
     <sphinxql>
+	set global grouping_in_utc=0;
+	set global timezone=UTC;
     INSERT into rt1 (id, tid) values (1, 1568577600), (2, '2019-10'),(3, '2019-10-15T20:00');
     SELECT id, tid, date_format(tid, '%Y-%m-%dT%H:%M') as d from rt1 order by id asc;
     </sphinxql>

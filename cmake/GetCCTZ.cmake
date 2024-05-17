@@ -1,8 +1,9 @@
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
 set ( CCTZ_REPO "https://github.com/manticoresoftware/cctz" )
-set ( CCTZ_REV "1a861bb" )
-set ( CCTZ_SRC_MD5 "8a8831e2595aef2e95f1a18498b3d600" )
+set ( CCTZ_REV "cf11f75" )
+
+set ( CCTZ_SRC_MD5 "d66ec00a70be233acf826dcd2a77e57a" )
 
 set ( CCTZ_GITHUB "${CCTZ_REPO}/archive/${CCTZ_REV}.zip" )
 set ( CCTZ_BUNDLE "${LIBS_BUNDLE}/cctz-${CCTZ_REV}.zip" )

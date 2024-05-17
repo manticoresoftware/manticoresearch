@@ -172,8 +172,8 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDe
 /// *ppErr, if provided, will point to parsing error, if any. By default scale is 's', seconds.
 int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
 
-int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat );
-bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime );
+int64_t GetUTC ( const CSphString & sTime, const char * sFormat=nullptr );
+bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime );
 
 enum class DateUnit_e
 {

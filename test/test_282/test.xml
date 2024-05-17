@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>dupes on huge delta-docid</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists t;
+	create table t;
+	replace into t values (10000000000000000000), (2);
+	flush ramchunk t;
+	replace into t values (10000000000000000000);
+	select * from t;
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

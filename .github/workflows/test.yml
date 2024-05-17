@@ -363,14 +363,10 @@ jobs:
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
 
-  build_test_kit_docker:
+  test_kit_docker_build:
     name: Test Kit docker image
     needs: pack_jammy
     runs-on: ubuntu-22.04
-    env:
-      GHCR_USER: ${{ secrets.GHCR_USER }}
-      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-      REPO_OWNER: ${{ github.repository_owner }}
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
@@ -393,7 +389,7 @@ jobs:
       - name: Building docker
         id: build
         run: |
-          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
+          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@v3
@@ -401,10 +397,9 @@ jobs:
           name: manticore_test_kit.img
           path: manticore_test_kit.img
 
-
   clt:
     name: CLT
-    needs: build_test_kit_docker
+    needs: test_kit_docker_build
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -431,6 +426,31 @@ jobs:
           image: test-kit:img
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
+
+
+  test_kit_docker_push:
+    name: Push Test Kit docker image to repo
+    needs: clt
+    runs-on: ubuntu-22.04
+    env:
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      REPO_OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download artifact
+        uses: manticoresoftware/download_artifact_with_retries@main
+        with:
+          name: manticore_test_kit.img
+          path: .
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Pushing docker image to repo
+        id: test-kit-push
+        run: |
+          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
     name: Linux aarch64 build

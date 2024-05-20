@@ -2,34 +2,32 @@
 
 [DBeaver](https://dbeaver.io/) is a SQL client software application and a database administration tool. For MySQL databases, it applies the JDBC application programming interface to interact with them via a JDBC driver. 
 
-Manticore allows you to use DBEaver for working with data stored in Manticore tables the same way as if it was stored in a MySQL database.
+Manticore allows you to use DBeaver for working with data stored in Manticore tables the same way as if it was stored in a MySQL database.
 
 ## Settings to use
 
-To start working with Manticore in DBeaver, do the following steps:
+To start working with Manticore in DBeaver, follow these steps:
 
-- Choose a `New database connection` option in DBeaver's UI
+- Choose the `New database connection` option in DBeaver's UI
 - Choose `SQL` -> `MySQL` as DBeaver's database driver 
-- Set the `Server host` and `Port` options corresponding to the host and port of your Manticore instance  (keep `database` field empty) 
-- Set `root/<empty password>` as authentication credentials.
+- Set the `Server host` and `Port` options corresponding to the host and port of your Manticore instance (keep the `database` field empty)
+- Set `root/<empty password>` as authentication credentials
 
 
-## Functions avaliable
+## Functions available
 
-Since Manticore does not support MySQL in full, only a part of DBeaver's functionality is available when working with Manticore.
+Since Manticore does not fully support MySQL, only a part of DBeaver's functionality is available when working with Manticore.
 
-You will be able to: 
-
-- view, create, delete and rename tables
-- add and drop table columns 
-- insert, delete and update column data.
+You will be able to:
+- View, create, delete, and rename tables
+- Add and drop table columns
+- Insert, delete, and update column data
 
 You will not be able to:
-
-- use database integrity checks mechanisms ( `MyISAM` will be set as the only storage engine available)
-- use MySQL procedures, triggers, events, etc.
-- manage database users
-- set other database administration options
+- Use database integrity check mechanisms (`MyISAM` will be set as the only storage engine available)
+- Use MySQL procedures, triggers, events, etc.
+- Manage database users
+- Set other database administration options
 
 
 ## Data type handling
@@ -44,7 +42,7 @@ Some MySQL data types are not currently supported by Manticore and, therefore, c
 - `INT UNSIGNED`, `SMALLINT UNSIGNED`, `TINYINT UNSIGNED`, `BIT` => `uint`
 - `JSON` => `json`
 - `TEXT`, `LONGTEXT`, `MEDIUMTEXT`, `TINYTEXT`, `BLOB`, `LONGBLOB`, `MEDIUMBLOB`, `TINYBLOB`  => `text`
-- `VARCHAR`, `LONG VARCHAR`, `BINARY`, `CHAR`, 'VARBINARY', `LONG VARBINARY`  => `string`
+- `VARCHAR`, `LONG VARCHAR`, `BINARY`, `CHAR`, `VARBINARY`, `LONG VARBINARY`  => `string`
 
 You can find more details about Manticore data types [here](Creating_a_table/Data_types#Data-types).
 

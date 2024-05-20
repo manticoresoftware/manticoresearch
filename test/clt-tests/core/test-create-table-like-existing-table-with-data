@@ -29,23 +29,49 @@ mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (1, 'zxczxc', 77
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM table1;"
 ––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE table1;"
++------+--------+------+
+| id   | title  | tag  |
++------+--------+------+
+|    1 | zxczxc |   77 |
++------+--------+------+
 ––– input –––
 mysql -h0 -P9306 -e 'CREATE TABLE `table2` LIKE `table1` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table2; SHOW CREATE TABLE table2;"
 ––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
++--------+------+
++------+--------+------+
+| id   | title  | tag  |
++------+--------+------+
+|    1 | zxczxc |   77 |
++------+--------+------+
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                 |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table2 | CREATE TABLE table2 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table2/exceptions.txt' stopwords='/var/lib/manticore/table2/stopwords_0.txt' wordforms='/var/lib/manticore/table2/wordforms_0.txt' |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 cat /var/lib/manticore/table2/exceptions.txt
 ––– output –––
+c => d
 ––– input –––
 cat /var/lib/manticore/table2/stopwords_0.txt
 ––– output –––
+abcstop
 ––– input –––
 cat /var/lib/manticore/table2/wordforms_0.txt
 ––– output –––
+a => b
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE table1;"
 ––– output –––
@@ -55,15 +81,51 @@ mysql -h0 -P9306 -e "CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
++--------+------+
 ––– input –––
 mysql -h0 -P9306 -e 'CREATE TABLE `table3` LIKE `table2` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
+| table3 | rt   |
++--------+------+
 ––– input –––
 mysql -h0 -P9306 -e 'CREATE TABLE `table4` LIKE `table1` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
+| table3 | rt   |
+| table4 | rt   |
++--------+------+
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `table5` LIKE `table3` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
+| table3 | rt   |
+| table4 | rt   |
+| table5 | rt   |
++--------+------+

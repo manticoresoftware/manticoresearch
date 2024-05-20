@@ -1,6 +1,6 @@
 # Supported languages
 
-Manticore supports a wide range of languages, with basic support enabled for most languages via `charset_table = non_cont` (which is the default value).
+Manticore supports a wide range of languages, with basic support enabled for most languages via `charset_table = non_cont` (which is the default value). The `non_cjk` option which is an alias for `non_cont` can be used as well: `charset_table = non_cjk`.
 
 For many languages, Manticore provides a [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) file that can be used to improve search relevance.
 

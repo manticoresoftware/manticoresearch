@@ -96,6 +96,7 @@
         * [• Boolean optimization](Searching/Full_text_matching/Boolean_optimization.md)
     * [• Search results](Searching/Search_results.md)
     * [• Filters](Searching/Filters.md)
+    * [• Joining](Searching/Joining.md)
     * [• Expressions](Searching/Expressions.md)
     * [• Search options](Searching/Options.md)
     * [• Highlighting](Searching/Highlighting.md)

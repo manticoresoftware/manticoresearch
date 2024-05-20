@@ -6,11 +6,10 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 ### Major changes
 * [Issue #839](https://github.com/manticoresoftware/manticoresearch/issues/839) Implemented [float_vector](Creating_a_table/Data_types.md#Float-vector) data type; implemented [vector search](Searching/KNN.md#KNN-vector-search).
 * [Issue #1673](https://github.com/manticoresoftware/manticoresearch/issues/1673) INNER/LEFT JOIN.
-* [Issue #1744](https://github.com/manticoresoftware/manticoresearch/issues/1744) Implemented autodetection of date formats for [timestamp](../Creating_a_table/Data_types#Timestamps) fields.
+* [Issue #1744](https://github.com/manticoresoftware/manticoresearch/issues/1744) Implemented autodetection of date formats for [timestamp](Creating_a_table/Data_types.md#Timestamps) fields.
 * [Issue #1720](https://github.com/manticoresoftware/manticoresearch/pull/1720) Changed Manticore Search license from GPLv2-or-later to GPLv3-or-later.
 * [Commit 7a55](https://github.com/manticoresoftware/manticoresearch/commit/7a5508424) Running Manticore in Windows now requires Docker to run Buddy.
 * [Issue #1541](https://github.com/manticoresoftware/manticoresearch/issues/1541) Added a [REGEX](Searching/Full_text_matching/Operators.md#REGEX-operator) full-text operator.
-* [Issue #1569](https://github.com/manticoresoftware/manticoresearch/issues/1569) Binary log is now written with transaction granularity.
 * [Issue #2091](https://github.com/manticoresoftware/manticoresearch/issues/2091) Ubuntu Noble 24.04 support.
 * [Commit 514d](https://github.com/manticoresoftware/manticoresearch/commit/514d35b497f4bdb20b6473ff963752a978a4bb8d) Revamp of time operations for better performance and new date/time functions:
   - [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Returns current date in local timezone
@@ -28,8 +27,10 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 
 ### Minor changes
 * [Issue #1285](https://github.com/manticoresoftware/manticoresearch/issues/1285) Support of Filebeat versions 8.10 - 8.11.
-* [Issue #1771](https://github.com/manticoresoftware/manticoresearch/issues/1771) `ALTER TABLE ... type='distributed'`.
+* [Issue #1771](https://github.com/manticoresoftware/manticoresearch/issues/1771) [ALTER TABLE ... type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table).
+* [Issue #1788](https://github.com/manticoresoftware/manticoresearch/issues/1788) Added the ability to copy tables using the [CREATE TABLE ... LIKE ... WITH DATA SQL](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) statement.
 * [Issue #2072](https://github.com/manticoresoftware/manticoresearch/issues/2072) Optimized the [table compacting algorithm](Securing_and_compacting_a_table/Compacting_a_table.md#Compacting-a-Table): Previously, both manual [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) and automatic [auto_optimize](Server_settings/Searchd.md#auto_optimize) processes would first merge chunks to ensure the count did not exceed the limit, and then expunge deleted documents from all other chunks containing deleted documents. This approach was sometimes too resource-intensive and has been disabled. Now, chunk merging occurs solely according to the [progressive_merge](Server_settings/Common.md#progressive_merge) setting. However, chunks with a high number of deleted documents are more likely to be merged.
+* [Commit ce6c](https://github.com/manticoresoftware/columnar/commit/ce6c5d3381edcdc411a00a5923d13d56dd9b3010) Added protection against loading a secondary index of a newer version.
 * [Issue #1417](https://github.com/manticoresoftware/manticoresearch/issues/1417) Partial replace via [REPLACE INTO ... SET](Data_creation_and_modification/Updating_documents/REPLACE.md#SQL-REPLACE).
 * [Commit 7c16](https://github.com/manticoresoftware/manticoresearch/commit/7c167b934ce416d3dfbd658744a231e638b14d9a) Updated default merge buffer sizes: `.spa` (scalar attrs): 256KB -> 8MB; `.spb` (blob attrs): 256KB -> 8MB; `.spc` (columnar attrs): 1MB, no change; `.spds` (docstore): 256KB -> 8MB; `.spidx` (secondary indexes): 256KB buffer -> 128MB memory limit; `.spi` (dictionary): 256KB -> 16MB; `.spd` (doclists): 8MB, no change; `.spp` (hitlists): 8MB, no change; `.spe` (skiplists): 256KB -> 8MB.
 * [Issue #1859](https://github.com/manticoresoftware/manticoresearch/issues/1859) Added [composite aggregation](Searching/Grouping.md#GROUP-BY-multiple-fields-at-once) via JSON.
@@ -105,7 +106,11 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 * [Issue #1962](https://github.com/manticoresoftware/manticoresearch/issues/1962) Fixed a long wait for replication to alter on empty cluster with an invalid node name.
 
 ### Bug fixes
+* [Commit 8a48](https://github.com/manticoresoftware/manticoresearch/commit/8a486c7ba1a293879cdecc41fb52eb7ab0cbf832) Fixed unused matches cleanup in `count distinct` which could cause a crash.
+* [Issue #1569](https://github.com/manticoresoftware/manticoresearch/issues/1569) Binary log is now written with transaction granularity.
 * [Issue #2089](https://github.com/manticoresoftware/manticoresearch/issues/2089) Fixed a bug associated with 64-bit IDs that could result in a "Malformed packet" error when inserting via MySQL, leading to [corrupted tables and duplicate IDs](https://github.com/manticoresoftware/manticoresearch/issues/2090).
+* [Issue #2160](https://github.com/manticoresoftware/manticoresearch/issues/2160) Fixed dates being inserted as if they were in UTC instead of local time zone.
+* [Issue #2177](https://github.com/manticoresoftware/manticoresearch/issues/2177) Fixed a crash that occurred when performing a search in a real-time table with a non-empty `index_token_filter`.
 * [Commit 001d](https://github.com/manticoresoftware/manticoresearch/commit/001d82904e4b887c49387308291aeefb07c0fbc4) Fixed html stipper corrupting memory after processing a joined field.
 * [Commit 00eb](https://github.com/manticoresoftware/manticoresearch/commit/00eb2ebf) Avoided rewinding stream after flush to prevent miscommunication issues with mysqldump.
 * [Commit 0553](https://github.com/manticoresoftware/manticoresearch/commit/05534114acf08c70ffcc41a23d558dec09a34373) Don't wait for preread to finish if it has not started.

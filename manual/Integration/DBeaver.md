@@ -44,11 +44,11 @@ Some MySQL data types are not currently supported by Manticore and, therefore, c
 - `TEXT`, `LONGTEXT`, `MEDIUMTEXT`, `TINYTEXT`, `BLOB`, `LONGBLOB`, `MEDIUMBLOB`, `TINYBLOB`  => `text`
 - `VARCHAR`, `LONG VARCHAR`, `BINARY`, `CHAR`, `VARBINARY`, `LONG VARBINARY`  => `string`
 
-You can find more details about Manticore data types [here](Creating_a_table/Data_types#Data-types).
+You can find more details about Manticore data types [here](Creating_a_table/Data_types.md#Data-types).
 
 ### About date types
 
-Manticore is able to handle the `DATE`, `DATETIME` and `TIMESTAMP` data types, however, this reqiures Manticore's [Buddy](Starting_the_server/Docker#Manticore-Columnar-Library-and-Manticore-Buddy) enabled. Otherwise, an attempt to operate with one of these types will result in an error.
+Manticore is able to handle the `DATE`, `DATETIME` and `TIMESTAMP` data types, however, this reqiures Manticore's [Buddy](Starting_the_server/Docker.md#Manticore-Columnar-Library-and-Manticore-Buddy) enabled. Otherwise, an attempt to operate with one of these types will result in an error.
 
 Note that the `TIME` type is not supported.
   

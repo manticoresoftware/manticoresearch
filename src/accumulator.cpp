@@ -465,12 +465,15 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	iDstRow = 0;
 	ARRAY_FOREACH ( i, dRowMap )
+	{
 		if ( dRowMap[i] != INVALID_ROWID )
 		{
 			if ( i != iDstRow )
 			{
 				// remove duplicate docinfo
-				memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
+				// but all attributes could be columnar
+				if ( iRowSize )
+					memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
 
 				// remove duplicate docstore
 				if ( m_pDocstore )
@@ -478,6 +481,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 			}
 			++iDstRow;
 		}
+	}
 
 	m_dAccumRows.Resize ( iDstRow * iRowSize );
 	m_uAccumDocs = iDstRow;

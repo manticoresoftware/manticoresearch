@@ -273,7 +273,12 @@ void ColumnarAttr_String_c::Kill ( const CSphVector<RowID_t> & dKilled )
 		std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
 		m_dData.Remove ( (int)iOffset, (int)iLength );
 
-		for ( RowID_t tNextRowID = tRowID+1; tNextRowID < (RowID_t)m_dLengths.GetLength(); tNextRowID++ )
+		int64_t iRowOff = m_dLengths[tRowID];
+		// proceed all zero length strings with the same offset
+		while ( tRowID>0 && m_dLengths[tRowID-1]==iRowOff )
+			tRowID--;
+
+		for ( RowID_t tNextRowID = tRowID; tNextRowID < (RowID_t)m_dLengths.GetLength(); tNextRowID++ )
 			m_dLengths[tNextRowID] -= iLength;
 	}
 }

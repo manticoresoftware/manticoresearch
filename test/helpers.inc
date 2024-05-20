@@ -873,19 +873,10 @@ function RemoveColumnarProperty ( $property )
 	return implode ( " ", $props );
 }
 
-if (!function_exists('array_key_first')) {
-    function array_key_first(array $arr) {
-        foreach($arr as $key => $unused) {
-            return $key;
-        }
-        return NULL;
-    }
-}
-
 
 function CompareColumns ( $a, $b )
 {
-	return strcmp ( array_key_first($a), array_key_first($b) );
+	return strcmp ( array_keys($a)[0], array_keys($b)[0] );
 }
 
 
@@ -936,7 +927,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 			}
 
 			if ( isset ( $row["columns"] ) )
-				usort ( $row['columns'], CompareColumns );
+				usort ( $row['columns'], function($a, $b) { return strcmp ( array_key_first($a), array_key_first($b) ); } );
 		}
 
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );

@@ -366,31 +366,33 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	bool bColumnarId = tSchema.GetAttr ( 0 ).IsColumnar();
 
-	// create temporary columnar accessor; don't take ownership of built attributes
-	auto pColumnar = CreateLightColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
-
-	std::string sError;
-	std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
-	if ( bColumnarId )
 	{
-		pColumnarIdIterator = CreateColumnarIterator ( pColumnar.get(), sphGetDocidName(), sError );
-		assert ( pColumnarIdIterator );
-	}
+		// create temporary columnar accessor; don't take ownership of built attributes
+		auto pColumnar = CreateLightColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
 
-//	int iHitIndex = 0;
-	CSphRowitem* pRow = m_dAccumRows.Begin();
-	for ( DWORD i = 0; i < m_uAccumDocs; ++i, pRow += iRowSize )
-	{
-		AccumDocHits_t& tElem = dDocHits[i];
-		if ( !bColumnarId )
-			tElem.m_tDocID = sphGetDocID ( pRow );
-		else
-			tElem.m_tDocID = pColumnarIdIterator->Get(i);
+		std::string sError;
+		std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
+		if ( bColumnarId )
+		{
+			pColumnarIdIterator = CreateColumnarIterator ( pColumnar.get(), sphGetDocidName(), sError );
+			assert ( pColumnarIdIterator );
+		}
 
-		tElem.m_iDocIndex = i;
-//		tElem.m_iHitIndex = iHitIndex;
-//		tElem.m_iHitCount = m_dPerDocHitsCount[i];
-//		iHitIndex += m_dPerDocHitsCount[i];
+	//	int iHitIndex = 0;
+		CSphRowitem* pRow = m_dAccumRows.Begin();
+		for ( DWORD i = 0; i < m_uAccumDocs; ++i, pRow += iRowSize )
+		{
+			AccumDocHits_t& tElem = dDocHits[i];
+			if ( !bColumnarId )
+				tElem.m_tDocID = sphGetDocID ( pRow );
+			else
+				tElem.m_tDocID = pColumnarIdIterator->Get(i);
+
+			tElem.m_iDocIndex = i;
+	//		tElem.m_iHitIndex = iHitIndex;
+	//		tElem.m_iHitCount = m_dPerDocHitsCount[i];
+	//		iHitIndex += m_dPerDocHitsCount[i];
+		}
 	}
 
 	dDocHits.Sort ( Lesser ( [] ( const AccumDocHits_t& a, const AccumDocHits_t& b )
@@ -451,17 +453,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	m_dAccum.Resize ( iDstRow );
 
-	// remove duplicates
-	if ( m_pColumnarBuilder )
-	{
-		CSphVector<RowID_t> dKilled;
-		ARRAY_FOREACH ( i, dRowMap )
-			if ( dRowMap[i] == INVALID_ROWID )
-				dKilled.Add ( i );
-
-		if ( m_pColumnarBuilder )
-			m_pColumnarBuilder->Kill ( dKilled );
-	}
+	RemoveColumnarDuplicates ( m_pColumnarBuilder, dRowMap, tSchema );
 
 	iDstRow = 0;
 	ARRAY_FOREACH ( i, dRowMap )

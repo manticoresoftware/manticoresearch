@@ -254,7 +254,7 @@ All other languages listed in the [Unicode languages
 list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/) are supported by default.
 
 <!-- example charset_table 3 -->
-To work with both cont and non-cont languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/CJK.md) for Chinese):
+To work with both cont and non-cont languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md) for Chinese):
 
 <!-- request SQL -->
 
@@ -643,7 +643,7 @@ ngram_len = 1
 <!-- example ngram_len -->
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram indexing). Known values are 0 and 1.
 
-N-grams provide basic support for continuous-script languages in unsegmented texts. The issue with searching in languages using continuous scripts is the absence of clear separators between words. In some cases, you may not want to use dictionary-based segmentation, such as [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/CJK.md). In those instances, n-gram segmentation might also work well.
+N-grams provide basic support for continuous-script languages in unsegmented texts. The issue with searching in languages using continuous scripts is the absence of clear separators between words. In some cases, you may not want to use dictionary-based segmentation, such as [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md). In those instances, n-gram segmentation might also work well.
 
 When this feature is enabled, streams of such languages (or any other characters defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) are indexed as N-grams. For example, if the incoming text is "ABCDEF" (where A to F represent some language characters) and ngram_len is 1, it will be indexed as if it were "A B C D E F". Only ngram_len=1 is currently supported. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; others will not be affected.
 

@@ -334,7 +334,7 @@ table products {
 ```
 <!-- end -->
 
-If you do not require support for cont-languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+If you do not require support for continuous-script languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars).
 options. For more information on these options, refer to the corresponding documentation sections.
 
 To map one character to multiple characters or vice versa, you can use [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.

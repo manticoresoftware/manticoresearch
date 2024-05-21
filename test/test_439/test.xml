@@ -99,6 +99,12 @@ searchd
     flush ramchunk test_str;
     select * from test_str;
 	drop table test_str;
+
+    <!-- another regression with columnar duplicates -->
+	CREATE TABLE t(ip string attribute) engine='columnar';
+	replace into t values(1, 'xx.xxx.xxx.xx'),(2,'xx.xxx.xx.xx'),(1, 'xx.xxx.xxx.xx');
+	select * from t order by id asc;
+	drop table t;
 </sphinxql>
 </queries>
 

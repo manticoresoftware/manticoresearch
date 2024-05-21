@@ -89,7 +89,7 @@ table products {
 
 <!-- example cont 2 -->
 2. Basic support using the N-gram options [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-For each language using continuous script, there are separate character set tables (`chinese`, `korean`, `japanese`, 'thai') that can be used. Alternatively, you can use the common `cont` character set table to support all CJK and Thai languages at once ot the `cjk` charset to comprise all CJK languages only. 
+For each language using a continuous script, there are separate character set tables (`chinese`, `korean`, `japanese`, `thai`) that can be used. Alternatively, you can use the common `cont` character set table to support all CJK and Thai languages at once, or the `cjk` charset to include all CJK languages only.
 
 
 <!-- intro -->

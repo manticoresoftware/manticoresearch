@@ -874,6 +874,16 @@ function RemoveColumnarProperty ( $property )
 }
 
 
+if (!function_exists('array_key_first'))
+{
+	function array_key_first(array $arr)
+	{
+		foreach($arr as $key => $unused)
+			return $key;
+		return NULL;
+	 }
+}
+
 function CompareColumns ( $a, $b )
 {
 	return strcmp ( array_keys($a)[0], array_keys($b)[0] );

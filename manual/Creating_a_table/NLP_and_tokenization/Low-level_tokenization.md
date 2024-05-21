@@ -42,7 +42,7 @@ charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC
 ```
 
 <!-- example charset_table -->
-`charset_table` specifies an array that maps letter characters to their case folded versions (or any other characters if you like). The default character set is `non_cont` which includes most languages with [non-continous](https://en.wikipedia.org/wiki/Scriptio_continua) scripts.
+`charset_table` specifies an array that maps letter characters to their case-folded versions (or any other characters if you prefer). The default character set is `non_cont`, which includes most languages with [non-continuous](https://en.wikipedia.org/wiki/Scriptio_continua) scripts.
 
 `charset_table` is a workhorse of Manticore's tokenization process, which extracts keywords from document text or query text. It controls what characters are accepted as valid and how they should be transformed (e.g. whether case should be removed or not).
 

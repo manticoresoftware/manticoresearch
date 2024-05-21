@@ -12,117 +12,73 @@ listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
 Started
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index1(f text, s string); insert into index1 values(1,'abc','string');"
+mysql -h0 -P9306 -e "CREATE TABLE index1001(f text, s string); insert into index1 values(01,'abc','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index2(f text, s string); insert into index2 values(2,'def','string');"
+mysql -h0 -P9306 -e "CREATE TABLE index1002(f text, s string); insert into index2 values(02,'def','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index3(f text, s string); insert into index3 values(3,'ghi','string');"
+mysql -h0 -P9306 -e "CREATE TABLE index1003(f text, s string); insert into index3 values(03,'ghi','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index4(f text, s string); insert into index4 values(4,'jkl','string');"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES"
-––– output –––
-+--------+------+
-| Index  | Type |
-+--------+------+
-| index1 | rt   |
-| index2 | rt   |
-| index3 | rt   |
-| index4 | rt   |
-+--------+------+
-––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE index1 RENAME new_index1;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE index2 RENAME new_index2;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE index3 RENAME new_index3;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE index4 RENAME new_index4;"
+mysql -h0 -P9306 -e "CREATE TABLE index1004(f text, s string); insert into index4 values(04,'jkl','string');"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+------------+------+
-| Index      | Type |
-+------------+------+
-| new_index1 | rt   |
-| new_index2 | rt   |
-| new_index3 | rt   |
-| new_index4 | rt   |
-+------------+------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index1(f text, s string); insert into index1 values(3,'ghi','string');"
+mysql -h0 -P9306 -e "ALTER TABLE index1001 RENAME new_index1001;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index2(f text, s string); insert into index2 values(4,'jkl','string');"
+mysql -h0 -P9306 -e "ALTER TABLE index1002 RENAME new_index1002;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index1' local='index2';"
+mysql -h0 -P9306 -e "ALTER TABLE index1003 RENAME new_index1003;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index1004 RENAME new_index1004;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index1005(f text, s string); insert into index1 values(3,'ghi','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index1006(f text, s string); insert into index2 values(4,'jkl','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index1005' local='index1006';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; DESC dist_table"
 ––– output –––
-+------------+-------------+
-| Index      | Type        |
-+------------+-------------+
-| dist_table | distributed |
-| index1     | rt          |
-| index2     | rt          |
-| new_index1 | rt          |
-| new_index2 | rt          |
-| new_index3 | rt          |
-| new_index4 | rt          |
-+------------+-------------+
-+--------+-------+
-| Agent  | Type  |
-+--------+-------+
-| index1 | local |
-| index2 | local |
-+--------+-------+
 ––– input –––
 mysql -h0 -P9306 -e "ALTER TABLE dist_table RENAME new_dist_table;"
 ––– output –––
-ERROR 1064 (42000) at line 1: Source table dist_table not exists
+ERROR 1064 (42000) at line 1: Table dist_table should be RT
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+------------+-------------+
-| Index      | Type        |
-+------------+-------------+
-| dist_table | distributed |
-| index1     | rt          |
-| index2     | rt          |
-| new_index1 | rt          |
-| new_index2 | rt          |
-| new_index3 | rt          |
-| new_index4 | rt          |
-+------------+-------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE products(title text, meta json) type='pq';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+------------+-------------+
-| Index      | Type        |
-+------------+-------------+
-| dist_table | distributed |
-| index1     | rt          |
-| index2     | rt          |
-| new_index1 | rt          |
-| new_index2 | rt          |
-| new_index3 | rt          |
-| new_index4 | rt          |
-| products   | percolate   |
-+------------+-------------+
 ––– input –––
 mysql -h0 -P9306 -e "ALTER TABLE products RENAME new_products;"
 ––– output –––
-ERROR 1064 (42000) at line 1: Source table products not exists
+ERROR 1064 (42000) at line 1: Table dist_table should be RT
+––– input –––
+for i in $(seq 1 1000); do mysql -h0 -P9306 -e "CREATE TABLE index${i}(f text, s string); insert into index${i} values(${i}, 'value${i}', 'string');"; done
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort"}'
+––– output –––
+––– input –––
+for i in $(seq 1 1000); do mysql -h0 -P9306 -e "ALTER TABLE index${i} RENAME new_index${i};"; done
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort"}'
+––– output –––

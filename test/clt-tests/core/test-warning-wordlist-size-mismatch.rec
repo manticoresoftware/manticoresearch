@@ -1,9 +1,12 @@
 ––– input –––
-apt-get update -y
+apt-get update -y > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
-apt-get install jq -y
+apt-get install jq -y > /dev/null; echo $?
 ––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
 ––– input –––
 searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
 ––– output –––
@@ -20,12 +23,25 @@ Started
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE x ( id bigint, tag bigint ); insert into x values (1,1),(2,2),(3,3); flush ramchunk x; insert into x values (4,1),(5,2),(6,3); flush ramchunk x; SHOW TABLES; SELECT * FROM x;"
 ––– output –––
++-------+------+
+| Index | Type |
++-------+------+
+| x     | rt   |
++-------+------+
++------+------+
+| id   | tag  |
++------+------+
+|    4 |    1 |
+|    1 |    1 |
+|    5 |    2 |
+|    2 |    2 |
+|    3 |    3 |
+|    6 |    3 |
++------+------+
 ––– input –––
 mysql -h0 -P9306 -e "optimize table x option cutoff=1;"
 ––– output –––
 ––– input –––
-cat /var/lib/manticore/x/x.2.spi
-––– output –––
-––– input –––
 cat /var/lib/manticore/x/x.meta | jq .total_bytes
 ––– output –––
+[0;39m0[0m

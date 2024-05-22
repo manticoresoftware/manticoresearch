@@ -1,0 +1,28 @@
+––– input –––
+mkdir /tmp/import-table/
+––– output –––
+––– input –––
+echo "a > b" > /tmp/import-table/wordforms1.txt; echo "c > d" > /tmp/import-table/exc.txt; echo "abcstop" > /tmp/import-table/stop.txt
+––– output –––
+––– input –––
+searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test (id INT) exceptions='/tmp/import-table/exc.txt' wordforms='/tmp/import-table/wordforms1.txt' stopwords='/tmp/import-table/stop.txt'; INSERT INTO test(id) VALUES(1);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test SETTINGS\G"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "import table test2 from '/var/lib/manticore/test/test'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test2 SETTINGS\G"
+––– output –––
+
+––– input –––
+mysql -h0 -P9306 -e "import table test3 from '/var/lib/manticore/test2/test2'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
+––– output –––

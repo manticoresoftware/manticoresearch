@@ -13,16 +13,48 @@ mysql -h0 -P9306 -e "CREATE TABLE test (id INT) exceptions='/tmp/import-table/ex
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE test SETTINGS\G"
 ––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test/exc.txt
+stopwords = /var/lib/manticore/test/stop.txt
+wordforms = /var/lib/manticore/test/wordforms1.txt
 ––– input –––
 mysql -h0 -P9306 -e "import table test2 from '/var/lib/manticore/test/test'"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE test2 SETTINGS\G"
 ––– output –––
-
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test2/exceptions.txt
+stopwords = /var/lib/manticore/test2/stopwords_0.txt
+wordforms = /var/lib/manticore/test2/wordforms_0.txt
 ––– input –––
 mysql -h0 -P9306 -e "import table test3 from '/var/lib/manticore/test2/test2'"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
 ––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test3/exceptions.txt
+stopwords = /var/lib/manticore/test3/stopwords_0.txt
+wordforms = /var/lib/manticore/test3/wordforms_0.txt
+––– input –––
+mysql -h0 -P9306 -e "CALL keywords('a 123', 'test2');"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | a         | b          |
+| 2    | 123       | 123        |
++------+-----------+------------+
+––– input –––
+mysql -h0 -P9306 -e "CALL keywords('a 123', 'test3');"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | a         | b          |
+| 2    | 123       | 123        |
++------+-----------+------------+

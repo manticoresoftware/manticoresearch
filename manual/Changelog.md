@@ -5,7 +5,7 @@ While 6.3.0 is being prepared for release, use the dev version which includes al
 
 ### Major changes
 * [Issue #839](https://github.com/manticoresoftware/manticoresearch/issues/839) Implemented [float_vector](Creating_a_table/Data_types.md#Float-vector) data type; implemented [vector search](Searching/KNN.md#KNN-vector-search).
-* [Issue #1673](https://github.com/manticoresoftware/manticoresearch/issues/1673) INNER/LEFT JOIN.
+* [Issue #1673](https://github.com/manticoresoftware/manticoresearch/issues/1673) [INNER/LEFT JOIN](Searching/Joining.md) (**beta stage**).
 * [Issue #1744](https://github.com/manticoresoftware/manticoresearch/issues/1744) Implemented autodetection of date formats for [timestamp](Creating_a_table/Data_types.md#Timestamps) fields.
 * [Issue #1720](https://github.com/manticoresoftware/manticoresearch/pull/1720) Changed Manticore Search license from GPLv2-or-later to GPLv3-or-later.
 * [Commit 7a55](https://github.com/manticoresoftware/manticoresearch/commit/7a5508424) Running Manticore in Windows now requires Docker to run Buddy.

@@ -118,6 +118,7 @@
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)
     * [• Updating table schema in RT mode](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Updating table FT settings in RT mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
+    * [• Renaming a real-time table](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• Updating table FT settings in plain mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• Rebuilding a secondary index](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Changing a distributed table](Updating_table_schema_and_settings.md#Changing-a-distributed-table)

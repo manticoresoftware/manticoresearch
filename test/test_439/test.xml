@@ -88,6 +88,23 @@ searchd
 	update test set mvacol=(0,1,2,3,4,5,6,7,8,9,10) where id=1;
 	select * from test;
 	drop table test;
+
+    <!-- regression crash on insert string attrubute into columnar with duplicates -->
+    CREATE TABLE test_str(ip string attribute) engine='columnar';
+    replace into test_str values(1, '1-0xx.xxx.xxx.xx'),(2,'2xx.xxx.xx.xx'),(1, '1-1xx.xxx.xxx.xx');
+    flush ramchunk test_str;
+    select * from test_str;
+    replace into test_str values(1, '1-0xx.xxx.xxx.xx'),(2,'2xx.xxx.xx.xx'),(1, '1-1xx.xxx.xxx.xx'),(1, '1-2xx.xxx.xxx.xx'),(1, '1-3xx.xxx.xxx.xx'),(3,'3xx.xxx.xx.xx'),(4,'4xx.xxx.xx.xx'),(5,'5xx.xxx.xx.xx');
+    replace into test_str values(12,'12xx.xxx.xx.xx'),(11, '11-0xx.xxx.xxx.xx'),(11, '11-1xx.xxx.xxx.xx'),(11, '11-2xx.xxx.xxx.xx'),(13,'13xx.xxx.xx.xx'),(14,'14xx.xxx.xx.xx'),(15,'15xx.xxx.xx.xx');
+    flush ramchunk test_str;
+    select * from test_str;
+	drop table test_str;
+
+    <!-- another regression with columnar duplicates -->
+	CREATE TABLE t(ip string attribute) engine='columnar';
+	replace into t values(1, 'xx.xxx.xxx.xx'),(2,'xx.xxx.xx.xx'),(1, 'xx.xxx.xxx.xx');
+	select * from t order by id asc;
+	drop table t;
 </sphinxql>
 </queries>
 

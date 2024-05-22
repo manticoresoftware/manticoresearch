@@ -52,3 +52,20 @@ Manticore is able to handle the `DATE`, `DATETIME` and `TIMESTAMP` data types, h
 
 Note that the `TIME` type is not supported.
   
+## Possible caveats
+
+- DBeaver's `Preferences` -> `Connections` -> `Client identification` option must not be turned off or overridden.
+  To work correctly with DBeaver, Manticore needs to distinguish its requests from others. For this, it uses client notification info sent by DBeaver in request headers. Disabling client notification will break that detection and, therefore, Manticore's correct functionality. 
+
+- When trying to update data in your table for the first time, you'll see the `No unique key` popup message and will be asked to define a custom unique key.
+  When you get this message, perform the following steps:
+
+  - Choose the `Custom Unique Key` option 
+  - Choose only the `id` column in the columns list
+  - Press `Ok`
+
+  After that, you'll be able to update your data safely.
+ 
+
+
+

@@ -35,6 +35,7 @@
   * [OPTION](Searching/Options.md#OPTION) - Query Options
   * [FACET](Searching/Faceted_search.md) - Faceted search
   * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
+  * [JOIN](Searching/Joining.md) - Joining tables in SELECT
 * [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself
 * [SHOW META](Node_info_and_management/SHOW_META.md) - Shows extended information about executed query
 * [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - Shows profiling information about executed query

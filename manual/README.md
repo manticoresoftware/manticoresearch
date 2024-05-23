@@ -77,7 +77,7 @@
         * [⪢ Adding data from tables]
             * [• Merging tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
             * [• Killlists in plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
-            * [• Attaching a plain table to RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
+            * [• Attaching one table to another](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
             * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
         * [• Rotating a table](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
     * [⪢ Updating documents]

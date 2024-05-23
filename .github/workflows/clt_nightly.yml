@@ -18,6 +18,7 @@ on:
       - 'test/clt-tests/comparison-overhead-json-sql/**'
       - 'test/clt-tests/id-attribute-error-during-indexing/**'
       - 'test/clt-tests/indexer-latest-mysql-postgres/**'
+      - 'test/clt-tests/core/test-alter-rename-nightly'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -124,6 +125,10 @@ jobs:
           - name: Indexer latest MYSQL POSTGRES
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres
+          - name: Test alter rename nightly
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/core/test-alter-rename-nightly
+
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

@@ -137,7 +137,7 @@ sudo make -j8 altinstall
 sudo ldconfig
 
 # install pymorphy2 and UK dictionary
-sudo pip3.9 install pymorphy2[fast]
-sudo pip3.9 install pymorphy2-dicts-uk
+sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
+sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->

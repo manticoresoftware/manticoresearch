@@ -1,5 +1,6 @@
 ––– input –––
 mkdir -p /var/run/manticore
+––– output –––
 ––– input –––
 sleep 5; searchd | head -n 9
 ––– output –––

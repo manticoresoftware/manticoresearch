@@ -1232,8 +1232,6 @@ public:
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
-	bool				CopyExternalFiles ( int iPostfix, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError ) final;
-
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
 	SI::Index_i *		Debug_GetSI() const override { return m_pSIdx.get(); }
 
@@ -11665,31 +11663,6 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	return Explain ( tArgs );
-}
-
-
-bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError )
-{
-	CSphString sDstPath = GetPathOnly ( GetFilebase() );
-	if ( !FixupCopyExternalFiles ( sDstPath, sFromPath, iPostfix, m_pTokenizer.Ptr(), m_pDict.Ptr(), dCopied, sError ) )
-		return false;
-
-	BuildHeader_t tBuildHeader(m_tStats);
-	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
-	tBuildHeader.m_iDocinfo = m_iDocinfo;
-	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
-	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
-
-	WriteHeader_t tWriteHeader;
-	tWriteHeader.m_pSettings = &m_tSettings;
-	tWriteHeader.m_pSchema = &m_tSchema;
-	tWriteHeader.m_pTokenizer = m_pTokenizer;
-	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
-
-	// save the header
-	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetFilename(SPH_EXT_SPH), sError );
 }
 
 bool CSphIndex_VLN::AlterSI ( CSphString & sError )

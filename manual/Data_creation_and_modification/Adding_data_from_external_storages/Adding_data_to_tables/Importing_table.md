@@ -30,7 +30,9 @@ Executing this command makes all the table files of the specified table copied t
 `IMPORT TABLE` has the following limitations:
 * paths to the external files that were originally specified in the config file must be absolute
 * only real-time and percolate tables are supported
-* plain tables need to be preliminarily (in the plain mode) converted to real-time tables via [ATTACH TABLE](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
+* plain tables need to be preliminarily (in the plain mode) converted to real-time tables via [ATTACH TABLE](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
+
+Note, the `IMPORT TABLE` command doesn't support tables created in versions older than 5.0.0.
 
 ## indexer --print-rt
 

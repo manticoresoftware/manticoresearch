@@ -1,4 +1,4 @@
-# Attaching a plain table to a real-time table
+# Attaching one table to another
 
 <!-- example Example_1 -->
 
@@ -8,14 +8,14 @@ The first case is useful when you need to regenerate a real-time table completel
 
 In the second case, you normally want to add a large bulk of new data to a real-time table, and again, creating a plain table with that data is easier than populating the existing real-time table.
 
+You can also attach an existing real-time table to another one.
+
 ##### Attaching table - general syntax
 The `ATTACH` statement allows you to convert a plain table to be attached to an existing real-time table. It also enables you to attach the content of one real-time table to another real-time table.
 
 ```sql
 ATTACH TABLE plain_or_rt_table TO TABLE rt_table [WITH TRUNCATE]
 ```
-
-`ATTACH TABLE` statement lets you move data from a plain table or a RT table to an RT table.
 
 After a successful `ATTACH` the data originally stored in the source plain table becomes a part of the target RT table, and the source plain table becomes unavailable (until the next rebuild). If the source table is an RT table, its content is moved into the destination RT table, and the source RT table remains empty. `ATTACH` does not result in any table data changes. Essentially, it just renames the files (making the source table a new disk chunk of the target RT table) and updates the metadata. So it is generally a quick operation that might (frequently) complete as fast as under a second.
 

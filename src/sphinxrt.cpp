@@ -1332,7 +1332,6 @@ public:
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
-	bool				CopyExternalFiles ( int iPostfix, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError ) final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -10289,25 +10288,6 @@ void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const Filename
 
 	RtGuard().m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().GetIndexFiles ( dFiles, dExt, pParentFilenameBuilder ); } );
 	dExt.Uniq(); // might be duplicates of tok \ dict files from disk chunks
-}
-
-bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError )
-{
-	CSphString sDstPath = GetPathOnly ( GetFilebase() );
-	if ( !FixupCopyExternalFiles ( sDstPath, sFromPath, -1, m_pTokenizer.Ptr(), m_pDict.Ptr(), dCopied, sError ) )
-		return false;
-
-	SaveMeta();
-
-	auto pDiskChunks = m_tRtChunks.DiskChunks();
-	auto& dDiskChunks = *pDiskChunks;
-	ARRAY_FOREACH ( i, dDiskChunks )
-	{
-		if ( !dDiskChunks[i]->CastIdx().CopyExternalFiles ( i, sFromPath, dCopied, sError ) )
-			return false;
-	}
-
-	return true;
 }
 
 void RtIndex_c::ProhibitSave()

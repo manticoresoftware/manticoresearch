@@ -1281,10 +1281,6 @@ public:
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
 
-	// put external files (if any) into index folder
-	// copy the rest of the external files to index folder
-	virtual bool				CopyExternalFiles ( int iPostfix, const CSphString & sFromPath, StrVec_t & dCopied, CSphString & sError ) { return true; }
-
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
 	virtual SI::Index_i *		Debug_GetSI() const { return nullptr; }

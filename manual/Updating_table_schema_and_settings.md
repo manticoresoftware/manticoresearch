@@ -218,6 +218,28 @@ mysql> show meta;
 
 <!-- end -->
 
+## Renaming a real-time table
+
+<!-- example Renaming RT tables -->
+
+You can change the name of a real-time table in RT mode.
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
 ## Updating table FT settings in plain mode
 
 <!-- example ALTER RECONFIGURE -->

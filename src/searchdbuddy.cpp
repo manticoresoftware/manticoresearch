@@ -774,10 +774,10 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 	StringBuilder_c sCmd ( " " );
 	sCmd.Appendf ( "docker run --rm" ); // the head of the docker start command
 	sCmd.Appendf ( "-p %d:9999", iHostPort ); // port mapping
-	sCmd.Appendf ( "-v \"%s/%s:/buddy\"", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() ); // volume for buddy modules
+	sCmd.Appendf ( "-v \"%s/%s\":/buddy", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() ); // volume for buddy modules
 	sCmd.Appendf ( "-v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore" ); // pesistent volume for buddy data
 	if ( !sDataDir.IsEmpty() ) // volume for data dir into container
-		sCmd.Appendf ( "-v %s:/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
+		sCmd.Appendf ( "-v \"%s\":/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
 	sCmd.Appendf ( "%s /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command

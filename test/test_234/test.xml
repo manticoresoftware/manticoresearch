@@ -98,6 +98,9 @@ Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 <query endpoint="cli_json" method="post">select * from test order by id asc limit 3;select id,j from test order by id desc limit 10</query>
 <query endpoint="cli_json" method="post"/>
 
+<!-- expected to success since cli_json doesn't perform url decoding -->
+<query endpoint="cli_json" method="post">select * from test where match ('%2F')</query>
+
 <!-- cli with 'get' method -->
 <query endpoint="cli_json" method="get">select%20id,1+2%20as%20a,%20packedfactors()%20from%20test%20where%20match(%27tes*%27)%20option%20ranker=expr(%271%27)</query>
 
@@ -115,6 +118,15 @@ Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 
 <!-- statement with characters in col need to be escaped-->
 <query endpoint="sql" method="post">mode=raw&amp;query=select concat('"', 'a')</query>
+<query endpoint="sql" method="post">raw_response=true&amp;query=select concat('"', 'a')</query>
+
+<query endpoint="sql?mode=raw" method="post">query=select concat('"', 'a')</query>
+<query endpoint="sql?raw_response=true" method="post">query=select concat('"', 'a')</query>
+
+<!-- sql POST without query= -->
+<query endpoint="sql" method="post">select concat('"', 'a')</query>
+<query endpoint="sql?mode=raw" method="post">select concat('"', 'a')</query>
+<query endpoint="sql?raw_response=true" method="post">select concat('"', 'a')</query>
 
 </queries>
 

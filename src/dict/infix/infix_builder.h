@@ -17,6 +17,7 @@
 
 static constexpr Str_t g_sTagInfixBlocks = FROMS ( "infix-blocks" );
 static constexpr Str_t g_sTagInfixEntries = FROMS ( "infix-entries" );
+static constexpr Str_t g_sTagDictHeader = FROMS ( "dict-header" );
 
 struct InfixBlock_t
 {

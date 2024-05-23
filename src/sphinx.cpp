@@ -1232,8 +1232,6 @@ public:
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
-	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
-
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
 	SI::Index_i *		Debug_GetSI() const override { return m_pSIdx.get(); }
 
@@ -9163,7 +9161,7 @@ bool CSphIndex_VLN::PreallocWordlist()
 	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
 		return false;
 
-	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=1 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
+	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=18 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
 		sphWarning ( "wordlist size mismatch (size=%zu, checkpoints=%d)", m_tWordlist.m_tBuf.GetLengthBytes(), m_tWordlist.m_dCheckpoints.GetLength() );
 
 	// make sure checkpoints are loadable
@@ -11665,78 +11663,6 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	return Explain ( tArgs );
-}
-
-
-bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
-{
-	CSphVector<std::pair<CSphString,CSphString>> dExtFiles;
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
-	{
-		CSphString sRenameTo;
-		sRenameTo.SetSprintf ( "exceptions_chunk%d.txt", iPostfix );
-		dExtFiles.Add ( { m_pTokenizer->GetSettings().m_sSynonymsFile, sRenameTo } );
-		const_cast<CSphTokenizerSettings &>(m_pTokenizer->GetSettings()).m_sSynonymsFile = sRenameTo;
-	}
-
-	if ( m_pDict )
-	{
-		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
-		if ( !sStopwords.IsEmpty() )
-		{
-			StringBuilder_c sNewStopwords(" ");
-			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
-			ARRAY_FOREACH ( i, dStops )
-			{
-				CSphString sTmp;
-				sTmp.SetSprintf ( "stopwords_chunk%d_%d.txt", iPostfix, i );
-				dExtFiles.Add ( { dStops[i], sTmp } );
-
-				sNewStopwords << sTmp;
-			}
-
-			const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_sStopwords = sNewStopwords.cstr();
-		}
-
-		StrVec_t dNewWordforms;
-		ARRAY_FOREACH ( i, m_pDict->GetSettings().m_dWordforms )
-		{
-			CSphString sTmp;
-			sTmp.SetSprintf ( "wordforms_chunk%d_%d.txt", iPostfix, i );
-			dExtFiles.Add( { m_pDict->GetSettings().m_dWordforms[i], sTmp } );
-			dNewWordforms.Add(sTmp);
-		}
-
-		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
-	}
-
-	CSphString sPathOnly = GetPathOnly ( GetFilebase() );
-	for ( const auto & i : dExtFiles )
-	{
-		CSphString sDest;
-		sDest.SetSprintf ( "%s%s", sPathOnly.cstr(), i.second.cstr() );
-		if ( !CopyFile ( i.first, sDest, m_sLastError ) )
-			return false;
-
-		dCopied.Add(sDest);
-	}
-
-	BuildHeader_t tBuildHeader(m_tStats);
-	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
-	tBuildHeader.m_iDocinfo = m_iDocinfo;
-	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
-	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
-
-	WriteHeader_t tWriteHeader;
-	tWriteHeader.m_pSettings = &m_tSettings;
-	tWriteHeader.m_pSchema = &m_tSchema;
-	tWriteHeader.m_pTokenizer = m_pTokenizer;
-	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
-
-	// save the header
-	return IndexBuildDone ( tBuildHeader, tWriteHeader, GetFilename(SPH_EXT_SPH), m_sLastError );
 }
 
 bool CSphIndex_VLN::AlterSI ( CSphString & sError )

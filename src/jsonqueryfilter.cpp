@@ -956,9 +956,9 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 		if ( tDateFormat && tDateFormat.StrVal()=="strict_date_optional_time" )
 		{
 			if ( bLess )
-				iLessVal = GetUTC ( tLess.StrVal(), CompatDateFormat() );
+				iLessVal = GetUTC ( tLess.StrVal() );
 			if ( bGreater )
-				iGreaterVal = GetUTC ( tGreater.StrVal(), CompatDateFormat() );
+				iGreaterVal = GetUTC ( tGreater.StrVal() );
 		}
 
 		if ( ( bLess && iLessVal==-1 && tLess.IsStr() && tLess.SzVal() && strcmp ( tLess.SzVal(), "now" )==0 )

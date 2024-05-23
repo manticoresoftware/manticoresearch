@@ -91,7 +91,7 @@ void SkipCache::Release ( SkipCacheKey_t tKey )
 		pSkipCache->Release ( std::move ( tKey ) );
 }
 
-bool SkipCache::Find ( SkipCacheKey_t tKey, SkipData_t* pData )
+bool SkipCache::Find ( SkipCacheKey_t tKey, SkipData_t * & pData )
 {
 	SkipCache_c* pSkipCache = SkipCache_c::Get();
 	if ( pSkipCache )

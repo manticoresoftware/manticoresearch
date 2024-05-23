@@ -11,7 +11,7 @@ Transactions are not supported for:
 * UPDATE (which is [different](../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md) from REPLACE, as it performs an in-place attribute update)
 * ALTER - for [updating table schema](../Updating_table_schema_and_settings.md)
 * TRUNCATE - for [emptying a real-time table](../Emptying_a_table.md)
-* ATTACH - for [attaching a plain table to a real-time table](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md)
+* ATTACH - for [attaching a plain table to a real-time table](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
 * CREATE - [for creating a table](../Creating_a_table/Local_tables.md)
 * DROP - [for deleting a table](../Deleting_a_table.md)
 

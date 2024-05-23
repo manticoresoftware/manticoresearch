@@ -1332,7 +1332,6 @@ public:
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
-	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -3807,17 +3806,9 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict ) const
 {
-	if ( tWriterDict.GetPos()==1 )
-	{
-		tCtx.m_iDictCheckpointsOffset = 1;
-		return;
-	}
-
 	// write checkpoints
 	SphOffset_t uOff = m_bKeywordDict ? 0 : tCtx.m_tDocsOffset - tCtx.m_tLastDocPos;
 
-	// however plain index becomes m_bIsEmpty and full scan does not work there
-	// we'll get partly working RT ( RAM chunk works and disk chunks give empty result set )
 	tWriterDict.ZipInt ( 0 ); // indicate checkpoint
 	tWriterDict.ZipOffset ( uOff ); // store last doclist length
 
@@ -3860,7 +3851,7 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	// flush header
 	// mostly for debugging convenience
 	// primary storage is in the index wide header
-	tWriterDict.PutBytes ( "dict-header", 11 );
+	tWriterDict.PutBlob ( g_sTagDictHeader );
 	tWriterDict.ZipInt ( tCtx.m_dCheckpoints.GetLength() );
 	tWriterDict.ZipOffset ( tCtx.m_iDictCheckpointsOffset );
 	tWriterDict.ZipInt ( m_pTokenizer->GetMaxCodepointLength() );
@@ -7962,10 +7953,9 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		CSphString sError;
 		Tokenizer::AddPluginFilterTo ( pTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !pError->IsEmpty() )
+		if ( pError && !pError->IsEmpty() )
 		{
-			if ( pError )
-				*pError = sError;
+			*pError = sError;
 			return false;
 		}
 		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
@@ -10298,78 +10288,6 @@ void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const Filename
 
 	RtGuard().m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().GetIndexFiles ( dFiles, dExt, pParentFilenameBuilder ); } );
 	dExt.Uniq(); // might be duplicates of tok \ dict files from disk chunks
-}
-
-bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
-{
-	struct Rename_t
-	{
-		CSphString m_sSrc;
-		CSphString m_sDst;
-	};
-
-	CSphVector<Rename_t> dExtFiles;
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
-	{
-		const char * szRenameTo = "exceptions.txt";
-		dExtFiles.Add ( { m_pTokenizer->GetSettings().m_sSynonymsFile, szRenameTo } );
-		const_cast<CSphTokenizerSettings &>(m_pTokenizer->GetSettings()).m_sSynonymsFile = szRenameTo;
-	}
-
-	if ( m_pDict )
-	{
-		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
-		if ( !sStopwords.IsEmpty() )
-		{
-			StringBuilder_c sNewStopwords(" ");
-			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
-			ARRAY_FOREACH ( i, dStops )
-			{
-				CSphString sTmp;
-				sTmp.SetSprintf ( "stopwords_%d.txt", i );
-				dExtFiles.Add ( { dStops[i], sTmp } );
-
-				sNewStopwords << sTmp;
-			}
-
-			const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_sStopwords = sNewStopwords.cstr();
-		}
-
-		StrVec_t dNewWordforms;
-		ARRAY_FOREACH ( i, m_pDict->GetSettings().m_dWordforms )
-		{
-			CSphString sTmp;
-			sTmp.SetSprintf ( "wordforms_%d.txt", i );
-			dExtFiles.Add( { m_pDict->GetSettings().m_dWordforms[i], sTmp } );
-			dNewWordforms.Add(sTmp);
-		}
-
-		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
-	}
-
-	CSphString sPathOnly = GetPathOnly ( GetFilebase() );
-	for ( const auto & i : dExtFiles )
-	{
-		CSphString sDest;
-		sDest.SetSprintf ( "%s%s", sPathOnly.cstr(), i.m_sDst.cstr() );
-		if ( !CopyFile ( i.m_sSrc, sDest, m_sLastError ) )
-			return false;
-
-		dCopied.Add(sDest);
-	}
-
-	SaveMeta();
-
-	auto pDiskChunks = m_tRtChunks.DiskChunks();
-	auto& dDiskChunks = *pDiskChunks;
-	ARRAY_FOREACH ( i, dDiskChunks )
-		if ( !dDiskChunks[i]->CastIdx().CopyExternalFiles ( i, dCopied ) )
-		{
-			m_sLastError = dDiskChunks[i]->Cidx().GetLastError();
-			return false;
-		}
-
-	return true;
 }
 
 void RtIndex_c::ProhibitSave()

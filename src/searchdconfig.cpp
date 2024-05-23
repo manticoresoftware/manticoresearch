@@ -827,63 +827,300 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 	return true;
 }
 
+using OptInt_t = std::optional<int>;
+using CopiedFiles = SmallStringHash_T<CSphSavedFile>;
 
-static std::unique_ptr<CSphIndex> TryToPreallocRt ( CSphString sIndex, CSphString sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
+static bool CopyExternalFile ( const CSphString & sSrcPath, const CSphString & sDstPath, const char * sDstName, OptInt_t iPostfix, OptInt_t iChunk, CSphSavedFile & tExternal, CopiedFiles & hCopied, CSphString & sError )
 {
-	auto pRT = sphCreateIndexRT ( std::move ( sIndex ), std::move ( sNewIndexPath ), CSphSchema {}, 32 * 1024 * 1024, true );
-	if ( !pRT->Prealloc ( false, nullptr, dWarnings ) )
+	CSphString sFromFile = tExternal.m_sFilename;
+	const CSphSavedFile * pDstExternal = hCopied ( sFromFile );
+	if ( pDstExternal )
 	{
-		sError.SetSprintf ( "failed to prealloc: %s", pRT->GetLastError().cstr() );
-		return nullptr;
+		tExternal = *pDstExternal;
+		return true;
 	}
 
-	return pRT;
+	assert ( sDstName && !sSrcPath.IsEmpty() && !sDstPath.IsEmpty() && !tExternal.m_sFilename.IsEmpty() );
+
+	StringBuilder_c sFile;
+	sFile << sDstName;
+	if ( iPostfix.has_value() )
+		sFile.Appendf ( "_chunk%d", iPostfix.value() );
+	if ( iChunk.has_value() )
+		sFile.Appendf ( "_%d", iChunk.value() );
+	sFile << ".txt";
+
+	CSphString sDst;
+	sDst.SetSprintf ( "%s%s", sDstPath.cstr(), sFile.cstr() );
+
+	CSphString sSrc;
+	if ( !IsPathAbsolute ( tExternal.m_sFilename ) )
+		sSrc.SetSprintf ( "%s%s", sSrcPath.cstr(), tExternal.m_sFilename.cstr() );
+	else
+		sSrc = tExternal.m_sFilename;
+
+	if ( !CopyFile ( sSrc.cstr(), sDst.cstr(), sError ) )
+		return false;
+
+	if ( !tExternal.Collect ( sDst.cstr(), &sError ) )
+		return false;
+
+	tExternal.m_sFilename = sFile.cstr();
+	hCopied.Add ( tExternal, sFromFile );
+	return true;
+}
+
+static JsonObj_c DumpFileInfoWoName ( const CSphSavedFile & tInfo )
+{
+	JsonObj_c tInfoDump;
+	tInfoDump.AddUint ( "size", tInfo.m_uSize );
+	tInfoDump.AddUint ( "ctime", tInfo.m_uCTime );
+	tInfoDump.AddUint ( "mtime", tInfo.m_uMTime );
+	tInfoDump.AddUint ( "crc32", tInfo.m_uCRC32 );
+	return tInfoDump;
 }
 
 
-static std::unique_ptr<CSphIndex> TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dWarnings, CSphString & sError )
+static JsonObj_c DumpFileInfo ( const CSphSavedFile & tInfo )
 {
-	auto pPQ = CreateIndexPercolate ( sIndex, sNewIndexPath, CSphSchema{} );
-	if ( !pPQ->Prealloc ( false, nullptr, dWarnings ) )
-	{
-		sError.SetSprintf ( "failed to prealloc: %s", pPQ->GetLastError().cstr() );
-		return nullptr;
-	}
-
-	// FIXME! just Prealloc is not enough for PQ index to properly save meta on deallocation
-	pPQ->PostSetup();
-
-	return pPQ;
+	JsonObj_c tFileDump;
+	tFileDump.AddStr ( "name", tInfo.m_sFilename );
+	JsonObj_c tInfoDump;
+	tInfoDump.AddUint ( "size", tInfo.m_uSize );
+	tInfoDump.AddUint ( "ctime", tInfo.m_uCTime );
+	tInfoDump.AddUint ( "mtime", tInfo.m_uMTime );
+	tInfoDump.AddUint ( "crc32", tInfo.m_uCRC32 );
+	tFileDump.AddItem ( "info", tInfoDump );
+	return tFileDump;
 }
 
-
-static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
+static bool CopyExceptions ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, JsonObj_c & tTokSettings, CopiedFiles & hCopied, CSphString & sError )
 {
-	bPQ = false;
+	assert ( tTokSettings && tTokSettings.HasItem( "synonyms_file" ) && tTokSettings.GetItem( "synonyms_file" ).IsStr() );
 
-	CSphString sRtError, sPqError;
-	auto pIndex = TryToPreallocRt ( sIndex, sNewIndexPath, dWarnings, sRtError );
-	if ( !pIndex )
+	CSphSavedFile tExceptions;
+	tExceptions.m_sFilename = tTokSettings.GetItem( "synonyms_file" ).StrVal();
+	if ( !CopyExternalFile ( sSrcPath, sDstPath, "exceptions", iPostfix, std::nullopt, tExceptions, hCopied, sError ) )
+		return false;
+
+	tTokSettings.DelItem ( "synonyms_file" );
+	tTokSettings.DelItem ( "syn_file_info" );
+	tTokSettings.AddStr ( "synonyms_file", tExceptions.m_sFilename );
+	JsonObj_c tFileInfo = DumpFileInfoWoName ( tExceptions );
+	tTokSettings.AddItem ( "syn_file_info", tFileInfo );
+	return true;
+}
+
+// copy multiple externals from the array object
+static std::optional<JsonObj_c> CopyExternalFilesArray ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, const JsonObj_c & tInfos, const char * sItemName, CopiedFiles & hCopied, CSphString & sError)
+{
+	JsonObj_c tResArray ( true );
+	for ( int i=0; i<tInfos.Size(); i++ )
 	{
-		pIndex = TryToPreallocPq ( sIndex, sNewIndexPath, dWarnings, sPqError );
-		if ( !pIndex )
+		JsonObj_c tItemName = tInfos[i].GetItem ( "name" );
+		if ( !tItemName || !tItemName.IsStr() )
 		{
-			sError = sRtError;
-			return false;
+			sError.SetSprintf ( "invalid %s", sItemName );
+			return std::nullopt;
 		}
 
-		bPQ = true;
+		CSphSavedFile tFileInfo;
+		tFileInfo.m_sFilename = tItemName.StrVal();
+		if ( !CopyExternalFile ( sSrcPath, sDstPath, sItemName, iPostfix, i, tFileInfo, hCopied, sError ) )
+			return std::nullopt;
+
+		JsonObj_c tFileItem = DumpFileInfo ( tFileInfo );
+		tResArray.AddItem ( tFileItem );
 	}
 
-	if ( !pIndex->CopyExternalFiles ( 0, dCopied ) )
-	{
-		sError = pIndex->GetLastError();
+	return tResArray;
+}
+
+static bool CopyWordforms ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, JsonObj_c & tDictSettings, CopiedFiles & hCopied, CSphString & sError )
+{
+	assert ( tDictSettings && tDictSettings.HasItem( "wordforms_file_infos" ) && tDictSettings.GetItem( "wordforms_file_infos" ).IsArray() && tDictSettings.GetItem( "wordforms_file_infos" ).Size()>0 );
+
+	auto tWfDst = CopyExternalFilesArray ( sSrcPath, sDstPath, iPostfix, tDictSettings.GetItem( "wordforms_file_infos" ), "wordforms", hCopied, sError );
+	if ( !tWfDst.has_value() )
 		return false;
-	}
+
+	tDictSettings.DelItem ( "wordforms_file_infos" );
+	tDictSettings.AddItem ( "wordforms_file_infos", tWfDst.value() );
 
 	return true;
 }
 
+static bool CopyStopwords ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, JsonObj_c & tDictSettings, CopiedFiles & hCopied, CSphString & sError )
+{
+	assert ( tDictSettings );
+
+	// could by just stopwords without stopwords_file_infos
+	if ( tDictSettings && !tDictSettings.HasItem( "stopwords_file_infos" ) )
+	{
+		assert ( tDictSettings.HasItem( "stopwords" ) && tDictSettings.GetItem( "stopwords" ).IsStr() );
+		CSphString sStopwords = tDictSettings.GetItem( "stopwords" ).StrVal();
+		StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
+
+		JsonObj_c tStopwordsInfo ( true );
+		for ( const CSphString & sFile : dStops )
+		{
+			JsonObj_c tInfo;
+			tInfo.AddStr ( "name", sFile );
+			tStopwordsInfo.AddItem ( tInfo );
+		};
+		tDictSettings.AddItem ( "stopwords_file_infos", tStopwordsInfo );
+	}
+
+	assert ( tDictSettings.HasItem( "stopwords_file_infos" ) && tDictSettings.GetItem( "stopwords_file_infos" ).IsArray() && tDictSettings.GetItem( "stopwords_file_infos" ).Size()>0 );
+
+	auto tStopsDst = CopyExternalFilesArray ( sSrcPath, sDstPath, iPostfix, tDictSettings.GetItem( "stopwords_file_infos" ), "stopwords", hCopied, sError );
+	if ( !tStopsDst.has_value() )
+		return false;
+
+	StringBuilder_c sStopwords ( " " );
+	for ( const JsonObj_c tFile : tStopsDst.value() )
+	{
+		assert ( tFile.HasItem ( "name" ) && tFile.GetItem ( "name" ).IsStr() );
+		sStopwords << tFile.GetItem ( "name" ).SzVal();
+	}
+	tDictSettings.DelItem ( "stopwords" );
+	tDictSettings.AddStr ( "stopwords", sStopwords.cstr() );
+	tDictSettings.DelItem ( "stopwords_file_infos" );
+	tDictSettings.AddItem ( "stopwords_file_infos", tStopsDst.value() );
+
+	return true;
+}
+
+static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, CSphString & sError )
+{
+	CSphAutofile tFile;
+	if ( tFile.Open ( sFilename, SPH_O_READ, sError )<0 )
+		return std::nullopt;
+
+	int64_t iSize = tFile.GetSize();
+	CSphFixedVector<char> sMeta { iSize + 2 }; // and zero-gap at the end
+	if ( !tFile.Read ( sMeta.Begin(), iSize, sError ) )
+		return std::nullopt;
+
+	JsonObj_c tMeta ( sMeta );
+	if ( tMeta.GetError ( sMeta.Begin(), iSize, sError ) )
+		return std::nullopt;
+
+	return tMeta;
+}
+
+static bool WriteJsonHeader ( const CSphString & sFilename, const JsonObj_c & tMeta, CSphString & sError )
+{
+	CSphAutofile tFile;
+	if ( tFile.Open ( sFilename, SPH_O_NEW, sError, true )<0 )
+		return false;
+
+	CSphString sDump = tMeta.AsString ( true );
+	if ( !sphWriteThrottled ( tFile.GetFD(), sDump.cstr(), sDump.Length(), sFilename.cstr(), sError ) )
+		return false;
+
+	tFile.SetPersistent();
+	return true;
+}
+
+// check for any stopwords, wordforms or exceptions and copy all avaliable
+static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphString & sDstIndex, OptInt_t iPostfix, JsonObj_c & tHeader, CopiedFiles & hCopied, CSphString & sError )
+{
+	JsonObj_c tTokSettings = tHeader.GetItem ( "tokenizer_settings" );
+	JsonObj_c tDictSettings = tHeader.GetItem ( "dictionary_settings" );
+
+	bool bHasExceptions = ( tTokSettings && tTokSettings.HasItem( "synonyms_file" ) && tTokSettings.GetItem( "synonyms_file" ).IsStr() );
+
+	bool bHasStopwords = false;
+	if ( tDictSettings && tDictSettings.HasItem( "stopwords_file_infos" ) )
+	{
+		JsonObj_c tStopwords = tDictSettings.GetItem( "stopwords_file_infos" );
+		bHasStopwords = ( tStopwords.IsArray() && tStopwords.Size()>0 );
+	}
+	if ( !bHasStopwords && tDictSettings.HasItem( "stopwords" ) )
+		bHasStopwords = tDictSettings.GetItem( "stopwords" ).IsStr();
+
+	bool bHasWordforms = false;
+	if ( tDictSettings && tDictSettings.HasItem( "wordforms_file_infos" ) )
+	{
+		JsonObj_c tWordforms = tDictSettings.GetItem( "wordforms_file_infos" );
+		bHasWordforms = ( tWordforms.IsArray() && tWordforms.Size()>0 );
+	}
+
+	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms )
+		return true;
+
+	CSphString sDstPath = GetPathOnly ( sDstIndex );
+
+	if ( bHasExceptions && !CopyExceptions ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tTokSettings, hCopied, sError ) )
+		return false;
+
+	if ( bHasStopwords && !CopyStopwords ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tDictSettings, hCopied, sError ) )
+		return false;
+
+	if ( bHasWordforms && !CopyWordforms ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tDictSettings, hCopied, sError ) )
+		return false;
+
+	return true;
+}
+
+// copy external from the either .meta or .sph
+static bool CopyExternal ( const CSphString & sSrcPath, const CSphString & sDstIndex, const CSphString & sHeaderName, OptInt_t iPostfix, CopiedFiles & hCopied, CSphString & sError )
+{
+	std::optional<JsonObj_c> tRes = ReadJsonHeader ( sHeaderName, sError );
+	if ( !tRes )
+		return false;
+
+	JsonObj_c & tMeta = tRes.value();
+
+	// copy external from the RAM part
+	if ( !CopyExternalsFromHeader ( sSrcPath, sDstIndex, iPostfix, tMeta, hCopied, sError ) )
+		return false;
+
+	// copy external from the disk chunks
+	if ( tMeta.HasItem ( "chunk_names" ) && tMeta.GetItem ( "chunk_names" ).IsArray() && tMeta.GetItem ( "chunk_names" ).Size()>0 )
+	{
+		JsonObj_c tChunks = tMeta.GetItem ( "chunk_names" );
+		for ( const JsonObj_c & tChunk : tChunks )
+		{
+			if ( !tChunk.IsInt() )
+			{
+				sError.SetSprintf ( "invalid chunk: %s", tChunk.AsString().cstr() );
+				return false;
+			}
+
+			int iChunk = (int)tChunk.IntVal();
+			CSphString sChunkName;
+			sChunkName.SetSprintf ( "%s.%d.sph", sDstIndex.cstr(), iChunk );
+			if ( !CopyExternal ( sSrcPath, sDstIndex, sChunkName, iChunk, hCopied, sError ) )
+				return false;
+		}
+	}
+
+	if ( !WriteJsonHeader ( sHeaderName, tMeta, sError ) )
+		return false;
+
+	return true;
+}
+
+// remove index_id from the .meta to prevent duplicate of active indexes
+static bool CleanupHeader ( const CSphString & sHeaderName, bool & bPQ, CSphString & sError )
+{
+	std::optional<JsonObj_c> tRes = ReadJsonHeader ( sHeaderName, sError );
+	if ( !tRes )
+		return false;
+
+	JsonObj_c & tMeta = tRes.value();
+	if ( tMeta.HasItem ( "index_id" ) )
+		tMeta.DelItem ( "index_id" );
+
+	bPQ = tMeta.HasItem ( "pqs" );
+
+	if ( !WriteJsonHeader ( sHeaderName, tMeta, sError ) )
+		return false;
+
+	return true;
+}
 
 bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, StrVec_t & dWarnings, CSphString & sError )
 {
@@ -892,7 +1129,17 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 		return false;
 
 	StrVec_t dWipe;
-	auto tCleanup = AtScopeExit ( [&dWipe] { dWipe.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
+	CopiedFiles hCopied;
+	auto tCleanup = AtScopeExit ( [&dWipe, &hCopied, &sNewIndexPath]
+	{
+			dWipe.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } );
+			for  ( const auto & tItem : hCopied )
+			{
+				CSphString sName;
+				sName.SetSprintf ( "%s%s", sNewIndexPath.cstr(), tItem.second.m_sFilename.cstr() );
+				unlink ( sName.cstr() );
+			};
+	});
 
 	CSphString sFind;
 	sFind.SetSprintf ( "%s.*", sPathToIndex.cstr() );
@@ -914,21 +1161,27 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 	for ( const auto & i : dFoundFiles )
 	{
 		CSphString sDest;
-		const char * szExt = GetExtension(i);
-		if ( !szExt )
+		const char * sExt = GetExtension(i);
+		if ( !sExt || StrEq ( sExt, "spl" ) || StrEq ( sExt, "lock" ) )
 			continue;
 
-		sDest.SetSprintf ( "%s.%s", sNewIndexPath.cstr(), szExt );
+		sDest.SetSprintf ( "%s.%s", sNewIndexPath.cstr(), sExt );
 		if ( !CopyFile ( i, sDest, sError ) )
 			return false;
 
 		dWipe.Add(sDest);
 	}
 
-	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dWipe, bPQ, dWarnings, sError ) )
+	CSphString sMetaName;
+	sMetaName.SetSprintf ( "%s.meta", sNewIndexPath.cstr() );
+	if ( !CopyExternal ( sPathToIndex, sNewIndexPath, sMetaName, std::nullopt, hCopied, sError ) )
+		return false;
+
+	if ( !CleanupHeader ( sMetaName, bPQ, sError ) )
 		return false;
 
 	dWipe.Reset();
+	hCopied.Reset();
 	return true;
 }
 

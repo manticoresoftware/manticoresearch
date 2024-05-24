@@ -2,13 +2,6 @@
 set -e
 
 
-[ ! -z "$GHCR_USER" ] && echo $GHCR_PASSWORD | docker login -u$GHCR_USER --password-stdin ghcr.io
-
-if ! (docker info | grep Username) > /dev/null 2>&1; then
-  echo "Can't authorise to GHCR docker registry"
-  exit 1
-fi
-
 git clone https://github.com/manticoresoftware/docker.git docker
 cd docker
 
@@ -116,24 +109,7 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
 
-img_url="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${BUILD_COMMIT}"
-images=("$img_url")
-[[ $GITHUB_REF_NAME == "master" ]] \
-  && img_url_latest="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-latest" \
-  && images+=("$img_url_latest") \
-  || img_url_latest=""
-
-echo "Going to push to '$img_url' and '$img_url_latest' (if not empty) if there's access to the registry"
+echo "Exporting image to ../manticore_test_kit.img"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img
-docker import ../manticore_test_kit.img $img_url
-[ ! -z "$img_url_latest" ] && docker tag $img_url $img_url_latest
-
-# pusing to ghcr.io
-[ ! -z "$GHCR_USER" ] && for img in "${images[@]}"; do
-	docker push $img \
-	  && echo "❗ Pushed the image to $img" \
-      && echo "Pushed test-kit to $img" >> $GITHUB_STEP_SUMMARY \
-	  || echo "❗ Couldn't push the image to $img"
-done || echo "Skipped pushing to repo, because GHCR_USER is not set"

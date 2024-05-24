@@ -16,6 +16,7 @@
 #include "fileio.h"
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "tokenizer/tokenizer.h"
 
 static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 {

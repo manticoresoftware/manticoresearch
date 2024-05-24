@@ -46,6 +46,15 @@ index test
 	source	= test
 	path	= <data_path/>/test
 }
+
+index rt1
+{
+	type = rt
+	path			= <data_path/>/rt1
+	rt_mem_limit = 128M
+    rt_field = title
+    rt_attr_timestamp = tid
+}
 </config>
 
 <queries>
@@ -98,6 +107,13 @@ index test
     <!-- all other date conversions support for JSON and STRING attributes -->
     SELECT id, j.jdata, s, day(j.jdata) jd, day(s) sd, month(j.jdata) jm, month(s) sm, year(j.jdata) jy, year(s) sy, yearmonth(j.jdata) as jym, yearmonth(s) as sym, yearmonthday(j.jdata) as jymd, yearmonthday(s) as symd from test order by id asc;
 	</sphinxql>
+    
+    <sphinxql>
+	set global grouping_in_utc=0;
+	set global timezone=UTC;
+    INSERT into rt1 (id, tid) values (1, 1568577600), (2, '2019-10'),(3, '2019-10-15T20:00');
+    SELECT id, tid, date_format(tid, '%Y-%m-%dT%H:%M') as d from rt1 order by id asc;
+    </sphinxql>
     
 </queries>
 

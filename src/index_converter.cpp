@@ -1430,7 +1430,7 @@ void ConverterPlain_t::WriteCheckpoints ( const Index_t & tIndex, CSphWriter & t
 	// primary storage is in the index wide header
 	if ( bKeywordDict )
 	{
-		tWriterDict.PutBytes ( "dict-header", 11 );
+		tWriterDict.PutBlob ( g_sTagDictHeader );
 		tWriterDict.ZipInt ( m_dCheckpoints.GetLength() );
 		tWriterDict.ZipOffset ( m_tCheckpointsPosition );
 		tWriterDict.ZipInt ( tIndex.m_pTokenizer->GetMaxCodepointLength() );

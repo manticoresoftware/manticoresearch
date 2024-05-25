@@ -218,6 +218,7 @@ Released: May 23rd 2024
 * [Issue #59](https://github.com/manticoresoftware/manticoresearch-helm/issues/59) Manticore cluster breakdown.
 * [Issue #68](https://github.com/manticoresoftware/manticoresearch-helm/issues/68) optimize.php would crash if percolate table was present.
 * [Issue #77](https://github.com/manticoresoftware/manticoresearch-helm/issues/77) Fixed errors when deploying on Kubernetes.
+* [Issue #274](https://github.com/manticoresoftware/manticoresearch-buddy/issues/274) Fixed the incorrect processing of concurrent requests to Buddy
 
 ### Related with manticore-backup
 * [Issue #97](https://github.com/manticoresoftware/manticoresearch-backup/pull/97) Set VIP HTTP port as default when available.

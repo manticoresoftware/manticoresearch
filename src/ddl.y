@@ -53,6 +53,8 @@
 %token	TOK_HNSW_EF_CONSTRUCTION
 %token	TOK_HNSW_M
 %token	TOK_HNSW_SIMILARITY
+%token	TOK_ANNOY_METRIC
+%token	TOK_ANNOY_N_TREES
 %token	TOK_IF
 %token	TOK_IMPORT
 %token	TOK_INDEXED
@@ -331,6 +333,22 @@ item_option:
 	| TOK_SECONDARY_INDEX '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionIndexed ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_ANNOY_METRIC '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionAnnoyMetric ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_ANNOY_N_TREES '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionAnnoyNTrees ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

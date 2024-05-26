@@ -12,6 +12,8 @@
 
 #include "searchdddl.h"
 
+#include <optional>
+
 class DdlParser_c : public SqlParserTraits_c
 {
 public:
@@ -37,9 +39,12 @@ public:
 		int				m_iKNNDims = 0;
 		int				m_iHNSWM = 16;
 		int				m_iHNSWEFConstruction = 200;
+		int				m_iAnnoyNTrees = 10;
 		knn::HNSWSimilarity_e m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
 		bool			m_bKNNDimsSpecified = false;
 		bool			m_bHNSWSimilaritySpecified = false;
+
+		std::optional<knn::AnnoyMetric_e> m_eAnnoyMetric;
 
 		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
@@ -65,6 +70,8 @@ public:
 	bool	AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWM ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
+	bool    AddItemOptionAnnoyMetric ( const SqlNode_t& tOption );
+	bool    AddItemOptionAnnoyNTrees ( const SqlNode_t& tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
@@ -141,6 +148,13 @@ knn::IndexSettings_t DdlParser_c::ItemOptions_t::ToKNN() const
 	tKNN.m_eHNSWSimilarity	= m_eHNSWSimilarity;
 	tKNN.m_iHNSWM			= m_iHNSWM;
 	tKNN.m_iHNSWEFConstruction = m_iHNSWEFConstruction;
+	tKNN.m_iAnnoyNTrees = m_iAnnoyNTrees;
+	tKNN.m_eKnnType = m_sKNNType == "HNSW" ? knn::KNNType_e::HNSW : knn::KNNType_e::ANNOY;
+	if ( m_eAnnoyMetric.has_value() )
+	{
+		tKNN.m_eAnnoyMetric = m_eAnnoyMetric.value();
+	}
+
 
 	return tKNN;
 }
@@ -206,7 +220,7 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 {
 	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && !tOpts.m_sKNNType.IsEmpty() )
 	{
-		sError = "knn_type='hnsw' can only be used with float_vector attributes";
+		sError = "knn_type='hnsw' or knn_type='annoy' can only be used with float_vector attributes";
 		return false;
 	}
 
@@ -220,9 +234,15 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 	}
 	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
-		if ( !tOpts.m_sKNNType.IsEmpty() && ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) )
+		if ( tOpts.m_sKNNType == "HNSW" && ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) )
 		{
 			sError = "knn_dims and hnsw_similarity are required if knn_type='hnsw'";
+			return false;
+		}
+
+		if ( tOpts.m_sKNNType == "ANNOY" && ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_eAnnoyMetric.has_value() ) )
+		{
+			sError = "knn_dims and annoy_metric are required if knn_type='annoy'";
 			return false;
 		}
 	}
@@ -400,7 +420,7 @@ bool DdlParser_c::AddItemOptionIndexed ( const SqlNode_t & tOption )
 bool DdlParser_c::AddItemOptionKNNType ( const SqlNode_t & tOption )
 {
 	m_tItemOptions.m_sKNNType = ToStringUnescape(tOption).ToUpper();
-	if ( m_tItemOptions.m_sKNNType!="HNSW" )
+	if ( m_tItemOptions.m_sKNNType != "HNSW" && m_tItemOptions.m_sKNNType != "ANNOY" )
 	{
 		m_sError.SetSprintf ( "Unknown KNN type '%s'", m_tItemOptions.m_sKNNType.cstr() );
 		return false;
@@ -451,6 +471,33 @@ bool DdlParser_c::AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_iHNSWEFConstruction = strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+bool DdlParser_c::AddItemOptionAnnoyMetric ( const SqlNode_t& tOption )
+{
+	CSphString sValue = ToStringUnescape ( tOption ).ToUpper();
+	if ( sValue == "ANGULAR" )
+		m_tItemOptions.m_eAnnoyMetric = knn::AnnoyMetric_e::ANGULAR;
+	else if ( sValue == "EUCLIDEAN" )
+		m_tItemOptions.m_eAnnoyMetric = knn::AnnoyMetric_e::EUCLIDEAN;
+	else if ( sValue == "MANHATTAN" )
+		m_tItemOptions.m_eAnnoyMetric = knn::AnnoyMetric_e::MANHATTAN;
+	else if ( sValue == "DOT" )
+		m_tItemOptions.m_eAnnoyMetric = knn::AnnoyMetric_e::DOT;
+	else
+	{
+		m_sError.SetSprintf ( "Unknown Annoy metric '%s'", sValue.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+bool DdlParser_c::AddItemOptionAnnoyNTrees ( const SqlNode_t& tOption )
+{
+	CSphString sValue = ToStringUnescape ( tOption );
+	m_tItemOptions.m_iAnnoyNTrees = strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
 }
 

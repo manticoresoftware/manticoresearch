@@ -13,6 +13,7 @@ export current_version_secondary=$(searchd --version | head -n 1 | cut -d" " -f8
 ––– input –––
 export current_version_knn=$(searchd --version | head -n 1 | cut -d" " -f11); echo $current_version_knn
 ––– output –––
+2.3.0
 ––– input –––
 export current_version_galera=$(strings /usr/share/manticore/modules/libgalera_manticore.so|grep -i -E "[0-9]{1}\.[0-9]{2}\([a-z0-9]+\)" | cut -d"(" -f1); echo $current_version_galera
 ––– output –––

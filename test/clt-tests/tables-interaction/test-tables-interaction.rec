@@ -1,0 +1,29 @@
+––– block: ../base/dind/init –––
+––– input –––
+docker pull -q --platform linux/x86_64 manticoresearch/manticore:latest > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+docker pull -q --platform linux/x86_64 manticoresearch/manticore:6.2.12 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+docker network create manticore_network > /dev/null
+––– output –––
+0
+––– input –––
+docker run -d --name manticore_6.2.12 --network manticore_network --platform linux/amd64 manticoresearch/manticore:6.2.12
+––– output –––
+0
+––– input –––
+docker run -d --name manticore_latest --network manticore_network --platform linux/amd64 manticoresearch/manticore:latest
+––– output –––
+––– input –––
+docker exec -it manticore_6.2.12 bash
+––– output –––
+––– input –––
+mysql -h manticore_latest -P9306 -e "CREATE TABLE test_table_latest (id BIGINT, title TEXT); INSERT INTO test_table_latest (id, title) VALUES (1, 'Test title latest'), (2, 'Another test title latest');"
+––– output –––
+––– input –––
+mysql -h manticore_latest -P9306 -e "SELECT * FROM test_table_latest;"
+––– output –––

@@ -95,21 +95,21 @@ orlist:
 	;
 
 atom:
-	keyword								{ $$ = $1; }
-	| sentence							{ $$ = $1; }
-	| paragraph							{ $$ = $1; }
-	| '"' '"'							{ $$ = NULL; }
-	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
-	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
-	| '"' '"' '/' TOK_FLOAT				{ $$ = NULL; }
-	| '"' phrase '"'					{ $$ = $2; pParser->SetPhrase ( $$, false ); }
-	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; pParser->m_iAtomPos = $$->FixupAtomPos(); } }
-	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
-	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
-	| '(' expr ')'						{ $$ = $2; }
-	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true ); }
-	| atom TOK_NOTNEAR atom				{ $$ = pParser->AddOp ( SPH_QUERY_NOTNEAR, $1, $3, $2.iValue ); }
-	;
+    keyword                         { $$ = $1; }
+    | sentence                      { $$ = $1; }
+    | paragraph                     { $$ = $1; }
+	| '"' '"'						{ $$ = NULL; }
+	| '"' '"' '~' TOK_INT			{ $$ = NULL; }
+	| '"' '"' '/' TOK_INT			{ $$ = NULL; }
+	| '"' '"' '/' TOK_FLOAT			{ $$ = NULL; }
+    | '"' phrase '"'                { $$ = $2; pParser->SetPhrase($$, false); }
+    | '"' phrase '"' '~' TOK_INT    { $$ = $2; if ($$) { assert($$->m_dWords.GetLength()); $$->SetOp(SPH_QUERY_PROXIMITY); $$->m_iOpArg = $5.iValue; pParser->m_iAtomPos = $$->FixupAtomPos(); } }
+    | '"' phrase '"' '/' TOK_INT    { $$ = $2; if ($$) { assert($$->m_dWords.GetLength()); $$->SetOp(SPH_QUERY_QUORUM); $$->m_iOpArg = $5.iValue; } }
+    | '"' phrase '"' '/' TOK_FLOAT  { $$ = $2; if ($$) { assert($$->m_dWords.GetLength()); $$->SetOp(SPH_QUERY_QUORUM); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
+    | '(' expr ')'                  { $$ = $2; }
+    | '=' '"' phrase '"'            { $$ = $3; pParser->SetPhrase($$, true); }
+    | atom TOK_NOTNEAR atom         { $$ = pParser->AddOp(SPH_QUERY_NOTNEAR, $1, $3, $2.iValue); }
+    ;
 
 keyword:
 	TOK_KEYWORD							{ $$ = $1; }
@@ -135,19 +135,22 @@ sp_item:
 	;
 
 phrase:
-	phrasetoken							{ $$ = $1; }
-	| phrase phrasetoken				{ $$ = pParser->AddKeyword ( $1, $2 ); }
-	;
+    phrasetoken                      { $$ = $1; }
+    | phrase phrasetoken             { $$ = pParser->AddKeyword($1, $2); }
+    | phrase '|' phrase              { $$ = pParser->AddOp(SPH_QUERY_OR, $1, $3); }
+    | '(' phrase ')'                 { $$ = $2; }
+    ;
 
 phrasetoken:
-	keyword								{ $$ = $1; }
-	| '('								{ $$ = NULL; }
-	| ')'								{ $$ = NULL; }
-	| '-'								{ $$ = NULL; }
-	| '|'								{ $$ = NULL; }
-	| '~'								{ $$ = NULL; }
-	| '/'								{ $$ = NULL; }
-	;
+    keyword                          { $$ = $1; }
+    | '"' phrase '"'                 { $$ = $2; if ($$) { assert($$->m_dWords.GetLength()); $$->SetOp(SPH_QUERY_PHRASE); } }
+    | '('                            { $$ = NULL; }
+    | ')'                            { $$ = NULL; }
+    | '-'                            { $$ = NULL; }
+    | '|'                            { $$ = NULL; }
+    | '~'                            { $$ = NULL; }
+    | '/'                            { $$ = NULL; }
+    ;
 
 
 %%

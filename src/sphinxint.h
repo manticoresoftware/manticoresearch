@@ -1171,6 +1171,8 @@ struct ExpansionContext_t : public ExpansionTrait_t
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
 	int m_iCutoff = -1;
+	bool m_bAlowExpansion				= true;
+
 	ExpansionStats_t m_tExpansionStats;
 
 	bool								m_bOnlyTreeFix = false;

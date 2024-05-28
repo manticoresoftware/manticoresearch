@@ -2,14 +2,15 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+The `UPDATE` command changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
-
+Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 Note that the document ID cannot be updated.
 
-Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.
+It's important to be aware that updating an attribute disables its [secondary index](../../Server_settings/Searchd.md#secondary_indexes). If maintaining secondary index continuity is critical, consider fully or [partially replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) the document instead.
+
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 <!-- intro -->
 ##### SQL:
@@ -124,7 +125,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -325,7 +326,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 doc.Add("coeff", 3465.23);
 doc.Add("tags1", new List<int> {3,6,4});
@@ -541,7 +542,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("meta.tags[0]", 100);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -773,17 +774,17 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+Dictionary<string, Object> meta = new Dictionary<string, Object>();
 meta.Add("tags", new List<int> {1,2,3});
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "title");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Insert(newdoc);
 
 meta = new Dictionary<string, Object>();
-meta.Add("tags", new List<string> {"one","two","three"}); 
-doc = new Dictionary<string, Object>(); 
+meta.Add("tags", new List<string> {"one","two","three"});
+doc = new Dictionary<string, Object>();
 doc.Add("meta", meta);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Update(updatedoc);
@@ -958,7 +959,7 @@ indexApi.update(updatedoc);
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("enabled", 0);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", cluster: "weekly", id: 1, doc: doc);
 indexApi.Update(updatedoc);
@@ -1119,7 +1120,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("tags1", new List<int> {});
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updatedoc);

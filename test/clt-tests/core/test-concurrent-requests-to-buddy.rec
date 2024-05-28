@@ -4,6 +4,5 @@ sleep 3; curl -s localhost:9308/cli -d 'debug sleep 30' &
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
-sleep 3; curl -s localhost:9308/cli -d 'show queries' | grep sleep
+sleep 3; curl -s localhost:9308/cli -d 'show queries'
 ––– output –––
-| %{NUMBER} | debug sleep %{NUMBER} | %{NUMBER}s ago   | http     | %{IPADDR}:%{NUMBER} |

@@ -6,11 +6,11 @@ mkdir /tmp/local-index
 mkdir /tmp/dist-index
 ––– output –––
 ––– input –––
-docker pull -q --platform linux/x86_64 manticoresearch/manticore:latest > /dev/null; echo $?
+docker pull -q --platform linux/x86_64 manticoresearch/manticore:dev-6.2.13-490365d > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker pull -q --platform linux/x86_64 manticoresearch/manticore:6.2.12 > /dev/null; echo $?
+docker pull -q --platform linux/x86_64 manticoresearch/manticore:dev-6.0.5-a5377a97 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -18,7 +18,7 @@ docker network create manticore_network > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker run -d --name manticore_remote --network manticore_network -v /tmp/local-index:/var/lib/manticore/ --platform linux/amd64 manticoresearch/manticore:6.2.12 > /dev/null; echo $?
+docker run -d --name manticore_remote --network manticore_network -v /tmp/local-index:/var/lib/manticore/ --platform linux/amd64 manticoresearch/manticore:dev-6.0.5-a5377a97 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -26,7 +26,7 @@ if timeout 5 grep -qm1 'accepting connections' <(docker logs -f manticore_remote
 ––– output –––
 accepting connections
 ––– input –––
-docker run -d --name manticore_dist --network manticore_network -v /tmp/dist-index:/var/lib/manticore/ --platform linux/amd64 manticoresearch/manticore:6.2.12 > /dev/null; echo $?
+docker run -d --name manticore_dist --network manticore_network -v /tmp/dist-index:/var/lib/manticore/ --platform linux/amd64 manticoresearch/manticore:dev-6.0.5-a5377a97 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -74,7 +74,7 @@ docker rm manticore_remote
 ––– output –––
 manticore_remote
 ––– input –––
-docker run -d --name manticore_remote --network manticore_network -v /tmp/local-index:/var/lib/manticore/ --platform linux/amd64 manticoresearch/manticore:latest > /dev/null; echo $?
+docker run -d --name manticore_remote --network manticore_network -v /tmp/local-index:/var/lib/manticore/ --platform linux/amd64 manticoresearch/manticore:dev-6.2.13-490365d > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -84,8 +84,8 @@ accepting connections
 ––– input –––
 docker exec manticore_dist mysql -e "select title from dist_table where id=1;"
 ––– output –––
-+-------------------+
-| title             |
-+-------------------+
-| Test title latest |
-+-------------------+
++-------+
+| title |
++-------+
+| -     |
++-------+

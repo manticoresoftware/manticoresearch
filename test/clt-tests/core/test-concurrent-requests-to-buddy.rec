@@ -6,3 +6,4 @@ sleep 3; curl -s localhost:9308/cli -d 'debug sleep 30' &
 ––– input –––
 sleep 3; curl -s localhost:9308/cli -d 'show queries'
 ––– output –––
+

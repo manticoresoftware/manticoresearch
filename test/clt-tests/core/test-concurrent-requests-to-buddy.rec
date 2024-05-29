@@ -1,9 +1,9 @@
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– input –––
-sleep 3; curl -s localhost:9308/cli -d 'debug sleep 30' &
+curl -s localhost:9308/cli -d 'debug sleep 30' &
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
-sleep 3; curl -s localhost:9308/cli -d 'show queries' | grep -q debug && echo "Success" || echo "Failure"
+curl -s localhost:9308/cli -d 'show queries' | grep -q debug && echo "Success" || echo "Failure"
 ––– output –––
 Success

@@ -14,7 +14,7 @@ In the typical scenario, indexer does the following:
 * Writes the table files
 * (Optional) Informs the search server about the new table which triggers table rotation
 
-## Indexer tool  
+## Indexer tool
 The `indexer` tool is used to create plain tables in Manticore Search. It has a general syntax of:
 
 ```shell
@@ -63,6 +63,24 @@ Or, in case you want to build a specific table:
 systemctl start --no-block manticore-indexer@specific-table-name
 ```
 Find more information about scheduling `indexer` via systemd below.
+
+### Custom startup flags using systemd
+
+The `systemctl set-environment INDEXER_CONFIG` command lets you run the Indexer with your desired configuration, overriding the default settings.
+
+The `systemctl set-environment INDEXER_ARGS` command allows you to specify custom startup flags for the Indexer Tool. For a full list of available command-line arguments, see [here](#Indexer-command-line-arguments).
+
+For example, to start Indexer in quiet mode, you can run:
+```bash
+systemctl set-environment INDEXER_ARGS='--quiet'
+systemctl restart manticore-indexer
+```
+
+To undo it, run:
+```bash
+systemctl set-environment INDEXER_ARGS=''
+systemctl restart manticore-indexer
+```
 
 ### Indexer command line arguments
 * `--config <file>` (`-c <file>` for short) tells `indexer` to use the given file as its configuration. Normally, it will look for `manticore.conf` in the installation directory (e.g. `/etc/manticoresearch/manticore.conf`), followed by the current directory you are in when calling `indexer` from the shell. This is most useful in shared environments where the binary files are installed in a global folder, e.g. `/usr/bin/`, but you want to provide users with the ability to make their own custom Manticore set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own `manticore.conf` files and pass them to `indexer` with this option. For example:
@@ -223,7 +241,7 @@ mem_limit = 256M
 
 Plain table building RAM usage limit. Optional, default is 128 MB. Enforced memory usage limit that the `indexer` will not go above. Can be specified in bytes, or kilobytes (using K postfix), or megabytes (using M postfix); see the example. This limit will be automatically raised if set to an extremely low value causing I/O buffers to be less than 8 KB; the exact lower bound for that depends on the built data size. If the buffers are less than 256 KB, a warning will be produced.
 
-The maximum possible limit is 2047M. Too low values can hurt plain table building speed, but 256M to 1024M should be enough for most, if not all datasets. Setting this value too high can cause SQL server timeouts. During the document collection phase, there will be periods when the memory buffer is partially sorted and no communication with the database is performed; and the database server can timeout. You can resolve that either by raising timeouts on the SQL server side or by lowering `mem_limit`.  
+The maximum possible limit is 2047M. Too low values can hurt plain table building speed, but 256M to 1024M should be enough for most, if not all datasets. Setting this value too high can cause SQL server timeouts. During the document collection phase, there will be periods when the memory buffer is partially sorted and no communication with the database is performed; and the database server can timeout. You can resolve that either by raising timeouts on the SQL server side or by lowering `mem_limit`.
 
 #### on_file_field_error
 
@@ -245,7 +263,7 @@ Note that with `on_file_field_error = skip_document` documents will only be igno
 
 ```ini
 write_buffer = 4M
-```    
+```
 
 Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final table files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
 

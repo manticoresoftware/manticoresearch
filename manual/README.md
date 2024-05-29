@@ -176,6 +176,7 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [DBeaver](Integration/DBeaver.md)
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)

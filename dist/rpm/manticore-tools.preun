@@ -1,2 +1,8 @@
-%systemd_preun manticore-indexer.service
-%systemd_preun manticore-indexer@.service
+if [ $1 -eq 0 ]; then  # If the package is being removed, not upgraded
+    # Handle all instances of manticore-indexer*
+    for service in $(systemctl show --property=Id --no-pager 'manticore-indexer*'|awk -F= '{print $2}'|grep .); do
+        systemctl stop "$service"
+        systemctl disable "$service"
+    done
+fi
+

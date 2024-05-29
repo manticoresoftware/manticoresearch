@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE index2001(f text, s string); insert into index2001 values(01,'abc','string');"
 ––– output –––

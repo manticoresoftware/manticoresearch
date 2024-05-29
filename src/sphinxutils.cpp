@@ -3649,20 +3649,13 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 
 	while ( sCur<sEnd && *sCur )
 	{
-		const int iOp = *sCur++;
-		DateMathOp_e eOp = DateMathOp_e::Mod;
-		if ( iOp=='/' )
+		DateMathOp_e eOp;
+		switch ( *sCur++ )
 		{
-			eOp = DateMathOp_e::Mod;
-		} else if ( iOp=='+' )
-		{
-			eOp = DateMathOp_e::Add;
-		} else if ( iOp=='-' )
-		{
-			eOp = DateMathOp_e::Sub;
-		} else
-		{
-			return false;
+			case '/' : eOp = DateMathOp_e::Mod; break;
+			case '+' : eOp = DateMathOp_e::Add; break;
+			case '-' : eOp = DateMathOp_e::Sub; break;
+			default: return false;
 		}
 
 		int iNum = 1;

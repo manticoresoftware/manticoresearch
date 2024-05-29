@@ -9209,18 +9209,18 @@ bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & 
 			tWriter.ZipOffset ( pSeg->m_dWordCheckpoints.GetLength() );
 			if ( !m_bKeywordDict )
 			{
-				ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
+				for ( const auto& dWordCheckpoint : pSeg->m_dWordCheckpoints )
 				{
-					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_iOffset );
-					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_uWordID );
+					tWriter.ZipOffset ( dWordCheckpoint.m_iOffset );
+					tWriter.ZipOffset ( dWordCheckpoint.m_uWordID );
 				}
 			} else
 			{
-				const char * pBase = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
-				ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
+				const auto * pBase = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
+				for ( const auto & dWordCheckpoint : pSeg->m_dWordCheckpoints )
 				{
-					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_iOffset );
-					tWriter.ZipOffset ( pSeg->m_dWordCheckpoints[i].m_szWord - pBase );
+					tWriter.ZipOffset ( dWordCheckpoint.m_iOffset );
+					tWriter.ZipOffset ( dWordCheckpoint.m_szWord - pBase );
 				}
 			}
 

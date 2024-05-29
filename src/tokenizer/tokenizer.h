@@ -41,6 +41,7 @@ enum ESphTokenizerClone
 	SPH_CLONE_QUERY_EXACT,
 	SPH_CLONE_QUERY_,
 	SPH_CLONE,	///< just clone 'as is'
+	SPH_CLONE_INDEX_ESCAPE,			///< clone tokenizer and set indexing mode but with escape specials
 };
 
 

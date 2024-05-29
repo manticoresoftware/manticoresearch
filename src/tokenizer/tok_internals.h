@@ -57,3 +57,31 @@ public:
 // used in tests
 void MergeIntersectedRanges ( CSphVector<RemapRangeTagged_t>& dRanges );
 bool AddRange ( CSphRemapRange tRange, CSphVector<RemapRangeTagged_t>& dRanges, CSphString* pError = nullptr );
+
+struct GtQuotation_t
+{
+	static constexpr BYTE EscapingSpace ( BYTE c )
+	{
+		return ( c=='=' || c == '>' ) ? 1 : 0;
+	}
+
+	static void EscapeChar ( BYTE *& pOut, BYTE c )
+	{
+		if ( EscapingSpace ( c ) )
+			*pOut++ = '\\';
+		*pOut++ = c;
+	}
+
+	static void EscapeCharWithSpaces ( BYTE *& pOut, BYTE c )
+	{
+		if ( EscapingSpace ( c ) )
+		{
+			pOut[0] = '\\';
+			pOut[1] = c;
+			pOut += 2;
+		} else
+			*pOut++ = c;
+	}
+};
+
+using GtEscapedBuilder = EscapedStringBuilder_T<GtQuotation_t>;

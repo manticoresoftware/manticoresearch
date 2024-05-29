@@ -57,11 +57,6 @@ public:
 
 	void Export ( Writer_i & w ) const;
 	void Export ( JsonEscapedBuilder& tOut ) const;
-
-private:
-//	void Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
-	template<typename WRITER>
-	void Export ( WRITER&& W, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
 };
 
 /// exceptions trie builder

@@ -40,8 +40,8 @@ body:
       label: "Have you tried the latest development version?"
       multiple: false
       options:
-        - Yes
-        - No
+        - "Yes"
+        - "No"
   - type: markdown
     attributes:
       value: "## Thank you for completing the form! For an expedited solution, consider our [professional services](https://manticoresearch.com/services/)."

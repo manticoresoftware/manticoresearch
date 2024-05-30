@@ -3,3 +3,4 @@ a\> > abc
 c\=\> => cde
 \=\>d => def
 \=\>a \> f \> => foo
+\~g => bar

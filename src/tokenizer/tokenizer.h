@@ -41,7 +41,6 @@ enum ESphTokenizerClone
 	SPH_CLONE_QUERY_EXACT,
 	SPH_CLONE_QUERY_,
 	SPH_CLONE,	///< just clone 'as is'
-	SPH_CLONE_INDEX_ESCAPE,			///< clone tokenizer and set indexing mode but with escape specials
 };
 
 
@@ -120,6 +119,9 @@ public:
 
 	/// get next token
 	virtual BYTE *					GetToken () = 0;
+
+	/// get next token comply escaping rules
+	virtual BYTE *					GetTokenEscaped () { return GetToken(); }
 
 	/// calc codepoint length
 	virtual int						GetCodepointLength ( int iCode ) const noexcept = 0;

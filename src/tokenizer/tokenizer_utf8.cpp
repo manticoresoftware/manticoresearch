@@ -72,20 +72,21 @@ int Tokenizer_UTF8_Base_c::GetCodepointLength ( int iCode ) const noexcept
 	return iBytes;
 }
 
-template<bool IS_QUERY, bool IS_ESCAPE>
+template<bool IS_QUERY>
 class CSphTokenizer_UTF8: public Tokenizer_UTF8_Base_c
 {
 public:
 	explicit CSphTokenizer_UTF8 ( bool bDefaultCharset )
 		: Tokenizer_UTF8_Base_c ( bDefaultCharset )
 	{}
-	BYTE* GetToken() override;
+	BYTE * GetToken() override;
+	BYTE * GetTokenEscaped() override;
 	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
 };
 
 
-template<bool IS_QUERY, bool IS_ESCAPE>
-BYTE* CSphTokenizer_UTF8<IS_QUERY, IS_ESCAPE>::GetToken()
+template<bool IS_QUERY>
+BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetToken()
 {
 	m_bWasSpecial = false;
 	m_bBlended = false;
@@ -94,20 +95,32 @@ BYTE* CSphTokenizer_UTF8<IS_QUERY, IS_ESCAPE>::GetToken()
 	m_bWasSynonym = false;
 
 	return m_bHasBlend
-				 ? DoGetToken<IS_QUERY, true, IS_ESCAPE>()
-				 : DoGetToken<IS_QUERY, false, IS_ESCAPE>();
+				 ? DoGetToken<IS_QUERY, true, false>()
+				 : DoGetToken<IS_QUERY, false, false>();
 }
 
-template<bool IS_QUERY, bool IS_ESCAPE>
-TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY, IS_ESCAPE>::Clone ( ESphTokenizerClone eMode ) const noexcept
+template<bool IS_QUERY>
+BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetTokenEscaped()
+{
+	m_bWasSpecial = false;
+	m_bBlended = false;
+	m_iOvershortCount = 0;
+	m_bTokenBoundary = false;
+	m_bWasSynonym = false;
+
+	return m_bHasBlend
+				 ? DoGetToken<IS_QUERY, true, true>()
+				 : DoGetToken<IS_QUERY, false, true>();
+}
+
+template<bool IS_QUERY>
+TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const noexcept
 {
 	CSphTokenizerBase* pClone;
-	if ( eMode==SPH_CLONE_INDEX_ESCAPE )
-		pClone = new CSphTokenizer_UTF8<false, true> ( false );
-	else if ( eMode!=SPH_CLONE_INDEX )
-		pClone = new CSphTokenizer_UTF8<true, false> ( false );
+	if ( eMode != SPH_CLONE_INDEX )
+		pClone = new CSphTokenizer_UTF8<true> ( false );
 	else
-		pClone = new CSphTokenizer_UTF8<false, false> ( false );
+		pClone = new CSphTokenizer_UTF8<false> ( false );
 	pClone->CloneBase ( this, eMode );
 	return TokenizerRefPtr_c {pClone};
 }
@@ -116,11 +129,11 @@ TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY, IS_ESCAPE>::Clone ( ESphTokenizer
 /////////////////////////////////////////////////////////////////////////////
 
 template<bool IS_QUERY>
-class CSphTokenizer_UTF8Ngram: public CSphTokenizer_UTF8<IS_QUERY, false>
+class CSphTokenizer_UTF8Ngram: public CSphTokenizer_UTF8<IS_QUERY>
 {
 public:
 	explicit CSphTokenizer_UTF8Ngram ( bool bDefaultCharset )
-		: CSphTokenizer_UTF8<IS_QUERY, false> ( bDefaultCharset ) {}
+		: CSphTokenizer_UTF8<IS_QUERY> (bDefaultCharset) {}
 	bool SetNgramChars ( const char* sConfig, CSphString& sError ) final;
 	void SetNgramLen ( int iLen ) final;
 	BYTE* GetToken() final;
@@ -149,12 +162,12 @@ BYTE* CSphTokenizer_UTF8Ngram<IS_QUERY>::GetToken()
 {
 	// !COMMIT support other n-gram lengths than 1
 	assert ( m_iNgramLen == 1 );
-	return CSphTokenizer_UTF8<IS_QUERY, false>::GetToken();
+	return CSphTokenizer_UTF8<IS_QUERY>::GetToken();
 }
 
 TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8Tokenizer ( bool bDefaultCharset )
 {
-	return TokenizerRefPtr_c { new CSphTokenizer_UTF8<false, false> ( bDefaultCharset ) };
+	return TokenizerRefPtr_c { new CSphTokenizer_UTF8<false> ( bDefaultCharset ) };
 }
 
 TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8NgramTokenizer ( bool bDefaultCharset )

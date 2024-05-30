@@ -638,7 +638,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 	bool bCommentedWholeLine = false;
 
 	BYTE* pFrom = nullptr;
-	while ( ( pFrom = pTokenizer->GetToken() ) != nullptr )
+	while ( ( pFrom = pTokenizer->GetTokenEscaped() ) != nullptr )
 	{
 		if ( *pFrom == '#' )
 		{
@@ -646,7 +646,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 			break;
 		}
 
-		if ( *pFrom == '~' && bFirstToken )
+		if ( *pFrom == '~' && bFirstToken && *pTokenizer->GetTokenStart()!='\\' )
 		{
 			bAfterMorphology = true;
 			bFirstToken = false;
@@ -913,7 +913,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = szIndex;
 
-	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX_ESCAPE );
+	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
 	const CSphTokenizerSettings& tSettings = pMyTokenizer->GetSettings();
 	
 	CSphVector<int> dBlended;

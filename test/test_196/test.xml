@@ -88,7 +88,7 @@ index idx21
 	path				= <data_path/>/idx21
     wordforms			= <this_test/>/wf21.txt
     
-    charset_table       = non_cjk,=,U+3e
+    charset_table       = non_cjk,=,U+3e,U+7e
     embedded_limit      = 0  
 }
 
@@ -98,7 +98,7 @@ index idx22
 	path				= <data_path/>/idx22
     wordforms			= <this_test/>/wf21.txt
     
-    charset_table       = non_cjk,=,U+3e
+    charset_table       = non_cjk,=,U+3e,U+7e
     embedded_limit      = 128000
 }
 
@@ -196,6 +196,8 @@ CALL KEYWORDS ( '>b b', 'META:wf' );
 CALL KEYWORDS ( 'c=> b', 'META:wf' );
 CALL KEYWORDS ( '=>d b', 'META:wf' );
 CALL KEYWORDS ( '=>a > f > b', 'META:wf' );
+CALL KEYWORDS ( '\\~g b', 'META:wf' );
+CALL KEYWORDS ( '\\~g b ~g', 'META:wf' );
 
 CALL KEYWORDS ( 'a> b', 'META:ex' );
 CALL KEYWORDS ( '>b b', 'META:ex' );

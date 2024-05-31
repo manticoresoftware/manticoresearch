@@ -4,7 +4,7 @@ docker pull -q --platform linux/x86_64 manticoresearch/manticore:latest > /dev/n
 ––– output –––
 0
 ––– input –––
-docker pull -q --platform linux/x86_64 manticoresearch/manticore:6.2.12 > /dev/null; echo $?
+docker pull -q --platform linux/x86_64 manticoresearch/manticore:dev > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––

@@ -1,13 +1,5 @@
 ––– block: ../base/dind/init –––
 ––– input –––
-docker pull -q --platform linux/x86_64 manticoresearch/manticore:latest > /dev/null; echo $?
-––– output –––
-0
-––– input –––
-docker pull -q --platform linux/x86_64 manticoresearch/manticore:dev > /dev/null; echo $?
-––– output –––
-0
-––– input –––
 docker network create manticore_network > /dev/null; echo $?
 ––– output –––
 0

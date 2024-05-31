@@ -16,7 +16,7 @@ docker run -e EXTRA=1 -d --name manticore_dist --network manticore_network --pla
 ––– output –––
 0
 ––– input –––
-if timeout 30 sh -c "docker logs -f manticore_dist 2>&1 | grep -qm1 'accepting connections'"; then echo 'accepting connections'; else echo 'Timeout failed'; fi
+if timeout 30 sh -c "docker logs -f manticore_dist 2>&1 | grep -qm1 'accepting connections'"; then echo 'accepting connections'; else echo 'Timeout exceeded'; fi
 ––– output –––
 accepting connections
 ––– input –––

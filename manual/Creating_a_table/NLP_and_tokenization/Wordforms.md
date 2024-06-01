@@ -127,7 +127,7 @@ core 2duo => c2d # Some people write '2duo' together...
 <!-- end -->
 
 <!-- example wf_escaping -->
-If you need to use `>` or `=` as normal characters, you can escape them by preceding each with a backslash (`\`). Both `>` and `=` should be escaped in this manner. Here's an example:
+If you need to use `>`, `=` or `~` as normal characters, you can escape them by preceding each with a backslash (`\`). Both `>` and `=` should be escaped in this manner. Here's an example:
 
 <!-- request Example -->
 ```ini
@@ -136,6 +136,7 @@ a\> > abc
 c\=\> => cde
 \=\>d => def
 \=\>a \> f \> => foo
+\~g => bar
 ```
 <!-- end -->
 

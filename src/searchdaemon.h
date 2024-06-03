@@ -1415,7 +1415,7 @@ bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
-void				SaveCompatHttp ( JsonObj_c & tRoot );
+void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();

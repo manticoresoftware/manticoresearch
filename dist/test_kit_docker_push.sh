@@ -29,7 +29,12 @@ images=("$img_url")
   || img_url_latest=""
 
 # Get the latest tag from the git references
-latest_tag=$(git describe --abbrev=0 --tags)
+# Check if any tag exists
+if git rev-list --tags --max-count=1 >/dev/null 2>&1; then
+	latest_tag=$(git describe --abbrev=0 --tags)
+else
+	latest_tag=""
+fi
 
 # Assign the current branch or tag to the appropriate variable
 if [ -n "$latest_tag" ]; then

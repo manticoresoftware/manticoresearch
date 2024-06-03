@@ -20,23 +20,27 @@ sanitize_tag() {
     echo "$name"
 }
 
-img_url="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${BUILD_COMMIT}"
+hub_repo="ghcr.io/${REPO_OWNER}/manticoresearch"
+img_url="${hub_repo}:test-kit-${BUILD_COMMIT}"
 images=("$img_url")
 [[ $GITHUB_REF_NAME == "master" ]] \
-  && img_url_latest="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-latest" \
+  && img_url_latest="test-kit-latest" \
   && images+=("$img_url_latest") \
   || img_url_latest=""
 
-# Get the current branch or tag linked to the latest commit
-current_ref=$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref --short HEAD)
+# Get the latest tag from the git references
+latest_tag=$(git describe --abbrev=0 --tags)
 
 # Assign the current branch or tag to the appropriate variable
-if [[ "$current_ref" =~ ^refs/tags/ ]]; then
-	img_url_tag="test-kit-$(sanitize_tag "$current_ref")"
+if [ -n "$latest_tag" ]; then
+	img_url_tag="test-kit-$(sanitize_tag "$latest_tag")"
+	images+=("$img_url_tag")
 fi
 
-if [[ $GITHUB_REF_NAME != "master" ]]; then
+# Custom branch name
+if [ "$GITHUB_REF_NAME" != "master" ]; then
 	img_url_branch="test-kit-$(sanitize_tag "$GITHUB_REF_NAME")"
+	images+=("$img_url_branch")
 fi
 
 echo "Going to push to '$img_url' and ('$img_url_latest', '$img_url_tag', '$img_url_branch') (if not empty) if there's access to the registry"

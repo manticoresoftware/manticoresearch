@@ -33,4 +33,4 @@ yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
 ––– input –––
 rpm -qa | grep manticore | awk -F'_' '{print $1}'
 ––– output –––
-manticore-tools-6.3.0_24052209
+manticore-tools-6.3.0

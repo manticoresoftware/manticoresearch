@@ -56,6 +56,8 @@ int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_501: return 501;
 	case EHTTP_STATUS::_503: return 503;
 	case EHTTP_STATUS::_526: return 526;
+
+	default: return 503;
 	};
 };
 
@@ -98,6 +100,8 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_501: return "501 Not Implemented";
 	case EHTTP_STATUS::_503: return "503 Service Unavailable";
 	case EHTTP_STATUS::_526: return "526 Invalid SSL Certificate";
+
+	default: return "503 Service Unavailable";
 	};
 }
 
@@ -3165,6 +3169,9 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 		tFilter.m_dValues.Add ( tDocId );
 		tFilter.m_sAttrName = "id";
 	}
+
+	// _bulk could have cluster:index format
+	SqlParser_SplitClusterIndex ( tStmt.m_sIndex, &tStmt.m_sCluster );
 
 	return true;
 }

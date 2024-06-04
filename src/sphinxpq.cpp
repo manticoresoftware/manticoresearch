@@ -89,7 +89,7 @@ public:
 	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
+	bool AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
@@ -124,11 +124,11 @@ public:
 	// plain index stub
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const override;
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
-	void				GetStatus ( CSphIndexStatus* pRes ) const override;
+	void				GetStatus ( CSphIndexStatus* pRes ) const final;
 
 	void				IndexDeleted() override { m_bIndexDeleted = true; }
-	void				ProhibitSave() override { m_bSaveDisabled = true; }
-	void				EnableSave() override { m_bSaveDisabled = false; }
+	void				ProhibitSave() final;
+	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
@@ -151,7 +151,7 @@ private:
 	int								m_iMaxCodepointLength = 0;
 	int64_t							m_iSavedTID = 0;
 	int64_t							m_tmSaved = 0;
-	bool							m_bSaveDisabled = false;
+	int								m_iDisabledCounter = 0;
 	bool							m_bHasFiles = false;
 	bool							m_bIndexDeleted = false;
 
@@ -185,6 +185,7 @@ private:
 	void PostSetupUnl () REQUIRES ( m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
 	SharedPQSlice_t GetStoredUnl () const REQUIRES_SHARED ( m_tLock );
+	bool IsSaveDisabled() const noexcept;
 
 	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
 
@@ -609,16 +610,16 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 		if ( pCheckpoint )
 		{
 			// there could be valid data prior 1st checkpoint that should be unpacked and checked
-			auto iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
-			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen )==0 && iPrefix==iNameLen) )
+			auto iNameLen = (int) strnlen ( pCheckpoint->m_szWord, SPH_MAX_KEYWORD_LEN );
+			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_szWord, iNameLen )==0 && iPrefix==iNameLen) )
 				tChPoint.m_uOff = pCheckpoint->m_iOffset;
 
 			// find the last checkpoint that meets prefix condition ( ie might be a span of terms that splat to a couple of checkpoints )
 			++pCheckpoint;
 			while ( pCheckpoint<=pLast )
 			{
-				iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
-				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen );
+				iNameLen = (int) strnlen ( pCheckpoint->m_szWord, SPH_MAX_KEYWORD_LEN );
+				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_szWord, iNameLen );
 				if ( iCmp==0 && iPrefix==iNameLen )
 					tChPoint.m_uOff = pCheckpoint->m_iOffset;
 				if ( iCmp<0 )
@@ -771,7 +772,7 @@ bool PercolateIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString* pError )
 }
 
 
-bool PercolateIndex_c::AddDocument ( InsertDocData_t & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
+bool PercolateIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
 	if ( !BindAccum ( pAcc, &sError ) )
 		return false;
@@ -1529,7 +1530,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto tJobContext = dCtx.CloneNewContext();
 		sphLogDebug ( "DoMatchDocuments cloned context %d", tJobContext.second );
 		auto& tCtx = tJobContext.first;
-		Threads::Coro::SetThrottlingPeriod ( session::GetThrottlingPeriodMS() );
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while (true)
 		{
 			sphLogDebugv ( "DoMatchDocuments %d, iJob: %d", tJobContext.second, iJob );
@@ -1659,6 +1660,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 	pRes->m_iStackNeed = iMaxStack;
 	pRes->m_iStackBase = StoredQuery_t::m_iStackBaseRequired;
+	pRes->m_iLockCount = m_iDisabledCounter;
 }
 
 class XQTreeCompressor_t
@@ -2869,7 +2871,7 @@ void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery );
 void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown )
 {
 	// sanity check
-	if ( m_iLockFD<0 || m_bSaveDisabled )
+	if ( m_iLockFD<0 || IsSaveDisabled() )
 		return;
 
 	// write new meta
@@ -3106,7 +3108,7 @@ bool PercolateIndex_c::IsFlushNeed() const
 	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
 		return false;
 
-	return !m_bSaveDisabled;
+	return !IsSaveDisabled();
 
 }
 
@@ -3134,10 +3136,25 @@ bool PercolateIndex_c::ForceDiskChunk()
 	return true;
 }
 
+bool PercolateIndex_c::IsSaveDisabled() const noexcept
+{
+	return m_iDisabledCounter > 0;
+}
+
+void PercolateIndex_c::ProhibitSave()
+{
+	++m_iDisabledCounter;
+}
+void PercolateIndex_c::EnableSave()
+{
+	if ( IsSaveDisabled() )
+		--m_iDisabledCounter;
+}
+
 void PercolateIndex_c::LockFileState ( StrVec_t & dFiles )
 {
 	ForceRamFlush ( "forced" );
-	m_bSaveDisabled = true;
+	++m_iDisabledCounter;
 
 	GetIndexFiles ( dFiles, dFiles );
 }

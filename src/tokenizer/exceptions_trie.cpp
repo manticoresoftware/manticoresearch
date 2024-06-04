@@ -16,10 +16,33 @@
 #include "fileio.h"
 #include "sphinxutils.h"
 #include "sphinxjson.h"
+#include "tok_internals.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZING EXCEPTIONS
 /////////////////////////////////////////////////////////////////////////////
+
+using WriterTrie_fn = std::function<void (const char*)>;
+
+struct WriterTrie_t
+{
+	WriterTrie_t ( const VecTraits_T<BYTE> & dData, int iMappings, WriterTrie_fn && fnWrite )
+		: m_dData ( dData )
+		, m_iMappings ( iMappings )
+		, m_fnWrite ( std::move ( fnWrite ) )
+	{
+	}
+	const VecTraits_T<BYTE> & m_dData;
+	int m_iMappings;
+
+	GtEscapedBuilder m_sLine;
+	int m_iCount = 0;
+	CSphVector<BYTE> m_dPrefix;
+	WriterTrie_fn m_fnWrite;
+	bool m_bAddNL = false;
+
+	void Write ( int iNode );
+};
 
 /// exceptions trie, stored in a tidy simple blob
 /// we serialize each trie node as follows:
@@ -32,53 +55,57 @@
 /// output mappings themselves are serialized just after the nodes,
 /// as plain old ASCIIZ strings
 
-template<typename WRITER>
-void ExceptionsTrie_c::Export ( WRITER&& W, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const
+void WriterTrie_t::Write ( int iNode )
 {
-	assert ( iNode >= 0 && iNode < m_iMappings );
-	BYTE* p = &m_dData[iNode];
+	assert ( iNode>=0 && iNode<m_iMappings );
+	const BYTE * p = m_dData.Begin() + iNode;
 
 	int iTo = *(int*)const_cast<BYTE*> ( p );
-	if ( iTo > 0 )
+	if ( iTo>0 )
 	{
-		CSphString s;
-		const char* sTo = (char*)&m_dData[iTo];
-		s.SetBinary ( (char*)dPrefix.Begin(), dPrefix.GetLength() );
-		s.SetSprintf ( "%s => %s\n", s.cstr(), sTo );
-		W ( s.cstr() );
-		( *pCount )++;
+		m_sLine.Clear();
+
+		const char * sTo = (const char *)m_dData.Begin() + iTo;
+		m_sLine.AppendEscapedWithCommaNoQuotes ( (char*)m_dPrefix.Begin(), m_dPrefix.GetLength() );
+
+		m_sLine.Appendf ( " => %s", sTo );
+		if ( m_bAddNL )
+			m_sLine.Appendf ( "\n" );
+
+		m_fnWrite ( m_sLine.cstr() );
+		m_iCount++;
 	}
 
 	int n = p[4];
-	if ( n == 0 )
+	if ( n==0 )
 		return;
 
 	p += 5;
-	for ( int i = 0; i < n; i++ )
+	for ( int i=0; i<n; i++ )
 	{
-		dPrefix.Add ( p[i] );
-		Export ( W, dPrefix, *(int*)&p[n + 4 * i], pCount );
-		dPrefix.Pop();
+		m_dPrefix.Add ( p[i] );
+		int iChild = *(int*)&p[n + 4 * i];
+		Write ( iChild );
+		m_dPrefix.Pop();
 	}
 }
 
-void ExceptionsTrie_c::Export ( Writer_i & w ) const
+void ExceptionsTrie_c::Export ( Writer_i & tWr ) const
 {
-	CSphVector<BYTE> dPrefix;
-	int iCount = 0;
+	WriterTrie_t tDataWriter ( m_dData, m_iMappings, [&tWr] ( const char * szLine ) { tWr.PutString ( szLine ); } );
+	tDataWriter.m_bAddNL = true;
 
-	w.PutDword ( m_iCount );
-	Export ( [&w] (const char* szLine) { w.PutString ( szLine ); }, dPrefix, 0, &iCount);
-	assert ( iCount==m_iCount );
+	tWr.PutDword ( m_iCount );
+	tDataWriter.Write ( 0 );
+	assert ( tDataWriter.m_iCount==m_iCount );
 }
 
 void ExceptionsTrie_c::Export ( JsonEscapedBuilder & tOut ) const
 {
-	CSphVector<BYTE> dPrefix;
-	int iCount = 0;
+	WriterTrie_t tDataWriter ( m_dData, m_iMappings, [&tOut] (const char* szLine) { tOut.FixupSpacedAndAppendEscaped ( szLine ); } );
 
-	Export ( [&tOut] (const char* szLine) { tOut.FixupSpacedAndAppendEscaped ( szLine ); }, dPrefix, 0, &iCount);
-	assert ( iCount==m_iCount );
+	tDataWriter.Write ( 0 );
+	assert ( tDataWriter.m_iCount==m_iCount );
 }
 
 /// intermediate exceptions trie node
@@ -154,7 +181,7 @@ public:
 	{
 		// skip leading spaces
 		char* d = s;
-		while ( *s && sphIsSpace ( *s ) )
+		while ( *s && ( sphIsSpace ( *s ) || *s=='\\' ) )
 			s++;
 
 		// handle degenerate (empty string) case
@@ -168,9 +195,14 @@ public:
 		{
 			// copy another token, add exactly 1 space after it, and skip whitespace
 			while ( *s && !sphIsSpace ( *s ) )
-				*d++ = *s++;
+			{
+				if ( *s=='\\' )
+					s++;
+				else
+					*d++ = *s++;
+			}
 			*d++ = ' ';
-			while ( sphIsSpace ( *s ) )
+			while ( sphIsSpace ( *s ) || *s=='\\' )
 				s++;
 		}
 

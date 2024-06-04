@@ -405,6 +405,193 @@ utilsApi.Sql("SHOW THREADS");
 }
 ```
 
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+res = await utilsApi.sql('SHOW THREADS');
+```
+
+<!-- response TypeScript -->
+
+```typescript
+[
+    {
+        "columns": [
+            {
+                "TID": {
+                    "type": "long"
+                }
+            },
+            {
+                "Name": {
+                    "type": "string"
+                }
+            },
+            {
+                "Proto": {
+                    "type": "string"
+                }
+            },
+            {
+                "State": {
+                    "type": "string"
+                }
+            },
+            {
+                "Connection from": {
+                    "type": "string"
+                }
+            },
+            {
+                "ConnID": {
+                    "type": "long long"
+                }
+            },
+            {
+                "This/prev job time, s": {
+                    "type": "string"
+                }
+            },
+            {
+                "CPU activity": {
+                    "type": "float"
+                }
+            },
+            {
+                "Jobs done": {
+                    "type": "long"
+                }
+            },
+            {
+                "Thread status": {
+                    "type": "string"
+                }
+            },
+            {
+                "Info": {
+                    "type": "string"
+                }
+            }
+        ],
+        "data": [
+            {
+                "TID": 506964,
+                "Name": "work_12",
+                "Proto": "http",
+                "State": "query",
+                "Connection from": "127.0.0.1:36656",
+                "ConnID": 2884,
+                "This/prev job time, s": "236us",
+                "CPU activity": "91.73%",
+                "Jobs done": 3328,
+                "Thread status": "working",
+                "Info": "show_threads"
+            }
+        ],
+        "total": 1,
+        "error": "",
+        "warning": ""
+    }
+]
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
+```
+
+<!-- response Go -->
+
+```go
+[
+    {
+        "columns": [
+            {
+                "TID": {
+                    "type": "long"
+                }
+            },
+            {
+                "Name": {
+                    "type": "string"
+                }
+            },
+            {
+                "Proto": {
+                    "type": "string"
+                }
+            },
+            {
+                "State": {
+                    "type": "string"
+                }
+            },
+            {
+                "Connection from": {
+                    "type": "string"
+                }
+            },
+            {
+                "ConnID": {
+                    "type": "long long"
+                }
+            },
+            {
+                "This/prev job time, s": {
+                    "type": "string"
+                }
+            },
+            {
+                "CPU activity": {
+                    "type": "float"
+                }
+            },
+            {
+                "Jobs done": {
+                    "type": "long"
+                }
+            },
+            {
+                "Thread status": {
+                    "type": "string"
+                }
+            },
+            {
+                "Info": {
+                    "type": "string"
+                }
+            }
+        ],
+        "data": [
+            {
+                "TID": 506964,
+                "Name": "work_12",
+                "Proto": "http",
+                "State": "query",
+                "Connection from": "127.0.0.1:36656",
+                "ConnID": 2884,
+                "This/prev job time, s": "236us",
+                "CPU activity": "91.73%",
+                "Jobs done": 3328,
+                "Thread status": "working",
+                "Info": "show_threads"
+            }
+        ],
+        "total": 1,
+        "error": "",
+        "warning": ""
+    }
+]
+```
+
+
 <!-- end -->
 
 The `Info` column displays:
@@ -480,6 +667,24 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
 
 ```clike
 utilsApi.Sql("SHOW THREADS OPTION columns=30");
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+res = await utilsApi.sql('SHOW THREADS OPTION columns=30');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS OPTION columns=30").Execute()
 ```
 
 <!-- end -->

@@ -497,7 +497,7 @@ To control which access mode to use, the options **access_plain_attrs**, **acces
 
 | Setting | Values | Description |
 | - | - | - |
-| access_plain_attrs  | mmap, **mmap_preread** (default), mlock | controls how `*.spa` (plain attributes) `*.spe` (skip lists) `*.spi` (word lists) `*.spt` (lookups) `*.spm` (killed docs) will be read |
+| access_plain_attrs  | mmap, **mmap_preread** (default), mlock | controls how `*.spa` (plain attributes) `*.spe` (skip lists) `*.spt` (lookups) `*.spm` (killed docs) will be read |
 | access_blob_attrs   | mmap, **mmap_preread** (default), mlock  | controls how `*.spb` (blob attributes) (string, mva and json attributes) will be read |
 | access_doclists   | **file** (default), mmap, mlock  | controls how `*.spd` (doc lists) data will be read |
 | access_hitlists   | **file** (default), mmap, mlock  | controls how `*.spp` (hit lists) data will be read |

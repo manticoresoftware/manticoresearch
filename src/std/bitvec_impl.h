@@ -21,9 +21,20 @@ BitVec_T<T, STATICBITS>::BitVec_T ( int iElements )
 }
 
 template<typename T, int STATICBITS>
-BitVec_T<T, STATICBITS>::~BitVec_T()
+BitVec_T<T, STATICBITS>::BitVec_T ( T * pData, int iElements )
 {
 	if ( m_pData != m_dStatic )
+		SafeDeleteArray(m_pData);
+
+	m_iElements = iElements;
+	m_pData = pData;
+	m_bOwnStorage = false;
+}
+
+template<typename T, int STATICBITS>
+BitVec_T<T, STATICBITS>::~BitVec_T()
+{
+	if ( m_pData != m_dStatic && m_bOwnStorage )
 		SafeDeleteArray ( m_pData );
 }
 

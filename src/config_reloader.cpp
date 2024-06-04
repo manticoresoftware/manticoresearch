@@ -19,7 +19,7 @@ static auto& g_bSeamlessRotate = sphGetSeamlessRotate();
 
 // Reloading called always from same thread (so, for now not need to be th-safe for itself)
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadConfigAndRotateIndexes().
-class ConfigReloader_c::Impl_c
+class ConfigReloader_c::Impl_c final
 {
 	ReadOnlyServedHash_c::Snapshot_t m_hLocalSnapshot;
 	ReadOnlyDistrHash_c::Snapshot_t m_hDistrSnapshot;
@@ -72,7 +72,7 @@ private:
 
 	void KeepExisting ( const CSphString& sIndex )
 	{
-		sphLogDebug ( "keep existing table  %s", sIndex.cstr() );
+		sphLogDebug ( "keep existing table %s", sIndex.cstr() );
 		CopyExistingLocal ( sIndex );
 		m_hLocals.Add ( sIndex );
 	}
@@ -87,12 +87,13 @@ private:
 
 	void LoadDistrFromConfig ( const CSphString& sIndex, const CSphConfigSection& hIndex )
 	{
+		CSphString sError;
 		DistributedIndexRefPtr_t pNewDistr ( new DistributedIndex_t );
-		ConfigureDistributedIndex ( [this] ( const auto& sIdx ) { return m_hLocals[sIdx]; }, *pNewDistr, sIndex.cstr(), hIndex );
-		if ( pNewDistr->IsEmpty() )
+		bool bOk = ConfigureDistributedIndex ( [this] ( const auto& sIdx ) { return m_hLocals[sIdx]; }, *pNewDistr, sIndex.cstr(), hIndex, sError );
+		if ( !bOk || pNewDistr->IsEmpty() )
 		{
 			if ( CopyExistingDistr ( sIndex ) || CopyExistingLocal ( sIndex ) )
-				sphWarning ( "table '%s': no valid local/remote tables in distributed table; using last valid definition", sIndex.cstr() );
+				sphWarning ( "table '%s': no valid local/remote tables in distributed table; using last valid definition; error: %s", sIndex.cstr(), sError.cstr() );
 		} else
 			m_hNewDistrIndexes.Add ( pNewDistr, sIndex );
 	}
@@ -202,7 +203,7 @@ private:
 	}
 
 public:
-	Impl_c ( HashOfServed_c& hDeferred )
+	explicit Impl_c ( HashOfServed_c& hDeferred )
 		: m_hLocalSnapshot { g_pLocalIndexes->GetSnapshot() }
 		, m_hDistrSnapshot { g_pDistIndexes->GetSnapshot() }
 		, m_hNewLocalIndexes { *g_pLocalIndexes }
@@ -213,7 +214,7 @@ public:
 		m_hNewDistrIndexes.InitEmptyHash();
 	}
 
-	void LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
+	void LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex ) noexcept
 	{
 		sphLogDebug ( "Load from config table %s with type %s", sIndex.cstr(), szIndexType ( eType ) );
 		assert ( eType != IndexType_e::ERROR_ );
@@ -230,7 +231,7 @@ public:
 		m_hProcessed.Add ( sIndex );
 	}
 
-	void IssuePlainOldRotation()
+	void IssuePlainOldRotation() noexcept
 	{
 		m_hNewLocalIndexes.CopyOwnerHash();
 		m_hNewDistrIndexes.CopyOwnerHash();
@@ -247,23 +248,18 @@ public:
 
 /// public iface
 ConfigReloader_c::ConfigReloader_c ( HashOfServed_c& hDeferred )
-	: m_pImpl { new Impl_c ( hDeferred ) }
-{
-	assert ( m_pImpl );
-}
+	: m_pImpl { std::make_unique<ConfigReloader_c::Impl_c> ( hDeferred ) }
+{}
 
-ConfigReloader_c::~ConfigReloader_c()
-{
-	SafeDelete ( m_pImpl );
-}
+ConfigReloader_c::~ConfigReloader_c() = default;
 
 
-void ConfigReloader_c::LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex )
+void ConfigReloader_c::LoadIndexFromConfig ( const CSphString& sIndex, IndexType_e eType, const CSphConfigSection& hIndex ) noexcept
 {
 	m_pImpl->LoadIndexFromConfig ( sIndex, eType, hIndex );
 }
 
-void ConfigReloader_c::IssuePlainOldRotation()
+void ConfigReloader_c::IssuePlainOldRotation() noexcept
 {
 	m_pImpl->IssuePlainOldRotation();
 }

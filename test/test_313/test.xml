@@ -15,7 +15,6 @@ index idx_test_agents
 	agent = 127.0.0.1:6655
 	agent = 127.0.0.1
 	agent = 127.0.0.1:idx
-	agent = 127.0.0.1:65537
 }
 </config>
 

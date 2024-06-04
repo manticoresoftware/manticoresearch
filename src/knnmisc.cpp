@@ -379,9 +379,12 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 
 	auto pKnnDist = (Expr_KNNDist_c*)pExpr;
 
-	util::Span_T<float> dPoint ( tQuery.m_dKNNVec.Begin(), tQuery.m_dKNNVec.GetLength() );
+	CSphVector<float> dPoint ( tQuery.m_dKNNVec );
+	if ( pKNNAttr->m_tKNN.m_eHNSWSimilarity == knn::HNSWSimilarity_e::COSINE )
+		NormalizeVec(dPoint);
+
 	std::string sErrorSTL;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), dPoint, tQuery.m_iKNNK, sErrorSTL );
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tQuery.m_iKNNK, tQuery.m_iKnnEf, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();

@@ -132,12 +132,29 @@ index T
     path = <data_path/>/test_t
 }
 
+source src10
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title, content FROM test_table10
+  sql_attr_uint   = gid
+}
+
+
+index test10
+{
+  source      = src10
+  path      = <data_path/>/test_10
+  index_field_lengths = 1
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
 <db_drop>drop table if exists test_group1</db_drop>
 <db_drop>drop table if exists test_group2</db_drop>
 <db_drop>drop table if exists test_exc</db_drop>
+<db_drop>drop table if exists test_table10</db_drop>
 
 <db_create>
 create table test_table
@@ -175,6 +192,17 @@ create table test_exc
 	gid int
 );
 </db_create>
+
+<db_create>
+create table test_table10
+(
+	id int not null,
+	title varchar(255) not null,
+	content varchar(255) not null,
+	gid int
+);
+</db_create>
+
 
 <db_insert>
 insert into test_table values
@@ -223,6 +251,12 @@ INSERT INTO `test_group2` VALUES
 insert into test_exc values
 ( 1, 'IT Tech', 1 ),
 ( 2, 'AT Tech', 2 )
+</db_insert>
+
+<db_insert>
+insert into test_table10 values
+(15, '15th', 'No wonder, Trevize thought, it was indulging itself in this way.', 15 ),
+(16, '', 'No wonder, Trevize thought, it was indulging itself in this way.', 16 )
 </db_insert>
 
 <queries>
@@ -504,6 +538,118 @@ select * from dist_gr2 facet gid facet tag;;
 <query endpoint="json/search">
 {
   "index": "t"
+}
+</query>
+
+<!-- error on mix of full-text with filters -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "bool": {
+      "should": [
+        { "match": {"_all":"white"} },
+        { "range": { "id": { "lt": 10 } } }
+      ]
+    }
+  }
+}
+</query>
+
+<!-- error on multiple full-texts at the root node without the bool node -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "match": { "*": "a" },
+    "query_string": "b"
+  }
+}
+</query>
+
+<!-- error on multiple filters at the root node without the bool node -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "equals": { "gid": 1 },
+    "in": { "gid": [2] }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "query_string": "b",
+    "equals": { "gid": 1 },
+    "in": { "gid": [2] }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query": {
+    "match": { "*": "a" },
+    "query_string": "b",
+    "equals": { "gid": 1 }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test10",
+  "query":{
+    "bool":{
+      "filter":[ {
+          "bool":{
+            "should":[
+                { "bool":{
+                  "must":[ { "term" : { "content" : "in" } } ],
+                  "must_not":[ { "exist" : { "field" : "title" } } ]
+                }
+              } ]
+  } } ] } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test10",
+  "query":{
+    "bool":{
+      "filter":[
+        {
+          "bool":{
+            "should":[
+              {
+                "bool":{
+                  "must":[
+                    {
+                      "term":{
+                        "content":"in"
+                      }
+                    }
+                  ],
+                  "must_not":[
+                    {
+                      "exists":{
+                        "field":"title"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
 }
 </query>
 

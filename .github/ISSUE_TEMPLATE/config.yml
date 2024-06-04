@@ -1,0 +1,10 @@
+contact_links:
+  - name: "Manticore Search quick start guide"
+    about: "Get help with setting up and using Manticore Search."
+    url: "https://manual.manticoresearch.com/Quick_start_guide"
+  - name: "Manticore Search roadmap"
+    about: "View the development roadmap and upcoming features of Manticore Search."
+    url: "https://roadmap.mnt.cr/"
+  - name: "Manticore Team's professional services"
+    about: "Looking for a faster solution to your issues with Manticore? Manticore Team can help."
+    url: "https://manticoresearch.com/services"

@@ -562,6 +562,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_bIndexed )
 		{
+			if ( m_tSchema.GetField ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "field '%s' is added twice", tCol.m_sName.cstr() );
+
 			m_tSchema.AddField ( tCol );
 			ARRAY_FOREACH ( k, m_tParams.m_dUnpack )
 			{
@@ -588,6 +591,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		{
 			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
 				LOC_ERROR ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+			if ( m_tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "attribute '%s' is added twice", tCol.m_sName.cstr() );
 
 			m_tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
 		}

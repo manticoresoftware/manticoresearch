@@ -14,7 +14,7 @@
 
 #include "sphinxsearch.h"
 
-void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, const ExpansionContext_t& tCtx )
+void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
 
@@ -50,11 +50,11 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo>& dKeywords, cons
 		const BYTE* sMultiform = m_pTokenizer->GetTokenizedMultiform();
 		strncpy ( (char*)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof ( sTokenized ) - 1 );
 
-		if ( ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char*)sWord ) )
+		if ( tCtx.m_bAlowExpansion && ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char*)sWord ) )
 		{
 			dQposWildcards.Add ( iQpos );
 
-			ISphWordlist::Args_t tWordlist ( false, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
+			ISphWordlist::Args_t tWordlist ( false, tCtx );
 			bool bExpanded = sphExpandGetWords ( (const char*)sWord, tCtx, tWordlist );
 
 			int iDocs = 0;

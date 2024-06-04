@@ -21,25 +21,37 @@ cmake -DPACK=1 /path/to/sources
 cmake --build .
 ```
 
-For example, to create the same RedHat 7 package as the official one, but without the embedded ICU and its large datafile, you can execute the following (assuming that the sources are placed in `/manticore/sources/` on the host):
+For instance, to create a package for Ubuntu Jammy that is similar to the official version Manticore Core Team provides, you should execute the following commands in the directory containing the Manticore Search sources. This directory is the root of a cloned repository from https://github.com/manticoresoftware/manticoresearch:
 
 ```bash
-docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
--e arch=x86_64 \
--e DISTR=rhel7 \
--e boost=boost_rhel_feb17 \
+docker run -it --rm \
+-e CACHEB="../cache" \
+-e DIAGNOSTIC=1 \
+-e PACK_ICUDATA=0 \
+-e NO_TESTS=1 \
+-e DISTR=jammy \
+-e boost=boost_nov22 \
 -e sysroot=roots_nov22 \
--v /manticore/sources:/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+-e arch=x86_64 \
+-e CTEST_CMAKE_GENERATOR=Ninja \
+-e CTEST_CONFIGURATION_TYPE=RelWithDebInfo \
+-e WITH_COVERAGE=0 \
+-e SYSROOT_URL="https://repo.manticoresearch.com/repository/sysroots" \
+-e HOMEBREW_PREFIX="" \
+-e PACK_GALERA=0 \
+-v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
 manticoresearch/external_toolchain:clang16_cmake3263 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
-RELEASE_TAG="noicu"
 mkdir build && cd build
-cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG -DWITH_ICU_FORCE_STATIC=0 ..
-cmake --build . --target package
+cmake -DPACK=1 ..
+
+cmake --build .
+# or if you want to build packages:
+# cmake --build . --target package
 ```
-The long source directory path is required or it may fail to build the sources.
+The long source directory path is required or it may fail to build the sources in some cases (e.g. Centos).
 
 The same process can be used to build binaries/packages not only for popular Linux distributions, but also for FreeBSD, Windows, and macOS.
 

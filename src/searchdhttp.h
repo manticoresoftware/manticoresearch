@@ -79,7 +79,7 @@ private:
 	http_parser m_tParser;
 };
 
-void HttpBuildReply ( CSphVector<BYTE>& dData, ESphHttpStatus eCode, Str_t sReply, bool bHtml );
+void HttpBuildReply ( CSphVector<BYTE>& dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml );
 
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
@@ -111,12 +111,13 @@ public:
 
 struct HttpProcessResult_t
 {
-	ESphHttpEndpoint m_eEndpoint { SPH_HTTP_ENDPOINT_TOTAL };
+	EHTTP_ENDPOINT m_eEndpoint { EHTTP_ENDPOINT::TOTAL };
+	EHTTP_STATUS m_eReplyHttpCode = EHTTP_STATUS::_200;
 	bool m_bOk { false };
 	CSphString m_sError;
 };
 
-void ReplyBuf ( Str_t sResult, ESphHttpStatus eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
+void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
 
 namespace bson {
@@ -140,19 +141,21 @@ public:
 	void SetErrorFormat ( bool bNeedHttpResponse );
 	CSphVector<BYTE> & GetResult();
 	const CSphString & GetError () const;
+	EHTTP_STATUS GetStatusCode () const;
 
 protected:
 	bool				m_bNeedHttpResponse {false};
 	CSphVector<BYTE>	m_dData;
 	CSphString			m_sError;
+	EHTTP_STATUS		m_eHttpCode = EHTTP_STATUS::_200;
 
-	void ReportError ( const char * szError, ESphHttpStatus eStatus );
-	void ReportError ( ESphHttpStatus eStatus );
-	void FormatError ( ESphHttpStatus eStatus, const char * sError, ... );
-	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus );
-	void BuildReply ( const char* szResult, ESphHttpStatus eStatus );
-	void BuildReply ( Str_t sResult, ESphHttpStatus eStatus );
-	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus );
+	void ReportError ( const char * szError, EHTTP_STATUS eStatus );
+	void ReportError ( EHTTP_STATUS eStatus );
+	void FormatError ( EHTTP_STATUS eStatus, const char * sError, ... );
+	void BuildReply ( const CSphString & sResult, EHTTP_STATUS eStatus );
+	void BuildReply ( const char* szResult, EHTTP_STATUS eStatus );
+	void BuildReply ( Str_t sResult, EHTTP_STATUS eStatus );
+	void BuildReply ( const StringBuilder_c & sResult, EHTTP_STATUS eStatus );
 	bool CheckValid ( const ServedIndex_c* pServed, const CSphString& sIndex, IndexType_e eType );
 };
 
@@ -169,8 +172,8 @@ protected:
 	const StrVec_t &		GetUrlParts() const { return m_dUrlParts; }
 
 	bool IsHead() { return GetRequestType()==HTTP_HEAD; }
-	void BuildReplyHead ( Str_t sRes, ESphHttpStatus eStatus );
-	void ReportError ( const char * sError, const char * sErrorType, ESphHttpStatus eStatus, const char * sIndex=nullptr );
+	void BuildReplyHead ( Str_t sRes, EHTTP_STATUS eStatus );
+	void ReportError ( const char * sError, const char * sErrorType, EHTTP_STATUS eStatus, const char * sIndex=nullptr );
 
 	Str_t m_sBody;
 	int m_iReqType { 0 };

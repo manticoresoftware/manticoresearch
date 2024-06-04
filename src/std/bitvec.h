@@ -26,6 +26,7 @@ public:
 	BitVec_T () = default;
 
 	explicit BitVec_T ( int iElements );
+	explicit BitVec_T ( T * pData, int iElements );
 	~BitVec_T ();
 
 	void Swap ( BitVec_T & rhs ) noexcept;
@@ -59,6 +60,7 @@ protected:
 	T *		m_pData = nullptr;
 	T		m_dStatic[STATICSIZE] {0};
 	int		m_iElements = 0;
+	bool	m_bOwnStorage = true;
 
 private:
 	int ScanBit ( int iIndex, int iStart ) const;

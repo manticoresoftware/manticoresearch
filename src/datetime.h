@@ -13,6 +13,7 @@
 
 #include "sphinxstd.h"
 #include "cctz/civil_time.h"
+#include "cctz/time_zone.h"
 
 enum class TimeUnit_e
 {
@@ -40,6 +41,7 @@ time_t		ConvertTime ( const cctz::civil_second & tCS );
 
 time_t		PackLocalTimeAsUTC ( time_t tTime );
 CSphString	FormatTime ( time_t tTime, const char * szFmt );
+bool		ParseAsLocalTime ( const char * szFmt, const CSphString & sTime, time_t & tRes );
 int			GetWeekDay ( const cctz::civil_second & tTime, bool bSundayFirst );
 int			GetYearDay ( const cctz::civil_second & tTime );
 int			GetQuarter ( const cctz::civil_second & tTime );
@@ -61,7 +63,5 @@ FORCE_INLINE cctz::civil_second ConvertGroupbyTime ( time_t tTime )
 	else
 		return ConvertTime(tTime);
 }
-
-const CSphString & CompatDateFormat();
 
 #endif // _datetime_

@@ -60,10 +60,10 @@ enum ESphAttr
 
 	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
 	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
-	SPH_ATTR_FLOAT_VECTOR_PTR,			// in-memory version of FLOAT_VECTOR
 	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
 	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
-	SPH_ATTR_STORED_FIELD
+	SPH_ATTR_STORED_FIELD,
+	SPH_ATTR_FLOAT_VECTOR_PTR			// in-memory version of FLOAT_VECTOR
 };
 
 /// column evaluation stage
@@ -341,9 +341,19 @@ struct ExprParseArgs_t
 	bool *				m_pNeedDocIds = nullptr;
 };
 
-ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
+struct JoinArgs_t
+{
+	const ISphSchema &	m_tJoinedSchema;
+	CSphString 			m_sIndex1;
+	CSphString 			m_sIndex2;
 
+	JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sIndex1, const CSphString & sIndex2 );
+};
+
+
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
+ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg );
 
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 

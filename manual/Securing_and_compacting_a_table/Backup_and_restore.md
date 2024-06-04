@@ -263,9 +263,9 @@ Manticore config
 <!-- example mysqldump_backup -->
 To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
 
-Note, `mysqldump` is supported only in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
+Note, `mysqldump` is supported only for real-time tables.
 
-<!-- request SQL -->
+<!-- request Example -->
 ```bash
 mysqldump -h0 -P9306 manticore > manticore_backup.sql
 mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
@@ -273,12 +273,22 @@ mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 
 Executing this command will produce a backup file named `manticore_backup.sql`. This file will hold all data and table schemas.
 
+<!-- request Example 2 -->
+```bash
+mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.sql
+```
+
+This will produce a backup file `tbl.sql` with `replace` commands instead of `insert`, with column names retained in each batch. Documents will be batched up to 16 megabytes large. There will be no `drop`/`create table` commands. This is useful for full-text reindexation after changing tokenization settings.
 <!-- end -->
 
 <!-- example mysqldump_restore -->
 ### Restore
 
 If you're looking to restore a Manticore Search database from a backup file, the mysql client is your tool of choice.
+
+Note, if you are restoring in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), you cannot drop and recreate tables directly. Therefore, you should:
+- Use `mysqldump` with the `-t` option to exclude `CREATE TABLE` statements from your backup.
+- Manually [TRUNCATE](../Emptying_a_table.md) the tables before proceeding with the restoration.
 
 <!-- request SQL -->
 ```bash
@@ -287,15 +297,19 @@ mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
 This command enables you to restore everything from the `manticore_backup.sql` file.
-
 <!-- end -->
+
 ### Additional options
 
 Here are some more settings that can be used with mysqldump to tailor your backup:
 
-- `--add-drop-table`: This injects a DROP TABLE command before each CREATE TABLE command in the backup file.
-- `--no-data`: This setting omits table data from the backup, leading to a backup file that consists of only table schemas.
-- `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note, the database name must be `Manticore`.
+- `-t` skips `drop`/`create` table commands. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--no-data`: This setting omits table data from the backup, resulting in a backup file that consists only of table schemas.
+- `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note that the database name must be `manticore`.
+- `--replace` to perform `replace` instead of `insert`. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--net-buffer-length=16M` to make batches up to 16 megabytes large for faster restoration.
+- `-e` to batch up documents. Useful for faster restoration.
+- `-c` to keep column names. Useful for reindexation of a table after changing its schema (e.g., changing field order).
 
 For a comprehensive list of settings and their thorough descriptions, kindly refer to the [official MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html).
 

@@ -281,6 +281,54 @@ static bool IsIpAddress ( const char * sURL )
 	return true;
 }
 
+WarnInfo_c::WarnInfo_c ( const char * szIndexName, const char *	szAgent, CSphString & sError, StrVec_t * pWarnings )
+	: m_szIndexName ( szIndexName )
+	, m_szAgent ( szAgent )
+	, m_pWarnings ( pWarnings )
+	, m_sError ( sError )
+{}
+
+void WarnInfo_c::Warn ( const char * szFmt, ... ) const
+{
+	va_list ap;
+	va_start ( ap, szFmt );
+
+	CSphString sWarning;
+	if ( m_szIndexName )
+		sWarning.SetSprintf ( "table '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
+	else
+		sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
+
+	sWarning.SetSprintfVa ( sWarning.cstr(), ap );
+	sphInfo ( "%s", sWarning.cstr() );
+
+	if ( m_pWarnings )
+		m_pWarnings->Add(sWarning);
+
+	va_end ( ap );
+}
+
+bool WarnInfo_c::ErrSkip ( const char * szFmt, ... ) const
+{
+	va_list ap;
+	va_start ( ap, szFmt );
+
+	CSphString sMsg;
+
+	if ( m_szIndexName )
+		sMsg.SetSprintf ( "table '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
+	else
+		sMsg.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
+
+	sMsg.SetSprintfVa ( sMsg.cstr(), ap );
+	sphWarning ( "%s", sMsg.cstr() );
+
+	m_sError = sMsg;
+
+	va_end ( ap );
+	return false;
+}
+
 /// Set flag m_bNeedResolve if address is AF_INET, host is not empty and not plain IP address,
 /// and also if global flag for postponed resolving is set.
 /// Otherwise resolve address now (if appliable) and then forbid any name resolving in future.
@@ -1294,13 +1342,13 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
+MultiAgentDescRefPtr_c ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, CSphString & sError, StrVec_t * pWarnings )
 {
 	MultiAgentDescRefPtr_c pRes;
 	CSphVector<AgentDesc_t *> tMirrors;
 	AT_SCOPE_EXIT ( [&tMirrors] { tMirrors.for_each( [] ( auto * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
-	WarnInfo_c tWI ( szIndexName, szAgent, pWarnings );
+	WarnInfo_c tWI ( szIndexName, szAgent, sError, pWarnings );
 
 	if ( ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
 		pRes = MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );

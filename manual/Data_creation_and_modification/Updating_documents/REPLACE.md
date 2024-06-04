@@ -24,6 +24,7 @@ REPLACE INTO table
     WHERE id = <id>
 ```
 Note, you can filter only by id in this mode.
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
 
@@ -81,7 +82,7 @@ Query OK, 1 row affected (0.00 sec)
 
 <!-- intro -->
 ##### REPLACE ... SET:
-<!-- request REPLACE ... SET -->
+<!-- request REPLACE SET -->
 
 ```sql
 REPLACE INTO products SET description='HUAWEI Matebook 15', price=10 WHERE id = 55;
@@ -186,26 +187,18 @@ POST /products/_doc/3
 ```json
 POST /products/_update/55
 {
-  "description": "HUAWEI Matebook 15",
-  "price": 10
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
 }
 ```
 
 <!-- response Elasticsearch-like partial -->
 ```json
 {
-"_id":55,
 "_index":"products",
-"_primary_term":1,
-"_seq_no":0,
-"_shards":{
-    "failed":0,
-    "successful":1,
-    "total":1
-},
-"_type":"_doc",
-"_version":1,
-"result":"updated"
+"updated":1
 }
 ```
 
@@ -314,6 +307,54 @@ class SuccessResponse {
 }
 
 ```
+
+<!-- intro -->
+
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.replace({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 11', name: 'Doc 11', cat: 3 },
+});
+```
+
+<!-- response TypeScript -->
+```json
+{
+    "_index":"test",
+    "_id":1,
+    "created":false
+    "result":"updated"
+    "status":200
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request Go -->
+``` go
+replaceDoc := map[string]interface{} {"content": "Text 11", "name": "Doc 11", "cat": 3}
+replaceRequest := manticoreclient.NewInsertDocumentRequest("test", replaceDoc)
+replaceRequest.SetId(1)
+res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequest(*replaceRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+    "_index":"test",
+    "_id":1,
+    "created":false
+    "result":"updated"
+    "status":200
+}
+```
+
 <!-- end -->
 
 `REPLACE` is available for real-time and percolate tables. You can't replace data in a plain table.
@@ -497,6 +538,100 @@ class BulkResponse {
     additionalProperties: {errors=false}
 }
 ```
+
+<!-- request TypeScript -->
+
+``` typescript
+replaceDocs = [
+  {
+    replace: {
+      index: 'test',
+      id: 1,
+      doc: { content: 'Text 11', cat: 1, name: 'Doc 11' },
+    },
+  },
+  {
+    replace: {
+      index: 'test',
+      id: 2,
+      doc: { content: 'Text 22', cat: 9, name: 'Doc 22' },
+    },
+  },
+];
+
+res = await indexApi.bulk(
+  replaceDocs.map((e) => JSON.stringify(e)).join("\n")
+);
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "items":
+  [
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":1,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    },
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":2,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+<!-- request Go -->
+
+``` go
+body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
+	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "items":
+  [
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":1,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    },
+    {
+      "replace":
+      {
+        "_index":"test",
+        "_id":2,
+        "created":false,
+        "result":"updated",
+        "status":200
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
 <!-- end -->
 
 <!-- proofread -->

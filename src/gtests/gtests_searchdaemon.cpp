@@ -122,8 +122,6 @@ class T_ParseAddressPort :  public CustomLogger_c
 {
 protected:
 
-	WarnInfo_c tInfo {"tstidx", "tstagent" };
-
 	void ParserTest ( const char * sInExpr, // incoming line
 		bool bExpectedResult,				// expect parsed or not
 		const char *sExpectedTail,			// tail of incoming line ret to caller
@@ -133,6 +131,9 @@ protected:
 		const char * sWarningMessage = ""	// expected warning message, if any
 		 )
 	{
+		CSphString sError;
+		WarnInfo_c tInfo {"tstidx", "tstagent", sError };
+
 		const char * pTest = sInExpr;
 		AgentDesc_t tFoo;
 		bool bResult = ParseAddressPort ( tFoo, &pTest, tInfo );
@@ -223,7 +224,8 @@ protected:
 	{
 		g_bHostnameLookup = true;
 		const char * pTest = sInExpr;
-		auto pResult = ConfigureMultiAgent ( pTest, "tstidx", tAgentOptions );
+		CSphString sError;
+		auto pResult = ConfigureMultiAgent ( pTest, "tstidx", tAgentOptions, sError );
 		EXPECT_EQ ( pResult!=nullptr, bExpectedResult ) << sInExpr;
 		return pResult;
 	}

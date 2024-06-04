@@ -18,7 +18,7 @@ a:1:{i:0;a:11:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 	"index":"test_vec",
 	"id":5,
 	"doc": 	{ "title" : "doc five", "vec" : [0.1816,-0.1221,0.6820] }
-}";s:4:"rows";s:76:"{"_index":"test_vec","_id":5,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:5;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:82:"{ "index": "test_vec", "query": { "match_all": {} }, "sort": [ { "id": "asc" } ] }";s:4:"rows";s:486:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":"1","_score":1,"_source":{"title":"doc one","vec":[-0.0738,0.1067,0.068]}},{"_id":"2","_score":1,"_source":{"title":"doc two","vec":[0.3968,0.1118,0.7669]}},{"_id":"3","_score":1,"_source":{"title":"doc three","vec":[-0.3379,0.3237,0.4578]}},{"_id":"4","_score":1,"_source":{"title":"doc four","vec":[-0.0292,-0.2448,0.1817]}},{"_id":"5","_score":1,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:6;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"{
+}";s:4:"rows";s:76:"{"_index":"test_vec","_id":5,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:5;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:82:"{ "index": "test_vec", "query": { "match_all": {} }, "sort": [ { "id": "asc" } ] }";s:4:"rows";s:476:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_source":{"title":"doc one","vec":[-0.0738,0.1067,0.068]}},{"_id":2,"_score":1,"_source":{"title":"doc two","vec":[0.3968,0.1118,0.7669]}},{"_id":3,"_score":1,"_source":{"title":"doc three","vec":[-0.3379,0.3237,0.4578]}},{"_id":4,"_score":1,"_source":{"title":"doc four","vec":[-0.0292,-0.2448,0.1817]}},{"_id":5,"_score":1,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:6;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"{
 "index": "test_vec",
 "knn":
 {
@@ -30,7 +30,7 @@ a:1:{i:0;a:11:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
       "term": { "title": "doc" }
     }
   }
-}";s:4:"rows";s:614:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":"1","_score":1295,"_knn_dist":0.1010012,"_source":{"title":"doc one","vec":[-0.0738,0.1067,0.068]}},{"_id":"3","_score":1295,"_knn_dist":0.37101465,"_source":{"title":"doc three","vec":[-0.3379,0.3237,0.4578]}},{"_id":"4","_score":1295,"_knn_dist":0.4464018,"_source":{"title":"doc four","vec":[-0.0292,-0.2448,0.1817]}},{"_id":"5","_score":1295,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}},{"_id":"2","_score":1295,"_knn_dist":0.80648041,"_source":{"title":"doc two","vec":[0.3968,0.1118,0.7669]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:173:"{
+}";s:4:"rows";s:604:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":1,"_score":1295,"_knn_dist":0.1010012,"_source":{"title":"doc one","vec":[-0.0738,0.1067,0.068]}},{"_id":3,"_score":1295,"_knn_dist":0.37101465,"_source":{"title":"doc three","vec":[-0.3379,0.3237,0.4578]}},{"_id":4,"_score":1295,"_knn_dist":0.4464018,"_source":{"title":"doc four","vec":[-0.0292,-0.2448,0.1817]}},{"_id":5,"_score":1295,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}},{"_id":2,"_score":1295,"_knn_dist":0.80648041,"_source":{"title":"doc two","vec":[0.3968,0.1118,0.7669]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:173:"{
 "index": "test_vec",
 "knn":
 {
@@ -50,7 +50,7 @@ a:1:{i:0;a:11:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
     "query_vector": [0.0452, 0.3906, -0.0110],
     "k": 5
   }
-}";s:4:"rows";s:599:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":"1","_score":1,"_knn_dist":0.1010012,"_source":{"title":"doc one","vec":[-0.0738,0.1067,0.068]}},{"_id":"3","_score":1,"_knn_dist":0.37101465,"_source":{"title":"doc three","vec":[-0.3379,0.3237,0.4578]}},{"_id":"4","_score":1,"_knn_dist":0.4464018,"_source":{"title":"doc four","vec":[-0.0292,-0.2448,0.1817]}},{"_id":"5","_score":1,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}},{"_id":"2","_score":1,"_knn_dist":0.80648041,"_source":{"title":"doc two","vec":[0.3968,0.1118,0.7669]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:166:"{
+}";s:4:"rows";s:589:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_knn_dist":0.1010012,"_source":{"title":"doc one","vec":[-0.0738,0.1067,0.068]}},{"_id":3,"_score":1,"_knn_dist":0.37101465,"_source":{"title":"doc three","vec":[-0.3379,0.3237,0.4578]}},{"_id":4,"_score":1,"_knn_dist":0.4464018,"_source":{"title":"doc four","vec":[-0.0292,-0.2448,0.1817]}},{"_id":5,"_score":1,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}},{"_id":2,"_score":1,"_knn_dist":0.80648041,"_source":{"title":"doc two","vec":[0.3968,0.1118,0.7669]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:166:"{
 "index": "test_vec",
 "knn":
 {
@@ -62,7 +62,7 @@ a:1:{i:0;a:11:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
       "equals": { "id":5 }
     }
   }
-}";s:4:"rows";s:175:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":"5","_score":1,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:283:"{
+}";s:4:"rows";s:173:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":5,"_score":1,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:283:"{
 "index": "test_vec",
 "knn":
 {
@@ -81,4 +81,4 @@ a:1:{i:0;a:11:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
       }
     }
   }
-}";s:4:"rows";s:178:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":"5","_score":1602,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}
+}";s:4:"rows";s:176:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":5,"_score":1602,"_knn_dist":0.76171523,"_source":{"title":"doc five","vec":[0.1816,-0.1221,0.682]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

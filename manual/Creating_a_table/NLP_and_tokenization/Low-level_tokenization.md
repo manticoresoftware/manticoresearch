@@ -351,6 +351,8 @@ Blended characters list. Optional, default is empty.
 
 Blended characters are indexed as both separators and valid characters. For example, when `&` is defined as a blended character and `AT&T` appears in an indexed document, three different keywords will be indexed, `at&t`, `at` and `t`.
 
+Additionally, blended characters can influence indexing in such a way that keywords are indexed as if the blended characters were not typed at all. This behavior is particularly evident when `blend_mode = trim_all` is specified. For example, the phrase `some_thing` will be indexed as `some`, `something`, and `thing` with `blend_mode = trim_all`.
+
 Care should be taken when using blended characters as defining a character as blended means that it is no longer a separator.
 * Therefore, if you put a comma to the `blend_chars` and search for `dog,cat`, it will treat that as a single token `dog,cat`. If `dog,cat` was **not** indexed as `dog,cat`, but left as `dog cat` only, then it will not match.
 * Hence, this behavior should be controlled with the [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting.
@@ -1178,7 +1180,7 @@ CRC dictionaries do not store the original keyword text in the index. Instead, t
 
 The keywords dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
 
-For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) operator only function with `dict=keywords`.
+For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) only function with `dict=keywords`.
 
 Indexing with a keywords dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, keywords). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 

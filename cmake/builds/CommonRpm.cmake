@@ -110,7 +110,7 @@ set ( CPACK_RPM_SPEC_MORE_DEFINE
 %define manticore_user manticore
 %define manticore_group manticore" )
 
-SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
+SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 3 (GPL3)" )
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
@@ -130,7 +130,6 @@ set ( CPACK_RPM_COMMON_POST_INSTALL_SCRIPT_FILE "${dircommon}/manticore.post" )
 
 # tools
 set ( CPACK_RPM_TOOLS_BUILDREQUIRES "systemd-units" )
-set ( CPACK_RPM_TOOLS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.postun" )
 set ( CPACK_RPM_TOOLS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.preun" )
 
 # now get system paths. These variables are used in configure substitutions below

@@ -1385,6 +1385,8 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 
 		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
 			continue;
+		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tCol.IsIndexedKNN() )
+			continue;
 
 		common::StringHash_fn fnStringCalcHash = nullptr;
 		common::AttrType_e eAttrType = ToColumnarType ( tCol.m_eAttrType, tCol.m_tLocator.m_iBitCount );
@@ -1414,22 +1416,22 @@ static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISc
 }
 
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema& tSchema, CSphBitvec& tSIAttrs, const CSphString& sFile, CSphString& sError )
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, int iBufferSize, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
-	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, sError );
+	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, iBufferSize, sError );
 }
 
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, int iBufferSize, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	CSphBitvec tSIAttrs ( tSchema.GetAttrsCount() );
 	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
 	GetAttrsProxy ( tSchema, tSISchema, dAttrs );
 
-	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, sError );
+	return CreateSecondaryIndexBuilder ( tSISchema, iMemoryLimit, sFile, iBufferSize, sError );
 }
 
 

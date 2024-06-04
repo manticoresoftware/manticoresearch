@@ -12,6 +12,7 @@
 
 #include "dynamic_idx.h"
 #include "sphinxsort.h"
+#include "querycontext.h"
 
 using namespace Threads;
 
@@ -330,7 +331,7 @@ public:
 	}
 	using RowBuffer_i::Eof;
 
-	void Error ( const char * sError, MysqlErrors_e ) override
+	void Error ( const char * sError, EMYSQL_ERR ) override
 	{
 		m_bError = true;
 		m_sError = sError;
@@ -468,7 +469,7 @@ public:
 	bool Commit() override { return false;}
 	void Eof ( bool, int, const char* ) override {}
 	using RowBuffer_i::Eof;
-	void Error ( const char * sError, MysqlErrors_e ) override
+	void Error ( const char * sError, EMYSQL_ERR ) override
 	{
 		m_bError = true;
 		m_sError = sError;

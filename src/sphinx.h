@@ -332,6 +332,13 @@ std::unique_ptr<ISphFieldFilter> sphCreateFilterICU ( std::unique_ptr<ISphFieldF
 // SEARCH QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
+enum class EStrCmpDir
+{
+	EQ,
+	LT,
+	GT
+};
+
 /// search query filter
 struct CommonFilterSettings_t
 {
@@ -352,6 +359,7 @@ struct CommonFilterSettings_t
 	bool				m_bOpenLeft = false;
 	bool				m_bOpenRight = false;
 	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
+	EStrCmpDir			m_eStrCmpDir = EStrCmpDir::EQ;		///< string comparison direction
 };
 
 
@@ -461,6 +469,21 @@ struct IndexHint_t
 	bool					m_bForce = true;
 };
 
+struct OnFilter_t
+{
+	CSphString	m_sIdx1;
+	CSphString	m_sAttr1;
+	CSphString	m_sIdx2;
+	CSphString	m_sAttr2;
+};
+
+enum class JoinType_e
+{
+	NONE,
+	INNER,
+	LEFT
+};
+
 const int DEFAULT_MAX_MATCHES = 1000;
 const int DEFAULT_QUERY_TIMEOUT = 0;
 const int DEFAULT_QUERY_RETRY = -1;
@@ -489,6 +512,7 @@ struct CSphQuery
 
 	CSphString		m_sKNNAttr;					///< which attr to use for KNN search (enables KNN if not empty)
 	int				m_iKNNK = 0;				///< KNN K
+	int				m_iKnnEf = 0;				///< KNN ef
 	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
@@ -512,10 +536,15 @@ struct CSphQuery
 	int				m_iMaxMatchThresh = 16384;
 	int				m_iNow = 0;	///< timestamp on query receive for all 'now' expressions to have the same base
 
-	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
+	CSphVector<CSphFilterSettings>	m_dFilters;		///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
-	CSphVector<IndexHint_t>			m_dIndexHints; ///< secondary index hints
+	CSphVector<IndexHint_t>			m_dIndexHints;	///< secondary index hints
+
+	JoinType_e		m_eJoinType = JoinType_e::NONE;	///< JOIN type
+	CSphString		m_sJoinIdx;						///< index to perform join on
+	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
+	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
@@ -622,6 +651,11 @@ struct IteratorStats_t
 	void	Merge ( const IteratorStats_t & tSrc );
 };
 
+struct ExpansionStats_t
+{
+	int m_iTerms = 0;
+	int	m_iMerged = 0;
+};
 
 /// search query meta-info
 class CSphQueryResultMeta
@@ -658,9 +692,11 @@ public:
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
+	ExpansionStats_t		m_tExpansionStats;		///< full text query statistics for expanded and merged terms
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
+	void					AddStat ( const ExpansionStats_t & tExpansionStats );
 
 	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
 	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
@@ -891,6 +927,7 @@ struct CSphIndexStatus
 	int64_t			m_iSavedTID = 0;
 	int64_t 		m_iDead = 0;
 	double			m_fSaveRateLimit {0.0};	 // not used for plain. Part of m_iMemLimit to be achieved before flushing
+	int 			m_iLockCount = 0;		// not used for plain. N of active locks (i.e. - if N>0, saving is prohibited)
 };
 
 
@@ -954,6 +991,7 @@ private:
 public:
 	virtual int			Kill ( DocID_t  /*tDocID*/ ) { return 0; }
 	virtual int			KillMulti ( const VecTraits_T<DocID_t> &  /*dKlist*/ ) { return 0; };
+	virtual int 		KillDupes () { return 0; }
 	virtual int			CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
 	virtual				~IndexSegment_c() = default;
 
@@ -1226,7 +1264,7 @@ public:
 	virtual void				DebugDumpDict ( FILE * fp ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual int					DebugCheck ( DebugCheckError_i& ) = 0;
+	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
@@ -1242,10 +1280,6 @@ public:
 	virtual CSphVector<SphAttr_t> BuildDocList () const;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
-
-	// put external files (if any) into index folder
-	// copy the rest of the external files to index folder
-	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
@@ -1336,7 +1370,7 @@ public:
 	void				DebugDumpHeader ( FILE *, const CSphString&, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
-	int					DebugCheck ( DebugCheckError_i& ) override { return 0; }
+	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) override { return 0; }
 	void				DebugDumpDict ( FILE * ) override {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
 
@@ -1383,6 +1417,7 @@ struct SphQueueSettings_t
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
 	StrVec_t 					m_dCreateSchema;
+	std::unique_ptr<JoinArgs_t>	m_pJoinArgs;
 	RowBuffer_i*				m_pSqlRowBuffer;
 	void **						m_ppOpaque1 = nullptr;
 	void **						m_ppOpaque2 = nullptr;
@@ -1398,9 +1433,10 @@ struct SphQueueSettings_t
 
 struct SphQueueRes_t : public ISphNoncopyable
 {
-	DWORD m_uPackedFactorFlags {SPH_FACTOR_DISABLE};
-	bool						m_bZonespanlist = false;
-	bool						m_bAlowMulti = true;
+	DWORD	m_uPackedFactorFlags = SPH_FACTOR_DISABLE;
+	bool	m_bZonespanlist = false;
+	bool	m_bAlowMulti = true;
+	bool	m_bJoinedGroupSort = false;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1421,15 +1457,12 @@ void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesT
 void				SetUnhintedBuffer ( int iReadUnhinted );
 int					GetUnhintedBuffer();
 
-/// check query for expressions
-bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
-
 void				SetPseudoSharding ( bool bSet );
 bool				GetPseudoSharding();
 void				SetPseudoShardingThresh ( int iThresh );
 
-void				InitSkipCache ( int64_t iCacheSize );
-void				ShutdownSkipCache();
+struct BuildBufferSettings_t;
+void				SetMergeSettings ( const BuildBufferSettings_t & tSettings );
 
 //////////////////////////////////////////////////////////////////////////
 

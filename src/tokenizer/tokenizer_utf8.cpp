@@ -79,7 +79,8 @@ public:
 	explicit CSphTokenizer_UTF8 ( bool bDefaultCharset )
 		: Tokenizer_UTF8_Base_c ( bDefaultCharset )
 	{}
-	BYTE* GetToken() override;
+	BYTE * GetToken() override;
+	BYTE * GetTokenEscaped() override;
 	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
 };
 
@@ -94,8 +95,22 @@ BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetToken()
 	m_bWasSynonym = false;
 
 	return m_bHasBlend
-				 ? DoGetToken<IS_QUERY, true>()
-				 : DoGetToken<IS_QUERY, false>();
+				 ? DoGetToken<IS_QUERY, true, false>()
+				 : DoGetToken<IS_QUERY, false, false>();
+}
+
+template<bool IS_QUERY>
+BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetTokenEscaped()
+{
+	m_bWasSpecial = false;
+	m_bBlended = false;
+	m_iOvershortCount = 0;
+	m_bTokenBoundary = false;
+	m_bWasSynonym = false;
+
+	return m_bHasBlend
+				 ? DoGetToken<IS_QUERY, true, true>()
+				 : DoGetToken<IS_QUERY, false, true>();
 }
 
 template<bool IS_QUERY>

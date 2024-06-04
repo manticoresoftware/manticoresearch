@@ -20,6 +20,7 @@
 #include "stackmock.h"
 #include "conversion.h"
 #include "geodist.h"
+#include "joinsorter.h"
 #include "secondarylib.h"
 
 #include <boost/icl/interval.hpp>
@@ -367,10 +368,9 @@ public:
 class FilterString_c : public IFilter_Str
 {
 public:
-	FilterString_c ( ESphCollation eCollation, bool bEq )
-		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
-		, m_dVal ( 0 )
-		, m_bEq ( bEq )
+	FilterString_c ( ESphCollation eCollation, bool bExclude )
+		: m_fnStrCmp { GetStringCmpFunc ( eCollation ) }
+		, m_bExclude { bExclude }
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) override
@@ -385,16 +385,44 @@ public:
 	bool Eval ( const CSphMatch & tMatch ) const override
 	{
 		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-		bool bEq = m_fnStrCmp ( dStr, m_dVal, false )==0;
-		return ( m_bEq==bEq );
+		bool bNeq = m_fnStrCmp ( dStr, m_dVal, false )!=0;
+		return m_bExclude == bNeq;
 	}
 
+	bool CanExclude() const override { return true; }
+
 protected:
-	SphStringCmp_fn			m_fnStrCmp;
+	CSphFixedVector<BYTE> m_dVal { 0 };
+	SphStringCmp_fn m_fnStrCmp;
+	bool m_bExclude;
+};
+
+class FilterStringCmp_c : public FilterString_c
+{
+public:
+	FilterStringCmp_c ( ESphCollation eCollation, bool bExclude, EStrCmpDir eStrCmpDir )
+		: FilterString_c ( eCollation, bExclude )
+		, m_eStrCmpDir ( eStrCmpDir )
+	{}
+
+	bool Eval ( const CSphMatch & tMatch ) const override
+	{
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		int iCmpResult = m_fnStrCmp ( dStr, m_dVal, false );
+
+		switch ( m_eStrCmpDir )
+		{
+			case EStrCmpDir::LT: return m_bExclude ? iCmpResult>=0 : iCmpResult<0;
+			case EStrCmpDir::GT: return m_bExclude ? iCmpResult<=0 : iCmpResult>0;
+			case EStrCmpDir::EQ:
+			default:
+				assert (false && "unexpected: EStrCmpDir::EQ should not be here!");
+				return false;
+		}
+	}
 
 private:
-	CSphFixedVector<BYTE>	m_dVal;
-	bool					m_bEq;
+	EStrCmpDir				m_eStrCmpDir;
 };
 
 static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVals )
@@ -404,11 +432,11 @@ static void CollectStrings ( const CSphString * pRef, int iCount, StrVec_t & dVa
 		dVals[i] = *( pRef + i );
 }
 
-class Filter_StringValues_c : public FilterString_c
+class Filter_StringValues_c : public IFilter_Str
 {
 public:
 	Filter_StringValues_c ( ESphCollation eCollation )
-		: FilterString_c ( eCollation, false )
+		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) final
@@ -428,6 +456,7 @@ public:
 	}
 
 private:
+	SphStringCmp_fn m_fnStrCmp;
 	StrVec_t m_dValues;
 };
 
@@ -951,8 +980,10 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
 				return std::make_unique<Filter_StringTagsAll_c>();
 		}
+		else if ( tSettings.m_eStrCmpDir==EStrCmpDir::EQ )
+			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bExclude );
 		else
-			return std::make_unique<FilterString_c> ( eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+			return std::make_unique<FilterStringCmp_c> ( eCollation, tSettings.m_bExclude, tSettings.m_eStrCmpDir );
 	}
 
 	// non-float, non-MVA
@@ -1119,14 +1150,8 @@ public:
 
 	bool Eval ( const CSphMatch & tMatch ) const
 	{
-		// attribute storages can fetch string length without reading the string itself
-		int iLen = m_pExpr->StringLenEval ( tMatch );
-		// StringLenEval returns -1 if not supported by expression
-		if ( iLen!=-1 )
-			return false;
-
 		const BYTE * pVal = nullptr;
-		iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		ByteBlob_t sRef ( pVal, iLen );
 
 		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
@@ -1231,6 +1256,11 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 	bool bJsonExpr = false;
 	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
+
+	// IN ( string list ) filter by JSON attribute should be done via Expr_JsonFieldIn_c expression
+	if ( bJsonExpr && tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+		return std::make_unique< ExprFilterProxy_c > ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+
 	if ( bJsonExpr && !bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 
@@ -1261,9 +1291,9 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 }
 
 
-static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, CSphString & sError )
+static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, const CSphString * pJoinIdx, CSphString & sError )
 {
-	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, pJoinIdx, sError, tExprArgs );
 	if ( pExpr && pExpr->UsesDocstore() )
 	{
 		sError.SetSprintf ( "unsupported filter on field '%s' (filters are supported only on attributes, not stored fields)", sAttrName.cstr() );
@@ -1398,8 +1428,26 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 }
 
 
-static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,
-	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
+static void TryToCreateJoinNullFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CommonFilterSettings_t & tFixedSettings )
+{
+	if ( pFilter )
+		return;
+
+	assert ( tCtx.m_pSchema );
+	const ISphSchema & tSchema = *tCtx.m_pSchema;
+
+	int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
+	if ( iAttr<0 )
+		return;
+
+	const CSphColumnInfo * pAttrMask = tCtx.m_pSchema->GetAttr ( GetNullMaskAttrName() );
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+	if ( ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED ) && pAttrMask && tFixedSettings.m_eType==SPH_FILTER_NULL )
+		pFilter = CreateJoinNullFilter ( tSettings, pAttrMask->m_tLocator );
+}
+
+
+static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -1423,12 +1471,11 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter>& pFilter, 
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	tExprArgs.m_eCollation = tCtx.m_eCollation;
-	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, sError );
+	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, pJoinIdx, sError );
 }
 
 
-static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName,
-	CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
+static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, bool bHaving, const CSphString & sAttrName, CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -1464,7 +1511,7 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
 			tExprArgs.m_eCollation = tCtx.m_eCollation;
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, sError, tExprArgs );
 		}
 		pFilter = CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tCtx.m_eCollation, tAttr.m_eAttrType );
 	} else
@@ -1605,7 +1652,52 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError )
+static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree )
+{
+	if ( tCtx.m_sJoinIdx.IsEmpty() )
+		return;
+
+	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pSchema, tCtx.m_sJoinIdx.cstr() );
+
+	bool bHaveNullFilters = false;
+	for ( const auto & i : dRightFilters )
+		bHaveNullFilters |= dModified[i.first].m_eType==SPH_FILTER_NULL;
+
+	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() && dRightFilters.GetLength() && ( bHaveNullFilters || dRightFilters.GetLength()!=dModified.GetLength() ) )
+	{
+		// mixed joined and non-joined filters; they will be handled in join sorter
+		// remove all filters from the query (keep the @rowid/pseudo_sharding filter)
+		bool bHaveRowIdFilter = false;
+		CSphFilterSettings tRowIdFilter;
+		for ( auto & i : dModified )
+			if ( i.m_sAttrName=="@rowid" )
+			{
+				bHaveRowIdFilter = true;
+				tRowIdFilter = i;
+			}
+
+		dModified.Resize(0);
+		dModifiedTree.Resize(0);
+
+		if ( bHaveRowIdFilter )
+			dModified.Add(tRowIdFilter);
+
+		return;
+	}
+
+	CSphString sPrefix;
+	sPrefix.SetSprintf ( "%s.", tCtx.m_sJoinIdx.cstr() );
+	for ( int i = dModified.GetLength()-1; i>=0; i-- )
+	{
+		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
+		bool bRemove = pAttr ? pAttr->IsJoined() : dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
+		if ( bRemove )
+			dModified.Remove(i);		
+	}
+}
+
+
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
@@ -1618,6 +1710,15 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 		if ( !FixupFilterSettings ( dFilters[i], dModified[i], tCtx, dFilters[i].m_sAttrName, sError ) )
 			return false;
 	}
+
+	if ( tCtx.m_pFilterTree )
+	{
+		dModifiedTree.Resize ( tCtx.m_pFilterTree->GetLength() );
+		ARRAY_FOREACH ( i, (*tCtx.m_pFilterTree) )
+			dModifiedTree[i] = (*tCtx.m_pFilterTree)[i];
+	}
+
+	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
@@ -1956,7 +2057,8 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 	if ( !FixupFilterSettings ( tSettings, tFixedSettings, tCtx, sAttrName, sError ) )
 		return nullptr;
 
-	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
+	TryToCreateJoinNullFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings );
+	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, sError, sWarning );
 	TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 
 	SetFilterLocator ( pFilter, tSettings, tCtx, sAttrName );
@@ -2099,6 +2201,9 @@ inline bool operator<( const FilterInfo_t& tA, const FilterInfo_t& tB )
 
 static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> dFilters )
 {
+	if ( dFilters.GetLength()==1 )
+		return std::unique_ptr<ISphFilter> { dFilters.Begin()->m_pFilter };
+
 	std::unique_ptr<ISphFilter> pCombinedFilter = nullptr;
 
 	dFilters.Sort ();
@@ -2313,8 +2418,20 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
+		{
+			const char * sOp = ([&]() {
+				switch ( f.m_eStrCmpDir )
+				{
+					case EStrCmpDir::EQ: return f.m_bExclude ? "!=" : "=";
+					case EStrCmpDir::LT: return f.m_bExclude ? ">=" : "<";
+					case EStrCmpDir::GT: return f.m_bExclude ? "<=" : ">";
+					default: assert(0); return f.m_bExclude ? "!?=" : "?=";
+				}
+			})();
+
+			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), sOp, ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
 			break;
+		}
 
 		case SPH_FILTER_NULL:
 			tBuf << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );

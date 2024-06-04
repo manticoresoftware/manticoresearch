@@ -1775,7 +1775,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 			continue;
 		}
 
-		auto dNodes = pCluster->GetViewNodes();
+		auto dNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
 		sphLogDebugRpl ( "alter '%s' SST index '%s' to nodes %d: '%s'", pCluster->m_sName.cstr(), sIndex.cstr(), dNodes.GetLength(), StrVec2Str ( dNodes ).cstr() );
 
 		// ok for just created cluster (wo nodes) to add existed index
@@ -1800,7 +1800,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 		}
 
 		// nodes list might change during alter at the other node
-		auto dNewNodes = pCluster->GetViewNodes();
+		auto dNewNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
 
 		// passed fine no join during the alter and the cluster remains same
 		if ( !HasNotReadyNodes ( pCluster ) && IsSameVector ( dNodes, dNewNodes ) )

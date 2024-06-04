@@ -18,3 +18,10 @@ yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-co
 ––– block: stop-searchd-dev –––
 ––– block: start-searchd-dev –––
 ––– block: check-version/export-new-version –––
+––– input –––
+yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rpm -qa | grep manticore
+––– output –––

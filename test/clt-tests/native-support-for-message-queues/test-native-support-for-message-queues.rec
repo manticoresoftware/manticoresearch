@@ -4,23 +4,54 @@ docker network create app-network --driver bridge > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker run -it -e EXTRA=1 --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash
+docker run -it -e EXTRA=1 --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
 docker exec manticore searchd
 ––– output –––
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
-docker run -it -e EXTRA=1 --network=app-network --name kafka -v ./test/clt-tests/kafka/import.sh:/import.sh -v ./test/clt-tests/kafka/dump.json:/tmp/dump.json -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnami/kafka:3.7.0
+docker run -it -d -e EXTRA=1 --network=app-network --name kafka -v ./test/clt-tests/kafka/import.sh:/import.sh -v ./test/clt-tests/kafka/dump.json:/tmp/dump.json -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnami/kafka:3.7.0 > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec kafka /opt/bitnami/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
+––– output –––
+Created topic my-data.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='2' batch=50;CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi);CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka" > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh
 ––– output –––
 ––– input –––
-docker exec kafka mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='2' batch=50;CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi);CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka"
+sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka LIMIT 10;"
 ––– output –––
-––– input –––
-docker exec kafka ./import.sh
-––– output –––
-––– input –––
-docker exec -it kafka kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic my-data --from-beginning --max-messages 10
-––– output –––
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka LIMIT 10;"
-––– output –––
++------+--------------------------------------+-----------------+---------------------+----------+
+| id   | name                                 | short_name      | received_at         | size     |
++------+--------------------------------------+-----------------+---------------------+----------+
+|    1 | The Quick Brown Fox                  | ISO 12345:6789  | %{DATETIME} | 20,25,30 |
+|    2 | Jumped Over The Lazy Dog             | ISO 98765:4321  | %{DATETIME} | 20,25,30 |
+|    3 | A Stitch In Time Saves Nine          | ISO 24680:1357  | %{DATETIME} | 20,25,30 |
+|    4 | An Apple A Day Keeps The Doctor Away | ISO 97531:86420 | %{DATETIME} | 20,25,30 |
+|    5 | Actions Speak Louder Than Words      | ISO 56789:12345 | %{DATETIME} | 20,25,30 |
+|    6 | Every Cloud Has A Silver Lining      | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
+|    7 | Beauty Is In The Eye Of The Beholder | ISO 13579:86420 | %{DATETIME} | 20,25,30 |
+|    8 | Birds Of A Feather Flock Together    | ISO 97531:24680 | %{DATETIME} | 20,25,30 |
+|    9 | You Can't Judge A Book By Its Cover  | ISO 56789:86420 | %{DATETIME} | 20,25,30 |
+|   10 | Two Heads Are Better Than One        | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
++------+--------------------------------------+-----------------+---------------------+----------+

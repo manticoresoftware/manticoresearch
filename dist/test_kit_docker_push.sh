@@ -24,7 +24,7 @@ hub_repo="ghcr.io/${REPO_OWNER}/manticoresearch"
 img_url="${hub_repo}:test-kit-${BUILD_COMMIT}"
 images=("$img_url")
 [[ $GITHUB_REF_NAME == "master" ]] \
-  && img_url_latest="test-kit-latest" \
+  && img_url_latest="${hub_repo}:test-kit-latest" \
   && images+=("$img_url_latest") \
   || img_url_latest=""
 
@@ -34,13 +34,14 @@ latest_tag=$(git describe --abbrev=0 --tags 2>/dev/null || echo "")
 
 # Assign the current branch or tag to the appropriate variable
 if [ -n "$latest_tag" ]; then
-	img_url_tag="test-kit-$(sanitize_tag "$latest_tag")"
+	img_url_tag="${hub_repo}:test-kit-$(sanitize_tag "$latest_tag")"
 	images+=("$img_url_tag")
 fi
 
 # Custom branch name
-if [ "$GITHUB_REF_NAME" != "master" ]; then
-	img_url_branch="test-kit-$(sanitize_tag "$GITHUB_REF_NAME")"
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$current_branch" != "master" ]; then
+	img_url_branch="${hub_repo}:test-kit-$(sanitize_tag "$current_branch")"
 	images+=("$img_url_branch")
 fi
 

@@ -20,10 +20,17 @@ sanitize_tag() {
     echo "$name"
 }
 
+# Current branch name
+if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+	current_branch="$GITHUB_HEAD_REF"
+else
+	current_branch="$GITHUB_REF_NAME"
+fi
+
 hub_repo="ghcr.io/${REPO_OWNER}/manticoresearch"
 img_url="${hub_repo}:test-kit-${BUILD_COMMIT}"
 images=("$img_url")
-[[ $GITHUB_REF_NAME == "master" ]] \
+[[ $current_branch == "master" ]] \
   && img_url_latest="${hub_repo}:test-kit-latest" \
   && images+=("$img_url_latest") \
   || img_url_latest=""
@@ -38,8 +45,6 @@ if [ -n "$latest_tag" ]; then
 	images+=("$img_url_tag")
 fi
 
-# Custom branch name
-current_branch=$(git rev-parse --abbrev-ref HEAD)
 if [ "$current_branch" != "master" ]; then
 	img_url_branch="${hub_repo}:test-kit-$(sanitize_tag "$current_branch")"
 	images+=("$img_url_branch")

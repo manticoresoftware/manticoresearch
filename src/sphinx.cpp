@@ -2399,11 +2399,11 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
 		return false;
 
-	tCtx.PrepareListOfUpdatedAttributes ( sError );
-
 	tCtx.m_pHistograms = m_pHistograms;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
 	tCtx.m_pAttrPool = m_tAttr.GetWritePtr ();
+
+	tCtx.PrepareListOfUpdatedAttributes ( sError );
 
 	if ( !Update_UpdateAttributes ( dRows, tCtx, bCritical, sError ) )
 		return false;

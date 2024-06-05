@@ -75,7 +75,6 @@ public:
 private:
 	CSphAutofile	m_tFile;
 	CSphVector<BYTE> m_dBuf;
-	CSphVector<int> m_dTnxOff;
 	CSphString		m_sError;
 
 	int64_t			m_iFilePos = 0;
@@ -243,9 +242,6 @@ void BinlogWriter_c::EndTransaction ( bool bWriteOnOverflow )
 	m_uCRC = 0;
 	m_iLastCrcPos = m_dBuf.GetLength();
 
-	// store tnx end
-	m_dTnxOff.Add ( m_dBuf.GetLength() );
-
 	// try to write if buffer gets too large but don't handle write errors just yet
 	// also, don't remove unsuccessful transactions from the buffer
 	if ( bWriteOnOverflow && m_dBuf.GetLength()>BINLOG_WRITE_BUFFER )
@@ -260,61 +256,13 @@ void BinlogWriter_c::CalculateHash()
 	m_iLastCrcPos = m_dBuf.GetLength();
 }
 
-struct TnxSize_t
-{
-	explicit TnxSize_t ( const VecTraits_T<int> & dOff )
-		: m_dOff ( dOff )
-	{
-	}
-
-	int GetSize ( int64_t iCount, int iChunkSize )
-	{
-		// even with no tnx binlog could have some head meta that should be written
-		if ( m_iTnx==m_dOff.GetLength() )
-			return ClumpSize ( iCount, iChunkSize );
-
-		// need to write at least one tnx
-		int64_t iSize = m_dOff[m_iTnx];
-		if ( m_iTnx )
-			iSize = iSize - m_dOff[m_iTnx-1];
-		m_iTnx++;
-
-		// accumulate up to the chunk size
-		while ( m_iTnx<m_dOff.GetLength() && iSize<iChunkSize )
-		{
-			int iCurSize = m_dOff[m_iTnx] - m_dOff[m_iTnx-1];
-			iSize += iCurSize;
-			m_iTnx++;
-		}
-
-		// switch to old write for extra large tnx
-		if ( iSize>INT_MAX )
-		{
-			m_iTnx = m_dOff.GetLength();
-			return ClumpSize ( iCount, iChunkSize );
-		}
-
-		return (int)iSize;
-	}
-
-	int ClumpSize ( int64_t iCount, int iChunkSize ) const
-	{
-		return ( (int)Min ( iCount, iChunkSize ) );
-	}
-
-	const VecTraits_T<int> & m_dOff;
-	int m_iTnx = 0;
-};
 
 bool BinlogWriter_c::Write ( bool bRemoveUnsuccessful )
 {
 	if ( !m_dBuf.GetLength() )
 		return true;
 
-	TnxSize_t tWriteSize ( m_dTnxOff );
-	WriteSize_fn fnWriteSize = [&tWriteSize]( int64_t iCount, int iChunkSize ) { return tWriteSize.GetSize ( iCount, iChunkSize ); };
-
-	if ( !sphWriteThrottled ( m_tFile.GetFD(), m_dBuf.Begin(), m_dBuf.GetLength(), std::move ( fnWriteSize ), m_tFile.GetFilename(), m_sError ) )
+	if ( !sphWriteThrottled ( m_tFile.GetFD(), m_dBuf.Begin(), m_dBuf.GetLength(), m_tFile.GetFilename(), m_sError ) )
 	{
 		// if we got a partial write, clamp the file at the end of last written transaction
 		sphSeek ( m_tFile.GetFD(), m_iFilePos, SEEK_SET );
@@ -326,7 +274,6 @@ bool BinlogWriter_c::Write ( bool bRemoveUnsuccessful )
 			// other unwritten transactions may still be in the buffer, but we can't tell the daemon that they failed at this point
 			// so we remove only the last one
 			m_dBuf.Resize(m_iTransactionStartPos);
-			m_dTnxOff.Pop();
 		}
 
 		return false;
@@ -336,7 +283,6 @@ bool BinlogWriter_c::Write ( bool bRemoveUnsuccessful )
 	m_iLastCrcPos = 0;
 	m_iTransactionStartPos = 0;
 	m_dBuf.Resize(0);
-	m_dTnxOff.Resize(0);
 	return true;
 }
 
@@ -422,7 +368,7 @@ bool BinlogReader_c::CheckCrc ( const char * sOp, const char * sIndexName, int64
 	ResetCrc();
 	bool bPassed = ( uRef==uCRC );
 	if ( !bPassed )
-		sphWarning ( "binlog: %s: CRC mismatch (table=%s, tid=" INT64_FMT ", pos=" INT64_FMT ", size=" INT64_FMT ")", sOp, sIndexName ? sIndexName : "", iTid, iTxnPos, (int64_t)GetFilesize() );
+		sphWarning ( "binlog: %s: CRC mismatch (table=%s, tid=" INT64_FMT ", pos=" INT64_FMT ")", sOp, sIndexName ? sIndexName : "", iTid, iTxnPos );
 	return bPassed;
 }
 

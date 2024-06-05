@@ -838,14 +838,7 @@ static inline void ThrottleSleep()
 }
 
 
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
-{
-	WriteSize_fn fnChunkSize = []( int64_t iCount, int iChunkSize ) { return (int)Min ( iCount, iChunkSize ); };
-
-	return sphWriteThrottled ( iFD, pBuf, iCount, std::move( fnChunkSize ), sName, sError );
-}
-
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_fn && fnWriteSize, const char * sName, CSphString & sError )
+bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError )
 {
 	if ( iCount <= 0 )
 		return true;
@@ -871,7 +864,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_f
 		if ( pIOStats )
 			tmTimer = sphMicroTimer();
 
-		int iToWrite = fnWriteSize ( iCount, iChunkSize );
+		auto iToWrite = (int)Min ( iCount, iChunkSize );
 		int iWritten = ::write ( iFD, p, iToWrite );
 
 		if ( pIOStats )

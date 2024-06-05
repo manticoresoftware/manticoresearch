@@ -261,12 +261,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
 /// write blob to file honoring throttling
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
-
-using WriteSize_fn = std::function<int ( int64_t iCount, int iChunkSize )>;
-
-/// write blob to file honoring throttling
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_fn && fnWriteSize, const char * sName, CSphString & sError );
+bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * szName, CSphString & sError );
 
 /// read blob from file honoring throttling
 size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount );

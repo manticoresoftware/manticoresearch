@@ -43,3 +43,15 @@ Zend Engine %{SEMVER}, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
 ––– block: check-searchd-process –––
 ––– block: check-backup –––
+––– input –––
+apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+dpkg -l | grep ^rc | awk '/^rc/ && /manticore/ { print $2 }'
+––– output –––
+manticore-common
+manticore-repo
+manticore-server
+manticore-server-core
+manticore-tools

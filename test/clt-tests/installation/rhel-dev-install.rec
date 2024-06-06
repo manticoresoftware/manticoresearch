@@ -26,3 +26,10 @@ Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd-dev –––
 ––– block: check-searchd-process –––
 ––– block: check-backup –––
+––– input –––
+yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rpm -qa | grep manticore
+––– output –––

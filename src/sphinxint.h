@@ -1170,8 +1170,8 @@ struct ExpansionContext_t : public ExpansionTrait_t
 	int m_iMinInfixLen					= 0;
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
-	int m_iCutoff = -1;
-	bool m_bAlowExpansion				= true;
+	int m_iCutoff						= -1;
+	bool m_bAllowExpansion				= true;
 
 	ExpansionStats_t m_tExpansionStats;
 
@@ -1192,6 +1192,7 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByDocs = false;
 	bool	m_bSortByHits = false;
 	int		m_iCutoff = -1;
+	bool	m_bAllowExpansion = true;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );

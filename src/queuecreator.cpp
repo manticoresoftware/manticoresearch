@@ -621,6 +621,9 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return Err ( "group-by attribute '%s' not found", m_tQuery.m_sGroupBy.cstr() );
 
 	const CSphColumnInfo & tGroupByAttr = tSchema.GetAttr(iGroupBy);
+	if ( tGroupByAttr.m_pExpr && tGroupByAttr.m_pExpr->UsesDocstore() )
+		return Err ( "unable to group by stored field '%s'", m_tQuery.m_sGroupBy.cstr() );
+
 	ESphAttr eType = tGroupByAttr.m_eAttrType;
 	CSphAttrLocator tLoc = tGroupByAttr.m_tLocator;
 	m_bJoinedGroupSort |= IsJoinAttr ( tGroupByAttr.m_sName );
@@ -2231,21 +2234,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 

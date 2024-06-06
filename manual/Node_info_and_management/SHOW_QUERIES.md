@@ -9,7 +9,7 @@ SHOW QUERIES
 
 - `id`: Query ID that can be used in [KILL](../Node_info_and_management/KILL.md) to terminate the query
 - `query`: Query statement or a portion of it
-- `time`: Time taken on command execution or how long ago the query was performed
+- `time`: Time taken on command execution or how long ago the query was performed (in this case, the value will include `ago`)
 - `protocol`: [Connection protocol](../Server_settings/Searchd.md#listen), with possible values being `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)
 - `host`: Client's `ip:port`
 

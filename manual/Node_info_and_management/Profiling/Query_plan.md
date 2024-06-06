@@ -173,7 +173,7 @@ POST /search
     "hits":
     [
        {
-          "_id":"711651",
+          "_id": 711651,
           "_score":2539,
           "_source":{}
        }
@@ -330,7 +330,7 @@ POST /search
     "total": 105,
     "hits": [
       {
-        "_id": "711651",
+        "_id": 711651,
         "_score": 2539,
         "_source": {}
       }
@@ -479,7 +479,7 @@ POST /search
     "hits":
     [
        {
-          "_id":"711651",
+          "_id": 711651,
           "_score":2539,
           "_source":{}
        }

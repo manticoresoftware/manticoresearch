@@ -12,9 +12,13 @@ on:
   pull_request:
     branches: [ master ]
     paths:
+      - '.github/workflows/clt_nightly.yml'
       - 'test/clt-tests/installation/**'
       - 'test/clt-tests/core/test-replace-into'
       - 'test/clt-tests/comparison-overhead-json-sql/**'
+      - 'test/clt-tests/id-attribute-error-during-indexing/**'
+      - 'test/clt-tests/indexer-latest-mysql-postgres/**'
+      - 'test/clt-tests/core/test-alter-rename-nightly'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -30,8 +34,8 @@ jobs:
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
-  clt:
-    name: CLT
+  clt-amd64:
+    name: CLT-Amd64
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false 
@@ -70,6 +74,9 @@ jobs:
           - name: Bookworm release installation
             image: debian:bookworm
             test_prefix: test/clt-tests/installation/deb-release-         
+          - name: Noble release installation
+            image: ubuntu:noble
+            test_prefix: test/clt-tests/installation/deb-release-
           - name: Centos 7 upgrade to dev
             image: centos:7
             test_prefix: test/clt-tests/installation/rhel-dev-u
@@ -103,15 +110,116 @@ jobs:
           - name: Bookworm upgrade to dev
             image: debian:bookworm
             test_prefix: test/clt-tests/installation/deb-dev-update
+          - name: Noble upgrade to dev
+            image: ubuntu:noble
+            test_prefix: test/clt-tests/installation/deb-dev-update
           - name: JSON vs SQL perf
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
           - name: REPLACE INTO
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-replace-into
+          - name: Id attribute error during indexing
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/id-attribute-error-during-indexing/test-id-attribute-error-during-indexing
+          - name: Indexer latest MYSQL POSTGRES
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres
+          - name: Test alter rename nightly
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/core/test-alter-rename-nightly
+
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:
           test_prefix: ${{ matrix.test_prefix }}
           image: ${{ matrix.image }}
           comment_mode: failures
+          run_args: --privileged 
+          
+  clt-arm64:
+    name: CLT-Arm64
+    runs-on: macos-14
+    strategy:
+      fail-fast: false 
+      matrix:
+        include:
+          - name: Centos 7 release installation
+            image: centos:7
+            test_prefix: test/clt-tests/installation/rhel-release-
+          - name: Alma 8 release installation
+            image: almalinux:8
+            test_prefix: test/clt-tests/installation/rhel-release-
+          - name: Alma 9 release installation
+            image: almalinux:9
+            test_prefix: test/clt-tests/installation/rhel-release-
+          - name: OL 9 release installation
+            image: "oraclelinux:9"
+            test_prefix: test/clt-tests/installation/rhel-release-
+          - name: Amazon release installation
+            image: amazonlinux:latest
+            test_prefix: test/clt-tests/installation/rhel-release-
+          - name: Bionic release installation
+            image: ubuntu:bionic
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: Focal release installation
+            image: ubuntu:focal
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: Jammy release installation
+            image: ubuntu:jammy
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: Buster release installation
+            image: debian:buster
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: Bullseye release installation
+            image: debian:bullseye
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: Bookworm release installation
+            image: debian:bookworm
+            test_prefix: test/clt-tests/installation/deb-release-         
+          - name: Noble release installation
+            image: ubuntu:noble
+            test_prefix: test/clt-tests/installation/deb-release-
+          - name: Centos 7 upgrade to dev
+            image: centos:7
+            test_prefix: test/clt-tests/installation/rhel-dev-u
+          - name: Alma 8 upgrade to dev
+            image: almalinux:8
+            test_prefix: test/clt-tests/installation/rhel-dev-u
+          - name: Alma 9 upgrade to dev
+            image: almalinux:9
+            test_prefix: test/clt-tests/installation/rhel-dev-u
+          - name: OL 9 upgrade to dev
+            image: "oraclelinux:9"
+            test_prefix: test/clt-tests/installation/rhel-dev-u
+          - name: Amazon upgrade to dev
+            image: amazonlinux:latest
+            test_prefix: test/clt-tests/installation/rhel-dev-u
+          - name: Bionic upgrade to dev
+            image: ubuntu:bionic
+            test_prefix: test/clt-tests/installation/deb-dev-u
+          - name: Focal upgrade to dev
+            image: ubuntu:focal
+            test_prefix: test/clt-tests/installation/deb-dev-u
+          - name: Jammy upgrade to dev
+            image: ubuntu:jammy
+            test_prefix: test/clt-tests/installation/deb-dev-u
+          - name: Buster upgrade to dev
+            image: debian:buster
+            test_prefix: test/clt-tests/installation/deb-dev-u
+          - name: Bullseye upgrade to dev
+            image: debian:bullseye
+            test_prefix: test/clt-tests/installation/deb-dev-u
+          - name: Bookworm upgrade to dev
+            image: debian:bookworm
+            test_prefix: test/clt-tests/installation/deb-dev-update
+          - name: Noble upgrade to dev
+            image: ubuntu:noble
+            test_prefix: test/clt-tests/installation/deb-dev-update
+    steps:
+      - uses: manticoresoftware/clt@0.1.23
+        with:
+          test_prefix: ${{ matrix.test_prefix }}
+          image: ${{ matrix.image }}
+          comment_mode: failures
+          run_args: --privileged

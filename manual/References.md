@@ -2,11 +2,14 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
-* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE) - Creates table using another one as a template
+* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Creates new table
+* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Creates table using another one as a template
+* [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Copies a table
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
-* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuild-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Updates/recovers secondary indexes
+* [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
 * [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
 * [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
 * [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
@@ -16,6 +19,7 @@
 ##### Data management
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces existing documents with new ones
+* [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Replaces one or multiple fields in a table
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Does in-place update in documents
 * [DELETE](Data_creation_and_modification/Deleting_documents.md) - Deletes documents
 * [TRUNCATE TABLE](Emptying_a_table.md) - Deletes all documents from table
@@ -32,6 +36,7 @@
   * [OPTION](Searching/Options.md#OPTION) - Query Options
   * [FACET](Searching/Faceted_search.md) - Faceted search
   * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
+  * [JOIN](Searching/Joining.md) - Joining tables in SELECT
 * [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself
 * [SHOW META](Node_info_and_management/SHOW_META.md) - Shows extended information about executed query
 * [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - Shows profiling information about executed query
@@ -49,7 +54,7 @@
 * [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
 ##### Importing to a real-time table
-* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) - Moves data from a plain table to a real-time table
+* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Moves data from a plain table to a real-time table
 * [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Imports previously created RT or PQ table into a server running in the RT mode
 
 ##### Replication
@@ -615,4 +620,5 @@ AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, E
 * [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/). [Installation page](https://manticoresearch.com/install-6.0.4/)
 * [6.2.0](https://manual.manticoresearch.com/manticore-6-2-0/). [Installation page](https://manticoresearch.com/install-6.2.0/)
 * [6.2.12](https://manual.manticoresearch.com/manticore-6-2-12/). [Installation page](https://manticoresearch.com/install-6.2.12/)
+* [6.3.0](https://manual.manticoresearch.com/manticore-6-3-0/). [Installation page](https://manticoresearch.com/install-6.3.0/)
 <!-- proofread -->

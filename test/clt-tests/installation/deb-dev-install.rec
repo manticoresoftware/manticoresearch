@@ -37,9 +37,21 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 manticore-executor -v
 ––– output –––
-PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (NTS)
+PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]{1,2}/!# %{YEAR} %{TIME}) (NTS)
 Copyright (c) The PHP Group
 Zend Engine %{SEMVER}, Copyright (c) Zend Technologies
 ––– block: start-searchd-dev –––
 ––– block: check-searchd-process –––
 ––– block: check-backup –––
+––– input –––
+apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+dpkg -l | grep ^rc | awk '/^rc/ && /manticore/ { print $2 }'
+––– output –––
+manticore-common
+manticore-repo
+manticore-server
+manticore-server-core
+manticore-tools

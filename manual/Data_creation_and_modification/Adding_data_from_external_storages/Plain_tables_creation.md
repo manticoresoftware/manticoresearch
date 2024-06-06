@@ -262,29 +262,29 @@ ignore_non_plain = 1
 ### Schedule indexer via systemd
 
 There are two approaches to scheduling indexer runs. The first way is the classical method of using crontab. The second way is using a systemd timer with a user-defined schedule. To create the timer unit files, you should place them in the appropriate directory where systemd looks for such unit files. On most Linux distributions, this directory is typically `/etc/systemd/system`. Here's how to do it:
-	
+
 1. Create a timer unit file for your custom schedule:
-```shell
-cat << EOF > /etc/systemd/system/manticore-indexer@.timer
-[Unit]
-Description=Run Manticore Search's indexer on schedule
-[Timer]
-OnCalendar=minutely
-RandomizedDelaySec=5m
-Unit=manticore-indexer@%i.service
-[Install]
-WantedBy=timers.target
-EOF
-```
-More on the `OnCalendar` syntax and examples can be found [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html#Calendar%20Events).
+   ```shell
+   cat << EOF > /etc/systemd/system/manticore-indexer@.timer
+   [Unit]
+   Description=Run Manticore Search's indexer on schedule
+   [Timer]
+   OnCalendar=minutely
+   RandomizedDelaySec=5m
+   Unit=manticore-indexer@%i.service
+   [Install]
+   WantedBy=timers.target
+   EOF
+   ```
+   More on the `OnCalendar` syntax and examples can be found [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html#Calendar%20Events).
 
 2. Edit the timer unit for your specific needs.
 3. Enable the timer:
-```shell
-systemctl enable manticore-indexer@idx1.timer
-```
+   ```shell
+   systemctl enable manticore-indexer@idx1.timer
+   ```
 4. Start the timer:
-```shell
-systemctl start manticore-indexer@idx1.timer
-```
+   ```shell
+   systemctl start manticore-indexer@idx1.timer
+   ```
 5. Repeat steps 2-4 for any additional timers.

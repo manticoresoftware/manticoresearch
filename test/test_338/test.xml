@@ -490,6 +490,28 @@ index test_vec
 
 <query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} } }, "sort": ["id"] }</query>
 
+<query endpoint="insert">
+{
+	"index":"test_rt",
+	"id":10001,
+	"doc":
+	{
+		"price": null
+	}
+}
+</query>
+
+<query endpoint="update">
+{
+	"index":"test_rt",
+	"id":10001,
+	"doc":
+	{
+		"price": null
+	}
+}
+</query>
+
 </httpqueries>
 
 </test>

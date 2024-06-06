@@ -120,7 +120,7 @@ utilsApi.Sql("TRUNCATE TABLE products");
 
 <!-- end -->
 
-One of the possible uses of this command is before [attaching a table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md).
+One of the possible uses of this command is before [attaching a table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md).
 
 <!-- example truncate with RECONFIGURE -->
 

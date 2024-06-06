@@ -1171,6 +1171,8 @@ struct ExpansionContext_t : public ExpansionTrait_t
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
 	int m_iCutoff = -1;
+	bool m_bAlowExpansion				= true;
+
 	ExpansionStats_t m_tExpansionStats;
 
 	bool								m_bOnlyTreeFix = false;
@@ -1349,7 +1351,7 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 
 	auto pCur = (const BYTE*)tBuf.GetReadPtr();
 	const BYTE * pEnd = pCur + tBuf.GetLengthBytes();
-	const int iHalfPage = 2048;
+	const int iHalfPage = GetMemPageSize()/2;
 
 	g_uHash = 0xff;
 	for ( ; pCur<pEnd; pCur+=iHalfPage )

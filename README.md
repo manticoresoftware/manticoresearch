@@ -69,7 +69,8 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
-  - [Vector search](https://manual.manticoresearch.com/Searching/dev/KNN)
+  - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
+  - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
   - A wide range of functions for filtering and data manipulation
@@ -117,7 +118,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/)
   - [Logstash/Filebeat](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)
   - [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/)
-  - [Mysqldump](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)
+  - [Mysqldump](https://manual.manticoresearch.com/Securing_and_compacting_a_table/Backup_and_restore#Backup-and-restore-with-mysqldump)
   - [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)
 
 # Installation

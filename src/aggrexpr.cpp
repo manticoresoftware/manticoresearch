@@ -221,7 +221,7 @@ bool ParseAggrRange ( const VecTraits_T< VecTraits_T < CSphNamedVariant > > & dS
 				} else if ( tVal.m_eType==VariantType_e::STRING )
 				{
 					time_t tFrom = 0;
-					if ( !ParseDateMath ( tVal.m_sValue, CompatDateFormat(), iNow, tFrom ) )
+					if ( !ParseDateMath ( tVal.m_sValue, iNow, tFrom ) )
 					{
 						sError.SetSprintf ( "date_range invalid from value '%s'", tVal.m_sValue.cstr() );
 						return false;
@@ -246,7 +246,7 @@ bool ParseAggrRange ( const VecTraits_T< VecTraits_T < CSphNamedVariant > > & dS
 				} else if ( tVal.m_eType==VariantType_e::STRING )
 				{
 					time_t tTo = 0;
-					if ( !ParseDateMath ( tVal.m_sValue, CompatDateFormat(), iNow, tTo ) )
+					if ( !ParseDateMath ( tVal.m_sValue, iNow, tTo ) )
 					{
 						sError.SetSprintf ( "date_range invalid to value '%s'", tVal.m_sValue.cstr() );
 						return false;
@@ -369,17 +369,19 @@ static void FormatKeyInt ( const RangeSetting_t & tRange, bool bHasFrom, bool bH
 static void FormatDate ( const CSphString & sVal, int iNow, CSphString & sRes )
 {
 	time_t tSrcDate;
-	Verify ( ParseDateMath ( sVal, CompatDateFormat(), iNow, tSrcDate ) );
+	Verify ( ParseDateMath ( sVal, iNow, tSrcDate ) );
 
 	FormatDate ( tSrcDate, sRes );
 }
+
+static const char * g_sCompatDateFormat = "%Y-%m-%dT%H:%M:%S"; // YYYY-mm-dd'T'HH:mm:ss.SSS'Z'
 
 static void FormatDate ( time_t tDate, char * sBuf, int iSize )
 {
 	std::tm tDstDate;
 	gmtime_r ( &tDate, &tDstDate );
 
-	Verify ( strftime ( sBuf, iSize, CompatDateFormat().cstr(), &tDstDate )>0 );
+	Verify ( strftime ( sBuf, iSize, g_sCompatDateFormat, &tDstDate )>0 );
 }
 
 void FormatDate ( time_t tDate, CSphString & sRes )

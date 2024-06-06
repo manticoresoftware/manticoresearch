@@ -476,31 +476,22 @@ public:
 			m_tUniq.Sort();
 			VecTraits_T<SphGroupKey_t> dStub;
 			m_tUniq.Compact(dStub);
+
+			// need to clean up matches NOT from m_dIData with current schema
+			// as after schema change data_ptr attributes will have garbage in ptr part for matches not processed by tProcessor
+			// and global sorters have differrent clean up code path that do not handle this garbage as usual sorters do
+			for ( int i = this->m_dIData.GetLength(); i < m_dData.GetLength(); i++ )
+			{
+				int iId = *(this->m_dIData.Begin()+i);
+				CSphMatch & tMatch = m_dData[iId];
+				m_pSchema->FreeDataPtrs(tMatch);
+				tMatch.ResetDynamic();
+			}
 		}
 
 		// just evaluate in heap order
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
-
-		if constexpr ( DISTINCT )
-		{
-			// need to clean up matches NOT from m_dIData with current schema
-			// as after schema change data_ptr attributes will have garbage in ptr part for matches not processed by tProcessor
-			// and global sorters have differrent clean up code path that do not handle this garbage as usual sorters do
-			if ( this->m_dIData.GetLength()!=m_iMaxUsed )
-			{
-				for ( int i=0; i<m_iMaxUsed; i++ )
-				{
-					CSphMatch & tMatch = m_dData[i];
-					if ( !tMatch.m_pStatic ) // clean up match that was in m_dIData set
-						continue;
-
-					m_pSchema->FreeDataPtrs ( tMatch );
-					tMatch.ResetDynamic ();
-				}
-			}
-		}
-
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

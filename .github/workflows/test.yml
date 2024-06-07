@@ -41,6 +41,8 @@ jobs:
     name: Detect changes in commit
     runs-on: ubuntu-22.04
     outputs:
+      source: ${{ steps.filter.outputs.source }}
+      test: ${{ steps.filter.outputs.test }}
       clt: ${{ steps.filter.outputs.clt }}
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +62,7 @@ jobs:
             clt:
             - 'test/clt-tests/**'
   win_bundle:
-    if: needs.changes.outputs.source == 'false'
+    if: needs.changes.outputs.source == 'true'
     needs: changes
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
@@ -378,7 +380,6 @@ jobs:
 
   pack_jammy_cache_check:
     needs: changes
-    if: needs.changes.outputs.source == 'false'
     name: Jammy x86_64 package [check cache]
     runs-on: ubuntu-22.04
     outputs:
@@ -405,6 +406,13 @@ jobs:
         with:
           path: build
           key: ${{ steps.generate-key.outputs.cache-key }}
+
+      - name: Override cache hit
+        id: override-cache-hit
+        run: |
+          if [ "${{ needs.changes.outputs.source }}" == "true" ]; then
+            echo "cache-hit=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload build artifacts from cache
         if: ${{ steps.cache.outputs.cache-hit == 'true' }}

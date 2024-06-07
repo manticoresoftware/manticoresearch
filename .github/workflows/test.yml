@@ -377,6 +377,8 @@ jobs:
           path: build
 
   pack_jammy_cache_check:
+    needs: changes
+    if: needs.changes.outputs.source == 'false'
     name: Jammy x86_64 package [check cache]
     runs-on: ubuntu-22.04
     outputs:

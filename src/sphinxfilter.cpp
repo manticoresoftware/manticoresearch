@@ -21,7 +21,8 @@
 #include "conversion.h"
 #include "geodist.h"
 #include "joinsorter.h"
-#include "secondarylib.h"
+#include "secondaryindex.h"
+#include "jsonsi.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -1599,7 +1600,7 @@ static bool CanAddGeodist ( const CSphColumnInfo & tAttr, const CreateFilterCont
 	if ( tAttr.IsColumnar() || tAttr.IsColumnarExpr() )
 		return true;
 
-	return tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( tAttr.m_sName.cstr() );
+	return tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( tAttr.m_sName );
 }
 
 
@@ -1697,7 +1698,35 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError )
+static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dItems )
+{
+	if ( !tCtx.m_pSI )
+		return;
+
+	for ( auto & i : dFilters )
+	{
+		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( i.m_sAttrName.cstr() );
+		if ( pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, *tCtx.m_pSchema, *tCtx.m_pSI ) )
+			continue;
+
+		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
+		{
+			CSphString sTransformed = UnifyJsonFieldName ( i.m_sAttrName );
+			for ( const auto & tItem : dItems )
+				if ( tItem.m_sAlias==i.m_sAttrName && tItem.m_eAggrFunc==SPH_AGGR_NONE )
+				{
+					sTransformed = UnifyJsonFieldName ( tItem.m_sExpr );
+					break;
+				}
+
+			if ( tCtx.m_pSI->IsEnabled(sTransformed) )
+				i.m_sAttrName = sTransformed;
+		}
+	}
+}
+
+
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, const CSphVector<CSphQueryItem> & dItems, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
@@ -1719,6 +1748,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
+	TransformForJsonSI ( tCtx, dModified, dItems );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )

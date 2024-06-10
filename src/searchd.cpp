@@ -7676,7 +7676,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill",
+	"show_settings", "alter_rebuild_si", "kill", "create_index", "drop_index"
 };
 
 
@@ -16884,6 +16884,49 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 	}
 }
 
+
+void HandleMysqlCreateIndex ( RowBuffer_i & tOut, const CSphString & sAttribute, const CSphString & sTable )
+{
+	auto pServed = GetServed ( sTable.cstr() );
+	if ( !pServed )
+	{
+		tOut.ErrorEx ( "table '%s' is not found", sTable.cstr() );
+		return;
+	}
+
+	WIdx_c pIdx { pServed };
+	CSphString sError;
+	if ( !pIdx->CreateJsonSecondaryIndex ( sAttribute, sError ) )
+	{
+		tOut.ErrorEx ( "index '%s': error creating attribute index on attribute '%s': %s", sTable.cstr(), sAttribute.cstr(), sError.cstr() );
+		return;
+	}
+
+	tOut.Ok();
+}
+
+
+void HandleMysqlDropIndex ( RowBuffer_i & tOut, const CSphString & sAttribute, const CSphString & sTable )
+{
+	auto pServed = GetServed ( sTable.cstr() );
+	if ( !pServed )
+	{
+		tOut.ErrorEx ( "table '%s' is not found", sTable.cstr() );
+		return;
+	}
+
+	WIdx_c pIdx { pServed };
+	CSphString sError;
+	if ( !pIdx->DropJsonSecondaryIndex ( sAttribute, sError ) )
+	{
+		tOut.ErrorEx ( "index '%s': error dropping attribute index '%s': %s", sTable.cstr(), sAttribute.cstr(), sError.cstr() );
+		return;
+	}
+
+	tOut.Ok();
+}
+
+
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {
 	assert ( pIndex );
@@ -17436,6 +17479,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_KILL:
 		HandleMysqlKill ( tOut, pStmt->m_iIntParam );
+		return true;
+
+	case STMT_CREATE_INDEX:
+		HandleMysqlCreateIndex ( tOut, pStmt->m_sStringParam, pStmt->m_sIndex );
+		return true;
+
+	case STMT_DROP_INDEX:
+		HandleMysqlDropIndex ( tOut, pStmt->m_sStringParam, pStmt->m_sIndex );
 		return true;
 
 	default:

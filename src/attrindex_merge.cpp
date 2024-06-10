@@ -218,8 +218,8 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 
 		if ( m_pBlobRowBuilder )
 		{
-			const BYTE* pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
-			uint64_t	uNewOffset	= m_pBlobRowBuilder->Flush ( pOldBlobRow );
+			const BYTE * pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
+			uint64_t uNewOffset	= m_pBlobRowBuilder->Flush ( pOldBlobRow ).first;
 
 			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes );
 			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );

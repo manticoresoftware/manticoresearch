@@ -31,8 +31,8 @@ public:
 	virtual				~BlobRowBuilder_i() {}
 
 	virtual bool		SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
-	virtual SphOffset_t	Flush() = 0;
-	virtual SphOffset_t	Flush ( const BYTE * pOldRow ) = 0;
+	virtual std::pair<SphOffset_t,SphOffset_t> Flush() = 0;
+	virtual std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) = 0;
 	virtual bool		Done ( CSphString & sError ) = 0;
 };
 
@@ -59,6 +59,9 @@ std::unique_ptr<BlobRowBuilder_i>	sphCreateBlobRowBuilderUpdate ( const ISphSche
 const BYTE *		sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
 
 ByteBlob_t			sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+
+// fetch attribute data from a given blob row
+ByteBlob_t			sphGetBlobAttr ( const BYTE * pBlobRow, const CSphAttrLocator & tLocator );
 
 // same as above, but works with docinfo
 const BYTE *		sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );

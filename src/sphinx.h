@@ -825,6 +825,7 @@ public:
 		PHASE_LOOKUP,				///< docid lookup construction
 		PHASE_MERGE,				///< index merging
 		PHASE_SI_BUILD,				///< secondary index build
+		PHASE_JSONSI_BUILD,			///< json secondary index build
 		PHASE_UNKNOWN,
 	};
 
@@ -1121,11 +1122,7 @@ struct CSphSourceStats;
 class DebugCheckError_i;
 struct AttrAddRemoveCtx_t;
 class Docstore_i;
-
-namespace SI
-{
-	class Index_i;
-}
+class SIContainer_c;
 
 enum ESphExt : BYTE;
 
@@ -1250,6 +1247,9 @@ public:
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }
 
+	virtual bool				CreateJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError ) { return false; }
+	virtual bool				DropJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError ) { return false; }
+
 public:
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) = 0;
@@ -1283,7 +1283,7 @@ public:
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
-	virtual SI::Index_i *		Debug_GetSI() const { return nullptr; }
+	virtual const SIContainer_c *	Debug_GetSI() const { return nullptr; }
 
 	virtual Docstore_i *			GetDocstore() const { return nullptr; }
 	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }

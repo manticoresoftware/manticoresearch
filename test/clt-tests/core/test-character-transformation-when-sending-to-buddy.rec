@@ -21,34 +21,11 @@ mysql -h0 -P9306 -e "CREATE TABLE test (id BIGINT, a TEXT, b TEXT);"
 mysql -h0 -P9306 -e "INSERT INTO test (id, a, b) VALUES (1, 'hello', 'world'), (2, 'hello', 'universe'), (3, 'goodbye', 'world');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT a, b FROM test WHERE MATCH('hello world') OPTION ranker=bm25, max_matches=3000;"
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1, key2 = 2;"
 ––– output –––
-+-------+-------+
-| a     | b     |
-+-------+-------+
-| hello | world |
-+-------+-------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT b, a FROM test WHERE MATCH('hello world') OPTION ranker=bm25, max_matches=3000;"
+searchd --version
 ––– output –––
-+-------+-------+
-| b     | a     |
-+-------+-------+
-| world | hello |
-+-------+-------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT a, b FROM test WHERE MATCH('hello world') OPTION max_matches=3000;"
+cat /var/log/manticore/searchd.log | grep 'request data'
 ––– output –––
-+-------+-------+
-| a     | b     |
-+-------+-------+
-| hello | world |
-+-------+-------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT b, a FROM test WHERE MATCH('hello world') OPTION max_matches=3000;"
-––– output –––
-+-------+-------+
-| b     | a     |
-+-------+-------+
-| world | hello |
-+-------+-------+

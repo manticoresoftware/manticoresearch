@@ -52,5 +52,5 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes'";
 +-------------------+----------------------------------------------+
 | Counter           | Value                                        |
 +-------------------+----------------------------------------------+
-| cluster_c_indexes | sharding_state,sharding_queue,sharding_table |
+| cluster_c_indexes | _sharding_state,_sharding_queue,_sharding_table |
 +-------------------+----------------------------------------------+

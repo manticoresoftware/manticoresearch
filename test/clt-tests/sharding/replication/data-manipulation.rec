@@ -25,9 +25,9 @@ mysql -h0 -P1306 -e "show tables;"
 +----------------+-------------+
 | Index          | Type        |
 +----------------+-------------+
-| sharding_queue | rt          |
-| sharding_state | rt          |
-| sharding_table | rt          |
+| _sharding_queue | rt          |
+| _sharding_state | rt          |
+| _sharding_table | rt          |
 | testrt         | distributed |
 | testrt_s%{NUMBER}      | rt          |
 +----------------+-------------+

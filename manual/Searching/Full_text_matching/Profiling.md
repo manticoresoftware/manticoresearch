@@ -116,7 +116,7 @@ POST /search
     "hits":
     [
        {
-          "_id":"406443",
+          "_id": 406443,
           "_score":3493,
           "_source":{}
        }
@@ -244,7 +244,7 @@ res = await searchApi.search({"index":"forum","query":{"query_string":"i me"},"_
 ```
 <!-- response javascript -->
 ``` javascript
-{"hits": {"hits": [{"_id": "100", "_score": 2500, "_source": {}}],
+{"hits": {"hits": [{"_id": 100, "_score": 2500, "_source": {}}],
           "total": 1},
  "profile": {"query": {"children": [{"children": [{"querypos": 1,
                                                       "type": "KEYWORD",
@@ -341,7 +341,7 @@ res = await searchApi.search({
 	{
 		"hits": 
 		[{
-			"_id": "1",
+			"_id": 1,
 			"_score": 1480,
 			"_source": {}
 		}],
@@ -401,7 +401,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 	{
 		"hits": 
 		[{
-			"_id": "1",
+			"_id": 1,
 			"_score": 1480,
 			"_source": {}
 		}],
@@ -515,7 +515,7 @@ POST /search
     "hits":
     [
        {
-          "_id":"711651",
+          "_id": 711651,
           "_score":2539,
           "_source":{}
        }
@@ -858,7 +858,7 @@ res = await searchApi.search({"index":"forum","query":{"query_string":"@title wa
 ```
 <!-- response javascript -->
 ``` javascript
-{"hits": {"hits": [{"_id": "2811025403043381551",
+{"hits": {"hits": [{"_id": 2811025403043381551,
                     "_score": 2643,
                     "_source": {}}],
           "total": 1},
@@ -959,7 +959,7 @@ res = await searchApi.search({
 	{
 		"hits": 
 		[{
-			"_id": "1",
+			"_id": 1,
             "_score": 1480,
             "_source": {}
         }],
@@ -1011,7 +1011,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 	{
 		"hits": 
 		[{
-			"_id": "1",
+			"_id": 1,
             "_score": 1480,
             "_source": {}
         }],

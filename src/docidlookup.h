@@ -83,8 +83,7 @@ public:
 		int iDocsInCheckpoint = GetNumDocsInCheckpoint(pFound);
 		for ( int i = 1; i < iDocsInCheckpoint; i++ )
 		{
-			DocID_t tDeltaDocID = UnzipOffsetBE(pCur);
-			assert ( tDeltaDocID>=0 );
+			uint64_t tDeltaDocID = UnzipOffsetBE(pCur);
 			tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
 			pCur += sizeof(RowID_t);
 
@@ -178,8 +177,7 @@ public:
 			return true;
 		}
 
-		DocID_t tDelta = UnzipOffsetBE ( m_pCur );
-		assert ( tDelta>=0 );
+		uint64_t tDelta = UnzipOffsetBE ( m_pCur );
 
 		tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
 		m_pCur += sizeof(RowID_t);

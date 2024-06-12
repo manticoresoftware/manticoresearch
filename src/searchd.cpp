@@ -1058,7 +1058,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #if !_WIN32
 	if ( bValidQuery )
 	{
-		size_t iPageSize = getpagesize();
+		size_t iPageSize = GetMemPageSize();
 
 		// FIXME! That is too complex way, remove all of this and just move query dump to the bottom
 		// remove also mincore_test.cmake, it's invokation from CMakeLists.txt and HAVE_UNSIGNED_MINCORE
@@ -5509,7 +5509,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		return 0;
 	}
 
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, tQueueRes.m_bJoinedGroupSort, dErrors[0] ) )
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -7786,8 +7786,8 @@ public:
 
 		case SPH_ATTR_TIMESTAMP:
 		{
-			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING && StrEq ( pName->cstr(), "@timestamp" ) )
-				tAttr = GetUTC ( tVal.m_sVal, CompatDateFormat() );
+			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING )
+				tAttr = GetUTC ( tVal.m_sVal );
 			else
 				tAttr = ToInt(tVal);
 		}
@@ -9445,7 +9445,7 @@ void StmtErrorReporter_i::Error ( const char * sTemplate, ... )
 	sBuf.vAppendf ( sTemplate, ap );
 	va_end ( ap );
 
-	ErrorEx ( MYSQL_ERR_PARSE_ERROR, sBuf.cstr () );
+	ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sBuf.cstr () );
 }
 
 class StmtErrorReporter_c final : public StmtErrorReporter_i
@@ -9465,7 +9465,7 @@ public:
 		m_tRowBuffer.Ok ( iAffectedRows, nWarnings );
 	}
 
-	void ErrorEx ( MysqlErrors_e iErr, const char * sError ) final
+	void ErrorEx ( EMYSQL_ERR iErr, const char * sError ) final
 	{
 		m_tRowBuffer.Error ( sError, iErr );
 	}
@@ -10631,7 +10631,7 @@ static bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dF
 		{
 			CSphString sError;
 			sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
-			tOut.ErrorEx ( MYSQL_ERR_FIELD_SPECIFIED_TWICE, sError.cstr() );
+			tOut.ErrorEx ( EMYSQL_ERR::FIELD_SPECIFIED_TWICE, sError.cstr() );
 			return false;
 		}
 
@@ -11157,7 +11157,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 
 	if ( !sError.IsEmpty() )
 	{
-		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		tOut.ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sError.cstr() );
 		return false;
 	}
 
@@ -11170,7 +11170,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
 	{
-		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		tOut.ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sError.cstr() );
 		return false;
 	}
 
@@ -11246,7 +11246,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 	if ( !sError.IsEmpty() )
 	{
 		pIndex->RollBack ( pAccum ); // clean up collected data
-		tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, sError.cstr() );
+		tOut.ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sError.cstr() );
 		return false;
 	}
 
@@ -13151,7 +13151,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 	if ( sphInterrupted() )
 	{
 		sphLogDebug ( "HandleClientMySQL: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-		dRows.Error ( "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+		dRows.Error ( "Server shutdown in progress", EMYSQL_ERR::SERVER_SHUTDOWN );
 		return false;
 	}
 
@@ -13988,7 +13988,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		if ( sphInterrupted() )
 		{
 			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-			dRows.Error ( "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+			dRows.Error ( "Server shutdown in progress", EMYSQL_ERR::SERVER_SHUTDOWN );
 			return;
 		}
 	}
@@ -16879,7 +16879,7 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 
 	if ( !iKilled )
 	{
-		tOut.ErrorEx ( SphSprintf ( "Unknown connection id: %d", iKill ).cstr(), MYSQL_ERR_NO_SUCH_THREAD );
+		tOut.ErrorEx ( SphSprintf ( "Unknown connection id: %d", iKill ).cstr(), EMYSQL_ERR::NO_SUCH_THREAD );
 	} else
 	{
 		tOut.Ok ( iKilled );

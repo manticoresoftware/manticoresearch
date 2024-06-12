@@ -114,19 +114,19 @@ PUT /pq/products/doc/
 {
   "index": "products",
   "type": "doc",
-  "_id": "1657852401006149661",
+  "_id": 1657852401006149661,
   "result": "created"
 }
 {
   "index": "products",
   "type": "doc",
-  "_id": "1657852401006149662",
+  "_id": 1657852401006149662,
   "result": "created"
 }
 {
   "index": "products",
   "type": "doc",
-  "_id": "1657852401006149663",
+  "_id": 1657852401006149663,
   "result": "created"
 }
 ```
@@ -485,7 +485,7 @@ POST /pq/products/_search
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "1657852401006149644",
+        "_id": 1657852401006149644,
         "_score": "1",
         "_source": {
           "query": {
@@ -601,7 +601,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"t
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "2811045522851233808",
+        "_id": 2811045522851233808,
         "_score": "1",
         "_source": {
           "query": {
@@ -696,7 +696,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { document : { 
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -736,7 +736,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -803,7 +803,7 @@ POST /pq/products/_search
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "1657852401006149644",
+        "_id": 1657852401006149644,
         "_score": "1",
         "_source": {
           "query": {
@@ -920,7 +920,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"t
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "2811045522851233808",
+        "_id": 2811045522851233808,
         "_score": "1",
         "_source": {
           "query": {
@@ -1016,7 +1016,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { document : { 
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -1056,7 +1056,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -1150,7 +1150,7 @@ POST /pq/products/_search
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "1657852401006149644",
+        "_id": 1657852401006149644,
         "_score": "1",
         "_source": {
           "query": {
@@ -1166,7 +1166,7 @@ POST /pq/products/_search
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "1657852401006149646",
+        "_id": 1657852401006149646,
         "_score": "1",
         "_source": {
           "query": {
@@ -1314,7 +1314,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "2811045522851233808",
+        "_id": 2811045522851233808,
         "_score": "1",
         "_source": {
           "query": {
@@ -1330,7 +1330,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "2811045522851233810",
+        "_id": 2811045522851233810,
         "_score": "1",
         "_source": {
           "query": {
@@ -1441,7 +1441,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -1457,7 +1457,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149662",
+        "_id": 1657852401006149662,
         "_score": "1",
         "_source": {
           "query": {
@@ -1499,7 +1499,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -1515,7 +1515,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149662",
+        "_id": 1657852401006149662,
         "_score": "1",
         "_source": {
           "query": {
@@ -1587,7 +1587,7 @@ POST /pq/products/_search
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "1657852401006149644",
+        "_id": 1657852401006149644,
         "_score": "1",
         "_source": {
           "query": {
@@ -1603,7 +1603,7 @@ POST /pq/products/_search
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "1657852401006149646",
+        "_id": 1657852401006149646,
         "_score": "1",
         "_source": {
           "query": {
@@ -1751,7 +1751,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "2811045522851233808",
+        "_id": 2811045522851233808,
         "_score": "1",
         "_source": {
           "query": {
@@ -1767,7 +1767,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
       {
         "_index": "products",
         "_type": "doc",
-        "_id": "2811045522851233810",
+        "_id": 2811045522851233810,
         "_score": "1",
         "_source": {
           "query": {
@@ -1876,7 +1876,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -1892,7 +1892,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149662",
+        "_id": 1657852401006149662,
         "_score": "1",
         "_source": {
           "query": {
@@ -1934,7 +1934,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -1950,7 +1950,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149662",
+        "_id": 1657852401006149662,
         "_score": "1",
         "_source": {
           "query": {
@@ -2095,7 +2095,7 @@ POST /pq/pq/_search
         "total":2,
         "hits":[
             {
-                "_id":"1",
+                "_id": 1,
                 "_score":1,
                 "_source":{
                     "query":{ "ql":"filter test" },
@@ -2104,7 +2104,7 @@ POST /pq/pq/_search
                 }
             },
             {
-                "_id":"2",
+                "_id": 2,
                 "_score":1,
                 "_source":{
                     "query":{"ql":"angry"},
@@ -2228,12 +2228,12 @@ res = await searchApi.search({"index":"pq","query":{"match_all":{}}});
 ```
 <!-- response javascript -->
 ``` javascript
-{"hits": {"hits": [{"_id": "2811025403043381501",
+{"hits": {"hits": [{"_id": 2811025403043381501,
                     "_score": 1,
                     "_source": {"filters": u"gid>=10",
                                  "query": "filter test",
                                  "tags": ""}},
-                   {"_id": "2811025403043381502",
+                   {"_id": 2811025403043381502,
                     "_score": 1,
                     "_source": {"filters": u"gid>=10 OR gid<=3",
                                  "query": "angry",
@@ -2439,7 +2439,7 @@ POST /pq/pq/_search -d '
     "hits":{
     "total":2,"hits":[
         {
-            "_id":"2",
+            "_id": 2,
             "_score":1,
             "_source":{
                 "query":{"title":"angry"},
@@ -2448,7 +2448,7 @@ POST /pq/pq/_search -d '
             }
         }
         {
-            "_id":"1",
+            "_id": 1,
             "_score":1,
             "_source":{
                 "query":{"ql":"filter test"},
@@ -2691,7 +2691,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -2707,7 +2707,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149662",
+        "_id": 1657852401006149662,
         "_score": "1",
         "_source": {
           "query": {
@@ -2749,7 +2749,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149661",
+        "_id": 1657852401006149661,
         "_score": "1",
         "_source": {
           "query": {
@@ -2765,7 +2765,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
       {
         "_index": "test_pq",
         "_type": "doc",
-        "_id": "1657852401006149662",
+        "_id": 1657852401006149662,
         "_score": "1",
         "_source": {
           "query": {

@@ -99,6 +99,21 @@ SELECT *, COUNT(*) from t1, t2 GROUP BY id limit 2 option threads=1, max_matches
 
 drop table t1;
 drop table t2;
+
+<!-- another regression of a crash at global sorters on clean up of data attributes -->
+create table test (dealerdata json, minprice bigint, partgroupid uint, partid bigint);
+</sphinxql>
+
+<repeat count="2000" vars="i" init="4" inc="2" skip="1">
+		<sphinxql skip="1">
+			INSERT INTO test VALUES (0,'{"1":{"MinPrice":<i/>}}',<i/>,<i/>,<i/>)
+		</sphinxql>
+</repeat>
+
+<sphinxql>
+select count(*) from test;
+select if(dealerdata.1.MinPrice is not null, dealerdata.1.MinPrice, minprice), count(distinct partid) from test group by partgroupid order by id asc;
+drop table test;
 </sphinxql>
 
 </queries>

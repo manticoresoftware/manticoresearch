@@ -1,0 +1,73 @@
+––– block: ../base/dind/init –––
+––– input –––
+docker pull -q --platform linux/x86_64 ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+docker pull -q --platform linux/x86_64 mysql:latest > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+docker pull -q --platform linux/x86_64 postgres:latest > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+docker network create t_network > /dev/null
+––– output –––
+––– input –––
+docker run -d --network=t_network -p 3306:3306 --platform linux/x86_64 --name mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=test mysql:latest > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+timeout 20 grep -m2 "Plugin ready for connections" <(docker logs -f mysql 2>&1)
+––– output –––
+#!/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{6}Z/!# 0 [System] [MY-011323] [Server] X Plugin ready for connections. Socket: /var/run/mysqld/mysqlx.sock
+#!/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{6}Z/!# 0 [System] [MY-011323] [Server] X Plugin ready for connections. Bind-address: '::' port: 33060, socket: /var/run/mysqld/mysqlx.sock
+––– input –––
+docker run -d --network=t_network --platform linux/x86_64 --name manticore -v ./test/clt-tests/id-attribute-error-during-indexing/min_mysql.conf:/min_mysql.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_mysql.conf > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+timeout 20 grep -m1 "can not redefine auto-defined 'id' attribute" <(docker logs -f manticore 2>&1)
+––– output –––
+ERROR: table 'idx_min': can not redefine auto-defined 'id' attribute.
+––– input –––
+docker run -d --network=t_network -p 5432:5432 --platform linux/amd64 --name postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres  postgres:latest > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+timeout 20 grep -m2 'database system is ready to accept connections' <(docker logs -f postgres 2>&1)
+––– output –––
+#!/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}/!# UTC [%{NUMBER}] LOG:  database system is ready to accept connections
+#!/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}/!# UTC [%{NUMBER}] LOG:  database system is ready to accept connections
+––– input –––
+docker run -d --network=t_network --platform linux/x86_64 --name manticore2 -v ./test/clt-tests/id-attribute-error-during-indexing/min_postgres.sql:/min_postgres.sql ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_postgres.sql > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+timeout 10 grep -m1 "can not redefine auto-defined 'id' attribute" <(docker logs -f manticore2 2>&1)
+––– output –––
+ERROR: table 'idx': can not redefine auto-defined 'id' attribute.
+––– input –––
+docker run -d --network=t_network --platform linux/x86_64 --name csv -v ./test/clt-tests/id-attribute-error-during-indexing/csv_crash.conf:/csv_crash.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /csv_crash.conf > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f csv 2>&1)
+––– output –––
+ERROR: csvpipe: can not define auto-defined 'id' attributeERROR: table 'video': failed to configure some of the sources, will not index.
+––– input –––
+docker run -d --network=t_network --platform linux/x86_64 --name tsv -v ./test/clt-tests/id-attribute-error-during-indexing/tsv_crash.conf:/tsv_crash.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /tsv_crash.conf > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f tsv 2>&1)
+––– output –––
+ERROR: tsvpipe: can not define auto-defined 'id' attributeERROR: table 'video': failed to configure some of the sources, will not index.
+––– input –––
+docker run --network=t_network --platform linux/x86_64 --name xml -v ./test/clt-tests/id-attribute-error-during-indexing/xml.conf:/xml.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /xml.conf > /dev/null;
+––– output –––
+––– input –––
+timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f xml 2>&1)
+––– output –––
+ERROR: table 'idx': source 'min': can not define auto-defined 'id' attribute (line=1, pos=207, docid=0).

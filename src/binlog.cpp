@@ -248,7 +248,7 @@ bool BinlogWriter_c::Write ( bool bRemoveUnsuccessful )
 	if ( !m_dBuf.GetLength() )
 		return true;
 
-	if ( !sphWriteThrottled ( m_tFile.GetFD(), m_dBuf.Begin(), m_dBuf.GetLength(), m_tFile.GetFilename(), m_sError ) )
+	if ( !WriteNonThrottled ( m_tFile.GetFD(), m_dBuf.Begin(), m_dBuf.GetLength(), m_tFile.GetFilename(), m_sError ) )
 	{
 		// if we got a partial write, clamp the file at the end of last written transaction
 		sphSeek ( m_tFile.GetFD(), m_iLastFilePos, SEEK_SET );

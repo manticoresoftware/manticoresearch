@@ -851,6 +851,8 @@ bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* 
 		iChunkSize = Min ( iChunkSize, g_iMaxIOSize );
 
 	CSphIOStats* pIOStats = GetIOStats();
+	int64_t iTotalWritten = 0;
+	const int64_t iTotalCount = iCount;
 
 	// while there's data, write it chunk by chunk
 	auto* p = (const BYTE*)pBuf;
@@ -865,7 +867,7 @@ bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* 
 			tmTimer = sphMicroTimer();
 
 		auto iToWrite = (int)Min ( iCount, iChunkSize );
-		int iWritten = ::write ( iFD, p, iToWrite );
+		auto iWritten = (int)::write ( iFD, &p[iTotalWritten], iToWrite );
 
 		if ( pIOStats )
 		{
@@ -879,24 +881,71 @@ bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* 
 			return false;
 		}
 
-		// success? rinse, repeat
-		if ( iWritten == iToWrite )
+		// failure? report, bailout
+		if ( iWritten<0 )
 		{
-			iCount -= iToWrite;
-			p += iToWrite;
-			continue;
+			if ( iTotalWritten!=iTotalCount )
+				sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
+			else
+				sError.SetSprintf ( "%s: write error: %s; " INT64_FMT " of " INT64_FMT " bytes written", sName, strerrorm ( errno ), iTotalWritten, iTotalCount );
+			return false;
 		}
 
-		// failure? report, bailout
-		if ( iWritten < 0 )
-			sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
-		else
-			sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, iToWrite );
-		return false;
+		// success? rinse, repeat
+		iCount -= iWritten;
+		iTotalWritten += iWritten;
 	}
 	return true;
 }
 
+
+bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
+{
+	if ( iCount<=0 )
+		return true;
+
+	CSphIOStats * pIOStats = GetIOStats ();
+	int64_t iTotalWritten = 0;
+	const int64_t iTotalCount = iCount;
+
+	// while there's data, write it chunk by chunk
+	auto * p = (const BYTE *) pBuf;
+	while ( iCount )
+	{
+		int64_t tmTimer = 0;
+		if ( pIOStats )
+			tmTimer = sphMicroTimer ();
+
+		auto iToWrite = (int) Min ( iCount, 1UL << 30 );
+		auto iWritten = (int) ::write ( iFD, &p[iTotalWritten], iToWrite );
+
+		if ( pIOStats )
+		{
+			pIOStats->m_iWriteTime += sphMicroTimer ()-tmTimer;
+			pIOStats->m_iWriteOps++;
+			pIOStats->m_iWriteBytes += iWritten;
+		}
+		if ( sphInterrupted () && iWritten!=iToWrite )
+		{
+			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );
+			return false;
+		}
+		// failure? report, bailout
+		if ( iWritten<0 )
+		{
+			if ( iTotalWritten!=iTotalCount )
+				sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
+			else
+				sError.SetSprintf ( "%s: write error: %s; " INT64_FMT " of " INT64_FMT " bytes written", sName, strerrorm ( errno ), iTotalWritten, iTotalCount );
+			return false;
+		}
+
+		// success? rinse, repeat
+		iCount -= iWritten;
+		iTotalWritten += iWritten;
+	}
+	return true;
+}
 
 size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount )
 {

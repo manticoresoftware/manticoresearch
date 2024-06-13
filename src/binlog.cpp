@@ -183,6 +183,7 @@ private:
 	bool	IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const;
 	bool	IsIndexMatched ( const BinlogIndexInfo_t & tIndex ) const;
 	void	RemoveAbandonedLog();
+	CSphString MakeBinlogName ( int iExt ) const noexcept;
 };
 
 std::unique_ptr<Binlog_c>		g_pRtBinlog;
@@ -191,14 +192,6 @@ std::unique_ptr<Binlog_c>		g_pRtBinlog;
 // BINLOG
 //////////////////////////////////////////////////////////////////////////
 
-static CSphString MakeBinlogName ( const char * sPath, int iExt )
-{
-	CSphString sName;
-	sName.SetSprintf ( "%s/binlog.%03d", sPath, iExt );
-	return sName;
-}
-
-//////////////////////////////////////////////////////////////////////////
 class BinlogTransactionGuard_c final
 {
 public:
@@ -403,7 +396,7 @@ void Binlog_c::RemoveAbandonedLog()
 {
 	assert ( !m_dLogFiles.IsEmpty() && m_dLogFiles.Last().m_dIndexInfos.IsEmpty() );
 	// do unlink
-	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), m_dLogFiles.Last().m_iExt );
+	CSphString sLog = MakeBinlogName ( m_dLogFiles.Last().m_iExt );
 	if ( ::unlink ( sLog.cstr() ) )
 		sphWarning ( "binlog: failed to unlink abandoned %s: %s", sLog.cstr(), strerrorm(errno) );
 
@@ -414,6 +407,12 @@ void Binlog_c::RemoveAbandonedLog()
 
 	// if we unlinked any logs, we need to save meta, too
 	SaveMeta ();
+}
+
+
+CSphString Binlog_c::MakeBinlogName ( int iExt ) const noexcept
+{
+	return SphSprintf ( "%s/binlog.%03d", m_sLogPath.cstr (), iExt );
 }
 
 bool Binlog_c::IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const
@@ -477,7 +476,7 @@ void Binlog_c::NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool 
 		}
 
 		// do unlink
-		CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
+		CSphString sLog = MakeBinlogName ( tLog.m_iExt );
 		if ( ::unlink ( sLog.cstr() ) )
 			sphWarning ( "binlog: failed to unlink %s: %s", sLog.cstr(), strerrorm(errno) );
 
@@ -768,7 +767,7 @@ void Binlog_c::OpenNewLog ( int iLastState )
 	SaveMeta();
 
 	// create file
-	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
+	CSphString sLog = MakeBinlogName ( tLog.m_iExt );
 
 	if ( !iLastState ) // reuse the last binlog since it is empty or useless.
 		::unlink ( sLog.cstr() );
@@ -851,7 +850,7 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	assert ( iBinlog>=0 && iBinlog<m_dLogFiles.GetLength() );
 	CSphString sError;
 
-	const CSphString sLog ( MakeBinlogName ( m_sLogPath.cstr(), m_dLogFiles[iBinlog].m_iExt ) );
+	const CSphString sLog ( MakeBinlogName ( m_dLogFiles[iBinlog].m_iExt ) );
 	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
 
 	// open, check, play

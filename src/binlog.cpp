@@ -35,8 +35,6 @@ struct BinlogIndexInfo_t
 	int64_t		m_iMinTID = INT64_MAX;	///< min TID logged by this file
 	int64_t		m_iMaxTID = 0;			///< max TID logged by this file
 	int64_t		m_iFlushedTID = 0;		///< last flushed TID
-	int64_t		m_tmMin = INT64_MAX;	///< min TID timestamp
-	int64_t		m_tmMax = 0;			///< max TID timestamp
 
 	CSphIndex *	m_pIndex = nullptr;		///< replay only; associated index (might be NULL if we don't serve it anymore!)
 	int64_t		m_iPreReplayTID = 0;	///< replay only; index TID at the beginning of this file replay
@@ -157,7 +155,7 @@ private:
 
 private:
 
-	int 					GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t tmNow );
+	int 					GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID );
 	void					LoadMeta ();
 	void					SaveMeta ();
 	void					LockBinlog ();
@@ -178,9 +176,8 @@ private:
 	bool		CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos ) const;
 
 	void	CheckTidSeq ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, CSphIndex * pIndexTID, int64_t iTxnPos ) const;
-	bool	CheckTime ( BinlogIndexInfo_t & tIndex, const char * sOp, int64_t tmStamp, int64_t iTID, int64_t iTxnPos ) const;
-	bool	PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, int64_t tmStamp, BinlogReader_c & tReader ) const;
-	static void	UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t tmStamp ) ;
+	bool	PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const;
+	static void	UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID ) ;
 
 	void	Log ( DWORD uFlag, const char * sTemplate, ... ) const;
 	int		ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const;
@@ -617,7 +614,7 @@ int64_t Binlog_c::NextFlushingTime () const
 	return m_iLastFlushed + m_iFlushPeriod;
 }
 
-int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t tmNow )
+int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID )
 {
 	MEMORY ( MEM_BINLOG );
 	assert ( m_dLogFiles.GetLength() );
@@ -630,7 +627,6 @@ int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t
 		if ( IsSame ( tIndex, tIndexName ) )
 		{
 			tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
-			tIndex.m_tmMax = Max ( tIndex.m_tmMax, tmNow );
 			return i;
 		}
 	}
@@ -643,8 +639,6 @@ int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t
 	tIndex.m_iMinTID = iTID;
 	tIndex.m_iMaxTID = iTID;
 	tIndex.m_iFlushedTID = 0;
-	tIndex.m_tmMin = tmNow;
-	tIndex.m_tmMax = tmNow;
 
 	// log this new entry
 	BinlogTransactionGuard_c tGuard ( m_tWriter, false );
@@ -654,7 +648,6 @@ int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t
 	m_tWriter.PutString ( tIndexName.szName );
 	m_tWriter.ZipOffset ( tIndexName.iUID );
 	m_tWriter.ZipOffset ( iTID );
-	m_tWriter.ZipOffset ( tmNow );
 
 	// return the index
 	return iID;
@@ -814,8 +807,6 @@ void Binlog_c::DoCacheWrite ()
 		m_tWriter.ZipOffset ( dIndexes[i].m_iMinTID );
 		m_tWriter.ZipOffset ( dIndexes[i].m_iMaxTID );
 		m_tWriter.ZipOffset ( dIndexes[i].m_iFlushedTID );
-		m_tWriter.ZipOffset ( dIndexes[i].m_tmMin );
-		m_tWriter.ZipOffset ( dIndexes[i].m_tmMax );
 	}
 }
 
@@ -1037,7 +1028,6 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 
 	// FIXME? use this for double checking?
 	tReader.UnzipOffset (); // TID
-	tReader.UnzipOffset (); // time
 
 	if ( !tReader.CheckCrc ( "indexadd", sName.cstr(), 0, iTxnPos ) )
 		return false;
@@ -1096,8 +1086,6 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 		dCache[i].m_iMinTID = tReader.UnzipOffset();
 		dCache[i].m_iMaxTID = tReader.UnzipOffset();
 		dCache[i].m_iFlushedTID = tReader.UnzipOffset();
-		dCache[i].m_tmMin = tReader.UnzipOffset();
-		dCache[i].m_tmMax = tReader.UnzipOffset();
 	}
 	if ( !tReader.CheckCrc ( "cache", "", 0, iTxnPos ) )
 		return false;
@@ -1187,7 +1175,6 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[iIdx];
 
 	auto iTID = (int64_t) tReader.UnzipOffset();
-	auto tmStamp = (int64_t) tReader.UnzipOffset();
 
 	// load transaction data
 	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
@@ -1209,7 +1196,7 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return false;
 	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return false;
 
-	if (!PerformChecks ( "update", tIndex, iTID, iTxnPos, tmStamp, tReader ))
+	if (!PerformChecks ( "update", tIndex, iTID, iTxnPos, tReader ))
 		return false;
 
 	if ( tIndex.m_pIndex && IsIndexMatched ( tIndex ) && iTID > tIndex.m_pIndex->m_iTID )
@@ -1229,7 +1216,7 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 
 	// update info
 	if ( IsIndexMatched ( tIndex ) )
-		UpdateIndexInfo ( tIndex, iTID, tmStamp );
+		UpdateIndexInfo ( tIndex, iTID );
 
 	return true;
 }
@@ -1248,17 +1235,16 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 
 	// load transaction data
 	auto iTID = (int64_t) tReader.UnzipOffset();
-	auto tmStamp = (int64_t) tReader.UnzipOffset();
 
 	if ( !tIndex.m_pIndex )
 		return false;
 
 	CSphString sError;
-	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( eOp, tReader, sError, [ eOp, iTxnPos, iTID, tmStamp, this, &tReader, &tIndex ] () {
+	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( eOp, tReader, sError, [ eOp, iTxnPos, iTID, this, &tReader, &tIndex ] () {
 		
 		CheckTnxResult_t tRes;
 
-		tRes.m_bValid = PerformChecks ( OpName (eOp), tIndex, iTID, iTxnPos, tmStamp, tReader );
+		tRes.m_bValid = PerformChecks ( OpName (eOp), tIndex, iTID, iTxnPos, tReader );
 		if ( !tRes.m_bValid )
 			return tRes;
 
@@ -1289,7 +1275,7 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 	} 
 
 	if ( IsIndexMatched (  tIndex ) )
-		UpdateIndexInfo ( tIndex, iTID, tmStamp );
+		UpdateIndexInfo ( tIndex, iTID );
 
 	return true;
 
@@ -1325,45 +1311,22 @@ void Binlog_c::CheckTidSeq ( const char * sOp, const BinlogIndexInfo_t & tIndex,
 			sOp, tIndex.m_sName.cstr(), pIndexTID->m_iTID, iTID, iTxnPos );
 }
 
-bool Binlog_c::CheckTime ( BinlogIndexInfo_t & tIndex, const char * sOp, int64_t tmStamp, int64_t iTID, int64_t iTxnPos ) const
-{
-	if ( tmStamp<tIndex.m_tmMax )
-	{
-		Log ( REPLAY_ACCEPT_DESC_TIMESTAMP, "binlog: %s: descending time (table=%s, lasttime=" INT64_FMT ", logtime=" INT64_FMT ", pos=" INT64_FMT ")",
-				sOp, tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
-		return false;
-	}
 
-	tIndex.m_tmMax = tmStamp;
-	return true;
-}
-
-
-bool Binlog_c::PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, int64_t tmStamp,
-		BinlogReader_c & tReader ) const
+bool Binlog_c::PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const
 {
 	// checksum
 	if ( !CheckCrc ( szOp, tIndex.m_sName, iTID, iTxnPos, tReader ) )
 		return false;
 
 	// check TID
-	if ( !CheckTid ( szOp, tIndex, iTID, iTxnPos ) )
-		return false;
-
-	// check timestamp
-	if ( !CheckTime ( tIndex, szOp, tmStamp, iTID, iTxnPos ) )
-		return false;
-
-	return true;
+	return CheckTid ( szOp, tIndex, iTID, iTxnPos );
 }
 
 
-void Binlog_c::UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t tmStamp )
+void Binlog_c::UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID )
 {
 	tIndex.m_iMinTID = Min ( tIndex.m_iMinTID, iTID );
 	tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
-	tIndex.m_tmMin = Min ( tIndex.m_tmMin, tmStamp );
-	tIndex.m_tmMax = Max ( tIndex.m_tmMax, tmStamp );
 }
 
 bool Binlog_c::IsBinlogWritable ( int64_t * pTID )
@@ -1392,8 +1355,7 @@ bool Binlog_c::BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexN
 	ScopedMutex_t tWriteLock ( m_tWriteLock );
 
 	int64_t iTID = ++(*pTID);
-	const int64_t tmNow = sphMicroTimer();
-	const int uIndex = GetWriteIndexID ( tIndexName, iTID, tmNow );
+	const int uIndex = GetWriteIndexID ( tIndexName, iTID );
 
 	{
 		BinlogTransactionGuard_c tGuard ( m_tWriter, m_eOnCommit==ACTION_NONE );
@@ -1402,7 +1364,6 @@ bool Binlog_c::BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexN
 		m_tWriter.ZipOffset ( eOp );
 		m_tWriter.ZipOffset ( uIndex );
 		m_tWriter.ZipOffset ( iTID );
-		m_tWriter.ZipOffset ( tmNow );
 
 		// save txn data
 		fnSaver ( m_tWriter );

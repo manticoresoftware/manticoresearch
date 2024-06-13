@@ -18,7 +18,7 @@
 // up to 12: PQ_ADD_DELETE added
 // 13 : changed txn format; now stores total documents also
 // 14 : ??
-// 15 : remove PQ_ADD, PQ_DELETE
+// 15 : remove PQ_ADD, PQ_DELETE, timestamps
 constexpr unsigned int BINLOG_VERSION = 15;
 
 namespace Binlog {

@@ -958,7 +958,6 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 				break;
 
 			case COMMIT:
-			case RECONFIGURE:
 			case PQ_ADD_DELETE:
 				bReplayOK = ReplayTxn ( Binlog::Blop_e(uOp), iBinlog, tReader );
 				break;
@@ -996,8 +995,8 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 		}
 	}
 
-	sphInfo ( "binlog: replay stats: %d commits; %d updates, %d reconfigure; %d pq-add-delete, %d tables",
-		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[RECONFIGURE],dTotal[PQ_ADD_DELETE], dTotal[ADD_INDEX] );
+	sphInfo ( "binlog: replay stats: %d commits, %d updates, %d pq-add-delete, %d tables",
+		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[PQ_ADD_DELETE], dTotal[ADD_INDEX] );
 	sphInfo ( "binlog: finished replaying %s; %d.%d MB in %d.%03d sec",
 		sLog.cstr(),
 		(int)(iFileSize/1048576), (int)((iFileSize*10/1048576)%10),
@@ -1156,7 +1155,6 @@ static const char* OpName ( Binlog::Blop_e eOp)
 	switch (eOp)
 	{
 		case Binlog::COMMIT: return "commit";
-		case Binlog::RECONFIGURE: return "reconfigure";
 		case Binlog::PQ_ADD_DELETE: return "pq-add-delete";
 		default: return "other";
 	}
@@ -1168,7 +1166,7 @@ bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) 
 	// load and lookup index
 	const int64_t iTxnPos = tReader.GetPos();
 	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
-	
+
 	int iIdx = ReplayIndexID ( tReader, tLog, "update" );
 	if ( iIdx==-1 )
 		return false;

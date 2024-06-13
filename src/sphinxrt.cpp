@@ -1281,7 +1281,6 @@ public:
 
 	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue ) override; // cb from binlog
 	Binlog::CheckTnxResult_t ReplayCommit ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue );
-	Binlog::CheckTnxResult_t ReplayReconfigure ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue );
 
 public:
 #if _WIN32
@@ -9328,49 +9327,11 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 	return tRes;
 }
 
-Binlog::CheckTnxResult_t RtIndex_c::ReplayReconfigure ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
-{
-	CSphTokenizerSettings tTokenizerSettings;
-	CSphDictSettings tDictSettings;
-	CSphEmbeddedFiles tEmbeddedFiles;
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
-	if ( GetIndexFilenameBuilder() )
-		pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
-
-	CSphReconfigureSettings tSettings;
-	LoadIndexSettings ( tSettings.m_tIndex, tReader, INDEX_FORMAT_VERSION );
-	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.get(), tReader, tEmbeddedFiles, sError ) )
-	{
-		sError.SetSprintf ( "failed to load settings, %s", sError.cstr() );
-		return {};
-	}
-
-	tSettings.m_tDict.Load ( tReader, tEmbeddedFiles, pFilenameBuilder.get(), sError );
-	tSettings.m_tFieldFilter.Load(tReader);
-
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
-	if ( tRes.m_bValid && tRes.m_bApply )
-	{
-		sError = "";
-		CSphReconfigureSetup tSetup;
-		StrVec_t dWarnings;
-		bool bSame = IsSameSettings ( tSettings, tSetup, dWarnings, sError );
-
-		if ( !sError.IsEmpty() )
-			sphWarning ( "binlog: reconfigure: wrong settings (table=%s, error=%s)", GetName(), sError.cstr() );
-
-		if ( !bSame )
-			tRes.m_bApply = Reconfigure ( tSetup );
-	}
-	return tRes;
-}
-
 Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
 {
 	switch ( eOp )
 	{
 	case Binlog::COMMIT: return ReplayCommit ( tReader, sError, std::move(fnCanContinue) );
-	case Binlog::RECONFIGURE: return ReplayReconfigure ( tReader, sError, std::move(fnCanContinue) );
 	default: assert (false && "unknown op provided to replay");
 	}
 	return {};

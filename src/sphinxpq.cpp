@@ -184,9 +184,6 @@ private:
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
 	SharedPQSlice_t GetStoredUnl () const REQUIRES_SHARED ( m_tLock );
 	bool IsSaveDisabled() const noexcept;
-
-	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
-
 	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 	bool LoadMetaImpl ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 };
@@ -2989,27 +2986,8 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 
-// fixme? Retire this, then SaveIndexSettings/SaveTokenizersettings/SaveDictionarySettings for plain CSphWriter, only json left
-void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
-{
-	CSphString sError;
-	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, { GetName(), m_iIndexId }, false, sError, [&tSetup] ( Writer_i & tWriter ) {
-		// reconfigure data
-		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
-		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );
-		SaveDictionarySettings ( tWriter, tSetup.m_pDict, false, 0 );
-
-		CSphFieldFilterSettings tFieldFilterSettings;
-		if ( tSetup.m_pFieldFilter )
-			tSetup.m_pFieldFilter->GetSettings(tFieldFilterSettings);
-		tFieldFilterSettings.Save(tWriter);
-	});
-}
-
 bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
-	BinlogReconfigure ( tSetup );
-
 	m_tSchema = tSetup.m_tSchema;
 
 	Setup ( tSetup.m_tIndex );

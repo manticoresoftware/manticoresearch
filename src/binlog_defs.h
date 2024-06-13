@@ -18,7 +18,7 @@
 // up to 12: PQ_ADD_DELETE added
 // 13 : changed txn format; now stores total documents also
 // 14 : ??
-// 15 : remove PQ_ADD, PQ_DELETE, timestamps
+// 15 : remove PQ_ADD, PQ_DELETE, timestamps, RECONFIGURE, reorder ops
 constexpr unsigned int BINLOG_VERSION = 15;
 
 namespace Binlog {
@@ -26,12 +26,11 @@ namespace Binlog {
 	/// Bin Log Operation
 	enum Blop_e : BYTE
 	{
-		COMMIT			= 1,
-		UPDATE_ATTRS	= 2,
-		ADD_INDEX		= 3,
-		ADD_CACHE		= 4,
-		RECONFIGURE		= 5,
-		PQ_ADD_DELETE	= 6,
+		ADD_INDEX		= 1,
+		ADD_CACHE		= 2,
+		COMMIT			= 3,
+		UPDATE_ATTRS	= 4,
+		PQ_ADD_DELETE	= 5,
 
 		TOTAL
 	};

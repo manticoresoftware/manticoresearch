@@ -10409,9 +10409,9 @@ std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString 
 }
 
 
-void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon )
+void sphRTInit ( CSphString sBinlogPath, const CSphConfigSection * pCommon )
 {
-	Binlog::Init ( hSearchd, bTestMode );
+	Binlog::Init ( std::move ( sBinlogPath ) );
 	if ( pCommon )
 		g_bProgressiveMerge = pCommon->GetBool ( "progressive_merge", true );
 }

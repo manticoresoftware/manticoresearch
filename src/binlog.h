@@ -49,8 +49,8 @@ namespace Binlog {
 		return !tReader.GetErrorFlag();
 	}
 
-	void Init ( const CSphConfigSection & hSearchd, bool bTestMode );
-	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags, bool bConfigless );
+	void Init ( CSphString sBinlogPath );
+	void Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless );
 	void Deinit ();
 	bool IsActive();
 	bool MockDisabled ( bool bNewVal );
@@ -59,7 +59,10 @@ namespace Binlog {
 	void Flush();
 	int64_t NextFlushTimestamp();
 
-	using IndexNameUid_t = std::pair<const char *, int64_t>;
+	struct IndexNameUid_t {
+		const char* szName;
+		int64_t iUID;
+	};
 
 	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
 	bool Commit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );

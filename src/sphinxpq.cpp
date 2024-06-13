@@ -136,10 +136,8 @@ public:
 
 	int64_t				GetMemLimit() const final { return 0; }
 
-	Binlog::CheckTnxResult_t ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue) override; // cb from binlog
-	Binlog::CheckTnxResult_t ReplayAdd(CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue);
-	Binlog::CheckTnxResult_t ReplayDelete(CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue);
-	Binlog::CheckTnxResult_t ReplayInsertAndDelete ( CSphReader& tReader, CSphString& sError, Binlog::CheckTxn_fn&& fnCanContinue );
+
+	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue ) final; // cb from binlog
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
@@ -1894,16 +1892,16 @@ template<typename READER>
 static void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, READER& tReader )
 {
 	dDeleteTags.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dDeleteTags )
-		dDeleteTags[i] = tReader.UnzipOffset();
+	for ( auto& tTag: dDeleteTags )
+		tTag = tReader.UnzipOffset();
 
 	dDeleteQueries.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dDeleteQueries )
-		dDeleteQueries[i] = tReader.UnzipOffset();
+	for ( auto& tQuery: dDeleteQueries )
+		tQuery = tReader.UnzipOffset();
 
 	dNewQueries.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dNewQueries )
-		LoadStoredQuery ( PQ_META_VERSION_MAX, dNewQueries[i], tReader );
+	for ( auto& tNewQuery: dNewQueries )
+		LoadStoredQuery ( PQ_META_VERSION_MAX, tNewQuery, tReader );
 }
 
 static void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
@@ -2043,7 +2041,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		// insert/replace pass
 
-		// check whether we can insert fastest possible way, or need to modify snapshot and only then insert
+		// check whether we can insert the fastest possible way, or need to modify snapshot and only then insert
 		if ( !bWithFullClone )
 		{
 			for ( const auto& pQuery : dNewSharedQueries )
@@ -2151,69 +2149,12 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 
 Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
 {
-	switch ( eOp )
+	if ( Binlog::PQ_ADD_DELETE!=eOp )
 	{
-	case Binlog::PQ_ADD: return ReplayAdd(tReader, sError, std::move(fnCanContinue));
-	case Binlog::PQ_DELETE: return ReplayDelete(tReader, std::move(fnCanContinue));
-	case Binlog::PQ_ADD_DELETE: return ReplayInsertAndDelete(tReader, sError, std::move(fnCanContinue));
-	default: assert (false && "unknown op provided to replay");
-	}
+		assert ( false && "unknown op provided to replay" );
 	return {};
 }
 
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
-{
-	StoredQueryDesc_t tStored;
-	LoadStoredQuery ( PQ_META_VERSION_MAX, tStored, tReader );
-
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
-	if ( tRes.m_bValid && tRes.m_bApply )
-	{
-		PercolateQueryArgs_t tArgs ( tStored );
-		// at binlog query already passed replace checks
-		tArgs.m_bReplace = true;
-
-		// actually replay
-		auto pQuery = CreateQuery ( tArgs, sError );
-		if ( !pQuery )
-		{
-			sError.SetSprintf ( "apply error, %s", sError.cstr() );
-			tRes = Binlog::CheckTnxResult_t();
-			return tRes;
-		}
-
-		// actually replay
-		CSphVector<int64_t> dDeleteQueries;
-		CSphVector<uint64_t> dDeleteTags;
-		CSphVector<StoredQuery_i*> dNewQueries;
-		dNewQueries.Add ( pQuery.release() );
-		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
-	}
-	return tRes;
-}
-
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayDelete (CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue)
-{
-	CSphVector<int64_t> dQueries;
-	CSphString sTags;
-	LoadDeleteQuery ( dQueries, sTags, tReader );
-
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
-	if ( tRes.m_bValid && tRes.m_bApply )
-	{
-		CSphVector<StoredQuery_i*> dNewQueries;
-		CSphVector<uint64_t> dDeleteTags;
-		if ( dQueries.IsEmpty() )
-			PercolateAppendTags ( sTags, dDeleteTags );
-
-		// actually replay
-		ReplayInsertAndDeleteQueries ( dNewQueries, dQueries, dDeleteTags );
-	}
-	return tRes;
-}
-
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayInsertAndDelete ( CSphReader& tReader, CSphString& sError, Binlog::CheckTxn_fn&& fnCanContinue )
-{
 	CSphVector<StoredQueryDesc_t> dNewQueriesDescs;
 	CSphVector<int64_t> dDeleteQueries;
 	CSphVector<uint64_t> dDeleteTags;
@@ -3533,9 +3474,8 @@ void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 	tWriter.PutString ( tQuery.m_sTags );
 	tWriter.ZipInt ( tQuery.m_dFilters.GetLength() );
 	tWriter.ZipInt ( tQuery.m_dFilterTree.GetLength() );
-	ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
+	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
 	{
-		const CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
 		tWriter.PutString ( tFilter.m_sAttrName );
 		tWriter.ZipInt ( tFilter.m_bExclude );
 		tWriter.ZipInt ( tFilter.m_bHasEqualMin );
@@ -3549,14 +3489,13 @@ void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 		tWriter.ZipOffset ( tFilter.m_iMaxValue );
 		tWriter.ZipInt ( tFilter.m_dValues.GetLength() );
 		tWriter.ZipInt ( tFilter.m_dStrings.GetLength() );
-		ARRAY_FOREACH ( j, tFilter.m_dValues )
-			tWriter.ZipOffset ( tFilter.m_dValues[j] );
-		ARRAY_FOREACH ( j, tFilter.m_dStrings )
-			tWriter.PutString ( tFilter.m_dStrings[j] );
+		for ( const auto & tValue: tFilter.m_dValues )
+			tWriter.ZipOffset ( tValue );
+		for ( const auto & tString: tFilter.m_dStrings )
+			tWriter.PutString ( tString );
 	}
-	ARRAY_FOREACH ( iTree, tQuery.m_dFilterTree )
+	for ( const FilterTreeItem_t & tItem: tQuery.m_dFilterTree )
 	{
-		const FilterTreeItem_t & tItem = tQuery.m_dFilterTree[iTree];
 		tWriter.ZipInt ( tItem.m_iLeft );
 		tWriter.ZipInt ( tItem.m_iRight );
 		tWriter.ZipInt ( tItem.m_iFilterItem );

@@ -123,8 +123,8 @@ public:
 	CSphString GetLogPath() const;
 
 private:
-	volatile int64_t		m_iLastFlushed = 0;
-	volatile int64_t		m_iFlushPeriod = BINLOG_AUTO_FLUSH;
+	std::atomic<int64_t>	m_iLastFlushed {0};
+	int64_t					m_iFlushPeriod = BINLOG_AUTO_FLUSH;
 
 	enum OnCommitAction_e
 	{
@@ -598,14 +598,15 @@ void Binlog_c::DoFlush ()
 	if ( m_tWriter.HasUnsyncedData() && !m_tWriter.Fsync() )
 		return;
 
-	m_iLastFlushed = sphMicroTimer ();
+	m_iLastFlushed.store ( sphMicroTimer (), std::memory_order_relaxed );
 }
 
 int64_t Binlog_c::NextFlushingTime () const
 {
-	if ( !m_iLastFlushed )
+	auto iLastFlushed = m_iLastFlushed.load ( std::memory_order_relaxed );
+	if ( !iLastFlushed )
 		return sphMicroTimer () + m_iFlushPeriod;
-	return m_iLastFlushed + m_iFlushPeriod;
+	return iLastFlushed + m_iFlushPeriod;
 }
 
 int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID )

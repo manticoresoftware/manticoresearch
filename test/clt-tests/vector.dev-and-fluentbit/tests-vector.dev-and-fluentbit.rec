@@ -1,0 +1,26 @@
+––– block: ../base/start-searchd –––
+––– input –––
+apt-get update > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s https://packages.fluentbit.io/fluentbit.key | gpg --dearmor -o /usr/share/keyrings/fluentbit-archive-keyring.gpg && echo "deb [signed-by=/usr/share/keyrings/fluentbit-archive-keyring.gpg] https://packages.fluentbit.io/ubuntu/$(. /etc/os-release; echo $VERSION_CODENAME) main" | sudo tee /etc/apt/sources.list.d/fluentbit.list > /dev/null && sudo apt-get update && sudo apt-get install -y td-agent-bit
+––– output –––
+––– input –––
+cat /var/log/dpkg.log > /dev/null; echo $?
+––– output –––
+––– input –––
+cat fluentbit.conf
+––– output –––
+––– input –––
+fluent-bit -c fluentbit.conf
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE testlog;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from testlog limit 3\G;"
+––– output –––

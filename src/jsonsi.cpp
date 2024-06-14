@@ -440,7 +440,7 @@ static bool BuildJsonSI ( const StrVec_t & dAttributes, const ISphSchema & tSche
 class JsonSIBuilder_c : public JsonSIBuilder_i
 {
 public:
-			JsonSIBuilder_c ( const ISphSchema & tSchema, const StrVec_t & dAttributes, const CSphString & sSPB, const CSphString & sSIFile, const CSphString & sTmpSIFile, const CSphString & sTmpOffsetFile );
+			JsonSIBuilder_c ( const ISphSchema & tSchema, const CSphString & sSPB, const CSphString & sSIFile );
 
 	bool	Setup ( CSphString & sError )			{ return m_tWriter.OpenFile ( m_sTmpOffsetFile, sError ); }
 	void	AddRowSize ( SphOffset_t tSize ) override;
@@ -448,24 +448,21 @@ public:
 
 private:
 	const ISphSchema &	m_tSchema;
-	StrVec_t			m_dAttributes;
 	CSphString			m_sSPB;
 	CSphString			m_sSIFile;
-	CSphString			m_sTmpSIFile;
 	CSphString			m_sTmpOffsetFile;
 	CSphWriter			m_tWriter;
 	int64_t				m_iNumRows = 0;
 };
 
 
-JsonSIBuilder_c::JsonSIBuilder_c ( const ISphSchema & tSchema, const StrVec_t & dAttributes, const CSphString & sSPB, const CSphString & sSIFile, const CSphString & sTmpSIFile, const CSphString & sTmpOffsetFile )
+JsonSIBuilder_c::JsonSIBuilder_c ( const ISphSchema & tSchema, const CSphString & sSPB, const CSphString & sSIFile )
 	: m_tSchema ( tSchema )
-	, m_dAttributes ( dAttributes )
 	, m_sSPB ( sSPB )
 	, m_sSIFile ( sSIFile )
-	, m_sTmpSIFile ( sTmpSIFile )
-	, m_sTmpOffsetFile ( sTmpOffsetFile )
-{}
+{
+	m_sTmpOffsetFile.SetSprintf ( "%s.offset.tmp", m_sSIFile.cstr() );
+}
 
 
 void JsonSIBuilder_c::AddRowSize ( SphOffset_t tSize )
@@ -478,7 +475,16 @@ void JsonSIBuilder_c::AddRowSize ( SphOffset_t tSize )
 bool JsonSIBuilder_c::Done ( CSphString & sError )
 {
 	m_tWriter.CloseFile();
-	bool bOk = BuildJsonSI ( m_dAttributes, m_tSchema, m_sSIFile, m_sTmpSIFile, [this] ( CSphString & sError ) -> std::unique_ptr<JsonRowIterator_i>
+
+	StrVec_t dAttributes;
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+		if ( m_tSchema.GetAttr(i).IsIndexedSI() )
+			dAttributes.Add ( m_tSchema.GetAttr(i).m_sName );
+
+	CSphString sTmpSIFile;
+	sTmpSIFile.SetSprintf ( "%s.jsonsi.tmp", m_sSIFile.cstr() );
+
+	bool bOk = BuildJsonSI ( dAttributes, m_tSchema, m_sSIFile, sTmpSIFile, [this] ( CSphString & sError ) -> std::unique_ptr<JsonRowIterator_i>
 		{
 			std::unique_ptr<JsonRowIterator_i> pIterator = std::make_unique<JsonRowIteratorFile_c> ( m_sTmpOffsetFile, m_sSPB, m_iNumRows );
 			if ( !pIterator->Setup(sError) )
@@ -531,32 +537,9 @@ bool DropJsonSI ( const CSphString & sFile, CSphString & sError )
 }
 
 
-std::unique_ptr<JsonSIBuilder_i> CreateJsonSIBuilder ( const ISphSchema & tSchema, const StrVec_t & dAttributes, const CSphString & sSPB, const CSphString & sSIFile, const CSphString & sTmpSIFile, const CSphString & sTmpOffsetFile, CSphString & sError )
+std::unique_ptr<JsonSIBuilder_i> CreateJsonSIBuilder ( const ISphSchema & tSchema, const CSphString & sSPB, const CSphString & sSIFile, CSphString & sError )
 {
-	for ( auto & sAttr : dAttributes )
-	{
-		const CSphColumnInfo * pFound = nullptr;
-		for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-			if ( tSchema.GetAttr(i).m_sName==sAttr )
-			{
-				pFound = &tSchema.GetAttr(i);
-				break;
-			}
-
-		if ( !pFound )
-		{
-			sError.SetSprintf ( "attribute '%s' specified in json_secondary_indexes not found", sAttr.cstr() );
-			return nullptr;
-		}
-
-		if ( pFound->m_eAttrType!=SPH_ATTR_JSON )
-		{
-			sError.SetSprintf ( "attribute '%s' specified in json_secondary_indexes is not JSON", sAttr.cstr() );
-			return nullptr;
-		}
-	}
-
-	auto pBuilder = std::make_unique<JsonSIBuilder_c> ( tSchema, dAttributes, sSPB, sSIFile, sTmpSIFile, sTmpOffsetFile );
+	auto pBuilder = std::make_unique<JsonSIBuilder_c> ( tSchema, sSPB, sSIFile );
 	if ( !pBuilder->Setup(sError) )
 		pBuilder.reset();
 

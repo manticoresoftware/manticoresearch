@@ -43,9 +43,8 @@ class SIContainer_c
 	friend void operator << ( JsonEscapedBuilder & tOut, const SIContainer_c & tSI );
 
 public:
-	bool		Load ( const CSphString & sFile, bool bDefault, CSphString & sError );
+	bool		Load ( const CSphString & sFile, CSphString & sError );
 	bool		Drop ( const CSphString & sFile, CSphString & sError );
-	void		AddNonLoaded ( const CSphString & sFile ) { m_dIndexes.Add ( { nullptr, sFile, false } ); }
 	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }
 	void		Reset() { m_dIndexes.Reset(); }
 
@@ -56,7 +55,6 @@ public:
 	bool		CalcCount ( uint32_t & uCount, const common::Filter_t & tFilter, uint32_t uMaxValues, CSphString & sError ) const;
 	uint32_t	GetNumIterators ( const common::Filter_t & tFilter ) const;
 	bool		IsEnabled ( const CSphString & sAttr ) const;
-	bool		IsDefault ( const CSphString & sAttr ) const;
 
 	RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const;
 
@@ -65,13 +63,10 @@ private:
 	{
 		std::unique_ptr<SI::Index_i>	m_pIndex;
 		CSphString						m_sFile;
-		bool							m_bDefault = false;
 	};
 
 	CSphVector<IndexInfo_t> m_dIndexes;
 };
-
-void operator << ( JsonEscapedBuilder & tOut, const SIContainer_c & tSI );
 
 struct RowIdBoundaries_t;
 

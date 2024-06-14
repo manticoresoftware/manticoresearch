@@ -374,6 +374,7 @@ struct CreateTableAttr_t
 	CSphColumnInfo			m_tAttr;
 	bool					m_bFastFetch = true;
 	bool					m_bStringHash = true;
+	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
 	knn::IndexSettings_t	m_tKNN;
 };
@@ -422,6 +423,7 @@ private:
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetupSIAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetDefaults();
 };
 

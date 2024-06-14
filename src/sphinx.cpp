@@ -1148,7 +1148,7 @@ public:
 
 	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	LOAD_E				LoadHeaderLegacy ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
-	LOAD_E				LoadHeaderJson ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, StrVec_t & dExtraSI, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
+	LOAD_E				LoadHeaderJson ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) final;
 	void				DebugDumpDocids ( FILE * fp ) final;
@@ -1223,8 +1223,8 @@ public:
 	bool				PreallocKNN();
 	bool				PreallocSkiplist();
 
-	bool				LoadSecondaryIndex ( const CSphString & sFile, bool bDefault );
-	bool				PreallocSecondaryIndex ( const StrVec_t & dExtraSI );
+	bool				LoadSecondaryIndex ( const CSphString & sFile );
+	bool				PreallocSecondaryIndex();
 
 	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true );
 	bool				SaveHeader ( CSphString & sError );
@@ -1236,10 +1236,6 @@ public:
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
-
-	// json secondary indexes
-	bool				CreateJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError ) override;
-	bool				DropJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError ) override;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
 	const SIContainer_c * Debug_GetSI() const override { return &m_tSI; }
@@ -1347,7 +1343,7 @@ private:
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder, CSphBitvec & tColumnarAttrs ); // fixme! build only
-	bool						Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder, std::unique_ptr<JsonSIBuilder_i> & pJsonSIBuilder, CSphString & sExtraSIFile, CSphBitvec & tSIAttrs, int64_t iMemoryLimit );
+	bool						Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder, std::unique_ptr<JsonSIBuilder_i> & pJsonSIBuilder, CSphBitvec & tSIAttrs, int64_t iMemoryLimit );
 
 	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader ); // fixme! build only
 	bool						Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t,SphOffset_t> & tOffsetSize, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
@@ -3230,6 +3226,9 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 	if ( m_uVersion >= 64 )
 		fnAddFile ( SPH_EXT_SPIDX );
 
+	if ( m_uVersion >= 66 )
+		fnAddFile ( SPH_EXT_SPJIDX );
+
 	if ( m_tSchema.HasNonColumnarAttrs() )
 		fnAddFile ( SPH_EXT_SPA );
 
@@ -5107,7 +5106,7 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 }
 
 
-bool CSphIndex_VLN::Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder, std::unique_ptr<JsonSIBuilder_i> & pJsonSIBuilder, CSphString & sExtraSIFile, CSphBitvec & tSIAttrs, int64_t iMemoryLimit )
+bool CSphIndex_VLN::Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder, std::unique_ptr<JsonSIBuilder_i> & pJsonSIBuilder, CSphBitvec & tSIAttrs, int64_t iMemoryLimit )
 {
 	if ( !IsSecondaryLibLoaded() )
 		return true;
@@ -5117,19 +5116,11 @@ bool CSphIndex_VLN::Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder,
 	if ( !pSIBuilder )
 		return false;
 
-	if ( !m_tSettings.m_dJsonSIAttrs.IsEmpty() )
+	if ( m_tSchema.HasJsonSIAttrs() )
 	{
-		CSphString sTmpSIFile, sTmpOffsetFile;
-		sExtraSIFile.SetSprintf ( "%s%s", GetFixedJsonSIAttrName().cstr(), sphGetExt(SPH_EXT_SPIDX) );
-		sTmpSIFile.SetSprintf ( "%s.tmp%s", GetFixedJsonSIAttrName().cstr(), sphGetExt(SPH_EXT_SPIDX) );
-
-		sExtraSIFile = GetFilename ( sExtraSIFile.cstr() );
-		sTmpSIFile = GetFilename ( sTmpSIFile.cstr() );
-		sTmpOffsetFile = GetFilename("tmp4");
-
-		pJsonSIBuilder = CreateJsonSIBuilder ( m_tSchema, m_tSettings.m_dJsonSIAttrs, GetFilename(SPH_EXT_SPB), sExtraSIFile, sTmpSIFile, sTmpOffsetFile, m_sLastError );
+		pJsonSIBuilder = CreateJsonSIBuilder ( m_tSchema, GetFilename(SPH_EXT_SPB), GetFilename(SPH_EXT_SPJIDX), m_sLastError );
 		if ( !pJsonSIBuilder )
-			return true;
+			return false;
 	}
 
 	return true;
@@ -5435,8 +5426,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	std::unique_ptr<SI::Builder_i> pSIBuilder;
 	std::unique_ptr<JsonSIBuilder_i> pJsonSIBuilder;
 	CSphBitvec tSIAttrs ( m_tSchema.GetAttrsCount() );
-	CSphString sExtraSIFile;
-	if ( !Build_SetupSI ( pSIBuilder, pJsonSIBuilder, sExtraSIFile, tSIAttrs, iMemoryLimit ) )
+	if ( !Build_SetupSI ( pSIBuilder, pJsonSIBuilder, tSIAttrs, iMemoryLimit ) )
 		return 0;
 
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
@@ -5828,8 +5818,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		if ( !bSiDone )
 			return 0;
-
-		m_tSI.AddNonLoaded(sExtraSIFile);
 	}
 
 	if ( !WriteDeadRowMap ( GetFilename ( SPH_EXT_SPM ), (DWORD)m_tStats.m_iTotalDocuments, m_sLastError ) )
@@ -7858,7 +7846,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	}
 
 	// using g_iPseudoShardingThresh==0 check so that iterators are still spawned in test suite (when g_iPseudoShardingThresh=0)
-	const int64_t SMALL_INDEX_THRESH = 1;
+	const int64_t SMALL_INDEX_THRESH = 8192;
 	if ( m_iDocinfo < SMALL_INDEX_THRESH && g_iPseudoShardingThresh > 0 )
 	{
 		dModifiedFilters = dFilters;
@@ -8589,7 +8577,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 	return rdInfo.GetErrorFlag() ? LOAD_E::GeneralError_e : LOAD_E::Ok_e;
 }
 
-CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, StrVec_t & dExtraSI, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
+CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	using namespace bson;
 
@@ -8723,13 +8711,6 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		} );
 	}
 
-	auto tSINode = tBson.ChildByName ( "secondary_indexes" );
-	if ( !IsNullNode(tSINode) )
-	{
-		auto tExtraFiles = Bson_c(tSINode).ChildByName("extra_files");
-		Bson_c(tExtraFiles).ForEach ( [&dExtraSI] ( const NodeHandle_t & tNode ) { dExtraSI.Add ( String(tNode) ); } );
-	}
-
 	// post-load stuff.. for now, bigrams
 	CSphIndexSettings & s = m_tSettings;
 	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && s.m_eBigramIndex!=SPH_BIGRAM_ALL )
@@ -8752,9 +8733,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, 
 		pFilenameBuilder = GetIndexFilenameBuilder() ( GetName() );
 
 	CSphEmbeddedFiles tEmbeddedFiles;
-	StrVec_t dExtraSI;
 	CSphString sWarning;
-	auto eRes = LoadHeaderJson ( sHeaderName, false, tEmbeddedFiles, dExtraSI, pFilenameBuilder.get(), sWarning );
+	auto eRes = LoadHeaderJson ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
 	if ( eRes == LOAD_E::ParseError_e )
 	{
 		eRes = LoadHeaderLegacy ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
@@ -9164,7 +9144,7 @@ bool CSphIndex_VLN::PreallocSkiplist()
 }
 
 
-bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile, bool bDefault )
+bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 {
 	if ( !sphFileExists ( sFile.cstr() ) )
 	{
@@ -9179,7 +9159,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile, bool bDefault
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
 	}
 
-	if ( !m_tSI.Load ( sFile, bDefault, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+	if ( !m_tSI.Load ( sFile, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
@@ -9195,7 +9175,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile, bool bDefault
 }
 
 
-bool CSphIndex_VLN::PreallocSecondaryIndex ( const StrVec_t & dExtraSI )
+bool CSphIndex_VLN::PreallocSecondaryIndex()
 {
 	if ( m_uVersion<61 )
 		return true;
@@ -9212,12 +9192,11 @@ bool CSphIndex_VLN::PreallocSecondaryIndex ( const StrVec_t & dExtraSI )
 		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
 	}
 
-	if ( !LoadSecondaryIndex ( GetFilename(SPH_EXT_SPIDX), true ) )
+	if ( !LoadSecondaryIndex ( GetFilename(SPH_EXT_SPIDX) ) )
 		return false;
 
-	for ( auto & i : dExtraSI )
-		if ( !LoadSecondaryIndex ( GetFilename ( i.cstr() ), false ) )
-			return false;
+	if ( m_tSchema.HasJsonSIAttrs() && !LoadSecondaryIndex ( GetFilename(SPH_EXT_SPJIDX) ) )
+		return false;
 
 	return true;
 }
@@ -9229,10 +9208,9 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	Dealloc();
 
 	CSphEmbeddedFiles tEmbeddedFiles;
-	StrVec_t dExtraSI;
 
 	// preload schema
-	auto eRes = LoadHeaderJson ( GetFilename ( SPH_EXT_SPH ), bStripPath, tEmbeddedFiles, dExtraSI, pFilenameBuilder, m_sLastWarning ) ;
+	auto eRes = LoadHeaderJson ( GetFilename ( SPH_EXT_SPH ), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) ;
 	if ( eRes == LOAD_E::ParseError_e )
 	{
 		sphInfo ( "Index header format is not json, will try it as binary..." );
@@ -9272,7 +9250,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( !PreallocColumnar() )		return false;
 	if ( !PreallocKNN() )			return false;
 	if ( !PreallocSkiplist() )		return false;
-	if ( !PreallocSecondaryIndex(dExtraSI) ) return false;
+	if ( !PreallocSecondaryIndex() ) return false;
 
 	// almost done
 	m_bPassedAlloc = true;
@@ -11536,52 +11514,6 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 }
 
 
-bool CSphIndex_VLN::CreateJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError )
-{
-	const CSphColumnInfo * pAttr = m_tSchema.GetAttr ( sAttribute.cstr() );
-	if ( !pAttr )
-	{
-		sError.SetSprintf ( "attribute '%s' not found", sAttribute.cstr() );
-		return false;
-	}
-
-	if ( pAttr->m_eAttrType!=SPH_ATTR_JSON )
-	{
-		sError.SetSprintf ( "attribute '%s' is not JSON", sAttribute.cstr() );
-		return false;
-	}
-
-	CSphString sSIName = sAttribute;
-	CSphString sFile, sTmp;
-	sFile.SetSprintf ( "%s%s", sSIName.cstr(), sphGetExt(SPH_EXT_SPIDX) );
-	sTmp.SetSprintf ( "%s.tmp%s", sSIName.cstr(), sphGetExt(SPH_EXT_SPIDX) );
-	sFile = GetFilename ( sFile.cstr() );
-	if ( !BuildJsonSI ( sAttribute, m_tAttr.GetWritePtr(), m_iDocinfo, m_tSchema, m_tBlobAttrs.GetWritePtr(), sFile, GetFilename ( sTmp.cstr() ), sError ) )
-		return false;
-
-	if ( !m_tSI.Load ( sFile, false, sError ) )
-		return false;
-
-	return SaveHeader(sError);
-}
-
-
-bool CSphIndex_VLN::DropJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError )
-{
-	CSphString sFile;
-	sFile.SetSprintf ( "%s%s", sAttribute.cstr(), sphGetExt(SPH_EXT_SPIDX) );
-	sFile = GetFilename ( sFile.cstr() );
-
-	if ( !m_tSI.Drop ( sFile, sError ) )
-		return false;
-
-	if ( !DropJsonSI ( sFile, sError ) )
-		return false;
-
-	return SaveHeader(sError);
-}
-
-
 bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
@@ -11624,7 +11556,7 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
 		return false;
 
-	if ( !m_tSI.Load ( sFileCur.cstr(), true, sError ) )
+	if ( !m_tSI.Load ( sFileCur.cstr(), sError ) )
 		return false;
 
 	if ( bCurExists )

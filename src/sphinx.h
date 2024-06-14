@@ -1247,9 +1247,6 @@ public:
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }
 
-	virtual bool				CreateJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError ) { return false; }
-	virtual bool				DropJsonSecondaryIndex ( const CSphString & sAttribute, CSphString & sError ) { return false; }
-
 public:
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) = 0;

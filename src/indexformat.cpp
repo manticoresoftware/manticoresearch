@@ -851,7 +851,4 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 			sJson << tWriteHeader.m_pFieldLens[i];
 		}
 	}
-
-	if ( tWriteHeader.m_pSI )
-		sJson.NamedVal ( "secondary_indexes", *tWriteHeader.m_pSI );
 }

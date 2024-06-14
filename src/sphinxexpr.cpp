@@ -2859,25 +2859,34 @@ public:
 		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
 			return false;
 
+		bool bOk;
+		switch ( tConstArgs.m_eType )
+		{
+		case SPH_FILTER_VALUES:
+		case SPH_FILTER_STRING_LIST:
+			bOk = !tConstArgs.m_bAnd;
+			break;
+
+		case SPH_FILTER_RANGE:
+		case SPH_FILTER_FLOATRANGE:
+			bOk = !tConstArgs.m_bOr;
+			break;
+
+		default:
+			break;
+		}
+
+		if ( !bOk )
+			return false;
+
 		tFilter = tConstArgs;
 		tFilter.m_sAttrName = tSchemaWithName.second;
 		tFilter.m_eMvaFunc = m_bStrict ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
 
-		switch ( tConstArgs.m_eType )
-		{
-		case SPH_FILTER_VALUES:
-			tFilter.m_dValues.Sort();
-			// [[clang::fallthrough]];
-		case SPH_FILTER_STRING_LIST:
-			return !tConstArgs.m_bAnd;
+		if ( tFilter.m_eType==SPH_FILTER_VALUES )
+			tFilter.m_dValues.Uniq();
 
-		case SPH_FILTER_RANGE:
-		case SPH_FILTER_FLOATRANGE:
-			return !tConstArgs.m_bOr;
-
-		default:
-			return false;
-		}
+		return true;
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -7684,7 +7693,11 @@ public:
 
 	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
 	{
-		if ( m_dValues.GetLength()!=1 )
+		if ( !m_dValues.GetLength() || tFilter.m_dValues.GetLength()!=1 )
+			return false;
+
+		// fixme! this means "return nothing"
+		if ( tFilter.m_dValues[0]!=0 && tFilter.m_dValues[0]!=1 )
 			return false;
 
 		std::pair<const ISphSchema*,CSphString> tSchemaWithName;
@@ -7696,7 +7709,7 @@ public:
 		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
 			return false;
 
-		tFilter.m_bExclude = !m_dValues[0];
+		tFilter.m_bExclude = tFilter.m_dValues[0]==0;
 		if ( m_dStrings.IsEmpty() )
 		{
 			tFilter.m_dValues.Resize(0);

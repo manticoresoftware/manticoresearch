@@ -628,7 +628,7 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 
 	// force secondary indexes from non-default files (that would be JSON SI); at least for now
 	// the idea is that they should always be faster
-	if ( !tCtx.m_tSI.IsDefault ( tFilter.m_sAttrName ) )
+	if ( !tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() ) )
 		bForce = true;
 
 	return true;
@@ -667,7 +667,7 @@ static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, con
 		{
 			tSIInfo.m_iTotalValues = tCtx.m_iTotalDocs;
 			tSIInfo.m_iRsetEstimate = tCtx.m_iTotalDocs;
-			tSIInfo.m_bUsable = !tCtx.m_tSI.IsDefault ( tFilter.m_sAttrName );
+			tSIInfo.m_bUsable = !tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 			continue;
 		}
 
@@ -1358,13 +1358,13 @@ RowIteratorsWithEstimates_t SIIteratorCreator_c::Create()
 
 /////////////////////////////////////////////////////////////////////
 
-bool SIContainer_c::Load ( const CSphString & sFile, bool bDefault, CSphString & sError )
+bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
 {
 	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), sError );
 	if ( !pIndex )
 		return false;
 
-	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex), sFile, bDefault } );
+	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex), sFile } );
 	return true;
 }
 
@@ -1466,16 +1466,6 @@ bool SIContainer_c::IsEnabled ( const CSphString & sAttr ) const
 }
 
 
-bool SIContainer_c::IsDefault ( const CSphString & sAttr ) const
-{
-	for ( auto & i : m_dIndexes )
-		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
-			return i.m_bDefault;
-
-	return false;
-}
-
-
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const
 {
 	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan
@@ -1485,25 +1475,6 @@ RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVe
 
 	SIIteratorCreator_c tCreator ( *this, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff );
 	return tCreator.Create();
-}
-
-/////////////////////////////////////////////////////////////////////
-
-void operator << ( JsonEscapedBuilder & tOut, const SIContainer_c & tSI )
-{
-	auto _ = tOut.ObjectW();
-
-	if ( tSI.m_dIndexes.any_of ( []( const auto & tIndex ){ return !tIndex.m_bDefault; } ) )
-	{
-		tOut.Named ( "extra_files" );
-		auto _ = tOut.Array();
-		for ( const auto & i : tSI.m_dIndexes )
-			if ( !i.m_bDefault )
-			{
-				CSphString sStripped = i.m_sFile;
-				tOut.String ( GetExtension(sStripped) );
-			}
-	}
 }
 
 /////////////////////////////////////////////////////////////////////

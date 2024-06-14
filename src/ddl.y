@@ -48,7 +48,6 @@
 %token	TOK_HNSW_SIMILARITY
 %token	TOK_IF
 %token	TOK_IMPORT
-%token	TOK_INDEX
 %token	TOK_INDEXED
 %token	TOK_INT
 %token	TOK_INTEGER
@@ -62,7 +61,6 @@
 %token	TOK_MULTI64
 %token	TOK_MODIFY
 %token	TOK_NOT
-%token	TOK_ON
 %token	TOK_PLUGIN
 %token	TOK_REBUILD
 %token	TOK_RECONFIGURE
@@ -97,8 +95,6 @@ statement:
 	| create_cluster
 	| join_cluster
 	| import_table
-	| create_index
-	| drop_index
 	;
 
 tablename:
@@ -303,6 +299,14 @@ item_option:
 	| TOK_HNSW_EF_CONSTRUCTION '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionHNSWEfConstruction ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_INDEXED '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionIndexed ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;
@@ -517,28 +521,6 @@ import_table:
 			tStmt.m_eStmt = STMT_IMPORT_TABLE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			tStmt.m_sStringParam = pParser->ToStringUnescape ( $5 );
-		}
-	;
-
-create_index:
-	TOK_CREATE TOK_INDEX TOK_ON tablename '(' ident ')'
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_INDEX;
-
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $4 );
-			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $6 );
-		}
-	;
-
-drop_index:
-	TOK_DROP TOK_INDEX ident TOK_ON tablename
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_INDEX;
-
-			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $3 );
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $5 );
 		}
 	;
 

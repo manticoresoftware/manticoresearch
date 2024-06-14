@@ -29,6 +29,7 @@ public:
 		AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
 		bool			m_bStringHash = true;
 		bool			m_bFastFetch = true;
+		bool			m_bIndexed = false;
 
 		bool			m_bHashOptionSet = false;
 
@@ -42,6 +43,7 @@ public:
 
 		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
+		void			CopyOptionsTo ( CreateTableAttr_t & tAttr ) const;
 	};
 
 	DdlParser_c ( CSphVector<SqlStmt_t>& dStmt, const char* szQuery, CSphString* pError );
@@ -55,6 +57,7 @@ public:
 	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
 	bool	AddItemOptionHash ( const SqlNode_t & tOption );
 	bool	AddItemOptionFastFetch ( const SqlNode_t & tOption );
+	bool	AddItemOptionIndexed ( const SqlNode_t & tOption );
 
 	bool	AddItemOptionKNNType ( const SqlNode_t & tOption );
 	bool	AddItemOptionKNNDims ( const SqlNode_t & tOption );
@@ -123,8 +126,18 @@ DWORD DdlParser_c::ItemOptions_t::ToFlags() const
 	DWORD uFlags = 0;
 	uFlags |= m_bStringHash ? CSphColumnInfo::ATTR_COLUMNAR_HASHES : 0;
 	uFlags |= m_bFastFetch ? CSphColumnInfo::ATTR_STORED : 0;
+	uFlags |= m_bIndexed ? CSphColumnInfo::ATTR_INDEXED_SI : 0;
 	uFlags |= m_sKNNType.IsEmpty() ? 0 : CSphColumnInfo::ATTR_INDEXED_KNN;
 	return uFlags;
+}
+
+
+void DdlParser_c::ItemOptions_t::CopyOptionsTo ( CreateTableAttr_t & tAttr ) const
+{
+	tAttr.m_tAttr.m_eEngine	= m_eEngine;
+	tAttr.m_bFastFetch		= m_bFastFetch;
+	tAttr.m_bStringHash		= m_bStringHash;
+	tAttr.m_bIndexed		= m_bIndexed;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -149,10 +162,7 @@ void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 	tAttr.m_tAttr.m_sName.ToLower();
 	tAttr.m_tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 	tAttr.m_tAttr.m_tLocator.m_iBitCount = iBits;
-	tAttr.m_tAttr.m_eEngine = m_tItemOptions.m_eEngine;
-	tAttr.m_bFastFetch = m_tItemOptions.m_bFastFetch;
-	tAttr.m_bStringHash	= m_tItemOptions.m_bStringHash;
-
+	m_tItemOptions.CopyOptionsTo(tAttr);
 	m_tItemOptions.Reset();
 }
 
@@ -271,9 +281,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 		tAttr.m_tAttr.m_sName			= sName;
 		tAttr.m_tAttr.m_eAttrType		= eAttrType;
-		tAttr.m_tAttr.m_eEngine			= tOpts.m_eEngine;
-		tAttr.m_bFastFetch				= tOpts.m_bFastFetch;
-		tAttr.m_bStringHash				= tOpts.m_bStringHash;
+		tOpts.CopyOptionsTo(tAttr);
 		tAttr.m_bKNN					= !tOpts.m_sKNNType.IsEmpty();
 		tAttr.m_tKNN.m_iDims			= tOpts.m_iKNNDims;
 		tAttr.m_tKNN.m_eHNSWSimilarity	= tOpts.m_eHNSWSimilarity;
@@ -292,9 +300,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 		tAttr.m_tAttr.m_sName		= sName;
 		tAttr.m_tAttr.m_eAttrType	= SPH_ATTR_STRING;
-		tAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
-		tAttr.m_bFastFetch			= tOpts.m_bFastFetch;
-		tAttr.m_bStringHash			= tOpts.m_bStringHash;
+		tOpts.CopyOptionsTo(tAttr);
 
 		if ( iType & FLAG_INDEXED )
 			AddField ( sName, CSphColumnInfo::FIELD_INDEXED );
@@ -342,8 +348,7 @@ bool DdlParser_c::AddCreateTableId ( const SqlNode_t & tName )
 	CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 	tAttr.m_tAttr.m_sName		= sName;
 	tAttr.m_tAttr.m_eAttrType	= SPH_ATTR_BIGINT;
-	tAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
-	tAttr.m_bFastFetch			= tOpts.m_bFastFetch;
+	tOpts.CopyOptionsTo(tAttr);
 	return true;
 }
 
@@ -367,6 +372,14 @@ bool DdlParser_c::AddItemOptionFastFetch ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_bFastFetch = !!strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionIndexed ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_bIndexed = !!strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
 }
 

@@ -1318,6 +1318,19 @@ void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 }
 
 
+void IndexSettingsContainer_c::SetupSIAttrs ( const CreateTableSettings_t & tCreateTable )
+{
+	StringBuilder_c sJsonSIAttrs(",");
+
+	for ( const auto & i : tCreateTable.m_dAttrs )
+		if ( i.m_bIndexed )
+			sJsonSIAttrs << i.m_tAttr.m_sName;
+
+	if ( sJsonSIAttrs.GetLength() )
+		Add ( "json_secondary_indexes", sJsonSIAttrs.cstr() );
+}
+
+
 bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sStoredFields(",");
@@ -1365,6 +1378,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	SetupColumnarAttrs(tCreateTable);
 	SetupKNNAttrs(tCreateTable);
+	SetupSIAttrs(tCreateTable);
 
 	if ( !Contains("type") )
 		Add ( "type", "rt" );

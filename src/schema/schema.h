@@ -119,6 +119,7 @@ public:
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
 	bool					HasKNNAttrs() const;
+	bool					HasJsonSIAttrs() const;
 	bool					IsFieldStored ( int iField ) const;
 	bool					IsAttrStored ( int iAttr ) const;
 
@@ -154,6 +155,7 @@ private:
 
 	void					SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 	void					SetupKNNFlags ( const CSphSourceSettings & tSettings );
+	void					SetupSIFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 };
 
 

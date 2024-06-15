@@ -67,6 +67,7 @@
 %token	TOK_RETURNS
 %token	TOK_RTINDEX
 %token	TOK_SECONDARY
+%token	TOK_SECONDARY_INDEX
 %token	TOK_SONAME
 %token	TOK_STORED
 %token	TOK_STRING
@@ -304,7 +305,7 @@ item_option:
     	    	YYERROR;
 			}
 		}
-	| TOK_INDEXED '=' TOK_QUOTED_STRING
+	| TOK_SECONDARY_INDEX '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionIndexed ( $3 ) )
 			{

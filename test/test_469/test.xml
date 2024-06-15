@@ -22,7 +22,7 @@ searchd
 
 <queries><sphinxql>
 
-create table t ( j json indexed='1' );
+create table t ( j json secondary_index='1' );
 desc t;
 insert into t values (1,'{ "price": 10.0, "factor": 1, "addresses": { "a1": { "id": "id_of_address_a1", "name": "name_of_address_a1" }, "a2": { "id":   "id_of_address_a1", "name": "name_of_address_a2" } }, "tags": { "1": "data_of_tag_1" }, "arr":["val0","val1"], "int_arr":[1,2,3] }');
 insert into t values (2,'{ "price": 20.0, "factor": 2, "addresses": { "a3": { "id": "id_of_address_a3", "name": "name_of_address_a3" }, "a4": { "id":   "id_of_address_a4", "name": "name_of_address_a4" } }, "tags": { "2": "data_of_tag_2" }, "arr":["val1","val2"], "int_arr":[4,5,6] }');

@@ -2859,7 +2859,7 @@ public:
 		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
 			return false;
 
-		bool bOk;
+		bool bOk = false;
 		switch ( tConstArgs.m_eType )
 		{
 		case SPH_FILTER_VALUES:

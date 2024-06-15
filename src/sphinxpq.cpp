@@ -2149,22 +2149,22 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphRe
 	if ( Binlog::PQ_ADD_DELETE!=eOp )
 	{
 		assert ( false && "unknown op provided to replay" );
-	return {};
-}
+		return {};
+	}
 
 	CSphVector<StoredQueryDesc_t> dNewQueriesDescs;
 	CSphVector<int64_t> dDeleteQueries;
 	CSphVector<uint64_t> dDeleteTags;
 
-	LoadInsertDeleteQueries( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
+	LoadInsertDeleteQueries ( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
 
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
 	if ( tRes.m_bValid && tRes.m_bApply )
 	{
-		CSphVector<StoredQuery_i*> dNewQueries; // not owned
-		dNewQueries.Reserve ( dNewQueries.GetLength() );
+		CSphVector<StoredQuery_i *> dNewQueries; // not owned
+		dNewQueries.Reserve ( dNewQueries.GetLength () );
 
-		for ( StoredQueryDesc_t& tDesc : dNewQueriesDescs )
+		for ( StoredQueryDesc_t & tDesc: dNewQueriesDescs )
 		{
 			PercolateQueryArgs_t tArgs ( tDesc );
 			// at binlog query already passed replace checks
@@ -2174,13 +2174,13 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphRe
 			auto pQuery = CreateQuery ( tArgs, sError );
 			if ( !pQuery )
 			{
-				sError.SetSprintf ( "apply error, %s", sError.cstr() );
-				tRes = Binlog::CheckTnxResult_t();
-				for ( StoredQuery_i* pDelQuery : dNewQueries )
+				sError.SetSprintf ( "apply error, %s", sError.cstr () );
+				tRes = Binlog::CheckTnxResult_t ();
+				for ( StoredQuery_i * pDelQuery: dNewQueries )
 					SafeDelete ( pDelQuery );
 				return tRes;
 			}
-			dNewQueries.Add ( pQuery.release() );
+			dNewQueries.Add ( pQuery.release () );
 		}
 
 		// actually replay

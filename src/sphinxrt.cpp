@@ -9196,47 +9196,49 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	return Binlog::Commit ( Binlog::COMMIT, &m_iTID, { GetName(), m_iIndexId }, false, sError, [pSeg,&dKlist,iAddTotalBytes,this] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
+	return Binlog::Commit ( Binlog::COMMIT, &m_iTID, { GetName(), m_iIndexId }, false, sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=m_bKeywordDict] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		if ( !pSeg || !pSeg->m_uRows )
-			tWriter.ZipOffset ( 0 );
-		else
 		{
-			tWriter.ZipOffset ( pSeg->m_uRows );
-			tWriter.ZipOffset(iAddTotalBytes);
-			Binlog::SaveVector ( tWriter, pSeg->m_dWords );
-			tWriter.ZipOffset ( pSeg->m_dWordCheckpoints.GetLength() );
-			if ( !m_bKeywordDict )
-			{
-				for ( const auto& dWordCheckpoint : pSeg->m_dWordCheckpoints )
-				{
-					tWriter.ZipOffset ( dWordCheckpoint.m_iOffset );
-					tWriter.ZipOffset ( dWordCheckpoint.m_uWordID );
-				}
-			} else
-			{
-				const auto * pBase = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
-				for ( const auto & dWordCheckpoint : pSeg->m_dWordCheckpoints )
-				{
-					tWriter.ZipOffset ( dWordCheckpoint.m_iOffset );
-					tWriter.ZipOffset ( dWordCheckpoint.m_szWord - pBase );
-				}
-			}
-
-			Binlog::SaveVector ( tWriter, pSeg->m_dDocs );
-			Binlog::SaveVector ( tWriter, pSeg->m_dHits );
-			Binlog::SaveVector ( tWriter, pSeg->m_dRows );
-			Binlog::SaveVector ( tWriter, pSeg->m_dBlobs );
-			Binlog::SaveVector ( tWriter, pSeg->m_dKeywordCheckpoints );
-
-			tWriter.PutByte ( pSeg->m_pDocstore ? 1 : 0 );
-			if ( pSeg->m_pDocstore )
-				pSeg->m_pDocstore->Save(tWriter);
-
-			tWriter.PutByte ( pSeg->m_pColumnar ? 1 : 0 );
-			if ( pSeg->m_pColumnar )
-				pSeg->m_pColumnar->Save(tWriter);
+			tWriter.ZipOffset ( 0 );
+			Binlog::SaveVector ( tWriter, dKlist );
+			return;
 		}
+
+		tWriter.ZipOffset ( pSeg->m_uRows );
+		tWriter.ZipOffset ( iAddTotalBytes );
+		Binlog::SaveVector ( tWriter, pSeg->m_dWords );
+		tWriter.ZipOffset ( pSeg->m_dWordCheckpoints.GetLength() );
+		if ( !bKeywordDict )
+		{
+			for ( const auto& dWordCheckpoint : pSeg->m_dWordCheckpoints )
+			{
+				tWriter.ZipOffset ( dWordCheckpoint.m_iOffset );
+				tWriter.ZipOffset ( dWordCheckpoint.m_uWordID );
+			}
+		} else
+		{
+			const auto * pBase = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
+			for ( const auto & dWordCheckpoint : pSeg->m_dWordCheckpoints )
+			{
+				tWriter.ZipOffset ( dWordCheckpoint.m_iOffset );
+				tWriter.ZipOffset ( dWordCheckpoint.m_szWord - pBase );
+			}
+		}
+
+		Binlog::SaveVector ( tWriter, pSeg->m_dDocs );
+		Binlog::SaveVector ( tWriter, pSeg->m_dHits );
+		Binlog::SaveVector ( tWriter, pSeg->m_dRows );
+		Binlog::SaveVector ( tWriter, pSeg->m_dBlobs );
+		Binlog::SaveVector ( tWriter, pSeg->m_dKeywordCheckpoints );
+
+		tWriter.PutByte ( pSeg->m_pDocstore ? 1 : 0 );
+		if ( pSeg->m_pDocstore )
+			pSeg->m_pDocstore->Save ( tWriter );
+
+		tWriter.PutByte ( pSeg->m_pColumnar ? 1 : 0 );
+		if ( pSeg->m_pColumnar )
+			pSeg->m_pColumnar->Save ( tWriter );
 
 		Binlog::SaveVector ( tWriter, dKlist );
 	});

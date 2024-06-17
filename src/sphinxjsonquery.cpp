@@ -1967,15 +1967,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
 
 	// might be null for empty result set
-
-	CSphFixedVector<std::pair<const CSphColumnInfo *, const char *>> dNested ( tAggr.m_dNested.GetLength() );
-	ARRAY_FOREACH ( i, tAggr.m_dNested )
-	{
-		dNested[i].second = tAggr.m_dNested[i].m_sBucketName.cstr();
-		dNested[i].first = tRes.m_tSchema.GetAttr ( tAggr.m_dNested[i].GetAliasName().cstr() );
-		assert ( dNested[i].first );
-	}
-
 	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
 
 	CSphString sBucketName;
@@ -2038,17 +2029,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				{
 					tOut.Sprintf ( R"("score":0.001)" );
 					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
-				}
-
-				for ( const auto & tNested : dNested )
-				{
-					tBufMatch.Clear();
-					tBufMatch.Appendf ( R"("%s":{"value":)",  tNested.second );
-					tOut.StartBlock ( ",", tBufMatch.cstr(), "}");
-
-					JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
-
-					tOut.FinishBlock ( false ); // named bucket obj
 				}
 			}
 		}
@@ -3642,11 +3622,10 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 
 		JsonObj_c tBucket = tJsonItem.begin();
 
-		if ( StrEq ( tBucket.Name(), "aggs" ) && tBucket!=tJsonItem.end() )
+		if ( StrEq ( tBucket.Name(), "aggs" ) ||  tJsonItem.HasItem ( "aggs" ) )
 		{
-			if ( !AddSubAggregate ( tBucket, false, tItem.m_dNested, sError ) )
-				return false;
-			++tBucket;
+			sError = R"(nested "aggs" is not supported)";
+			return false;
 		}
 
 		if ( tBucket==tJsonItem.end() )

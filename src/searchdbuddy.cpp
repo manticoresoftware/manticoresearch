@@ -530,7 +530,27 @@ bool HasBuddy()
 	return ( g_eBuddy==BuddyState_e::WORK );
 }
 
-static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType )
+static void BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const VecTraits_T<BYTE> & dSrcHttpReply )
+{
+	if ( !dSrcHttpReply.GetLength() )
+		return;
+
+	const char * sErrorStart = (const char *)dSrcHttpReply.Begin();
+	const char * sBodyDel = strstr ( sErrorStart, "\r\n\r\n" );
+	if ( !sBodyDel )
+		return;
+	const char * sBody = sBodyDel + 4;
+	if ( (sBodyDel - sErrorStart )>dSrcHttpReply.GetLength() )
+		return;
+
+	JsonObj_c tError ( sBody );
+	if ( tError.Empty() )
+		return;
+
+	tBuddyQuery.NamedValNE ( "error_body", sBody );
+}
+
+static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !HasBuddy() )
 		return { false, {} };
@@ -550,6 +570,8 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 			tBuddyQuery.NamedString ( "path_query", sPathQuery );
 			tBuddyQuery.NamedString ( "body", sQuery );
 			tBuddyQuery.NamedString ( "http_method", ( bHttp ? http_method_str ( eRequestType ) : "" ) );
+			if ( bHttp && dSrcHttpReply.GetLength() )
+				BuddyQueryAddErrorBody ( tBuddyQuery, dSrcHttpReply );
 		}
 	}
 
@@ -649,7 +671,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		return tRes.m_bOk;
 	}
 
-	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
+	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType, dResult );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
@@ -701,7 +723,7 @@ static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSave
 
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
 {
-	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET );
+	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET, VecTraits_T<BYTE>() );
 	if ( !tReplyRaw.first )
 	{
 		LogSphinxqlError ( sSrcQuery.first, tError );

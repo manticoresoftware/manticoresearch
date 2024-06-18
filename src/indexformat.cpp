@@ -12,8 +12,6 @@
 
 #include "indexformat.h"
 
-#include "secondaryindex.h"
-
 #if WITH_RE2
 #include <string>
 #include <re2/re2.h>

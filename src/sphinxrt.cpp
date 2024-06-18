@@ -1354,7 +1354,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 21;			///< current version. 21 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
+	static const DWORD			META_VERSION;
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -1517,6 +1517,9 @@ private:
 	bool						AttachSaveDiskChunk ();
 	ConstDiskChunkRefPtr_t		PopDiskChunk();
 };
+
+// FIXME! Can't define it in the class because it fails to link on clang-15
+const DWORD RtIndex_c::META_VERSION = 21;			///< current version. 21 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
 
 
 RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict )

@@ -1,6 +1,9 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/comparison-overhead-json-sql/load_us_names.php 10000 10 10000000 1 512 > /dev/null
+php -d memory_limit=-1 ./test/clt-tests/comparison-overhead-json-sql/load_us_names.php 10000 10 10000000 1 8096 > /dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select count(*) from name;"
 ––– output –––
 ––– input –––
 export start=$(date +%s%N)
@@ -15,7 +18,10 @@ export end=$(date +%s%N)
 export multiple_disk_chunks=$(( (end - start) / 1000000 ))
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1,sync=1;"
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW THREADS\G;"
 ––– output –––
 ––– input –––
 export start=$(date +%s%N)
@@ -37,3 +43,6 @@ Duration: %{NUMBER} %{NUMBER} ms
 php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 2);" 2>\dev\null && echo "----$?----"
 ––– output –––
 ----0----
+––– input –––
+mysqldump -h0 -P9306 manticore > ./test/clt-tests/core/manticore_backup.sql
+––– output –––

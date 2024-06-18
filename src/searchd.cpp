@@ -16122,6 +16122,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 	tCtx.m_iBits = tStmt.m_iBits;
 	tCtx.m_uFlags = tStmt.m_uAttrFlags;
 	tCtx.m_eEngine = tStmt.m_eEngine;
+	tCtx.m_tKNN = tStmt.m_tAlterKNN;
 
 	if ( bIndexed || bStored )
 	{

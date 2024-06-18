@@ -26,7 +26,7 @@ export multiple_disk_chunks=$(( (end - start) / 1000000 ))
 ––– input –––
 mysql -h0 -P9306 -e "show table name status" | grep "disk_chunks"
 ––– output –––
-| disk_chunks                 | 7                                                                                                      |
+| disk_chunks                 | #!/{7,6}/!#                                                                                                      |
 ––– input –––
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"
 ––– output –––

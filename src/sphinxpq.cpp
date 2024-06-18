@@ -143,7 +143,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION;
+	static constexpr DWORD			META_VERSION = 10;				///< META in json format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -194,7 +194,6 @@ private:
 };
 
 // FIXME! Can't define it in the class because it fails to link on clang-15
-const DWORD PercolateIndex_c::META_VERSION = 10;				///< META in json format
 
 //////////////////////////////////////////////////////////////////////////
 // percolate functions

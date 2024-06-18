@@ -65,6 +65,11 @@ searchd
 	select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
 	flush ramchunk test;
 	select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
+    
+    <!-- regression knn option missed at alter table -->
+    alter table test add column image_vecto2 float_vector knn_type='hnsw' knn_dims='7' hnsw_similarity='l2';
+    show create table test;
+    
 	drop table test;
 </sphinxql>
 </queries>

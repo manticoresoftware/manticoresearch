@@ -43,6 +43,7 @@ public:
 
 		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
+		knn::IndexSettings_t ToKNN() const;
 		void			CopyOptionsTo ( CreateTableAttr_t & tAttr ) const;
 	};
 
@@ -129,6 +130,19 @@ DWORD DdlParser_c::ItemOptions_t::ToFlags() const
 	uFlags |= m_bIndexed ? CSphColumnInfo::ATTR_INDEXED_SI : 0;
 	uFlags |= m_sKNNType.IsEmpty() ? 0 : CSphColumnInfo::ATTR_INDEXED_KNN;
 	return uFlags;
+}
+
+
+knn::IndexSettings_t DdlParser_c::ItemOptions_t::ToKNN() const
+{
+	knn::IndexSettings_t tKNN;
+
+	tKNN.m_iDims			= m_iKNNDims;
+	tKNN.m_eHNSWSimilarity	= m_eHNSWSimilarity;
+	tKNN.m_iHNSWM			= m_iHNSWM;
+	tKNN.m_iHNSWEFConstruction = m_iHNSWEFConstruction;
+
+	return tKNN;
 }
 
 
@@ -235,7 +249,6 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits, bool bModify )
 {
 	assert( m_pStmt );
-	ItemOptions_t tOpts = m_tItemOptions;
 
 	m_pStmt->m_eStmt = bModify ? STMT_ALTER_MODIFY : STMT_ALTER_ADD;
 	ToString ( m_pStmt->m_sIndex, tIndex );
@@ -245,11 +258,14 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & 
 	m_pStmt->m_eAlterColType = eAttr;
 	m_pStmt->m_uFieldFlags = ConvertFlags(iFieldFlags);
 	m_pStmt->m_uAttrFlags = m_tItemOptions.ToFlags();
-	m_pStmt->m_eEngine = tOpts.m_eEngine;
+	m_pStmt->m_eEngine = m_tItemOptions.m_eEngine;
 	m_pStmt->m_iBits = iBits;
+	m_pStmt->m_tAlterKNN = m_tItemOptions.ToKNN();
+
+	bool bOk = CheckFieldFlags ( m_pStmt->m_eAlterColType, iFieldFlags, m_pStmt->m_sAlterAttr, m_tItemOptions, m_sError );
 	m_tItemOptions.Reset();
 
-	return CheckFieldFlags ( m_pStmt->m_eAlterColType, iFieldFlags, m_pStmt->m_sAlterAttr, tOpts, m_sError );
+	return bOk;
 }
 
 
@@ -283,10 +299,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		tAttr.m_tAttr.m_eAttrType		= eAttrType;
 		tOpts.CopyOptionsTo(tAttr);
 		tAttr.m_bKNN					= !tOpts.m_sKNNType.IsEmpty();
-		tAttr.m_tKNN.m_iDims			= tOpts.m_iKNNDims;
-		tAttr.m_tKNN.m_eHNSWSimilarity	= tOpts.m_eHNSWSimilarity;
-		tAttr.m_tKNN.m_iHNSWM			= tOpts.m_iHNSWM;
-		tAttr.m_tKNN.m_iHNSWEFConstruction = tOpts.m_iHNSWEFConstruction;
+		tAttr.m_tKNN					= tOpts.ToKNN();
 
 		return true;
 	}

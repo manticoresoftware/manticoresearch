@@ -56,6 +56,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 
 			ISphWordlist::Args_t tWordlist ( false, tCtx );
 			bool bExpanded = sphExpandGetWords ( (const char*)sWord, tCtx, tWordlist );
+			tCtx.m_bHasWildcards |= bExpanded;
 
 			int iDocs = 0;
 			int iHits = 0;

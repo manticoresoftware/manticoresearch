@@ -7972,6 +7972,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missing bigram
+	bool bHasWildcards = false;
 
 	if ( !bFillOnly )
 	{
@@ -7998,6 +7999,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;
 
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
+		bHasWildcards = tExpCtx.m_bHasWildcards;
 	} else
 	{
 		BYTE sWord[SPH_MAX_KEYWORD_LEN];
@@ -8025,8 +8027,10 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		}
 	}
 
-	// get stats from disk chunks too
-	if ( !tSettings.m_bStats )
+	// process disk chunks too but only if:
+	// - need term stats
+	// - has terms with wildcards as these are expanded differently
+	if ( !tSettings.m_bStats && !bHasWildcards )
 		return true;
 
 	if ( bFillOnly )

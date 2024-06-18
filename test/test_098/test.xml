@@ -127,6 +127,15 @@ index rt_crc
     charset_table = non_cjk, U+00025, U+0002C, U+0002E
 }
 
+index rt_wild
+{
+	type = rt
+	path			= <data_path/>/rt_wild
+	rt_field = title
+	rt_attr_uint = gid
+	min_prefix_len = 1
+}
+
 </config>
 
 <queries>
@@ -186,6 +195,14 @@ flush ramchunk rt_crc;
 INSERT INTO rt_crc (id, title) VALUES ( 4, 'the %google.com% doing out of the box' ), (5, 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam non leo aliquam, rutrum sapien ac, placerat mi. Suspendisse cursus erat ac quam facilisis rutrum. Duis cursus enim lectus, aliquet faucibus nibh consectetur ac. Duis hendrerit id arcu in vulputate. Mauris feugiat dolor eget elit porttitor placerat. Sed eros nisi, tempus rhoncus tempor ac, bibendum a mauris. Praesent feugiat nunc ipsum, sed posuere velit euismod.');
 select * from rt_crc where match('%google.com%');
 
+</sphinxql>
+
+<!-- regression wildcards expansion skipped for disk chunks if no stats requested -->
+<sphinxql>
+INSERT INTO rt_wild VALUES ( 10, 'running man', 100 ), ( 11, 'running runs', 100 );
+flush ramchunk rt_wild;
+CALL KEYWORDS ('ru*', 'rt_wild', 0 as stats);
+CALL KEYWORDS ('ru*', 'rt_wild', 1 as stats);
 </sphinxql>
 
 </queries>

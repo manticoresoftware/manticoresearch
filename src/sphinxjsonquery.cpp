@@ -1885,7 +1885,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 
 static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
 {
-	if ( eAggrFunc==Aggr_e::RANGE || eAggrFunc==Aggr_e::DATE_RANGE )
+	if ( eAggrFunc==Aggr_e::DATE_RANGE )
 	{
 		if ( !tKey.m_bKeyed )
 			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
@@ -1893,6 +1893,15 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 			tOut.Sprintf ( R"("from":"%s")", pRange->m_sFrom.cstr() );
 		if ( !pRange->m_sTo.IsEmpty() )
 			tOut.Sprintf ( R"("to":"%s")", pRange->m_sTo.cstr() );
+
+	} else if ( eAggrFunc==Aggr_e::RANGE )
+	{
+		if ( !tKey.m_bKeyed )
+			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
+		if ( !pRange->m_sFrom.IsEmpty() )
+			tOut.Sprintf ( R"("from":%s)", pRange->m_sFrom.cstr() );
+		if ( !pRange->m_sTo.IsEmpty() )
+			tOut.Sprintf ( R"("to":%s)", pRange->m_sTo.cstr() );
 
 	} else if ( eAggrFunc==Aggr_e::DATE_HISTOGRAM )
 	{

@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?php
-if (count($argv) < 6) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier> <rt_mem_limit kb>\n");
+if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier>\n");
 
 // This function waits for an idle mysql connection for the $query, runs it and exits
 function process($query) {
@@ -55,11 +55,7 @@ for ($i=0;$i<$argv[2];$i++) {
 
 // init
 mysqli_query($all_links[0], "drop table if exists name");
-$query = "create table name(username text) min_infix_len='2' expand_keywords='1'";
-if (!empty($argv[5])) {
-	$query .= " rt_mem_limit='" . (int)$argv[5] . "k'";
-}
-mysqli_query($all_links[0], $query);
+mysqli_query($all_links[0], "create table name(username text) min_infix_len='2' expand_keywords='1'");
 
 $batch = [];
 $query_start = "insert into name(id, username) values ";

@@ -16470,6 +16470,14 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	// cluster does not implement ALTER for now
+	auto tCluster = IsPartOfCluster ( pServed );
+	if ( tCluster )
+	{
+		tOut.ErrorEx ( "table '%s' is part of cluster %s, ALTER is not supported for tables in cluster", tStmt.m_sIndex.cstr(), tCluster->cstr() );
+		return;
+	}
+
 	WIdx_T<RtIndex_i*> pRtIndex { pServed };
 
 	// get all table settings as a string

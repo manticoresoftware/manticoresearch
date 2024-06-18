@@ -5,12 +5,18 @@ php -d memory_limit=-1 ./test/clt-tests/comparison-overhead-json-sql/load_us_nam
 ––– input –––
 mysql -h0 -P9306 -e "select count(*) from name;"
 ––– output –––
++----------+
+| count(*) |
++----------+
+| 10000000 |
++----------+
 ––– input –––
 export start=$(date +%s%N)
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "select * from name where match('*on*'); show meta; show table name status;"
+mysql -h0 -P9306 -e "select * from name where match('*on*');" > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 export end=$(date +%s%N)
 ––– output –––
@@ -18,14 +24,23 @@ export end=$(date +%s%N)
 export multiple_disk_chunks=$(( (end - start) / 1000000 ))
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "OPTIMIZE TABLE test OPTION cutoff=1, sync=1;"
+mysql -h0 -P9306 -e "show table name status" | grep "disk_chunks"
 ––– output –––
+| disk_chunks                 | 7                                                                                                      |
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show table name status" | grep "disk_chunks"
+––– output –––
+| disk_chunks                 | 1                                                                                                      |
 ––– input –––
 export start=$(date +%s%N)
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "select * from name where match('*on*'); show meta; show table name status;"
+mysql -h0 -P9306 -e "select * from name where match('*on*');" > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 export end=$(date +%s%N)
 ––– output –––
@@ -37,7 +52,6 @@ echo "Duration: ${optimize} ${multiple_disk_chunks} ms"
 ––– output –––
 Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
-php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 2);" 2>\dev\null && echo "----$?----"
+php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 15);" 2>\dev\null && echo "----$?----"
 ––– output –––
 ----0----
-

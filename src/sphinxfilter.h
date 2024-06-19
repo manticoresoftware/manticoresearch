@@ -125,6 +125,33 @@ inline bool EvalRange ( T tValue, T tMin, T tMax )
 	return bMinOk && bMaxOk;
 }
 
+template<typename T = SphAttr_t>
+inline bool EvalRange ( T tValue, const CommonFilterSettings_t & tFilter )
+{
+	T tMin, tMax;
+	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+	{
+		tMin = (T)tFilter.m_fMinValue;
+		tMax = (T)tFilter.m_fMaxValue;
+	}
+	else
+	{
+		tMin = (T)tFilter.m_iMinValue;
+		tMax = (T)tFilter.m_iMaxValue;
+	}
+
+	if ( tFilter.m_bOpenLeft )
+		return tFilter.m_bHasEqualMax ? ( tValue<=tMax ) : ( tValue<tMax );
+
+	if ( tFilter.m_bOpenRight )
+		return tFilter.m_bHasEqualMin ? ( tValue>=tMin ) : ( tValue>tMin );
+
+	auto bMinOk = tFilter.m_bHasEqualMin ? ( tValue>=tMin ) : ( tValue>tMin );
+	auto bMaxOk = tFilter.m_bHasEqualMax ? ( tValue<=tMax ) : ( tValue<tMax );
+
+	return bMinOk && bMaxOk;
+}
+
 template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT = false, bool OPEN_RIGHT = false, typename T = SphAttr_t>
 inline bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
 {

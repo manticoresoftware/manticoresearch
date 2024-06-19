@@ -986,7 +986,7 @@ void SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const 
 	CSphString sIndexes;
 	ToString ( sIndexes, tValue );
 	StrVec_t dIndexes;
-	sphSplit ( dIndexes, sIndexes.cstr() );
+	sphSplit ( dIndexes, sIndexes.cstr(), ", \t" );
 	
 	for ( const auto & i : dIndexes )
 	{

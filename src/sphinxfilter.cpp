@@ -1246,24 +1246,51 @@ public:
 };
 
 
-
-static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
 {
-	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
-	SafeAddRef ( _pExpr );
-
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
 	bool bAutoConvert = false;
 	bool bJsonExpr = false;
 	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
 
-	// IN ( string list ) filter by JSON attribute should be done via Expr_JsonFieldIn_c expression
-	if ( bJsonExpr && tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
-		return std::make_unique< ExprFilterProxy_c > ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+	if ( !bJsonExpr )
+		return nullptr;
 
-	if ( bJsonExpr && !bAutoConvert )
-		pExpr = sphJsonFieldConv ( pExpr );
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+
+	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
+	{
+		switch ( tFixedSettings.m_eType )
+		{
+		case SPH_FILTER_VALUES:
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr ), SPH_ATTR_INTEGER );
+
+		case SPH_FILTER_RANGE:
+		case SPH_FILTER_FLOATRANGE:
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
+
+		default:
+			break;
+		}
+	}
+
+	if ( !bAutoConvert )
+		pExpr = sphJsonFieldConv(pExpr);
+
+	return nullptr;
+}
+
+
+static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+{
+	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
+	SafeAddRef ( _pExpr );
+
+	std::unique_ptr<ISphFilter> pRes = SetupJsonExpr ( pExpr, tSettings, tFixedSettings );
+	if ( pRes )
+		return pRes;
 
 	switch ( tFixedSettings.m_eType )
 	{

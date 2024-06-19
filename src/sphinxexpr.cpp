@@ -1766,6 +1766,19 @@ private:
 };
 
 
+static ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch, const BYTE * pBlobPool, const CSphRefcountedPtr<ISphExpr> & pArg )
+{
+	assert ( ppKey );
+	if ( !pBlobPool || !pArg )
+		return JSON_EOF;
+
+	uint64_t uPacked = pArg->Int64Eval ( tMatch );
+	*ppKey = pBlobPool + sphJsonUnpackOffset ( uPacked );
+
+	return sphJsonUnpackType ( uPacked );
+}
+
+
 class Expr_JsonFieldConv_c : public ISphExpr
 {
 public:
@@ -1823,14 +1836,7 @@ protected:
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
-		assert ( ppKey );
-		if ( !m_pBlobPool || !m_pArg )
-			return JSON_EOF;
-
-		uint64_t uPacked = m_pArg->Int64Eval ( tMatch );
-		*ppKey = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
-
-		return sphJsonUnpackType ( uPacked );
+		return ::GetKey ( ppKey, tMatch, m_pBlobPool, m_pArg );
 	}
 
 	// generic evaluate
@@ -2842,6 +2848,9 @@ public:
 
 	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
 	{
+		if ( m_bStrict )
+			return false;
+
 		ExprConstArgs_c tConstArgs;
 		m_pExpr->Command ( SPH_EXPR_COLLECT_CONST_ARGS, (void*)&tConstArgs );
 		if ( tConstArgs.IsError() )
@@ -2881,7 +2890,7 @@ public:
 
 		tFilter = tConstArgs;
 		tFilter.m_sAttrName = tSchemaWithName.second;
-		tFilter.m_eMvaFunc = m_bStrict ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
+		tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
 
 		if ( tFilter.m_eType==SPH_FILTER_VALUES )
 			tFilter.m_dValues.Uniq();
@@ -7614,6 +7623,16 @@ public:
 		m_dHashes.Uniq();
 	}
 
+	Expr_JsonFieldIn_c ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg )
+		: Expr_ArgVsConstSet_T<int64_t> ( pArg )
+	{
+		m_dValues.Resize ( dVals.GetLength() );
+		ARRAY_FOREACH ( i, dVals )
+			m_dValues[i] = dVals[i];
+
+		m_dValues.Uniq();
+	}
+
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
 		Expr_ArgVsConstSet_T<int64_t>::Command ( eCmd, pArg );
@@ -7744,14 +7763,7 @@ protected:
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
-		assert ( ppKey );
-		if ( !m_pBlobPool )
-			return JSON_EOF;
-
-		uint64_t uPacked = m_pArg->Int64Eval ( tMatch );
-		*ppKey = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
-
-		return sphJsonUnpackType ( uPacked );
+		return ::GetKey ( ppKey, tMatch, m_pBlobPool, m_pArg );
 	}
 
 	int ValueEval ( const int64_t iVal ) const
@@ -7843,6 +7855,145 @@ ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
 {
 	return new Expr_JsonFieldIn_c ( dVals, pArg );
 }
+
+
+ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg )
+{
+	return new Expr_JsonFieldIn_c ( dVals, pArg );
+}
+
+////////////////////////////////////////////////////////////////////
+/// JSON field vs constant range
+class Expr_JsonFieldRange_c : public Expr_ArgVsSet_T<int64_t>
+{
+	using BASE = Expr_ArgVsSet_T<int64_t>;
+
+public:
+	Expr_JsonFieldRange_c ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg )
+		: BASE ( pArg )
+		, m_tFilter ( tFilter )
+	{}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		BASE::Command ( eCmd, pArg );
+
+		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+			m_pBlobPool = (const BYTE*)pArg;
+	}
+
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		const BYTE * pVal = nullptr;
+		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		switch ( eJson )
+		{
+		case JSON_INT32_VECTOR:		return ArrayEval<int>(pVal);
+		case JSON_INT64_VECTOR:		return ArrayEval<int64_t>(pVal);
+		case JSON_DOUBLE_VECTOR:	return ArrayFloatEval(pVal);
+		case JSON_INT32:
+		case JSON_INT64:			return ValueEval ( eJson==JSON_INT32 ? sphJsonLoadInt ( &pVal ) : sphJsonLoadBigint ( &pVal ) );
+		case JSON_DOUBLE:			return ValueEval ( sphQW2D ( sphJsonLoadBigint ( &pVal ) ) );
+		default:
+			return 0;
+		}
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_JsonFieldRange_c");
+		CALC_POD_HASH ( m_tFilter.m_iMinValue );
+		CALC_POD_HASH ( m_tFilter.m_iMaxValue );
+		CALC_POD_HASH ( m_tFilter.m_bHasEqualMin );
+		CALC_POD_HASH ( m_tFilter.m_bHasEqualMax );
+		CALC_POD_HASH ( m_tFilter.m_bOpenLeft );
+		CALC_POD_HASH ( m_tFilter.m_bOpenRight );
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_JsonFieldRange_c ( *this );
+	}
+
+protected:
+	const BYTE *			m_pBlobPool {nullptr};
+	CommonFilterSettings_t	m_tFilter;
+
+	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
+	{
+		return ::GetKey ( ppKey, tMatch, m_pBlobPool, m_pArg );
+	}
+
+	template<typename T>
+	int ValueEval ( T tVal ) const
+	{
+		if ( m_tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+		{
+			if ( EvalRange ( (float)tVal, m_tFilter ) )
+				return 1;
+		}
+		else
+		{
+			if ( EvalRange ( tVal, m_tFilter ) )
+				return 1;
+		}
+
+		return 0;
+	}
+
+	template <typename T>
+	int ArrayEval ( const BYTE * pVal ) const
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		auto * pArray = (const T *)pVal;
+		if ( m_tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+		{
+			for ( const T * pValue = pArray; pValue < pArray+iLen; pValue++ )
+				if ( EvalRange ( (float)*pValue, m_tFilter ) )
+					return 1;
+		}
+		else
+		{
+			for ( const T * pValue = pArray; pValue < pArray+iLen; pValue++ )
+				if ( EvalRange ( *pValue, m_tFilter ) )
+					return 1;
+		}
+
+		return 0;
+	}
+
+	int ArrayFloatEval ( const BYTE * pVal ) const
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		const BYTE * p = pVal;
+		for ( int i=0; i<iLen; i++ )
+			if ( EvalRange ( sphQW2D ( sphJsonLoadBigint ( &p ) ), m_tFilter ) )
+				return 1;
+
+		return 0;
+	}
+
+	bool IsJson ( bool & bConverted ) const final
+	{
+		bConverted = true;
+		return true;
+	}
+
+private:
+	Expr_JsonFieldRange_c ( const Expr_JsonFieldRange_c & rhs )
+		: Expr_ArgVsSet_T<int64_t> ( rhs )
+		, m_tFilter ( rhs.m_tFilter )
+	{}
+};
+
+
+ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg )
+{
+	return new Expr_JsonFieldRange_c ( tFilter, pArg );
+}
+
+////////////////////////////////////////////////////////////////////
 
 // fixme! Expr_ArgVsConstSet_T collects raw packed strings in the case.
 // m.b. store FNV hashes there instead, and use them to boost search speed?

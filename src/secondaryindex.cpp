@@ -860,14 +860,14 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 {
 	CSphString sWarning;
 	const auto * pAttr = tCtx.m_tIndexSchema.GetAttr ( tHint.m_sIndex.cstr() );
-	if ( !pAttr )
+	if ( !pAttr && !sphJsonNameSplit ( tHint.m_sIndex.cstr() ) )
 	{
 		sWarning.SetSprintf ( "hint error: '%s' attribute not found", tHint.m_sIndex.cstr() );
 		dWarnings.Add (sWarning);
 		return;
 	}
 
-	if ( !tSIInfo.m_bHasHistograms )
+	if ( !tSIInfo.m_bHasHistograms && !tSIInfo.m_bUsable )
 	{
 		sWarning.SetSprintf ( "hint error: histogram not found for attribute '%s'", tHint.m_sIndex.cstr() );
 		dWarnings.Add (sWarning);

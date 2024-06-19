@@ -540,7 +540,7 @@ SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, rele
 POST /search -d '
     {
     "size": 0,
-    "index": "films", 
+    "index": "films",
     "aggs": {
         "cat_release": {
             "composite": {
@@ -695,7 +695,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
-Note the `HAVING` does not affect `total_found`.
+Note that `HAVING` does not affect `total_found` in the [search query meta info](../Node_info_and_management/SHOW_META.md#SHOW-META).
 
 <!-- example group7 -->
 ##### GROUPBY()

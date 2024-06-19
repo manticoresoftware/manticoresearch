@@ -32,7 +32,7 @@ mysql -P9306 -h0 -e "select count(*) from name.@status;"
 +----------+
 | count(*) |
 +----------+
-|        8 |
+|        %{NUMBER} |
 +----------+
 ––– input –––
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"

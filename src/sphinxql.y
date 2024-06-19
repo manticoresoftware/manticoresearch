@@ -1841,6 +1841,16 @@ subkey:
 streq:
 	expr '=' strval				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| strval '=' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_NE strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_NE expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '<' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '<' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '>' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '>' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_LTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_LTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_GTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_GTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 strval:

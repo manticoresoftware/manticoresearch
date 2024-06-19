@@ -2927,14 +2927,15 @@ private:
 };
 
 
-class Expr_StrEq_c : public Expr_BinaryFilter_c
+class Expr_StrCmp_c : public Expr_BinaryFilter_c
 {
 public:
-	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation, bool bEq )
+	Expr_StrCmp_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation, bool bExclude, EStrCmpDir eStrCmpDir )
 		: Expr_BinaryFilter_c ( "Expr_StrEq_c", pLeft, pRight )
+		, m_bExclude ( bExclude )
+		, m_eStrCmpDir ( eStrCmpDir )
 	{
 		m_fnStrCmp = GetStringCmpFunc ( eCollation );
-		m_bEqual = bEq;
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final
@@ -2944,15 +2945,25 @@ public:
 		int iLeft = m_pFirst->StringEval ( tMatch, &pLeft );
 		int iRight = m_pSecond->StringEval ( tMatch, &pRight );
 
-		bool bEq = m_fnStrCmp ( {pLeft, iLeft}, {pRight, iRight}, false )==0;
+		int iCmp = m_fnStrCmp ( {pLeft, iLeft}, {pRight, iRight}, false );
 
 		FreeDataPtr ( *m_pFirst, pLeft );
 		FreeDataPtr ( *m_pSecond, pRight );
 
-		if ( m_bEqual )
-			return (int)bEq;
-		else
-			return	(int)(!bEq);
+		switch ( m_eStrCmpDir )
+		{
+			case EStrCmpDir::LT: return ( m_bExclude ? iCmp>=0 : iCmp<0 );
+			case EStrCmpDir::GT: return ( m_bExclude ? iCmp<=0 : iCmp>0 );
+			case EStrCmpDir::EQ:
+			{
+				if ( m_bExclude )
+					return ( iCmp!=0 );
+				else
+					return ( iCmp==0 );
+			}
+
+			default: return 0;
+		}
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
@@ -2966,9 +2977,10 @@ public:
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
-		EXPR_CLASS_NAME("Expr_StrEq_c");
+		EXPR_CLASS_NAME("Expr_StrCmp_c");
 		CALC_POD_HASH(m_fnStrCmp);
-		CALC_POD_HASH(m_bEqual);
+		CALC_POD_HASH(m_bExclude);
+		CALC_POD_HASH(m_eStrCmpDir);
 		CALC_CHILD_HASH(m_pFirst);
 		CALC_CHILD_HASH(m_pSecond);
 		return CALC_DEP_HASHES();
@@ -2976,14 +2988,15 @@ public:
 
 	ISphExpr * Clone () const final
 	{
-		return new Expr_StrEq_c ( *this );
+		return new Expr_StrCmp_c ( *this );
 	}
 
 private:
 	SphStringCmp_fn m_fnStrCmp {nullptr};
-	bool m_bEqual = true;
+	bool m_bExclude = false;
+	EStrCmpDir m_eStrCmpDir;
 
-	Expr_StrEq_c ( const Expr_StrEq_c& ) = default;
+	Expr_StrCmp_c ( const Expr_StrCmp_c & ) = default;
 };
 
 
@@ -4297,6 +4310,8 @@ private:
 
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 	ISphExpr *				CreateLevenshteinNode ( ISphExpr * pPattern, ISphExpr * pAttr, ISphExpr * pOpts );
+
+	ISphExpr *				CreateCmp ( const ExprNode_t & tNode, ISphExpr * pLeft, ISphExpr * pRight );
 
 	bool					CheckStoredArg ( ISphExpr * pExpr );
 	bool					PrepareFuncArgs ( const ExprNode_t & tNode, bool bSkipChildren, CSphRefcountedPtr<ISphExpr> & pLeft, CSphRefcountedPtr<ISphExpr> & pRight, VecRefPtrs_t<ISphExpr*> & dArgs );
@@ -6640,6 +6655,63 @@ bool ExprParser_t::CheckStoredArg ( ISphExpr * pExpr )
 	return true;
 }
 
+ISphExpr * ExprParser_t::CreateCmp ( const ExprNode_t & tNode, ISphExpr * pLeft, ISphExpr * pRight )
+{
+	int iOp = tNode.m_iToken;
+
+	// str case
+	if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
+			|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR
+			|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD
+		)
+		&& ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING
+			|| m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR )
+		)
+	{
+		if ( !CheckStoredArg(pLeft) || !CheckStoredArg(pRight) )
+			return nullptr;
+
+		switch ( iOp )
+		{
+		case '<':
+			return new Expr_StrCmp_c ( pLeft, pRight, m_eCollation, false, EStrCmpDir::LT );
+		case '>':
+			return new Expr_StrCmp_c ( pLeft, pRight, m_eCollation, false, EStrCmpDir::GT );
+		case TOK_LTE:
+			return new Expr_StrCmp_c ( pLeft, pRight, m_eCollation, true, EStrCmpDir::GT );
+		case TOK_GTE:
+			return new Expr_StrCmp_c ( pLeft, pRight, m_eCollation, true, EStrCmpDir::LT );
+		case TOK_EQ:
+			return new Expr_StrCmp_c ( pLeft, pRight, m_eCollation, false, EStrCmpDir::EQ );
+		case TOK_NE:
+			return new Expr_StrCmp_c ( pLeft, pRight, m_eCollation, true, EStrCmpDir::EQ );
+
+		default:				assert ( 0 && "unhandled token type" ); break;
+		}
+	}
+
+	// numeric case
+#define LOC_SPAWN_POLY(_classname) switch (tNode.m_eArgType) { \
+	case SPH_ATTR_INTEGER:	return new _classname##Int_c ( pLeft, pRight ); \
+	case SPH_ATTR_BIGINT:	return new _classname##Int64_c ( pLeft, pRight ); \
+	default:				return new _classname##Float_c ( pLeft, pRight ); }
+
+	switch ( iOp )
+	{
+		case '<':				LOC_SPAWN_POLY ( Expr_Lt );
+		case '>':				LOC_SPAWN_POLY ( Expr_Gt );
+		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte );
+		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte );
+		case TOK_EQ:			LOC_SPAWN_POLY ( Expr_Eq );
+		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne );
+
+		default:				assert ( 0 && "unhandled token type" ); break;
+	}
+#undef LOC_SPAWN_POLY
+
+	return nullptr;
+}
+
 
 bool ExprParser_t::PrepareFuncArgs ( const ExprNode_t & tNode, bool bSkipChildren, CSphRefcountedPtr<ISphExpr> & pLeft, CSphRefcountedPtr<ISphExpr> & pRight, VecRefPtrs_t<ISphExpr*> & dArgs )
 {
@@ -7068,34 +7140,13 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case '|':				return new Expr_BitOr_c ( pLeft, pRight );
 		case '%':				return new Expr_Mod_c ( pLeft, pRight );
 
-		case '<':				LOC_SPAWN_POLY ( Expr_Lt );
-		case '>':				LOC_SPAWN_POLY ( Expr_Gt );
-		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte );
-		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte );
-
-		// fixme! Both branches below returns same result. Refactor!
+		case '<':
+		case '>':
+		case TOK_LTE:
+		case TOK_GTE:
 		case TOK_EQ:
 		case TOK_NE:
-			if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
-					|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR
-					|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD
-				)
-				&& ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING
-					|| m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR )
-				)
-			{
-				if ( !CheckStoredArg(pLeft) || !CheckStoredArg(pRight) )
-					return nullptr;
-
-				return new Expr_StrEq_c ( pLeft, pRight, m_eCollation, ( iOp==TOK_EQ ) );
-			}
-			if ( iOp==TOK_EQ )
-			{
-				LOC_SPAWN_POLY ( Expr_Eq );
-			} else
-			{
-				LOC_SPAWN_POLY ( Expr_Ne );
-			}
+			return CreateCmp ( tNode, pLeft, pRight );
 
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And );
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or );

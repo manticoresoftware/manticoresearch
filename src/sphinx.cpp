@@ -1186,7 +1186,7 @@ public:
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
-	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader&, CSphString&, CSphString&, Binlog::CheckTxn_fn&&) final;
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader&, CSphString&, CSphString&, Binlog::CheckTxn_fn&& ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -2422,7 +2422,7 @@ void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid,
 		tWriter.ZipOffset ( tUpd.m_dAttributes.GetLength () );
 		for ( const auto & i: tUpd.m_dAttributes )
 		{
-			tWriter.PutString ( i.m_sName );
+			tWriter.PutZString ( i.m_sName );
 			tWriter.ZipOffset ( i.m_eType );
 		}
 
@@ -2435,24 +2435,34 @@ void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid,
 }
 
 
-Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn && fnCanContinue )
-{
-	auto eOp = tReader.GetByte();
-	switch (eOp)
-	{
-	case binlog_UPDATE_ATTRS:
-		return ReplayUpdate ( tReader, sError, sOp, std::move ( fnCanContinue ) );
-	default:
-		assert ( false && "unknown op provided to replay" );
-	}
-	return {};
-}
-
-
 Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphString & sError, CSphString & sOp,
 		Binlog::CheckTxn_fn && fnCanContinue )
 {
 	sOp = "update";
+
+	// check we need to apply
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { false, true } );
+
+	// no apply - just skip txn
+	if ( !tRes.m_bApply )
+	{
+		int iAttrs = (int) tReader.UnzipOffset ();
+		for ( auto i=0; i<iAttrs; ++i )
+		{
+			tReader.GetZString();
+			tReader.UnzipOffset();
+		}
+
+		if ( tReader.GetErrorFlag () )
+			return {};
+
+		if ( !Binlog::SkipVector<DWORD> ( tReader ) ) return {};
+		if ( !Binlog::SkipVector<DocID_t> ( tReader ) ) return {};
+		if ( !Binlog::SkipVector<int> ( tReader ) ) return {};
+		if ( !Binlog::SkipVector<BYTE> ( tReader ) ) return {};
+		return fnCanContinue ( { true, false } );
+	}
+
 	// load transaction data
 	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
 	auto & tUpd = *pUpd;
@@ -2462,24 +2472,20 @@ Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphStr
 	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
 	for ( auto & i: tUpd.m_dAttributes )
 	{
-		i.m_sName = tReader.GetString ();
+		i.m_sName = tReader.GetZString ();
 		i.m_eType = (ESphAttr) tReader.UnzipOffset (); // safe, we'll crc check later
 	}
 
 	if ( tReader.GetErrorFlag () )
 		return {};
 
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) )
-		return {};
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) )
-		return {};
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) )
-		return {};
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) )
-		return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) ) return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) ) return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return {};
 
-	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
-	if ( tRes.m_bValid && tRes.m_bApply )
+	tRes = fnCanContinue ( { true, false } );
+	if ( tRes.m_bValid )
 	{
 		CSphString sError, sWarning;
 		bool bCritical = false;
@@ -2488,6 +2494,21 @@ Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphStr
 		tRes.m_bApply = true;
 	}
 	return tRes;
+}
+
+
+Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp,
+		Binlog::CheckTxn_fn && fnCanContinue )
+{
+	auto eOp = tReader.GetByte ();
+	switch ( eOp )
+	{
+	case binlog_UPDATE_ATTRS:
+		return ReplayUpdate ( tReader, sError, sOp, std::move ( fnCanContinue ) );
+	default:
+		assert ( false && "unknown op provided to replay" );
+	}
+	return {};
 }
 
 int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )

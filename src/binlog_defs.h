@@ -21,5 +21,5 @@ namespace Binlog {
 		bool m_bValid = false;
 		bool m_bApply = false;
 	};
-	using CheckTxn_fn = std::function <CheckTnxResult_t()>;
+	using CheckTxn_fn = std::function<CheckTnxResult_t ( CheckTnxResult_t )>;
 }

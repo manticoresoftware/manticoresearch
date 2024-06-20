@@ -80,6 +80,7 @@ public:
 	DWORD		GetDword ();
 	SphOffset_t	GetOffset ();
 	CSphString	GetString ();
+	CSphString  GetZString ();
 	int			GetLine ( char * sBuffer, int iMaxLen );
 	bool		Tag ( const char * sTag );
 
@@ -180,6 +181,9 @@ public:
 	virtual void	PutString ( const char * szString ) = 0;
 	virtual void	PutString ( const CSphString & sString ) = 0;
 
+	virtual void	PutZString ( const char * szString ) = 0;
+	virtual void	PutZString ( const CSphString & sString ) = 0;
+
 	virtual void	ZipInt ( DWORD uValue ) = 0;
 	virtual void	ZipOffset ( uint64_t uValue ) = 0;
 	virtual			~Writer_i() = default;
@@ -217,6 +221,8 @@ public:
 	void			PutString ( const char * szString ) override;
 	void			PutString ( const CSphString & sString ) override;
 	void			PutString ( Str_t tString ) { PutBytes ( tString.first, tString.second ); };
+	void			PutZString ( const char * szString ) override;
+	void			PutZString ( const CSphString & sString ) override;
 	void			Tag ( const char * sTag );
 
 	void			SeekTo ( SphOffset_t iPos, bool bTruncate = false );

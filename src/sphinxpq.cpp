@@ -2159,7 +2159,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSph
 
 	LoadInsertDeleteQueries ( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
 
-	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { true, true } );
 	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		CSphVector<StoredQuery_i *> dNewQueries; // not owned

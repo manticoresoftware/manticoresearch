@@ -126,6 +126,26 @@ void MemoryWriter_c::PutString ( const char * sVal )
 }
 
 
+void MemoryWriter_c::PutZString ( const CSphString & sVal )
+{
+	int iLen = sVal.Length ();
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( (const BYTE *) sVal.cstr (), iLen );
+}
+
+
+void MemoryWriter_c::PutZString ( const char * sVal )
+{
+	int iLen = 0;
+	if ( sVal )
+		iLen = (int) strlen ( sVal );
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( (const BYTE *) sVal, iLen );
+}
+
+
 void MemoryWriter_c::PutBytes ( const void * pData, int64_t iLen )
 {
 	if ( !iLen )

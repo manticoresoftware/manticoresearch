@@ -507,14 +507,25 @@ SphOffset_t CSphReader::GetOffset()
 CSphString CSphReader::GetString()
 {
 	CSphString sRes;
-
-	DWORD iLen = GetDword();
-	if ( iLen )
+	DWORD uLen = GetDword ();
+	if ( uLen )
 	{
-		char * sBuf = new char [ iLen ];
-		GetBytes ( sBuf, iLen );
-		sRes.SetBinary ( sBuf, iLen );
-		SafeDeleteArray ( sBuf );
+		sRes.Reserve ( uLen );
+		GetBytes ( (BYTE *) sRes.cstr (), uLen );
+	}
+
+	return sRes;
+}
+
+
+CSphString CSphReader::GetZString ()
+{
+	CSphString sRes;
+	auto uLen = UnzipOffset();
+	if ( uLen )
+	{
+		sRes.Reserve ( uLen );
+		GetBytes ( (BYTE *) sRes.cstr (), uLen );
 	}
 
 	return sRes;
@@ -755,6 +766,24 @@ void CSphWriter::PutString ( const CSphString & sString )
 	PutDword ( iLen );
 	if ( iLen )
 		PutBytes ( sString.cstr(), iLen );
+}
+
+
+void CSphWriter::PutZString ( const char * szString )
+{
+	int iLen = szString ? (int) strlen ( szString ) : 0;
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( szString, iLen );
+}
+
+
+void CSphWriter::PutZString ( const CSphString & sString )
+{
+	int iLen = sString.Length ();
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( sString.cstr (), iLen );
 }
 
 

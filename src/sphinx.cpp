@@ -1186,7 +1186,7 @@ public:
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
-	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { assert (0 && "strange ReplayTxn call"); return {}; }
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader&, CSphString&, CSphString&, Binlog::CheckTxn_fn&&) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -2410,6 +2410,85 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	Update_MinMax ( dRows, tCtx );
 	return true;
 }
+void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid, const CSphAttrUpdate & tUpd )
+{
+	CSphString sError;
+	Binlog::Commit ( pTID, { szName, iUid }, false, sError, [&tUpd] ( Writer_i & tWriter ) {
+
+		// my user op
+		tWriter.PutByte ( binlog_UPDATE_ATTRS );
+
+		// update data
+		tWriter.ZipOffset ( tUpd.m_dAttributes.GetLength () );
+		for ( const auto & i: tUpd.m_dAttributes )
+		{
+			tWriter.PutString ( i.m_sName );
+			tWriter.ZipOffset ( i.m_eType );
+		}
+
+		// POD vectors
+		Binlog::SaveVector ( tWriter, tUpd.m_dPool );
+		Binlog::SaveVector ( tWriter, tUpd.m_dDocids );
+		Binlog::SaveVector ( tWriter, tUpd.m_dRowOffset );
+		Binlog::SaveVector ( tWriter, tUpd.m_dBlobs );
+	} );
+}
+
+
+Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn && fnCanContinue )
+{
+	auto eOp = tReader.GetByte();
+	switch (eOp)
+	{
+	case binlog_UPDATE_ATTRS:
+		return ReplayUpdate ( tReader, sError, sOp, std::move ( fnCanContinue ) );
+	default:
+		assert ( false && "unknown op provided to replay" );
+	}
+	return {};
+}
+
+
+Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphString & sError, CSphString & sOp,
+		Binlog::CheckTxn_fn && fnCanContinue )
+{
+	sOp = "update";
+	// load transaction data
+	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
+	auto & tUpd = *pUpd;
+	tUpd.m_bIgnoreNonexistent = true;
+
+	int iAttrs = (int) tReader.UnzipOffset ();
+	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
+	for ( auto & i: tUpd.m_dAttributes )
+	{
+		i.m_sName = tReader.GetString ();
+		i.m_eType = (ESphAttr) tReader.UnzipOffset (); // safe, we'll crc check later
+	}
+
+	if ( tReader.GetErrorFlag () )
+		return {};
+
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) )
+		return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) )
+		return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) )
+		return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) )
+		return {};
+
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
+	if ( tRes.m_bValid && tRes.m_bApply )
+	{
+		CSphString sError, sWarning;
+		bool bCritical = false;
+		UpdateAttributes ( pUpd, bCritical, sError, sWarning ); // FIXME! check for errors
+		assert ( !bCritical ); // fixme! handle this
+		tRes.m_bApply = true;
+	}
+	return tRes;
+}
 
 int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
 {
@@ -2433,7 +2512,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
 
 	if ( tCtx.m_uUpdateMask && m_bBinlog )
-		Binlog::CommitUpdateAttributes ( &m_iTID, { GetName(), m_iIndexId }, *tUpd.m_pUpdate );
+		CommitUpdateAttributes ( &m_iTID, GetName(), m_iIndexId, *tUpd.m_pUpdate );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 

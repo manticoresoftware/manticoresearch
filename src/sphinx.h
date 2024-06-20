@@ -776,6 +776,9 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 	}
 };
 
+constexpr static BYTE binlog_UPDATE_ATTRS = 0;
+void CommitUpdateAttributes ( int64_t * pTID, const char* szName, int64_t iUid, const CSphAttrUpdate & tUpd );
+
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
 /////////////////////////////////////////////////////////////////////////////
@@ -1230,7 +1233,9 @@ public:
 	/// update accumulating state
 	virtual int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& /*fnWatcher*/ ) = 0;
 
-	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
+	virtual Binlog::CheckTnxResult_t ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn&& fnCheck ) = 0;
+
+	Binlog::CheckTnxResult_t ReplayUpdate ( CSphReader &, CSphString &, CSphString &, Binlog::CheckTxn_fn && );
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes ( CSphString & sError ) const = 0;
@@ -1362,7 +1367,7 @@ public:
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
 	int					CheckThenUpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString &, BlockerFn&& ) override { return -1; }
-	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader &, CSphString &, CSphString&, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) override { return true; }

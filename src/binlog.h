@@ -65,13 +65,10 @@ namespace Binlog {
 	};
 
 	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
-	bool Commit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
+	bool Commit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
 
 	/// replay stored binlog
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
-
-	// dedicated for Commit BLOP_UPDATE_ATTRS
-	void CommitUpdateAttributes ( int64_t * pTID, IndexNameUid_t tIndexName, const CSphAttrUpdate & tUpd );
 
 	void NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave );
 

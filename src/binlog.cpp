@@ -20,6 +20,23 @@ static constexpr DWORD		BINLOG_HEADER_MAGIC_SPBL = 0x4c425053;	/// magic 'SPBL' 
 static constexpr DWORD		BLOP_MAGIC_TXN_ = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
 static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;		/// magic 'SPLI' header that marks binlog meta
 
+// up to 12: PQ_ADD_DELETE added
+// 13 : changed txn format; now stores total documents also
+// 14 : ??
+// 15 : remove external ops; ops is 1 byte (unzipped); reorder ops
+
+constexpr unsigned int BINLOG_VERSION = 15;
+
+/// Bin Log Operation
+enum Blop_e : BYTE
+{
+	ADD_INDEX = 1,
+	ADD_TXN = 2,
+	ADD_CACHE = 3,
+
+	TOTAL
+};
+
 //////////////////////////////////////////////////////////////////////////
 // BINLOG
 //////////////////////////////////////////////////////////////////////////
@@ -107,7 +124,7 @@ public:
 			~Binlog_c();
 
 	void	NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave );
-	bool	BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError );
+	bool	BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError );
 
 	void	Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
@@ -165,8 +182,7 @@ private:
 	void					OpenNewLog ( int iLastState=0 );
 
 	int						ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog );
-	bool					ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tReader ) const;
-	bool					ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const;
+	bool					ReplayTxn ( int iBinlog, BinlogReader_c & tReader ) const;
 	bool					ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
 	bool					ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const;
 	bool 					IsBinlogWritable ( int64_t * pTID = nullptr ) const noexcept;
@@ -179,7 +195,7 @@ private:
 	static void	UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID ) ;
 
 	void	Log ( DWORD uFlag, const char * sTemplate, ... ) const;
-	int		ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const;
+	int		ReplayIndexID ( CSphReader & tReader, const BinlogFileDesc_t & tLog ) const;
 	bool	IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const;
 	bool	IsIndexMatched ( const BinlogIndexInfo_t & tIndex ) const;
 	void	RemoveAbandonedLog();
@@ -944,13 +960,8 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 				bReplayOK = ReplayCacheAdd ( iBinlog, uVersion, tReader );
 				break;
 
-			case UPDATE_ATTRS:
-				bReplayOK = ReplayUpdateAttributes ( iBinlog, tReader );
-				break;
-
-			case COMMIT:
-			case PQ_ADD_DELETE:
-				bReplayOK = ReplayTxn ( Binlog::Blop_e(uOp), iBinlog, tReader );
+			case ADD_TXN:
+				bReplayOK = ReplayTxn ( iBinlog, tReader );
 				break;
 
 			default:
@@ -986,8 +997,8 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 		}
 	}
 
-	sphInfo ( "binlog: replay stats: %d commits, %d updates, %d pq-add-delete, %d tables",
-		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[PQ_ADD_DELETE], dTotal[ADD_INDEX] );
+	sphInfo ( "binlog: replay stats: %d commits, %d tables",
+		dTotal[ADD_TXN], dTotal[ADD_INDEX] );
 	sphInfo ( "binlog: finished replaying %s; %d.%d MB in %d.%03d sec",
 		sLog.cstr(),
 		(int)(iFileSize/1048576), (int)((iFileSize*10/1048576)%10),
@@ -1069,13 +1080,13 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", tReader.GetFilename().cstr(), uVersion, BINLOG_VERSION );
 		return false;
 	}
-	ARRAY_FOREACH ( i, dCache )
+	for ( auto& tFile : dCache )
 	{
-		dCache[i].m_sName = tReader.GetString();
-		dCache[i].m_iIndexID = tReader.UnzipOffset();
-		dCache[i].m_iMinTID = tReader.UnzipOffset();
-		dCache[i].m_iMaxTID = tReader.UnzipOffset();
-		dCache[i].m_iFlushedTID = tReader.UnzipOffset();
+		tFile.m_sName = tReader.GetString();
+		tFile.m_iIndexID = tReader.UnzipOffset();
+		tFile.m_iMinTID = tReader.UnzipOffset();
+		tFile.m_iMaxTID = tReader.UnzipOffset();
+		tFile.m_iFlushedTID = tReader.UnzipOffset();
 	}
 	if ( !tReader.CheckCrc ( "cache", "", 0, iTxnPos ) )
 		return false;
@@ -1120,14 +1131,14 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 //////////////////////////////////////////////////////////////////////////
 
 // helper used in about all replay ops
-int Binlog_c::ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const
+int Binlog_c::ReplayIndexID ( CSphReader & tReader, const BinlogFileDesc_t & tLog ) const
 {
 	const int64_t iTxnPos = tReader.GetPos();
 	const int iVal = (int)tReader.UnzipOffset();
 
 	if ( iVal<0 || iVal>=tLog.m_dIndexInfos.GetLength() )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: unexpected table id (id=%d, max=%d, pos=" INT64_FMT ")", sPlace, iVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: unexpected table id (id=%d, max=%d, pos=" INT64_FMT ")", iVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
 		return -1;
 	}
 
@@ -1139,82 +1150,13 @@ CSphString Binlog_c::GetLogPath() const
 	return m_sLogPath;
 }
 
-static const char * szOpName ( Binlog::Blop_e eOp )
-{
-	switch (eOp)
-	{
-		case Binlog::COMMIT: return "commit";
-		case Binlog::PQ_ADD_DELETE: return "pq-add-delete";
-		default: return "other";
-	}
-}
-
-// dedicated function for replay attribute update
-bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const
+bool Binlog_c::ReplayTxn ( int iBinlog, BinlogReader_c & tReader ) const
 {
 	// load and lookup index
 	const int64_t iTxnPos = tReader.GetPos();
 	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
 
-	int iIdx = ReplayIndexID ( tReader, tLog, "update" );
-	if ( iIdx==-1 )
-		return false;
-	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[iIdx];
-
-	auto iTID = (int64_t) tReader.UnzipOffset();
-
-	// load transaction data
-	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
-	auto& tUpd = *pUpd;
-	tUpd.m_bIgnoreNonexistent = true;
-
-	int iAttrs = (int)tReader.UnzipOffset();
-	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
-	for ( auto & i : tUpd.m_dAttributes )
-	{
-		i.m_sName = tReader.GetString();
-		i.m_eType = (ESphAttr) tReader.UnzipOffset(); // safe, we'll crc check later
-	}
-
-	if ( tReader.GetErrorFlag() ) return false;
-
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) ) return false;
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) ) return false;
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return false;
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return false;
-
-	if (!PerformChecks ( "update", tIndex, iTID, iTxnPos, tReader ))
-		return false;
-
-	if ( tIndex.m_pIndex && IsIndexMatched ( tIndex ) && iTID > tIndex.m_pIndex->m_iTID )
-	{
-		// we normally expect per-index TIDs to be sequential
-		// but let's be graceful about that
-		CheckTidSeq ("update", tIndex, iTID, tIndex.m_pIndex, iTxnPos );
-
-		CSphString sError, sWarning;
-		bool bCritical = false;
-		tIndex.m_pIndex->UpdateAttributes ( pUpd, bCritical, sError, sWarning ); // FIXME! check for errors
-		assert ( !bCritical ); // fixme! handle this
-
-		// update committed tid on replay in case of unexpected / mismatched tid
-		tIndex.m_pIndex->m_iTID = iTID;
-	}
-
-	// update info
-	if ( IsIndexMatched ( tIndex ) )
-		UpdateIndexInfo ( tIndex, iTID );
-
-	return true;
-}
-
-bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tReader ) const
-{
-	// load and lookup index
-	const int64_t iTxnPos = tReader.GetPos();
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
-
-	int iIdx = ReplayIndexID ( tReader, tLog, szOpName (eOp) );
+	int iIdx = ReplayIndexID ( tReader, tLog );
 	if ( iIdx==-1 )
 		return false;
 
@@ -1227,11 +1169,12 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 		return false;
 
 	CSphString sError;
-	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( eOp, tReader, sError, [ eOp, iTxnPos, iTID, this, &tReader, &tIndex ] () {
+	CSphString sOp;
+	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( tReader, sError, sOp, [ iTxnPos, iTID, this, &tReader, &tIndex, &sOp ] () {
 		
 		CheckTnxResult_t tRes;
 
-		tRes.m_bValid = PerformChecks ( szOpName (eOp), tIndex, iTID, iTxnPos, tReader );
+		tRes.m_bValid = PerformChecks ( sOp.cstr(), tIndex, iTID, iTxnPos, tReader );
 		if ( !tRes.m_bValid )
 			return tRes;
 
@@ -1240,7 +1183,7 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 		{
 			// we normally expect per-index TIDs to be sequential
 			// but let's be graceful about that
-			CheckTidSeq ( szOpName (eOp), tIndex, iTID, tIndex.m_pIndex, iTxnPos );
+			CheckTidSeq ( sOp.cstr (), tIndex, iTID, tIndex.m_pIndex, iTxnPos );
 			tRes.m_bApply = true;
 		}
 		return tRes;
@@ -1249,7 +1192,8 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 	// could be invalid TXN in binlog
 	if ( !tReplayed.m_bValid )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)", szOpName ( eOp ), tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",
+			  sOp.cstr (), tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
 		return false;
 	}
 
@@ -1329,7 +1273,7 @@ bool Binlog_c::IsBinlogWritable ( int64_t * pTID ) const noexcept
 }
 
 // commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.
-bool Binlog_c::BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError )
+bool Binlog_c::BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError )
 {
 	if ( !IsBinlogWritable ( bIncTID ? pTID : nullptr ) ) // m.b. need to advance TID as index flush according to it
 		return true;
@@ -1344,7 +1288,7 @@ bool Binlog_c::BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexN
 		BinlogTransactionGuard_c tGuard ( m_tWriter, m_eOnCommit==ACTION_NONE );
 
 		// header
-		m_tWriter.PutByte ( eOp );
+		m_tWriter.PutByte ( Blop_e::ADD_TXN );
 		m_tWriter.ZipOffset ( uIndex );
 		m_tWriter.ZipOffset ( iTID );
 
@@ -1398,28 +1342,6 @@ void Binlog::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCa
 	g_bRTChangesAllowed = true;
 }
 
-// implemented here because used both in plain and rt indexes
-void Binlog::CommitUpdateAttributes ( int64_t * pTID, IndexNameUid_t tIndexName, const CSphAttrUpdate & tUpd )
-{
-	CSphString sError;
-	Binlog::Commit ( Binlog::UPDATE_ATTRS, pTID, tIndexName, false, sError, [&tUpd] ( Writer_i & tWriter ) {
-
-		// update data
-		tWriter.ZipOffset ( tUpd.m_dAttributes.GetLength() );
-		for ( const auto & i : tUpd.m_dAttributes )
-		{
-			tWriter.PutString ( i.m_sName );
-			tWriter.ZipOffset ( i.m_eType );
-		}
-
-		// POD vectors
-		Binlog::SaveVector ( tWriter, tUpd.m_dPool );
-		Binlog::SaveVector ( tWriter, tUpd.m_dDocids );
-		Binlog::SaveVector ( tWriter, tUpd.m_dRowOffset );
-		Binlog::SaveVector ( tWriter, tUpd.m_dBlobs );
-	});
-}
-
 bool Binlog::IsActive()
 {
 	if (!g_pRtBinlog)
@@ -1434,12 +1356,12 @@ bool Binlog::MockDisabled ( bool bNewVal )
 	return bNewVal;
 }
 
-bool Binlog::Commit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver )
+bool Binlog::Commit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver )
 {
 	if ( !g_pRtBinlog )
 		return true;
 
-	return g_pRtBinlog->BinlogCommit ( eOp, pTID, tIndexName, bIncTID, std::move (fnSaver), sError );
+	return g_pRtBinlog->BinlogCommit ( pTID, tIndexName, bIncTID, std::move (fnSaver), sError );
 }
 
 void Binlog::NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave )

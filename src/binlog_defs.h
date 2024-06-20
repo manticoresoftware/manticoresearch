@@ -15,27 +15,7 @@
 #include "std/ints.h"
 #include <functional>
 
-// up to 12: PQ_ADD_DELETE added
-// 13 : changed txn format; now stores total documents also
-// 14 : ??
-// 15 : remove PQ_ADD, PQ_DELETE, timestamps, RECONFIGURE; ops is 1 byte (unzipped); reorder ops
-
-constexpr unsigned int BINLOG_VERSION = 15;
-
 namespace Binlog {
-
-	/// Bin Log Operation
-	enum Blop_e : BYTE
-	{
-		ADD_INDEX		= 1,
-		ADD_CACHE		= 2,
-		COMMIT			= 3,
-		UPDATE_ATTRS	= 4,
-		PQ_ADD_DELETE	= 5,
-
-		TOTAL
-	};
-
 	struct CheckTnxResult_t
 	{
 		bool m_bValid = false;

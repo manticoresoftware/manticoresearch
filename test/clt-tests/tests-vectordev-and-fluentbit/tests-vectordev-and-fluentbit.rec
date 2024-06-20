@@ -14,40 +14,33 @@ apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+mkdir /usr/share/vector && cd $_
 ––– output –––
 ––– input –––
-echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-8.x.list
-––– output –––
-deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
-––– input –––
-mkdir /usr/share/logstash && cd $_
+wget -P vector https://packages.timber.io/vector/0.30.0/vector_0.30.0-1_amd64.deb
 ––– output –––
 ––– input –––
-wget -q https://artifacts.elastic.co/downloads/logstash/logstash-7.10.0-linux-x86_64.tar.gz
-––– output –––
-––– input –––
-tar -xvzf logstash-7.10.0-linux-x86_64.tar.gz > /dev/null; echo $?
+tar -xvzf vector-0.30.0-x86_64-unknown-linux-gnu.tar.gz > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-mkdir /usr/share/filebeat && cd /usr/share/filebeat
+mkdir /usr/share/fluentbit && cd /usr/share/fluentbit
 ––– output –––
 ––– input –––
-wget -q https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-8.11.0-linux-x86_64.tar.gz
+wget -q https://fluentbit.io/releases/1.8/fluent-bit-1.8.0-linux-x86_64.tar.gz
 ––– output –––
 ––– input –––
-tar -xvzf filebeat-8.11.0-linux-x86_64.tar.gz > /dev/null; echo $?
+tar -xvzf fluent-bit-1.8.0-linux-x86_64.tar.gz > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
 cd /usr/local/src
 ––– output –––
 ––– input –––
-ln -s /usr/share/logstash/logstash-7.10.0/bin/logstash /usr/bin/logstash
+ln -s /usr/share/vector/vector-0.30.0/bin/vector /usr/bin/vector
 ––– output –––
 ––– input –––
-ln -s /usr/share/filebeat/filebeat-8.11.0-linux-x86_64/filebeat /usr/bin/filebeat
+ln -s /usr/share/fluentbit/fluent-bit-1.8.0/bin/fluent-bit /usr/bin/fluent-bit
 ––– output –––
 ––– input –––
 manticore-executor -v
@@ -57,10 +50,10 @@ Copyright (c) The PHP Group
 Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd –––
 ––– input –––
-printf 'input {\n    file {\n        path => ["/var/log/dpkg.log"]\n        start_position => "beginning"\n        sincedb_path => "/dev/null"\n        mode => "read"\n        exit_after_read => "true"\n        file_completed_action => "log"\n        file_completed_log_path => "/dev/null"\n    }\n}\n\noutput {\n    elasticsearch {\n        index => "testlog_1"\n        hosts => ["http://localhost:9308"]\n        ilm_enabled => false\n        manage_template => false\n    }\n}\n' > logstash.conf
+printf '[sources.in]\n  type = "file"\n  include = ["/var/log/dpkg.log"]\n\n[sinks.out]\n  type = "console"\n  inputs = ["in"]\n  target = "stdout"\n\n[sinks.elasticsearch]\n  type = "elasticsearch"\n  inputs = ["in"]\n  endpoint = "http://localhost:9308"\n  index = "testlog_1"\n  mode = "index"' > /usr/share/vector/vector.toml
 ––– output –––
 ––– input –––
-timeout 60 logstash -f logstash.conf 2>/dev/null 1>/var/log/logstash.log && echo 'Done' || echo 'Timeout or failed'
+timeout 60 vector --config /usr/share/vector/vector.toml 2>/dev/null 1>/var/log/vector.log && echo 'Done' || echo 'Timeout or failed'
 ––– output –––
 Done
 ––– input –––
@@ -68,14 +61,14 @@ curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sor
 ––– output –––
 [{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_2"\n  allow_older_versions: true\n  compression_level: 0\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_2"\n  pattern: "testlog_2"\n\nseccomp:\n  default_action: allow\n  syscalls:\n  - action: allow\n    names:\n    - rseq' > filebeat.yml
+printf '[SERVICE]\n    Flush        5\n    Daemon       Off\n    Log_Level    info\n\n[INPUT]\n    Name        tail\n    Path        /var/log/dpkg.log\n\n[OUTPUT]\n    Name        es\n    Match       *\n    Host        localhost\n    Port        9308\n    Index       testlog_2\n    Type        _doc' > /usr/share/fluentbit/fluentbit.conf
 ––– output –––
 ––– input –––
-filebeat -c filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log & pid=$!
+fluent-bit -c /usr/share/fluentbit/fluentbit.conf 2>/var/log/fluentbit.log & pid=$!
 ––– output –––
 [1] #!/[0-9]+/!#
 ––– input –––
-if timeout 60 grep -qm1 'Non-zero metrics in the last 30s' <(tail -n 0 -f /var/log/filebeat.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/filebeat.log; cat /var/log/manticore/searchd.log; fi
+if timeout 60 grep -qm1 'Flushing records' <(tail -n 0 -f /var/log/fluentbit.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/fluentbit.log; cat /var/log/manticore/searchd.log; fi
 ––– output –––
 Done
 ––– input –––
@@ -84,7 +77,7 @@ kill ${pid}
 ––– input –––
 wait 2>&1 >/dev/null
 ––– output –––
-[1]+  Done                    filebeat -c filebeat.yml -strict.perms=false -e 2> /var/log/filebeat.log
+[1]+  Done                    fluent-bit -c /usr/share/fluentbit/fluentbit.conf 2> /var/log/fluentbit.log
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe testlog_2' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––

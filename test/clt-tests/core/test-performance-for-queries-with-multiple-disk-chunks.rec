@@ -59,6 +59,6 @@ echo "Duration: ${optimize} ${multiple_disk_chunks} ms"
 ––– output –––
 Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
-php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 20);" 2>\dev\null && echo "----$?----"
+php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 15);" 2>\dev\null && echo "----$?----"
 ––– output –––
 ----0----

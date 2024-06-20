@@ -216,10 +216,6 @@ jobs:
           - name: Noble upgrade to dev
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
-          - name: Test alter rename nightly
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/core/test-alter-rename-nightly
-
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

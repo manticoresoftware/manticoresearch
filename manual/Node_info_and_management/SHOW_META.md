@@ -9,7 +9,7 @@ SHOW META [ LIKE pattern ]
 
 The included items are:
 * `total`: The number of matches actually retrieved and sent to the client.
-* `total_found`: The estimated total number of matches for the query in the index.
+* `total_found`: The estimated total number of matches for the query in the index. If you need an accurate number of matches, prefer using `SELECT COUNT(*)`.
 * `total_relation`: If Manticore cannot calculate the exact `total` value, this field will display `total_relation: gte`, indicating that the actual count is **Greater Than or Equal** to `total_found`. If the `total` value is precise, `total_relation: eq` will be shown.
 * `time`: The duration (in seconds) it took to process the search query.
 * `keyword[N]`: The n-th keyword used in the search query. Note that the keyword can be presented as a wildcard, e.g., `abc*`.

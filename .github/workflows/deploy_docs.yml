@@ -64,18 +64,8 @@ jobs:
         CI_COMMIT_BRANCH: ${{ github.ref_name }}
         CI_COMMIT_TITLE: ${{ github.event.head_commit.message }}
     steps:
-      - name: Install git
-        run: |
-          add-apt-repository ppa:git-core/ppa
-          apt update
-          apt install -y git
-
       - name: Checkout
-        uses: actions/checkout@v3.5.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          set-safe-directory: true
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: Initialization
         # without adding the safe.directory the script fails to do git show ...

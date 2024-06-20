@@ -691,4 +691,5 @@ curl 0:9308/cli_json -d 'desc test'
 
 HTTP keep-alive is supported (except for the `/cli` endpoint), which allows for stateful interactions via the HTTP JSON interface as long as the client also supports keep-alive. For instance, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can execute `SHOW META` after a `SELECT` command, and it will function similarly to interactions with Manticore through a MySQL client.
 
+
 <!-- proofread -->

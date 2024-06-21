@@ -1109,22 +1109,39 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 	const int64_t iTxnPos = tReader.GetPos();
 	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
 
-	// load data
-	CSphVector<BinlogIndexInfo_t> dCache;
-	dCache.Resize ( (int) tReader.UnzipOffset() ); // FIXME! sanity check
-	if ( m_bWrongVersion && dCache.GetLength() )
+	// check data
+	int iCache = tReader.UnzipOffset (); // FIXME! sanity check
+	if ( m_bWrongVersion && iCache )
 	{
 		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", tReader.GetFilename().cstr(), uVersion, BINLOG_VERSION );
 		return false;
 	}
-	for ( auto& tFile : dCache )
+
+	BinlogIndexInfo_t tCache;
+	for ( int i = 0; i<iCache; ++i )
 	{
-		tFile.m_sName = tReader.GetZString();
-		tFile.m_iIndexID = tReader.UnzipOffset();
-		tFile.m_iMinTID = tReader.UnzipOffset();
-		tFile.m_iMaxTID = tReader.UnzipOffset();
-		tFile.m_iFlushedTID = tReader.UnzipOffset();
+		tCache.m_sName = tReader.GetZString ();
+		tCache.m_iIndexID = tReader.UnzipOffset ();
+		tCache.m_iMinTID = tReader.UnzipOffset ();
+		tCache.m_iMaxTID = tReader.UnzipOffset ();
+		tCache.m_iFlushedTID = tReader.UnzipOffset ();
+
+		BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
+
+		if ( tCache.m_sName!=tIndex.m_sName )
+		{
+			sphWarning ( "binlog: cache mismatch: table %d name mismatch (%s cached, %s replayed)",
+				i, tCache.m_sName.cstr (), tIndex.m_sName.cstr () );
+			continue;
+		}
+
+		if ( tCache.m_iMinTID!=tIndex.m_iMinTID || tCache.m_iMaxTID!=tIndex.m_iMaxTID )
+		{
+			sphWarning ( "binlog: cache mismatch: table %s tid ranges mismatch (cached " INT64_FMT " to " INT64_FMT ", replayed " INT64_FMT " to " INT64_FMT ")",
+				tCache.m_sName.cstr (), tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
+		}
 	}
+
 	if ( !tReader.CheckCrc ( "cache", "", 0, iTxnPos ) )
 		return false;
 
@@ -1133,33 +1150,11 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 	// in any case, broken log or not, we probably managed to replay something
 	// so let's just report differences as warnings
 
-	if ( dCache.GetLength()!=tLog.m_dIndexInfos.GetLength() )
+	if ( iCache!=tLog.m_dIndexInfos.GetLength() )
 	{
-		sphWarning ( "binlog: cache mismatch: %d tables cached, %d replayed",
-			dCache.GetLength(), tLog.m_dIndexInfos.GetLength() );
+		sphWarning ( "binlog: cache mismatch: %d tables cached, %d replayed", iCache, tLog.m_dIndexInfos.GetLength() );
 		return true;
 	}
-
-	ARRAY_FOREACH ( i, dCache )
-	{
-		BinlogIndexInfo_t & tCache = dCache[i];
-		BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
-
-		if ( tCache.m_sName!=tIndex.m_sName )
-		{
-			sphWarning ( "binlog: cache mismatch: table %d name mismatch (%s cached, %s replayed)",
-				i, tCache.m_sName.cstr(), tIndex.m_sName.cstr() );
-			continue;
-		}
-
-		if ( tCache.m_iMinTID!=tIndex.m_iMinTID || tCache.m_iMaxTID!=tIndex.m_iMaxTID )
-		{
-			sphWarning ( "binlog: cache mismatch: table %s tid ranges mismatch (cached " INT64_FMT " to " INT64_FMT ", replayed " INT64_FMT " to " INT64_FMT ")",
-				tCache.m_sName.cstr(),
-				tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
-		}
-	}
-
 	return true;
 }
 

@@ -695,8 +695,15 @@ void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 		if ( dAttrs[i]>=0 )
 		{
 			const auto & tAttr = m_pSorterSchema->GetAttr ( dAttrs[i] );
-			m_bJoinedGroupSort |= IsJoinAttr ( tAttr.m_sName );
+			m_bJoinedGroupSort |= tAttr.IsJoined();
 			m_hExtra.Add ( tAttr.m_sName );
+
+			// check if dependent columns are joined
+			IntVec_t dCols;
+			dCols.Add ( dAttrs[i] );
+			FetchDependencyChains(dCols);
+			for ( auto iCol : dCols )
+				m_bJoinedGroupSort |= m_pSorterSchema->GetAttr(iCol).IsJoined();
 		}
 }
 
@@ -741,9 +748,17 @@ void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 
 		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
 
+		int iOldLen = dDependentCols.GetLength();
+
 		// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
 		if ( tCol.m_pExpr )
 			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+
+		// some expressions depend on the column they are attached to (json fast key)
+		// so filter out duplicates to avoid circular dependencies
+		for ( int iNewAttr = iOldLen; iNewAttr < dDependentCols.GetLength(); iNewAttr++ )
+			if ( dDependentCols[iNewAttr]==dDependentCols[i] )
+				dDependentCols.Remove(iNewAttr);
 	}
 
 	dDependentCols.Uniq();
@@ -1894,11 +1909,12 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
-		if ( dExtraExprs[i].m_tKey.m_sKey.IsEmpty() )
+		const CSphString & sKey = dExtraExprs[i].m_tKey.m_sKey;
+		if ( sKey.IsEmpty() )
 			continue;
 
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), dExtraExprs[i].m_tKey.m_sKey.cstr() );
+		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), sKey.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 )
@@ -1913,6 +1929,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_STRINGPTR );
 			SetupRemapColJson ( tRemapCol, tState, dExtraExprs, i );
 			iRemap = tSorterSchema.GetAttrsCount();
+			ModifyExprForJoin ( tRemapCol, sKey );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 		}
 

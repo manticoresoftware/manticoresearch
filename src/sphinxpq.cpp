@@ -1901,6 +1901,24 @@ static void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueri
 		LoadStoredQuery ( PQ_META_VERSION_MAX, tNewQuery, tReader );
 }
 
+
+void SkipStoredQuery ( CSphReader & tReader );
+
+static void SkipInsertDeleteQueries ( CSphReader & tReader )
+{
+	auto uValues = tReader.UnzipInt ();
+	for ( auto i = 0; i<uValues; ++i )
+		tReader.UnzipOffset ();
+
+	uValues = tReader.UnzipInt ();
+	for ( auto i = 0; i<uValues; ++i )
+		tReader.UnzipOffset ();
+
+	uValues = tReader.UnzipInt ();
+	for ( auto i = 0; i<uValues; ++i )
+		SkipStoredQuery ( tReader );
+}
+
 static void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
 {
 	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
@@ -2153,14 +2171,26 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSph
 	assert ( eOp == binlog_PQ_ADD_DELETE );
 
 	sOp = "pq_add_delete";
+
+	// check we need to apply
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { false, true } );
+
+	// no apply - just skip txn
+	if ( !tRes.m_bApply )
+	{
+		SkipInsertDeleteQueries ( tReader );
+		return fnCanContinue ( { true, false } );
+	}
+
 	CSphVector<StoredQueryDesc_t> dNewQueriesDescs;
 	CSphVector<int64_t> dDeleteQueries;
 	CSphVector<uint64_t> dDeleteTags;
 
 	LoadInsertDeleteQueries ( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
 
-	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { true, true } );
-	if ( tRes.m_bValid && tRes.m_bApply )
+	assert ( tRes.m_bApply );
+	tRes = fnCanContinue ( { true, false } );
+	if ( tRes.m_bValid )
 	{
 		CSphVector<StoredQuery_i *> dNewQueries; // not owned
 		dNewQueries.Reserve ( dNewQueries.GetLength () );
@@ -2186,6 +2216,7 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSph
 
 		// actually replay
 		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
+		tRes.m_bApply = true;
 	}
 	return tRes;
 }
@@ -3398,19 +3429,32 @@ void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader 
 }
 
 template<typename READER>
+inline CSphString GetZString ( READER & tReader )
+{
+	return tReader.GetZString();
+}
+
+// if implement GetZString in MemoryReader_c -> need to upgrade v of replication also
+template<>
+inline CSphString GetZString ( MemoryReader_c & tReader )
+{
+	return tReader.GetString ();
+}
+
+template<typename READER>
 void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tReader )
 {
 	assert ( uVersion>=7 );
 	tQuery.m_iQUID = tReader.UnzipOffset();
 	tQuery.m_bQL = ( tReader.UnzipInt()!=0 );
-	tQuery.m_sQuery = tReader.GetString();
-	tQuery.m_sTags = tReader.GetString();
+	tQuery.m_sQuery = GetZString ( tReader );
+	tQuery.m_sTags = GetZString ( tReader );
 
 	tQuery.m_dFilters.Reset ( tReader.UnzipInt() );
 	tQuery.m_dFilterTree.Reset ( tReader.UnzipInt() );
 	for ( auto& tFilter : tQuery.m_dFilters )
 	{
-		tFilter.m_sAttrName = tReader.GetString();
+		tFilter.m_sAttrName = GetZString ( tReader );
 		tFilter.m_bExclude = ( tReader.UnzipInt()!=0 );
 		tFilter.m_bHasEqualMin = ( tReader.UnzipInt()!=0 );
 		tFilter.m_bHasEqualMax = ( tReader.UnzipInt()!=0 );
@@ -3430,7 +3474,7 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 		for ( auto & dValue : dVals )
 			dValue = tReader.UnzipOffset ();
 		for ( auto & dString : dStrings )
-			dString = tReader.GetString ();
+			dString = GetZString ( tReader );
 
 		tFilter.m_dValues.AdoptData ( dVals.LeakData(), iValCount, iValCount );
 		tFilter.m_dStrings.AdoptData ( dStrings.LeakData(), iStrCount, iStrCount );
@@ -3444,18 +3488,70 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 	}
 }
 
+void SkipStoredQuery ( CSphReader & tReader )
+{
+	tReader.UnzipOffset ();
+	tReader.UnzipInt ();
+	GetZString ( tReader );
+	GetZString ( tReader );
+
+	auto uFilters = tReader.UnzipInt ();
+	auto uFilterTrees = tReader.UnzipInt ();
+	for ( int i=0; i<uFilters; ++i)
+	{
+		GetZString ( tReader );
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipOffset ();
+		tReader.UnzipOffset ();
+
+		int iValCount = tReader.UnzipInt ();
+		int iStrCount = tReader.UnzipInt ();
+		for ( int j = 0; j<iValCount; ++j )
+			tReader.UnzipOffset ();
+		for ( int j = 0; j<iStrCount; ++j )
+			GetZString ( tReader );
+	}
+	for ( int i = 0; i<uFilterTrees; ++i )
+	{
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+		tReader.UnzipInt ();
+	}
+}
+
+
+template<typename WRITER>
+inline void PutZString ( const CSphString& sVal, WRITER & tWriter )
+{
+	tWriter.PutZString ( sVal );
+}
+
+template<>
+inline void PutZString ( const CSphString & sVal, MemoryWriter_c & tWriter )
+{
+	tWriter.PutString ( sVal );
+}
+
 template<typename WRITER>
 void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 {
 	tWriter.ZipOffset ( tQuery.m_iQUID );
 	tWriter.ZipInt ( tQuery.m_bQL );
-	tWriter.PutString ( tQuery.m_sQuery );
-	tWriter.PutString ( tQuery.m_sTags );
+	PutZString ( tQuery.m_sQuery, tWriter );
+	PutZString ( tQuery.m_sTags, tWriter );
 	tWriter.ZipInt ( tQuery.m_dFilters.GetLength() );
 	tWriter.ZipInt ( tQuery.m_dFilterTree.GetLength() );
 	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
 	{
-		tWriter.PutString ( tFilter.m_sAttrName );
+		PutZString ( tFilter.m_sAttrName, tWriter );
 		tWriter.ZipInt ( tFilter.m_bExclude );
 		tWriter.ZipInt ( tFilter.m_bHasEqualMin );
 		tWriter.ZipInt ( tFilter.m_bHasEqualMax );
@@ -3471,7 +3567,7 @@ void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 		for ( const auto & tValue: tFilter.m_dValues )
 			tWriter.ZipOffset ( tValue );
 		for ( const auto & tString: tFilter.m_dStrings )
-			tWriter.PutString ( tString );
+			PutZString ( tString, tWriter );
 	}
 	for ( const FilterTreeItem_t & tItem: tQuery.m_dFilterTree )
 	{

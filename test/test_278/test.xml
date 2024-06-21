@@ -331,6 +331,12 @@ select id, count(*) from join1 left join join2 on join1.id=join2.id;
 select id, * from join1 join join2 on join1.id=join2.id;
 select id, count(*) from join1 join join2 on join1.id=join2.id;
 
+<!-- CONCAT of joined json -->
+select to_string(join2.j.table) as table2, concat(to_string(j.table), table2) as test from join1 join join2 on join1.id = join2.id;
+
+<!-- sort by CONCAT of joined json -->
+select to_string(join2.j.table) as table2, concat(to_string(j.table), table2) as test from join1 join join2 on join1.id = join2.id order by test asc;
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

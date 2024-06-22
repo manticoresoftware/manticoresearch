@@ -150,13 +150,13 @@ private:
 	};
 	OnCommitAction_e		m_eOnCommit { ACTION_NONE };
 
-	CSphMutex				m_tWriteLock; // lock on operation
+	Threads::Coro::Mutex_c m_tWriteAccess;      // serialize ops
 
 	int						m_iLockFD = -1;
 	CSphString				m_sWriterError;
-	BinlogWriter_c			m_tWriter GUARDED_BY ( m_tWriteLock );
+	BinlogWriter_c			m_tWriter GUARDED_BY ( m_tWriteAccess );
 
-	mutable CSphVector<BinlogFileDesc_t>	m_dLogFiles GUARDED_BY ( m_tWriteLock ); // active log files
+	mutable CSphVector<BinlogFileDesc_t>	m_dLogFiles GUARDED_BY ( m_tWriteAccess ); // active log files
 
 	CSphString				m_sLogPath;
 
@@ -396,7 +396,7 @@ Binlog_c::~Binlog_c ()
 	UnlockBinlog ();
 }
 
-void Binlog_c::RemoveLastEmptyLog () REQUIRES ( m_tWriteLock )
+void Binlog_c::RemoveLastEmptyLog () REQUIRES ( m_tWriteAccess )
 {
 	assert ( !m_dLogFiles.IsEmpty() && m_dLogFiles.Last().m_dIndexInfos.IsEmpty() );
 	// do unlink
@@ -438,7 +438,7 @@ void Binlog_c::NotifyIndexFlush ( int64_t iFlushedTID, IndexNameUid_t tFlushedIn
 
 	MEMORY ( MEM_BINLOG );
 
-	ScopedMutex_t tWriteLock ( m_tWriteLock );
+	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
 
 	assert ( bShutdown || m_dLogFiles.GetLength() );
 
@@ -548,12 +548,12 @@ bool Binlog_c::IsFlushingEnabled () const
 
 
 // executed externally by task binlog flush, every BINLOG_AUTO_FLUSH (1 sec)
-void Binlog_c::DoFlush () EXCLUDES ( m_tWriteLock )
+void Binlog_c::DoFlush () EXCLUDES ( m_tWriteAccess )
 {
 	assert ( !m_bDisabled );
 	MEMORY ( MEM_BINLOG );
 
-	ScopedMutex_t LockWriter ( m_tWriteLock );
+	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
 	if ( m_eOnCommit==ACTION_NONE || m_tWriter.HasUnwrittenData() )
 	{
 		if ( !m_tWriter.Write() )
@@ -574,7 +574,7 @@ int64_t Binlog_c::NextFlushingTime () const noexcept
 	return iLastFlushed + m_iFlushPeriod;
 }
 
-int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID ) REQUIRES ( m_tWriteLock )
+int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID ) REQUIRES ( m_tWriteAccess )
 {
 	MEMORY ( MEM_BINLOG );
 	assert ( m_dLogFiles.GetLength() );
@@ -612,7 +612,7 @@ int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID ) REQUIR
 	return iID;
 }
 
-void Binlog_c::SaveMeta () REQUIRES (m_tWriteLock)
+void Binlog_c::SaveMeta () REQUIRES ( m_tWriteAccess )
 {
 	MEMORY ( MEM_BINLOG );
 
@@ -662,7 +662,7 @@ void Binlog_c::UnlockBinlog ()
 	RawFileUnLock ( SphSprintf ( "%s/binlog.lock", m_sLogPath.cstr () ), m_iLockFD );
 }
 
-void Binlog_c::OpenNewLog ( int iLastState ) REQUIRES (m_tWriteLock)
+void Binlog_c::OpenNewLog ( int iLastState ) REQUIRES ( m_tWriteAccess )
 {
 	MEMORY ( MEM_BINLOG );
 
@@ -700,7 +700,7 @@ void Binlog_c::OpenNewLog ( int iLastState ) REQUIRES (m_tWriteLock)
 
 // cache is a small summary of affected indexes, it is written at the very end of binlog file when it exceeded size limit,
 // before opening new file.
-void Binlog_c::DoCacheWrite () REQUIRES (m_tWriteLock)
+void Binlog_c::DoCacheWrite () REQUIRES ( m_tWriteAccess )
 {
 	if ( m_dLogFiles.IsEmpty() )
 		return;
@@ -722,7 +722,7 @@ void Binlog_c::DoCacheWrite () REQUIRES (m_tWriteLock)
 	}
 }
 
-void Binlog_c::CheckDoRestart () REQUIRES (m_tWriteLock)
+void Binlog_c::CheckDoRestart () REQUIRES ( m_tWriteAccess )
 {
 	// restart on exceed file size limit
 	if ( !m_iRestartSize || m_tWriter.GetFilePos()<=m_iRestartSize )
@@ -735,7 +735,7 @@ void Binlog_c::CheckDoRestart () REQUIRES (m_tWriteLock)
 	OpenNewLog();
 }
 
-bool Binlog_c::CheckDoFlush() REQUIRES (m_tWriteLock)
+bool Binlog_c::CheckDoFlush() REQUIRES ( m_tWriteAccess )
 {
 	switch ( m_eOnCommit )
 	{
@@ -779,13 +779,13 @@ bool Binlog_c::IsBinlogWritable ( int64_t * pTID ) const noexcept
 
 
 // commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.
-bool Binlog_c::BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteLock )
+bool Binlog_c::BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess )
 {
 	if ( !IsBinlogWritable ( bIncTID ? pTID : nullptr ) ) // m.b. need to advance TID as index flush according to it
 		return true;
 
 	MEMORY ( MEM_BINLOG );
-	ScopedMutex_t tWriteLock ( m_tWriteLock );
+	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
 
 	int64_t iTID = ++( *pTID );
 	const int uIndex = GetWriteIndexID ( tIndexName, iTID );

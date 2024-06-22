@@ -180,10 +180,10 @@ private:
 	bool					CheckDoFlush();
 	void					OpenNewLog ( int iLastState=0 );
 
-	int						ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog );
-	bool					ReplayTxn ( int iBinlog, BinlogReader_c & tReader ) const;
-	bool					ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
-	bool					ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const;
+	int						ReplayBinlog ( BinlogFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes );
+	bool					ReplayTxn ( const BinlogFileDesc_t & tLog, BinlogReader_c & tReader ) const;
+	bool					ReplayIndexAdd ( BinlogFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
+	bool					ReplayCacheAdd ( const BinlogFileDesc_t & tLog, DWORD uVersion, BinlogReader_c & tReader ) const;
 	bool 					IsBinlogWritable ( int64_t * pTID = nullptr ) const noexcept;
 
 	bool	PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const;
@@ -876,9 +876,9 @@ void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes,
 	// do replay
 	m_bReplayMode = true;
 	int iLastLogState = 0;
-	ARRAY_FOREACH ( i, m_dLogFiles )
+	for ( auto& tLog : m_dLogFiles )
 	{
-		iLastLogState = ReplayBinlog ( hIndexes, i );
+		iLastLogState = ReplayBinlog ( tLog, hIndexes );
 		if ( pfnProgressCallback ) // on each replayed binlog
 			pfnProgressCallback ();
 	}
@@ -902,13 +902,10 @@ void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes,
 }
 
 
-int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog ) NO_THREAD_SAFETY_ANALYSIS
+int Binlog_c::ReplayBinlog ( BinlogFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes ) NO_THREAD_SAFETY_ANALYSIS
 {
-	assert ( iBinlog>=0 && iBinlog<m_dLogFiles.GetLength() );
 	CSphString sError;
-
-	const CSphString sLog ( MakeBinlogName ( m_dLogFiles[iBinlog].m_iExt ) );
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
+	const CSphString sLog ( MakeBinlogName ( tLog.m_iExt ) );
 
 	// open, check, play
 	sphInfo ( "binlog: replaying log %s", sLog.cstr() );
@@ -921,7 +918,6 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	}
 
 	const SphOffset_t iFileSize = tReader.GetFilesize();
-
 	if ( !iFileSize )
 	{
 		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr() );
@@ -987,7 +983,7 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 		switch ( uOp )
 		{
 			case ADD_INDEX:
-				bReplayOK = ReplayIndexAdd ( iBinlog, hIndexes, tReader );
+				bReplayOK = ReplayIndexAdd ( tLog, hIndexes, tReader );
 				break;
 
 			case ADD_CACHE:
@@ -998,11 +994,11 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 					break;
 				}
 				bHaveCacheOp = true;
-				bReplayOK = ReplayCacheAdd ( iBinlog, uVersion, tReader );
+				bReplayOK = ReplayCacheAdd ( tLog, uVersion, tReader );
 				break;
 
 			case ADD_TXN:
-				bReplayOK = ReplayTxn ( iBinlog, tReader );
+				bReplayOK = ReplayTxn ( tLog, tReader );
 				break;
 
 			default:
@@ -1048,11 +1044,10 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	return ( bHaveCacheOp && dTotal[TOTAL]==1 ) ? 1 : 0;
 }
 
-bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
+bool Binlog_c::ReplayIndexAdd ( BinlogFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	// load and check index
 	const int64_t iTxnPos = tReader.GetPos(); // that is purely for reporting anomalies
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
 
 	uint64_t uVal = tReader.UnzipOffset();
 	if ( (int)uVal!=tLog.m_dIndexInfos.GetLength() )
@@ -1104,10 +1099,9 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	return true;
 }
 
-bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
+bool Binlog_c::ReplayCacheAdd ( const BinlogFileDesc_t & tLog, DWORD uVersion, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	const int64_t iTxnPos = tReader.GetPos();
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
 
 	// check data
 	int iCache = tReader.UnzipOffset (); // FIXME! sanity check
@@ -1126,7 +1120,7 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 		tCache.m_iMaxTID = tReader.UnzipOffset ();
 		tCache.m_iFlushedTID = tReader.UnzipOffset ();
 
-		BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
+		const BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
 
 		if ( tCache.m_sName!=tIndex.m_sName )
 		{
@@ -1177,12 +1171,10 @@ int Binlog_c::ReplayIndexID ( CSphReader & tReader, const BinlogFileDesc_t & tLo
 	return iVal;
 }
 
-bool Binlog_c::ReplayTxn ( int iBinlog, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
+bool Binlog_c::ReplayTxn ( const BinlogFileDesc_t & tLog, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	// load and lookup index
 	const int64_t iTxnPos = tReader.GetPos();
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
-
 	int iIdx = ReplayIndexID ( tReader, tLog );
 	if ( iIdx==-1 )
 		return false;

@@ -9,9 +9,8 @@ apt-get update > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null; echo $?
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null 2>&1; echo $?
 ––– output –––
-debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
 mkdir /usr/share/fluentbit && cd /usr/share/fluentbit

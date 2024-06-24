@@ -509,8 +509,8 @@ jobs:
             test_prefix: |-
               test/clt-tests/core/
               test/clt-tests/expected-errors/
-          - name: Logstash
-            test_prefix: test/clt-tests/logstash/logstash- 
+          - name: Integrations
+            test_prefix: test/clt-tests/integrations/
           - name: mysqldump
             test_prefix: |-
               test/clt-tests/mysqldump/mysql/

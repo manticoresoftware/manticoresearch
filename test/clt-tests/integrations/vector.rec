@@ -1,0 +1,44 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+mkdir /usr/share/vector && cd /usr/share/vector
+––– output –––
+––– input –––
+if wget -P vector https://packages.timber.io/vector/0.30.0/vector_0.30.0-1_amd64.deb > /dev/null 2>&1; then echo "'vector_0.30.0-1_amd64.deb' saved"; fi
+––– output –––
+'vector_0.30.0-1_amd64.deb' saved
+––– input –––
+dpkg -i vector/vector_0.30.0-1_amd64.deb > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+echo -e '[sources.test_file]\ntype = "file"\ninclude = ["/var/log/dpkg.log"]\n\n[transforms.modify_test_file]\ntype = "remap"\ninputs = ["test_file"]\nsource = """\n.vec_timestamp = del(.timestamp)"""\n\n[sinks.manticore]\ntype = "elasticsearch"\ninputs = ["modify_test_file"]\nendpoints = ["http://127.0.0.1:9308"]\nbulk.index = "testlog_1"' > /usr/share/vector/vector.toml
+––– output –––
+––– input –––
+manticore-executor -v
+––– output –––
+PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!#) (#!/[NZ]/!#TS)
+Copyright (c) The PHP Group
+Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
+––– block: ../base/start-searchd –––
+––– input –––
+vector -c vector.toml > /var/log/vector.log 2>&1 &
+––– output –––
+[1] #!/[0-9]+/!#
+––– input –––
+sleep 3; curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"file","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"source_type","Type":"text","Properties":"indexed stored"},{"Field":"vec_timestamp","Type":"text","Properties":"indexed stored"}]

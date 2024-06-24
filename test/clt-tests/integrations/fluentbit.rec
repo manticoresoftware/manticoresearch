@@ -1,0 +1,59 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+mkdir /usr/share/fluentbit && cd /usr/share/fluentbit
+––– output –––
+––– input –––
+wget -P fluentbit http://mirrors.kernel.org/ubuntu/pool/main/liby/libyaml/libyaml-0-2_0.2.2-1_amd64.deb 2>&1 | grep "'fluentbit/libyaml-0-2_0.2.2-1_amd64.deb’ saved"
+––– output –––
+––– input –––
+echo -e "[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index testlog_1" > /usr/share/fluentbit/fluentbit/fluentbit.conf
+––– output –––
+––– input –––
+dpkg -i fluentbit/libyaml-0-2_0.2.2-1_amd64.deb > /dev/null
+––– output –––
+––– input –––
+curl -s https://packages.fluentbit.io/fluentbit.key | gpg --dearmor > /usr/share/keyrings/fluentbit-keyring.gpg
+––– output –––
+––– input –––
+OS_CODENAME=$(cat /etc/lsb-release | grep 'CODENAME' | cut -d= -f2) && echo "deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/ubuntu/$OS_CODENAME $OS_CODENAME main" | tee -a /etc/apt/sources.list
+––– output –––
+deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/ubuntu/jammy jammy main
+––– input –––
+apt-get update > /dev/null 2>&1 && apt-get -y install fluent-bit > /dev/null 2>&1 && echo "debconf: delaying package configuration, since apt-utils is not installed"
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+––– input –––
+ln -s /opt/fluent-bit/bin/fluent-bit /usr/bin/fluent-bit
+––– output –––
+––– input –––
+mkdir -p /etc/manticore && echo -e "[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index testlog" > /etc/manticore/manticore.conf
+––– output –––
+––– input –––
+manticore-executor -v
+––– output –––
+PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!#) (#!/[NZ]/!#TS)
+Copyright (c) The PHP Group
+Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
+––– block: ../base/start-searchd –––
+––– input –––
+fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit.conf > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+sleep 3; curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"text","Properties":"indexed stored"}]

@@ -187,6 +187,9 @@ private:
 	template <typename ACTION>
 	void ProcessJsonObj ( const CSphString & sAttrPrefix, const bson::NodeHandle_t & tNode, ACTION && tAction )
 	{
+		if ( tNode.second==JSON_EOF )
+			return;
+
 		if ( tNode.second==JSON_ROOT || tNode.second==JSON_OBJECT )
 		{
 			bson::Bson_c tBson(tNode);

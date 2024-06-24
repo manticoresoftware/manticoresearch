@@ -8,6 +8,13 @@
 #pragma GCC diagnostic ignored "-Wfree-nonheap-object"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
+
+#define TRACK_BOUNDS(_res,_left,_right) \
+	_res = _left; \
+	if ( _res.m_iStart>0 && pParser->m_pBuf[_res.m_iStart-1]=='`' ) \
+		_res.m_iStart--; \
+	_res.m_iEnd = _right.m_iEnd; \
+	_res.m_iType = 0;
 %}
 
 %lex-param		{ DdlParser_c * pParser }
@@ -132,6 +139,22 @@ attribute_type:
 	| TOK_TIMESTAMP	{ $$.SetValueInt ( SPH_ATTR_TIMESTAMP ); }
 	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
 	;
+
+list_of_tables:
+	| tablename ',' tablename
+		{
+    		TRACK_BOUNDS ( $$, $1, $3 );
+    	}
+	| list_of_tables ',' tablename
+		{
+			TRACK_BOUNDS ( $$, $1, $3 );
+		}
+	;
+
+table_or_tables:
+	tablename
+	| list_of_tables
+	;
 	
 //////////////////////////////////////////////////////////////////////////
 
@@ -198,14 +221,14 @@ alter:
 			tStmt.m_eStmt = STMT_ALTER_INDEX_SETTINGS;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_ADD tablename
+	| TOK_ALTER TOK_CLUSTER ident TOK_ADD table_or_tables
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sIndex, $5 );
 		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_DROP tablename
+	| TOK_ALTER TOK_CLUSTER ident TOK_DROP table_or_tables
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;

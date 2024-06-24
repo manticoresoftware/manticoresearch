@@ -151,7 +151,8 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 // ver 0x106 add total indexed bytes to accum
 // ver 0x107 add blobs vector to replicate update statement
 // ver 0x108 gtid is sent and parsed as blob (was string)
-static constexpr WORD REPLICATE_COMMAND_VER = 0x108;
+// ver 0x109 indexes support for ALTER ADD \ DROP table
+static constexpr WORD REPLICATE_COMMAND_VER = 0x109;
 bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 {
 	TlsMsg::ResetErr();

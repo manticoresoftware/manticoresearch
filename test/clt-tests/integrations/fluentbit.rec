@@ -16,8 +16,9 @@ apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null 2>&1; echo 
 mkdir /usr/share/fluentbit && cd /usr/share/fluentbit
 ––– output –––
 ––– input –––
-wget -P fluentbit http://mirrors.kernel.org/ubuntu/pool/main/liby/libyaml/libyaml-0-2_0.2.2-1_amd64.deb 2>&1 | grep "'fluentbit/libyaml-0-2_0.2.2-1_amd64.deb’ saved"
+wget -P fluentbit http://mirrors.kernel.org/ubuntu/pool/main/liby/libyaml/libyaml-0-2_0.2.2-1_amd64.deb > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
 echo -e "[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index testlog_1" > /usr/share/fluentbit/fluentbit/fluentbit.conf
 ––– output –––
@@ -32,9 +33,9 @@ OS_CODENAME=$(cat /etc/lsb-release | grep 'CODENAME' | cut -d= -f2) && echo "deb
 ––– output –––
 deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/ubuntu/jammy jammy main
 ––– input –––
-apt-get update > /dev/null 2>&1 && apt-get -y install fluent-bit > /dev/null 2>&1 && echo "debconf: delaying package configuration, since apt-utils is not installed"
+apt-get update > /dev/null 2>&1 && apt-get -y install fluent-bit > /dev/null 2>&1; echo $?
 ––– output –––
-debconf: delaying package configuration, since apt-utils is not installed
+0
 ––– input –––
 ln -s /opt/fluent-bit/bin/fluent-bit /usr/bin/fluent-bit
 ––– output –––

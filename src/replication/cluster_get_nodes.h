@@ -29,3 +29,5 @@ using ClusterNodesStatesVec_t = CSphVector<RemoteNodeClusterState_t>;
 // command to all remote nodes at cluster to get actual nodes states
 ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc );
 bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState );
+
+bool CheckRemotesVersions ( const ClusterDesc_t & tDesc );

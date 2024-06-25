@@ -51,7 +51,9 @@ The exit codes for indexer are as follows:
 * 1: there was a problem while indexing (and if `--rotate` was specified, it was skipped) or an operation emitted a warning
 * 2: indexing went OK, but the `--rotate` attempt failed
 
-Also, you can run `indexer` via a systemctl unit file:
+### Indexer systemd service
+
+You can also start `indexer` using the following systemctl unit file:
 
 ```shell
 systemctl start --no-block manticore-indexer
@@ -62,21 +64,18 @@ Or, in case you want to build a specific table:
 ```shell
 systemctl start --no-block manticore-indexer@specific-table-name
 ```
-Find more information about scheduling `indexer` via systemd below.
 
-### Custom startup flags using systemd
+Use the `systemctl set-environment INDEXER_CONFIG` command to run the Indexer with a custom configuration, which replaces the default settings.
 
-The `systemctl set-environment INDEXER_CONFIG` command lets you run the Indexer with your desired configuration, overriding the default settings.
+The `systemctl set-environment INDEXER_ARGS` command lets you add custom startup options for the Indexer. For a complete list of command-line options, see [here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments).
 
-The `systemctl set-environment INDEXER_ARGS` command allows you to specify custom startup flags for the Indexer Tool. For a full list of available command-line arguments, see [here](#Indexer-command-line-arguments).
-
-For example, to start Indexer in quiet mode, you can run:
+For instance, to start the Indexer in quiet mode, run:
 ```bash
 systemctl set-environment INDEXER_ARGS='--quiet'
 systemctl restart manticore-indexer
 ```
 
-To undo it, run:
+To revert the changes, run:
 ```bash
 systemctl set-environment INDEXER_ARGS=''
 systemctl restart manticore-indexer

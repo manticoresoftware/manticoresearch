@@ -621,7 +621,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return Err ( "group-by attribute '%s' not found", m_tQuery.m_sGroupBy.cstr() );
 
 	const CSphColumnInfo & tGroupByAttr = tSchema.GetAttr(iGroupBy);
-	if ( tGroupByAttr.m_pExpr && tGroupByAttr.m_pExpr->UsesDocstore() )
+	if ( m_tSettings.m_bComputeItems && tGroupByAttr.m_pExpr && tGroupByAttr.m_pExpr->UsesDocstore() )
 		return Err ( "unable to group by stored field '%s'", m_tQuery.m_sGroupBy.cstr() );
 
 	ESphAttr eType = tGroupByAttr.m_eAttrType;

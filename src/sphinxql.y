@@ -689,8 +689,20 @@ on_clause_attr:
 	| on_clause_attr TOK_SUBKEY			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	;
 
+on_clause_type_cast:
+	TOK_INT			{ pParser->SetJoinOnCast(SPH_ATTR_INTEGER); }
+	| TOK_FLOAT		{ pParser->SetJoinOnCast(SPH_ATTR_FLOAT); }
+	| TOK_STRING	{ pParser->SetJoinOnCast(SPH_ATTR_STRING); }
+	;
+
+on_clause_equality:
+    idxname on_clause_attr '=' idxname on_clause_attr								{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
+	| on_clause_type_cast '(' idxname on_clause_attr ')' '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
+	| idxname on_clause_attr '=' on_clause_type_cast '(' idxname on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
+	;
+
 on_clause:
-	idxname on_clause_attr '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $1, $2, $4, $5 ); }
+	on_clause_equality
 	| on_clause TOK_AND on_clause
 	;
 

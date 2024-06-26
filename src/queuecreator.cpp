@@ -298,8 +298,9 @@ private:
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
 	bool	AddJoinAttrs();
+	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
-	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 );
+	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast );
 	bool	AddNullBitmask();
 	bool	AddColumnarJoinOnFilter ( const CSphString & sAttr );
 	bool	CheckHavingConstraints() const;
@@ -1524,7 +1525,7 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 }
 
 
-bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 )
+bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast )
 {
 	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr1.cstr() );
 	if ( pAttr )
@@ -1556,15 +1557,25 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 	// convert JSON fields to join attr type
 	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 	{
-		auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
-		if ( !pJoinAttr )
+		// try to determine type if it was not explicitly specified
+		if ( eTypeCast==SPH_ATTR_NONE )
 		{
-			m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
-			return false;
+			auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
+			if ( !pJoinAttr )
+			{
+				if ( sphJsonNameSplit ( sAttr2.cstr() ) )
+					m_sError.SetSprintf ( "use implicit type conversion on join-on attribute '%s'", sAttr2.cstr() );
+				else
+					m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
+
+				return false;
+			}
+
+			eTypeCast = pJoinAttr->m_eAttrType;
 		}
 
 		CSphString sConverted;
-		switch ( pJoinAttr->m_eAttrType )
+		switch ( eTypeCast )
 		{
 		case SPH_ATTR_STRING:
 			sConverted.SetSprintf ( "TO_STRING(%s)", sAttr1.cstr() );
@@ -1662,6 +1673,21 @@ static ESphAttr FilterType2AttrType ( ESphFilter eFilter )
 }
 
 
+bool QueueCreator_c::CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast )
+{
+	if ( eTypeCast==SPH_ATTR_NONE )
+		return true;
+
+	if ( !sphJsonNameSplit ( sAttr.cstr() ) )
+	{
+		m_sError.SetSprintf ( "Explicit type conversion used on non-json attribute '%s.%s'", sIdx.cstr(), sAttr.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
 bool QueueCreator_c::AddJoinFilterAttrs()
 {
 	if ( !m_tSettings.m_pJoinArgs )
@@ -1671,16 +1697,21 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 	const CSphString & sRightIndex = m_tSettings.m_pJoinArgs->m_sIndex2;
 	for ( const auto & i : m_tQuery.m_dOnFilters )
 	{
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx1, i.m_sAttr1, i.m_eTypeCast1 ) ) return false;
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx2, i.m_sAttr2, i.m_eTypeCast2 ) ) return false;
+
+		ESphAttr eTypeCast = i.m_eTypeCast1!=SPH_ATTR_NONE ? i.m_eTypeCast1 : i.m_eTypeCast2;
+
 		if ( i.m_sIdx1==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )						return false;
 		}
 
 		if ( i.m_sIdx2==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )						return false;
 		}
 	}
 

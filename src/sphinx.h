@@ -475,6 +475,8 @@ struct OnFilter_t
 	CSphString	m_sAttr1;
 	CSphString	m_sIdx2;
 	CSphString	m_sAttr2;
+	ESphAttr	m_eTypeCast1 = SPH_ATTR_NONE;
+	ESphAttr	m_eTypeCast2 = SPH_ATTR_NONE;
 };
 
 enum class JoinType_e

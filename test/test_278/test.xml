@@ -337,6 +337,18 @@ select to_string(join2.j.table) as table2, concat(to_string(j.table), table2) as
 <!-- sort by CONCAT of joined json -->
 select to_string(join2.j.table) as table2, concat(to_string(j.table), table2) as test from join1 join join2 on join1.id = join2.id order by test asc;
 
+<!-- join on two json attrs (error) -->
+select * from join1 left join join2 on join1.j.a = join2.j.a;
+
+<!-- join on two json attrs -->
+select * from join1 left join join2 on int(join1.j.a) = join2.j.a;
+
+<!-- join on two json attrs -->
+select * from join1 left join join2 on join1.j.a = int(join2.j.a);
+
+<!-- type cast on non-json attr (error) -->
+select * from join1 left join join2 on join1.j.a = int(join2.id);
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

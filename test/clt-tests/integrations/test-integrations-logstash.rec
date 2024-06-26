@@ -1,0 +1,75 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mkdir /usr/share/logstash && cd $_
+––– output –––
+––– input –––
+wget -q https://artifacts.elastic.co/downloads/logstash/logstash-7.10.0-linux-x86_64.tar.gz
+––– output –––
+––– input –––
+tar -xvzf logstash-7.10.0-linux-x86_64.tar.gz > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+cd /usr/local/src
+––– output –––
+––– input –––
+ln -s /usr/share/logstash/logstash-7.10.0/bin/logstash /usr/bin/logstash
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+echo 'input { file { path => ["/var/log/dpkg.log"] start_position => "beginning" sincedb_path => "/dev/null" mode => "read" exit_after_read => true file_completed_action => "log" file_completed_log_path => "/dev/null" } } output { elasticsearch { index => "testlog_1" hosts => ["http://localhost:9308"] ilm_enabled => false manage_template => false } }' > logstash.conf
+––– output –––
+––– input –––
+echo "2024-06-25 10:12:34 status installed libc-bin:amd64 2.31-0ubuntu9.16\n2024-06-25 10:12:34 status installed dpkg:amd64 1.19.7ubuntu3\n2024-06-25 10:12:35 status installed base-passwd:amd64 3.5.52\n2024-06-25 10:12:35 status installed bash:amd64 5.0-7ubuntu1.2\n2024-06-25 10:12:36 status installed coreutils:amd64 8.30-3ubuntu2\n2024-06-25 10:12:36 status installed debianutils:amd64 4.11.2\n2024-06-25 10:12:36 status installed diffutils:amd64 1:3.7-5\n2024-06-25 10:12:36 status installed dpkg-dev:amd64 1.19.7ubuntu3\n2024-06-25 10:12:36 status installed libc-bin:amd64 2.31-0ubuntu9.16\n2024-06-25 10:12:37 status installed libgcc-s1:amd64 11.2.0-6ubuntu2" > dpkg.log
+––– output –––
+––– input –––
+logstash -f logstash.conf > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
+––– input –––
+mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM testlog_1;"
+––– output –––
++-----------+------+
+| Index     | Type |
++-----------+------+
+| testlog_1 | rt   |
++-----------+------+
++----------+
+| count(*) |
++----------+
+|     4088 |
++----------+
+––– input –––
+mysql -P9306 -h0 -e "SELECT @version, path, host FROM testlog_1 LIMIT 10;"
+––– output –––
++----------+-------------------+--------------+
+| @version | path              | host         |
++----------+-------------------+--------------+
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
+| 1        | /var/log/dpkg.log | #!/[0-9a-zA-Z]+/!# |
++----------+-------------------+--------------+

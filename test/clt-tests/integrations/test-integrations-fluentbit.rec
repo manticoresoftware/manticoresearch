@@ -1,0 +1,63 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mkdir -p /usr/share/fluentbit/fluentbit && cd /usr/share/fluentbit
+––– output –––
+––– input –––
+echo -e "[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index testlog_1" > /usr/share/fluentbit/fluentbit/fluentbit.conf
+––– output –––
+––– input –––
+bash -c "$(curl -s https://raw.githubusercontent.com/fluent/fluent-bit/master/install.sh)" > /dev/null 2>&1;echo $?
+––– output –––
+0
+––– input –––
+ln -s /opt/fluent-bit/bin/fluent-bit /usr/bin/fluent-bit
+––– output –––
+––– input –––
+fluent-bit --version | grep 'Fluent Bit'
+––– output –––
+Fluent Bit v3.0.7
+––– input –––
+mkdir -p /etc/manticore && echo -e "[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index testlog" > /etc/manticore/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit.conf > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+sleep 3; curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"text","Properties":"indexed stored"}]
+––– input –––
+mysql -P9306 -h0 -e "SHOW TABLES; SELECT * FROM testlog_1 LIMIT 3\G;"
+––– output –––
++-----------+------+
+| Index     | Type |
++-----------+------+
+| testlog_1 | rt   |
++-----------+------+
+*************************** 1. row ***************************
+id: %{NUMBER}
+log: #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# startup archives install
+@timestamp: %{NUMBER}
+*************************** 2. row ***************************
+id: %{NUMBER}
+log: #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# install base-passwd:amd64 <none> 3.5.52build1
+@timestamp: %{NUMBER}
+*************************** 3. row ***************************
+id: %{NUMBER}
+log: #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status half-installed base-passwd:amd64 3.5.52build1
+@timestamp: %{NUMBER}

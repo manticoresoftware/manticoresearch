@@ -62,7 +62,7 @@ searchd {
 Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
 * `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format.
-* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Also, an alternative syntax `/sql?raw_response=true` can be used.
+* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql.
 * The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter must not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
 
 ### /sql
@@ -70,12 +70,12 @@ Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 <!-- example SQL_over_HTTP -->
 
 General syntax:
-* `curl "localhost:6780/sql[?mode=raw|raw_response=true]&query={URL_ENCODED_QUERY}"`
-* `curl localhost:6780/sql[?mode=raw|raw_response=true] -d "[query={URL_ENCODED_QUERY}|{NOT_URL_ENCODED_QUERY}]"`
+* `curl "localhost:6780/sql[?mode=raw]&query={URL_ENCODED_QUERY}"`
+* `curl localhost:6780/sql[?mode=raw] -d "[query={URL_ENCODED_QUERY}|{NOT_URL_ENCODED_QUERY}]"`
 
 The `/sql` endpoint accepts an SQL query via the HTTP JSON interface:
-* Without `mode=raw` or `raw_response=true` - only [SELECTs](../Searching/Full_text_matching/Basic_usage.md#SQL) are allowed, returning the response in JSON format.
-* With [mode=raw|raw_response=true](../Connecting_to_the_server/HTTP.md#mode=raw) - any SQL query is permitted, returning the response in raw format.
+* Without `mode=raw`- only [SELECTs](../Searching/Full_text_matching/Basic_usage.md#SQL) are allowed, returning the response in JSON format.
+* With [mode=raw](../Connecting_to_the_server/HTTP.md#mode=raw) - any SQL query is permitted, returning the response in raw format.
 
 The endpoint can handle HTTP requests using either the GET or the POST method. For sending queries, you can:
 1. **Using GET:** Include the query in the `query` parameter of the URL, like `/sql?query=your_encoded_query_here`. It's **important to URL encode** this parameter to avoid errors, especially if the query includes an `=` sign, which might be interpreted as part of the URL syntax rather than the query.
@@ -85,7 +85,7 @@ The endpoint can handle HTTP requests using either the GET or the POST method. F
 
 This approach keeps the usage of GET and POST distinct and avoids any confusion about combining methods in a single request.
 
-Without `mode=raw` or `raw_response=true` the response is a JSON containing information about the hits and the execution time. The response format is the same as the [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint. Note that the `/sql` endpoint only supports single search requests. For processing a multi-query, see the section below about the [raw mode|raw_response=true](../Connecting_to_the_server/HTTP.md#mode=raw).
+Without `mode=raw` the response is a JSON containing information about the hits and the execution time. The response format is the same as the [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint. Note that the `/sql` endpoint only supports single search requests. For processing a multi-query, see the section below about the [raw mode](../Connecting_to_the_server/HTTP.md#mode=raw).
 
 <!-- request POST -->
 ```bash
@@ -199,14 +199,11 @@ GET /sql?query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%20mat
 
 <!-- example mode=raw -->
 
-The `/sql` endpoint also includes a special "raw" mode, which allows you to send **any valid SQL queries, including multi-queries**. The response is a JSON array containing one or more result sets. You can activate this mode by using the option `mode=raw`.  An alternative option you can also use is `raw_response=true`
+The `/sql` endpoint also includes a special "raw" mode, which allows you to send **any valid SQL queries, including multi-queries**. The response is a JSON array containing one or more result sets. You can activate this mode by using the option `mode=raw`.
 
 <!-- request POST -->
 ```bash
 POST /sql?mode=raw
-desc test
-
-POST /sql?raw_response=true
 desc test
 ```
 
@@ -693,5 +690,6 @@ curl 0:9308/cli_json -d 'desc test'
 ### Keep-alive
 
 HTTP keep-alive is supported (except for the `/cli` endpoint), which allows for stateful interactions via the HTTP JSON interface as long as the client also supports keep-alive. For instance, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can execute `SHOW META` after a `SELECT` command, and it will function similarly to interactions with Manticore through a MySQL client.
+
 
 <!-- proofread -->

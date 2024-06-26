@@ -20,3 +20,5 @@ void SaveUpdate ( const CSphQuery & tQuery, MemoryWriter_c & tWriter );
 void SaveAttrUpdate ( const CSphAttrUpdate & tUpd, MemoryWriter_c & tWriter );
 void SaveCmdHeader ( const ReplicationCommand_t& tCmd, MemoryWriter_c & tWriter );
 
+WORD GetVerCommandReplicate();
+

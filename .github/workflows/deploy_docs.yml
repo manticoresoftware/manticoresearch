@@ -64,12 +64,13 @@ jobs:
         CI_COMMIT_BRANCH: ${{ github.ref_name }}
         CI_COMMIT_TITLE: ${{ github.event.head_commit.message }}
     steps:
-      - name: Install git
+      - name: Install fresh git
         run: |
-          add-apt-repository ppa:git-core/ppa
-          apt update
+          echo 'APT::Key::Assert-Pubkey-Algo ">=rsa1024";' > /etc/apt/apt.conf.d/99weakkey-warning
+          add-apt-repository -y ppa:git-core/ppa
+          apt -y update
           apt install -y git
-
+    
       - name: Checkout
         uses: actions/checkout@v3.5.3
         with:

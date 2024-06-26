@@ -131,6 +131,7 @@ When used in SQL but not called from any UDFs, the result of `PACKEDFACTORS()` i
 ```sql
 SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)
 ```
+Note that `REMOVE_REPEATS` does not affect `total_found` in the [search query meta info](../../Node_info_and_management/SHOW_META.md#SHOW-META).
 
 ### WEIGHT()
 The `WEIGHT()` function returns the calculated matching score. If no ordering is specified, the result is sorted in descending order by the score provided by `WEIGHT()`. In this example, we order first by weight and then by an integer attribute.

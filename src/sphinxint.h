@@ -1177,6 +1177,7 @@ struct ExpansionContext_t : public ExpansionTrait_t
 
 	bool								m_bOnlyTreeFix = false;
 	CSphVector<RegexTerm_t>				m_dRegexTerms;
+	bool								m_bHasWildcards = false;
 	
 	void AggregateStats ();
 };

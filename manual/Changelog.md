@@ -23,7 +23,7 @@ Version 6.3.2 continues the 6.3 series and includes several bug fixes, some of w
 * [Issue #275](https://github.com/manticoresoftware/manticoresearch-buddy/issues/275) Fixed hanging of `drop table if exists t; create table t` via `/cli`.
 
 ### Replication-related
-* [Issue #2270](https://github.com/manticoresoftware/manticoresearch/issues/2270) Added support for cluster:name format in the `/_bulk` HTTP endpoint.
+* [Issue #2270](https://github.com/manticoresoftware/manticoresearch/issues/2270) Added support for `cluster:name` format in the `/_bulk` HTTP endpoint.
 
 # Version 6.3.0
 Released: May 23rd 2024

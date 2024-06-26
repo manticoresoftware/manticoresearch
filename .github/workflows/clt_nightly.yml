@@ -129,6 +129,9 @@ jobs:
           - name: Test alter rename nightly
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-alter-rename-nightly
+          - name: Test integrations
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/integrations/test-integrations-
 
     steps:
       - uses: manticoresoftware/clt@0.1.23

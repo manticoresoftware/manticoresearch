@@ -9,7 +9,7 @@ Version 6.3.2 continues the 6.3 series and includes several bug fixes, some of w
 * ⚠️[Issue #2305](https://github.com/manticoresoftware/manticoresearch/issues/2305) Updated aggs.range values to be numeric.
 
 ### Bug fixes
-* [Commit ](https://github.com/manticoresoftware/manticoresearch/commit/c51c7fa4bd0ec4ad8d53188b888461bff29f1417) Fixed grouping by stored check vs rset merge.
+* [Commit c51c](https://github.com/manticoresoftware/manticoresearch/commit/c51c7fa4bd0ec4ad8d53188b888461bff29f1417) Fixed grouping by stored check vs rset merge.
 * [Commit 0e85](https://github.com/manticoresoftware/manticoresearch/commit/0e85b9d5682f51681750d798aef6a11cfb93d69e) Fixed a crash in the daemon when querying with wildcard characters in an RT index using a CRC dictionary and `local_df` enabled.
 * [Issue #2200](https://github.com/manticoresoftware/manticoresearch/issues/2200) Fixed a crash in JOIN on `count(*)` without GROUP BY.
 * [Issue #2201](https://github.com/manticoresoftware/manticoresearch/issues/2201) Fixed JOIN not returning a warning when attempting grouping by a full-text field.

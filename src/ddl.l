@@ -31,7 +31,7 @@
 DIGIT				[0-9]
 ALPHA				[a-zA-Z_]
 ID					[a-zA-Z_@][a-zA-Z_0-9]*
-TABLEID			    {ALPHA}[a-zA-Z_0-9]*
+TABLEID			    [a-zA-Z_][a-zA-Z0-9_@.:,]*
 SPACE				[ \t\n\r]
 EXPONENT			[eE](\+|-)?{DIGIT}+
 

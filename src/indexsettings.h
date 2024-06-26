@@ -301,6 +301,7 @@ enum class MutableName_e
 	READ_BUFFER_DOCS,
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
+	IS_TYPE_SYSTEM,
 
 	TOTAL
 };
@@ -332,6 +333,7 @@ public:
 	bool		m_bPreopen = false;
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
+	bool		m_bIsTypeSystem = false;
 	
 	MutableIndexSettings_c();
 

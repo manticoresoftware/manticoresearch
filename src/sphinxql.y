@@ -29,7 +29,7 @@
 %token	TOK_SUBKEY
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
-%token	TOK_MANTICORE "Manticore."
+%token	TOK_TABLEIDENT
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -311,167 +311,56 @@ identcol:
 	;
 
 /// indexes
-idxname:
+idxname1:
 	TOK_BACKIDENT
 	{
 		$$ = $1;
 		++$$.m_iStart;
 		--$$.m_iEnd;
 	}
+	| TOK_TABLEIDENT
 	| ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
 	;
 
-identidx:
-	 idxname
-	 | TOK_MANTICORE idxname {$$ = $2;}
-	;
-
 one_index:
-	identidx
-	| ident ':' identidx
-		{
-			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
-			$$ = $3;
-		}
+	idxname1
 	;
 
-only_one_index:
+idxname:
 	one_index
 		{
-			pParser->SetIndex ($1);
+			if ( !pParser->SetIndex ($1) )
+			{
+				yyerror ( pParser, pParser->m_pParseError->cstr() );
+				YYERROR;
+			}
 		}
-	;
-
-chunk:
-	TOK_DOT_NUMBER
-		{
-			pParser->AddDotIntSubkey ($1);
-			pParser->m_pStmt->m_iIntParam = $1.GetValueInt();
-		}
-	| TOK_CHUNK TOK_CONST_INT
-		{
-			pParser->AddIntSubkey ($2);
-			pParser->m_pStmt->m_iIntParam = $2.GetValueInt();
-		}
-	;
-
-chunks:
-	chunk
-	| chunks chunk
-	;
-
-string_key:
-	TOK_SUBKEY
-		{
-    		pParser->AddStringSubkey ($1);
-    	}
-    ;
-
-string_keys:
-	string_key
-	| string_keys string_key
-	;
-
-chunk_subkeys:
-	string_keys
-	| chunk string_keys
-	;
-
-subkey_chunks:
-	chunks
-	| string_key chunks
-	;
-
-fromkeys:
-	// empty
-	| chunk_subkeys
-	| subkey_chunks
-	;
-
-
-one_index_opt_subindex:				// used in describe (meta m.b. num or name)
-	only_one_index
-	| only_one_index chunk_subkeys
-	;
-
-one_index_opt_chunk:				// used in show settings, show status, update, delete
-	only_one_index
-	| only_one_index chunks
-	| list_of_indexes
-    	{
-    		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
-    	}
 	;
 
 from_target:		// used in select ... from
-	only_one_index fromkeys
+	idxname
 		{
-			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
-			pParser->SwapSubkeys();
+			if ( !pParser->SetQueryIndex ( pParser->m_pStmt->m_sIndex ) )
+			{
+				yyerror ( pParser, pParser->m_pParseError->cstr() );
+				YYERROR;
+			}
 		}
-	| list_of_indexes
+	| sysvar
 		{
-			pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
-		}
-	| sysvar_ext
-		{
-    		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
-    		pParser->SwapSubkeys();
+    		if ( !pParser->SetQueryIndex ( $1 ) )
+			{
+				yyerror ( pParser, pParser->m_pParseError->cstr() );
+				YYERROR;
+			}
     	}
-	;
-
-list_of_indexes:
-	one_index ',' one_index
-		{
-    		TRACK_BOUNDS ( $$, $1, $3 );
-    	}
-	| list_of_indexes ',' one_index
-		{
-			TRACK_BOUNDS ( $$, $1, $3 );
-		}
 	;
 
 // enhanced sysvars
 //////////////////////////////////////////////////////////////////////////
 
-string_nokeys:
-	TOK_SUBKEY
-	| string_keys TOK_SUBKEY
-		{
-			$$ = $2;
-		}
-	;
-
-multi_strings_and_maybe_chunk_nokey:
-	string_nokeys
-	| TOK_DOT_NUMBER
-	| TOK_DOT_NUMBER string_nokeys
-		{
-    		$$ = $2;
-    	}
-    | string_nokeys TOK_DOT_NUMBER
-    	{
-    		$$ = $2;
-    	}
-    | string_nokeys TOK_DOT_NUMBER string_nokeys
-    	{
-    		$$ = $3;
-    	}
-	;
-
 sysvar:					// full name in token, like var '@@session.last_insert_id', no subkeys parsed
 	TOK_SYSVAR
-	| TOK_SYSVAR multi_strings_and_maybe_chunk_nokey
-		{
-			TRACK_BOUNDS ( $$, $1, $2 );
-		}
-    ;
-
-sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.last_insert_id'
-	TOK_SYSVAR
-	| TOK_SYSVAR chunk_subkeys
-	| TOK_SYSVAR chunk
-	;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1425,30 +1314,30 @@ show_what:
 	| TOK_PLAN				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
-	| TOK_CREATE TOK_TABLE identidx
+	| TOK_CREATE TOK_TABLE idxname
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
-			pParser->SetIndex ($3);
 		}
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->SetIndex(pParser->ToStringUnescape ( $2 ));
+			if ( !pParser->SetIndex(pParser->ToStringUnescape ( $2 )) )
+			{
+				yyerror ( pParser, pParser->m_pParseError->cstr() );
+				YYERROR;
+			}
 		}
-	| TOK_AGENT only_one_index TOK_STATUS like_filter
+	| TOK_AGENT idxname TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->SetIndex( $2 );
 		}
-	| index_or_table one_index_opt_chunk TOK_STATUS like_filter
+	| index_or_table idxname TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
-			pParser->SetIndex( $2 );
 		}
-	| index_or_table one_index_opt_chunk TOK_SETTINGS
+	| index_or_table idxname TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
-			pParser->SetIndex( $2 );
 		}
 	| TOK_TABLE TOK_STATUS like_filter
 		{
@@ -1462,7 +1351,7 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CHARACTER_SET;
 		}
-	| TOK_TABLES like_filter
+	| TOK_TABLES like_filter from_type
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES;
 		}
@@ -1483,6 +1372,11 @@ show_what:
 index_or_table:
 	TOK_INDEX
 	| TOK_TABLE
+	;
+
+from_type:
+	// empty
+	| TOK_FROM TOK_QUOTED_STRING		{ pParser->m_pStmt->m_sIndex = pParser->ToStringUnescape ($2 ); }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1553,7 +1447,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO only_one_index opt_column_list TOK_VALUES insert_rows_list opt_option_clause
+	insert_or_replace TOK_INTO idxname opt_column_list TOK_VALUES insert_rows_list opt_option_clause
 	;
 
 insert_or_replace:
@@ -1601,9 +1495,13 @@ insert_val:
 
 delete_from:
 	TOK_DELETE { pParser->m_pStmt->m_eStmt = STMT_DELETE; }
-		TOK_FROM one_index_opt_chunk where_clause opt_option_clause
+		TOK_FROM idxname where_clause opt_option_clause
 			{
-				pParser->GenericStatement ( &$4 );
+				if ( !pParser->GenericStatement ( &$4 ) )
+				{
+					yyerror ( pParser, pParser->m_pParseError->cstr() );
+					YYERROR;
+				}
 			}
 	;
 
@@ -1688,7 +1586,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok one_index_opt_subindex describe_opt like_filter
+	describe_tok idxname describe_opt like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
 		}
@@ -1712,9 +1610,13 @@ describe_tok:
 
 update:
 	TOK_UPDATE { pParser->m_pStmt->m_eStmt = STMT_UPDATE; }
-		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
+		from_target TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
 			{
-				pParser->GenericStatement ( &$3 );
+				if ( !pParser->GenericStatement ( &$3 ) )
+				{
+					yyerror ( pParser, pParser->m_pParseError->cstr() );
+					YYERROR;
+				}
 			}
 	;
 
@@ -1797,10 +1699,7 @@ global_or_session:
 
 optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
-		index_or_table identidx opt_option_clause
-			{
-				pParser->SetIndex( $4 );
-			}
+		index_or_table idxname opt_option_clause
 	;
 
 
@@ -1900,7 +1799,11 @@ explain_query:
 			{
 				SqlStmt_t & tStmt = *pParser->m_pStmt;
 				pParser->ToString ( tStmt.m_sCallProc, $3 );
-				pParser->SetIndex( $4 );
+				if ( !pParser->SetIndex( $4 ) )
+				{
+					yyerror ( pParser, pParser->m_pParseError->cstr() );
+					YYERROR;
+				}
 				pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $5 );
 			}
 	;

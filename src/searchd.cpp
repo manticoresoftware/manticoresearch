@@ -6480,60 +6480,58 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 bool SearchHandler_c::ParseSysVar ()
 {
 	const auto& sVar = m_dLocal.First().m_sName;
-	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
 
-	if ( sVar=="@@system" )
+	if ( sVar.Begins ( "@@system" ) )
 	{
-		if ( !dSubkeys.IsEmpty () )
+		bool bSchema = sVar.Ends ( ".@table" );
+		bool bValid = true;
+		TableFeeder_fn fnFeed;
+		if ( sVar.Begins ( "@@system.threads" ) ) // select .. from @@system.threads
 		{
-			bool bSchema = ( dSubkeys.Last ()==".@table" );
-			bool bValid = true;
-			TableFeeder_fn fnFeed;
-			if ( dSubkeys[0]==".threads" ) // select .. from @@system.threads
-			{
-				if ( m_pStmt->m_sThreadFormat.IsEmpty() ) // override format to show all columns by default
-					m_pStmt->m_sThreadFormat="all";
+			if ( m_pStmt->m_sThreadFormat.IsEmpty() ) // override format to show all columns by default
+				m_pStmt->m_sThreadFormat="all";
 
-				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowThreads ( *pBuf, m_pStmt ); };
-			}
-			else if ( dSubkeys[0]==".tables" ) // select .. from @@system.tables
-			{
-				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowTables ( *pBuf, m_pStmt ); };
-			}
-			else if ( dSubkeys[0]==".tasks" ) // select .. from @@system.tasks
-			{
-				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleTasks ( *pBuf ); };
-			}
-			else if ( dSubkeys[0]==".sched" ) // select .. from @@system.sched
-			{
-				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSched ( *pBuf ); };
-			} else if ( dSubkeys[0] == ".sessions" ) // select .. from @@system.sched
-			{
-				fnFeed = [this] ( RowBuffer_i* pBuf ) { HandleShowSessions ( *pBuf, m_pStmt ); };
-			}
-			else
-				bValid = false;
+			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowThreads ( *pBuf, m_pStmt ); };
 
-			if ( bValid )
-			{
-				cServedIndexRefPtr_c pIndex;
-				if ( bSchema )
-				{
-					m_dLocal.First ().m_sName.SetSprintf( "@@system.%s.@table", dSubkeys[0].cstr() );
-					pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
+		} else if ( sVar.Begins ( "@@system.tables" ) ) // select .. from @@system.tables
+		{
+			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowTables ( *pBuf, m_pStmt ); };
 
-				} else {
-					m_dLocal.First ().m_sName.SetSprintf ( "@@system.%s", dSubkeys[0].cstr () );
-					pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
-				}
-				m_dAcquired.AddIndex ( m_dLocal.First ().m_sName, std::move (pIndex) );
-				return true;
+		} else if ( sVar.Begins ( "@@system.tasks" ) ) // select .. from @@system.tasks
+		{
+			fnFeed = [] ( RowBuffer_i * pBuf ) { HandleTasks ( *pBuf ); };
+
+		} else if ( sVar.Begins ( "@@system.sched" ) ) // select .. from @@system.sched
+		{
+			fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSched ( *pBuf ); };
+
+		} else if ( sVar.Begins ( "@@system.sessions" ) ) // select .. from @@system.sched
+		{
+			fnFeed = [this] ( RowBuffer_i* pBuf ) { HandleShowSessions ( *pBuf, m_pStmt ); };
+
+		} else
+		{
+			bValid = false;
+		}
+
+		if ( bValid )
+		{
+			cServedIndexRefPtr_c pIndex;
+			if ( bSchema )
+			{
+				m_dLocal.First ().m_sName = sVar;
+				pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
+
+			} else {
+				m_dLocal.First ().m_sName = sVar;
+				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
 			}
+			m_dAcquired.AddIndex ( m_dLocal.First ().m_sName, std::move (pIndex) );
+			return true;
 		}
 	}
 
 	m_sError << "no such variable " << sVar;
-	dSubkeys.for_each ( [this] ( const auto& s ) { m_sError << s; } );
 	return false;
 }
 
@@ -6544,13 +6542,13 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 
 	assert ( !dSubkeys.IsEmpty () );
 
-	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".@table" );
+	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()=="@table" );
 	TableFeeder_fn fnFeed;
-	if ( dSubkeys[0]==".@table" ) // select .. idx.table
+	if ( dSubkeys[0]=="@table" ) // select .. idx.table
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
-	else if ( dSubkeys[0]==".@status" ) // select .. idx.status
+	else if ( dSubkeys[0]=="@status" ) // select .. idx.status
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
-	else if ( dSubkeys[0]==".@files" ) // select .. from idx.files
+	else if ( dSubkeys[0]=="@files" ) // select .. from idx.files
 		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
 	else
 	{
@@ -6566,7 +6564,7 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 		pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
 	} else
 	{
-		m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
+		m_dLocal.First ().m_sName.SetSprintf ( "%s.%s", sVar.cstr (), dSubkeys[0].cstr () );
 		pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
 	}
 
@@ -10400,7 +10398,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 	CSphString sError;
 	PercolateOptions_t tOpts;
 	tOpts.m_sIndex = dStmtIndex.m_sVal;
-	SqlParser_SplitClusterIndex ( tOpts.m_sIndex, nullptr );
+	SplitClusterIndex ( tOpts.m_sIndex, nullptr );
 	bool bSkipEmpty = false;
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
@@ -12157,7 +12155,12 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.DataTable ( dOut );
 }
 
-using NamedIndexType_t = std::pair<CSphString, IndexType_e>;
+struct NamedIndexType_t
+{
+	CSphString m_sName;
+	IndexType_e m_eType;
+	bool m_bSystem;
+};
 
 CSphVector<NamedIndexType_t> GetAllServedIndexes()
 {
@@ -12176,10 +12179,10 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 		case IndexType_e::RT:
 		case IndexType_e::PERCOLATE:
 		case IndexType_e::TEMPLATE:
-			dIndexes.Add ( NamedIndexType_t ( tIt.first, tIt.second->m_eType ) );
+			dIndexes.Add ( NamedIndexType_t { tIt.first, tIt.second->m_eType, tIt.second->m_tSettings.m_bIsTypeSystem } );
 			break;
 		default:
-			dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::ERROR_ ) );
+			dIndexes.Add ( NamedIndexType_t { tIt.first, IndexType_e::ERROR_, tIt.second->m_tSettings.m_bIsTypeSystem } );
 		}
 	}
 
@@ -12188,9 +12191,9 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::DISTR ) );
+		dIndexes.Add ( NamedIndexType_t { tIt.first, IndexType_e::DISTR, false } );
 
-	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.first.cstr(), b.first.cstr() ) < 0; } ) );
+	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.m_sName.cstr(), b.m_sName.cstr() ) < 0; } ) );
 	return dIndexes;
 }
 
@@ -12198,10 +12201,16 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	auto dIndexes = GetAllServedIndexes();
 
+	bool bShowSystem = ( pStmt->m_sIndex=="system" );
+	bool bShowAll = ( pStmt->m_sIndex=="_all" );
+
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
-	for ( auto& dPair : dIndexes )
-		dTable.MatchTuplet( dPair.first.cstr (), szIndexType(dPair.second) );
+	for ( auto & tIndex : dIndexes )
+	{
+		if ( bShowAll || bShowSystem==tIndex.m_bSystem )
+			dTable.MatchTuplet( tIndex.m_sName.cstr (), szIndexType ( tIndex.m_eType ) );
+	}
 	tOut.DataTable ( dTable );
 }
 
@@ -12949,6 +12958,12 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
+	if ( !ValidateDbStatement ( sIndex, *pServed, tStmt.m_sIndexDb ) )
+	{
+		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
+		return;
+	}
+
 	RtAccum_t tAcc;
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
@@ -13634,14 +13649,23 @@ static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand
 	return nullptr;
 }
 
+bool ValidateDbStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sIndexDb )
+{
+	bool bSystem = ( sIndexDb=="system" );
+
+	if ( tDesc.m_tSettings.m_bIsTypeSystem==bSystem )
+		return true;
+
+	return TlsMsg::Err ( "table '%s' is %ssystem", sIndexName.cstr(), ( tDesc.m_tSettings.m_bIsTypeSystem ? "" : "non-") );
+}
 
 static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * sDistributed, const SqlStmt_t & tStmt,
 		SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
 {
-
 	const CSphString & sCluster = tStmt.m_sCluster;
 	const CSphString & sStore = tStmt.m_tQuery.m_sStore;
 	bool bOnlyStoreDocIDs = !sStore.IsEmpty();
+	const CSphString & sIndexDb = tStmt.m_sIndexDb;
 
 	CSphString sError;
 	auto err = [&sName, &sDistributed, &sError, &dErrors] (const char* szErr = nullptr)
@@ -13656,6 +13680,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sName );
 	if ( !ValidateClusterStatement ( sName, *pServed, sCluster, IsHttpStmt ( tStmt ) ) )
+		return err ( TlsMsg::szError() );
+
+	if ( !ValidateDbStatement ( sName, *pServed, sIndexDb ) )
 		return err ( TlsMsg::szError() );
 
 	// process store to local variable instead of deletion (here we don't need any stuff like accum, txn, replication)
@@ -15888,20 +15915,20 @@ void HandleMysqlShowFederatedIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t &
 	CSphSourceStats tFakeStats;
 	tFakeStats.m_iTotalDocuments = 1000; // TODO: check is it worth to query that number from agents
 
-	for ( const NamedIndexType_t& tIndex : dIndexes )
+	for ( const NamedIndexType_t & tIndex : dIndexes )
 	{
-		if ( !tSelector.Match ( tIndex.first.cstr() ) )
+		if ( !tSelector.Match ( tIndex.m_sName.cstr() ) )
 			continue;
 
-		if ( tIndex.second == IndexType_e::DISTR )
-			AddFederatedIndexStatusLine ( tFakeStats, tIndex.first, tOut );
+		if ( tIndex.m_eType==IndexType_e::DISTR )
+			AddFederatedIndexStatusLine ( tFakeStats, tIndex.m_sName, tOut );
 		else {
-			auto pServed = GetServed ( tIndex.first );
+			auto pServed = GetServed ( tIndex.m_sName );
 			if ( !pServed )
 				continue; // really rare case when between GetAllServedIndexes and that moment table was removed.
 			RIdx_c pIndex { pServed };
 			assert ( pIndex );
-			AddFederatedIndexStatusLine ( pIndex->GetStats(), tIndex.first, tOut );
+			AddFederatedIndexStatusLine ( pIndex->GetStats(), tIndex.m_sName, tOut );
 		}
 	}
 
@@ -17981,6 +18008,7 @@ bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig,
 		sError.SetSprintf ( "prealloc: %s", pIdx->GetLastError().cstr() );
 		return false;
 	}
+	tIdx.m_tSettings = pIdx->GetMutableSettings(); // need update cached settings after index loads .settings file
 	return FixupAndLockIndex ( tIdx, pIdx, pConfig, szIndexName, dWarnings, sError );
 }
 

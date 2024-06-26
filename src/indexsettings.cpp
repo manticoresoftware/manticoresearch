@@ -2163,6 +2163,7 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
+		case MutableName_e::IS_TYPE_SYSTEM: return "type_system";
 		default: assert ( 0 && "Invalid mutable option" ); return "";
 	}
 }
@@ -2363,6 +2364,17 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		sError = "";
 	}
 
+	JsonObj_c tIsTypeSystem = tParser.GetBoolItem ( "type_system", sError, true );
+	if ( tIsTypeSystem )
+	{
+		m_bIsTypeSystem = tIsTypeSystem.BoolVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::IS_TYPE_SYSTEM );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
 	m_bNeedSave = true;
 
 	return true;
@@ -2441,6 +2453,12 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( hIndex.Exists ( "type_system" ) )
+	{
+		m_bIsTypeSystem = hIndex.GetBool ( "type_system", MutableIndexSettings_c::GetDefaults().m_bIsTypeSystem );
+		m_dLoaded.BitSet ( (int)MutableName_e::IS_TYPE_SYSTEM );
+	}
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -2457,6 +2475,14 @@ static void AddInt ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c 
 		return;
 
 	tRoot.AddInt ( GetMutableName ( eName ), iVal );
+}
+
+static void AddBool ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, bool bVal )
+{
+	if ( !dLoaded.BitGet ( (int)eName ) )
+		return;
+
+	tRoot.AddBool ( GetMutableName ( eName ), bVal );
 }
 
 static const char * GetExpandKwName ( int iExpandKeywords )
@@ -2483,9 +2509,8 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 		tRoot.AddStr ( "expand_keywords", GetExpandKwName ( m_iExpandKeywords ) );
 
 	AddInt ( m_dLoaded, MutableName_e::RT_MEM_LIMIT, tRoot, m_iMemLimit );
-	if ( m_dLoaded.BitGet ( (int)MutableName_e::PREOPEN ) )
-		tRoot.AddBool ( "preopen", m_bPreopen );
-	
+	AddBool ( m_dLoaded, MutableName_e::PREOPEN, tRoot, m_bPreopen );
+
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eAttr ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eBlob ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_DOCLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eDoclist ) );
@@ -2496,6 +2521,7 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
 
 	AddInt ( m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, tRoot, m_iOptimizeCutoff );
+	AddBool ( m_dLoaded, MutableName_e::IS_TYPE_SYSTEM, tRoot, m_bIsTypeSystem );
 
 	sBuf = tRoot.AsString ( true );
 
@@ -2563,6 +2589,11 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::IS_TYPE_SYSTEM ) )
+	{
+		m_bIsTypeSystem = tOther.m_bIsTypeSystem;
+		m_dLoaded.BitSet ( (int)MutableName_e::IS_TYPE_SYSTEM );
+	}
 }
 
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
@@ -2605,6 +2636,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 
 	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
+	tOut.Add ( GetMutableName ( MutableName_e::IS_TYPE_SYSTEM ), m_bIsTypeSystem,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::IS_TYPE_SYSTEM, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::IS_TYPE_SYSTEM ) ) );
 }
 
 void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sSettingsFile )

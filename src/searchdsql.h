@@ -232,6 +232,7 @@ struct SqlStmt_t
 	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
 	CSphString				m_sIndex;
 	CSphString				m_sCluster;
+	CSphString				m_sIndexDb;
 	bool					m_bClusterUpdateNodes = false;
 
 	// INSERT (and CALL) specific
@@ -353,10 +354,12 @@ public:
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
-	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
-	void			SetIndex ( const SqlNode_t& tNode ) const;
-	void			SetIndex ( const CSphString& sIndex ) const;
-	void 			AddComment ( const SqlNode_t* tNode ) const;
+	void			DefaultOk ( std::initializer_list<const char *> sList = {} );
+	bool			SetIndex ( const SqlNode_t & tNode ) const;
+	bool			SetIndex ( const CSphString & sIndex ) const;
+	void 			AddComment ( const SqlNode_t * tNode ) const;
+	bool			SetQueryIndex ( const CSphString & sIndex ) const;
+	bool			SetQueryIndex ( const SqlNode_t & tNode ) const;
 
 protected:
 	CSphVector<SqlStmt_t> &	m_dStmt;
@@ -370,7 +373,7 @@ protected:
 
 bool	sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 bool	PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
-void	SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
+void	SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 void	InitParserOption();
 
 enum class AddOption_e

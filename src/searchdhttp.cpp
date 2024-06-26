@@ -3171,7 +3171,7 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 	}
 
 	// _bulk could have cluster:index format
-	SqlParser_SplitClusterIndex ( tStmt.m_sIndex, &tStmt.m_sCluster );
+	SplitClusterIndex ( tStmt.m_sIndex, &tStmt.m_sCluster );
 
 	return true;
 }

@@ -208,7 +208,7 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 	return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
 }
 
-void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
+void SqlParserTraits_c::ProcessParsingError ( const char * szMessage )
 {
 	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
 	// notice: szMessage here is NOT prefixed with "PXX:"
@@ -242,21 +242,166 @@ void SqlParserTraits_c::DefaultOk ( std::initializer_list<const char*> sList )
 	m_pStmt->m_eStmt = STMT_DUMMY;
 }
 
-void SqlParserTraits_c::SetIndex ( const SqlNode_t& tNode ) const
+static bool ParseIndex ( bool bFirstIdx, CSphString & sIdx, SqlStmt_t & tStmt, CSphString * pError );
+static bool SplitIndexes ( const CSphString & sIndexes, SqlStmt_t & tStmt, CSphString & sError );
+
+bool SqlParserTraits_c::SetIndex ( const SqlNode_t & tNode ) const
 {
 	ToString ( m_pStmt->m_sIndex, tNode );
 	// unquote index name
 	if ( ( tNode.m_iEnd - tNode.m_iStart ) > 2 && m_pStmt->m_sIndex.cstr()[0] == '\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1] == '\'' )
 		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
+
+	return SplitIndexes ( m_pStmt->m_sIndex, *m_pStmt, *m_pParseError );
 }
 
-void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
+bool SqlParserTraits_c::SetIndex ( const CSphString & sIndex ) const
 {
 	auto iLen = sIndex.Length();
 	if ( iLen > 2 && sIndex.cstr()[0] == '\'' && sIndex.cstr()[iLen-1] == '\'' )
 		m_pStmt->m_sIndex = sIndex.SubString ( 1, iLen - 2 );
 	else
 		m_pStmt->m_sIndex = sIndex;
+
+	return SplitIndexes ( m_pStmt->m_sIndex, *m_pStmt, *m_pParseError );
+}
+
+bool SqlParserTraits_c::SetQueryIndex ( const CSphString & sIndex ) const
+{
+	assert ( m_pQuery );
+	assert ( m_pStmt );
+	m_pQuery->m_sIndexes = sIndex;
+	return SplitIndexes ( m_pQuery->m_sIndexes, *m_pStmt, *m_pParseError );
+}
+
+bool SqlParserTraits_c::SetQueryIndex ( const SqlNode_t & tNode ) const
+{
+	assert ( m_pQuery );
+	assert ( m_pStmt );
+	ToString ( m_pQuery->m_sIndexes, tNode );
+	return SplitIndexes ( m_pQuery->m_sIndexes, *m_pStmt, *m_pParseError );
+}
+
+static bool ParseIndexAdd ( const char * sFrom, const char * sEnd, bool bFirstIdx, CSphString & sDst, const char * sParsedErrorPart, CSphString * pError )
+{
+	assert ( sFrom && sEnd );
+	assert ( sFrom<sEnd );
+
+	CSphString sParsed;
+	sParsed.SetBinary  ( sFrom, sEnd-sFrom );
+	if ( !bFirstIdx && sDst!=sParsed )
+	{
+		if ( pError )
+			pError->SetSprintf ( "indexes %s should match, '%s'!='%s'", sParsedErrorPart, sDst.scstr(), sParsed.scstr() );
+		return false;
+	}
+	sDst = sParsed;
+	return true;
+}
+
+// can not use SetBinary on the idx itself
+static void ParseSetIndex ( CSphString & sIdx, const char * sFrom, const char * sEnd )
+{
+	assert ( sFrom && sEnd );
+	assert ( sFrom<sEnd );
+	CSphString sTmp;
+	sTmp.SetBinary ( sFrom, sEnd-sFrom );
+	sIdx = sTmp;
+}
+
+static void ParseIndeAddPart ( const char * sFrom, const char * sEnd, SqlStmt_t & tStmt )
+{
+	CSphString sPart;
+	Verify ( ParseIndexAdd ( sFrom, sEnd, true, sPart, "", nullptr ) );
+
+	if ( sPart.IsEmpty() )
+		return;
+
+	if ( sphIsInteger ( sPart.cstr()[0] ) )
+
+		tStmt.m_dIntSubkeys.Add ( (int64_t) strtoull ( sPart.cstr(), nullptr, 10 ) );
+	else
+		tStmt.m_dStringSubkeys.Add ( sPart );
+}
+
+bool ParseIndex ( bool bFirstIdx, CSphString & sIdx, SqlStmt_t & tStmt, CSphString * pError )
+{
+	CSphString sCluster;
+	SplitClusterIndex ( sIdx, &sCluster );
+	if ( !bFirstIdx && tStmt.m_sCluster!=sCluster )
+	{
+		if ( pError )
+			pError->SetSprintf ( "indexes cluster should match, '%s'!='%s'", tStmt.m_sCluster.scstr(), sCluster.scstr() );
+		return false;
+	}
+	tStmt.m_sCluster = sCluster;
+
+	// might be a @@system or @@*
+	if ( sIdx.Begins( "@" ) )
+		return true;
+
+	const char * sStart = sIdx.cstr();
+	const char * sEnd = sStart + sIdx.Length();
+
+	const char * sDelDb = strchr ( sStart, '.' );
+	if ( !sDelDb )
+		return true;
+
+	// could be^
+	// - index
+	// - db.index
+	// - index.@part
+	// - db.index.@part
+
+	const char * sDelPart = nullptr;
+	if ( sDelDb+1<sEnd )
+		sDelPart = strchr ( sDelDb+1, '.' );
+
+	// db.index.@part
+	if ( sDelPart )
+	{
+		if ( !ParseIndexAdd ( sStart, sDelDb, bFirstIdx, tStmt.m_sIndexDb, "databases", pError ) )
+			return false;
+		ParseIndeAddPart ( sDelPart, sEnd, tStmt );
+
+		ParseSetIndex ( sIdx, sDelDb + 1, sDelPart );
+		return true;
+	}
+
+	// index.@part or index.4
+	if ( sDelDb+1<sEnd && ( sDelDb[1]=='@' || sphIsInteger ( sDelDb[1] ) ) )
+	{
+		ParseIndeAddPart ( sDelDb + 1, sEnd, tStmt );
+		ParseSetIndex ( sIdx, sStart, sDelDb );
+	} else
+	{
+		if ( !ParseIndexAdd ( sStart, sDelDb, bFirstIdx, tStmt.m_sIndexDb, "databases", pError ) )
+			return false;
+
+		ParseSetIndex ( sIdx, sDelDb + 1, sEnd );
+	}
+
+	return true;
+}
+
+bool SplitIndexes ( const CSphString & sIndexes, SqlStmt_t & tStmt, CSphString & sError )
+{
+	StrVec_t dSrcIndexes;
+	sphSplit ( dSrcIndexes, sIndexes.cstr(), ", " );
+
+	StringBuilder_c sDstIndexes ( "," );
+	ARRAY_FOREACH ( i, dSrcIndexes )
+	{
+		CSphString & sIdx = dSrcIndexes[i];
+		if ( !ParseIndex ( ( i==0 ), sIdx, tStmt, &sError ) )
+			return false;
+
+		sDstIndexes += sIdx.cstr();
+	}
+
+	tStmt.m_sIndex = sDstIndexes.cstr();
+	tStmt.m_tQuery.m_sIndexes = sDstIndexes.cstr();
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -336,8 +481,7 @@ public:
 	int				AllocNamedVec ();
 	CSphVector<CSphNamedInt> & GetNamedVec ( int iIndex );
 	void			FreeNamedVec ( int iIndex );
-	void			GenericStatement ( SqlNode_t * pNode );
-	void 			SwapSubkeys();
+	bool			GenericStatement ( SqlNode_t * pNode );
 
 	void			AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
 	void			UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
@@ -346,11 +490,6 @@ public:
 	void			SetLimit ( int iOffset, int iLimit );
 
 	float			ToFloat ( const SqlNode_t & tNode ) const;
-	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
-
-	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
-	void 			AddIntSubkey ( const SqlNode_t & tNode ) const;
-	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
 
 	void			AddComment ( const SqlNode_t* tNode );
 
@@ -365,6 +504,8 @@ private:
 	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
 };
+
+static void SwapSubkeys ( CSphQuery & tQuery, SqlStmt_t & tStmt );
 
 #define YYSTYPE SqlNode_t
 
@@ -462,28 +603,6 @@ float SqlParser_c::ToFloat ( const SqlNode_t & tNode ) const
 {
 	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
 }
-
-int64_t SqlParser_c::DotGetInt ( const SqlNode_t & tNode ) const
-{
-	return (int64_t) strtoull ( m_pBuf+tNode.m_iStart+1, nullptr, 10 );
-}
-
-void SqlParser_c::AddStringSubkey ( const SqlNode_t & tNode ) const
-{
-	auto& sKey = m_pStmt->m_dStringSubkeys.Add();
-	ToString ( sKey, tNode );
-}
-
-void SqlParser_c::AddIntSubkey ( const SqlNode_t & tNode ) const
-{
-	m_pStmt->m_dIntSubkeys.Add ( tNode.GetValueInt() );
-}
-
-void SqlParser_c::AddDotIntSubkey ( const SqlNode_t & tNode ) const
-{
-	m_pStmt->m_dIntSubkeys.Add ( DotGetInt ( tNode ) );
-}
-
 
 /// hashes for all options
 enum class Option_e : BYTE
@@ -1270,10 +1389,10 @@ void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName )
 	ToString ( m_pStmt->m_sSetName, tName );
 }
 
-void SqlParser_c::SwapSubkeys ()
+void SwapSubkeys ( CSphQuery & tQuery, SqlStmt_t & tStmt )
 {
-	m_pQuery->m_dIntSubkeys.SwapData ( m_pStmt->m_dIntSubkeys );
-	m_pQuery->m_dStringSubkeys.SwapData ( m_pStmt->m_dStringSubkeys );
+	tQuery.m_dIntSubkeys.SwapData ( tStmt.m_dIntSubkeys );
+	tQuery.m_dStringSubkeys.SwapData ( tStmt.m_dStringSubkeys );
 }
 
 void SqlParser_c::AddComment ( const SqlNode_t* tNode )
@@ -1295,12 +1414,14 @@ void SqlParser_c::AddComment ( const SqlNode_t* tNode )
 }
 
 
-void SqlParser_c::GenericStatement ( SqlNode_t * pNode )
+bool SqlParser_c::GenericStatement ( SqlNode_t * pNode )
 {
-	SwapSubkeys();
+	assert ( m_pQuery && m_pStmt );
+	SwapSubkeys ( *m_pQuery, *m_pStmt );
 	m_pStmt->m_iListStart = pNode->m_iStart;
 	m_pStmt->m_iListEnd = pNode->m_iEnd;
-	SetIndex ( *pNode );
+	//return SetIndex ( *pNode );
+	return true;
 }
 
 void SqlParser_c::AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const
@@ -1980,7 +2101,8 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		//
 		// so at SQL parse stage, we only do quick validation, and at this point,
 		// we just store the select list for later use by the expression parser
-		CSphQuery & tQuery = dStmt[iStmt].m_tQuery;
+		SqlStmt_t & tStmt = dStmt[iStmt];
+		CSphQuery & tQuery = tStmt.m_tQuery;
 		if ( tQuery.m_iSQLSelectStart>=0 )
 		{
 			if ( tQuery.m_iSQLSelectStart-1>=0 && tParser.m_pBuf[tQuery.m_iSQLSelectStart-1]=='`' )
@@ -2015,6 +2137,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 			dStmt[iStmt].m_pTableFunc = std::move ( pFunc );
 		}
 
+		if ( tStmt.m_eStmt==STMT_SELECT )
+			SwapSubkeys ( tQuery, tStmt );
+
 		// validate filters
 		for ( const auto& tFilter : tQuery.m_dFilters )
 		{
@@ -2033,7 +2158,6 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 			CreateFilterTree ( tParser.m_dFilterTree, iFilterStart, iFilterCount, tQuery );
 		else
 			OptimizeFilters ( tQuery.m_dFilters );
-
 
 		iFilterStart = iFilterCount;
 
@@ -2071,7 +2195,7 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 }
 
 
-void SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
+void SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
 {
 	if ( sIndex.IsEmpty() )
 		return;

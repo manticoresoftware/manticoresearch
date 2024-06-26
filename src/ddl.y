@@ -16,7 +16,7 @@
 %error-verbose
 
 %token	TOK_IDENT "identifier"
-%token	TOK_TABLEIDENT "tablename"
+%token	TOK_TABLEIDENT
 %token	TOK_CONST_FLOAT "float"
 %token	TOK_CONST_INT "integer"
 %token	TOK_QUOTED_STRING "string"
@@ -97,11 +97,6 @@ statement:
 	| import_table
 	;
 
-tablename:
-	TOK_TABLEIDENT
-	| TOK_MODIFY
-	;
-
 ident_without_modify:
 	TOK_TABLEIDENT
 	| TOK_IDENT
@@ -141,7 +136,7 @@ alter_col_type:
 	;
 
 alter:
-	TOK_ALTER TOK_TABLE tablename TOK_ADD TOK_COLUMN ident alter_col_type item_option_list
+	TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_ADD TOK_COLUMN ident alter_col_type item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $3, $6, $7 ) )
 			{
@@ -149,7 +144,7 @@ alter:
 	            YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_MODIFY TOK_COLUMN ident alter_col_type item_option_list
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_MODIFY TOK_COLUMN ident alter_col_type item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $3, $6, $7, true ) )
 			{
@@ -157,7 +152,7 @@ alter:
 				YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $3, $6, SPH_ATTR_INTEGER, 0, $9.GetValueInt() ) )
 			{
@@ -165,60 +160,60 @@ alter:
 	            YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_DROP TOK_COLUMN ident
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_DROP TOK_COLUMN ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_DROP;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
 		}
-	| TOK_ALTER TOK_RTINDEX tablename TOK_RECONFIGURE
+	| TOK_ALTER TOK_RTINDEX TOK_TABLEIDENT TOK_RECONFIGURE
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_RECONFIGURE
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_RECONFIGURE
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_KILLLIST_TARGET '=' TOK_QUOTED_STRING
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_KILLLIST_TARGET '=' TOK_QUOTED_STRING
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_KLIST_TARGET;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
 		}
-	| TOK_ALTER TOK_TABLE tablename create_table_option_list
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT create_table_option_list
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_INDEX_SETTINGS;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_ADD tablename
+	| TOK_ALTER TOK_CLUSTER ident TOK_ADD TOK_TABLEIDENT
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sIndex, $5 );
 		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_DROP tablename
+	| TOK_ALTER TOK_CLUSTER ident TOK_DROP TOK_TABLEIDENT
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sIndex, $5 );
 		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_UPDATE tablename
+	| TOK_ALTER TOK_CLUSTER ident TOK_UPDATE TOK_TABLEIDENT
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sSetName, $5 );
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_REBUILD TOK_SECONDARY
+	| TOK_ALTER TOK_TABLE TOK_TABLEIDENT TOK_REBUILD TOK_SECONDARY
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_REBUILD_SI;
@@ -362,7 +357,7 @@ _if_exists:
 	;
 
 create_table:
-	TOK_CREATE TOK_TABLE _if_not_exists tablename create_table_items create_table_option_list
+	TOK_CREATE TOK_TABLE _if_not_exists TOK_TABLEIDENT create_table_items create_table_option_list
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE;
@@ -372,7 +367,7 @@ create_table:
 	;
 
 create_table_like:
-	TOK_CREATE TOK_TABLE _if_not_exists tablename TOK_LIKE tablename
+	TOK_CREATE TOK_TABLE _if_not_exists TOK_TABLEIDENT TOK_LIKE TOK_TABLEIDENT
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE_LIKE;
@@ -384,7 +379,7 @@ create_table_like:
 	;
 
 drop_table:
-	TOK_DROP TOK_TABLE _if_exists tablename
+	TOK_DROP TOK_TABLE _if_exists TOK_TABLEIDENT
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_TABLE;
@@ -507,7 +502,7 @@ join_cluster:
 	;
 
 import_table:
-	TOK_IMPORT TOK_TABLE tablename TOK_FROM TOK_QUOTED_STRING
+	TOK_IMPORT TOK_TABLE TOK_TABLEIDENT TOK_FROM TOK_QUOTED_STRING
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_IMPORT_TABLE;

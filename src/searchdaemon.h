@@ -1756,4 +1756,6 @@ protected:
 	CSphString m_sError;
 };
 
+bool ValidateDbStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sIndexDb );
+
 #endif // _searchdaemon_

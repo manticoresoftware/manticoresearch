@@ -49,6 +49,7 @@ SPACE				[ \t\n\r]
 SIGN                [+-]?
 INT                 {DIGIT}+
 EXP     			[eE]{SIGN}{INT}
+TABLEID			    [a-zA-Z_@][a-zA-Z0-9_@.:,]*
 
 FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 
@@ -216,9 +217,6 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "WITHIN"			{ YYSTOREBOUNDS; return TOK_WITHIN; }
 "YEAR"				{ YYSTOREBOUNDS; return TOK_YEAR; }
 
-"MANTICORE."        |
-"`MANTICORE`."      { YYSTOREBOUNDS; return TOK_MANTICORE; }
-
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }
 "<="				{ YYSTOREBOUNDS; return TOK_LTE; }
@@ -247,6 +245,10 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 {SPACE}+
 \.{SPACE}*{ID}		{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }
+
+{TABLEID}           { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
+`{TABLEID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; }
+`{DIGIT}+{TABLEID}`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
 
 %%
 

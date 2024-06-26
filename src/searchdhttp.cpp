@@ -1184,16 +1184,6 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 			tItem.m_sAlias = tBucket.m_sCol;
 			hAttrs.Add ( tBucket.m_sCol );
 		}
-
-		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
-		{
-			if ( tBucket.m_dNested[iNested].m_eAggrFunc==Aggr_e::NONE )
-				continue;
-
-			CSphQueryItem & tItem = tQuery.m_dItems.Add();
-			tItem.m_sExpr = tBucket.m_dNested[iNested].m_sCol;
-			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
-		}
 	}
 
 	tQuery.m_bFacetHead = true;
@@ -1263,16 +1253,6 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		CSphQueryItem & tAggCountItem = tQuery.m_dRefItems.Add();
 		tAggCountItem.m_sExpr = "count(*)";
 		tAggCountItem.m_sAlias = "count(*)";
-		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
-		{
-			if ( tBucket.m_dNested[iNested].m_eAggrFunc==Aggr_e::NONE )
-				continue;
-
-			CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
-			tItem.m_sExpr = tBucket.m_dNested[iNested].m_sCol;
-			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
-		}
-
 
 		switch ( tBucket.m_eAggrFunc )
 		{

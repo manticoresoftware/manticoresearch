@@ -1,5 +1,31 @@
 # Changelog
 
+# Version 6.3.2
+Released: June 26th 2024
+
+Version 6.3.2 continues the 6.3 series and includes several bug fixes, some of which were discovered after the release of 6.3.0.
+
+### Breaking changes
+* ⚠️[Issue #2305](https://github.com/manticoresoftware/manticoresearch/issues/2305) Updated aggs.range values to be numeric.
+
+### Bug fixes
+* [Commit ](https://github.com/manticoresoftware/manticoresearch/commit/c51c7fa4bd0ec4ad8d53188b888461bff29f1417) Fixed grouping by stored check vs rset merge.
+* [Commit 0e85](https://github.com/manticoresoftware/manticoresearch/commit/0e85b9d5682f51681750d798aef6a11cfb93d69e) Fixed a crash in the daemon when querying with wildcard characters in an RT index using a CRC dictionary and `local_df` enabled.
+* [Issue #2200](https://github.com/manticoresoftware/manticoresearch/issues/2200) Fixed a crash in JOIN on `count(*)` without GROUP BY.
+* [Issue #2201](https://github.com/manticoresoftware/manticoresearch/issues/2201) Fixed JOIN not returning a warning when attempting grouping by a full-text field.
+* [Issue #2230](https://github.com/manticoresoftware/manticoresearch/issues/2230) Addressed issue where adding an attribute via `ALTER TABLE` did not take KNN options into account.
+* [Issue #2231](https://github.com/manticoresoftware/manticoresearch/issues/2231) Fixed failure in removing `manticore-tools` Redhat package in version 6.3.0.
+* [Issue #2242](https://github.com/manticoresoftware/manticoresearch/issues/2242) Corrected issues with JOIN and multiple FACET statements returning incorrect results.
+* [Issue #2250](https://github.com/manticoresoftware/manticoresearch/issues/2250) Fixed ALTER TABLE producing an error if the table is in a cluster.
+* [Issue #2252](https://github.com/manticoresoftware/manticoresearch/issues/2252) Fixed the original query being passed into buddy from the SphinxQL interface.
+* [Issue #2267](https://github.com/manticoresoftware/manticoresearch/issues/2267) Improved wildcard expansion in the `CALL KEYWORDS` for RT index with disk chunks.
+* [Issue #271](https://github.com/manticoresoftware/manticoresearch-buddy/issues/271) Fixed hanging of incorrect `/cli` requests.
+* [Issue #274](https://github.com/manticoresoftware/manticoresearch-buddy/issues/274) Resolved issues where concurrent requests to Manticore could get stuck.
+* [Issue #275](https://github.com/manticoresoftware/manticoresearch-buddy/issues/275) Fixed hanging of `drop table if exists t; create table t` via `/cli`.
+
+### Replication-related
+* [Issue #2270](https://github.com/manticoresoftware/manticoresearch/issues/2270) Added support for `cluster:name` format in the `/_bulk` HTTP endpoint.
+
 # Version 6.3.0
 Released: May 23rd 2024
 

@@ -1170,11 +1170,14 @@ struct ExpansionContext_t : public ExpansionTrait_t
 	int m_iMinInfixLen					= 0;
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
-	int m_iCutoff = -1;
+	int m_iCutoff						= -1;
+	bool m_bAllowExpansion				= true;
+
 	ExpansionStats_t m_tExpansionStats;
 
 	bool								m_bOnlyTreeFix = false;
 	CSphVector<RegexTerm_t>				m_dRegexTerms;
+	bool								m_bHasWildcards = false;
 	
 	void AggregateStats ();
 };
@@ -1189,6 +1192,7 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByDocs = false;
 	bool	m_bSortByHits = false;
 	int		m_iCutoff = -1;
+	bool	m_bAllowExpansion = true;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
@@ -1349,7 +1353,7 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 
 	auto pCur = (const BYTE*)tBuf.GetReadPtr();
 	const BYTE * pEnd = pCur + tBuf.GetLengthBytes();
-	const int iHalfPage = 2048;
+	const int iHalfPage = GetMemPageSize()/2;
 
 	g_uHash = 0xff;
 	for ( ; pCur<pEnd; pCur+=iHalfPage )

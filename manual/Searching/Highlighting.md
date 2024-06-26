@@ -52,7 +52,7 @@ POST /search
     "hits":
     [
       {
-        "_id":"4",
+        "_id": 4,
         "_score":1704,
         "_source":
         {
@@ -134,7 +134,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"try"}},"hi
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"4","_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 4,"_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
 ```
 
 <!-- intro -->
@@ -222,7 +222,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -259,7 +259,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -388,7 +388,7 @@ POST /search
     "hits":
     [
       {
-        "_id":"3",
+        "_id": 3,
         "_score":1602,
         "_source":
         {
@@ -409,7 +409,7 @@ POST /search
         }
       },
       {
-        "_id":"4",
+        "_id": 4,
         "_score":1573,
         "_source":
         {
@@ -429,7 +429,7 @@ POST /search
         }
       },
       {
-        "_id":"2",
+        "_id": 2,
         "_score":1521,
         "_source":
         {
@@ -532,7 +532,7 @@ res =  await searchApi.search({"index":"books","query":{"query_string":"try|gets
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id":"3","_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id":"4","_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id":"5","_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id": 3,"_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id": 4,"_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id": 5,"_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
 ```
 
 <!-- intro -->
@@ -616,7 +616,7 @@ res = await searchApi.search({
 		"total":2,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -633,7 +633,7 @@ res = await searchApi.search({
 			}
 		},
 		{
-			"_id":"2",
+			"_id": 2,
 			"_score":1480,
 			"_source":
 			{
@@ -672,7 +672,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":2,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -689,7 +689,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 			}
 		},
 		{
-			"_id":"2",
+			"_id": 2,
 			"_score":1480,
 			"_source":
 			{
@@ -943,7 +943,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2788,
         "_source": {
           "title": "Books one",
@@ -1025,7 +1025,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
 ```
 
 <!-- intro -->
@@ -1116,7 +1116,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1155,7 +1155,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1204,7 +1204,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2788,
         "_source": {
           "title": "Books one",
@@ -1292,7 +1292,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
 
 ```
 
@@ -1381,7 +1381,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1424,7 +1424,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1535,7 +1535,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"content":"one|
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
 ```
 
 
@@ -1611,7 +1611,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1656,7 +1656,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1769,7 +1769,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
 ```
 
 
@@ -1836,7 +1836,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1877,7 +1877,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -1987,7 +1987,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
 
 ```
 
@@ -2049,7 +2049,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2089,7 +2089,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2197,7 +2197,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
 
 
 ```
@@ -2259,7 +2259,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2299,7 +2299,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2405,7 +2405,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
 ```
 <!-- intro -->
 ##### Java:
@@ -2465,7 +2465,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2505,7 +2505,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2614,7 +2614,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
 
 ```
 <!-- intro -->
@@ -2675,7 +2675,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2715,7 +2715,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2822,7 +2822,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
 ```
 <!-- intro -->
 ##### Java:
@@ -2892,7 +2892,7 @@ res = await searchApi.search({
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -2935,7 +2935,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 		"total":1,
 		"hits":
 		[{
-			"_id":"1",
+			"_id": 1,
 			"_score":1480,
 			"_source":
 			{
@@ -3040,7 +3040,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"content":"and 
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
 
 ```
 <!-- intro -->

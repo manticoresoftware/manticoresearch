@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Insert vs local timezone</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries><sphinxql>
+set global timezone='Asia/Novosibirsk';
+create table rt1(tid timestamp);
+INSERT into rt1 (id, tid) values (3, '2022-01-01T00:00');
+SELECT id, date_format(tid, '%Y-%m-%dT%H:%M') from rt1;
+drop table rt1;
+</sphinxql></queries>
+
+</test>

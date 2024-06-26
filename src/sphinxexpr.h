@@ -60,10 +60,10 @@ enum ESphAttr
 
 	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
 	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
-	SPH_ATTR_FLOAT_VECTOR_PTR,			// in-memory version of FLOAT_VECTOR
 	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
 	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
-	SPH_ATTR_STORED_FIELD
+	SPH_ATTR_STORED_FIELD,
+	SPH_ATTR_FLOAT_VECTOR_PTR			// in-memory version of FLOAT_VECTOR
 };
 
 /// column evaluation stage
@@ -351,7 +351,7 @@ struct JoinArgs_t
 };
 
 
-ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const JoinArgs_t * pJoinArgs, CSphString & sError, ExprParseArgs_t & tArgs );
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg );
 

@@ -298,8 +298,9 @@ private:
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
 	bool	AddJoinAttrs();
+	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
-	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 );
+	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast );
 	bool	AddNullBitmask();
 	bool	AddColumnarJoinOnFilter ( const CSphString & sAttr );
 	bool	CheckHavingConstraints() const;
@@ -399,7 +400,7 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 
-			ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) };
+			ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) };
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tLoc, pExpr );
 			m_tGroupSorterSettings.m_bJson = true;
 		}
@@ -498,6 +499,8 @@ bool QueueCreator_c::SetupDistinctAttr()
 	else
 		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
 
+	m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
+
 	return true;
 }
 
@@ -563,7 +566,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 			if ( !sJsonExpr.IsEmpty() )
 			{
 				ExprParseArgs_t tExprArgs;
-				dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), tSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) );
+				dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) );
 			}
 			else if ( tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
 			{
@@ -601,7 +604,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 
-		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) };
 		m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		m_tGroupSorterSettings.m_bJson = true;
 		m_bJoinedGroupSort |= bJoined;
@@ -619,6 +622,9 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return Err ( "group-by attribute '%s' not found", m_tQuery.m_sGroupBy.cstr() );
 
 	const CSphColumnInfo & tGroupByAttr = tSchema.GetAttr(iGroupBy);
+	if ( m_tSettings.m_bComputeItems && tGroupByAttr.m_pExpr && tGroupByAttr.m_pExpr->UsesDocstore() )
+		return Err ( "unable to group by stored field '%s'", m_tQuery.m_sGroupBy.cstr() );
+
 	ESphAttr eType = tGroupByAttr.m_eAttrType;
 	CSphAttrLocator tLoc = tGroupByAttr.m_tLocator;
 	m_bJoinedGroupSort |= IsJoinAttr ( tGroupByAttr.m_sName );
@@ -690,8 +696,15 @@ void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 		if ( dAttrs[i]>=0 )
 		{
 			const auto & tAttr = m_pSorterSchema->GetAttr ( dAttrs[i] );
-			m_bJoinedGroupSort |= IsJoinAttr ( tAttr.m_sName );
+			m_bJoinedGroupSort |= tAttr.IsJoined();
 			m_hExtra.Add ( tAttr.m_sName );
+
+			// check if dependent columns are joined
+			IntVec_t dCols;
+			dCols.Add ( dAttrs[i] );
+			FetchDependencyChains(dCols);
+			for ( auto iCol : dCols )
+				m_bJoinedGroupSort |= m_pSorterSchema->GetAttr(iCol).IsJoined();
 		}
 }
 
@@ -731,11 +744,22 @@ void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 {
 	ARRAY_FOREACH ( i, dDependentCols )
 	{
+		if ( m_pSorterSchema->IsRemovedAttr ( dDependentCols[i] ) )
+			continue;
+
 		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
+
+		int iOldLen = dDependentCols.GetLength();
 
 		// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
 		if ( tCol.m_pExpr )
 			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+
+		// some expressions depend on the column they are attached to (json fast key)
+		// so filter out duplicates to avoid circular dependencies
+		for ( int iNewAttr = iOldLen; iNewAttr < dDependentCols.GetLength(); iNewAttr++ )
+			if ( dDependentCols[iNewAttr]==dDependentCols[i] )
+				dDependentCols.Remove(iNewAttr);
 	}
 
 	dDependentCols.Uniq();
@@ -818,7 +842,7 @@ bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 	if ( !dDependentCols.GetLength() )
 		return tExprCol.IsColumnarExpr();
 
-	if ( dDependentCols.GetLength()==1 )
+	if ( dDependentCols.GetLength()==1 && !m_pSorterSchema->IsRemovedAttr ( dDependentCols[0] ) )
 	{
 		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr ( dDependentCols[0] );
 		if ( tColumnarAttr.IsColumnarExpr() )
@@ -995,7 +1019,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		if ( m_hQueryDups[tItem.m_sAlias] )
 		{
-			bool bJoined = m_pSorterSchema->GetAttr(iSorterAttr).m_tLocator.m_bDynamic;
+			bool bJoined = !!(m_pSorterSchema->GetAttr(iSorterAttr).m_uAttrFlags & CSphColumnInfo::ATTR_JOINED);
 			if ( bColumnar || bJoined )	// we might have several similar aliases for columnar attributes (and they are not plain attrs but expressions)
 				return true;
 			else
@@ -1031,10 +1055,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		CSphString sExpr2;
 		sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprParseArgs );
+		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
 	}
 	else
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprParseArgs );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
 
 	m_uPackedFactorFlags |= uQueryPackedFactorFlags;
 	m_bZonespanlist |= bHasZonespanlist;
@@ -1043,10 +1067,6 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
-
-	// remove original column
-	if ( iSorterAttr>=0 )
-		m_pSorterSchema->RemoveStaticAttr(iSorterAttr);
 
 	if ( !SetupAggregateExpr ( tExprCol, tItem.m_sExpr, uQueryPackedFactorFlags ) )
 		return false;
@@ -1062,6 +1082,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		// NOTE, "final" stage might need to be fixed up later
 		// we'll do that when parsing sorting clause
 		m_pSorterSchema->AddAttr ( tExprCol, true );
+
+		// remove original column after new attribute added or shadows this one
+		if ( iSorterAttr>=0 )
+			m_pSorterSchema->RemoveStaticAttr ( iSorterAttr );
 	}
 	else // some aggregate
 	{
@@ -1077,6 +1101,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 
 		if ( !bColumnarAggregate )
 			UpdateAggregateDependencies ( tExprCol );
+
+		// remove original column after new attribute added or shadows this one
+		if ( iSorterAttr>=0 )
+			m_pSorterSchema->RemoveStaticAttr ( iSorterAttr );
 	}
 
 	m_hQueryDups.Add ( tExprCol.m_sName );
@@ -1166,7 +1194,7 @@ bool QueueCreator_c::MaybeAddExprColumn ()
 	tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 	tExprArgs.m_pZonespanlist = &bHasZonespanlist;
 
-	tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs );
+	tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs );
 	if ( !tCol.m_pExpr )
 		return false;
 
@@ -1357,7 +1385,7 @@ void QueueCreator_c::ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy )
 				if ( !sJsonExpr.IsEmpty() )
 				{
 					ExprParseArgs_t tExprArgs;
-					dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprArgs ) );
+					dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) );
 				}
 				else
 					dJsonKeys.Add(nullptr);
@@ -1491,13 +1519,13 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 	tExprParseArgs.m_pProfiler = m_tSettings.m_pProfiler;
 	tExprParseArgs.m_eCollation = m_tQuery.m_eCollation;
 	tExprCol.m_eStage = SPH_EVAL_PRESORT;
-	tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs.get(), m_sError, tExprParseArgs );
+	tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
 	tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 	return !!tExprCol.m_pExpr;
 }
 
 
-bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 )
+bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast )
 {
 	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr1.cstr() );
 	if ( pAttr )
@@ -1511,7 +1539,12 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 
 	if ( !sphJsonNameSplit ( sAttr1.cstr(), nullptr ) )
 	{
-		m_sError.SetSprintf ( "Unable to perform join on '%s'", sAttr1.cstr() );
+		const CSphColumnInfo * pField = m_pSorterSchema->GetField ( sAttr1.cstr() );
+		if ( pField && ( pField->m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) )
+			m_sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", m_tSettings.m_pJoinArgs->m_sIndex1.cstr(), sAttr1.cstr() );
+		else
+			m_sError.SetSprintf ( "Unable to perform join on '%s'", sAttr1.cstr() );
+
 		return false;
 	}
 
@@ -1524,15 +1557,25 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 	// convert JSON fields to join attr type
 	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 	{
-		auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
-		if ( !pJoinAttr )
+		// try to determine type if it was not explicitly specified
+		if ( eTypeCast==SPH_ATTR_NONE )
 		{
-			m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
-			return false;
+			auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
+			if ( !pJoinAttr )
+			{
+				if ( sphJsonNameSplit ( sAttr2.cstr() ) )
+					m_sError.SetSprintf ( "use implicit type conversion on join-on attribute '%s'", sAttr2.cstr() );
+				else
+					m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
+
+				return false;
+			}
+
+			eTypeCast = pJoinAttr->m_eAttrType;
 		}
 
 		CSphString sConverted;
-		switch ( pJoinAttr->m_eAttrType )
+		switch ( eTypeCast )
 		{
 		case SPH_ATTR_STRING:
 			sConverted.SetSprintf ( "TO_STRING(%s)", sAttr1.cstr() );
@@ -1613,26 +1656,81 @@ bool QueueCreator_c::AddJoinAttrs()
 }
 
 
+static ESphAttr FilterType2AttrType ( ESphFilter eFilter )
+{
+	switch ( eFilter )
+	{
+	case SPH_FILTER_FLOATRANGE:
+		return SPH_ATTR_FLOAT;
+
+	case SPH_FILTER_STRING:
+	case SPH_FILTER_STRING_LIST:
+		return SPH_ATTR_STRINGPTR;
+
+	default:
+		return SPH_ATTR_BIGINT;
+	}
+}
+
+
+bool QueueCreator_c::CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast )
+{
+	if ( eTypeCast==SPH_ATTR_NONE )
+		return true;
+
+	if ( !sphJsonNameSplit ( sAttr.cstr() ) )
+	{
+		m_sError.SetSprintf ( "Explicit type conversion used on non-json attribute '%s.%s'", sIdx.cstr(), sAttr.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
 bool QueueCreator_c::AddJoinFilterAttrs()
 {
 	if ( !m_tSettings.m_pJoinArgs )
 		return true;
 
 	const CSphString & sLeftIndex = m_tSettings.m_pJoinArgs->m_sIndex1;
+	const CSphString & sRightIndex = m_tSettings.m_pJoinArgs->m_sIndex2;
 	for ( const auto & i : m_tQuery.m_dOnFilters )
 	{
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx1, i.m_sAttr1, i.m_eTypeCast1 ) ) return false;
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx2, i.m_sAttr2, i.m_eTypeCast2 ) ) return false;
+
+		ESphAttr eTypeCast = i.m_eTypeCast1!=SPH_ATTR_NONE ? i.m_eTypeCast1 : i.m_eTypeCast2;
+
 		if ( i.m_sIdx1==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )						return false;
 		}
 
 		if ( i.m_sIdx2==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )						return false;
 		}
 	}
+
+	if ( NeedToMoveMixedJoinFilters ( m_tQuery, *m_pSorterSchema ) )
+		for ( const auto & i : m_tQuery.m_dFilters )
+		{
+			const CSphString & sAttr = i.m_sAttrName;
+			const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+			if ( pAttr || !sphJsonNameSplit ( sAttr.cstr(), sRightIndex.cstr() ) )
+				continue;
+
+			CSphColumnInfo tExprCol ( sAttr.cstr(), FilterType2AttrType ( i.m_eType ) );
+			tExprCol.m_eStage = SPH_EVAL_SORTER;
+			tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
+			m_pSorterSchema->AddAttr ( tExprCol, true );
+
+			m_hQueryDups.Add(sAttr);
+			m_hQueryColumns.Add(sAttr);
+		}
 
 	return true;
 }
@@ -1842,11 +1940,12 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
-		if ( dExtraExprs[i].m_tKey.m_sKey.IsEmpty() )
+		const CSphString & sKey = dExtraExprs[i].m_tKey.m_sKey;
+		if ( sKey.IsEmpty() )
 			continue;
 
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), dExtraExprs[i].m_tKey.m_sKey.cstr() );
+		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), sKey.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 )
@@ -1861,6 +1960,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_STRINGPTR );
 			SetupRemapColJson ( tRemapCol, tState, dExtraExprs, i );
 			iRemap = tSorterSchema.GetAttrsCount();
+			ModifyExprForJoin ( tRemapCol, sKey );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 		}
 
@@ -2182,21 +2282,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
@@ -2256,12 +2356,12 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 bool QueueCreator_c::SetupComputeQueue ()
 {
 	return AddJoinAttrs()
+		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates()
-		&& AddJoinFilterAttrs()
 		&& AddNullBitmask();
 }
 

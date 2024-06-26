@@ -80,7 +80,7 @@ The table below lists all supported languages and indicates how to enable:
 | Swedish | charset_table=non_cjk | sv | morphology=libstemmer_sv | |
 | Sylheti | specify charset_table manually | - | - | |
 | Tamil | specify charset_table manually | - | morphology=libstemmer_ta | |
-| Thai | charset_table=non_cjk | th | - | |
+| Thai | charset_table=thai | th | - | |
 | Turkish | charset_table=non_cjk | tr | morphology=libstemmer_tr | |
 | Ukrainian | charset_table=non_cjk,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | Requires [installation](../../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) of UK lemmatizer |
 | Yoruba | charset_table=non_cjk | yo | - | |

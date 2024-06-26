@@ -33,7 +33,6 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString	m_sBucketName;
 	CSphString	m_sCol;
 	int			m_iSize = 0;
-	CSphVector<JsonAggr_t> m_dNested;
 	CSphString	m_sSort;
 	CSphVector<AggrComposite_t> m_dComposite;
 	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;

@@ -1255,7 +1255,7 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 
 		} else
 		{
-			sError = "unsupported value type";
+			sError.SetSprintf ( "unsupported value type '%s' in field '%s'", tItem.TypeName(), tItem.Name() );
 			return false;
 		}
 	}
@@ -1357,7 +1357,7 @@ bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 
 		if ( !bFloat && !bInt && !bBool && !bString && !bArray && !bObject )
 		{
-			sError = "unsupported value type";
+			sError.SetSprintf ( "unsupported value type '%s' in field '%s'", tItem.TypeName(), tItem.Name() );
 			return false;
 		}
 
@@ -1885,7 +1885,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 
 static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
 {
-	if ( eAggrFunc==Aggr_e::RANGE || eAggrFunc==Aggr_e::DATE_RANGE )
+	if ( eAggrFunc==Aggr_e::DATE_RANGE )
 	{
 		if ( !tKey.m_bKeyed )
 			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
@@ -1893,6 +1893,15 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 			tOut.Sprintf ( R"("from":"%s")", pRange->m_sFrom.cstr() );
 		if ( !pRange->m_sTo.IsEmpty() )
 			tOut.Sprintf ( R"("to":"%s")", pRange->m_sTo.cstr() );
+
+	} else if ( eAggrFunc==Aggr_e::RANGE )
+	{
+		if ( !tKey.m_bKeyed )
+			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
+		if ( !pRange->m_sFrom.IsEmpty() )
+			tOut.Sprintf ( R"("from":%s)", pRange->m_sFrom.cstr() );
+		if ( !pRange->m_sTo.IsEmpty() )
+			tOut.Sprintf ( R"("to":%s)", pRange->m_sTo.cstr() );
 
 	} else if ( eAggrFunc==Aggr_e::DATE_HISTOGRAM )
 	{
@@ -1922,7 +1931,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
 
 		if ( tKey.m_pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
-			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+			tOut.Sprintf ( R"("key_as_string":%s)", tBuf.cstr() );
 		else
 			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 	}
@@ -1967,15 +1976,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
 
 	// might be null for empty result set
-
-	CSphFixedVector<std::pair<const CSphColumnInfo *, const char *>> dNested ( tAggr.m_dNested.GetLength() );
-	ARRAY_FOREACH ( i, tAggr.m_dNested )
-	{
-		dNested[i].second = tAggr.m_dNested[i].m_sBucketName.cstr();
-		dNested[i].first = tRes.m_tSchema.GetAttr ( tAggr.m_dNested[i].GetAliasName().cstr() );
-		assert ( dNested[i].first );
-	}
-
 	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
 
 	CSphString sBucketName;
@@ -2038,17 +2038,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				{
 					tOut.Sprintf ( R"("score":0.001)" );
 					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
-				}
-
-				for ( const auto & tNested : dNested )
-				{
-					tBufMatch.Clear();
-					tBufMatch.Appendf ( R"("%s":{"value":)",  tNested.second );
-					tOut.StartBlock ( ",", tBufMatch.cstr(), "}");
-
-					JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
-
-					tOut.FinishBlock ( false ); // named bucket obj
 				}
 			}
 		}
@@ -2372,7 +2361,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		else if ( pId )
 		{
 			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-			tOut.Sprintf ( R"("_id":"%U","_score":%d)", tDocID, tMatch.m_iWeight );
+			tOut.Sprintf ( R"("_id":%U,"_score":%d)", tDocID, tMatch.m_iWeight );
 		}
 		else
 			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
@@ -2529,7 +2518,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError 
 	tErr.AddStr ( "index", szIndex );
 
 	tObj.AddItem ( "error", tErr );
-	tObj.AddInt ( "status", HttpGetStatusCodes ( SPH_HTTP_STATUS_409 ) );
+	tObj.AddInt ( "status", HttpGetStatusCodes ( EHTTP_STATUS::_409 ) );
 
 	return tObj;
 }
@@ -3642,11 +3631,10 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 
 		JsonObj_c tBucket = tJsonItem.begin();
 
-		if ( StrEq ( tBucket.Name(), "aggs" ) && tBucket!=tJsonItem.end() )
+		if ( StrEq ( tBucket.Name(), "aggs" ) ||  tJsonItem.HasItem ( "aggs" ) )
 		{
-			if ( !AddSubAggregate ( tBucket, false, tItem.m_dNested, sError ) )
-				return false;
-			++tBucket;
+			sError = R"(nested "aggs" is not supported)";
+			return false;
 		}
 
 		if ( tBucket==tJsonItem.end() )

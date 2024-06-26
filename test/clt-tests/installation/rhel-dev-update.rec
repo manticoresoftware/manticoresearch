@@ -1,3 +1,8 @@
+––– block: manticore-and-packages-installation –––
+––– block: start-searchd-release –––
+––– block: check-searchd-process –––
+––– block: check-backup –––
+––– block: check-version/export-current-version –––
 ––– input –––
 yum install -y --skip-broken mariadb mariadb105 which procps binutils > /dev/null 2>&1; echo $?
 ––– output –––
@@ -27,4 +32,10 @@ yum -y --enablerepo manticore-dev update manticore manticore-extra manticore-com
 ––– block: stop-searchd-dev –––
 ––– block: start-searchd-dev –––
 ––– block: check-version/export-new-version –––
-––– block: check-version/comparison-version –––
+––– input –––
+yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rpm -qa | grep manticore
+––– output –––

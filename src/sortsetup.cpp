@@ -339,7 +339,7 @@ bool SortStateSetup_c::SetupJsonField ( CSphString & sError )
 	if ( m_iAttr>=0 )
 	{
 		ExprParseArgs_t tExprArgs;
-		ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs, sError, tExprArgs );
+		ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs ? &(m_pJoinArgs->m_sIndex2) : nullptr, sError, tExprArgs );
 		if ( !pExpr )
 			return false;
 
@@ -362,7 +362,7 @@ bool SortStateSetup_c::SetupColumnar ( CSphString & sError )
 
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &m_eAttrType;
-	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs, sError, tExprArgs );
+	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs ? &(m_pJoinArgs->m_sIndex2) : nullptr, sError, tExprArgs );
 	if ( !pExpr )
 		return false;
 
@@ -398,7 +398,7 @@ void SortStateSetup_c::SetupJsonConversions()
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	CSphString sError; // ignored
-	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs, sError, tExprArgs );
+	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs ? &(m_pJoinArgs->m_sIndex2) : nullptr, sError, tExprArgs );
 	if ( !pExpr )
 		return;
 

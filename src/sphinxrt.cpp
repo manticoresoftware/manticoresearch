@@ -1252,6 +1252,7 @@ public:
 	int					CommonOptimize ( OptimizeTask_t tTask );
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
 	bool				CompressOneChunk ( int iChunk, int* pAffected = nullptr );
+	bool				DedupOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				MergeTwoChunks ( int iA, int iB, int* pAffected = nullptr );
 	bool				MergeCanRun () const;
 	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAffected = nullptr );
@@ -1331,7 +1332,6 @@ public:
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
-	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -3806,17 +3806,9 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict ) const
 {
-	if ( tWriterDict.GetPos()==1 )
-	{
-		tCtx.m_iDictCheckpointsOffset = 1;
-		return;
-	}
-
 	// write checkpoints
 	SphOffset_t uOff = m_bKeywordDict ? 0 : tCtx.m_tDocsOffset - tCtx.m_tLastDocPos;
 
-	// however plain index becomes m_bIsEmpty and full scan does not work there
-	// we'll get partly working RT ( RAM chunk works and disk chunks give empty result set )
 	tWriterDict.ZipInt ( 0 ); // indicate checkpoint
 	tWriterDict.ZipOffset ( uOff ); // store last doclist length
 
@@ -3859,7 +3851,7 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	// flush header
 	// mostly for debugging convenience
 	// primary storage is in the index wide header
-	tWriterDict.PutBytes ( "dict-header", 11 );
+	tWriterDict.PutBlob ( g_sTagDictHeader );
 	tWriterDict.ZipInt ( tCtx.m_dCheckpoints.GetLength() );
 	tWriterDict.ZipOffset ( tCtx.m_iDictCheckpointsOffset );
 	tWriterDict.ZipInt ( m_pTokenizer->GetMaxCodepointLength() );
@@ -7297,7 +7289,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 }
 
 
-static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphString & sError, CSphString & sWarning )
+static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, CSphString & sError, CSphString & sWarning )
 {
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
@@ -7307,10 +7299,11 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema,
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 
-	if ( !TransformFilters ( tFlx, dTransformedFilters, sError ) )
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, sError ) )
 		return false;
 
 	tFlx.m_pFilters = &dTransformedFilters;
+	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
 
 	return tCtx.CreateFilters ( tFlx, sError, sWarning );
 }
@@ -7416,7 +7409,8 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 	if ( !dRamChunks.IsEmpty () )
 	{
 		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, true, tCtx, dTransformedFilters, tMeta.m_sError, tMeta.m_sWarning ) )
+		CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, true, tCtx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
@@ -7566,7 +7560,8 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 	if ( !dRamChunks.IsEmpty () )
 	{
 		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, false, tCtx, dTransformedFilters, tMeta.m_sError, tMeta.m_sWarning ) )
+		CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+		if ( !SetupFilters ( tQuery, &tMaxSorterSchema, false, tCtx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
@@ -7708,6 +7703,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		SwitchProfile ( pProfiler, SPH_QSTATE_LOCAL_DF );
 		GetKeywordsSettings_t tSettings;
 		tSettings.m_bStats = true;
+		// do not want to expand keywords and fold back its statistics as it could take too much time
+		tSettings.m_bAllowExpansion = false;
+
 		CSphVector < CSphKeywordInfo > dKeywords;
 		DoGetKeywords ( dKeywords, tQuery.m_sQuery.cstr(), tSettings, false, nullptr, tGuard );
 		for ( auto & tKw : dKeywords )
@@ -7958,10 +7956,9 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		CSphString sError;
 		Tokenizer::AddPluginFilterTo ( pTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !pError->IsEmpty() )
+		if ( pError && !pError->IsEmpty() )
 		{
-			if ( pError )
-				*pError = sError;
+			*pError = sError;
 			return false;
 		}
 		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
@@ -7978,6 +7975,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missing bigram
+	bool bHasWildcards = false;
 
 	if ( !bFillOnly )
 	{
@@ -7985,7 +7983,8 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 		// query defined options
 		tExpCtx.m_iExpansionLimit = tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit;
-		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) && !tSettings.m_bFoldWildcards );
+		tExpCtx.m_bAllowExpansion = ( tSettings.m_bAllowExpansion && m_bKeywordDict && IsStarDict ( m_bKeywordDict ) );
+		bool bExpandWildcards = ( tExpCtx.m_bAllowExpansion && !tSettings.m_bFoldWildcards );
 		pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard.m_dRamSegs );
@@ -8003,6 +8002,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;
 
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
+		bHasWildcards = tExpCtx.m_bHasWildcards;
 	} else
 	{
 		BYTE sWord[SPH_MAX_KEYWORD_LEN];
@@ -8030,8 +8030,10 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		}
 	}
 
-	// get stats from disk chunks too
-	if ( !tSettings.m_bStats )
+	// process disk chunks too but only if:
+	// - need term stats
+	// - has terms with wildcards as these are expanded differently
+	if ( !tSettings.m_bStats && !bHasWildcards )
 		return true;
 
 	if ( bFillOnly )
@@ -9478,6 +9480,33 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 	return true;
 }
 
+bool RtIndex_c::DedupOneChunk ( int iChunkID, int* pAffected )
+{
+	TRACE_SCHED ( "rt", "RtIndex_c::DedupOneChunk" );
+	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
+	if ( !pVictim )
+	{
+		sphWarning ( "rt optimize: table %s: dedup of chunk %d failed, no chunk with such ID!", GetName(), iChunkID );
+		return false;
+	}
+	const CSphIndex& tVictim = pVictim->Cidx();
+	if ( SkipOrDrop ( iChunkID, tVictim, false, pAffected ) )
+		return true;
+
+	sphLogDebug ( "dedup %d (%d docs)", iChunkID, (int)tVictim.GetCount() );
+
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", "DedupOneChunk.serial" );
+
+	// and also apply already collected kills
+	int iKilled = pVictim->CastIdx().KillDupes();
+	m_tStats.m_iTotalDocuments -= iKilled;
+
+	if ( pAffected && iKilled>0 )
+		*pAffected += 1;
+	return true;
+}
+
 // catch common cases where we can't work at all (erroneous settings, etc.), or can redirect to another action
 bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool& bResult, int* pAffected )
 {
@@ -9797,6 +9826,7 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 	case OptimizeTask_t::eDrop:
 	case OptimizeTask_t::eCompress:
 	case OptimizeTask_t::eSplit:
+	case OptimizeTask_t::eDedup:
 		if ( !CheckValidateChunk ( tTask.m_iFrom, iChunks, tTask.m_bByOrder ) )
 			return false;
 	default: break;
@@ -9928,6 +9958,7 @@ int RtIndex_c::CommonOptimize ( OptimizeTask_t tTask )
 	case OptimizeTask_t::eMerge: MergeTwoChunks ( tTask.m_iFrom, tTask.m_iTo, &iChunks ); return iChunks;
 	case OptimizeTask_t::eDrop: DropDiskChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
 	case OptimizeTask_t::eCompress: CompressOneChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
+	case OptimizeTask_t::eDedup: DedupOneChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
 	case OptimizeTask_t::eSplit: SplitOneChunk ( tTask.m_iFrom, tTask.m_sUvarFilter.cstr(), &iChunks ); return iChunks;
 	case OptimizeTask_t::eAutoOptimize:
 		bProgressive = true;
@@ -10265,78 +10296,6 @@ void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const Filename
 
 	RtGuard().m_dDiskChunks.for_each ( [&] ( ConstDiskChunkRefPtr_t& p ) { p->Cidx().GetIndexFiles ( dFiles, dExt, pParentFilenameBuilder ); } );
 	dExt.Uniq(); // might be duplicates of tok \ dict files from disk chunks
-}
-
-bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
-{
-	struct Rename_t
-	{
-		CSphString m_sSrc;
-		CSphString m_sDst;
-	};
-
-	CSphVector<Rename_t> dExtFiles;
-	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
-	{
-		const char * szRenameTo = "exceptions.txt";
-		dExtFiles.Add ( { m_pTokenizer->GetSettings().m_sSynonymsFile, szRenameTo } );
-		const_cast<CSphTokenizerSettings &>(m_pTokenizer->GetSettings()).m_sSynonymsFile = szRenameTo;
-	}
-
-	if ( m_pDict )
-	{
-		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
-		if ( !sStopwords.IsEmpty() )
-		{
-			StringBuilder_c sNewStopwords(" ");
-			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
-			ARRAY_FOREACH ( i, dStops )
-			{
-				CSphString sTmp;
-				sTmp.SetSprintf ( "stopwords_%d.txt", i );
-				dExtFiles.Add ( { dStops[i], sTmp } );
-
-				sNewStopwords << sTmp;
-			}
-
-			const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_sStopwords = sNewStopwords.cstr();
-		}
-
-		StrVec_t dNewWordforms;
-		ARRAY_FOREACH ( i, m_pDict->GetSettings().m_dWordforms )
-		{
-			CSphString sTmp;
-			sTmp.SetSprintf ( "wordforms_%d.txt", i );
-			dExtFiles.Add( { m_pDict->GetSettings().m_dWordforms[i], sTmp } );
-			dNewWordforms.Add(sTmp);
-		}
-
-		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
-	}
-
-	CSphString sPathOnly = GetPathOnly ( GetFilebase() );
-	for ( const auto & i : dExtFiles )
-	{
-		CSphString sDest;
-		sDest.SetSprintf ( "%s%s", sPathOnly.cstr(), i.m_sDst.cstr() );
-		if ( !CopyFile ( i.m_sSrc, sDest, m_sLastError ) )
-			return false;
-
-		dCopied.Add(sDest);
-	}
-
-	SaveMeta();
-
-	auto pDiskChunks = m_tRtChunks.DiskChunks();
-	auto& dDiskChunks = *pDiskChunks;
-	ARRAY_FOREACH ( i, dDiskChunks )
-		if ( !dDiskChunks[i]->CastIdx().CopyExternalFiles ( i, dCopied ) )
-		{
-			m_sLastError = dDiskChunks[i]->Cidx().GetLastError();
-			return false;
-		}
-
-	return true;
 }
 
 void RtIndex_c::ProhibitSave()

@@ -3,7 +3,7 @@ cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
 set ( GALERA_REPO "https://github.com/manticoresoftware/galera" )
 set ( GALERA_REV "dfce7662" )
-set ( GALERA_SRC_MD5 "c4afea2ccd88a53acb23261b71421958" )
+set ( GALERA_SRC_MD5 "c4afea2ccd88a53acb23261b71421958" ) # To update this, download the commit's zip from GitHub and calculate md5sum. If it doesn't work, take the one the CI build job returns when it fails
 
 set ( WSREP_REPO "https://github.com/percona/wsrep-API" )
 set ( WSREP_REV "2c211e1" ) # or "percona-3.x-5.7-v31"

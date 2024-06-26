@@ -475,6 +475,8 @@ struct OnFilter_t
 	CSphString	m_sAttr1;
 	CSphString	m_sIdx2;
 	CSphString	m_sAttr2;
+	ESphAttr	m_eTypeCast1 = SPH_ATTR_NONE;
+	ESphAttr	m_eTypeCast2 = SPH_ATTR_NONE;
 };
 
 enum class JoinType_e
@@ -991,6 +993,7 @@ private:
 public:
 	virtual int			Kill ( DocID_t  /*tDocID*/ ) { return 0; }
 	virtual int			KillMulti ( const VecTraits_T<DocID_t> &  /*dKlist*/ ) { return 0; };
+	virtual int 		KillDupes () { return 0; }
 	virtual int			CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& /*fnWatcher*/ ) { return KillMulti ( dKlist ); };
 	virtual				~IndexSegment_c() = default;
 
@@ -1279,10 +1282,6 @@ public:
 	virtual CSphVector<SphAttr_t> BuildDocList () const;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
-
-	// put external files (if any) into index folder
-	// copy the rest of the external files to index folder
-	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }

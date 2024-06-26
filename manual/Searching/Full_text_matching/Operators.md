@@ -193,7 +193,7 @@ Field-start and field-end keyword modifiers ensure that a keyword only matches i
 boosted^1.234 boostedfieldend$^1.234
 ```
 
-The boost modifier raises the word IDF score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
+The boost modifier raises the word [IDF](../../Searching/Options.md#idf)_score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
 
 ### NEAR operator
 

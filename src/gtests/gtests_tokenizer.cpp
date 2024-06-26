@@ -14,6 +14,7 @@
 
 #include "sphinxint.h"
 #include "tokenizer/tokenizer.h"
+#include "tokenizer/tok_internals.h"
 
 // Miscelaneous tests of tokenizer
 
@@ -1185,4 +1186,160 @@ TEST_F ( QueryParser, test_NOT )
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 		ASSERT_STREQ ( sReconst.cstr(), tCase.m_sReconst );
 	}
+}
+
+TEST ( Charsets, Merge_noIntersection )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 201, 300, 120 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 103 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 201 );
+	EXPECT_EQ ( dFoo.m_iEnd, 300 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+}
+
+TEST ( Charsets, Merge_SameRange )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 100, 200, 120 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 1 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+}
+
+TEST ( Charsets, Merge_FirstEndLonger )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 102 }, dRanges );
+	AddRange ( { 100, 200, 101 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 1 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+}
+
+TEST ( Charsets, Merge_intersection )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 101 }, dRanges );
+	AddRange ( { 110, 160, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 160 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+}
+
+TEST ( Charsets, Merge_intersectionSameEnd )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 101 }, dRanges );
+	AddRange ( { 110, 150, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+}
+
+TEST ( Charsets, Merge_intersectionFullCover )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 160, 101 }, dRanges );
+	AddRange ( { 110, 150, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 3 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+	dFoo = dRanges[2];
+	EXPECT_EQ ( dFoo.m_iStart, 151 );
+	EXPECT_EQ ( dFoo.m_iEnd, 160 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 152 );
+}
+
+TEST ( Charsets, ComplexMergeRanges )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 110, 190, 120 }, dRanges );
+	AddRange ( { 120, 180, 121 }, dRanges );
+	AddRange ( { 130, 170, 122 }, dRanges );
+	AddRange ( { 140, 160, 123 }, dRanges );
+	AddRange ( { 142, 158, 125 }, dRanges );
+	AddRange ( { 144, 156, 127 }, dRanges );
+	AddRange ( { 146, 170, 129 }, dRanges );
+	AddRange ( { 150, 150, 124 }, dRanges );
+
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 10 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 103 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 119 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+	dFoo = dRanges[2];
+	EXPECT_EQ ( dFoo.m_iStart, 120 );
+	EXPECT_EQ ( dFoo.m_iEnd, 129 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 121 );
+	dFoo = dRanges[3];
+	EXPECT_EQ ( dFoo.m_iStart, 130 );
+	EXPECT_EQ ( dFoo.m_iEnd, 139 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 122 );
+	dFoo = dRanges[4];
+	EXPECT_EQ ( dFoo.m_iStart, 140 );
+	EXPECT_EQ ( dFoo.m_iEnd, 149 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 123 );
+	dFoo = dRanges[5];
+	EXPECT_EQ ( dFoo.m_iStart, 150 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 124 );
+	dFoo = dRanges[6];
+	EXPECT_EQ ( dFoo.m_iStart, 151 );
+	EXPECT_EQ ( dFoo.m_iEnd, 170 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 134 );
+	dFoo = dRanges[7];
+	EXPECT_EQ ( dFoo.m_iStart, 171 );
+	EXPECT_EQ ( dFoo.m_iEnd, 180 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 172 );
+	dFoo = dRanges[8];
+	EXPECT_EQ ( dFoo.m_iStart, 181 );
+	EXPECT_EQ ( dFoo.m_iEnd, 190 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 191 );
+	dFoo = dRanges[9];
+	EXPECT_EQ ( dFoo.m_iStart, 191 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 194 );
+
 }

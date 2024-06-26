@@ -104,15 +104,16 @@ bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tRe
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTER
 void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * szClient )
 {
-	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ))
-		return;
+	auto eClusterCmd = (E_CLUSTER)tBuf.GetWord();
 
-	auto eClusterCmd = (E_CLUSTER) tBuf.GetWord ();
-	CSphString sCluster;
+	// GET_NODE_VER should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
+	if ( eClusterCmd!=E_CLUSTER::GET_NODE_VER && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
+		return;
 
 	if ( eClusterCmd!=E_CLUSTER::FILE_SEND )
 		sphLogDebugRpl ( "remote cluster command %d(%s), client %s", (int) eClusterCmd, szClusterCmd (eClusterCmd), szClient );
 
+	CSphString sCluster;
 	TlsMsg::ResetErr();
 	switch (eClusterCmd) {
 	case E_CLUSTER::DELETE_:
@@ -149,6 +150,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 
 	case E_CLUSTER::GET_NODE_STATE:
 		ReceiveClusterGetState ( tOut, tBuf, sCluster );
+		break;
+
+	case E_CLUSTER::GET_NODE_VER:
+		ReceiveClusterGetVer ( tOut );
 		break;
 
 	default:

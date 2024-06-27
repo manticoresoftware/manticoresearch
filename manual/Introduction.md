@@ -15,7 +15,7 @@ As an open-source database (available on [GitHub](https://github.com/manticoreso
   * [Synonyms](Creating_a_table/NLP_and_tokenization/Exceptions.md)
   * [Wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md)
   * [Advanced tokenization at character and word level](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
-  * [Proper Chinese segmentation](Creating_a_table/NLP_and_tokenization/CJK.md)
+  * [Proper Chinese segmentation](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
   * [Text highlighting](Searching/Highlighting.md)
 
 #### Vector search capabilities

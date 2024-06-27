@@ -100,7 +100,7 @@ public:
 	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
 };
 
-#define NONCOPYMOVABLE( a ) a(const a&) = delete; a (a&&) = delete; a& operator= (a) = delete
+#define NONCOPYMOVABLE( a ) a(const a&) = delete; a (a&&) = delete; a& operator= (const a&) = delete; a& operator= (a&&) = delete
 
 // implement moving ctr and moving= using swap-and-release
 #define MOVE_BYSWAP( class_c )								\

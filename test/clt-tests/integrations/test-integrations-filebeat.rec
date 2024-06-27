@@ -24,10 +24,10 @@ printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /va
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
-echo "2024-06-25 10:12:34 status installed libc-bin:amd64 2.31-0ubuntu9.16\n2024-06-25 10:12:34 status installed dpkg:amd64 1.19.7ubuntu3\n2024-06-25 10:12:35 status installed base-passwd:amd64 3.5.52\n2024-06-25 10:12:35 status installed bash:amd64 5.0-7ubuntu1.2\n2024-06-25 10:12:36 status installed coreutils:amd64 8.30-3ubuntu2\n2024-06-25 10:12:36 status installed debianutils:amd64 4.11.2\n2024-06-25 10:12:36 status installed diffutils:amd64 1:3.7-5\n2024-06-25 10:12:36 status installed dpkg-dev:amd64 1.19.7ubuntu3\n2024-06-25 10:12:36 status installed libc-bin:amd64 2.31-0ubuntu9.16\n2024-06-25 10:12:37 status installed libgcc-s1:amd64 11.2.0-6ubuntu2" > dpkg.log
+echo -e "2024-04-24 10:47:07 startup archives install\n2024-04-24 10:47:07 install base-passwd:amd64 <none> 3.6.3build1\n2024-04-24 10:47:07 status half-installed base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:07 status unpacked base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:07 configure base-passwd:amd64 3.6.3build1 3.6.3build1\n2024-04-24 10:47:07 status half-configured base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:08 status installed base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:08 startup archives install\n2024-04-24 10:47:08 install base-files:amd64 <none> 13ubuntu10\n2024-04-24 10:47:08 status half-installed base-files:amd64 13ubuntu10" > /var/log/dpkg.log
 ––– output –––
 ––– input –––
-filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log & pid=$!
+filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
 ––– output –––
 [1] #!/[0-9]+/!#
 ––– input –––
@@ -43,27 +43,29 @@ curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sor
 ––– output –––
 [{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-mysql -P9306 -h0 -e "SHOW TABLES;"
+mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM testlog_1; SELECT input, ecs FROM testlog_1 LIMIT 10;"
 ––– output –––
 +-----------+------+
 | Index     | Type |
 +-----------+------+
 | testlog_1 | rt   |
 +-----------+------+
-––– input –––
-mysql -P9306 -h0 -e "SELECT ecs, host, input FROM testlog_1 LIMIT 10;"
-––– output –––
-+---------------------+-------------------------+-----------------------+
-| ecs                 | host                    | input                 |
-+---------------------+-------------------------+-----------------------+
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-| {"version":"8.0.0"} | {"name":"#!/[0-9a-zA-Z]+/!#"} | {"type":"filestream"} |
-+---------------------+-------------------------+-----------------------+
++----------+
+| count(*) |
++----------+
+|       10 |
++----------+
++-----------------------+---------------------+
+| input                 | ecs                 |
++-----------------------+---------------------+
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
++-----------------------+---------------------+

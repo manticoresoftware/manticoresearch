@@ -134,7 +134,17 @@ enum OnCommitAction_e
 	ACTION_WRITE
 };
 
-class SingleBinlog_c
+enum class BinlogFileState_e
+{
+	OK,
+	ERROR_NON_READABLE, // if can't open binlog file
+	ERROR_EMPTY,		// if file is empty (0 bytes)
+	ERROR_WRONG_FILE,	// file is broken
+	ERROR_EMPTY_8,		// file is valid, but no txns
+	ERROR_ABANDONED		// file is valid, but only cache, no txns
+};
+
+class SingleBinlog_c final
 {
 	Binlog_c * m_pOwner;
 
@@ -149,8 +159,7 @@ private:
 	void DoCacheWrite ();
 	void CheckDoRestart ();
 	bool CheckDoFlush ();
-
-	void Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
+	void SaveMeta () REQUIRES ( m_tWriteAccess );
 
 public:
 	NONCOPYMOVABLE( SingleBinlog_c );
@@ -158,21 +167,16 @@ public:
 	explicit SingleBinlog_c ( Binlog_c* pOwner ) noexcept
 		: m_pOwner { pOwner } {}
 
+	~SingleBinlog_c ();
+	void Deinit();
 
 	void DoFlush ( OnCommitAction_e eAction );
-
-	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept;
-
+	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES ( m_tWriteAccess );
 	bool BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, FnWriteCommit fnSaver, CSphString & sError );
-
 	void NotifyIndexFlush ( int64_t iFlushedTID, IndexNameUid_t tFlushedIndexName, bool bShutdown, bool bForceSave );
-
-	void AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx ) REQUIRES (m_tWriteAccess);
-
-	void OpenNewLog ( int iLastState = 0 );
-
-	~SingleBinlog_c();
-
+	void AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx ) REQUIRES ( m_tWriteAccess );
+	void AdoptFile ( int iExt ) REQUIRES ( m_tWriteAccess );
+	void OpenNewLog ( BinlogFileState_e eState = BinlogFileState_e::OK );
 };
 
 using SingleBinlogPtr = std::unique_ptr<SingleBinlog_c>;
@@ -214,7 +218,7 @@ private:
 
 	CSphString				m_sLogPath;
 
-	CSphVector<int> 		m_tSavedFiles;
+	CSphVector<int> 		m_dSavedFiles;
 
 	bool					m_bReplayMode = false; // replay mode indicator
 	bool					m_bDisabled = true;
@@ -224,18 +228,19 @@ private:
 
 	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M; searchd.binlog_max_log_size
 
-	std::atomic<int>		m_iNextBinlog { 1 };
+	std::atomic<int>		m_iNextBinlog { 0 };
 
 private:
 
-	SingleBinlog_c *		GetWriteIndexBinlog ( const char* szIndexName ) EXCLUDES ( m_tHashAccess );
+	SingleBinlog_c *		GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog=true ) EXCLUDES ( m_tHashAccess );
 
 	void					LoadMeta ();
 	void					SaveMeta () EXCLUDES ( m_tHashAccess );
 	void					LockBinlog ();
 	void					UnlockBinlog ();
+	void					RemoveFile ( int iExt );
 
-	int						ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes );
+	BinlogFileState_e		ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes );
 	bool					ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c & tReader ) const;
 	bool					ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
 	bool					ReplayCacheAdd ( const BinlogReplayFileDesc_t & tLog, DWORD uVersion, BinlogReader_c & tReader ) const;
@@ -433,23 +438,27 @@ void BinlogReader_c::HashCollected ()
 
 //////////////////////////////////////////////////////////////////////////
 
-SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName ) EXCLUDES ( m_tHashAccess )
+SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog ) EXCLUDES ( m_tHashAccess )
 {
 	SingleBinlogPtr * pVal;
 	{
 		Threads::SccRL_t tLock ( m_tHashAccess );
 		pVal = m_hBinlogs ( szIndexName );
-		if ( pVal )
-			return pVal->get();
 	}
-	Threads::SccWL_t tLock ( m_tHashAccess );
-	pVal = m_hBinlogs ( szIndexName );
-	if ( pVal ) // the value arrived while we acquired w-lock
-		return pVal->get ();
+	if ( pVal )
+		return pVal->get();
+	{
+		Threads::SccWL_t tLock ( m_tHashAccess );
+		pVal = m_hBinlogs ( szIndexName );
+		if ( pVal ) // the value arrived while we acquired w-lock
+			return pVal->get ();
 
-	m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> (this), szIndexName );
-	pVal = m_hBinlogs ( szIndexName );
+		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> (this), szIndexName );
+		pVal = m_hBinlogs ( szIndexName );
+	}
 	assert ( pVal );
+	if ( bOpenNewLog )
+		pVal->get()->OpenNewLog();
 	return pVal->get ();
 }
 
@@ -459,14 +468,17 @@ Binlog_c::~Binlog_c ()
 		return;
 
 	for ( auto & tBinlog: m_hBinlogs )
-		tBinlog.second.reset();
+		tBinlog.second->Deinit();
 
 	UnlockBinlog ();
 }
 
 
-SingleBinlog_c::~SingleBinlog_c ()
+void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
 {
+	if ( !m_pOwner )
+		return;
+
 	bool bLastLogEmpty = false;
 	if ( !m_dLogFiles.IsEmpty () && m_tWriter.IsOpen () )
 		bLastLogEmpty = m_dLogFiles.Last ().m_dIndexInfos.IsEmpty ();
@@ -475,9 +487,17 @@ SingleBinlog_c::~SingleBinlog_c ()
 	if ( m_tWriter.IsOpen () )
 		DoCacheWrite ();
 	m_tWriter.CloseFile ();
+
 	// should remove last binlog if no tnx was writen
 	if ( bLastLogEmpty )
 		RemoveLastEmptyLog ();
+
+	m_pOwner = nullptr;
+}
+
+SingleBinlog_c::~SingleBinlog_c ()
+{
+	Deinit();
 }
 
 
@@ -493,12 +513,18 @@ void SingleBinlog_c::RemoveLastEmptyLog () REQUIRES ( m_tWriteAccess )
 	m_dLogFiles.Pop ();
 
 	// if we unlinked any logs, we need to save meta, too
-	m_pOwner->SaveMeta ();
+	SaveMeta();
 }
 
 CSphString Binlog_c::MakeBinlogName ( int iExt ) const noexcept
 {
-	return SphSprintf ( "%s/binlog.%03d", m_sLogPath.cstr (), iExt );
+	return SphSprintf ( "%s/binlog.%04d", m_sLogPath.cstr (), iExt );
+}
+
+void Binlog_c::RemoveFile ( int iExt )
+{
+	auto sLog = MakeBinlogName ( iExt );
+	::unlink ( sLog.cstr () );
 }
 
 bool Binlog_c::IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const noexcept
@@ -594,7 +620,7 @@ void SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, IndexNameUid_t tFlu
 	} else if ( iPreflushFiles!=m_dLogFiles.GetLength () || bForceSave )
 	{
 		// if we unlinked any logs, we need to save meta, too
-		m_pOwner->SaveMeta ();
+		SaveMeta();
 	}
 }
 
@@ -720,14 +746,13 @@ int SingleBinlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID ) 
 }
 
 
-void SingleBinlog_c::CollectBinlogFiles ( CSphVector<int> & tOutput ) const noexcept EXCLUDES ( m_tWriteAccess )
+void SingleBinlog_c::CollectBinlogFiles ( CSphVector<int> & tOutput ) const noexcept
 {
-	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
 	for ( const auto& tLog : m_dLogFiles )
 		tOutput.Add ( tLog.m_iExt );
 }
 
-void Binlog_c::SaveMeta () EXCLUDES ( m_tHashAccess )
+void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_BINLOG );
 
@@ -746,16 +771,31 @@ void Binlog_c::SaveMeta () EXCLUDES ( m_tHashAccess )
 	wrMeta.PutDword ( BINLOG_VERSION );
 
 	// save list of active log files
-	m_tSavedFiles.Reset();
+	CSphVector<int> dFiles;
 	{
 		Threads::SccRL_t rLock { m_tHashAccess };
 		for ( auto & tBinlog: m_hBinlogs )
-			tBinlog.second->CollectBinlogFiles ( m_tSavedFiles );
+			tBinlog.second->CollectBinlogFiles ( dFiles );
 	}
 
-	wrMeta.ZipInt ( m_tSavedFiles.GetLength() );
-	for ( const auto& iExt : m_tSavedFiles )
+	// append not yet processed saved files
+	for ( int i = m_dSavedFiles.GetLength ()-1; i>=0; --i )
+		dFiles.Add ( m_dSavedFiles[i] );
+
+	StringBuilder_c sMetaLog;
+	sMetaLog << "SaveMeta: " << m_bReplayMode << " " << dFiles.GetLength () << ": ";
+	sMetaLog.StartBlock ();
+	wrMeta.ZipInt ( dFiles.GetLength () );
+	for ( const auto & iExt: dFiles )
+	{
 		wrMeta.ZipInt ( iExt ); // everything else is saved in logs themselves
+		sMetaLog << iExt;
+	}
+
+	// sphWarning ( "%s", sMetaLog.cstr() );
+
+	if ( dFiles.IsEmpty() )
+		m_iNextBinlog.store ( 0, std::memory_order_release );
 
 	wrMeta.CloseFile();
 
@@ -784,31 +824,28 @@ void Binlog_c::UnlockBinlog ()
 	RawFileUnLock ( SphSprintf ( "%s/binlog.lock", m_sLogPath.cstr () ), m_iLockFD );
 }
 
-void SingleBinlog_c::OpenNewLog ( int iLastState ) REQUIRES ( m_tWriteAccess )
+void SingleBinlog_c::OpenNewLog ( BinlogFileState_e eState ) REQUIRES ( m_tWriteAccess )
 {
 	MEMORY ( MEM_BINLOG );
 
 	// calc new ext
-	int iExt = -1;
-	if ( !m_dLogFiles.IsEmpty() )
-		iExt = m_dLogFiles.Last().m_iExt;
-
-	if ( !iLastState || iExt<0 )
-		iExt = m_pOwner->NextBinlogExt();
-
-	// create entry
-	// we need to reset it, otherwise there might be leftover data after last Remove()
 	BinlogFileDesc_t tLog;
-	tLog.m_iExt = iExt;
-	m_dLogFiles.Add ( tLog );
+	if ( !m_dLogFiles.IsEmpty() )
+		tLog.m_iExt = m_dLogFiles.Last().m_iExt;
+
+	if ( eState==BinlogFileState_e::OK || tLog.m_iExt<0 )
+	{
+		tLog.m_iExt = m_pOwner->NextBinlogExt();
+		m_dLogFiles.Add ( std::move ( tLog ) );
+	}
 
 	// update meta first then only remove binlog file
-	m_pOwner->SaveMeta();
+	SaveMeta();
 
 	// create file
 	CSphString sLog = m_pOwner->MakeBinlogName ( tLog.m_iExt );
 
-	if ( !iLastState ) // reuse the last binlog since it is empty or useless.
+	if ( eState!=BinlogFileState_e::OK && eState!=BinlogFileState_e::ERROR_NON_READABLE ) // reuse the last binlog since it is empty or useless.
 		::unlink ( sLog.cstr() );
 
 	CSphString sError;
@@ -855,6 +892,11 @@ void SingleBinlog_c::CheckDoRestart () REQUIRES ( m_tWriteAccess )
 	DoCacheWrite();
 	m_tWriter.CloseFile();
 	OpenNewLog();
+}
+
+void SingleBinlog_c::SaveMeta ()
+{
+	m_pOwner->SaveMeta ();
 }
 
 bool SingleBinlog_c::CheckDoFlush() REQUIRES ( m_tWriteAccess )
@@ -972,9 +1014,9 @@ void Binlog_c::LoadMeta ()
 				 sMeta.cstr (), uVersion, BINLOG_VERSION );
 
 	const bool bLoaded64bit = ( uVersion<15 ) ? ( rdMeta.GetByte ()==1 ) : true;
-	m_tSavedFiles.Resize ( rdMeta.UnzipInt () ); // FIXME! sanity check
+	m_dSavedFiles.Resize ( rdMeta.UnzipInt () ); // FIXME! sanity check
 
-	if ( m_tSavedFiles.IsEmpty () )
+	if ( m_dSavedFiles.IsEmpty () )
 		return;
 
 	// ok, so there is actual recovery data
@@ -986,15 +1028,16 @@ void Binlog_c::LoadMeta ()
 		sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
 
 	// load list of active log files
-	int iMaxExt = 1;
-	for ( int & iExt: m_tSavedFiles )
+	int iMaxExt = 0;
+	for ( int i=m_dSavedFiles.GetLength ()-1; i>=0; --i )
 	{
-		iExt = rdMeta.UnzipInt (); // everything else is saved in logs themselves
+		auto iExt = rdMeta.UnzipInt (); // everything else is saved in logs themselves
 		if ( iExt>iMaxExt )
 			iMaxExt = iExt;
+		m_dSavedFiles[i] = iExt;
 	}
 
-	m_iNextBinlog.store ( iMaxExt, std::memory_order_release );
+	m_iNextBinlog.store ( iMaxExt+1, std::memory_order_release );
 }
 
 void SingleBinlog_c::AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx )
@@ -1020,8 +1063,18 @@ void SingleBinlog_c::AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx )
 	tLog.m_dIndexInfos.Add ( tIdx );
 }
 
+
+void SingleBinlog_c::AdoptFile ( int iExt )
+{
+	if ( !m_dLogFiles.IsEmpty () && m_dLogFiles.Last ().m_iExt==iExt )
+		return;
+
+	BinlogFileDesc_t & tLog = m_dLogFiles.Add ();
+	tLog.m_iExt = iExt;
+}
+
 // primary call - invoked from daemon once on start
-void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
+void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback ) NO_THREAD_SAFETY_ANALYSIS
 {
 	if ( m_bDisabled )
 		return;
@@ -1034,37 +1087,52 @@ void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, Progres
 
 	// do replay
 	m_bReplayMode = true;
-	int iLastLogState = 0;
-	SingleBinlog_c* pPrevInfo = nullptr;
-	for ( const int iExt : m_tSavedFiles )
+	BinlogFileState_e ePrevLogState = BinlogFileState_e::OK, eLastLogState = BinlogFileState_e::OK;
+	SingleBinlog_c* pPrevInfo = nullptr, *pInfo = nullptr;
+	while ( !m_dSavedFiles.IsEmpty() )
 	{
+		auto iExt = m_dSavedFiles.Last();
 		BinlogReplayFileDesc_t tLog;
 		tLog.m_iExt = iExt;
-		iLastLogState = ReplayBinlog ( tLog, hIndexes );
+		ePrevLogState = std::exchange ( eLastLogState, ReplayBinlog ( tLog, hIndexes ) );
 		if ( pfnProgressCallback ) // on each replayed binlog
 			pfnProgressCallback ();
 
+		m_dSavedFiles.Pop();
+
+		if ( tLog.m_dIndexInfos.IsEmpty() )
+		{
+			if ( pInfo )
+				pInfo->AdoptFile ( iExt );
+			else
+				RemoveFile ( iExt );
+		}
+
+
 		for ( const auto& tInfo : tLog.m_dIndexInfos )
 		{
-			auto pInfo = GetWriteIndexBinlog ( tInfo.m_sName.cstr () );
+			pInfo = GetWriteIndexBinlog ( tInfo.m_sName.cstr (), false );
 			pInfo->AdoptIndex ( tLog.m_iExt, tInfo );
 			if ( pInfo!=pPrevInfo )
 			{
 				if ( pPrevInfo )
-					pPrevInfo->OpenNewLog ( iLastLogState );
+					pPrevInfo->OpenNewLog ( ePrevLogState );
 				pPrevInfo = pInfo;
 			}
 		}
 	}
 
-	if ( pPrevInfo )
-		pPrevInfo->OpenNewLog ( iLastLogState );
+	if ( !pInfo && !pPrevInfo )
+		SaveMeta();
 
-	if ( m_tSavedFiles.GetLength ()>0 )
+	if ( pPrevInfo )
+		pPrevInfo->OpenNewLog ( eLastLogState );
+
+	if ( m_dSavedFiles.GetLength ()>0 )
 	{
 		tmReplay = sphMicroTimer ()-tmReplay;
 		sphInfo ( "binlog: finished replaying total %d in %d.%03d sec",
-				  m_tSavedFiles.GetLength (),
+				  m_dSavedFiles.GetLength (),
 				  (int) ( tmReplay/1000000 ), (int) ( ( tmReplay/1000 )%1000 ) );
 	}
 
@@ -1078,7 +1146,7 @@ void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, Progres
 }
 
 
-int Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes ) NO_THREAD_SAFETY_ANALYSIS
+BinlogFileState_e Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes ) NO_THREAD_SAFETY_ANALYSIS
 {
 	CSphString sError;
 	const CSphString sLog ( MakeBinlogName ( tLog.m_iExt ) );
@@ -1090,20 +1158,20 @@ int Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHas
 	if ( !tReader.Open ( sLog, sError ) )
 	{
 		Log ( REPLAY_IGNORE_OPEN_ERROR, "binlog: log open error: %s", sError.cstr() );
-		return 0;
+		return BinlogFileState_e::ERROR_NON_READABLE;
 	}
 
 	const SphOffset_t iFileSize = tReader.GetFilesize();
 	if ( !iFileSize )
 	{
 		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr() );
-		return -1;
+		return BinlogFileState_e::ERROR_EMPTY;
 	}
 
 	if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC_SPBL )
 	{
 		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s missing magic header (corrupted?)", sLog.cstr() );
-		return -1;
+		return BinlogFileState_e::ERROR_WRONG_FILE;
 	}
 
 	DWORD uVersion = tReader.GetDword();
@@ -1112,6 +1180,12 @@ int Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHas
 
 	// could replay empty binlog of the old version
 	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
+
+	if ( iFileSize==8 ) // couple of DWORDs we just read - header and version
+	{
+		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr () );
+		return BinlogFileState_e::ERROR_EMPTY_8;
+	}
 
 	/////////////
 	// do replay
@@ -1217,7 +1291,7 @@ int Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHas
 		(int)(tmReplay/1000000), (int)((tmReplay/1000)%1000) );
 
 	// only one operation, that is Add Cache - by the fact, empty binlog
-	return ( bHaveCacheOp && dTotal[TOTAL]==1 ) ? 1 : 0;
+	return ( bHaveCacheOp && dTotal[TOTAL]==1 ) ? BinlogFileState_e::ERROR_ABANDONED : BinlogFileState_e::OK;
 }
 
 bool Binlog_c::ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS

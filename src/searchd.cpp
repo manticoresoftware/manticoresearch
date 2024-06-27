@@ -5507,7 +5507,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		return 0;
 	}
 
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, tQueueRes.m_bJoinedGroupSort, dErrors[0] ) )
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -16122,6 +16122,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 	tCtx.m_iBits = tStmt.m_iBits;
 	tCtx.m_uFlags = tStmt.m_uAttrFlags;
 	tCtx.m_eEngine = tStmt.m_eEngine;
+	tCtx.m_tKNN = tStmt.m_tAlterKNN;
 
 	if ( bIndexed || bStored )
 	{
@@ -16467,6 +16468,14 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	if ( !pServed || pServed->m_eType != IndexType_e::RT )
 	{
 		tOut.ErrorEx ( "table '%s' is not found, or not real-time", tStmt.m_sIndex.cstr() );
+		return;
+	}
+
+	// cluster does not implement ALTER for now
+	auto tCluster = IsPartOfCluster ( pServed );
+	if ( tCluster )
+	{
+		tOut.ErrorEx ( "table '%s' is part of cluster %s, ALTER is not supported for tables in cluster", tStmt.m_sIndex.cstr(), tCluster->cstr() );
 		return;
 	}
 

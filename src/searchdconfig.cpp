@@ -520,6 +520,8 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 		auto _ = tOut.Object();
 		for_each ( dIndexes, [&tOut] ( const auto& tIndex ) { tIndex.Save ( tOut ); } );
 	}
+	SaveCompatHttp ( tOut );
+
 	tOut.FinishBlocks();
 
 	CSphString sNew, sOld;

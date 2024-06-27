@@ -9761,6 +9761,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	tExpCtx.m_bMergeSingles = false;
 	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
 	tExpCtx.m_iCutoff = tSettings.m_iCutoff;
+	tExpCtx.m_bAllowExpansion = tSettings.m_bAllowExpansion;
 
 	tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	return true;

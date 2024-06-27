@@ -24,12 +24,10 @@ body:
         <sup>To be completed by the assignee. Check off tasks that have been completed or are not applicable.</sup>
         <details>
 
-        - [ ] Task estimated
-        - [ ] Specification created, reviewed and approved
         - [ ] Implementation completed
         - [ ] Tests developed
         - [ ] Documentation updated
-        - [ ] Documentation proofread
+        - [ ] Documentation reviewed
         - [ ] Changelog updated
         - [x] OpenAPI YAML updated and issue created to rebuild clients
 

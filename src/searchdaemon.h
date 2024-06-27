@@ -181,7 +181,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x108,
+	VER_COMMAND_CLUSTER		= 0x109,
 	VER_COMMAND_GETFIELD	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
@@ -1415,7 +1415,7 @@ bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
-void				SaveCompatHttp ( JsonObj_c & tRoot );
+void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();

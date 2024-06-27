@@ -38,21 +38,24 @@ Microsoft Windows => ms windows
 C++ => cplusplus
 c++ => cplusplus
 C plus plus => cplusplus
+\=\>abc\> => abc
 ```
 
-All tokens here are case sensitive and will **not** be processed by [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) rules. Thus, with the example exceptions file above, the "at&t" text will be tokenized as two keywords "at" and "t" due to lowercase letters. On the other hand, "AT&T" will match exactly and produce a single "AT&T" keyword.
+All tokens here are case sensitive and will **not** be processed by [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) rules. Thus, with the example exceptions file above, the `at&t` text will be tokenized as two keywords `at` and `t` due to lowercase letters. On the other hand, `AT&T` will match exactly and produce a single `AT&T` keyword.
 
-Note that this map-to keyword:
-* is always interpreted as a *single* word
-* is both case and space sensitive
+If you need to use `>` or `=` as normal characters, you can escape them by preceding each with a backslash (`\`). Both `>` and `=` should be escaped in this manner.
 
-In our sample, "ms windows" query will *not* match the document with "MS Windows" text. The query will be interpreted as a query for two keywords, "ms" and "windows". The mapping for "MS Windows" is a single keyword "ms windows", with a space in the middle. On the other hand, "standartenfuhrer" will retrieve documents with "Standarten Fuhrer" or "Standarten Fuehrer" contents (capitalized exactly like this), or any capitalization variant of the keyword itself, e.g., "staNdarTenfUhreR". (It won't catch "standarten fuhrer", however: this text does not match any of the listed exceptions because of case sensitivity and gets indexed as two separate keywords.)
+Note that the map-to keywords:
+* are always interpreted as a *single* word
+* are both case and space sensitive
 
-The whitespace in the map-from tokens list matters, but its amount does not. Any amount of whitespace in the map-form list will match any other amount of whitespace in the indexed document or query. For instance, the "AT & T" map-from token will match "AT & T" text, whatever the amount of space in both map-from part and the indexed text. Such text will, therefore, be indexed as a special "AT&T" keyword, thanks to the very first entry from the sample.
+In the above sample, `ms windows` query will *not* match the document with `MS Windows` text. The query will be interpreted as a query for two keywords, `ms` and `windows`. The mapping for `MS Windows` is a single keyword `ms windows`, with a space in the middle. On the other hand, `standartenfuhrer` will retrieve documents with `Standarten Fuhrer` or `Standarten Fuehrer` contents (capitalized exactly like this), or any capitalization variant of the keyword itself, e.g., `staNdarTenfUhreR`. (It won't catch `standarten fuhrer`, however: this text does not match any of the listed exceptions because of case sensitivity and gets indexed as two separate keywords.)
 
-Exceptions also allow capturing special characters (that are exceptions from general charset_table rules; hence the name). Assume that you generally do not want to treat '+' as a valid character, but still want to be able to search for some exceptions from this rule such as 'C++'. The sample above will do just that, totally independent of what characters are in the table and what are not.
+The whitespace in the map-from tokens list matters, but its amount does not. Any amount of whitespace in the map-form list will match any other amount of whitespace in the indexed document or query. For instance, the `AT & T` map-from token will match `AT & T` text, whatever the amount of space in both map-from part and the indexed text. Such text will, therefore, be indexed as a special `AT&T` keyword, thanks to the very first entry from the sample.
 
-Therefore, when it comes to a [plain table](../../Creating_a_table/Local_tables/Plain_table.md), it's required to rotate the table in order to pick up changes in the exceptions file.
+Exceptions also allow capturing special characters (that are exceptions from general `charset_table` rules; hence the name). Assume that you generally do not want to treat `+` as a valid character, but still want to be able to search for some exceptions from this rule such as `C++`. The sample above will do just that, totally independent of what characters are in the table and what are not.
+
+When using a [plain table](../../Creating_a_table/Local_tables/Plain_table.md), it is necessary to rotate the table to incorporate changes from the exceptions file. In the case of a real-time table, changes will only apply to new documents.
 
 <!-- request SQL -->
 

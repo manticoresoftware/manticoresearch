@@ -7702,6 +7702,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		SwitchProfile ( pProfiler, SPH_QSTATE_LOCAL_DF );
 		GetKeywordsSettings_t tSettings;
 		tSettings.m_bStats = true;
+		// do not want to expand keywords and fold back its statistics as it could take too much time
+		tSettings.m_bAllowExpansion = false;
+
 		CSphVector < CSphKeywordInfo > dKeywords;
 		DoGetKeywords ( dKeywords, tQuery.m_sQuery.cstr(), tSettings, false, nullptr, tGuard );
 		for ( auto & tKw : dKeywords )
@@ -7971,6 +7974,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missing bigram
+	bool bHasWildcards = false;
 
 	if ( !bFillOnly )
 	{
@@ -7978,7 +7982,8 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 		// query defined options
 		tExpCtx.m_iExpansionLimit = tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit;
-		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) && !tSettings.m_bFoldWildcards );
+		tExpCtx.m_bAllowExpansion = ( tSettings.m_bAllowExpansion && m_bKeywordDict && IsStarDict ( m_bKeywordDict ) );
+		bool bExpandWildcards = ( tExpCtx.m_bAllowExpansion && !tSettings.m_bFoldWildcards );
 		pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard.m_dRamSegs );
@@ -7996,6 +8001,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_pIndexData = tGuard.m_tSegmentsAndChunks.m_pSegs;
 
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
+		bHasWildcards = tExpCtx.m_bHasWildcards;
 	} else
 	{
 		BYTE sWord[SPH_MAX_KEYWORD_LEN];
@@ -8023,8 +8029,10 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		}
 	}
 
-	// get stats from disk chunks too
-	if ( !tSettings.m_bStats )
+	// process disk chunks too but only if:
+	// - need term stats
+	// - has terms with wildcards as these are expanded differently
+	if ( !tSettings.m_bStats && !bHasWildcards )
 		return true;
 
 	if ( bFillOnly )

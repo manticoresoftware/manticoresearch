@@ -272,6 +272,7 @@ public:
 	DWORD					m_uFieldFlags = 0;
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
+	knn::IndexSettings_t	m_tAlterKNN;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

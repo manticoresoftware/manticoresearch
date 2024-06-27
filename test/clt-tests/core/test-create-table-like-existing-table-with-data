@@ -7,7 +7,7 @@ ls -1 /var/lib/manticore/
 exc.txt
 stop.txt
 wordforms1.txt
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
 ––– output –––

@@ -178,6 +178,16 @@ searchd
 	{ "index": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
 </query>
 
+<!-- _bulk cluster:name format -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test:rt1", "_id" : "301" } }
+{ "gid" : "301" }
+
+</bulk>
+<query endpoint="json/search">
+{ "index": "rt1", "query": { "match_all": {} } }
+</query>
+
 <!-- cleanup -->
 
 <sphinxql d="0">

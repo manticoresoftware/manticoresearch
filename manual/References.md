@@ -220,7 +220,7 @@
 * ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#Phrase-search-operator) - phrase search operator
 * ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#Proximity-search-operator) - proximity search operator
 * ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#Quorum-matching-operator) - quorum matching operator
-* [word1 <<< word2 <<< word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
+* [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
 * [=word1](Searching/Full_text_matching/Operators.md#Exact-form-modifier) - exact form modifier
 * [^word1](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-start modifier
 * [word2$](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-end modifier
@@ -610,10 +610,8 @@ AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, E
 * [3.5.0](https://manual.manticoresearch.com/manticore-3-5-0/)
 * [3.5.2](https://manual.manticoresearch.com/manticore-3-5-2/)
 * [3.5.4](https://manual.manticoresearch.com/manticore-3-5-4/)
-* [3.6.0](https://manual.manticoresearch.com/manticore-3-6-0/)
 * [4.0.2](https://manual.manticoresearch.com/manticore-4-0-2/)
 * [4.2.0](https://manual.manticoresearch.com/manticore-4-2-0/)
-* [5.0.0](https://manual.manticoresearch.com/manticore-5-0-0/). [Installation page](https://manticoresearch.com/install-5.0.0/)
 * [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/). [Installation page](https://manticoresearch.com/install-5.0.2/)
 * [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/). [Installation page](https://manticoresearch.com/install-6.0.0/)
 * [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/). [Installation page](https://manticoresearch.com/install-6.0.2/)
@@ -621,4 +619,5 @@ AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, E
 * [6.2.0](https://manual.manticoresearch.com/manticore-6-2-0/). [Installation page](https://manticoresearch.com/install-6.2.0/)
 * [6.2.12](https://manual.manticoresearch.com/manticore-6-2-12/). [Installation page](https://manticoresearch.com/install-6.2.12/)
 * [6.3.0](https://manual.manticoresearch.com/manticore-6-3-0/). [Installation page](https://manticoresearch.com/install-6.3.0/)
+* [6.3.2](https://manual.manticoresearch.com/manticore-6-3-2/). [Installation page](https://manticoresearch.com/install-6.3.2/)
 <!-- proofread -->

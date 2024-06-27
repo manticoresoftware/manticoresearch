@@ -63,7 +63,7 @@ Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
 * `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format.
 * The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql.
-* The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter should not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
+* The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter must not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
 
 ### /sql
 
@@ -74,7 +74,7 @@ General syntax:
 * `curl localhost:6780/sql[?mode=raw] -d "[query={URL_ENCODED_QUERY}|{NOT_URL_ENCODED_QUERY}]"`
 
 The `/sql` endpoint accepts an SQL query via the HTTP JSON interface:
-* Without `mode=raw` - only [SELECTs](../Searching/Full_text_matching/Basic_usage.md#SQL) are allowed, returning the response in JSON format.
+* Without `mode=raw`- only [SELECTs](../Searching/Full_text_matching/Basic_usage.md#SQL) are allowed, returning the response in JSON format.
 * With [mode=raw](../Connecting_to_the_server/HTTP.md#mode=raw) - any SQL query is permitted, returning the response in raw format.
 
 The endpoint can handle HTTP requests using either the GET or the POST method. For sending queries, you can:
@@ -690,5 +690,6 @@ curl 0:9308/cli_json -d 'desc test'
 ### Keep-alive
 
 HTTP keep-alive is supported (except for the `/cli` endpoint), which allows for stateful interactions via the HTTP JSON interface as long as the client also supports keep-alive. For instance, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can execute `SHOW META` after a `SELECT` command, and it will function similarly to interactions with Manticore through a MySQL client.
+
 
 <!-- proofread -->

@@ -75,7 +75,11 @@ bool CommitMonitor_c::CommitTOI()
 	{
 	case ReplCmd_e::CLUSTER_ALTER_ADD:
 	case ReplCmd_e::CLUSTER_ALTER_DROP:
-		return SetIndexClusterTOI ( &tCmd );
+	{
+		bool bOk = SetIndexesClusterTOI ( &tCmd );
+		sphLogDebugRpl ( "CommitTOI %s for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
+		return bOk;
+	}
 	default:
 		return TlsMsg::Err ( "unknown command '%d'", (int) tCmd.m_eCommand );
 	}

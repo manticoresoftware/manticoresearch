@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– input –––
 php ./test/clt-tests/core/issue-1335-dump.php 10000 30 800000
 ––– output –––

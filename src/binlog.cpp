@@ -676,6 +676,9 @@ void Binlog_c::DoFlush ()
 	assert ( !m_bDisabled );
 	MEMORY ( MEM_BINLOG );
 
+	if ( sphInterrupted () )
+		return;
+
 	Threads::SccRL_t tLock ( m_tHashAccess );
 	for ( auto& tBinlog : m_hBinlogs )
 		tBinlog.second->DoFlush ( m_eOnCommit );
@@ -752,21 +755,17 @@ void SingleBinlog_c::CollectBinlogFiles ( CSphVector<int> & tOutput ) const noex
 		tOutput.Add ( tLog.m_iExt );
 }
 
+static constexpr int SAVE_TRIES = 4;
+static constexpr int SAVE_TRIE_DELAY = 50;
+
 void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_BINLOG );
 
-	CSphString sMeta, sMetaOld;
-	sMeta.SetSprintf ( "%s/binlog.meta.new", m_sLogPath.cstr() );
-	sMetaOld.SetSprintf ( "%s/binlog.meta", m_sLogPath.cstr() );
-
-	CSphString sError;
-
 	// opened and locked, lets write
-	CSphWriter wrMeta;
-	if ( !wrMeta.OpenFile ( sMeta, sError ) )
-		sphDie ( "failed to open '%s': '%s'", sMeta.cstr(), sError.cstr() );
 
+	CSphVector<BYTE> dMeta;
+	MemoryWriter2_c wrMeta ( dMeta );
 	wrMeta.PutDword ( BINLOG_META_MAGIC_SPLI );
 	wrMeta.PutDword ( BINLOG_VERSION );
 
@@ -797,18 +796,46 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 	if ( dFiles.IsEmpty() )
 		m_iNextBinlog.store ( 0, std::memory_order_release );
 
-	wrMeta.CloseFile();
 
-	if ( wrMeta.IsError() )
+	auto sMetaNew = SphSprintf ( "%s/binlog.meta.new", m_sLogPath.cstr () );
+	auto sMeta = SphSprintf ( "%s/binlog.meta", m_sLogPath.cstr () );
+
+	for ( int i=0; i<SAVE_TRIES; ++i )
 	{
-		sphWarning ( "%s", sError.cstr() );
-		return;
-	}
+		CSphString sError;
+		CSphWriterNonThrottled wrMetaFile;
+		::unlink ( sMetaNew.cstr() );
+		if ( !wrMetaFile.OpenFile ( sMetaNew, sError ) )
+			sphDie ( "failed to open '%s': '%s'", sMetaNew.cstr(), sError.cstr() );
 
-	if ( sph::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
-		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
-			sMeta.cstr(), sMetaOld.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
-	sphLogDebug ( "Binlog::SaveMeta: Done (%s)", sMeta.cstr() );
+		wrMetaFile.PutBytes ( dMeta.begin(), dMeta.GetLength() );
+		wrMetaFile.CloseFile();
+
+		if ( wrMetaFile.IsError() )
+		{
+			sphWarning ( "Error when closing file %s, errno=%d, error=%s, try=%d", sError.cstr(), errno, strerrorm ( errno ), i+1 );
+			continue;
+		}
+
+		if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
+		{
+			sphSleepMsec ( SAVE_TRIE_DELAY );
+			if ( sph::rename ( sMetaNew.cstr (), sMeta.cstr () ) )
+			{
+				if ( i<SAVE_TRIES-1 )
+				{
+					sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s), try %d",
+								 sMetaNew.cstr (), sMeta.cstr (), errno, strerrorm ( errno ),
+								 i+1 ); // !COMMIT handle this gracefully
+					sphSleepMsec ( SAVE_TRIE_DELAY );
+				} else
+					sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
+							 sMetaNew.cstr (), sMeta.cstr (), errno,
+							 strerrorm ( errno ) ); // !COMMIT handle this gracefully
+			} else break;
+		} else break;
+	}
+	sphLogDebug ( "Binlog::SaveMeta: Done (%s)", sMetaNew.cstr() );
 }
 
 void Binlog_c::LockBinlog ()

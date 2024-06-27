@@ -257,6 +257,12 @@ private:
 	void			UpdatePoolUsed();
 };
 
+class CSphWriterNonThrottled final : public CSphWriter
+{
+public:
+	void Flush () final;
+};
+
 
 bool SeekAndWarn ( int iFD, SphOffset_t iPos, const char * szWarnPrefix );
 

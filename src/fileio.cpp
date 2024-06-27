@@ -751,6 +751,30 @@ void CSphWriter::Flush()
 }
 
 
+void CSphWriterNonThrottled::Flush ()
+{
+	if ( m_pSharedOffset && *m_pSharedOffset!=m_iDiskPos )
+	{
+		auto uMoved = sphSeek ( m_iFD, m_iDiskPos, SEEK_SET );
+		if ( uMoved!=m_iDiskPos )
+		{
+			m_bError = true;
+			return;
+		}
+	}
+
+	if ( !WriteNonThrottled ( m_iFD, m_pBuffer.get (), m_iPoolUsed, m_sName.cstr (), *m_pError ) )
+		m_bError = true;
+
+	m_iDiskPos += m_iPoolUsed;
+	m_iPoolUsed = 0;
+	m_pPool = m_pBuffer.get ();
+
+	if ( m_pSharedOffset )
+		*m_pSharedOffset = m_iDiskPos;
+}
+
+
 void CSphWriter::PutString ( const char * szString )
 {
 	int iLen = szString ? (int) strlen ( szString ) : 0;

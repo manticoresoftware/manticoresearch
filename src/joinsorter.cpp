@@ -848,6 +848,10 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, PUSH && fnPush 
 template <typename PUSH>
 bool JoinSorter_c::PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush )
 {
+	// no matches with null values from right table if we have a MATCH() for the right table
+	if ( !m_tQuery.m_sJoinQuery.IsEmpty() )
+		return false;
+
 	memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
 
 	// set NULL bitmask

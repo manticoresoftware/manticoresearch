@@ -84,25 +84,6 @@ static StrVec_t ParseGroupBy ( const CSphString & sGroupBy )
 }
 
 
-static void FetchAttrDependencies ( IntVec_t & dAttrIds, const ISphSchema & tSchema )
-{
-	for ( auto i : dAttrIds )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( !tAttr.m_pExpr )
-			continue;
-
-		int iOldLen = dAttrIds.GetLength();
-		tAttr.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dAttrIds );
-		for ( int iNewAttr = iOldLen; iNewAttr < dAttrIds.GetLength(); iNewAttr++ )
-			if ( dAttrIds[iNewAttr]==i )
-				dAttrIds.Remove(iNewAttr);
-	}
-
-	dAttrIds.Uniq();
-}
-
-
 CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema, const char * szJoinedIndex )
 {
 	CSphString sPrefix;

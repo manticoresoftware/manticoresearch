@@ -1734,7 +1734,21 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 	{
 		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( i.m_sAttrName.cstr() );
 		if ( pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, *tCtx.m_pSchema, *tCtx.m_pSI ) )
+		{
+			// we transformed an attribute from an expression filter into a plain filter
+			// we may no longer need to calculate that expression at PREFILTER stage
+			IntVec_t dAttrIds;
+			dAttrIds.Add ( tCtx.m_pSchema->GetAttrIndex ( pAttr->m_sName.cstr() ) );
+			FetchAttrDependencies ( dAttrIds, *tCtx.m_pSchema );
+			for ( auto iAttr : dAttrIds )
+			{
+				const CSphColumnInfo & tDependentAttr = tCtx.m_pSchema->GetAttr(iAttr);
+				if ( tDependentAttr.m_eStage!=SPH_EVAL_STATIC )
+					(const_cast<CSphColumnInfo &>(tDependentAttr)).m_eStage = Max ( tDependentAttr.m_eStage, SPH_EVAL_FINAL );
+			}
+
 			continue;
+		}
 
 		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
 		{

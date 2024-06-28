@@ -1364,6 +1364,8 @@ private:
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
 	CSphVector<SecondaryIndexInfo_t> GetEnabledIndexes ( const CSphQuery & tQuery, bool bFT, float & fCost, int iThreads ) const;
 
+	bool						SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
+
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
 	const DWORD *				GetRawAttrs() const override { return m_tAttr.GetReadPtr(); }
@@ -7952,6 +7954,51 @@ static bool AreAllFiltersExpressions ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
+bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
+{
+	// select the sorter with max schema
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
+	pMaxSorterSchema = dSorters[iMaxSchemaIndex]->GetSchema();
+	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
+
+	auto & tQuery = tCtx.m_tQuery;
+
+	// setup filters
+	tFlx.m_pFilters		= &tQuery.m_dFilters;
+	tFlx.m_pFilterTree	= &tQuery.m_dFilterTree;
+	tFlx.m_pSchema		= pMaxSorterSchema;
+	tFlx.m_pBlobPool	= m_tBlobAttrs.GetReadPtr();
+	tFlx.m_pColumnar	= m_pColumnar.get();
+	tFlx.m_eCollation	= tQuery.m_eCollation;
+	tFlx.m_bScan		= tQuery.m_sQuery.IsEmpty();
+	tFlx.m_pHistograms	= m_pHistograms;
+	tFlx.m_pSI			= &m_tSI;
+	tFlx.m_iTotalDocs	= m_iDocinfo;
+	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
+
+	// may modify eval stages in schema; needs to be before SetupCalc
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, tMeta.m_sError ) )
+		return false;
+
+	tFlx.m_pFilters = &dTransformedFilters;
+	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
+
+	// setup calculations and result schema
+	if ( !tCtx.SetupCalc ( tMeta, *pMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
+		return false;
+
+	// set blob pool for string on_sort expression fix up
+	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
+	tCtx.SetColumnar ( m_pColumnar.get() );
+	tCtx.m_pProfile = tMeta.m_pProfile;
+	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
+	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
+	tCtx.m_iIndexTotalDocs = m_iDocinfo;
+
+	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+}
+
+
 bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	assert ( tArgs.m_iTag>=0 );
@@ -7993,45 +8040,16 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( tQuery.m_bLowPriority )
 		tPrio.emplace();
 
-	// select the sorter with max schema
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
-	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
-	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
-
-	// setup calculations and result schema
-	CSphQueryContext tCtx ( tQuery );
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
-		return false;
-
-	// set blob pool for string on_sort expression fix up
-	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
-	tCtx.SetColumnar ( m_pColumnar.get() );
-	tCtx.m_pProfile = tMeta.m_pProfile;
-
-	// setup filters
+	CSphQueryContext tCtx(tQuery);
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &tQuery.m_dFilters;
-	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
-	tFlx.m_pSchema = &tMaxSorterSchema;
-	tFlx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
-	tFlx.m_pColumnar = m_pColumnar.get();
-	tFlx.m_eCollation = tQuery.m_eCollation;
-	tFlx.m_bScan = true;
-	tFlx.m_pHistograms = m_pHistograms;
-	tFlx.m_pSI = &m_tSI;
-	tFlx.m_iTotalDocs = m_iDocinfo;
-	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
-	
+	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, tMeta.m_sError ) )
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, dSorters, tArgs ) )
 		return false;
 
-	tFlx.m_pFilters = &dTransformedFilters;
-	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
-
-	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
-		return false;
+	assert(pMaxSorterSchema);
+	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
@@ -10899,20 +10917,16 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		return false;
 	}
 
-	// select the sorter with max schema
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
-	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
-	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
-
-	// setup calculations and result schema
-	CSphQueryContext tCtx ( tQuery );
-	tCtx.m_pProfile = pProfile;
-	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
-	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
-	tCtx.m_iIndexTotalDocs = m_iDocinfo;
-
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
+	CSphQueryContext tCtx(tQuery);
+	CreateFilterContext_t tFlx;
+	const ISphSchema * pMaxSorterSchema = nullptr;
+	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
+	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, dSorters, tArgs ) )
 		return false;
+
+	assert(pMaxSorterSchema);
+	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
@@ -11002,30 +11016,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		return true;
 
 	SetupRowIdBoundaries ( tQuery.m_dFilters, RowID_t(m_iDocinfo), *pRanker );
-
-	// setup filters
- 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &tQuery.m_dFilters;
-	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
-	tFlx.m_pSchema = &tMaxSorterSchema;
-	tFlx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
-	tFlx.m_pColumnar = m_pColumnar.get();
-	tFlx.m_eCollation = tQuery.m_eCollation;
-	tFlx.m_bScan = tQuery.m_sQuery.IsEmpty ();
-	tFlx.m_pHistograms = m_pHistograms;
-	tFlx.m_pSI = &m_tSI;
-	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
-
-	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, tMeta.m_sError ) )
-		return false;
-
-	tFlx.m_pFilters = &dTransformedFilters;
-	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
-
-	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
-		return false;
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{

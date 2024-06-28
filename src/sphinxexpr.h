@@ -365,7 +365,7 @@ ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg );
 ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg );
-
+void FetchAttrDependencies ( IntVec_t & dAttrIds, const ISphSchema & tSchema );
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 
 /// provide mysql version string

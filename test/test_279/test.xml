@@ -84,6 +84,9 @@ select id from join1 inner join join2 on join1.string_id = join2.string_id where
 <!-- mixed filters absent from select list; left join; null filter; columnar storage -->
 select title, uint(join2.j.sort) as table2, weight() * (j.sort + table2) as test2 from join1 left join join2 on join1.string_id = join2.string_id where join2.name = 'name2' or join2.name is null order by test2 desc;
 
+<!-- left join + match from right table -->
+select title, join2.title, uint(join2.j.sort) as table2, weight() * (j.sort + table2) as test2 from join1 left join join2 on join1.string_id = join2.string_id where match('title2', join2) order by test2 desc;
+
 <!-- cleanup -->
 drop table join1;
 drop table join2;

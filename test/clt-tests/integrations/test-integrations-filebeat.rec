@@ -43,7 +43,7 @@ curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sor
 ––– output –––
 [{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM testlog_1; SELECT input, ecs FROM testlog_1 LIMIT 10;"
+mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM testlog_1; SELECT input, ecs FROM testlog_1;"
 ––– output –––
 +-----------+------+
 | Index     | Type |

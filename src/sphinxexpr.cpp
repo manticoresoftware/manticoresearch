@@ -7192,6 +7192,9 @@ public:
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		if ( !dMva.second )
+			return 0;
+
 		int nValues = dMva.second / sizeof(T);
 
 		const T * L = (const T *)dMva.first;

@@ -1,0 +1,71 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+––– output –––
+––– input –––
+echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-8.x.list
+––– output –––
+deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq filebeat > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+printf 'filebeat.inputs:\n- type: filestream\n  id: testlog\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: ["http://localhost:9308"]\n  index:  "testlog_1"\n  allow_older_versions: true\n  compression_level: 0\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: "testlog_1"\n  pattern: "testlog_1"\n\nseccomp:\n  default_action: allow\n  syscalls:\n  - action: allow\n    names:\n    - rseq' > /filebeat.yml
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+echo -e "2024-04-24 10:47:07 startup archives install\n2024-04-24 10:47:07 install base-passwd:amd64 <none> 3.6.3build1\n2024-04-24 10:47:07 status half-installed base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:07 status unpacked base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:07 configure base-passwd:amd64 3.6.3build1 3.6.3build1\n2024-04-24 10:47:07 status half-configured base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:08 status installed base-passwd:amd64 3.6.3build1\n2024-04-24 10:47:08 startup archives install\n2024-04-24 10:47:08 install base-files:amd64 <none> 13ubuntu10\n2024-04-24 10:47:08 status half-installed base-files:amd64 13ubuntu10" > /var/log/dpkg.log
+––– output –––
+––– input –––
+filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
+––– output –––
+[1] #!/[0-9]+/!#
+––– input –––
+if timeout 60 grep -qm1 'Non-zero metrics in the last 30s' <(tail -n 0 -f /var/log/filebeat.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/filebeat.log; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Done
+––– input –––
+filebeat version
+––– output –––
+filebeat version 8.14.1 (amd64), libbeat 8.14.1 [c74896ed7acbb92921ee46fa5e3d66d575a8b0a9 built #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# +0000 UTC]
+––– input –––
+curl -s localhost:9308/cli_json -d 'describe testlog_1' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
+––– input –––
+mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM testlog_1; SELECT input, ecs FROM testlog_1;"
+––– output –––
++-----------+------+
+| Index     | Type |
++-----------+------+
+| testlog_1 | rt   |
++-----------+------+
++----------+
+| count(*) |
++----------+
+|       10 |
++----------+
++-----------------------+---------------------+
+| input                 | ecs                 |
++-----------------------+---------------------+
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
+| {"type":"filestream"} | {"version":"8.0.0"} |
++-----------------------+---------------------+

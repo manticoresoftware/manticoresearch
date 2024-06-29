@@ -84,6 +84,25 @@ static StrVec_t ParseGroupBy ( const CSphString & sGroupBy )
 }
 
 
+static void FetchAttrDependencies ( IntVec_t & dAttrIds, const ISphSchema & tSchema )
+{
+	for ( auto i : dAttrIds )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( !tAttr.m_pExpr )
+			continue;
+
+		int iOldLen = dAttrIds.GetLength();
+		tAttr.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dAttrIds );
+		for ( int iNewAttr = iOldLen; iNewAttr < dAttrIds.GetLength(); iNewAttr++ )
+			if ( dAttrIds[iNewAttr]==i )
+				dAttrIds.Remove(iNewAttr);
+	}
+
+	dAttrIds.Uniq();
+}
+
+
 CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema, const char * szJoinedIndex )
 {
 	CSphString sPrefix;
@@ -534,7 +553,16 @@ private:
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, const char * szRemapPrefix );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, int iSorterAttrId, bool bConvertJsonType=false );
 	void		AddOnFilterToFilterTree ( int iFilterId );
+
+	void		AddStarItemsToJoinSelectList();
+	void		AddQueryItemsToJoinSelectList();
+	void		AddGroupbyItemsToJoinSelectList();
+	void		AddRemappedStringItemsToJoinSelectList();
+	void		AddExpressionItemsToJoinSelectList();
+	void		AddDocidToJoinSelectList();
+
 	void		SetupJoinSelectList();
+
 	void		RepackJsonFieldAsStr ( const CSphMatch & tSrcMatch, const CSphAttrLocator & tLocSrc, const CSphAttrLocator & tLocDst );
 	void		ProduceCacheSizeWarning ( CSphString & sWarning );
 	void		PopulateStoredFields();
@@ -820,6 +848,10 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, PUSH && fnPush 
 template <typename PUSH>
 bool JoinSorter_c::PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush )
 {
+	// no matches with null values from right table if we have a MATCH() for the right table
+	if ( !m_tQuery.m_sJoinQuery.IsEmpty() )
+		return false;
+
 	memcpy ( m_tMatch.m_pDynamic, tEntry.m_pDynamic, m_iDynamicSize*sizeof(CSphRowitem) );
 
 	// set NULL bitmask
@@ -1271,15 +1303,12 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 }
 
 
-void JoinSorter_c::SetupJoinSelectList()
+void JoinSorter_c::AddStarItemsToJoinSelectList()
 {
-	m_tJoinQuery.m_dItems.Resize(0);
-	m_dAttrRemap.Reset();
-
+	const CSphSchema & tJoinedSchema = m_pJoinedIndex->GetMatchSchema();
 	bool bHaveStar = m_tQuery.m_dItems.any_of ( []( const CSphQueryItem & tItem ) { return tItem.m_sExpr=="*" || tItem.m_sAlias=="*"; } );
 	if ( bHaveStar )
 	{
-	 	const CSphSchema & tJoinedSchema = m_pJoinedIndex->GetMatchSchema();
 		for ( int i = 0; i < tJoinedSchema.GetAttrsCount(); i++ )
 		{
 			auto & tAttr = tJoinedSchema.GetAttr(i);
@@ -1291,10 +1320,18 @@ void JoinSorter_c::SetupJoinSelectList()
 			AddToJoinSelectList ( sAttrName, sAttrName );
 		}
 	}
+}
 
+
+void JoinSorter_c::AddQueryItemsToJoinSelectList()
+{
 	for ( const auto & i : m_tQuery.m_dItems )
 		AddToJoinSelectList ( i.m_sExpr, i.m_sAlias );
+}
 
+
+void JoinSorter_c::AddGroupbyItemsToJoinSelectList()
+{
 	for ( const auto & tQuery : m_dQueries )
 	{
 		if ( !tQuery.m_sGroupBy.IsEmpty() )
@@ -1310,8 +1347,11 @@ void JoinSorter_c::SetupJoinSelectList()
 		if ( !tQuery.m_sGroupDistinct.IsEmpty() )
 			AddToJoinSelectList ( tQuery.m_sGroupDistinct, tQuery.m_sGroupDistinct );
 	}
+}
 
-	// find remapped sorting attrs
+
+void JoinSorter_c::AddRemappedStringItemsToJoinSelectList()
+{
 	auto * pSorterSchema = m_pSorter->GetSchema();
 	assert(pSorterSchema);
 	for ( int i = 0; i < pSorterSchema->GetAttrsCount(); i++ )
@@ -1335,19 +1375,55 @@ void JoinSorter_c::SetupJoinSelectList()
 			AddToJoinSelectList ( sJoinedAttrName, sJoinedAttrName, GetInternalJsonPrefix() );
 		}
 	}
+}
 
-	// find JSON attrs present in filters and add them to select list (only when all filters are moved to the left query)
-	if ( NeedToMoveMixedJoinFilters ( m_tQuery, *m_pSorterSchema ) )
+
+void JoinSorter_c::AddExpressionItemsToJoinSelectList()
+{
+	// find JSON/columnar attrs present in filters and add them to select list (only when all filters are moved to the left query)
+	if ( !NeedToMoveMixedJoinFilters ( m_tQuery, *m_pSorterSchema ) )
+		return;
+
+	const CSphSchema & tJoinedSchema = m_pJoinedIndex->GetMatchSchema();
+	for ( const auto & i : m_tQuery.m_dFilters )
 	{
-		for ( const auto & i : m_tQuery.m_dFilters )
-			if ( sphJsonNameSplit ( i.m_sAttrName.cstr(), m_pJoinedIndex->GetName() ) )
-				AddToJoinSelectList ( i.m_sAttrName );
-	}
+		if ( sphJsonNameSplit ( i.m_sAttrName.cstr(), m_pJoinedIndex->GetName() ) )
+		{
+			AddToJoinSelectList ( i.m_sAttrName );
+			continue;
+		}
 
+		CSphString sJoinedAttr;
+		if ( GetJoinAttrName ( i.m_sAttrName, CSphString ( m_pJoinedIndex->GetName() ), &sJoinedAttr ) )
+		{
+			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
+			if ( pAttr && pAttr->IsColumnar() )
+				AddToJoinSelectList ( i.m_sAttrName, i.m_sAttrName );
+		}		
+	}
+}
+
+
+void JoinSorter_c::AddDocidToJoinSelectList()
+{
 	// fetch docid; we need it for docstore queries
 	CSphString sId;
 	sId.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), sphGetDocidName() );
 	AddToJoinSelectList ( sId, sId );
+}
+
+
+void JoinSorter_c::SetupJoinSelectList()
+{
+	m_tJoinQuery.m_dItems.Resize(0);
+	m_dAttrRemap.Reset();
+
+	AddStarItemsToJoinSelectList();
+	AddQueryItemsToJoinSelectList();
+	AddGroupbyItemsToJoinSelectList();
+	AddRemappedStringItemsToJoinSelectList();
+	AddExpressionItemsToJoinSelectList();
+	AddDocidToJoinSelectList();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -21,7 +21,8 @@
 #include "conversion.h"
 #include "geodist.h"
 #include "joinsorter.h"
-#include "secondarylib.h"
+#include "secondaryindex.h"
+#include "jsonsi.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -1245,24 +1246,51 @@ public:
 };
 
 
-
-static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
 {
-	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
-	SafeAddRef ( _pExpr );
-
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
 	bool bAutoConvert = false;
 	bool bJsonExpr = false;
 	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
 
-	// IN ( string list ) filter by JSON attribute should be done via Expr_JsonFieldIn_c expression
-	if ( bJsonExpr && tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
-		return std::make_unique< ExprFilterProxy_c > ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+	if ( !bJsonExpr )
+		return nullptr;
 
-	if ( bJsonExpr && !bAutoConvert )
-		pExpr = sphJsonFieldConv ( pExpr );
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+
+	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
+	{
+		switch ( tFixedSettings.m_eType )
+		{
+		case SPH_FILTER_VALUES:
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr ), SPH_ATTR_INTEGER );
+
+		case SPH_FILTER_RANGE:
+		case SPH_FILTER_FLOATRANGE:
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
+
+		default:
+			break;
+		}
+	}
+
+	if ( !bAutoConvert )
+		pExpr = sphJsonFieldConv(pExpr);
+
+	return nullptr;
+}
+
+
+static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+{
+	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
+	SafeAddRef ( _pExpr );
+
+	std::unique_ptr<ISphFilter> pRes = SetupJsonExpr ( pExpr, tSettings, tFixedSettings );
+	if ( pRes )
+		return pRes;
 
 	switch ( tFixedSettings.m_eType )
 	{
@@ -1599,7 +1627,7 @@ static bool CanAddGeodist ( const CSphColumnInfo & tAttr, const CreateFilterCont
 	if ( tAttr.IsColumnar() || tAttr.IsColumnarExpr() )
 		return true;
 
-	return tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( tAttr.m_sName.cstr() );
+	return tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( tAttr.m_sName );
 }
 
 
@@ -1697,7 +1725,49 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError )
+static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dItems )
+{
+	if ( !tCtx.m_pSI )
+		return;
+
+	for ( auto & i : dFilters )
+	{
+		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( i.m_sAttrName.cstr() );
+		if ( pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, *tCtx.m_pSchema, *tCtx.m_pSI ) )
+		{
+			// we transformed an attribute from an expression filter into a plain filter
+			// we may no longer need to calculate that expression at PREFILTER stage
+			IntVec_t dAttrIds;
+			dAttrIds.Add ( tCtx.m_pSchema->GetAttrIndex ( pAttr->m_sName.cstr() ) );
+			FetchAttrDependencies ( dAttrIds, *tCtx.m_pSchema );
+			for ( auto iAttr : dAttrIds )
+			{
+				const CSphColumnInfo & tDependentAttr = tCtx.m_pSchema->GetAttr(iAttr);
+				if ( tDependentAttr.m_eStage!=SPH_EVAL_STATIC )
+					(const_cast<CSphColumnInfo &>(tDependentAttr)).m_eStage = Max ( tDependentAttr.m_eStage, SPH_EVAL_FINAL );
+			}
+
+			continue;
+		}
+
+		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
+		{
+			CSphString sTransformed = UnifyJsonFieldName ( i.m_sAttrName );
+			for ( const auto & tItem : dItems )
+				if ( tItem.m_sAlias==i.m_sAttrName && tItem.m_eAggrFunc==SPH_AGGR_NONE )
+				{
+					sTransformed = UnifyJsonFieldName ( tItem.m_sExpr );
+					break;
+				}
+
+			if ( tCtx.m_pSI->IsEnabled(sTransformed) )
+				i.m_sAttrName = sTransformed;
+		}
+	}
+}
+
+
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, const CSphVector<CSphQueryItem> & dItems, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
@@ -1719,6 +1789,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
+	TransformForJsonSI ( tCtx, dModified, dItems );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )

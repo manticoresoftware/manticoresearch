@@ -2271,7 +2271,8 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 	if ( iGroupbyAttr<0 )
 		return iMaxMatches;
 
-	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
+	CSphString sModifiedAttr;
+	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName, sModifiedAttr ) : -1;
 	if ( iCountDistinct > m_tQuery.m_iMaxMatchThresh )
 		return iMaxMatches;
 
@@ -2307,11 +2308,11 @@ PrecalculatedSorterResults_t QueueCreator_c::FetchPrecalculatedValues() const
 	{
 		int iCountDistinctAttr = GetGroupDistinctAttrIndex();
 		if ( iCountDistinctAttr>0 && m_tSettings.m_bEnableFastDistinct )
-			tPrecalc.m_iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName ) : -1;
+			tPrecalc.m_iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName, tPrecalc.m_sAttr ) : -1;
 	}
 
 	if ( CanCalcFastCountFilter() )
-		tPrecalc.m_iCountFilter = m_tSettings.m_fnGetCountFilter ? m_tSettings.m_fnGetCountFilter ( m_tQuery.m_dFilters[0] ) : -1;
+		tPrecalc.m_iCountFilter = m_tSettings.m_fnGetCountFilter ? m_tSettings.m_fnGetCountFilter ( m_tQuery.m_dFilters[0], tPrecalc.m_sAttr ) : -1;
 
 	if ( CanCalcFastCount() )
 		tPrecalc.m_iCount = m_tSettings.m_fnGetCount ? m_tSettings.m_fnGetCount() : -1;

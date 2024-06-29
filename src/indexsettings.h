@@ -176,6 +176,8 @@ public:
 	StrVec_t m_dRowwiseAttrs;			///< list of attributes to NOT be placed in columnar store
 	StrVec_t m_dColumnarStringsNoHash;	///< list of columnar string attributes that don't need pregenerated hashes
 
+	StrVec_t m_dJsonSIAttrs;			///< list of JSON attributes that need secondary indexes generated
+
 	CSphVector<NamedKNNSettings_t> m_dKNN;		///< knn index settings
 
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
@@ -275,6 +277,7 @@ private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
 	bool			ParseColumnarSettings ( const CSphConfigSection & hIndex, CSphString & sError );
 	bool			ParseKNNSettings ( const CSphConfigSection & hIndex, CSphString & sError );
+	bool			ParseSISettings ( const CSphConfigSection & hIndex, CSphString & sError );
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
 };
 
@@ -371,6 +374,7 @@ struct CreateTableAttr_t
 	CSphColumnInfo			m_tAttr;
 	bool					m_bFastFetch = true;
 	bool					m_bStringHash = true;
+	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
 	knn::IndexSettings_t	m_tKNN;
 };
@@ -419,6 +423,7 @@ private:
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetupSIAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetDefaults();
 };
 
@@ -458,12 +463,17 @@ class JsonEscapedBuilder;
 void operator<< ( JsonEscapedBuilder& tOut, const CSphFieldFilterSettings& tFieldFilterSettings );
 void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSettings );
 
-void SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
-void SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
+void		SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
+void		SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
-void SetDefaultAttrEngine ( AttrEngine_e eEngine );
+void		SetDefaultAttrEngine ( AttrEngine_e eEngine );
 AttrEngine_e GetDefaultAttrEngine();
 
-bool ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty );
+bool		ForceExactWords ( bool bWordDict, bool bHasMorphology, int iMinPrefixLen, int iMinInfixLen, bool bMorphFieldsEmpty );
+
+void		LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
+void		operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSettings );
+void		LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
+void		SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
 
 #endif // _indexsettings_

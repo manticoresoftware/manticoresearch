@@ -18,6 +18,7 @@
 #include "attrindex_builder.h"
 #include "secondarylib.h"
 #include "knnmisc.h"
+#include "jsonsi.h"
 #include "attrindex_merge.h"
 
 class AttrMerger_c::Impl_c
@@ -26,6 +27,7 @@ class AttrMerger_c::Impl_c
 	HistogramContainer_c					m_tHistograms;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
 	std::unique_ptr<knn::Builder_i>			m_pKNNBuilder;
+	std::unique_ptr<JsonSIBuilder_i>		m_pJsonSIBuilder;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
 	CSphWriter								m_tWriterSPA;
@@ -77,10 +79,11 @@ public:
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
 	auto sSPA = GetTmpFilename ( pDstIndex, SPH_EXT_SPA );
-	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
+	const CSphSchema & tDstSchema = pDstIndex->GetMatchSchema();
+	if ( tDstSchema.HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
 		return false;
 
-	if ( pDstIndex->GetMatchSchema().HasBlobAttrs() )
+	if ( tDstSchema.HasBlobAttrs() )
 	{
 		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_tBufferSettings.m_iBufferAttributes, m_sError );
 		if ( !m_pBlobRowBuilder )
@@ -93,40 +96,47 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 		if ( !m_pDocstoreBuilder )
 			return false;
 
-		for ( int i = 0; i < pDstIndex->GetMatchSchema().GetFieldsCount(); ++i )
-			if ( pDstIndex->GetMatchSchema().IsFieldStored(i) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->GetMatchSchema().GetFieldName(i), DOCSTORE_TEXT );
+		for ( int i = 0; i < tDstSchema.GetFieldsCount(); ++i )
+			if ( tDstSchema.IsFieldStored(i) )
+				m_pDocstoreBuilder->AddField ( tDstSchema.GetFieldName(i), DOCSTORE_TEXT );
 
-		for ( int i = 0; i < pDstIndex->GetMatchSchema().GetAttrsCount(); ++i )
-			if ( pDstIndex->GetMatchSchema().IsAttrStored(i) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->GetMatchSchema().GetAttr(i).m_sName, DOCSTORE_ATTR );
+		for ( int i = 0; i < tDstSchema.GetAttrsCount(); ++i )
+			if ( tDstSchema.IsAttrStored(i) )
+				m_pDocstoreBuilder->AddField ( tDstSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
 	}
 
-	if ( pDstIndex->GetMatchSchema().HasColumnarAttrs() )
+	if ( tDstSchema.HasColumnarAttrs() )
 	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_tBufferSettings.m_iBufferColumnar, m_sError );
+		m_pColumnarBuilder = CreateColumnarBuilder ( tDstSchema, GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_tBufferSettings.m_iBufferColumnar, m_sError );
 		if ( !m_pColumnarBuilder )
 			return false;
 	}
 
-	if ( pDstIndex->GetMatchSchema().HasKNNAttrs() )
+	if ( tDstSchema.HasKNNAttrs() )
 	{
-		m_pKNNBuilder = BuildCreateKNN ( pDstIndex->GetMatchSchema(), m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, m_dAttrsForKNN, m_sError );
 		if ( !m_pKNNBuilder )
+			return false;
+	}
+
+	if ( tDstSchema.HasJsonSIAttrs() )
+	{
+		m_pJsonSIBuilder = CreateJsonSIBuilder ( tDstSchema, pDstIndex->GetTmpFilename(SPH_EXT_SPB), GetTmpFilename ( pDstIndex, SPH_EXT_SPJIDX ), m_sError );
+		if ( !m_pJsonSIBuilder )
 			return false;
 	}
 
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_pSIdxBuilder = CreateIndexBuilder ( m_tBufferSettings.m_iSIMemLimit, pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_tBufferSettings.m_iBufferStorage, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( m_tBufferSettings.m_iSIMemLimit, tDstSchema, GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_tBufferSettings.m_iBufferStorage, m_sError );
 		if ( !m_pSIdxBuilder )
 			return false;
 	}
 
-	m_tMinMax.Init ( pDstIndex->GetMatchSchema() );
+	m_tMinMax.Init ( tDstSchema );
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
-	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->GetMatchSchema() );
+	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, tDstSchema );
 
 	m_tResultRowID = 0;
 	return true;
@@ -218,11 +228,14 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 
 		if ( m_pBlobRowBuilder )
 		{
-			const BYTE* pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
-			uint64_t	uNewOffset	= m_pBlobRowBuilder->Flush ( pOldBlobRow );
+			const BYTE * pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
+			std::pair<SphOffset_t, SphOffset_t> tOffsetSize = m_pBlobRowBuilder->Flush ( pOldBlobRow );
+
+			if ( m_pJsonSIBuilder )
+				m_pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
 
 			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes );
-			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );
+			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, tOffsetSize.first );
 
 			m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
 		} else if ( iStrideBytes )
@@ -332,6 +345,9 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 		m_sError = sError.c_str();
 		return false;
 	}
+
+	if ( m_pJsonSIBuilder && !m_pJsonSIBuilder->Done(m_sError) )
+		return false;
 
 	if ( m_pKNNBuilder && !m_pKNNBuilder->Save ( GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN ).cstr(), m_tBufferSettings.m_iBufferStorage, sError ) )
 	{

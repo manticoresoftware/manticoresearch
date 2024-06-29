@@ -1242,8 +1242,8 @@ public:
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
-	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
-	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const override;
+	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCount() const override;
 
 private:
@@ -2098,7 +2098,10 @@ bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQu
 			if ( iGroupby>0 )
 			{
 				if ( iMaxCountDistinct==-1 )
-					iMaxCountDistinct = GetCountDistinct ( tQuery.m_sGroupBy );
+				{
+					CSphString sModifiedAttr;
+					iMaxCountDistinct = GetCountDistinct ( tQuery.m_sGroupBy, sModifiedAttr );
+				}
 
 				if ( iMaxCountDistinct==-1 )
 				{
@@ -3139,28 +3142,42 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 }
 
 
-int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr ) const
+int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const
 {
 	if ( m_tDeadRowMap.HasDead() )
 		return -1;
 
-	return m_tSI.GetCountDistinct(sAttr);
+	sModifiedAttr = sAttr;
+	if ( !m_tSchema.GetAttr ( sAttr.cstr() ) && sphJsonNameSplit ( sAttr.cstr() ) )
+		sModifiedAttr = UnifyJsonFieldName(sAttr);
+
+	return m_tSI.GetCountDistinct(sModifiedAttr);
 }
 
 
-int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter ) const
+int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const
 {
 	if ( m_tDeadRowMap.HasDead() )
 		return -1;
 
+	CSphFilterSettings tModifiedFilter = tFilter;
+
 	CSphQuery tQuery;
 	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_tSI, 0, m_iDocinfo, 1 );
-	if ( !tCtx.IsEnabled_SI(tFilter) )
+
+	sModifiedAttr = tFilter.m_sAttrName;
+	if ( !m_tSchema.GetAttr ( sModifiedAttr.cstr() ) && sphJsonNameSplit ( sModifiedAttr.cstr() ) )
+	{
+		tModifiedFilter.m_sAttrName = UnifyJsonFieldName(sModifiedAttr);
+		sModifiedAttr = tModifiedFilter.m_sAttrName;
+	}
+
+	if ( !tCtx.IsEnabled_SI(tModifiedFilter) )
 		return -1;
 
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
-	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, SPH_COLLATION_DEFAULT, m_tSchema, sWarning ) )
+	if ( !ToColumnarFilter ( tColumnarFilter, tModifiedFilter, SPH_COLLATION_DEFAULT, m_tSchema, sWarning ) )
 		return -1;
 
 	uint32_t uCount = 0;
@@ -8088,6 +8105,13 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, false );
 	bool bAllPrecalc = dSorters.GetLength() && dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
 
+	int iOldLen = tMeta.m_tIteratorStats.m_dIterators.GetLength();
+	for ( auto & i : dSorters )
+		i->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
+
+	if ( tMeta.m_tIteratorStats.m_dIterators.GetLength()!=iOldLen )
+		tMeta.m_tIteratorStats.m_iTotal = 1;
+
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
 	std::unique_ptr<RowidIterator_i> pIterator;
@@ -11033,6 +11057,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	SwitchProfile ( pProfile, SPH_QSTATE_SETUP_ITER );
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
+
+	int iOldLen = tMeta.m_tIteratorStats.m_dIterators.GetLength();
+	for ( auto & i : dSorters )
+		i->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
+
+	if ( tMeta.m_tIteratorStats.m_dIterators.GetLength()!=iOldLen )
+		tMeta.m_tIteratorStats.m_iTotal = 1;
+
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
 	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, pRanker.get() );
 	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );

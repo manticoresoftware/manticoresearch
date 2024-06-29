@@ -42,6 +42,7 @@ struct PrecalculatedSorterResults_t
 	int64_t		m_iCountDistinct = -1;
 	int64_t		m_iCountFilter = -1;
 	int64_t		m_iCount = -1;
+	CSphString	m_sAttr;
 };
 
 /// creates proper queue for given query

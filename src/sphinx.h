@@ -1163,8 +1163,8 @@ public:
 
 	virtual std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const { return { 0, 0 }; }
 	virtual bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, bool bHasSI, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
-	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
-	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const { return -1; }	// returns values if index has some meta on its attributes
+	virtual int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
+	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCount() const { return -1; }
 
 public:
@@ -1410,9 +1410,9 @@ struct SphQueueSettings_t
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
 	bool						m_bGrouped = false;	// are we going to push already grouped matches to it?
-	std::function<int64_t (const CSphString &)>			m_fnGetCountDistinct;
-	std::function<int64_t (const CSphFilterSettings &)>	m_fnGetCountFilter;
-	std::function<int64_t ()>							m_fnGetCount;
+	std::function<int64_t (const CSphString &, CSphString &)>			m_fnGetCountDistinct;
+	std::function<int64_t (const CSphFilterSettings &, CSphString &)>	m_fnGetCountFilter;
+	std::function<int64_t ()>	m_fnGetCount;
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
 	StrVec_t 					m_dCreateSchema;

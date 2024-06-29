@@ -1260,8 +1260,8 @@ public:
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int* pAffected = nullptr );
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
-	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
-	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const override;
+	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCount() const override;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 
@@ -7058,7 +7058,8 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 		int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, i->Cidx().GetMatchSchema() );
 		if ( iGroupby>=0 )
 		{
-			int64_t iCountDistinct = i->Cidx().GetCountDistinct ( i->Cidx().GetMatchSchema().GetAttr(iGroupby).m_sName );
+			CSphString sModifiedAttr;
+			int64_t iCountDistinct = i->Cidx().GetCountDistinct ( i->Cidx().GetMatchSchema().GetAttr(iGroupby).m_sName, sModifiedAttr );
 			if ( iCountDistinct==-1 )
 				return -1;	// if one of the chunks doesn't have that info, we can't calculate max
 
@@ -9036,7 +9037,7 @@ int RtIndex_c::ChunkIDByChunkIdx ( int iChunkIdx ) const
 }
 
 
-int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
+int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const
 {
 	// fixme! add code to calculate distinct values in RAM segments
 	if ( m_tRtChunks.GetRamSegmentsCount() )
@@ -9046,11 +9047,11 @@ int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
 	if ( !pDiskChunks || pDiskChunks->GetLength()!=1 )
 		return -1;
 
-	return (*pDiskChunks)[0]->Cidx().GetCountDistinct(sAttr);
+	return (*pDiskChunks)[0]->Cidx().GetCountDistinct ( sAttr, sModifiedAttr );
 }
 
 
-int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter ) const
+int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const
 {
 	// fixme! add code to calculate count(*) in RAM segments
 	if ( m_tRtChunks.GetRamSegmentsCount() )
@@ -9063,7 +9064,7 @@ int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter ) const
 	int64_t iSumCount = 0;
 	for ( const auto & i : *pDiskChunks )
 	{
-		int64_t iCount = i->Cidx().GetCountFilter(tFilter);
+		int64_t iCount = i->Cidx().GetCountFilter ( tFilter, sModifiedAttr );
 		if ( iCount==-1 )
 			return -1;
 

@@ -575,6 +575,29 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 }
 
 
+void CSphSchema::SetupSIFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings )
+{
+	SmallStringHash_T<int> hJsonSI;
+	for ( const auto & i : tSettings.m_dJsonSIAttrs )
+		hJsonSI.Add ( 0, i );
+
+	for ( auto & tAttr : m_dAttrs )
+	{
+		if ( !hJsonSI.Exists ( tAttr.m_sName ) )
+			continue;
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON )
+		{
+			CSphString sWarning;
+			sWarning.SetSprintf ( "unable to create json SI on non-json attribute '%s'", tAttr.m_sName.cstr() );
+			pWarnings->Add ( sWarning );
+		}
+		else
+			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_INDEXED_SI;
+	}
+}
+
+
 void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings )
 {
 	bool bAllFieldsStored = false;
@@ -603,6 +626,7 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, St
 	{
 		SetupColumnarFlags ( tSettings, pWarnings );
 		SetupKNNFlags(tSettings);
+		SetupSIFlags ( tSettings, pWarnings );
 	}
 
 	bool bAllNonStored = false;
@@ -654,6 +678,12 @@ bool CSphSchema::HasNonColumnarAttrs() const
 bool CSphSchema::HasKNNAttrs() const
 {
 	return m_dAttrs.any_of ( [] ( const CSphColumnInfo& tAttr ) { return tAttr.IsIndexedKNN(); } );
+}
+
+
+bool CSphSchema::HasJsonSIAttrs() const
+{
+	return m_dAttrs.any_of ( [] ( const CSphColumnInfo& tAttr ) { return tAttr.IsIndexedSI(); } );
 }
 
 

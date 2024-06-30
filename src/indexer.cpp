@@ -318,6 +318,10 @@ struct ConsoleIndexProgress_t: public CSphIndexProgress
 			cOut.Sprintf ( "creating secondary index" );
 			break;
 
+		case PHASE_JSONSI_BUILD:
+			cOut.Sprintf ( "creating json secondary index" );
+			break;
+
 		default:
 			assert ( 0 && "internal error: unhandled progress phase" );
 			cOut.Sprintf ( "(progress-phase-%d)", m_ePhase );

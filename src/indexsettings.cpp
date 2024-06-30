@@ -23,6 +23,7 @@
 #include "tokenizer/tokenizer.h"
 #include "client_task_info.h"
 #include "knnlib.h"
+#include "secondarylib.h"
 
 #if !_WIN32
 	#include <glob.h>
@@ -805,6 +806,28 @@ bool CSphIndexSettings::ParseKNNSettings ( const CSphConfigSection & hIndex, CSp
 }
 
 
+bool CSphIndexSettings::ParseSISettings ( const CSphConfigSection & hIndex, CSphString & sError )
+{
+	if ( !hIndex.Exists("json_secondary_indexes") )
+		return true;
+
+	if ( !IsSecondaryLibLoaded() )
+	{
+		sError = "secondary index library not loaded";
+		return false;
+	}
+
+	{
+		CSphString sAttrs = hIndex.GetStr ( "json_secondary_indexes" );
+		sAttrs.ToLower();
+		sphSplit ( m_dJsonSIAttrs, sAttrs.cstr() );
+		m_dJsonSIAttrs.Uniq();
+	}
+
+	return true;
+}
+
+
 bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError )
 {
 	m_uBlockSize = hIndex.GetSize ( "docstore_block_size", DEFAULT_DOCSTORE_BLOCK );
@@ -871,6 +894,9 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		return false;
 
 	if ( !ParseKNNSettings ( hIndex, sError ) )
+		return false;
+
+	if ( !ParseSISettings ( hIndex, sError ) )
 		return false;
 
 	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )
@@ -1292,6 +1318,19 @@ void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 }
 
 
+void IndexSettingsContainer_c::SetupSIAttrs ( const CreateTableSettings_t & tCreateTable )
+{
+	StringBuilder_c sJsonSIAttrs(",");
+
+	for ( const auto & i : tCreateTable.m_dAttrs )
+		if ( i.m_bIndexed )
+			sJsonSIAttrs << i.m_tAttr.m_sName;
+
+	if ( sJsonSIAttrs.GetLength() )
+		Add ( "json_secondary_indexes", sJsonSIAttrs.cstr() );
+}
+
+
 bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sStoredFields(",");
@@ -1339,6 +1378,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	SetupColumnarAttrs(tCreateTable);
 	SetupKNNAttrs(tCreateTable);
+	SetupSIAttrs(tCreateTable);
 
 	if ( !Contains("type") )
 		Add ( "type", "rt" );
@@ -2606,6 +2646,147 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
 }
+
+
+void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
+{
+	using namespace bson;
+	tSettings.SetMinPrefixLen ( (int)Int ( tNode.ChildByName ( "min_prefix_len" ) ) );
+	tSettings.m_iMinInfixLen = (int)Int ( tNode.ChildByName ( "min_infix_len" ) );
+	tSettings.m_iMaxSubstringLen = (int)Int ( tNode.ChildByName ( "max_substring_len" ) );
+	tSettings.m_bHtmlStrip = Bool ( tNode.ChildByName ( "strip_html" ) );
+	tSettings.m_sHtmlIndexAttrs = String ( tNode.ChildByName ( "html_index_attrs" ) );
+	tSettings.m_sHtmlRemoveElements = String ( tNode.ChildByName ( "html_remove_elements" ) );
+	tSettings.m_bIndexExactWords = Bool ( tNode.ChildByName ( "index_exact_words" ) );
+	tSettings.m_eHitless = (ESphHitless)Int ( tNode.ChildByName ( "hitless" ), SPH_HITLESS_NONE );
+	tSettings.m_eHitFormat = (ESphHitFormat)Int ( tNode.ChildByName ( "hit_format" ), SPH_HIT_FORMAT_PLAIN );
+	tSettings.m_bIndexSP = Bool ( tNode.ChildByName ( "index_sp" ) );
+	tSettings.m_sZones = String ( tNode.ChildByName ( "zones" ) );
+	tSettings.m_iBoundaryStep = (int)Int ( tNode.ChildByName ( "boundary_step" ) );
+	tSettings.m_iStopwordStep = (int)Int ( tNode.ChildByName ( "stopword_step" ), 1 );
+	tSettings.m_iOvershortStep = (int)Int ( tNode.ChildByName ( "overshort_step" ), 1 );
+	tSettings.m_iEmbeddedLimit = (int)Int ( tNode.ChildByName ( "embedded_limit" ) );
+	tSettings.m_eBigramIndex = (ESphBigram)Int ( tNode.ChildByName ( "bigram_index" ), SPH_BIGRAM_NONE );
+	tSettings.m_sBigramWords = String ( tNode.ChildByName ( "bigram_words" ) );
+	tSettings.m_bIndexFieldLens = Bool ( tNode.ChildByName ( "index_field_lens" ) );
+	tSettings.m_ePreprocessor = (Preprocessor_e)Int ( tNode.ChildByName ( "icu" ), (DWORD)Preprocessor_e::NONE  );
+	tSettings.m_sIndexTokenFilter = String ( tNode.ChildByName ( "index_token_filter" ) );
+	tSettings.m_tBlobUpdateSpace = Int ( tNode.ChildByName ( "blob_update_space" ) );
+	tSettings.m_iSkiplistBlockSize = (int)Int ( tNode.ChildByName ( "skiplist_block_size" ), 32 );
+	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
+	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
+	tSettings.m_eDefaultEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine_default" ), (DWORD)AttrEngine_e::ROWWISE );
+}
+
+
+void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion )
+{
+	tSettings.SetMinPrefixLen ( tReader.GetDword() );
+	tSettings.m_iMinInfixLen = tReader.GetDword ();
+	tSettings.m_iMaxSubstringLen = tReader.GetDword();
+
+	tSettings.m_bHtmlStrip = !!tReader.GetByte ();
+	tSettings.m_sHtmlIndexAttrs = tReader.GetString ();
+	tSettings.m_sHtmlRemoveElements = tReader.GetString ();
+
+	tSettings.m_bIndexExactWords = !!tReader.GetByte ();
+	tSettings.m_eHitless = (ESphHitless)tReader.GetDword();
+
+	tSettings.m_eHitFormat = (ESphHitFormat)tReader.GetDword();
+	tSettings.m_bIndexSP = !!tReader.GetByte();
+
+	tSettings.m_sZones = tReader.GetString();
+
+	tSettings.m_iBoundaryStep = (int)tReader.GetDword();
+	tSettings.m_iStopwordStep = (int)tReader.GetDword();
+
+	tSettings.m_iOvershortStep = (int)tReader.GetDword();
+	tSettings.m_iEmbeddedLimit = (int)tReader.GetDword();
+
+	tSettings.m_eBigramIndex = (ESphBigram)tReader.GetByte();
+	tSettings.m_sBigramWords = tReader.GetString();
+
+	tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
+
+	tSettings.m_ePreprocessor = tReader.GetByte()==1 ? Preprocessor_e::ICU : Preprocessor_e::NONE;
+	tReader.GetString(); // was: RLP context
+
+	tSettings.m_sIndexTokenFilter = tReader.GetString();
+	tSettings.m_tBlobUpdateSpace = tReader.GetOffset();
+
+	if ( uVersion<56 )
+		tSettings.m_iSkiplistBlockSize = 128;
+	else
+		tSettings.m_iSkiplistBlockSize = (int)tReader.GetDword();
+
+	if ( uVersion>=60 )
+		tSettings.m_sHitlessFiles = tReader.GetString();
+
+	if ( uVersion>=63 )
+		tSettings.m_eEngine = (AttrEngine_e)tReader.GetDword();
+}
+
+
+void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings )
+{
+	tWriter.PutDword ( tSettings.RawMinPrefixLen() );
+	tWriter.PutDword ( tSettings.m_iMinInfixLen );
+	tWriter.PutDword ( tSettings.m_iMaxSubstringLen );
+	tWriter.PutByte ( tSettings.m_bHtmlStrip ? 1 : 0 );
+	tWriter.PutString ( tSettings.m_sHtmlIndexAttrs.cstr () );
+	tWriter.PutString ( tSettings.m_sHtmlRemoveElements.cstr () );
+	tWriter.PutByte ( tSettings.m_bIndexExactWords ? 1 : 0 );
+	tWriter.PutDword ( tSettings.m_eHitless );
+	tWriter.PutDword ( tSettings.m_eHitFormat );
+	tWriter.PutByte ( tSettings.m_bIndexSP );
+	tWriter.PutString ( tSettings.m_sZones );
+	tWriter.PutDword ( tSettings.m_iBoundaryStep );
+	tWriter.PutDword ( tSettings.m_iStopwordStep );
+	tWriter.PutDword ( tSettings.m_iOvershortStep );
+	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
+	tWriter.PutByte ( tSettings.m_eBigramIndex );
+	tWriter.PutString ( tSettings.m_sBigramWords );
+	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
+	tWriter.PutByte ( tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
+	tWriter.PutString("");	// was: RLP context
+	tWriter.PutString ( tSettings.m_sIndexTokenFilter );
+	tWriter.PutOffset ( tSettings.m_tBlobUpdateSpace );
+	tWriter.PutDword ( tSettings.m_iSkiplistBlockSize );
+	tWriter.PutString ( tSettings.m_sHitlessFiles );
+	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
+}
+
+
+void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSettings )
+{
+	auto _ = tOut.ObjectW();
+	tOut.NamedValNonDefault ( "min_prefix_len", tSettings.RawMinPrefixLen() );
+	tOut.NamedValNonDefault ( "min_infix_len", tSettings.m_iMinInfixLen );
+	tOut.NamedValNonDefault ( "max_substring_len", tSettings.m_iMaxSubstringLen );
+	tOut.NamedValNonDefault ( "strip_html", tSettings.m_bHtmlStrip, false );
+	tOut.NamedStringNonEmpty ( "html_index_attrs", tSettings.m_sHtmlIndexAttrs );
+	tOut.NamedStringNonEmpty ( "html_remove_elements", tSettings.m_sHtmlRemoveElements );
+	tOut.NamedValNonDefault ( "index_exact_words", tSettings.m_bIndexExactWords, false );
+	tOut.NamedValNonDefault ( "hitless", tSettings.m_eHitless, SPH_HITLESS_NONE );
+	tOut.NamedValNonDefault ( "hit_format", tSettings.m_eHitFormat, SPH_HIT_FORMAT_PLAIN );
+	tOut.NamedValNonDefault ( "index_sp", tSettings.m_bIndexSP, false );
+	tOut.NamedStringNonEmpty ( "zones", tSettings.m_sZones );
+	tOut.NamedValNonDefault ( "boundary_step", tSettings.m_iBoundaryStep );
+	tOut.NamedValNonDefault ( "stopword_step", tSettings.m_iStopwordStep, 1 );
+	tOut.NamedValNonDefault ( "overshort_step", tSettings.m_iOvershortStep, 1 );
+	tOut.NamedValNonDefault ( "embedded_limit", tSettings.m_iEmbeddedLimit );
+	tOut.NamedValNonDefault ( "bigram_index", tSettings.m_eBigramIndex, SPH_BIGRAM_NONE );
+	tOut.NamedStringNonEmpty ( "bigram_words", tSettings.m_sBigramWords );
+	tOut.NamedValNonDefault ( "index_field_lens", tSettings.m_bIndexFieldLens, false );
+	tOut.NamedValNonDefault ( "icu", (DWORD)tSettings.m_ePreprocessor, (DWORD)Preprocessor_e::NONE );
+	tOut.NamedStringNonEmpty ( "index_token_filter", tSettings.m_sIndexTokenFilter );
+	tOut.NamedValNonDefault ( "blob_update_space", tSettings.m_tBlobUpdateSpace );
+	tOut.NamedValNonDefault ( "skiplist_block_size", tSettings.m_iSkiplistBlockSize, 32 );
+	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
+	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
+	tOut.NamedValNonDefault ( "engine_default", (DWORD)tSettings.m_eDefaultEngine, (DWORD)AttrEngine_e::ROWWISE );
+}
+
 
 void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sSettingsFile )
 {

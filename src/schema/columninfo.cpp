@@ -77,6 +77,11 @@ bool CSphColumnInfo::IsJoined() const
 }
 
 
+bool CSphColumnInfo::IsIndexedSI() const
+{
+	return m_uAttrFlags & ATTR_INDEXED_SI;
+}
+
 
 CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {

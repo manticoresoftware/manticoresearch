@@ -96,6 +96,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarni
 	m_dRowwiseAttrs = tSettings.m_dRowwiseAttrs;
 	m_dColumnarStringsNoHash = tSettings.m_dColumnarStringsNoHash;
 	m_dKNN = tSettings.m_dKNN;
+	m_dJsonSIAttrs = tSettings.m_dJsonSIAttrs;
 	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;
 	m_eEngine = tSettings.m_eEngine;
 

@@ -318,7 +318,7 @@ public:
 	}
 
 	template<typename T>
-	void NamedVal ( const char* szName, T tValue )
+	void NamedVal ( const char* szName, const T & tValue )
 	{
 		Named ( szName );
 		*this << tValue;

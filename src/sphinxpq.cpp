@@ -143,7 +143,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 10;				///< META in json format
+	static constexpr DWORD			META_VERSION = 10;				///< META in json format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -192,6 +192,8 @@ private:
 	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 	bool LoadMetaImpl ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 };
+
+// FIXME! Can't define it in the class because it fails to link on clang-15
 
 //////////////////////////////////////////////////////////////////////////
 // percolate functions

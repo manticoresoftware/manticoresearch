@@ -5476,8 +5476,8 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_pHook = pHook;
 	tQS.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
 	tQS.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
-	tQS.m_fnGetCountDistinct	= [pIndex]( const CSphString & sAttr ){ return pIndex->GetCountDistinct(sAttr); };
-	tQS.m_fnGetCountFilter		= [pIndex]( const CSphFilterSettings & tFilter ){ return pIndex->GetCountFilter(tFilter); };
+	tQS.m_fnGetCountDistinct	= [pIndex]( const CSphString & sAttr, CSphString & sModifiedAttr ){ return pIndex->GetCountDistinct ( sAttr, sModifiedAttr ); };
+	tQS.m_fnGetCountFilter		= [pIndex]( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ){ return pIndex->GetCountFilter ( tFilter, sModifiedAttr ); };
 	tQS.m_fnGetCount			= [pIndex](){ return pIndex->GetCount(); };
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
@@ -5775,7 +5775,8 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 				continue;
 
 			auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
-			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct(sAttr);
+			CSphString sModifiedAttr;
+			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct ( sAttr, sModifiedAttr );
 		}
 	}
 }
@@ -7676,7 +7677,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill",
+	"show_settings", "alter_rebuild_si", "kill"
 };
 
 
@@ -11954,6 +11955,9 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 
 	if ( tAttr.IsIndexedKNN() )
 		sProps << "knn";
+
+	if ( tAttr.IsIndexedSI() )
+		sProps << "indexed";
 
 	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
 		sProps << "fast_fetch";
@@ -16892,6 +16896,7 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 		tOut.Ok ( iKilled );
 	}
 }
+
 
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {

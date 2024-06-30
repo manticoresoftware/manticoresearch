@@ -41,6 +41,7 @@
 #include "tracer.h"
 #include "pseudosharding.h"
 #include "knnmisc.h"
+#include "jsonsi.h"
 #include "std/sys.h"
 #include "dict/infix/infix_builder.h"
 
@@ -1259,8 +1260,8 @@ public:
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int* pAffected = nullptr );
 	int					ChunkIDByChunkIdx (int iChunkIdx) const;
 
-	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
-	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const override;
+	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCount() const override;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 
@@ -1353,7 +1354,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 21;			///< current version. 21 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
+	static constexpr DWORD		META_VERSION		= 21;			///< current version. 21 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -3393,14 +3394,15 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 
 bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const
 {
-	auto sSPA = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPA );
-	auto sSPB = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPB );
-	auto sSPT = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPT );
-	auto sSPHI = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPHI );
-	auto sSPDS = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPDS );
-	auto sSPC = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPC );
-	auto sSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPIDX );
-	auto sSKNN = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPKNN );
+	auto sSPA	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPA );
+	auto sSPB	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPB );
+	auto sSPT	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPT );
+	auto sSPHI	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPHI );
+	auto sSPDS	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPDS );
+	auto sSPC	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPC );
+	auto sSIdx	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPIDX );
+	auto sJsonSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPJIDX );
+	auto sSKNN	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPKNN );
 
 	CSphWriter tWriterSPA;
 	if ( !tWriterSPA.OpenFile ( sSPA, sError ) )
@@ -3443,11 +3445,19 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	CSphVector<PlainOrColumnar_t> dSiAttrs;
 	std::unique_ptr<SI::Builder_i> pSIdxBuilder;
+	std::unique_ptr<JsonSIBuilder_i> pJsonSIBuilder;
 	if ( IsSecondaryLibLoaded() )
 	{
 		pSIdxBuilder = CreateIndexBuilder ( m_iRtMemLimit, m_tSchema, sSIdx, dSiAttrs, tSettings.m_iBufferStorage, sError );
 		if ( !pSIdxBuilder )
 			return false;
+
+		if ( m_tSchema.HasJsonSIAttrs() )
+		{
+			pJsonSIBuilder = CreateJsonSIBuilder ( m_tSchema, sSPB, sJsonSIdx, sError );
+			if ( !pJsonSIBuilder )
+				return false;
+		}
 	}
 
 	tCtx.m_iTotalDocuments = 0;
@@ -3491,12 +3501,16 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( pBlobLocatorAttr )
 			{
 				auto tSrcOffset = sphGetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator );
-				auto tTargetOffset = pBlobRowBuilder->Flush ( tSeg.m_dBlobs.Begin() + tSrcOffset );
+				auto tTargetOffsetSize = pBlobRowBuilder->Flush ( tSeg.m_dBlobs.Begin() + tSrcOffset );
 
 				memcpy ( pNewRow, pRow, iStrideBytes );
-				sphSetRowAttr ( pNewRow, pBlobLocatorAttr->m_tLocator, tTargetOffset );
+				sphSetRowAttr ( pNewRow, pBlobLocatorAttr->m_tLocator, tTargetOffsetSize.first );
 				tWriterSPA.PutBytes ( pNewRow, (int64_t)iStrideBytes );
-			} else
+
+				if ( pJsonSIBuilder )
+					pJsonSIBuilder->AddRowSize ( tTargetOffsetSize.second );
+			}
+			else
 				tWriterSPA.PutBytes ( pRow, (int64_t)iStrideBytes );
 
 			DocID_t tDocID;
@@ -3583,6 +3597,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	}
 
 	tWriterSPA.CloseFile();
+	if ( tWriterSPA.IsError() )
+		return false;
 
 	std::string sSidxError;
 	if ( pSIdxBuilder.get() && !pSIdxBuilder->Done ( sSidxError ) )
@@ -3591,7 +3607,10 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		return false;
 	}
 
-	return !tWriterSPA.IsError();
+	if ( pJsonSIBuilder && !pJsonSIBuilder->Done(sError) )
+		return false;
+
+	return true;
 }
 
 
@@ -7039,7 +7058,8 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 		int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, i->Cidx().GetMatchSchema() );
 		if ( iGroupby>=0 )
 		{
-			int64_t iCountDistinct = i->Cidx().GetCountDistinct ( i->Cidx().GetMatchSchema().GetAttr(iGroupby).m_sName );
+			CSphString sModifiedAttr;
+			int64_t iCountDistinct = i->Cidx().GetCountDistinct ( i->Cidx().GetMatchSchema().GetAttr(iGroupby).m_sName, sModifiedAttr );
 			if ( iCountDistinct==-1 )
 				return -1;	// if one of the chunks doesn't have that info, we can't calculate max
 
@@ -7299,7 +7319,7 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema * pSchema,
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, sError ) )
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, sError ) )
 		return false;
 
 	tFlx.m_pFilters = &dTransformedFilters;
@@ -9017,7 +9037,7 @@ int RtIndex_c::ChunkIDByChunkIdx ( int iChunkIdx ) const
 }
 
 
-int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
+int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const
 {
 	// fixme! add code to calculate distinct values in RAM segments
 	if ( m_tRtChunks.GetRamSegmentsCount() )
@@ -9027,11 +9047,11 @@ int64_t	RtIndex_c::GetCountDistinct ( const CSphString & sAttr ) const
 	if ( !pDiskChunks || pDiskChunks->GetLength()!=1 )
 		return -1;
 
-	return (*pDiskChunks)[0]->Cidx().GetCountDistinct(sAttr);
+	return (*pDiskChunks)[0]->Cidx().GetCountDistinct ( sAttr, sModifiedAttr );
 }
 
 
-int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter ) const
+int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const
 {
 	// fixme! add code to calculate count(*) in RAM segments
 	if ( m_tRtChunks.GetRamSegmentsCount() )
@@ -9044,7 +9064,7 @@ int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter ) const
 	int64_t iSumCount = 0;
 	for ( const auto & i : *pDiskChunks )
 	{
-		int64_t iCount = i->Cidx().GetCountFilter(tFilter);
+		int64_t iCount = i->Cidx().GetCountFilter ( tFilter, sModifiedAttr );
 		if ( iCount==-1 )
 			return -1;
 

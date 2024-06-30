@@ -453,7 +453,7 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 	if ( m_tSI.IsEmpty() )
 		return false;
 
-	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE )
+	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE && tFilter.m_eType!=SPH_FILTER_NULL )
 		return false;
 
 	// all(mva\string) need to scan whole row

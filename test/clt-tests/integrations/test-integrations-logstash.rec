@@ -62,14 +62,14 @@ mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM dpkg_log;"
 |        5 |
 +----------+
 ––– input –––
-mysql -P9306 -h0 -e "SELECT path, message, @version FROM dpkg_log;" | sort
+mysql -P9306 -h0 -e "SELECT @version,message, path FROM dpkg_log;" | sort
 ––– output –––
-+-------------------+----------------------------------------------------------------------------------------+----------+
-+-------------------+----------------------------------------------------------------------------------------+----------+
-+-------------------+----------------------------------------------------------------------------------------+----------+
-| path              | message                                                                                | @version |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status half-configured libc-bin:amd64 2.31-0ubuntu9.9              | 1        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status installed libc-bin:amd64 2.31-0ubuntu9.9                    | 1        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1 | 1        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>                     | 1        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# trigproc systemd:amd64 245.4-4ubuntu3.21 <none>                    | 1        |
++----------+----------------------------------------------------------------------------------------+-------------------+
++----------+----------------------------------------------------------------------------------------+-------------------+
++----------+----------------------------------------------------------------------------------------+-------------------+
+| 1        | 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9              | /var/log/dpkg.log |
+| 1        | 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9                    | /var/log/dpkg.log |
+| 1        | 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1 | /var/log/dpkg.log |
+| 1        | 2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>                     | /var/log/dpkg.log |
+| 1        | 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>                    | /var/log/dpkg.log |
+| @version | message                                                                                | path              |

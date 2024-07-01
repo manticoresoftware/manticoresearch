@@ -63,12 +63,12 @@ mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM dpkg_log;"
 ––– input –––
 mysql -P9306 -h0 -e "SELECT file, message, source_type FROM dpkg_log;"
 ––– output –––
-+-------------------+----------------------------------------------------------------------------------------+-------------+
+ +-------------------+----------------------------------------------------------------------------------------+-------------+
 | file              | message                                                                                | source_type |
 +-------------------+----------------------------------------------------------------------------------------+-------------+
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1 | file        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>                     | file        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status half-configured libc-bin:amd64 2.31-0ubuntu9.9              | file        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# status installed libc-bin:amd64 2.31-0ubuntu9.9                    | file        |
-| /var/log/dpkg.log | #!/[0-9]{4}-[0-9]{2}-[0-9]{2}/!# #!/[0-9]{2}:[0-9]{2}:[0-9]{2}/!# trigproc systemd:amd64 245.4-4ubuntu3.21 <none>                    | file        |
+| /var/log/dpkg.log | 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1 | file        |
+| /var/log/dpkg.log | 2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>                     | file        |
+| /var/log/dpkg.log | 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9              | file        |
+| /var/log/dpkg.log | 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9                    | file        |
+| /var/log/dpkg.log | 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>                    | file        |
 +-------------------+----------------------------------------------------------------------------------------+-------------+

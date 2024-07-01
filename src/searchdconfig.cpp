@@ -802,33 +802,6 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath,
 	return true;
 }
 
-
-bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, StrVec_t & dCopied, CSphString & sError )
-{
-	for ( const auto & i : dFiles )
-	{
-		CSphString sDest = i;
-		StripPath(sDest);
-		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
-		if ( RealPath ( i ) == RealPath ( sDest ) )
-			continue;
-
-		// can not overwrite existed destination file
-		if ( sphIsReadable ( sDest.cstr(), nullptr ) )
-		{
-			sError.SetSprintf ( "can not overwrite index file '%s'", sDest.cstr() );
-			return false;
-		}
-
-		if ( !CopyFile ( i, sDest, sError ) )
-			return false;
-
-		dCopied.Add(sDest);
-	}
-
-	return true;
-}
-
 using OptInt_t = std::optional<int>;
 using CopiedFiles = SmallStringHash_T<CSphSavedFile>;
 
@@ -1360,17 +1333,14 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	if ( !CheckCreateTableSettings ( tCreateTable, sError ) )
 		return false;
 
-	IndexSettingsContainer_c tSettingsContainer;
-	if ( !tSettingsContainer.Populate ( tCreateTable ) )
+	std::unique_ptr<IndexSettingsContainer_i> pSettingsContainer { CreateIndexSettingsContainer() };
+	if ( !pSettingsContainer->Populate ( tCreateTable, true ) )
 	{
-		sError = tSettingsContainer.GetError();
+		sError = pSettingsContainer->GetError();
 		return false;
 	}
 
-	StrVec_t dWipe;
-	auto tCleanup = AtScopeExit ( [&dWipe] { dWipe.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
-
-	if ( tSettingsContainer.Get ( "type" ) != "distributed")
+	if ( pSettingsContainer->Get ( "type" )!="distributed")
 	{
 		CSphString sPath, sIndexPath;
 		if ( !PrepareDirForNewIndex ( sPath, sIndexPath, sIndex, sError ) )
@@ -1380,12 +1350,15 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 			return false;
 		}
 
-		tSettingsContainer.Add ( "path", sIndexPath );
-		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, dWipe, sError ) )
+		pSettingsContainer->Add ( "path", sIndexPath );
+		if ( !pSettingsContainer->CopyExternalFiles ( sPath, 0 ) )
+		{
+			sError = pSettingsContainer->GetError();
 			return false;
+		}
 	}
 
-	const CSphConfigSection & hCfg = tSettingsContainer.AsCfg();
+	const CSphConfigSection & hCfg = pSettingsContainer->AsCfg();
 
 	ESphAddIndex eAdd;
 	ServedIndexRefPtr_c pDesc;
@@ -1412,7 +1385,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 
 	if ( SaveConfigInt ( sError ) )
 	{
-		dWipe.Reset();
+		pSettingsContainer->ResetCleanup();
 		return true;
 	}
 

@@ -1097,14 +1097,17 @@ RowidIterator_i * CreateIteratorWrapper ( common::BlockIterator_i * pIterator, c
 class RowidEmptyIterator_c : public RowidIterator_i
 {
 public:
-			RowidEmptyIterator_c () = default;
+			RowidEmptyIterator_c ( const CSphString & sAttr ) : m_sAttr ( sAttr ){}
 
 	bool	HintRowID ( RowID_t tRowID ) override { return false; }
 	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override { return false; }
 	int64_t	GetNumProcessed() const override { return 0; }
 	void	SetCutoff ( int iCutoff ) override {}
 	bool	WasCutoffHit() const override { return false; }
-	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override {}
+	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { m_sAttr, "SecondaryIndex" } ); }
+
+private:
+	CSphString m_sAttr;
 };
 
 static const int CIDX_ROWS = 512;
@@ -1309,7 +1312,7 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 {
 	RowidIterator_i * pIt = nullptr;
 	if ( !dFilterIt.size() )
-		pIt = new RowidEmptyIterator_c();
+		pIt = new RowidEmptyIterator_c ( tFilter.m_sAttrName );
 	else if ( dFilterIt.size()==1 )
 	{
 		if ( m_pRowIdFilter )

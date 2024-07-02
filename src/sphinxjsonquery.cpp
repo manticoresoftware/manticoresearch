@@ -1210,7 +1210,7 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 		dInsertSchema.Last().ToLower();
 
 		SqlInsert_t & tNewValue = dInsertValues.Add();
-		if ( tItem.IsStr() )
+		if ( tItem.IsStr() || tItem.IsNull() )
 		{
 			tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
 			tNewValue.m_sVal = tItem.StrVal();

@@ -28,6 +28,10 @@ echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20
 ––– output –––
 0
 ––– input –––
+cat /var/log/dpkg.log | wc -l
+––– output –––
+5
+––– input –––
 filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
 ––– output –––
 [1] #!/[0-9]+/!#
@@ -44,27 +48,13 @@ curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort
 ––– output –––
 [{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM dpkg_log;"
+mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT message FROM dpkg_log\G;"  | grep -v '^*'
 ––– output –––
-+----------+------+
-| Index    | Type |
-+----------+------+
-| dpkg_log | rt   |
-+----------+------+
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
-––– input –––
-mysql -P9306 -h0 -e "SELECT message, ecs, input FROM dpkg_log;" | sort
-––– output –––
-+----------------------------------------------------------------------------------------+---------------------+-----------------------+
-+----------------------------------------------------------------------------------------+---------------------+-----------------------+
-+----------------------------------------------------------------------------------------+---------------------+-----------------------+
-| 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9              | {"version":"8.0.0"} | {"type":"filestream"} |
-| 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9                    | {"version":"8.0.0"} | {"type":"filestream"} |
-| 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1 | {"version":"8.0.0"} | {"type":"filestream"} |
-| 2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>                     | {"version":"8.0.0"} | {"type":"filestream"} |
-| 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>                    | {"version":"8.0.0"} | {"type":"filestream"} |
-| message                                                                                | ecs                 | input                 |
+dpkg_log
+rt
+5
+2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
+2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>
+2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>

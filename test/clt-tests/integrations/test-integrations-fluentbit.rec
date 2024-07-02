@@ -34,6 +34,10 @@ Fluent Bit v3.0.7
 echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
 ––– output –––
 0
+––– input –––
+cat /var/log/dpkg.log | wc -l
+––– output –––
+5
 ––– block: ../base/start-searchd –––
 ––– input –––
 fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit.conf > /dev/null 2>&1; echo $?
@@ -44,24 +48,13 @@ sleep 3; curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].da
 ––– output –––
 [{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"text","Properties":"indexed stored"}]
 ––– input –––
-mysql -P9306 -h0 -e "SHOW TABLES; SELECT COUNT(*) FROM dpkg_log; SELECT log FROM dpkg_log;"
+mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT log FROM dpkg_log\G;" | grep -v '^*'
 ––– output –––
-+----------+------+
-| Index    | Type |
-+----------+------+
-| dpkg_log | rt   |
-+----------+------+
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
-+----------------------------------------------------------------------------------------+
-| log                                                                                    |
-+----------------------------------------------------------------------------------------+
-| 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1 |
-| 2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>                     |
-| 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9              |
-| 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9                    |
-| 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>                    |
-+----------------------------------------------------------------------------------------+
+dpkg_log
+rt
+5
+2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
+2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>
+2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>

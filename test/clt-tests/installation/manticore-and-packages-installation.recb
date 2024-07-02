@@ -1,4 +1,7 @@
 ––– input –––
+sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo; sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo
+––– output –––
+––– input –––
 yum install -y --skip-broken mariadb mariadb105 which > /dev/null 2>&1; echo $?
 ––– output –––
 0

@@ -26,6 +26,7 @@ echo -e "filebeat.inputs:\n- type: filestream\n  id: example\n  paths:\n    - /v
 ––– input –––
 echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
 ––– output –––
+0
 ––– input –––
 filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
 ––– output –––

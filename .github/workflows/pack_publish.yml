@@ -27,3 +27,5 @@ jobs:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
           run_args: -e TELEMETRY=0
+
+          

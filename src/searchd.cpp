@@ -10931,7 +10931,7 @@ bool AttributeConverter_c::SetFieldValue ( int iField, const SqlInsert_t & tVal,
 		return false;
 	}
 
-	const char * szFieldValue = tVal.m_sVal.cstr();
+	const char * szFieldValue = tVal.m_sVal.scstr();
 	if ( m_dFieldAttrs[iField] )
 	{
 		m_dTmpFieldStorage[iField] = szFieldValue;

@@ -653,5 +653,12 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- facets with sort defined as order property at aggregate bucket -->
+<query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "terms": { "field": "gid", "size": 5, "order": {"gid" : "asc"} } } } }</query>
+
+<!-- facets with sort but the wrong order -->
+<query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "sort":[{"gid":{"order":"asc"}}], "terms": { "field": "gid", "size": 5 }}}}</query>
+
+
 </queries>
 </test>

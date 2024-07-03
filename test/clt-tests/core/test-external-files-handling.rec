@@ -3,24 +3,24 @@
 echo "z => w" > /var/lib/manticore/wordforms1.txt; echo "x => y" > /var/lib/manticore/wordforms2.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop1.txt; echo "defstop" > /var/lib/manticore/stop2.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t (id BIGINT, title TEXT, tag INTEGER) stopwords = 'en, it, /var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions = '/var/lib/manticore/exc.txt' wordforms = '/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/some_mask*';"
+mysql -h0 -P9306 -e "CREATE TABLE t_ram (id BIGINT, title TEXT, tag INTEGER) stopwords = 'en, it, /var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions = '/var/lib/manticore/exc.txt' wordforms = '/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/some_mask*' rt_mem_limit = '256M';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t;"
+mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (2, 'srthh', 88); FLUSH RAMCHUNK t;"
+mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (2, 'srthh', 88); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t;"
+mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t; SHOW CREATE TABLE t;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_ram; SHOW CREATE TABLE t_ram;"
 ––– output –––
 +-------+------+
 | Index | Type |
 +-------+------+
-| t     | rt   |
+| t_ram | rt   |
 +-------+------+
 +------+----------+------+
 | id   | title    | tag  |
@@ -29,25 +29,34 @@ mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t; SHOW CREATE TABLE t;"
 |    1 | zxczxc   |   77 |
 |    3 | srthgrth |   99 |
 +------+----------+------+
-+-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table | Create Table                                                                                                                                                                                                                                                                                                  |
-+-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| t     | CREATE TABLE t (
++-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table | Create Table                                                                                                                                                                                                                                                                                                                                                           |
++-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| t_ram | CREATE TABLE t_ram (
 id bigint,
 title text,
 tag integer
-) exceptions='/var/lib/manticore/t/exc.txt' stopwords='/var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt' wordforms='/var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt' |
-+-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+) exceptions='/var/lib/manticore/t_ram/exc.txt' stopwords='/var/lib/manticore/t_ram/en /var/lib/manticore/t_ram/it /var/lib/manticore/t_ram/stop1.txt /var/lib/manticore/t_ram/stop2.txt' wordforms='/var/lib/manticore/t_ram/wordforms1.txt /var/lib/manticore/t_ram/wordforms2.txt' rt_mem_limit='268435456' |
++-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+mysql -h0 -P9306 -e "SHOW TABLE t_ram STATUS LIKE 'disk_chunks';"
 ––– output –––
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Variable_name | Value                                                                                                                                                                                                                                                   |
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| settings      | exceptions = /var/lib/manticore/t/exc.txt
-stopwords = /var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt
-wordforms = /var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt |
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| disk_chunks   | 3     |
++---------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
+––– output –––
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                                                                        |
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | exceptions = /var/lib/manticore/t_ram/exc.txt
+stopwords = /var/lib/manticore/t_ram/en /var/lib/manticore/t_ram/it /var/lib/manticore/t_ram/stop1.txt /var/lib/manticore/t_ram/stop2.txt
+wordforms = /var/lib/manticore/t_ram/wordforms1.txt /var/lib/manticore/t_ram/wordforms2.txt
+rt_mem_limit = 268435456 |
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
@@ -60,19 +69,23 @@ starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMV
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't'
+precaching table 't_ram'
 precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
 Buddy started!
 ––– input –––
-mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
 ––– output –––
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Variable_name | Value                                                                                                                                                                                                                                                   |
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| settings      | exceptions = /var/lib/manticore/t/exc.txt
-stopwords = /var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt
-wordforms = /var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt |
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                                                                        |
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | exceptions = /var/lib/manticore/t_ram/exc.txt
+stopwords = /var/lib/manticore/t_ram/en /var/lib/manticore/t_ram/it /var/lib/manticore/t_ram/stop1.txt /var/lib/manticore/t_ram/stop2.txt
+wordforms = /var/lib/manticore/t_ram/wordforms1.txt /var/lib/manticore/t_ram/wordforms2.txt
+rt_mem_limit = 268435456 |
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mkdir -p /var/lib/manticore/t/ && echo "x => z" > /var/lib/manticore/t/new_exc.txt && echo "apple => orange" > /var/lib/manticore/t/new_wordforms1.txt && echo "banana => pear" > /var/lib/manticore/t/new_wordforms2.txt && echo "newstop1" > /var/lib/manticore/t/new_stop1.txt && echo "newstop2" > /var/lib/manticore/t/new_stop2.txt
+––– output –––
 ––– input –––
 echo "x => z" > /var/lib/manticore/t/new_exc.txt
 ––– output –––
@@ -89,41 +102,42 @@ echo "newstop1" > /var/lib/manticore/t/new_stop1.txt
 echo "newstop2" > /var/lib/manticore/t/new_stop2.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE t STOPWORDS='/var/lib/manticore/t/new_stop1.txt, /var/lib/manticore/t/new_stop2.txt';"
+mysql -h0 -P9306 -e "ALTER TABLE t_ram STOPWORDS='/var/lib/manticore/t/new_stop1.txt, /var/lib/manticore/t/new_stop2.txt';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE t EXCEPTIONS='/var/lib/manticore/t/new_exc.txt';"
+mysql -h0 -P9306 -e "ALTER TABLE t_ram EXCEPTIONS='/var/lib/manticore/t/new_exc.txt';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE t WORDFORMS='/var/lib/manticore/t/new_wordforms1.txt, /var/lib/manticore/t/new_wordforms2.txt';"
+mysql -h0 -P9306 -e "ALTER TABLE t_ram WORDFORMS='/var/lib/manticore/t/new_wordforms1.txt, /var/lib/manticore/t/new_wordforms2.txt';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
 ––– output –––
-+---------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Variable_name | Value                                                                                                                                                                                                                       |
-+---------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| settings      | exceptions = /var/lib/manticore/t/new_exc.txt
-stopwords = /var/lib/manticore/t/new_stop1.txt /var/lib/manticore/t/new_stop2.txt
-wordforms = /var/lib/manticore/t/new_wordforms1.txt /var/lib/manticore/t/new_wordforms2.txt |
-+---------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                                    |
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | exceptions = /var/lib/manticore/t_ram/new_exc.txt
+stopwords = /var/lib/manticore/t_ram/new_stop1.txt /var/lib/manticore/t_ram/new_stop2.txt
+wordforms = /var/lib/manticore/t_ram/new_wordforms1.txt /var/lib/manticore/t_ram/new_wordforms2.txt
+rt_mem_limit = 268435456 |
++---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE t STOPWORDS='';"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE t EXCEPTIONS='';"
+mysql -h0 -P9306 -e "ALTER TABLE t_ram STOPWORDS='';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "ALTER TABLE t WORDFORMS='';"
+mysql -h0 -P9306 -e "ALTER TABLE t_ram EXCEPTIONS='';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+mysql -h0 -P9306 -e "ALTER TABLE t_ram WORDFORMS='';"
 ––– output –––
-+---------------+-------+
-| Variable_name | Value |
-+---------------+-------+
-| settings      |       |
-+---------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
+––– output –––
++---------------+--------------------------+
+| Variable_name | Value                    |
++---------------+--------------------------+
+| settings      | rt_mem_limit = 268435456 |
++---------------+--------------------------+
 ––– input –––
 rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
@@ -136,14 +150,61 @@ starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMV
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't'
+precaching table 't_ram'
 precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
 Buddy started!
 ––– input –––
-mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
 ––– output –––
-+---------------+-------+
-| Variable_name | Value |
-+---------------+-------+
-| settings      |       |
-+---------------+-------+
++---------------+--------------------------+
+| Variable_name | Value                    |
++---------------+--------------------------+
+| settings      | rt_mem_limit = 268435456 |
++---------------+--------------------------+
+––– input –––
+echo "newstop3" > /var/lib/manticore/t/new_stop3.txt && echo "newstop4" > /var/lib/manticore/t/new_stop4.txt && echo "newstop5" > /var/lib/manticore/t/new_stop5.txt && echo "newstop6" > /var/lib/manticore/t/new_stop6.txt && echo "newstop7" > /var/lib/manticore/t/new_stop7.txt
+––– output –––
+––– input –––
+echo "word1 => replacement1" > /var/lib/manticore/t/new_wordforms3.txt && echo "word2 => replacement2" > /var/lib/manticore/t/new_wordforms4.txt && echo "word3 => replacement3" > /var/lib/manticore/t/new_wordforms5.txt && echo "word4 => replacement4" > /var/lib/manticore/t/new_wordforms6.txt && echo "word5 => replacement5" > /var/lib/manticore/t/new_wordforms7.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE t_ram STOPWORDS='/var/lib/manticore/t/new_stop3.txt, /var/lib/manticore/t/new_stop4.txt, /var/lib/manticore/t/new_stop5.txt, /var/lib/manticore/t/new_stop6.txt, /var/lib/manticore/t/new_stop7.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE t_ram WORDFORMS='/var/lib/manticore/t/new_wordforms3.txt, /var/lib/manticore/t/new_wordforms4.txt, /var/lib/manticore/t/new_wordforms5.txt, /var/lib/manticore/t/new_wordforms6.txt, /var/lib/manticore/t/new_wordforms7.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
+––– output –––
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | stopwords = /var/lib/manticore/t_ram/new_stop3.txt /var/lib/manticore/t_ram/new_stop4.txt /var/lib/manticore/t_ram/new_stop5.txt /var/lib/manticore/t_ram/new_stop6.txt /var/lib/manticore/t_ram/new_stop7.txt
+wordforms = /var/lib/manticore/t_ram/new_wordforms3.txt /var/lib/manticore/t_ram/new_wordforms4.txt /var/lib/manticore/t_ram/new_wordforms5.txt /var/lib/manticore/t_ram/new_wordforms6.txt /var/lib/manticore/t_ram/new_wordforms7.txt
+rt_mem_limit = 268435456 |
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 't_ram'
+precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
+Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
+––– output –––
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | stopwords = /var/lib/manticore/t_ram/new_stop3.txt /var/lib/manticore/t_ram/new_stop4.txt /var/lib/manticore/t_ram/new_stop5.txt /var/lib/manticore/t_ram/new_stop6.txt /var/lib/manticore/t_ram/new_stop7.txt
+wordforms = /var/lib/manticore/t_ram/new_wordforms3.txt /var/lib/manticore/t_ram/new_wordforms4.txt /var/lib/manticore/t_ram/new_wordforms5.txt /var/lib/manticore/t_ram/new_wordforms6.txt /var/lib/manticore/t_ram/new_wordforms7.txt
+rt_mem_limit = 268435456 |
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

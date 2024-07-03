@@ -1,26 +1,26 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "a => b" > /var/lib/manticore/wordforms2.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop1.txt; echo "defstop" > /var/lib/manticore/stop2.txt
+echo "z => w" > /var/lib/manticore/wordforms1.txt; echo "z => w" > /var/lib/manticore/wordforms2.txt; echo "a => b" > /var/lib/manticore/wordforms3.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "z" > /var/lib/manticore/stop1.txt; echo "defstop" > /var/lib/manticore/stop2.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t (id BIGINT, title TEXT, tag INTEGER) stopwords = 'en, it, /var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions = '/var/lib/manticore/exc.txt' wordforms = '/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/some_mask*';"
+mysql -h0 -P9306 -e "CREATE TABLE t_ram (id BIGINT, title TEXT, tag INTEGER) stopwords='/var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/wordforms3.txt, /var/lib/manticore/some_mask*' rt_mem_limit='256M';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t;"
+mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (2, 'srthh', 88); FLUSH RAMCHUNK t;"
+mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (2, 'srthh', 88); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t;"
+mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t; SHOW CREATE TABLE t;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_ram; SHOW CREATE TABLE t_ram;"
 ––– output –––
 +-------+------+
 | Index | Type |
 +-------+------+
-| t     | rt   |
+| t_ram | rt   |
 +-------+------+
 +------+----------+------+
 | id   | title    | tag  |
@@ -29,25 +29,34 @@ mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t; SHOW CREATE TABLE t;"
 |    1 | zxczxc   |   77 |
 |    3 | srthgrth |   99 |
 +------+----------+------+
-+-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table | Create Table                                                                                                                                                                                                                                                                                                  |
-+-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| t     | CREATE TABLE t (
++-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table | Create Table                                                                                                                                                                                                                                                                                                                                           |
++-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| t_ram | CREATE TABLE t_ram (
 id bigint,
 title text,
 tag integer
-) exceptions='/var/lib/manticore/t/exc.txt' stopwords='/var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt' wordforms='/var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt' |
-+-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+) exceptions='/var/lib/manticore/t_ram/exc.txt' stopwords='/var/lib/manticore/t_ram/stop1.txt /var/lib/manticore/t_ram/stop2.txt' wordforms='/var/lib/manticore/t_ram/wordforms1.txt /var/lib/manticore/t_ram/wordforms2.txt /var/lib/manticore/t_ram/wordforms3.txt' rt_mem_limit='268435456' |
++-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+mysql -h0 -P9306 -e "SHOW TABLE t_ram STATUS LIKE 'disk_chunks';"
 ––– output –––
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Variable_name | Value                                                                                                                                                                                                                                                   |
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| settings      | exceptions = /var/lib/manticore/t/exc.txt
-stopwords = /var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt
-wordforms = /var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt |
-+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| disk_chunks   | 3     |
++---------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
+––– output –––
++---------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                                                        |
++---------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | exceptions = /var/lib/manticore/t_ram/exc.txt
+stopwords = /var/lib/manticore/t_ram/stop1.txt /var/lib/manticore/t_ram/stop2.txt
+wordforms = /var/lib/manticore/t_ram/wordforms1.txt /var/lib/manticore/t_ram/wordforms2.txt /var/lib/manticore/t_ram/wordforms3.txt
+rt_mem_limit = 268435456 |
++---------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
@@ -60,8 +69,8 @@ starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMV
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't'
-WARNING: table 't': all wordform source tokens are stopwords (wordform='a => b', file='/var/lib/manticore/t/wordforms1.txt'). IGNORED.
-WARNING: table 't': all wordform source tokens are stopwords (wordform='a => b', file='/var/lib/manticore/t/wordforms2.txt'). IGNORED.
+precaching table 't_ram'
+WARNING: table 't_ram': all source tokens are stopwords (wordform='z => w', file='/var/lib/manticore/t_ram/wordforms1.txt'). IGNORED.
+WARNING: table 't_ram': all source tokens are stopwords (wordform='z => w', file='/var/lib/manticore/t_ram/wordforms2.txt'). IGNORED.
 precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
 Buddy started!

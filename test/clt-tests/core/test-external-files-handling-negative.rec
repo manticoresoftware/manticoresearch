@@ -3,7 +3,7 @@
 echo "z => w" > /var/lib/manticore/wordforms1.txt; echo "z => w" > /var/lib/manticore/wordforms2.txt; echo "a => b" > /var/lib/manticore/wordforms3.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "z" > /var/lib/manticore/stop1.txt; echo "defstop" > /var/lib/manticore/stop2.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t_ram (id BIGINT, title TEXT, tag INTEGER) stopwords='/var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/wordforms3.txt, /var/lib/manticore/some_mask*' rt_mem_limit='256M';"
+mysql -h0 -P9306 -e "CREATE TABLE t_ram (id BIGINT, title TEXT, tag INTEGER) stopwords='/var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/wordforms3.txt' rt_mem_limit='256M';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t_ram;"

@@ -3,7 +3,7 @@
 echo "z => w" > /var/lib/manticore/wordforms1.txt; echo "x => y" > /var/lib/manticore/wordforms2.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop1.txt; echo "defstop" > /var/lib/manticore/stop2.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t_disk (id BIGINT, title TEXT, tag INTEGER) stopwords = 'en, it, /var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions = '/var/lib/manticore/exc.txt' wordforms = '/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/some_mask*';"
+mysql -h0 -P9306 -e "CREATE TABLE t_disk (id BIGINT, title TEXT, tag INTEGER) stopwords = 'en, it, /var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions = '/var/lib/manticore/exc.txt' wordforms = '/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt,';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO t_disk (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t_disk;"

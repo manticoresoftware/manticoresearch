@@ -42,11 +42,11 @@ select id, in(j['addresses']['a5']['name'],'name_of_address_a5') a from t where 
 select id, any(x='val0' for x in j['arr']) a from t where a>0; show meta;
 select id, any(x='val0' or x='val3' for x in j['arr']) a from t where a>0; show meta;
 select id, any(x=1 or x=9 for x in j['int_arr']) a from t where a>0; show meta;
-select id, any(x=1 or x=9 for x in j['int_arr']) a from t where a>0 /*+ No_SecondaryIndex(j.int_arr) */; show meta;
+select id, any(x=1 or x=9 for x in j['int_arr']) a from t where a>0 /*+ No_SecondaryIndex(j['int_arr']) */; show meta;
 select id, any(x>=4 and x&lt;=6 for x in j['int_arr']) a from t where a>0; show meta;
 select id, any(x>=1 and x&lt;=9 for x in j['int_arr']) a from t where a>0; show meta;
 select id, any(x&lt;=1 or x&gt;=9 for x in j['int_arr']) a from t where a>0; show meta;
-select id, any(x>=1 and x&lt;=9 for x in j['int_arr']) a from t where a>0 /*+ No_SecondaryIndex(j.int_arr) */; show meta;
+select id, any(x>=1 and x&lt;=9 for x in j['int_arr']) a from t where a>0 /*+ No_SecondaryIndex(j['int_arr']) */; show meta;
 
 select id,j.addresses.a1.id from t order by id asc;
 select count(*) from t where j.addresses.a1.id is null; show meta;

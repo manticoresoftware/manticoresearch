@@ -1532,7 +1532,7 @@ public:
 					{
 						const BYTE * pStr;
 						int iLen = m_dArgs[i]->StringEval ( tStub, &pStr );
-						sArg.SetSprintf ( ".%s", CSphString ( (const char*)pStr, iLen ).cstr() );
+						sArg.SetSprintf ( "['%s']", CSphString ( (const char*)pStr, iLen ).cstr() );
 					}
 					break;
 

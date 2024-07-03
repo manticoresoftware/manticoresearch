@@ -196,7 +196,7 @@ private:
 			tBson.ForEach ( [this,sAttrPrefix,tAction]( CSphString && sName, const bson::NodeHandle_t & tNode )
 				{
 					CSphString sAttrName;
-					sAttrName.SetSprintf ( "%s.%s", sAttrPrefix.cstr(), sName.cstr() );
+					sAttrName.SetSprintf ( "%s['%s']", sAttrPrefix.cstr(), sName.cstr() );
 					ProcessJsonObj ( sAttrName, tNode, tAction );
 				} );
 
@@ -552,29 +552,76 @@ std::unique_ptr<JsonSIBuilder_i> CreateJsonSIBuilder ( const ISphSchema & tSchem
 
 CSphString UnifyJsonFieldName ( const CSphString & sName )
 {
-	CSphString sRes = sName;
-
-	const char * szOpen = "['";
-	const char * szClose = "']";
-
-	while ( true )
+	enum class State_e
 	{
-		const char * szStart = sRes.cstr();
-		const char * szEnd = szStart + sRes.Length();
+		NONE,
+		KEY_NAME,
+		QUOTES
+	};
 
-		const char * szFound1 = strstr ( szStart, szOpen );
-		if ( !szFound1 )
+	State_e eState = State_e::KEY_NAME;
+	const char * pStart = sName.cstr();
+	const char * pMax = pStart + sName.Length() + 1;
+	const char * p = pStart;
+	CSphString sRes;
+
+	while ( p < pMax )
+	{
+		switch ( eState )
+		{
+		case State_e::NONE:
+			switch ( *p )
+			{
+			case '[':
+				if ( *(p+1)=='\'' )
+				{
+					eState = State_e::QUOTES;
+					p++;
+					pStart = p+1;
+				}
+				break;
+
+			case '.':
+				eState = State_e::KEY_NAME;
+				pStart = p+1;
+				break;
+
+			default: break;
+			}
 			break;
 
-		const char * szFound2 = strstr ( szStart+strlen(szOpen), szClose );
-		if ( !szFound2 )
+		case State_e::QUOTES:
+			if ( *p=='\'' && *(p+1)==']' )
+			{
+				eState = State_e::NONE;
+				CSphString sKey;
+				sKey.SetBinary( pStart, p-pStart );
+				sRes.SetSprintf ( "%s['%s']", sRes.cstr(), sKey.cstr() );
+				p++;
+			}
 			break;
 
-		const char * szKeyStart = szFound1+strlen(szOpen);
-		const char * szKeyEnd = szFound2+strlen(szClose);
-		CSphString sKey ( szKeyStart, szFound2-szKeyStart );
+		case State_e::KEY_NAME:
+			if ( *p=='.' || *p=='[' || *p=='\0' )
+			{
+				eState = State_e::NONE;
+				CSphString sKey;
+				sKey.SetBinary( pStart, p-pStart );
 
-		sRes.SetSprintf ( "%s.%s%s", sRes.SubString ( 0, szFound1-szStart ).cstr(), sKey.cstr(), sRes.SubString ( szKeyEnd-szStart, szEnd-szKeyEnd ).cstr() );
+				if ( sRes.IsEmpty() )
+					sRes = sKey;
+				else
+					sRes.SetSprintf ( "%s['%s']", sRes.cstr(), sKey.cstr() );
+
+				p--;
+			}
+			break;
+
+		default:
+			break;
+		}
+
+		p++;
 	}
 
 	return sRes;

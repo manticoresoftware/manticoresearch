@@ -1268,19 +1268,9 @@ hint_list:
 	| hint_list hint_item
 	;
 
-hint_subkey:
-	TOK_SUBKEY
-	| hint_subkey TOK_SUBKEY	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
-	;
-
-hint_ident:
-	ident
-	| ident hint_subkey			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
-	;
-
 hint_attr_list:
-	hint_ident
-	| hint_attr_list ',' hint_ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	json_field
+	| hint_attr_list ',' json_field {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
 hint_item:           

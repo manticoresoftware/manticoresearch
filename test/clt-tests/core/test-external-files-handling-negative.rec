@@ -1,0 +1,67 @@
+––– block: ../base/start-searchd –––
+––– input –––
+echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "a => b" > /var/lib/manticore/wordforms2.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop1.txt; echo "defstop" > /var/lib/manticore/stop2.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id BIGINT, title TEXT, tag INTEGER) stopwords = 'en, it, /var/lib/manticore/stop1.txt, /var/lib/manticore/stop2.txt' exceptions = '/var/lib/manticore/exc.txt' wordforms = '/var/lib/manticore/wordforms1.txt, /var/lib/manticore/wordforms2.txt, /var/lib/manticore/some_mask*';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (1, 'zxczxc', 77); FLUSH RAMCHUNK t;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (2, 'srthh', 88); FLUSH RAMCHUNK t;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t; SHOW CREATE TABLE t;"
+––– output –––
++-------+------+
+| Index | Type |
++-------+------+
+| t     | rt   |
++-------+------+
++------+----------+------+
+| id   | title    | tag  |
++------+----------+------+
+|    2 | srthh    |   88 |
+|    1 | zxczxc   |   77 |
+|    3 | srthgrth |   99 |
++------+----------+------+
++-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table | Create Table                                                                                                                                                                                                                                                                                                  |
++-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| t     | CREATE TABLE t (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/t/exc.txt' stopwords='/var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt' wordforms='/var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt' |
++-------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW INDEX t SETTINGS;"
+––– output –––
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                                                                                                                                   |
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| settings      | exceptions = /var/lib/manticore/t/exc.txt
+stopwords = /var/lib/manticore/t/en /var/lib/manticore/t/it /var/lib/manticore/t/stop1.txt /var/lib/manticore/t/stop2.txt
+wordforms = /var/lib/manticore/t/wordforms1.txt /var/lib/manticore/t/wordforms2.txt |
++---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 't'
+WARNING: table 't': all wordform source tokens are stopwords (wordform='a => b', file='/var/lib/manticore/t/wordforms1.txt'). IGNORED.
+WARNING: table 't': all wordform source tokens are stopwords (wordform='a => b', file='/var/lib/manticore/t/wordforms2.txt'). IGNORED.
+precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
+Buddy started!

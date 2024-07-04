@@ -522,7 +522,7 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 
 		// tokenize stopwords line by line to prevent exceptions to fold multiple lines
 		sphSplitApply ( (const char *)dBuffer.Begin(), iLength, "\r\n", [&] ( const char * sLine, int iLineLen )
-		{ 
+		{
 			BYTE* pToken;
 			pTokenizerClone->SetBuffer ( (const BYTE *)sLine, iLineLen );
 			while ( ( pToken = pTokenizerClone->GetToken() ) != nullptr )
@@ -686,7 +686,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 	if ( !dTokens.GetLength() )
 	{
 		if ( !bCommentedWholeLine )
-			sphWarning ( "table '%s': all source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+			sphWarning ( "table '%s': all wordform source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
@@ -915,7 +915,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 
 	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
 	const CSphTokenizerSettings& tSettings = pMyTokenizer->GetSettings();
-	
+
 	CSphVector<int> dBlended;
 
 	// get a list of blend chars and set add them to the tokenizer as simple chars

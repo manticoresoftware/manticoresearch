@@ -137,7 +137,7 @@ public:
 	int64_t				GetMemLimit() const final { return 0; }
 
 
-	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn && fnCanContinue ) final; // cb from binlog
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn && fnCanContinue ) final; // cb from binlog
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
@@ -1976,9 +1976,6 @@ CSphVector<StoredQuerySharedPtr_t> UniqAndWrapQueries ( const VecTraits_T<Stored
 }
 } // namespace
 
-
-constexpr BYTE binlog_PQ_ADD_DELETE = 2;
-
 int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock )
 {
 	// wrap original queries vec, since we might retry more than once
@@ -2113,7 +2110,8 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
 		CSphString sError;
 		Binlog::Commit ( &m_iTID, { GetName(), m_iIndexId }, true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
-			tWriter.PutByte ( binlog_PQ_ADD_DELETE );
+			// my user op
+			tWriter.PutByte ( Binlog::PQ_ADD_DELETE );
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
@@ -2165,12 +2163,9 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 	return true;
 }
 
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn&& fnCanContinue )
+Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn&& fnCanContinue )
 {
-	[[maybe_unused]] auto eOp = tReader.GetByte();
-	assert ( eOp == binlog_PQ_ADD_DELETE );
-
-	sOp = "pq_add_delete";
+	assert ( uOp == Binlog::PQ_ADD_DELETE );
 
 	// check we need to apply
 	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { false, true } );

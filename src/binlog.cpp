@@ -263,6 +263,17 @@ private:
 
 std::unique_ptr<Binlog_c>		g_pRtBinlog;
 
+
+inline const char * SzTxnName ( Txn_e eTxn )
+{
+	switch ( eTxn )
+	{
+	case UPDATE_ATTRS: return "update";
+	case COMMIT: return "commit";
+	case PQ_ADD_DELETE: return "pq_add_delete";
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 // BinlogTransactionGuard_c
 //////////////////////////////////////////////////////////////////////////
@@ -1545,8 +1556,9 @@ bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c &
 		return false;
 
 	CSphString sError;
-	CSphString sOp;
-	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( tReader, sError, sOp, [ iTxnPos, iTID, this, &tReader, &tIndex, &sOp ] ( CheckTnxResult_t tCheck ) {
+	BYTE uOp = tReader.GetByte();
+	CSphString sOp = SzTxnName ( (Txn_e) uOp );
+	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( tReader, sError, uOp, [ iTxnPos, iTID, this, &tReader, &tIndex, &sOp ] ( CheckTnxResult_t tCheck ) {
 		
 		CheckTnxResult_t tRes;
 		if ( tCheck.m_bValid )

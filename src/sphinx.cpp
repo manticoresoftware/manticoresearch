@@ -1186,7 +1186,7 @@ public:
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
-	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader&, CSphString&, CSphString&, Binlog::CheckTxn_fn&& ) final;
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader&, CSphString&, BYTE, Binlog::CheckTxn_fn&& ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -2416,7 +2416,7 @@ void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid,
 	Binlog::Commit ( pTID, { szName, iUid }, false, sError, [&tUpd] ( Writer_i & tWriter ) {
 
 		// my user op
-		tWriter.PutByte ( binlog_UPDATE_ATTRS );
+		tWriter.PutByte ( Binlog::UPDATE_ATTRS );
 
 		// update data
 		tWriter.ZipOffset ( tUpd.m_dAttributes.GetLength () );
@@ -2435,11 +2435,8 @@ void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid,
 }
 
 
-Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphString & sError, CSphString & sOp,
-		Binlog::CheckTxn_fn && fnCanContinue )
+Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
 {
-	sOp = "update";
-
 	// check we need to apply
 	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { false, true } );
 
@@ -2497,14 +2494,12 @@ Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphStr
 }
 
 
-Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp,
-		Binlog::CheckTxn_fn && fnCanContinue )
+Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn && fnCanContinue )
 {
-	auto eOp = tReader.GetByte ();
-	switch ( eOp )
+	switch ( uOp )
 	{
-	case binlog_UPDATE_ATTRS:
-		return ReplayUpdate ( tReader, sError, sOp, std::move ( fnCanContinue ) );
+	case Binlog::UPDATE_ATTRS:
+		return ReplayUpdate ( tReader, sError, std::move ( fnCanContinue ) );
 	default:
 		assert ( false && "unknown op provided to replay" );
 	}

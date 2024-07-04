@@ -19,6 +19,13 @@ namespace Binlog {
 
 	using ProgressCallbackSimple_t = void();
 
+	enum Txn_e : BYTE
+	{
+		UPDATE_ATTRS,
+		COMMIT,
+		PQ_ADD_DELETE,
+	};
+
 	enum ReplayFlags_e
 	{
 		REPLAY_ACCEPT_DESC_TIMESTAMP = 1,

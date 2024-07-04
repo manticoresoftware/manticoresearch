@@ -1279,8 +1279,8 @@ public:
 	void				SetKillHookFor ( IndexSegment_c* pAccum, int iDiskChunkID ) const;
 	void				SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskChunkIDs ) const;
 
-	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader& tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn&& fnCanContinue ) override; // cb from binlog
-	Binlog::CheckTnxResult_t ReplayCommit ( CSphReader & tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn && fnCanContinue );
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader& tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn&& fnCanContinue ) override; // cb from binlog
+	Binlog::CheckTnxResult_t ReplayCommit ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue );
 
 public:
 #if _WIN32
@@ -9201,14 +9201,12 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 	return dChunk.GetStats().m_iTotalDocuments - tStatus.m_iDead;
 }
 
-constexpr static BYTE binlog_COMMIT = 1;
-
 bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
 	return Binlog::Commit ( &m_iTID, { GetName(), m_iIndexId }, false, sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=m_bKeywordDict] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
 	{
-		tWriter.PutByte ( binlog_COMMIT );
+		tWriter.PutByte ( Binlog::COMMIT );
 		if ( !pSeg || !pSeg->m_uRows )
 		{
 			tWriter.ZipOffset ( 0 );
@@ -9263,9 +9261,8 @@ static Binlog::CheckTnxResult_t Warn ( CSphString & sError, const CSphReader & t
 }
 
 
-Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphString & sError, CSphString& sOp, Binlog::CheckTxn_fn && fnCanContinue )
+Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
 {
-	sOp = "commit";
 	CSphRefcountedPtr<RtSegment_t> pSeg;
 	CSphVector<DocID_t> dKlist;
 
@@ -9341,13 +9338,12 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 	return tRes;
 }
 
-Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn ( CSphReader & tReader, CSphString & sError, CSphString & sOp, Binlog::CheckTxn_fn && fnCanContinue )
+Binlog::CheckTnxResult_t RtIndex_c::ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn && fnCanContinue )
 {
-	auto eOp = tReader.GetByte();
-	switch ( eOp )
+	switch ( uOp )
 	{
-	case binlog_UPDATE_ATTRS: return ReplayUpdate ( tReader, sError, sOp, std::move ( fnCanContinue ) );
-	case binlog_COMMIT: return ReplayCommit ( tReader, sError, sOp, std::move ( fnCanContinue ) );
+	case Binlog::UPDATE_ATTRS: return ReplayUpdate ( tReader, sError, std::move ( fnCanContinue ) );
+	case Binlog::COMMIT: return ReplayCommit ( tReader, sError, std::move ( fnCanContinue ) );
 	default: assert (false && "unknown op provided to replay");
 	}
 	return {};

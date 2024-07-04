@@ -180,7 +180,6 @@ public:
 	
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;
-	virtual int		GetChunkId () const { return 0; };
 
 protected:
 	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );

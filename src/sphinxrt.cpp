@@ -1066,17 +1066,6 @@ public:
 		++m_iCh;
 		return m_iCh;
 	}
-
-	int GetChunkId ( const RtData_c & tData ) const
-	{
-		int iChunkId = 0;
-		for ( const auto & tChunk : *tData.DiskChunks() )
-		{
-			iChunkId = Max ( iChunkId, tChunk->Cidx().m_iChunk );
-		};
-
-		return iChunkId;
-	}
 };
 
 class WorkerSchedulers_c
@@ -1527,7 +1516,6 @@ private:
 	void						AttachSetSettings ( CSphIndex * pIndex );
 	bool						AttachSaveDiskChunk ();
 	ConstDiskChunkRefPtr_t		PopDiskChunk();
-	int							GetChunkId () const override { return m_tChunkID.GetChunkId ( m_tRtChunks ); }
 };
 
 

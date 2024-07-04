@@ -1124,12 +1124,18 @@ void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_
 
 //////////////////////////////////////////////////////////////////////////
 
-static void SplitArg ( const CSphString & sValue, StrVec_t & dFiles )
+static StrVec_t SplitArg ( const CSphString & sValue, StrVec_t & dFiles )
 {
-	dFiles = sphSplit ( sValue.cstr(), sValue.Length(), " \t," );
-	for ( auto & sFile : dFiles )
-		sFile.Trim();
+	StrVec_t dValues = sphSplit ( sValue.cstr(), sValue.Length(), " \t," );
+	for ( auto & i : dValues )
+	{
+		dFiles.Add ( i.Trim() );
+		StripPath(i);
+	}
+
+	return dValues;
 }
+
 
 bool StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError )
 {
@@ -1153,73 +1159,8 @@ bool StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSph
 	return true;
 }
 
-struct ExtFiles_t
-{
-	StrVec_t	m_dFiles;
-	bool		m_bFilesSet = false; // could be empty files string set
-	bool		m_bExtCopy = false; // should be external copied on just collected and checked
-};
 
-class IndexSettingsContainer_c : public IndexSettingsContainer_i
-{
-public:
-	IndexSettingsContainer_c() = default;
-	~IndexSettingsContainer_c() override;
-
-	bool			Populate ( const CreateTableSettings_t & tCreateTable, bool bExtCopy ) override;
-	bool			Add ( const char * szName, const CSphString & sValue ) override;
-	bool			Add ( const CSphString & sName, const CSphString & sValue ) override;
-	CSphString		Get ( const CSphString & sName ) const override;
-	bool			Contains ( const char * szName ) const override;
-	void			RemoveKeys ( const CSphString & sName ) override;
-	bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) override;
-	bool			CheckPaths() override;
-	bool			CopyExternalFiles ( const CSphString & sIndexPath, int iSuffix ) override;
-	void			ResetCleanup() override;
-
-	const CSphConfigSection &	AsCfg() const override;
-	const CSphString &			GetError() const override { return m_sError; }
-
-private:
-	CSphConfigSection m_hCfg;
-
-	ExtFiles_t		m_tStopword;
-	ExtFiles_t		m_tException;
-	ExtFiles_t		m_tWordform;
-	ExtFiles_t		m_tHitless;
-	StrVec_t		m_dCleanupFiles;
-
-	CSphString		m_sError;
-	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
-
-	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
-	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
-	void			SetupSIAttrs ( const CreateTableSettings_t & tCreateTable );
-
-	void			SetDefaults();
-
-	StrVec_t 		GetFiles();
-	bool			CopyExternalFiles ( const ExtFiles_t & tExt, const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile );
-	bool			CopyExternalFile ( const CSphString & sSrcFile, const CSphString & sDestPath, const char * sKeyName, int iSuffix, StringBuilder_c & sFilesOpt, int & iFile );
-};
-
-IndexSettingsContainer_i * CreateIndexSettingsContainer ()
-{
-	return new IndexSettingsContainer_c();
-}
-
-IndexSettingsContainer_c::~IndexSettingsContainer_c()
-{
-	for ( const auto & sFile : m_dCleanupFiles )
-		unlink ( sFile.cstr() );
-}
-
-void IndexSettingsContainer_c::ResetCleanup()
-{
-	m_dCleanupFiles.Reset();
-}
-
-bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy )
+bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue )
 {
 	if ( sName=="type" && sValue=="pq" )
 	{
@@ -1229,83 +1170,74 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 
 	if ( sName=="stopwords" )
 	{
-		// new value replaces previous
-		m_tStopword.m_dFiles.Reset();
-		m_tStopword.m_bExtCopy = bExtCopy;
-		m_tStopword.m_bFilesSet = true;
+		RemoveKeys(sName);
+		m_dStopwordFiles.Reset();
 
-		SplitArg ( sValue, m_tStopword.m_dFiles );
+		StrVec_t dValues = SplitArg ( sValue, m_dStopwordFiles );
 
 		// m_dStopwordFiles now holds the files with olds paths
 		// there's a hack in stopword loading code that modifies the folder to pre-installed
 		// let's use this hack here and copy that file too so that we're fully standalone
-		for ( auto & sFile : m_tStopword.m_dFiles )
-		{
-			if ( !sphIsReadable ( sFile ) )
+		for ( auto & i : m_dStopwordFiles )
+			if ( !sphIsReadable(i) )
 			{
-				CSphString sFilename;
-				sFilename.SetSprintf ( "%s/stopwords/%s", GET_FULL_SHARE_DIR (), StripPath ( sFile ).cstr() );
+				CSphString sFilename = i;
+				sFilename.SetSprintf ( "%s/stopwords/%s", GET_FULL_SHARE_DIR (), StripPath(sFilename).cstr() );
 				if ( sphIsReadable ( sFilename.cstr() ) )
-				{
-					sFile = sFilename;
-				} else
-				{
-					m_sError.SetSprintf ( "'stopwords' file missed %s", sFile.cstr() );
-					return false;
-				}
+					i = sFilename;
 			}
-		}
 
-		// will add string option after copy
-		return true;
+		StringBuilder_c sNewValue {" "};
+		for ( auto & i : dValues )
+			sNewValue << i;
+
+		return Add ( sName, sNewValue.cstr() );
 	}
 
 	if ( sName=="exceptions" )
 	{
-		// new value replaces previous
-		m_tException.m_dFiles.Reset();
-		m_tException.m_bExtCopy = bExtCopy;
-		m_tException.m_bFilesSet = true;
+		RemoveKeys(sName);
+		m_dExceptionFiles.Reset();
 
-		SplitArg ( sValue, m_tException.m_dFiles );
-
-		if ( m_tException.m_dFiles.GetLength()>1 )
+		StrVec_t dValues = SplitArg ( sValue, m_dExceptionFiles );
+		if ( dValues.GetLength()>1 )
 		{
 			m_sError = "'exceptions' options only supports a single file";
 			return false;
-		} else if ( m_tException.m_dFiles.IsEmpty() )
+		} else if ( dValues.IsEmpty() )
 		{
 			// needs an empty value
-			m_tException.m_dFiles.Add();
+			dValues.Add ();
 		}
 
-		// will add string option after copy
-		return true;
+		return Add ( sName, dValues[0] );
 	}
 
 	if ( sName=="wordforms" )
 	{
-		// multiple wordworms are ok - no need to reset
-		m_tWordform.m_bExtCopy = bExtCopy;
-		m_tWordform.m_bFilesSet = true;
+		RemoveKeys(sName);
+		m_dWordformFiles.Reset();
 
-		// will add string option after copy
-		SplitArg ( sValue, m_tWordform.m_dFiles );
+		StrVec_t dValues = SplitArg ( sValue, m_dWordformFiles );
+		for ( auto & i : dValues )
+			Add ( sName, i );
 
 		return true;
 	}
 
 	if ( sName=="hitless_words" && ( sValue!="none" && sValue!="all" ) )
 	{
-		// new value replaces previous
-		m_tHitless.m_dFiles.Reset();
-		m_tHitless.m_bExtCopy = bExtCopy;
-		m_tHitless.m_bFilesSet = true;
+		RemoveKeys ( sName );
+		m_dHitlessFiles.Reset();
+		StrVec_t dValues = SplitArg ( sValue, m_dHitlessFiles );
 
-		SplitArg ( sValue, m_tHitless.m_dFiles );
+		// need only names for hitless files
+		StringBuilder_c sTmp ( " " );
+		for ( const CSphString & sVal : dValues )
+			sTmp << sVal;
 
-		// will add string option after copy
-		return true;
+		return Add ( sName, sTmp.cstr() );
+
 	}
 
 	if ( sName=="engine" )
@@ -1399,7 +1331,7 @@ void IndexSettingsContainer_c::SetupSIAttrs ( const CreateTableSettings_t & tCre
 }
 
 
-bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable, bool bExtCopy )
+bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sStoredFields(",");
 	StringBuilder_c sStoredOnlyFields(",");
@@ -1441,7 +1373,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 		}
 
 	for ( const auto & i : tCreateTable.m_dOpts )
-		if ( !AddOption ( i.m_sName, i.m_sValue, bExtCopy ) )
+		if ( !AddOption ( i.m_sName, i.m_sValue ) )
 			return false;
 
 	SetupColumnarAttrs(tCreateTable);
@@ -1496,13 +1428,13 @@ bool IndexSettingsContainer_c::Contains ( const char * szName ) const
 StrVec_t IndexSettingsContainer_c::GetFiles()
 {
 	StrVec_t dFiles;
-	for ( const auto & i : m_tStopword.m_dFiles )
-		dFiles.Add ( i );
+	for ( const auto & i : m_dStopwordFiles )
+		dFiles.Add(i);
 
-	for ( const auto & i : m_tException.m_dFiles )
-		dFiles.Add ( i );
+	for ( const auto & i : m_dExceptionFiles )
+		dFiles.Add(i);
 
-	for ( const auto & i : m_tWordform.m_dFiles )
+	for ( const auto & i : m_dWordformFiles )
 	{
 		StrVec_t dFilesFound = FindFiles ( i.cstr() );
 		for ( const auto & j : dFilesFound )
@@ -1516,7 +1448,7 @@ StrVec_t IndexSettingsContainer_c::GetFiles()
 		}
 	}
 
-	for ( const auto & i : m_tHitless.m_dFiles )
+	for ( const auto & i : m_dHitlessFiles )
 		dFiles.Add ( i );
 
 	return dFiles;
@@ -1552,15 +1484,6 @@ bool IndexSettingsContainer_c::CheckPaths()
 
 	for ( const auto & i : dFiles )
 	{
-		if ( i.IsEmpty() )
-			continue;
-
-		if ( HasWildcard ( i.cstr() ) && FindFiles ( i.cstr(), false ).IsEmpty() )
-		{
-			m_sError.SetSprintf ( "fileы not found: '%s'", i.cstr() );
-			return false;
-		}
-
 		if ( !sphIsReadable(i) )
 		{
 			m_sError.SetSprintf ( "file not found: '%s'", i.cstr() );
@@ -1573,90 +1496,6 @@ bool IndexSettingsContainer_c::CheckPaths()
 			return false;
 		}
 	}
-
-	return true;
-}
-
-bool IndexSettingsContainer_c::CopyExternalFiles ( const CSphString & sIndexPath, int iSuffix )
-{
-	int iFile = 0;
-	if ( !CopyExternalFiles ( m_tStopword, sIndexPath, "stopwords", iSuffix, iFile ) )
-		return false;
-
-	iFile = 0;
-	if ( !CopyExternalFiles ( m_tException, sIndexPath, "exceptions", iSuffix, iFile ) )
-		return false;
-
-	iFile = 0;
-	if ( !CopyExternalFiles ( m_tHitless, sIndexPath, "hitless_words", iSuffix, iFile ) )
-		return false;
-
-	if ( m_tWordform.m_bFilesSet )
-	{
-		int iFile = 0;
-		ExtFiles_t tFiles;
-		tFiles.m_bFilesSet = true;
-		tFiles.m_bExtCopy = m_tWordform.m_bExtCopy;
-		for ( const auto & sWordformFiles : m_tWordform.m_dFiles )
-		{
-			StrVec_t dFiles = FindFiles ( sWordformFiles.cstr() );
-			for ( const auto & sSingleFile : dFiles )
-			{
-				tFiles.m_dFiles.Reset();
-				tFiles.m_dFiles.Add ( sSingleFile );
-				if ( !CopyExternalFiles ( tFiles, sIndexPath, "wordforms", iSuffix, iFile ) )
-					return false;
-			}
-		}
-	}
-
-	return true;
-}
-
-bool IndexSettingsContainer_c::CopyExternalFile ( const CSphString & sSrcFile, const CSphString & sDestPath, const char * sKeyName, int iSuffix, StringBuilder_c & sFilesOpt, int & iFile )
-{
-	CSphString sDstFile;
-	do
-	{
-		sDstFile.SetSprintf ( "%s/%s_chunk%d_%d.txt", sDestPath.cstr(), sKeyName, iSuffix, iFile );
-		iFile++;
-
-	} while ( sphIsReadable ( sDstFile.cstr() ) );
-
-	if ( !CopyFile ( sSrcFile, sDstFile, m_sError ) )
-		return false;
-
-	m_dCleanupFiles.Add ( sDstFile );
-	sFilesOpt << StripPath ( sDstFile ).cstr();
-	return true;
-}
-
-bool IndexSettingsContainer_c::CopyExternalFiles ( const ExtFiles_t & tExt, const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile )
-{
-	if ( !tExt.m_bFilesSet )
-		return true;
-
-	StringBuilder_c sFilesOpt ( " "  );
-
-	if ( tExt.m_bExtCopy )
-	{
-		for ( const auto & sSrcFile : tExt.m_dFiles )
-		{
-			if ( sSrcFile.IsEmpty() )
-				continue;
-			if ( !CopyExternalFile ( sSrcFile, sDestPath, sKeyName, iSuffix, sFilesOpt, iFile ) )
-				return false;
-		}
-	} else
-	{
-		for ( const auto & sSrcFile : tExt.m_dFiles )
-		{
-			CSphString sDstFile = sSrcFile;
-			sFilesOpt << StripPath ( sDstFile ).cstr();
-		}
-	}
-
-	Add ( sKeyName, sFilesOpt.cstr() );
 
 	return true;
 }

@@ -394,27 +394,39 @@ struct CreateTableSettings_t
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
 
-class IndexSettingsContainer_i
+
+class IndexSettingsContainer_c
 {
 public:
-	virtual ~IndexSettingsContainer_i() {};
+	bool			Populate ( const CreateTableSettings_t & tCreateTable );
+	bool			Add ( const char * szName, const CSphString & sValue );
+	bool			Add ( const CSphString & sName, const CSphString & sValue );
+	CSphString		Get ( const CSphString & sName ) const;
+	bool			Contains ( const char * szName ) const;
+	void			RemoveKeys ( const CSphString & sName );
+	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
+	StrVec_t 		GetFiles();
+	bool			CheckPaths();
 
-	virtual bool			Populate ( const CreateTableSettings_t & tCreateTable, bool bExtCopy ) = 0;
-	virtual bool			Add ( const char * szName, const CSphString & sValue ) = 0;
-	virtual bool			Add ( const CSphString & sName, const CSphString & sValue ) = 0;
-	virtual CSphString		Get ( const CSphString & sName ) const =0 ;
-	virtual bool			Contains ( const char * szName ) const = 0;
-	virtual void			RemoveKeys ( const CSphString & sName ) = 0;
-	virtual bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) = 0;
-	virtual bool			CheckPaths() = 0;
-	virtual bool			CopyExternalFiles ( const CSphString & sIndexPath, int iSuffix ) = 0;
-	virtual void			ResetCleanup() = 0;
+	const CSphConfigSection &	AsCfg() const;
+	const CSphString &			GetError() const { return m_sError; }
 
-	virtual const CSphConfigSection &	AsCfg() const = 0;
-	virtual const CSphString &			GetError() const = 0;
+private:
+	CSphConfigSection m_hCfg;
+
+	StrVec_t		m_dStopwordFiles;
+	StrVec_t		m_dExceptionFiles;
+	StrVec_t		m_dWordformFiles;
+	StrVec_t		m_dHitlessFiles;
+	CSphString		m_sError;
+	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
+
+	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetupSIAttrs ( const CreateTableSettings_t & tCreateTable );
+	void			SetDefaults();
 };
 
-IndexSettingsContainer_i * CreateIndexSettingsContainer ();
 
 class ISphTokenizer;
 class CSphDict;

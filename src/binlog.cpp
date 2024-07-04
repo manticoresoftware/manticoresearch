@@ -176,6 +176,7 @@ private:
 	void CheckDoRestart () REQUIRES ( m_tWriteAccess );
 	bool CheckDoFlush () REQUIRES ( m_tWriteAccess );
 	void SaveMeta () REQUIRES ( m_tWriteAccess );
+	void FixNofFiles ( int iFiles );
 };
 
 using SingleBinlogPtr = std::unique_ptr<SingleBinlog_c>;
@@ -228,6 +229,7 @@ private:
 	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M; searchd.binlog_max_log_size
 
 	std::atomic<int>		m_iNextBinlog { 0 };
+	std::atomic<int>		m_iNumFiles;
 
 private:
 
@@ -256,6 +258,7 @@ private:
 	CSphString MakeBinlogName ( int iExt ) const noexcept;
 
 	int NextBinlogExt();
+	void FixNofFiles ( int iFiles );
 };
 
 std::unique_ptr<Binlog_c>		g_pRtBinlog;
@@ -575,6 +578,10 @@ void SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, IndexNameUid_t tFlu
 
 	if ( bCurrentLogAbandoned && !bShutdown )
 	{
+		// if all logs were closed, we can rewind binlog file ext back to 0
+		if ( m_dLogFiles.IsEmpty() )
+			FixNofFiles ( iPreflushFiles );
+
 		// if current log was closed, we need a new one (it will automatically save meta, too)
 		OpenNewLog ();
 
@@ -787,6 +794,11 @@ void SingleBinlog_c::SaveMeta ()
 }
 
 
+void SingleBinlog_c::FixNofFiles ( int iFiles )
+{
+	m_pOwner->FixNofFiles (iFiles);
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog ) NO_THREAD_SAFETY_ANALYSIS
@@ -903,6 +915,14 @@ int Binlog_c::NextBinlogExt ()
 }
 
 
+void Binlog_c::FixNofFiles ( int iFiles )
+{
+	m_iNumFiles.fetch_sub ( iFiles );
+	if ( !m_iNumFiles )
+		m_iNextBinlog.store ( 0, std::memory_order_release );
+}
+
+
 // run once on startup
 void Binlog_c::CheckAndSetPath ( CSphString sBinlogPath )
 {
@@ -1011,6 +1031,7 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 	StringBuilder_c sMetaLog;
 	sMetaLog << "SaveMeta: " << m_bReplayMode << " " << dFiles.GetLength () << ": ";
 	sMetaLog.StartBlock ();
+	m_iNumFiles.store ( dFiles.GetLength (), std::memory_order_relaxed );
 	wrMeta.ZipInt ( dFiles.GetLength () );
 	for ( const auto & iExt: dFiles )
 	{

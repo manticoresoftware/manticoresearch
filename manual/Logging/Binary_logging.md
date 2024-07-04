@@ -37,6 +37,24 @@ During normal operation, a new binlog file is opened whenever the `binlog_max_lo
 binlog_max_log_size = 16M
 ```
 
+### Binary logging strategies
+
+There are 2 different binlog strategies, controlled by `binlog_common` directive:
+
+* 0 - Provide separate binlog file for each table. That is default value.
+* 1 - Provide one single binlog for all the tables. Only one single files is opened for binlogging all the tables.
+
+```ini
+binlog_common = 1
+```
+
+If directive `binlog_common` is absent, default value is taken from env variable `MANTICORE_BINLOG_COMMON`. If that variable is also absent/not set, default value is 0, i.e. 'provide separate binlog files for each table'.
+
+One single binlog for all the tables was default option during the years. It keeps a few binlog files which are easy to manually maintain when necessary. On the other side, when you have several tables with random insert/flush behavior, binlog files will persist until all participating tables flushed. Even if you totally drop a table, it's data will live in binlog, if another tables are still 'dirty'. Also, writing to binlog is serialized with separate transactions. If you change several tables simultaneously, all the changes will be sequenced to binlog.
+
+Separate binlog for each table keep 1 opened file for each table (it maybe sensible for ones struggling with low ulimit). With separate binlogs several tables may write their changes simultaneously (however parallel changes of a one single table still be serialized with the binlog serving the table). Also flushing/dropping a table will cause it's binlog to be abandoned and deleted immediately; as it is not shared with another tables. Also, in case of unclean shutdown, even if a binlog file is damaged, it will affect only one table and will not ruine others.
+
+
 ### Binary flushing strategies
 
 There are 3 different binlog flushing strategies, controlled by the `binlog_flush` directive:
@@ -74,5 +92,3 @@ searchd {
 The default RT flush period is set to 10 hours.
 
 It's important to note that `rt_flush_period` only controls the frequency at which *checks* occur. There are no *guarantees* that a specific RAM chunk will be saved. For example, it doesn't make sense to regularly re-save a large RAM chunk that only receives a few rows worth of updates. Manticore automatically determines whether to perform the flush using a few heuristics.
-
-<!-- proofread -->

@@ -62,6 +62,7 @@ namespace Binlog {
 
 	void Init ( CSphString sBinlogPath );
 	void Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless );
+	void SetCommon ( bool bCommonBinlog );
 	void Deinit ();
 	bool IsActive();
 	bool MockDisabled ( bool bNewVal );

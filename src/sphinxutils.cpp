@@ -990,6 +990,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "binlog_flush",			0, NULL },
 	{ "binlog_path",			0, NULL },
 	{ "binlog_max_log_size",	0, NULL },
+	{ "binlog_common",			0, NULL },
 	{ "thread_stack",			0, NULL },
 	{ "expansion_limit",		0, NULL },
 	{ "rt_flush_period",		0, NULL },

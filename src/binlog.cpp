@@ -190,6 +190,7 @@ public:
 	bool	BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit fnSaver, CSphString & sError );
 
 	void	Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless );
+	void	SetCommon ( bool bCommonBinlog );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
 
 	bool	IsActive () const { return !m_bDisabled; }
@@ -222,6 +223,7 @@ private:
 	bool					m_bCompareByNameAndUID = false; // check for matching index by name, or by name + uid
 	DWORD					m_uReplayFlags = 0;
 	bool					m_bWrongVersion = false;
+	bool					m_bCommonBinlog = false; // per-index binlog(false), or old-way common binlog(true)
 
 	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M; searchd.binlog_max_log_size
 
@@ -230,6 +232,8 @@ private:
 private:
 
 	SingleBinlog_c *		GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog=true ) EXCLUDES ( m_tHashAccess );
+	SingleBinlog_c * 		GetSingleWriteIndexBinlog ( bool bOpenNewLog ) EXCLUDES ( m_tHashAccess );
+
 
 	void					LoadMeta ();
 	void					SaveMeta () EXCLUDES ( m_tHashAccess );
@@ -787,6 +791,9 @@ void SingleBinlog_c::SaveMeta ()
 
 SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog ) NO_THREAD_SAFETY_ANALYSIS
 {
+	if ( m_bCommonBinlog )
+		return GetSingleWriteIndexBinlog ( bOpenNewLog );
+
 	SingleBinlogPtr * pVal;
 	{
 		Threads::SccRL_t tLock ( m_tHashAccess );
@@ -806,6 +813,39 @@ SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bO
 	assert ( pVal );
 	if ( bOpenNewLog )
 		pVal->get()->OpenNewLog();
+	return pVal->get ();
+}
+
+
+SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THREAD_SAFETY_ANALYSIS
+{
+	assert ( m_bCommonBinlog );
+
+	SingleBinlogPtr * pVal = nullptr;
+	{
+		Threads::SccRL_t tLock ( m_tHashAccess );
+		auto Iter = m_hBinlogs.begin ();
+		if ( Iter != m_hBinlogs.end() )
+			pVal = &Iter->second;
+	}
+	if ( pVal )
+		return pVal->get ();
+	{
+		Threads::SccWL_t tLock ( m_tHashAccess );
+		auto Iter = m_hBinlogs.begin ();
+		if ( Iter!=m_hBinlogs.end () )
+			pVal = &Iter->second;
+
+		if ( pVal ) // the value arrived while we acquired w-lock
+			return pVal->get ();
+
+		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> ( this ), "common" );
+		pVal = &m_hBinlogs.begin ()->second;
+	}
+	assert ( pVal );
+	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
+	if ( bOpenNewLog )
+		pVal->get ()->OpenNewLog ();
 	return pVal->get ();
 }
 
@@ -901,6 +941,15 @@ void Binlog_c::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlag
 
 	LockBinlog ();
 	LoadMeta();
+}
+
+void Binlog_c::SetCommon ( bool bCommonBinlog )
+{
+	if ( m_bCommonBinlog == bCommonBinlog )
+		return;
+
+	m_bCommonBinlog = bCommonBinlog;
+	// fixme! add cleanup to avoid 'mixed' binlog
 }
 
 bool Binlog_c::IsFlushingEnabled () const
@@ -1335,12 +1384,6 @@ bool Binlog_c::ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallString
 	const int64_t iTxnPos = tReader.GetPos(); // that is purely for reporting anomalies
 
 	uint64_t uVal = tReader.UnzipOffset();
-	if ( (int)uVal!=tLog.m_dIndexInfos.GetLength() )
-	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: indexadd: unexpected table id (id=" UINT64_FMT ", expected=%d, pos=" INT64_FMT ")",
-			uVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
-		return false;
-	}
 
 	// load data
 	CSphString sName = tReader.GetZString();
@@ -1349,6 +1392,14 @@ bool Binlog_c::ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallString
 
 	if ( !tReader.CheckCrc ( "indexadd", sName.cstr(), 0, iTxnPos ) )
 		return false;
+
+	if ( (int) uVal!=tLog.m_dIndexInfos.GetLength () )
+	{
+		Log ( REPLAY_IGNORE_TRX_ERROR,
+			  "binlog: indexadd: unexpected table id (id=" UINT64_FMT ", expected=%d, pos=" INT64_FMT ")",
+			  uVal, tLog.m_dIndexInfos.GetLength (), iTxnPos );
+		return false;
+	}
 
 	// check for index name dupes
 	ARRAY_FOREACH ( i, tLog.m_dIndexInfos )
@@ -1556,6 +1607,12 @@ void Binlog::Init ( CSphString sBinlogPath )
 
 	// check binlog path before detaching from the console - since we call sphDie on failure, and it should be visible.
 	g_pRtBinlog->CheckAndSetPath ( std::move ( sBinlogPath ) );
+}
+
+void Binlog::SetCommon ( bool bCommonBinlog )
+{
+	assert ( g_pRtBinlog );
+	g_pRtBinlog->SetCommon ( bCommonBinlog );
 }
 
 void Binlog::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless )

@@ -187,7 +187,7 @@ protected:
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ( CSphString sBinlogPath, const CSphConfigSection * pCommon = nullptr );
+void sphRTInit ( CSphString sBinlogPath, bool bCommonBinlog = false, const CSphConfigSection * pCommon = nullptr );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ );
 void sphRTSetTestMode ();
 

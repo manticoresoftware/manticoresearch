@@ -18218,7 +18218,7 @@ public:
 
 		// all went fine; swap them
 		sphLogDebug ( "all went fine; swap them" );
-		Binlog::NotifyIndexFlush ( pIdx->m_iTID, { m_szIndex, pIdx->GetIndexId() }, false, false );
+		Binlog::NotifyIndexFlush ( pIdx->m_iTID, m_szIndex, false, false );
 		g_pLocalIndexes->AddOrReplace ( pNewServed, m_szIndex );
 		sphInfo ( "rotating table '%s': success", m_szIndex );
 
@@ -18308,7 +18308,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 
 	// all went fine; swap them
 	sphLogDebug ( "all went fine; swap them" );
-	Binlog::NotifyIndexFlush ( pNewIndex->m_iTID, { sIndex.cstr(), pNewIndex->GetIndexId() }, false, false );
+	Binlog::NotifyIndexFlush ( pNewIndex->m_iTID, sIndex.cstr(), false, false );
 	g_pLocalIndexes->AddOrReplace ( pNewServed, sIndex );
 	sphInfo ( "rotating table '%s': success", sIndex.cstr() );
 	return true;
@@ -21275,7 +21275,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
-	Binlog::Configure ( hSearchd, uReplayFlags, IsConfigless() );
+	Binlog::Configure ( hSearchd, uReplayFlags );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitSkipCache ( g_iSkipCache );

@@ -2410,10 +2410,10 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	Update_MinMax ( dRows, tCtx );
 	return true;
 }
-void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid, const CSphAttrUpdate & tUpd )
+void CommitUpdateAttributes ( int64_t * pTID, const char * szName, const CSphAttrUpdate & tUpd )
 {
 	CSphString sError;
-	Binlog::Commit ( pTID, { szName, iUid }, false, sError, [&tUpd] ( Writer_i & tWriter ) {
+	Binlog::Commit ( pTID, szName, false, sError, [&tUpd] ( Writer_i & tWriter ) {
 
 		// my user op
 		tWriter.PutByte ( Binlog::UPDATE_ATTRS );
@@ -2505,7 +2505,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
 
 	if ( tCtx.m_uUpdateMask && m_bBinlog )
-		CommitUpdateAttributes ( &m_iTID, GetName(), m_iIndexId, *tUpd.m_pUpdate );
+		CommitUpdateAttributes ( &m_iTID, GetName(), *tUpd.m_pUpdate );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
@@ -2629,7 +2629,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 	}
 
 	if ( m_bBinlog )
-		Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, false, false );
+		Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, false );
 
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;

@@ -18,6 +18,7 @@
 #include "sphinxint.h"
 #include "coroutine.h"
 #include "sphinxpq.h"
+#include "binlog.h"
 
 using namespace Threads;
 
@@ -1338,6 +1339,13 @@ static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
 	DeleteExtraIndexFiles ( pRt, pExtFiles );
 }
 
+static void FixupIndexTID ( CSphIndex * pIdx, int64_t iTID )
+{
+	assert ( IsConfigless () );
+	if ( pIdx && ( pIdx->IsRT () || pIdx->IsPQ () ) )
+		pIdx->m_iTID = iTID;
+}
+
 static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
 {
 	assert ( IsConfigless() );
@@ -1396,6 +1404,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	case ADD_NEEDLOAD:
 		{
 			assert ( pDesc );
+			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
 				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr );

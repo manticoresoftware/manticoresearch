@@ -778,7 +778,7 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 	}
 };
 
-void CommitUpdateAttributes ( int64_t * pTID, const char* szName, int64_t iUid, const CSphAttrUpdate & tUpd );
+void CommitUpdateAttributes ( int64_t * pTID, const char* szName, const CSphAttrUpdate & tUpd );
 
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES

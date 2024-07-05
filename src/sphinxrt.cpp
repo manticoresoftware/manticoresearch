@@ -1352,7 +1352,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 21;			///< current version. 21 as we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
+	static const DWORD			META_VERSION		= 21;			///< current version. since 20 we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
@@ -1567,7 +1567,7 @@ RtIndex_c::~RtIndex_c ()
 		::close ( m_iLockFD );
 
 	if ( bValid )
-		Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, sphInterrupted(), m_bIndexDeleted );
+		Binlog::NotifyIndexFlush ( m_iTID, GetName(), sphInterrupted(), m_bIndexDeleted );
 
 	if ( m_bIndexDeleted )
 	{
@@ -1689,7 +1689,7 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	SaveMeta();
 	auto pChunks = m_tRtChunks.DiskChunks();
 	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
-	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, false, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, false );
 
 	int64_t iWasTID = m_iSavedTID;
 	int64_t tmDelta = sphMicroTimer() - m_tmSaved;
@@ -4258,7 +4258,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
-		Binlog::NotifyIndexFlush ( iTID, { GetName(), m_iIndexId }, false, false );
+		Binlog::NotifyIndexFlush ( iTID, GetName(), false, false );
 		m_iSavedTID = iTID;
 
 		tNewSet.InitRamSegs ( RtWriter_c::empty );
@@ -8257,7 +8257,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 		sphWarn ( "INTERNAL ERROR: table %s update failure: %s", GetName(), sError.cstr() );
 
 	// bump the counter, binlog the update!
-	CommitUpdateAttributes ( &m_iTID, GetName(), m_iIndexId, tUpdc );
+	CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
 	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
@@ -8489,7 +8489,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	SaveMeta ();
 
 	// fixme: notify that it was ALTER that caused the flush
-	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, false, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, false );
 
 	QcacheDeleteIndex ( GetIndexId() );
 }
@@ -8818,7 +8818,7 @@ bool RtIndex_c::Truncate ( CSphString& )
 	SaveMeta ( m_iTID, { nullptr, 0 } );
 
 	// allow binlog to unlink now-redundant data files
-	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, false, true );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, true );
 
 	// kill RAM chunk file
 	UnlinkRAMChunk ( "truncate" );
@@ -9204,7 +9204,7 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	return Binlog::Commit ( &m_iTID, { GetName(), m_iIndexId }, false, sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=m_bKeywordDict] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
+	return Binlog::Commit ( &m_iTID, GetName(), false, sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=m_bKeywordDict] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		tWriter.PutByte ( Binlog::COMMIT );
 		if ( !pSeg || !pSeg->m_uRows )

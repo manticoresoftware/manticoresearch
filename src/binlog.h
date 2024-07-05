@@ -57,7 +57,7 @@ namespace Binlog {
 	}
 
 	void Init ( CSphString sBinlogPath );
-	void Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless );
+	void Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags );
 	void SetCommon ( bool bCommonBinlog );
 	void Deinit ();
 	bool IsActive();
@@ -67,18 +67,15 @@ namespace Binlog {
 	void Flush();
 	int64_t NextFlushTimestamp();
 
-	struct IndexNameUid_t {
-		const char* szName;
-		int64_t iUID;
-	};
-
 	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
-	bool Commit ( int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
+	bool Commit ( int64_t * pTID, const char* szIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
 
 	/// replay stored binlog
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
 
-	void NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave );
+	void NotifyIndexFlush ( int64_t iTID, const char* szIndexName, bool bShutdown, bool bForceSave );
 
 	CSphString GetPath();
+
+	int64_t LastTidFor ( const CSphString & sIndex );
 }

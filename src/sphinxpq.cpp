@@ -2092,7 +2092,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
 		CSphString sError;
-		Binlog::Commit ( &m_iTID, { GetName(), m_iIndexId }, true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
+		Binlog::Commit ( &m_iTID, GetName(), true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
 			// my user op
 			tWriter.PutByte ( Binlog::PQ_ADD_DELETE );
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
@@ -2880,7 +2880,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, bShutdown, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), bShutdown, false );
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 }

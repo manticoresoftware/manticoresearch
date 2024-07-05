@@ -56,17 +56,6 @@ namespace Binlog {
 		return !tReader.GetErrorFlag();
 	}
 
-
-	template<typename T>
-	static bool SkipVector ( CSphReader & tReader )
-	{
-		STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( T ), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
-		auto iElems = (int) tReader.UnzipOffset ();
-		if ( iElems )
-			tReader.SkipBytes ( iElems * sizeof(T) );
-		return !tReader.GetErrorFlag ();
-	}
-
 	void Init ( CSphString sBinlogPath );
 	void Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags, bool bConfigless );
 	void SetCommon ( bool bCommonBinlog );

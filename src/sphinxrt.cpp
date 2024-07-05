@@ -9316,7 +9316,7 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 
 	if ( !Binlog::LoadVector ( tReader, dKlist ) ) return Warn ( sError, tReader );
 
-	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { true, true } );
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
 	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		// in case dict=keywords

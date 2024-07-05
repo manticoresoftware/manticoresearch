@@ -2437,29 +2437,6 @@ void CommitUpdateAttributes ( int64_t * pTID, const char * szName, int64_t iUid,
 
 Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
 {
-	// check we need to apply
-	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { false, true } );
-
-	// no apply - just skip txn
-	if ( !tRes.m_bApply )
-	{
-		int iAttrs = (int) tReader.UnzipOffset ();
-		for ( auto i=0; i<iAttrs; ++i )
-		{
-			tReader.GetZString();
-			tReader.UnzipOffset();
-		}
-
-		if ( tReader.GetErrorFlag () )
-			return {};
-
-		if ( !Binlog::SkipVector<DWORD> ( tReader ) ) return {};
-		if ( !Binlog::SkipVector<DocID_t> ( tReader ) ) return {};
-		if ( !Binlog::SkipVector<int> ( tReader ) ) return {};
-		if ( !Binlog::SkipVector<BYTE> ( tReader ) ) return {};
-		return fnCanContinue ( { true, false } );
-	}
-
 	// load transaction data
 	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
 	auto & tUpd = *pUpd;
@@ -2481,8 +2458,8 @@ Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphStr
 	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return {};
 	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return {};
 
-	tRes = fnCanContinue ( { true, false } );
-	if ( tRes.m_bValid )
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
+	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		CSphString sError, sWarning;
 		bool bCritical = false;

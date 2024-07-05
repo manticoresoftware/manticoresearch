@@ -1614,24 +1614,23 @@ bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c &
 	CSphString sError;
 	BYTE uOp = tReader.GetByte();
 	CSphString sOp = SzTxnName ( (Txn_e) uOp );
-	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( tReader, sError, uOp, [ iTxnPos, iTID, this, &tReader, &tIndex, &sOp ] ( CheckTnxResult_t tCheck ) {
+	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( tReader, sError, uOp, [ iTxnPos, iTID, this, &tReader, &tIndex, &sOp ] {
 		
 		CheckTnxResult_t tRes;
-		if ( tCheck.m_bValid )
-			tRes.m_bValid = PerformChecks ( sOp.cstr(), tIndex, iTID, iTxnPos, tReader );
+		tRes.m_bValid = PerformChecks ( sOp.cstr (), tIndex, iTID, iTxnPos, tReader );
+		if ( !tRes.m_bValid )
+			return tRes;
 
-		if ( tCheck.m_bApply )
+		// only replay transaction when index exists and does not have it yet (based on TID)
+		if ( IsIndexIDSame ( tIndex ) && iTID>tIndex.m_pIndex->m_iTID )
 		{
-			// only replay transaction when index exists and does not have it yet (based on TID)
-			if ( IsIndexIDSame ( tIndex ) && iTID > tIndex.m_pIndex->m_iTID )
-			{
-				tRes.m_bApply = true;
-				// we normally expect per-index TIDs to be sequential
-				// but let's be graceful about that
-				if ( iTID!=tIndex.m_pIndex->m_iTID+1 )
-					sphWarning ("binlog: %s: unexpected tid (table=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
+			tRes.m_bApply = true;
+			// we normally expect per-index TIDs to be sequential
+			// but let's be graceful about that
+			if ( iTID!=tIndex.m_pIndex->m_iTID+1 )
+				sphWarning (
+						"binlog: %s: unexpected tid (table=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
 						sOp.cstr (), tIndex.m_sName.cstr (), tIndex.m_pIndex->m_iTID, iTID, iTxnPos );
-			}
 		}
 		return tRes;
 	});

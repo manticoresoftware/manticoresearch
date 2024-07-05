@@ -1902,23 +1902,6 @@ static void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueri
 }
 
 
-void SkipStoredQuery ( CSphReader & tReader );
-
-static void SkipInsertDeleteQueries ( CSphReader & tReader )
-{
-	auto uValues = tReader.UnzipInt ();
-	for ( auto i = 0; i<uValues; ++i )
-		tReader.UnzipOffset ();
-
-	uValues = tReader.UnzipInt ();
-	for ( auto i = 0; i<uValues; ++i )
-		tReader.UnzipOffset ();
-
-	uValues = tReader.UnzipInt ();
-	for ( auto i = 0; i<uValues; ++i )
-		SkipStoredQuery ( tReader );
-}
-
 static void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
 {
 	LoadInsertDeleteQueries_T ( dNewQueries, dDeleteQueries, dDeleteTags, tReader );
@@ -2167,25 +2150,14 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSph
 {
 	assert ( uOp == Binlog::PQ_ADD_DELETE );
 
-	// check we need to apply
-	Binlog::CheckTnxResult_t tRes = fnCanContinue ( { false, true } );
-
-	// no apply - just skip txn
-	if ( !tRes.m_bApply )
-	{
-		SkipInsertDeleteQueries ( tReader );
-		return fnCanContinue ( { true, false } );
-	}
-
 	CSphVector<StoredQueryDesc_t> dNewQueriesDescs;
 	CSphVector<int64_t> dDeleteQueries;
 	CSphVector<uint64_t> dDeleteTags;
 
 	LoadInsertDeleteQueries ( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
 
-	assert ( tRes.m_bApply );
-	tRes = fnCanContinue ( { true, false } );
-	if ( tRes.m_bValid )
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
+	if ( tRes.m_bValid && tRes.m_bApply )
 	{
 		CSphVector<StoredQuery_i *> dNewQueries; // not owned
 		dNewQueries.Reserve ( dNewQueries.GetLength () );
@@ -3480,45 +3452,6 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 		tItem.m_iRight = tReader.UnzipInt();
 		tItem.m_iFilterItem = tReader.UnzipInt();
 		tItem.m_bOr = ( tReader.UnzipInt()!=0 );
-	}
-}
-
-void SkipStoredQuery ( CSphReader & tReader )
-{
-	tReader.UnzipOffset ();
-	tReader.UnzipInt ();
-	GetZString ( tReader );
-	GetZString ( tReader );
-
-	auto uFilters = tReader.UnzipInt ();
-	auto uFilterTrees = tReader.UnzipInt ();
-	for ( int i=0; i<uFilters; ++i)
-	{
-		GetZString ( tReader );
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipOffset ();
-		tReader.UnzipOffset ();
-
-		int iValCount = tReader.UnzipInt ();
-		int iStrCount = tReader.UnzipInt ();
-		for ( int j = 0; j<iValCount; ++j )
-			tReader.UnzipOffset ();
-		for ( int j = 0; j<iStrCount; ++j )
-			GetZString ( tReader );
-	}
-	for ( int i = 0; i<uFilterTrees; ++i )
-	{
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
-		tReader.UnzipInt ();
 	}
 }
 

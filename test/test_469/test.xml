@@ -58,6 +58,15 @@ select id from t where j.price is not null; show meta;
 select id from t where j.factor is null; show meta;
 select id from t where j.factor is not null; show meta;
 
+select id, in(j.arr, 'val0') a from t where a>0; show meta;
+select id, in(j.arr, 'val0') a from t where a&lt;1; show meta;
+select id, in(j.arr, 'val0') a from t where a=0; show meta;
+select id, in(j.arr, 'val0') a from t where a=1; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a>0; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a&lt;1; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a=0; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a=1; show meta;
+
 drop table t;
 
 </sphinxql></queries>

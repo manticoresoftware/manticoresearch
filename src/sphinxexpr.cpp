@@ -1702,8 +1702,24 @@ public:
 	{
 		Expr_WithLocator_c::Command ( eCmd, pArg );
 
-		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+		switch ( eCmd )
+		{
+		case SPH_EXPR_SET_BLOB_POOL:
 			m_pBlobPool = (const BYTE*)pArg;
+			break;
+
+		case SPH_EXPR_FORMAT_AS_TEXT:
+			if ( m_iLocator!=-1 )
+			{
+				auto pSchemaWithName = static_cast<std::pair<const ISphSchema*,CSphString>*>(pArg);
+				const CSphColumnInfo & tAttr = pSchemaWithName->first->GetAttr(m_iLocator);
+				pSchemaWithName->second.SetSprintf ( "%s['%s']", tAttr.m_sName.cstr(), m_sKey.cstr() );
+			}
+			break;
+
+		default:
+			break;
+		}
 	}
 
 	float Eval ( const CSphMatch & ) const final
@@ -2740,6 +2756,45 @@ void Expr_BinaryFilter_c::SetFlagOr ( ESphExprCommand eCmd, void * pArg ) const
 }
 
 ////////////////////////////////////////////////////////////////////
+
+static bool CanSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bExclude )
+{
+	switch ( tFilter.m_eType )
+	{
+	case SPH_FILTER_VALUES:
+		// fixme! this means "return nothing"
+		if ( tFilter.m_dValues.GetLength()!=1 )
+			return false;
+
+		if ( tFilter.m_dValues[0]!=0 && tFilter.m_dValues[0]!=1 )
+			return false;
+
+		bExclude = tFilter.m_dValues[0]==0;
+		return true;
+
+	case SPH_FILTER_RANGE:
+	{
+		bool bFilterIncludes0 = EvalRange ( 0, tFilter );
+		bool bFilterIncludes1 = EvalRange ( 1, tFilter );
+
+		// fixme! this means "return all"
+		if ( bFilterIncludes0 && bFilterIncludes1 )
+			return false;
+
+		// fixme! this means "return nothing"
+		if ( !bFilterIncludes0 && !bFilterIncludes1 )
+			return false;
+
+		bExclude = !bFilterIncludes1;
+	}
+	return true;
+
+	default:
+		return false;
+	}
+}
+
+////////////////////////////////////////////////////////////////////
 class Expr_ForIn_c : public Expr_JsonFieldConv_c
 {
 public:
@@ -2848,6 +2903,10 @@ public:
 
 	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
 	{
+		bool bExclude = false;
+		if ( !CanSetupAsFilter ( tFilter, bExclude ) )
+			return false;
+
 		if ( m_bStrict )
 			return false;
 
@@ -2891,6 +2950,7 @@ public:
 		tFilter = tConstArgs;
 		tFilter.m_sAttrName = tSchemaWithName.second;
 		tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+		tFilter.m_bExclude = bExclude;
 
 		if ( tFilter.m_eType==SPH_FILTER_VALUES )
 			tFilter.m_dValues.Uniq();
@@ -7766,13 +7826,12 @@ public:
 
 	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
 	{
-		if ( !m_dValues.GetLength() || tFilter.m_dValues.GetLength()!=1 )
+		if ( !CanSetupAsFilter ( tFilter, tFilter.m_bExclude ) )
 			return false;
 
-		// fixme! this means "return nothing"
-		if ( tFilter.m_dValues[0]!=0 && tFilter.m_dValues[0]!=1 )
+		if ( !m_dValues.GetLength() )
 			return false;
-
+		
 		std::pair<const ISphSchema*,CSphString> tSchemaWithName;
 		tSchemaWithName.first = &tSchema;
 		m_pArg->Command ( SPH_EXPR_FORMAT_AS_TEXT, (void*)&tSchemaWithName );
@@ -7781,8 +7840,7 @@ public:
 
 		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
 			return false;
-
-		tFilter.m_bExclude = tFilter.m_dValues[0]==0;
+		
 		if ( m_dStrings.IsEmpty() )
 		{
 			tFilter.m_dValues.Resize(0);

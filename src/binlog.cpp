@@ -24,7 +24,7 @@ static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;	/// magic 'SPLI' he
 // up to 12: PQ_ADD_DELETE added
 // 13 : changed txn format; now stores total documents also
 // 14 : ??
-// 15 : remove external ops; ops is 1 byte (unzipped); reorder ops
+// 15 : big refactor: remove external ops; ops is 1 byte (unzipped); + internal ops, + size for ADD_TXN
 
 constexpr unsigned int BINLOG_VERSION = 15;
 
@@ -96,6 +96,8 @@ public:
 
 private:
 	friend class BinlogTransactionGuard_c;
+	friend class TransactionSizeGuard_c;
+
 	void StartTransaction ();
 	void EndTransaction ( int64_t iStartTransaction, bool bWriteOnOverflow );
 	inline int64_t GetBuffPos () const noexcept { return m_dBuf.GetLengthBytes64 (); }
@@ -300,6 +302,32 @@ private:
 	BinlogWriter_c &	m_tWriter;
 	bool				m_bWriteOnOverflow;
 	int64_t				m_iStartTransaction;
+};
+
+class TransactionSizeGuard_c final
+{
+public:
+	NONCOPYMOVABLE ( TransactionSizeGuard_c );
+
+
+	explicit TransactionSizeGuard_c ( BinlogWriter_c & tWriter )
+			: m_tWriter ( tWriter )
+			, m_iStartTransaction ( tWriter.GetBuffPos () )
+	{
+		m_tWriter.PutDword ( 0 ); // placeholder for size
+	}
+
+
+	~TransactionSizeGuard_c ()
+	{
+		DWORD uSize = m_tWriter.GetBuffPos ()-m_iStartTransaction-sizeof ( DWORD );
+		memcpy ( &m_tWriter.m_dBuf[m_iStartTransaction], &uSize, sizeof ( DWORD ) );
+	}
+
+
+private:
+	BinlogWriter_c & m_tWriter;
+	int64_t m_iStartTransaction;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -517,6 +545,7 @@ bool SingleBinlog_c::BinlogCommit ( int64_t * pTID, IndexNameUid_t tIndexName, F
 		m_tWriter.PutByte ( Blop_e::ADD_TXN );
 		m_tWriter.ZipOffset ( uIndex );
 		m_tWriter.ZipOffset ( iTID );
+		TransactionSizeGuard_c tPutSize ( m_tWriter );
 
 		// save txn data
 		fnSaver ( m_tWriter );
@@ -1539,6 +1568,20 @@ int Binlog_c::ReplayIndexID ( CSphReader & tReader, const BinlogReplayFileDesc_t
 	return iVal;
 }
 
+namespace {
+void SkipBytes ( CSphAutoreader& tReader, DWORD uSize )
+{
+	auto uFakeBuf = Min ( uSize, 4096 );
+	CSphFixedVector<BYTE> dFakeBuf { uFakeBuf };
+	while ( uSize )
+	{
+		tReader.GetBytes ( dFakeBuf.begin (), uFakeBuf );
+		uSize -= uFakeBuf;
+		uFakeBuf = Min ( uSize, 4096 );
+	}
+}
+}
+
 bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	// load and lookup index
@@ -1551,9 +1594,22 @@ bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c &
 
 	// load transaction data
 	auto iTID = (int64_t) tReader.UnzipOffset();
+	auto uSize = tReader.GetDword();
 
-	if ( !tIndex.m_pIndex )
-		return false;
+	// skip txns of non-existent (deleted) indexes (skip blobs by size)
+	if ( !tIndex.m_pIndex || iTID<=tIndex.m_pIndex->m_iTID )
+	{
+		tIndex.m_iMinTID = Min ( tIndex.m_iMinTID, iTID );
+		tIndex.m_iFlushedTID = tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
+
+		// just skip the blob
+		SkipBytes ( tReader, uSize );
+
+		// checksum
+		return !tReader.GetErrorFlag () && tReader.CheckCrc ( "skip", tIndex.m_sName.cstr (), iTID, iTxnPos );
+	}
+
+	assert ( tIndex.m_pIndex );
 
 	CSphString sError;
 	BYTE uOp = tReader.GetByte();

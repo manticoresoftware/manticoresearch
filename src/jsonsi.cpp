@@ -315,7 +315,7 @@ private:
 			break;
 
 		case JSON_OBJECT:
-			ConvertAndStore ( 1LL, eType, iAttr );
+			ConvertAndStore ( int64_t(1), eType, iAttr );
 			break;
 
 		default:

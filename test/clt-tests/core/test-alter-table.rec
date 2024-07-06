@@ -25,9 +25,9 @@ mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: exceptions = /tmp/test-alter/test3/exc.txt
-stopwords = /tmp/test-alter/test3/stop.txt
-wordforms = /tmp/test-alter/test3/wordforms1.txt
+Value: exceptions = /tmp/test-alter/test3/exceptions_chunk0_0.txt
+stopwords = /tmp/test-alter/test3/stopwords_chunk0_0.txt
+wordforms = /tmp/test-alter/test3/wordforms_chunk0_0.txt
 ––– input –––
 mysql -h0 -P9306 -e "ALTER TABLE test3 exceptions = ''"
 ––– output –––
@@ -36,5 +36,5 @@ mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: stopwords = /tmp/test-alter/test3/stop.txt
-wordforms = /tmp/test-alter/test3/wordforms1.txt
+Value: stopwords = /tmp/test-alter/test3/stopwords_chunk0_0.txt
+wordforms = /tmp/test-alter/test3/wordforms_chunk0_0.txt

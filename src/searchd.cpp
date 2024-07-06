@@ -16501,23 +16501,28 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	int iSuffix = pRtIndex->GetChunkId();
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
+
 	// parse the options string to old-style config hash
-	IndexSettingsContainer_c tContainer;
-	tContainer.Populate ( dCreateTableStmts[0].m_tCreateTable );
+	std::unique_ptr<IndexSettingsContainer_i> pContainer { CreateIndexSettingsContainer() };
+	pContainer->Populate ( dCreateTableStmts[0].m_tCreateTable, false );
 
-	// force override for old options
-	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
-		tContainer.RemoveKeys ( i.m_sName );
-
+	// force override for old options options from alter should override currect options
 	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
 	{
-		// should be able to remove settings with the empty option
-		tContainer.AddOption ( i.m_sName, i.m_sValue );
+		pContainer->RemoveKeys ( i.m_sName );
 	}
 
-	if ( !tContainer.CheckPaths() )
+	// should be able to remove settings with the empty option or remove the prev options by the last empty option
+	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
 	{
-		tOut.Error ( tContainer.GetError().cstr() );
+		pContainer->AddOption ( i.m_sName, i.m_sValue, true );
+	}
+
+	if ( !pContainer->CheckPaths() )
+	{
+		tOut.Error ( pContainer->GetError().cstr() );
 		return;
 	}
 
@@ -16525,26 +16530,15 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	StrVec_t dOldFiles;
 	pRtIndex->GetIndexFiles ( dOldFiles, dOldFiles );
 
-	StrVec_t dCopiedFiles;
-	auto tCleanup = AtScopeExit ( [&dCopiedFiles] { dCopiedFiles.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
-
-	StrVec_t dNewFiles = tContainer.GetFiles();
-	if ( !tContainer.GetError().IsEmpty() )
+	if ( !pContainer->CopyExternalFiles ( sIndexPath, iSuffix ) )
 	{
-		tOut.Error ( tContainer.GetError().cstr () );
-		return;
-	}
-
-	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
-	if ( !CopyExternalIndexFiles ( dNewFiles, sIndexPath, dCopiedFiles, sError ) )
-	{
-		tOut.Error ( sError.cstr () );
+		tOut.Error ( pContainer->GetError().cstr () );
 		return;
 	}
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
-	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
+	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), pContainer->AsCfg(), tSettings, &dWarnings, sError ) )
 	{
 		tOut.Error ( sError.cstr () );
 		return;
@@ -16568,7 +16562,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	{
 		// all ok, delete old files
 		RemoveOutdatedFiles ( pRtIndex, dOldFiles );
-		dCopiedFiles.Reset();
+		pContainer->ResetCleanup();
 
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	}

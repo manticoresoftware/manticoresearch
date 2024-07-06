@@ -25,6 +25,15 @@ static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
 static const char * g_szOrder = "_@order_";
 
+class QueryTreeBuilder_c;
+struct ErrorPathGuard_t
+{
+	ErrorPathGuard_t ( QueryTreeBuilder_c & tBuilder, bool bEnabled, const JsonObj_c & tPath );
+	~ErrorPathGuard_t ();
+
+	QueryTreeBuilder_c & m_tBuilder;
+	const bool m_bEnabled;
+};
 
 class QueryTreeBuilder_c : public XQParseHelper_c
 {
@@ -47,12 +56,20 @@ public:
 	bool m_bHasFilter = false;
 	void ResetNodesFlags() { m_bHasFulltext = m_bHasFilter = false; } 
 
+	QueryTreeBuilder_c CreateCollectPath ( const CSphSchema * pSchema );
+	void ErrorPrintPath ( QueryTreeBuilder_c & tOrig );
+	ErrorPathGuard_t ErrorAddPath ( const JsonObj_c & tPath );
+
 private:
 	const CSphQuery *			m_pQuery {nullptr};
 	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
 	const CSphIndexSettings &	m_tSettings;
 
 	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec );
+
+	friend ErrorPathGuard_t;
+	CSphVector< std::pair<CSphString, const void *> > m_dErrorPath;
+	bool m_bErrorCollectPath = false;
 };
 
 
@@ -190,6 +207,61 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 	return pNode;
 }
 
+ErrorPathGuard_t QueryTreeBuilder_c::ErrorAddPath ( const JsonObj_c & tPath )
+{
+	return ErrorPathGuard_t ( *this, m_bErrorCollectPath, tPath );
+}
+
+void QueryTreeBuilder_c::ErrorPrintPath ( QueryTreeBuilder_c & tOrig )
+{
+	assert ( IsError() );
+
+	StringBuilder_c tBuilder;
+	tBuilder.Appendf ( "%s at '", tOrig.m_pParsed->m_sParseError.cstr() );
+
+	const void * pLast = nullptr;
+	for ( const auto & tEntry : m_dErrorPath )
+	{
+		// skip duplicates
+		if ( !tEntry.second || pLast!=tEntry.second )
+			tBuilder.Appendf ( "/%s", tEntry.first.scstr() );
+
+		pLast = tEntry.second;
+	}
+
+	tBuilder << "'";
+
+	tOrig.m_pParsed->m_sParseError = (CSphString)tBuilder;
+}
+
+QueryTreeBuilder_c QueryTreeBuilder_c::CreateCollectPath ( const CSphSchema * pSchema )
+{
+	QueryTreeBuilder_c tOther ( m_pQuery, std::move ( m_pQueryTokenizerQL ), m_tSettings );
+	tOther.Setup ( pSchema, m_pTokenizer->Clone ( SPH_CLONE ), std::move ( m_pDict ), m_pParsed, m_tSettings );
+
+	tOther.m_bErrorCollectPath = true;
+	tOther.m_dErrorPath.Add ( { "query", nullptr } );
+
+	return tOther;
+}
+
+
+ErrorPathGuard_t::ErrorPathGuard_t ( QueryTreeBuilder_c & tBuilder, bool bEnabled, const JsonObj_c & tPath )
+	: m_tBuilder ( tBuilder )
+	, m_bEnabled ( bEnabled )
+{
+	// add path entry only in the collect pass and only prior to error point
+	if ( m_bEnabled && !m_tBuilder.IsError() )
+		m_tBuilder.m_dErrorPath.Add ( { tPath.Name(), tPath.GetRoot() } );
+}
+
+ErrorPathGuard_t::~ErrorPathGuard_t ()
+{
+	if ( m_bEnabled && !m_tBuilder.IsError() )
+		m_tBuilder.m_dErrorPath.Pop();
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 class QueryParserJson_c : public QueryParser_i
@@ -299,6 +371,12 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
+
+		QueryTreeBuilder_c tErrorBuilder { tBuilder.CreateCollectPath ( pSchema ) };
+		ConstructNode ( tRoot[0], tErrorBuilder );
+		tErrorBuilder.Cleanup();
+		tErrorBuilder.ErrorPrintPath ( tBuilder );
+
 		return false;
 	}
 
@@ -356,6 +434,7 @@ bool IsBoolNode ( const CSphString & sName )
 
 XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	if ( !tJson.IsObj() )
 	{
 		tBuilder.Error ( "\"match\" value should be an object" );
@@ -481,6 +560,7 @@ bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVec
 
 bool QueryParserJson_c::ConstructBoolNodeItems ( const JsonObj_c & tClause, CSphVector<XQNode_t *> & dItems, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tClause );
 	if ( tClause.IsArray() )
 	{
 		for ( const auto & tObject : tClause )
@@ -510,6 +590,7 @@ bool QueryParserJson_c::ConstructBoolNodeItems ( const JsonObj_c & tClause, CSph
 
 XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	if ( !tJson.IsObj() )
 	{
 		tBuilder.Error ( "\"bool\" value should be an object" );
@@ -684,6 +765,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	if ( !tJson.IsStr() )
 	{
 		tBuilder.Error ( "\"query_string\" value should be an string" );
@@ -759,6 +841,7 @@ bool IsFullText ( const CSphString & sName )
 
 XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	CSphString sName = tJson.Name();
 	if ( !tJson || sName.IsEmpty() )
 	{
@@ -797,6 +880,7 @@ XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTree
 		return ConstructQLNode ( tJson.GetItem ( "query" ), tBuilder );
 	}
 
+	tBuilder.Error ( "unknown full-text node '%s'", sName.cstr() );
 	return nullptr;
 }
 

@@ -190,20 +190,19 @@ private:
 		if ( tNode.second==JSON_EOF )
 			return;
 
-		if ( tNode.second==JSON_ROOT || tNode.second==JSON_OBJECT )
-		{
-			bson::Bson_c tBson(tNode);
-			tBson.ForEach ( [this,sAttrPrefix,tAction]( CSphString && sName, const bson::NodeHandle_t & tNode )
-				{
-					CSphString sAttrName;
-					sAttrName.SetSprintf ( "%s['%s']", sAttrPrefix.cstr(), sName.cstr() );
-					ProcessJsonObj ( sAttrName, tNode, tAction );
-				} );
+		if ( tNode.second!=JSON_ROOT )
+			tAction ( sAttrPrefix, tNode );
 
+		if ( tNode.second!=JSON_ROOT && tNode.second!=JSON_OBJECT )
 			return;
-		}
 
-		tAction ( sAttrPrefix, tNode );
+		bson::Bson_c tBson(tNode);
+		tBson.ForEach ( [this,sAttrPrefix,tAction]( CSphString && sName, const bson::NodeHandle_t & tNode )
+			{
+				CSphString sAttrName;
+				sAttrName.SetSprintf ( "%s['%s']", sAttrPrefix.cstr(), sName.cstr() );
+				ProcessJsonObj ( sAttrName, tNode, tAction );
+			} );
 	}
 
 	void ConvertAndStore ( int64_t iValue, ESphJsonType eType, int iAttr )
@@ -212,6 +211,7 @@ private:
 		{
 		case JSON_INT32:
 		case JSON_INT64:
+		case JSON_OBJECT:
 			m_pBuilder->SetAttr ( iAttr, iValue );
 			break;
 
@@ -314,6 +314,10 @@ private:
 			ConvertAndStore ( bson::Int(tNode), eType, iAttr );
 			break;
 
+		case JSON_OBJECT:
+			ConvertAndStore ( 1LL, eType, iAttr );
+			break;
+
 		default:
 			assert ( 0 && "Internal error: unsupported json type" );
 			break;
@@ -371,6 +375,10 @@ private:
 
 		case JSON_DOUBLE_VECTOR:
 			eType = ToWidestType ( eType, JSON_DOUBLE );
+			break;
+
+		case JSON_OBJECT:
+			eType = ToWidestType ( eType, JSON_INT32 );
 			break;
 
 		case JSON_MIXED_VECTOR:

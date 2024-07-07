@@ -681,5 +681,25 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- error on full-text vs filter order -->
+<query endpoint="json/search">
+{
+  "index": "test2",
+  "query": {
+    "equals": { "gid": 11 },
+    "match": { "*": "on" }
+  }
+}
+</query>
+<query endpoint="json/search">
+{
+  "index": "test2",
+  "query": {
+    "match": { "*": "on" },
+    "equals": { "gid": 11 }
+  }
+}
+</query>
+
 </queries>
 </test>

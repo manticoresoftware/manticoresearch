@@ -37,6 +37,16 @@ During normal operation, a new binlog file is opened whenever the `binlog_max_lo
 binlog_max_log_size = 16M
 ```
 
+### Log files
+
+Each binlog file has a name, as binlog.NNNN, where NNNN is a number, zero padded. By default, it is 4 digits, so binlog files are named like 'binlog.0000', 'binlog.0001', etc. If desired, number of digits can be set with `binlog_filename_digits` directive:
+
+```ini
+binlog_filename_digits = 6
+```
+
+Notice, you need to abandon your binlog before change the value; otherwise actual one will be taken from existing binlog meta. So, if you want to change, N of digits, say, to 6 - after you put your value to config, you need to flush all your tables; than perform clean shutdown of the daemon; than manually drop all binlog.* files and restart the daemon.
+
 ### Binary logging strategies
 
 There are 2 different binlog strategies, controlled by `binlog_common` directive:

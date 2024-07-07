@@ -229,6 +229,8 @@ private:
 	bool					m_bCommonBinlog = false; // per-index binlog(false), or old-way common binlog(true)
 
 	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M; searchd.binlog_max_log_size
+	int 					m_iBinlogFileDigits = 4;	// how many digits use for naming binlog files
+	CSphString				m_sBinlogFileNameTemplate;
 
 	std::atomic<int>		m_iNextBinlog { 0 };
 	std::atomic<int>		m_iNumFiles;
@@ -256,6 +258,7 @@ private:
 	void	Log ( DWORD uFlag, const char * sTemplate, ... ) const;
 	int		ReplayIndexID ( CSphReader & tReader, const BinlogReplayFileDesc_t & tLog ) const;
 	CSphString MakeBinlogName ( int iExt ) const noexcept;
+	void MakeBinlogFilenameTemplate () noexcept;
 
 	int NextBinlogExt();
 	void FixNofFiles ( int iFiles );
@@ -927,10 +930,15 @@ Binlog_c::~Binlog_c ()
 	UnlockBinlog ();
 }
 
+void Binlog_c::MakeBinlogFilenameTemplate() noexcept
+{
+	m_sBinlogFileNameTemplate = SphSprintf ( "%s/binlog.%%0%dd", m_sLogPath.cstr (), m_iBinlogFileDigits );
+}
 
 CSphString Binlog_c::MakeBinlogName ( int iExt ) const noexcept
 {
-	return SphSprintf ( "%s/binlog.%04d", m_sLogPath.cstr (), iExt );
+	assert ( !m_sBinlogFileNameTemplate.IsEmpty() );
+	return SphSprintf ( m_sBinlogFileNameTemplate.scstr(), iExt );
 }
 
 void Binlog_c::RemoveFile ( int iExt )
@@ -971,6 +979,7 @@ void Binlog_c::FixNofFiles ( int iFiles )
 void Binlog_c::CheckAndSetPath ( CSphString sBinlogPath )
 {
 	m_sLogPath = std::move ( sBinlogPath );
+	MakeBinlogFilenameTemplate();
 	m_bDisabled = m_sLogPath.IsEmpty ();
 
 	if ( m_bDisabled )
@@ -997,12 +1006,14 @@ void Binlog_c::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlag
 
 	m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
 	m_uReplayFlags = uReplayFlags;
+	m_iBinlogFileDigits = hSearchd.GetInt ( "binlog_filename_digits", 4 );
 
 	if ( m_bDisabled )
 		return;
 
 	LockBinlog ();
 	LoadMeta();
+	MakeBinlogFilenameTemplate ();
 }
 
 void Binlog_c::SetCommon ( bool bCommonBinlog )
@@ -1067,6 +1078,7 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 	MemoryWriter2_c wrMeta ( dMeta );
 	wrMeta.PutDword ( BINLOG_META_MAGIC_SPLI );
 	wrMeta.PutDword ( BINLOG_VERSION );
+	wrMeta.PutByte ( m_iBinlogFileDigits );
 
 	// save list of active log files
 	CSphVector<int> dFiles;
@@ -1203,7 +1215,7 @@ void Binlog_c::LoadMeta ()
 		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
 				 sMeta.cstr (), uVersion, BINLOG_VERSION );
 
-	const bool bLoaded64bit = ( uVersion<15 ) ? ( rdMeta.GetByte ()==1 ) : true;
+	auto uByte = rdMeta.GetByte(); // id64 for v<15; num of digits in names for v>=15
 	m_dSavedFiles.Resize ( rdMeta.UnzipInt () ); // FIXME! sanity check
 
 	if ( m_dSavedFiles.IsEmpty () )
@@ -1214,8 +1226,14 @@ void Binlog_c::LoadMeta ()
 	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
 
 	// let's require that bitness
-	if ( !bLoaded64bit )
-		sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
+	if ( uVersion < 15 )
+	{
+		if ( uByte != 1 )
+			sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
+	} else
+		m_iBinlogFileDigits = uByte;
+
+	assert ( m_iBinlogFileDigits>0 );
 
 	// load list of active log files
 	int iMaxExt = 0;

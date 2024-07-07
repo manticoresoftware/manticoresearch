@@ -141,7 +141,9 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 9;				///< META in json format
+	// NOTICE! meta version 10 was introduced in 2a6ea8f7 and rolled back to 9 in e1709760.
+	// if you need to upgrade - skip v10 and use v11.
+	static const DWORD				META_VERSION = 9; // next should be 11
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;

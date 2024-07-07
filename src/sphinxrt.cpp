@@ -1352,7 +1352,10 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 20;			///< current version. since 20 we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
+	// NOTICE! meta version 21 was introduced in 2a6ea8f7 and rolled back to 20 in e1709760.
+	// if you need to upgrade - skip v21 and use v22.
+	static const DWORD			META_VERSION		= 20; // next should be 22
+	//< current version. since 20 we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;

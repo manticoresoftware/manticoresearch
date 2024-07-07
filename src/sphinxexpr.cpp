@@ -9856,14 +9856,14 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 
 		if ( dRetTypes[0]!=SPH_ATTR_INTEGER && dRetTypes[0]!=SPH_ATTR_BIGINT && dRetTypes[0]!=SPH_ATTR_FLOAT && dRetTypes[0]!=SPH_ATTR_TIMESTAMP )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 1 must be number", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 1 must be number, or evaluated to number", sFuncName );
 			return -1;
 		}
 
 		GatherArgFN ( iArg, [&] ( int i )
 		{
 			if ( i!=0 && m_dNodes[i].m_eRetType!=SPH_ATTR_MAPARG )
-				m_sParserError.SetSprintf ( "%s() arguments %d must be a map", sFuncName, i+1 );
+				m_sParserError.SetSprintf ( "%s() argument %d must be a map", sFuncName, i+1 );
 		} );
 	}
 	break;
@@ -9879,13 +9879,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 
 		if ( dRetTypes[0]!=SPH_ATTR_INTEGER && dRetTypes[0]!=SPH_ATTR_BIGINT && dRetTypes[0]!=SPH_ATTR_FLOAT && dRetTypes[0]!=SPH_ATTR_TIMESTAMP )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 1 must be number", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 1 must be number, or evaluated to number", sFuncName );
 			return -1;
 		}
 
 		if ( dRetTypes[1]!=SPH_ATTR_MAPARG )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 2 must be map", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 2 must be map", sFuncName );
 			return -1;
 		}
 	}

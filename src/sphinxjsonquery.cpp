@@ -275,6 +275,18 @@ bool CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError )
 	return true;
 }
 
+static JsonObj_c FindFullTextQueryNode ( const JsonObj_c & tRoot )
+{
+	for ( JsonObj_c tChild : tRoot )
+	{
+		if ( !IsFilter ( tChild ) )
+			return tChild;
+	}
+
+	return tRoot[0];
+}
+
+
 bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
 	JsonObj_c tRoot ( szQuery );
@@ -295,7 +307,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	QueryTreeBuilder_c tBuilder ( pQuery, std::move ( pQueryTokenizerQL ), tSettings );
 	tBuilder.Setup ( pSchema, pQueryTokenizerJson->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
 
-	XQNode_t * pRoot = ConstructNode ( tRoot[0], tBuilder );
+	const JsonObj_c tFtNode = FindFullTextQueryNode ( tRoot );
+	XQNode_t * pRoot = ConstructNode ( tFtNode, tBuilder );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();

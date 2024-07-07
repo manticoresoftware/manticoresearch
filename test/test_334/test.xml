@@ -610,7 +610,7 @@ select * from dist_gr2 facet gid facet tag;;
             "should":[
                 { "bool":{
                   "must":[ { "term" : { "content" : "in" } } ],
-                  "must_not":[ { "exist" : { "field" : "title" } } ]
+                  "must_not":[ { "exists" : { "field" : "title" } } ]
                 }
               } ]
   } } ] } }
@@ -659,6 +659,26 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- facets with sort but the wrong order -->
 <query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "sort":[{"gid":{"order":"asc"}}], "terms": { "field": "gid", "size": 5 }}}}</query>
 
+
+<!-- error on full-text vs filter order -->
+<query endpoint="json/search">
+{
+  "index": "test2",
+  "query": {
+    "equals": { "gid": 11 },
+    "match": { "*": "on" }
+  }
+}
+</query>
+<query endpoint="json/search">
+{
+  "index": "test2",
+  "query": {
+    "match": { "*": "on" },
+    "equals": { "gid": 11 }
+  }
+}
+</query>
 
 </queries>
 </test>

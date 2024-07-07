@@ -141,7 +141,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 10;				///< META in json format
+	static const DWORD				META_VERSION = 9;				///< META in json format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -2630,6 +2630,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 
 	// version
 	DWORD uVersion = (DWORD)Int ( tBson.ChildByName ( "meta_version" ), 9 );
+	if ( uVersion == 10 ) uVersion = 9; // fixme! a little hack, m.b. deal another way? v10 is minor of v9
 	if ( uVersion == 0 || uVersion > META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
@@ -2848,8 +2849,6 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	sNewMeta.NamedVal ( "tid", m_iTID );
-	// meta v.10
-	sNewMeta.NamedVal ( "index_id", m_iIndexId );
 
 	{
 		sNewMeta.Named ( "pqs" );

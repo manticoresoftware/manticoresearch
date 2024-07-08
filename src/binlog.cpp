@@ -190,7 +190,7 @@ public:
 			~Binlog_c();
 
 	void	NotifyIndexFlush ( int64_t iTID, const char * szIndexName, bool bShutdown, bool bForceSave );
-	bool	BinlogCommit ( int64_t * pTID, const char * szIndexName, bool bIncTID, FnWriteCommit fnSaver, CSphString & sError );
+	bool	BinlogCommit ( int64_t * pTID, const char * szIndexName, FnWriteCommit fnSaver, CSphString & sError );
 
 	void	Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags );
 	void	SetCommon ( bool bCommonBinlog );
@@ -251,7 +251,7 @@ private:
 	bool					ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c & tReader ) const;
 	bool					ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
 	bool					ReplayCacheAdd ( const BinlogReplayFileDesc_t & tLog, DWORD uVersion, BinlogReader_c & tReader ) const;
-	bool 					IsBinlogWritable ( int64_t * pTID = nullptr ) const noexcept;
+	bool 					IsBinlogWritable () const noexcept;
 
 	bool	PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const;
 
@@ -1163,24 +1163,19 @@ void Binlog_c::UnlockBinlog ()
 }
 
 
-bool Binlog_c::IsBinlogWritable ( int64_t * pTID ) const noexcept
+bool Binlog_c::IsBinlogWritable () const noexcept
 {
 	if ( m_bReplayMode )
 		return false;
 
-	if ( !m_bDisabled )
-		return true;
-
-	if ( pTID ) // still need to advance TID as index flush according to it
-		++( *pTID );
-	return false;
+	return !m_bDisabled;
 }
 
 
 // commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.
-bool Binlog_c::BinlogCommit ( int64_t * pTID, const char* szIndexName, bool bIncTID, FnWriteCommit fnSaver, CSphString & sError )
+bool Binlog_c::BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError )
 {
-	if ( !IsBinlogWritable ( bIncTID ? pTID : nullptr ) ) // m.b. need to advance TID as index flush according to it
+	if ( !IsBinlogWritable () ) // m.b. need to advance TID as index flush according to it
 		return true;
 
 	auto pSingleBinlog = GetWriteIndexBinlog ( szIndexName );
@@ -1754,12 +1749,12 @@ bool Binlog::MockDisabled ( bool bNewVal )
 	return bNewVal;
 }
 
-bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver )
+bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, CSphString & sError, FnWriteCommit && fnSaver )
 {
 	if ( !g_pRtBinlog )
 		return true;
 
-	return g_pRtBinlog->BinlogCommit ( pTID, szIndexName, bIncTID, std::move (fnSaver), sError );
+	return g_pRtBinlog->BinlogCommit ( pTID, szIndexName, std::move (fnSaver), sError );
 }
 
 void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave )

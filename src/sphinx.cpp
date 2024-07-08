@@ -2424,7 +2424,7 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 void CommitUpdateAttributes ( int64_t * pTID, const char * szName, const CSphAttrUpdate & tUpd )
 {
 	CSphString sError;
-	Binlog::Commit ( pTID, szName, false, sError, [&tUpd] ( Writer_i & tWriter ) {
+	Binlog::Commit ( pTID, szName, sError, [&tUpd] ( Writer_i & tWriter ) {
 
 		// my user op
 		tWriter.PutByte ( Binlog::UPDATE_ATTRS );

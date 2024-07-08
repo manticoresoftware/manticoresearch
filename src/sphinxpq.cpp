@@ -2096,7 +2096,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
 		CSphString sError;
-		Binlog::Commit ( &m_iTID, GetName(), true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
+		Binlog::Commit ( &m_iTID, GetName(), sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
 			// my user op
 			tWriter.PutByte ( Binlog::PQ_ADD_DELETE );
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );

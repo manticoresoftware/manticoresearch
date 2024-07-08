@@ -9238,7 +9238,7 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	return Binlog::Commit ( &m_iTID, GetName(), false, sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=m_bKeywordDict] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
+	return Binlog::Commit ( &m_iTID, GetName(), sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=m_bKeywordDict] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		tWriter.PutByte ( Binlog::COMMIT );
 		if ( !pSeg || !pSeg->m_uRows )

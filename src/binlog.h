@@ -67,8 +67,7 @@ namespace Binlog {
 	void Flush();
 	int64_t NextFlushTimestamp();
 
-	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
-	bool Commit ( int64_t * pTID, const char* szIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
+	bool Commit ( int64_t * pTID, const char* szIndexName, CSphString & sError, FnWriteCommit && fnSaver );
 
 	/// replay stored binlog
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );

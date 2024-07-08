@@ -3042,7 +3042,7 @@ void PercolateIndex_c::ForceRamFlush ( const char * szReason )
 		return;
 
 	int64_t tmStart = sphMicroTimer();
-	int64_t iWasTID = m_iSavedTID;
+	int64_t iWasTID = std::exchange ( m_iSavedTID, m_iTID );
 	int64_t tmWas = m_tmSaved;
 	SaveMeta ();
 

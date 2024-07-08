@@ -1395,7 +1395,7 @@ private:
 
 	bool						m_bIndexDeleted = false;
 
-	int64_t						m_iSavedTID;
+	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;
 	mutable DWORD				m_uDiskAttrStatus = 0;
 
@@ -1535,7 +1535,6 @@ private:
 
 RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict )
 	: RtIndex_i { std::move ( sIndexName ), std::move ( sPath ) }
-	, m_iSavedTID ( m_iTID )
 	, m_tmSaved ( sphMicroTimer() )
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iTrackFailedRamActions {0}
@@ -1707,12 +1706,10 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
 	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
-	int64_t iWasTID = m_iSavedTID;
-	int64_t tmDelta = sphMicroTimer() - m_tmSaved;
-	m_iSavedTID = m_iTID;
-	m_tmSaved = sphMicroTimer();
-
-	tmSave = sphMicroTimer() - tmSave;
+	int64_t iWasTID = std::exchange ( m_iSavedTID, m_iTID );
+	auto tmNow = sphMicroTimer ();
+	int64_t tmDelta = tmNow-std::exchange ( m_tmSaved, tmNow );
+	tmSave = tmNow-tmSave;
 	sphInfo ( "rt: table %s: ramchunk saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
 		"ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)",
 		GetName(), szReason, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
@@ -5259,14 +5256,16 @@ int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter, FilenameBuilder_i * )
 	if ( m_iRtMemLimit<=0 )
 		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iRtMemLimit );
 
-	if ( m_iTID<0 )
+	if ( m_iTID<-1 ) // -1 is valid value for 'no binlog'
+	{
 		tReporter.Fail ( "table TID < 0 (current=" INT64_FMT ")", m_iTID );
 
-	if ( m_iSavedTID<0 )
-		tReporter.Fail ( "table saved TID < 0 (current=" INT64_FMT ")", m_iSavedTID );
+		if ( m_iSavedTID<0 )
+			tReporter.Fail ( "table saved TID < 0 (current=" INT64_FMT ")", m_iSavedTID );
 
-	if ( m_iTID<m_iSavedTID )
-		tReporter.Fail ( "table TID < table saved TID (current=" INT64_FMT ", saved=" INT64_FMT ")", m_iTID, m_iSavedTID );
+		if ( m_iTID<m_iSavedTID )
+			tReporter.Fail ( "table TID < table saved TID (current=" INT64_FMT ", saved=" INT64_FMT ")", m_iTID, m_iSavedTID );
+	}
 
 	if ( m_iWordsCheckpoint!=RTDICT_CHECKPOINT_V5 )
 		tReporter.Fail ( "unexpected number of words per checkpoint (expected 48, got %d)", m_iWordsCheckpoint );

@@ -74,6 +74,7 @@
 %token	TOK_RETURNS
 %token	TOK_RTINDEX
 %token	TOK_SECONDARY
+%token	TOK_SECONDARY_INDEX
 %token	TOK_SONAME
 %token	TOK_STORED
 %token	TOK_STRING
@@ -322,6 +323,14 @@ item_option:
 	| TOK_HNSW_EF_CONSTRUCTION '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionHNSWEfConstruction ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_SECONDARY_INDEX '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionIndexed ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

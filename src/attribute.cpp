@@ -172,18 +172,18 @@ protected:
 class BlobRowBuilder_File_c : public BlobRowBuilder_Base_c
 {
 public:
-							BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked, int iBufferSize );
+				BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked, int iBufferSize );
 
-	bool					Setup ( const CSphString & sFile, CSphString & sError );
+	bool		Setup ( const CSphString & sFile, CSphString & sError );
 
-	SphOffset_t				Flush() override;
-	SphOffset_t				Flush ( const BYTE * pOldRow ) override;
-	bool					Done ( CSphString & sError ) override;
+	std::pair<SphOffset_t,SphOffset_t> Flush() override;
+	std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) override;
+	bool		Done ( CSphString & sError ) override;
 
 private:
-	CSphWriter				m_tWriter;
-	SphOffset_t				m_tSpaceForUpdates = 0;
-	int						m_iBufferSize = 0;
+	CSphWriter	m_tWriter;
+	SphOffset_t	m_tSpaceForUpdates = 0;
+	int			m_iBufferSize = 0;
 };
 
 
@@ -240,7 +240,7 @@ bool BlobRowBuilder_File_c::Setup ( const CSphString & sFile, CSphString & sErro
 }
 
 
-SphOffset_t BlobRowBuilder_File_c::Flush()
+std::pair<SphOffset_t,SphOffset_t> BlobRowBuilder_File_c::Flush()
 {
 	SphOffset_t tRowOffset = m_tWriter.GetPos();
 
@@ -277,17 +277,17 @@ SphOffset_t BlobRowBuilder_File_c::Flush()
 	for ( const auto & i : m_dAttrs )
 		m_tWriter.PutBytes ( i->GetData().Begin(), i->GetData().GetLength() );
 
-	return tRowOffset;
+	return { tRowOffset, m_tWriter.GetPos()-tRowOffset };
 }
 
 
-SphOffset_t BlobRowBuilder_File_c::Flush ( const BYTE * pOldRow )
+std::pair<SphOffset_t,SphOffset_t> BlobRowBuilder_File_c::Flush ( const BYTE * pOldRow )
 {
 	assert ( pOldRow );
 	SphOffset_t tRowOffset = m_tWriter.GetPos();
 	m_tWriter.PutBytes ( pOldRow, sphGetBlobTotalLen ( pOldRow, m_dAttrs.GetLength() ) );
 
-	return tRowOffset;
+	return { tRowOffset, m_tWriter.GetPos()-tRowOffset };
 }
 
 
@@ -315,9 +315,9 @@ public:
 							BlobRowBuilder_Mem_c ( CSphTightVector<BYTE> & dPool );
 							BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool );
 
-	SphOffset_t				Flush() override;
-	SphOffset_t				Flush ( const BYTE * pOldRow ) override;
-	bool					Done ( CSphString & /*sError*/ ) override { return true; }
+	std::pair<SphOffset_t,SphOffset_t> Flush() override;
+	std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) override  { assert (0); return {0,0}; }
+	bool					Done ( CSphString & /*sError*/ ) override			{ return true; }
 
 protected:
 	CSphTightVector<BYTE> & m_dPool;
@@ -361,7 +361,7 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 }
 
 
-SphOffset_t BlobRowBuilder_Mem_c::Flush()
+std::pair<SphOffset_t,SphOffset_t> BlobRowBuilder_Mem_c::Flush()
 {
 	SphOffset_t tRowOffset = m_dPool.GetLength();
 
@@ -404,16 +404,8 @@ SphOffset_t BlobRowBuilder_Mem_c::Flush()
 		memcpy ( pPtr, i->GetData().Begin(), iLen );
 	}
 
-	return tRowOffset;
+	return { tRowOffset, m_dPool.GetLength()-tRowOffset };
 }
-
-
-SphOffset_t BlobRowBuilder_Mem_c::Flush ( const BYTE * pOldRow )
-{
-	assert ( 0 );
-	return 0;
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -580,6 +572,12 @@ static ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAtt
 
 	assert ( 0 && "Unknown blob row type" );
 	return { nullptr, 0 };
+}
+
+
+ByteBlob_t sphGetBlobAttr ( const BYTE * pBlobRow, const CSphAttrLocator & tLocator )
+{
+	return GetBlobAttr ( pBlobRow, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
 }
 
 

@@ -1497,11 +1497,65 @@ public:
 	{
 		Expr_WithLocator_c::Command ( eCmd, pArg );
 
-		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+		switch ( eCmd )
+		{
+		case SPH_EXPR_SET_BLOB_POOL:
 			m_pBlobPool = (const BYTE*)pArg;
-		else if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_iLocator!=-1 )
-			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
-		for ( auto& pExpr : m_dArgs )
+			break;
+
+		case SPH_EXPR_GET_DEPENDENT_COLS:
+			if ( m_iLocator!=-1 )
+				static_cast < CSphVector<int>* > ( pArg )->Add(m_iLocator);
+			break;
+
+		case SPH_EXPR_FORMAT_AS_TEXT:
+			if ( m_iLocator!=-1 && !m_dArgs.IsEmpty() && m_dArgs.all_of( []( auto & pExpr ){ return pExpr->IsConst(); } ) )
+			{
+				auto pSchemaWithName = static_cast<std::pair<const ISphSchema*,CSphString>*>(pArg);
+				CSphString sAllFields;
+				ARRAY_FOREACH ( i, m_dArgs )
+				{
+					CSphMatch tStub;
+					CSphString sArg;
+
+					switch ( m_dRetTypes[i] )
+					{
+					case SPH_ATTR_INTEGER:
+						sArg.SetSprintf ( "[%d]", m_dArgs[i]->IntEval(tStub) );
+						break;
+
+					case SPH_ATTR_BIGINT:
+						sArg.SetSprintf ( "[" INT64_FMT "]", m_dArgs[i]->Int64Eval(tStub) );
+						break;
+
+					case SPH_ATTR_STRING:
+					{
+						const BYTE * pStr;
+						int iLen = m_dArgs[i]->StringEval ( tStub, &pStr );
+						sArg.SetSprintf ( "['%s']", CSphString ( (const char*)pStr, iLen ).cstr() );
+					}
+					break;
+
+					default:
+						break;
+					}
+
+					if ( sAllFields.IsEmpty() )
+						sAllFields = sArg;
+					else
+						sAllFields.SetSprintf ( "%s%s", sAllFields.cstr(), sArg.cstr() );
+				}
+
+				const CSphColumnInfo & tAttr = pSchemaWithName->first->GetAttr(m_iLocator);
+				pSchemaWithName->second.SetSprintf ( "%s%s", tAttr.m_sName.cstr(), sAllFields.cstr() );
+			}
+			break;
+
+		default:
+			break;
+		}
+
+		for ( auto & pExpr : m_dArgs )
 			if ( pExpr )
 				pExpr->Command ( eCmd, pArg );
 	}
@@ -1648,8 +1702,24 @@ public:
 	{
 		Expr_WithLocator_c::Command ( eCmd, pArg );
 
-		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+		switch ( eCmd )
+		{
+		case SPH_EXPR_SET_BLOB_POOL:
 			m_pBlobPool = (const BYTE*)pArg;
+			break;
+
+		case SPH_EXPR_FORMAT_AS_TEXT:
+			if ( m_iLocator!=-1 )
+			{
+				auto pSchemaWithName = static_cast<std::pair<const ISphSchema*,CSphString>*>(pArg);
+				const CSphColumnInfo & tAttr = pSchemaWithName->first->GetAttr(m_iLocator);
+				pSchemaWithName->second.SetSprintf ( "%s['%s']", tAttr.m_sName.cstr(), m_sKey.cstr() );
+			}
+			break;
+
+		default:
+			break;
+		}
 	}
 
 	float Eval ( const CSphMatch & ) const final
@@ -1712,6 +1782,19 @@ private:
 };
 
 
+static ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch, const BYTE * pBlobPool, const CSphRefcountedPtr<ISphExpr> & pArg )
+{
+	assert ( ppKey );
+	if ( !pBlobPool || !pArg )
+		return JSON_EOF;
+
+	uint64_t uPacked = pArg->Int64Eval ( tMatch );
+	*ppKey = pBlobPool + sphJsonUnpackOffset ( uPacked );
+
+	return sphJsonUnpackType ( uPacked );
+}
+
+
 class Expr_JsonFieldConv_c : public ISphExpr
 {
 public:
@@ -1769,14 +1852,7 @@ protected:
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
-		assert ( ppKey );
-		if ( !m_pBlobPool || !m_pArg )
-			return JSON_EOF;
-
-		uint64_t uPacked = m_pArg->Int64Eval ( tMatch );
-		*ppKey = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
-
-		return sphJsonUnpackType ( uPacked );
+		return ::GetKey ( ppKey, tMatch, m_pBlobPool, m_pArg );
 	}
 
 	// generic evaluate
@@ -2473,7 +2549,252 @@ private:
 	Expr_Iterator_c ( const Expr_Iterator_c& ) = default;
 };
 
+////////////////////////////////////////////////////////////////////
 
+class ExprConstArgs_c : public CSphFilterSettings
+{
+public:
+	bool	m_bOr = false;
+	bool	m_bAnd = false;
+
+	void	AppendFilter ( const CSphFilterSettings & tFilter );
+	bool	IsError() const { return !m_bSet || m_bError; }
+
+private:
+	bool	m_bSet = false;
+	bool	m_bError = false;
+};
+
+
+void ExprConstArgs_c::AppendFilter ( const CSphFilterSettings & tFilter )
+{
+	if ( !m_bSet )
+	{
+		*(CSphFilterSettings*)this = tFilter;
+		m_bSet = true;
+		return;
+	}
+
+	if ( m_eType!=tFilter.m_eType || m_bExclude || tFilter.m_bExclude )
+	{
+		m_bError = true;
+		return;
+	}
+
+	switch ( m_eType )
+	{
+	case SPH_FILTER_STRING_LIST:
+		for ( auto & i : tFilter.m_dStrings )
+			m_dStrings.Add(i);
+		break;
+
+	case SPH_FILTER_VALUES:
+		for ( auto & i : tFilter.m_dValues )
+			m_dValues.Add(i);
+		break;
+
+	case SPH_FILTER_RANGE:
+	case SPH_FILTER_FLOATRANGE:
+		m_iMinValue = Max ( m_iMinValue, tFilter.m_iMinValue );
+		m_iMaxValue = Min ( m_iMaxValue, tFilter.m_iMaxValue );
+		m_fMinValue = Max ( m_fMinValue, tFilter.m_fMinValue );
+		m_fMaxValue = Min ( m_fMaxValue, tFilter.m_fMaxValue );
+		m_bHasEqualMin |= tFilter.m_bHasEqualMin;
+		m_bHasEqualMax |= tFilter.m_bHasEqualMax;
+		m_bOpenLeft	 &= tFilter.m_bOpenLeft;
+		m_bOpenRight &= tFilter.m_bOpenRight;
+		break;
+
+	default:
+		m_bError = true;
+		break;
+	}
+}
+
+////////////////////////////////////////////////////////////////////
+class Expr_BinaryFilter_c : public Expr_Binary_c
+{
+	using Expr_Binary_c::Expr_Binary_c;
+
+protected:
+	void		PopulateConstArgsStr ( ESphExprCommand eCmd, void * pArg ) const;
+	void		PopulateConstArgsLtInt ( ESphExprCommand eCmd, void * pArg ) const;
+	void		PopulateConstArgsGtInt ( ESphExprCommand eCmd, void * pArg ) const;
+	void		PopulateConstArgsLteInt ( ESphExprCommand eCmd, void * pArg ) const;
+	void		PopulateConstArgsGteInt ( ESphExprCommand eCmd, void * pArg ) const;
+	void		PopulateConstArgsEqInt ( ESphExprCommand eCmd, void * pArg ) const;
+	void		PopulateConstArgsNeInt ( ESphExprCommand eCmd, void * pArg ) const;
+	void		SetFlagAnd ( ESphExprCommand eCmd, void * pArg ) const;
+	void		SetFlagOr ( ESphExprCommand eCmd, void * pArg ) const;
+
+private:
+	const ISphExpr * GetExprForConsts ( ESphExprCommand eCmd ) const;
+
+	template <typename ACTION>
+	void		AddFilter ( ESphExprCommand eCmd, void * pArg, ACTION && fnAction ) const;
+};
+
+template <typename ACTION>
+void Expr_BinaryFilter_c::AddFilter ( ESphExprCommand eCmd, void * pArg, ACTION && fnAction ) const
+{
+	const ISphExpr * pToEval = GetExprForConsts(eCmd);
+	if ( !pToEval )
+		return;
+
+	CSphFilterSettings tFilter;
+	CSphMatch tStub;
+	fnAction ( tFilter, tStub, pToEval );
+	((ExprConstArgs_c*)pArg)->AppendFilter(tFilter);
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsStr ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			const BYTE * pStr = nullptr;
+			int iLen = pExpr->StringEval ( tMatch, &pStr );
+			tFilter.m_eType = SPH_FILTER_STRING_LIST;
+			tFilter.m_dStrings.Add ( CSphString ( (const char*)pStr, iLen ) );
+		} );
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsLtInt ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_iMaxValue = pExpr->Int64Eval(tMatch);
+			tFilter.m_bHasEqualMax = false;
+			tFilter.m_bOpenLeft = true;
+		} );
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsGtInt ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_iMinValue = pExpr->Int64Eval(tMatch);
+			tFilter.m_bHasEqualMin = false;
+			tFilter.m_bOpenRight = true;
+		} );
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsLteInt ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_iMaxValue = pExpr->Int64Eval(tMatch);
+			tFilter.m_bOpenLeft = true;
+		} );
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsGteInt ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_iMinValue = pExpr->Int64Eval(tMatch);
+			tFilter.m_bOpenRight = true;
+		} );
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsEqInt ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_dValues.Add ( pExpr->Int64Eval(tMatch) );
+		} );
+}
+
+
+void Expr_BinaryFilter_c::PopulateConstArgsNeInt ( ESphExprCommand eCmd, void * pArg ) const
+{
+	AddFilter ( eCmd, pArg, []( CSphFilterSettings & tFilter, const CSphMatch & tMatch, const ISphExpr * pExpr )
+		{
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_bExclude = true;
+			tFilter.m_dValues.Add ( pExpr->Int64Eval(tMatch) );
+		} );
+}
+
+
+const ISphExpr * Expr_BinaryFilter_c::GetExprForConsts ( ESphExprCommand eCmd ) const
+{
+	if ( eCmd!=SPH_EXPR_COLLECT_CONST_ARGS )
+		return nullptr;
+
+	if ( m_pFirst->IsConst() && !m_pSecond->IsConst() )
+		return m_pFirst;
+
+	if ( !m_pFirst->IsConst() && m_pSecond->IsConst() )
+		return m_pSecond;
+
+	return nullptr;
+}
+
+
+void Expr_BinaryFilter_c::SetFlagAnd ( ESphExprCommand eCmd, void * pArg ) const
+{
+	if ( eCmd==SPH_EXPR_COLLECT_CONST_ARGS )
+		((ExprConstArgs_c*)pArg)->m_bAnd = true;
+}
+
+
+void Expr_BinaryFilter_c::SetFlagOr ( ESphExprCommand eCmd, void * pArg ) const
+{
+	if ( eCmd==SPH_EXPR_COLLECT_CONST_ARGS )
+		((ExprConstArgs_c*)pArg)->m_bOr = true;
+}
+
+////////////////////////////////////////////////////////////////////
+
+static bool CanSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bExclude )
+{
+	switch ( tFilter.m_eType )
+	{
+	case SPH_FILTER_VALUES:
+		// fixme! this means "return nothing"
+		if ( tFilter.m_dValues.GetLength()!=1 )
+			return false;
+
+		if ( tFilter.m_dValues[0]!=0 && tFilter.m_dValues[0]!=1 )
+			return false;
+
+		bExclude = tFilter.m_dValues[0]==0;
+		return true;
+
+	case SPH_FILTER_RANGE:
+	{
+		bool bFilterIncludes0 = EvalRange ( 0, tFilter );
+		bool bFilterIncludes1 = EvalRange ( 1, tFilter );
+
+		// fixme! this means "return all"
+		if ( bFilterIncludes0 && bFilterIncludes1 )
+			return false;
+
+		// fixme! this means "return nothing"
+		if ( !bFilterIncludes0 && !bFilterIncludes1 )
+			return false;
+
+		bExclude = !bFilterIncludes1;
+	}
+	return true;
+
+	default:
+		return false;
+	}
+}
+
+////////////////////////////////////////////////////////////////////
 class Expr_ForIn_c : public Expr_JsonFieldConv_c
 {
 public:
@@ -2580,6 +2901,63 @@ public:
 	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return (int64_t)IntEval ( tMatch ); }
 
+	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
+	{
+		bool bExclude = false;
+		if ( !CanSetupAsFilter ( tFilter, bExclude ) )
+			return false;
+
+		if ( m_bStrict )
+			return false;
+
+		ExprConstArgs_c tConstArgs;
+		m_pExpr->Command ( SPH_EXPR_COLLECT_CONST_ARGS, (void*)&tConstArgs );
+		if ( tConstArgs.IsError() )
+			return false;
+
+		if ( tConstArgs.m_bAnd && tConstArgs.m_bOr )
+			return false;
+
+		std::pair<const ISphSchema*,CSphString> tSchemaWithName;
+		tSchemaWithName.first = &tSchema;
+		m_pArg->Command ( SPH_EXPR_FORMAT_AS_TEXT, (void*)&tSchemaWithName );
+		if ( tSchemaWithName.second.IsEmpty() )
+			return false;
+
+		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
+			return false;
+
+		bool bOk = false;
+		switch ( tConstArgs.m_eType )
+		{
+		case SPH_FILTER_VALUES:
+		case SPH_FILTER_STRING_LIST:
+			bOk = !tConstArgs.m_bAnd;
+			break;
+
+		case SPH_FILTER_RANGE:
+		case SPH_FILTER_FLOATRANGE:
+			bOk = !tConstArgs.m_bOr;
+			break;
+
+		default:
+			break;
+		}
+
+		if ( !bOk )
+			return false;
+
+		tFilter = tConstArgs;
+		tFilter.m_sAttrName = tSchemaWithName.second;
+		tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+		tFilter.m_bExclude = bExclude;
+
+		if ( tFilter.m_eType==SPH_FILTER_VALUES )
+			tFilter.m_dValues.Uniq();
+
+		return true;
+	}
+
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
 		EXPR_CLASS_NAME("Expr_ForIn_c");
@@ -2589,10 +2967,7 @@ public:
 		return CALC_PARENT_HASH();
 	}
 
-	ISphExpr* Clone () const final
-	{
-		return new Expr_ForIn_c ( *this );
-	}
+	ISphExpr * Clone() const final { return new Expr_ForIn_c ( *this ); }
 
 private:
 	CSphRefcountedPtr<ISphExpr> m_pExpr;
@@ -2612,11 +2987,11 @@ private:
 };
 
 
-class Expr_StrCmp_c : public Expr_Binary_c
+class Expr_StrCmp_c : public Expr_BinaryFilter_c
 {
 public:
 	Expr_StrCmp_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation, bool bExclude, EStrCmpDir eStrCmpDir )
-		: Expr_Binary_c ( "Expr_StrEq_c", pLeft, pRight )
+		: Expr_BinaryFilter_c ( "Expr_StrEq_c", pLeft, pRight )
 		, m_bExclude ( bExclude )
 		, m_eStrCmpDir ( eStrCmpDir )
 	{
@@ -2653,6 +3028,12 @@ public:
 
 	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return (int64_t)IntEval ( tMatch ); }
+
+	void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		Expr_Binary_c::Command ( eCmd, pArg );
+		PopulateConstArgsStr ( eCmd, pArg );
+	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
@@ -2849,7 +3230,6 @@ private:
 	{}
 };
 
-//////////////////////////////////////////////////////////////////////////
 
 #define EVALFIRST	m_pFirst->Eval(tMatch)
 #define EVALSECOND	m_pSecond->Eval(tMatch)
@@ -2939,31 +3319,43 @@ DECLARE_END()
 
 //////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_BINARY_TRAITS(_classname) \
-	class _classname : public Expr_Binary_c \
+#define DECLARE_BINARY_TRAITS(_classname,_parent) \
+	class _classname : public _parent \
 	{ \
 		public: \
-		_classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : Expr_Binary_c ( #_classname, pFirst, pSecond ) {} \
-		 _classname ( const _classname& rhs ) : Expr_Binary_c (rhs) {} \
+		_classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : _parent ( #_classname, pFirst, pSecond ) {} \
+		 _classname ( const _classname& rhs ) : _parent (rhs) {} \
 		 ISphExpr* Clone() const final { return new _classname(*this); }
 
 
 #define DECLARE_BINARY_FLT(_classname,_expr) \
-		DECLARE_BINARY_TRAITS ( _classname ) \
+		DECLARE_BINARY_TRAITS ( _classname, Expr_Binary_c ) \
 		float Eval ( const CSphMatch & tMatch ) const final { return _expr; } \
 	};
 
 #define DECLARE_BINARY_INT(_classname,_expr,_expr2,_expr3) \
-		DECLARE_BINARY_TRAITS ( _classname ) \
+		DECLARE_BINARY_TRAITS ( _classname, Expr_Binary_c ) \
 		float Eval ( const CSphMatch & tMatch ) const final { return _expr; } \
 		int IntEval ( const CSphMatch & tMatch ) const final { return _expr2; } \
 		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return _expr3; } \
 	};
 
-#define DECLARE_BINARY_POLY(_classname,_expr,_expr2,_expr3) \
-	DECLARE_BINARY_INT ( _classname##Float_c,	_expr,						(int)Eval(tMatch),		(int64_t)Eval(tMatch ) ) \
-	DECLARE_BINARY_INT ( _classname##Int_c,		(float)IntEval(tMatch),		_expr2,					(int64_t)IntEval(tMatch) ) \
-	DECLARE_BINARY_INT ( _classname##Int64_c,	(float)Int64Eval(tMatch),	(int)Int64Eval(tMatch),	_expr3 )
+#define DECLARE_BINARY_INT_EXPR(_classname,_expr,_expr2,_expr3,_expr4) \
+		DECLARE_BINARY_TRAITS ( _classname, Expr_BinaryFilter_c ) \
+		float Eval ( const CSphMatch & tMatch ) const final { return _expr; } \
+		int IntEval ( const CSphMatch & tMatch ) const final { return _expr2; } \
+		int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return _expr3; } \
+		void Command ( ESphExprCommand eCmd, void * pArg ) final \
+		{ \
+			Expr_Binary_c::Command ( eCmd, pArg ); \
+			_expr4 ( eCmd, pArg ); \
+		} \
+	};
+
+#define DECLARE_BINARY_POLY(_classname,_expr,_expr2,_expr3,_expr4) \
+	DECLARE_BINARY_INT_EXPR ( _classname##Float_c,	_expr,						(int)Eval(tMatch),		(int64_t)Eval(tMatch ),		_expr4 ) \
+	DECLARE_BINARY_INT_EXPR ( _classname##Int_c,	(float)IntEval(tMatch),		_expr2,					(int64_t)IntEval(tMatch),	_expr4 ) \
+	DECLARE_BINARY_INT_EXPR ( _classname##Int64_c,	(float)Int64Eval(tMatch),	(int)Int64Eval(tMatch),	_expr3,						_expr4 )
 
 #define IFFLT(_expr)	( (_expr) ? 1.0f : 0.0f )
 #define IFINT(_expr)	( (_expr) ? 1 : 0 )
@@ -2975,7 +3367,7 @@ DECLARE_BINARY_INT ( Expr_BitAnd_c,	(float)(int(EVALFIRST)&int(EVALSECOND)),	INT
 DECLARE_BINARY_INT ( Expr_BitOr_c,	(float)(int(EVALFIRST)|int(EVALSECOND)),	INTFIRST | INTSECOND,				INT64FIRST | INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Mod_c,	(float)(int(EVALFIRST)%int(EVALSECOND)),	INTFIRST % INTSECOND,				INT64FIRST % INT64SECOND )
 
-DECLARE_BINARY_TRAITS ( Expr_Div_c )
+DECLARE_BINARY_TRAITS ( Expr_Div_c, Expr_Binary_c )
 	   float Eval ( const CSphMatch & tMatch ) const final
 	   {
 			   float fSecond = m_pSecond->Eval ( tMatch );
@@ -2984,7 +3376,7 @@ DECLARE_BINARY_TRAITS ( Expr_Div_c )
 	   }
 DECLARE_END()
 
-DECLARE_BINARY_TRAITS ( Expr_Idiv_c )
+DECLARE_BINARY_TRAITS ( Expr_Idiv_c, Expr_Binary_c )
 	float Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto iSecond = int(EVALSECOND);
@@ -3007,19 +3399,19 @@ DECLARE_BINARY_TRAITS ( Expr_Idiv_c )
 	}
 DECLARE_END()
 
-DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( EVALFIRST<EVALSECOND ),					IFINT ( INTFIRST<INTSECOND ),		IFINT ( INT64FIRST<INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( EVALFIRST>EVALSECOND ),					IFINT ( INTFIRST>INTSECOND ),		IFINT ( INT64FIRST>INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Lte,		IFFLT ( EVALFIRST<=EVALSECOND ),				IFINT ( INTFIRST<=INTSECOND ),		IFINT ( INT64FIRST<=INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Gte,		IFFLT ( EVALFIRST>=EVALSECOND ),				IFINT ( INTFIRST>=INTSECOND ),		IFINT ( INT64FIRST>=INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Eq,		IFFLT ( fabs ( EVALFIRST-EVALSECOND )<=1e-6 ),	IFINT ( INTFIRST==INTSECOND ),		IFINT ( INT64FIRST==INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Ne,		IFFLT ( fabs ( EVALFIRST-EVALSECOND )>1e-6 ),	IFINT ( INTFIRST!=INTSECOND ),		IFINT ( INT64FIRST!=INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( EVALFIRST<EVALSECOND ),					IFINT ( INTFIRST<INTSECOND ),		IFINT ( INT64FIRST<INT64SECOND  ), PopulateConstArgsLtInt )
+DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( EVALFIRST>EVALSECOND ),					IFINT ( INTFIRST>INTSECOND ),		IFINT ( INT64FIRST>INT64SECOND  ), PopulateConstArgsGtInt )
+DECLARE_BINARY_POLY ( Expr_Lte,		IFFLT ( EVALFIRST<=EVALSECOND ),				IFINT ( INTFIRST<=INTSECOND ),		IFINT ( INT64FIRST<=INT64SECOND ), PopulateConstArgsLteInt )
+DECLARE_BINARY_POLY ( Expr_Gte,		IFFLT ( EVALFIRST>=EVALSECOND ),				IFINT ( INTFIRST>=INTSECOND ),		IFINT ( INT64FIRST>=INT64SECOND ), PopulateConstArgsGteInt )
+DECLARE_BINARY_POLY ( Expr_Eq,		IFFLT ( fabs ( EVALFIRST-EVALSECOND )<=1e-6 ),	IFINT ( INTFIRST==INTSECOND ),		IFINT ( INT64FIRST==INT64SECOND ), PopulateConstArgsEqInt )
+DECLARE_BINARY_POLY ( Expr_Ne,		IFFLT ( fabs ( EVALFIRST-EVALSECOND )>1e-6 ),	IFINT ( INTFIRST!=INTSECOND ),		IFINT ( INT64FIRST!=INT64SECOND ), PopulateConstArgsNeInt )
 
 DECLARE_BINARY_INT ( Expr_Min_c,	Min ( EVALFIRST, EVALSECOND ),					Min ( INTFIRST, INTSECOND ),		Min ( INT64FIRST, INT64SECOND ) )
 DECLARE_BINARY_INT ( Expr_Max_c,	Max ( EVALFIRST, EVALSECOND ),					Max ( INTFIRST, INTSECOND ),		Max ( INT64FIRST, INT64SECOND ) )
 DECLARE_BINARY_FLT ( Expr_Pow_c,	float ( pow ( EVALFIRST, EVALSECOND ) ) )
 
-DECLARE_BINARY_POLY ( Expr_And,		EVALFIRST!=0.0f && EVALSECOND!=0.0f,		IFINT ( INTFIRST && INTSECOND ),	IFINT ( INT64FIRST && INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Or,		EVALFIRST!=0.0f || EVALSECOND!=0.0f,		IFINT ( INTFIRST || INTSECOND ),	IFINT ( INT64FIRST || INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_And,		EVALFIRST!=0.0f && EVALSECOND!=0.0f,		IFINT ( INTFIRST && INTSECOND ),	IFINT ( INT64FIRST && INT64SECOND ), SetFlagAnd )
+DECLARE_BINARY_POLY ( Expr_Or,		EVALFIRST!=0.0f || EVALSECOND!=0.0f,		IFINT ( INTFIRST || INTSECOND ),	IFINT ( INT64FIRST || INT64SECOND ), SetFlagOr )
 
 DECLARE_BINARY_FLT ( Expr_Atan2_c,	float ( atan2 ( EVALFIRST, EVALSECOND ) ) )
 
@@ -7243,6 +7635,9 @@ public:
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		if ( !dMva.second )
+			return 0;
+
 		int nValues = dMva.second / sizeof(T);
 
 		const T * L = (const T *)dMva.first;
@@ -7312,6 +7707,7 @@ public:
 				{
 					auto tRes = SqlUnescapeN ( szExpr + iOfs, iLen );
 					m_dHashes.Add ( sphFNV64 ( tRes.first.cstr(), tRes.second ) );
+					m_dStrings.Add ( tRes.first );
 				}
 			}
 			m_dHashes.Sort();
@@ -7328,15 +7724,27 @@ public:
 	Expr_JsonFieldIn_c ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
 		: Expr_ArgVsConstSet_T<int64_t> ( pArg )
 	{
-		m_dHashes.AddN ( dVals.GetLength() );
+		m_dHashes.Resize ( dVals.GetLength() );
+		m_dStrings.Resize ( dVals.GetLength() );
 		m_uValueHash = SPH_FNV64_SEED;
 		ARRAY_FOREACH ( i, dVals )
 		{
 			const CSphString & sVal = dVals[i];
+			m_dStrings[i] = sVal;
 			m_dHashes[i] = sphFNV64 ( sVal.cstr() );
 			m_uValueHash = sphFNV64cont ( sVal.cstr(), m_uValueHash );
 		}
 		m_dHashes.Uniq();
+	}
+
+	Expr_JsonFieldIn_c ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg )
+		: Expr_ArgVsConstSet_T<int64_t> ( pArg )
+	{
+		m_dValues.Resize ( dVals.GetLength() );
+		ARRAY_FOREACH ( i, dVals )
+			m_dValues[i] = dVals[i];
+
+		m_dValues.Uniq();
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -7416,6 +7824,39 @@ public:
 		}
 	}
 
+	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
+	{
+		if ( !CanSetupAsFilter ( tFilter, tFilter.m_bExclude ) )
+			return false;
+
+		if ( !m_dValues.GetLength() )
+			return false;
+		
+		std::pair<const ISphSchema*,CSphString> tSchemaWithName;
+		tSchemaWithName.first = &tSchema;
+		m_pArg->Command ( SPH_EXPR_FORMAT_AS_TEXT, (void*)&tSchemaWithName );
+		if ( tSchemaWithName.second.IsEmpty() )
+			return false;
+
+		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
+			return false;
+		
+		if ( m_dStrings.IsEmpty() )
+		{
+			tFilter.m_dValues.Resize(0);
+			for ( auto i : m_dValues )
+				tFilter.m_dValues.Add(i);
+		}
+		else
+		{
+			tFilter.m_eType = m_dStrings.GetLength()==1 ? SPH_FILTER_STRING : SPH_FILTER_STRING_LIST;
+			tFilter.m_dStrings = m_dStrings;
+		}
+
+		tFilter.m_sAttrName = tSchemaWithName.second;	
+		return true;
+	}
+
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
 		EXPR_CLASS_NAME("Expr_JsonFieldIn_c");
@@ -7430,17 +7871,11 @@ public:
 protected:
 	const BYTE *		m_pBlobPool {nullptr};
 	CSphVector<int64_t>	m_dHashes;
+	StrVec_t			m_dStrings;
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
-		assert ( ppKey );
-		if ( !m_pBlobPool )
-			return JSON_EOF;
-
-		uint64_t uPacked = m_pArg->Int64Eval ( tMatch );
-		*ppKey = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
-
-		return sphJsonUnpackType ( uPacked );
+		return ::GetKey ( ppKey, tMatch, m_pBlobPool, m_pArg );
 	}
 
 	int ValueEval ( const int64_t iVal ) const
@@ -7532,6 +7967,145 @@ ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
 {
 	return new Expr_JsonFieldIn_c ( dVals, pArg );
 }
+
+
+ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg )
+{
+	return new Expr_JsonFieldIn_c ( dVals, pArg );
+}
+
+////////////////////////////////////////////////////////////////////
+/// JSON field vs constant range
+class Expr_JsonFieldRange_c : public Expr_ArgVsSet_T<int64_t>
+{
+	using BASE = Expr_ArgVsSet_T<int64_t>;
+
+public:
+	Expr_JsonFieldRange_c ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg )
+		: BASE ( pArg )
+		, m_tFilter ( tFilter )
+	{}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		BASE::Command ( eCmd, pArg );
+
+		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+			m_pBlobPool = (const BYTE*)pArg;
+	}
+
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		const BYTE * pVal = nullptr;
+		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		switch ( eJson )
+		{
+		case JSON_INT32_VECTOR:		return ArrayEval<int>(pVal);
+		case JSON_INT64_VECTOR:		return ArrayEval<int64_t>(pVal);
+		case JSON_DOUBLE_VECTOR:	return ArrayFloatEval(pVal);
+		case JSON_INT32:
+		case JSON_INT64:			return ValueEval ( eJson==JSON_INT32 ? sphJsonLoadInt ( &pVal ) : sphJsonLoadBigint ( &pVal ) );
+		case JSON_DOUBLE:			return ValueEval ( sphQW2D ( sphJsonLoadBigint ( &pVal ) ) );
+		default:
+			return 0;
+		}
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_JsonFieldRange_c");
+		CALC_POD_HASH ( m_tFilter.m_iMinValue );
+		CALC_POD_HASH ( m_tFilter.m_iMaxValue );
+		CALC_POD_HASH ( m_tFilter.m_bHasEqualMin );
+		CALC_POD_HASH ( m_tFilter.m_bHasEqualMax );
+		CALC_POD_HASH ( m_tFilter.m_bOpenLeft );
+		CALC_POD_HASH ( m_tFilter.m_bOpenRight );
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_JsonFieldRange_c ( *this );
+	}
+
+protected:
+	const BYTE *			m_pBlobPool {nullptr};
+	CommonFilterSettings_t	m_tFilter;
+
+	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
+	{
+		return ::GetKey ( ppKey, tMatch, m_pBlobPool, m_pArg );
+	}
+
+	template<typename T>
+	int ValueEval ( T tVal ) const
+	{
+		if ( m_tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+		{
+			if ( EvalRange ( (float)tVal, m_tFilter ) )
+				return 1;
+		}
+		else
+		{
+			if ( EvalRange ( tVal, m_tFilter ) )
+				return 1;
+		}
+
+		return 0;
+	}
+
+	template <typename T>
+	int ArrayEval ( const BYTE * pVal ) const
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		auto * pArray = (const T *)pVal;
+		if ( m_tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+		{
+			for ( const T * pValue = pArray; pValue < pArray+iLen; pValue++ )
+				if ( EvalRange ( (float)*pValue, m_tFilter ) )
+					return 1;
+		}
+		else
+		{
+			for ( const T * pValue = pArray; pValue < pArray+iLen; pValue++ )
+				if ( EvalRange ( *pValue, m_tFilter ) )
+					return 1;
+		}
+
+		return 0;
+	}
+
+	int ArrayFloatEval ( const BYTE * pVal ) const
+	{
+		int iLen = sphJsonUnpackInt ( &pVal );
+		const BYTE * p = pVal;
+		for ( int i=0; i<iLen; i++ )
+			if ( EvalRange ( sphQW2D ( sphJsonLoadBigint ( &p ) ), m_tFilter ) )
+				return 1;
+
+		return 0;
+	}
+
+	bool IsJson ( bool & bConverted ) const final
+	{
+		bConverted = true;
+		return true;
+	}
+
+private:
+	Expr_JsonFieldRange_c ( const Expr_JsonFieldRange_c & rhs )
+		: Expr_ArgVsSet_T<int64_t> ( rhs )
+		, m_tFilter ( rhs.m_tFilter )
+	{}
+};
+
+
+ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg )
+{
+	return new Expr_JsonFieldRange_c ( tFilter, pArg );
+}
+
+////////////////////////////////////////////////////////////////////
 
 // fixme! Expr_ArgVsConstSet_T collects raw packed strings in the case.
 // m.b. store FNV hashes there instead, and use them to boost search speed?
@@ -9282,14 +9856,14 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 
 		if ( dRetTypes[0]!=SPH_ATTR_INTEGER && dRetTypes[0]!=SPH_ATTR_BIGINT && dRetTypes[0]!=SPH_ATTR_FLOAT && dRetTypes[0]!=SPH_ATTR_TIMESTAMP )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 1 must be number", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 1 must be number, or evaluated to number", sFuncName );
 			return -1;
 		}
 
 		GatherArgFN ( iArg, [&] ( int i )
 		{
 			if ( i!=0 && m_dNodes[i].m_eRetType!=SPH_ATTR_MAPARG )
-				m_sParserError.SetSprintf ( "%s() arguments %d must be a map", sFuncName, i+1 );
+				m_sParserError.SetSprintf ( "%s() argument %d must be a map", sFuncName, i+1 );
 		} );
 	}
 	break;
@@ -9305,13 +9879,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 
 		if ( dRetTypes[0]!=SPH_ATTR_INTEGER && dRetTypes[0]!=SPH_ATTR_BIGINT && dRetTypes[0]!=SPH_ATTR_FLOAT && dRetTypes[0]!=SPH_ATTR_TIMESTAMP )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 1 must be number", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 1 must be number, or evaluated to number", sFuncName );
 			return -1;
 		}
 
 		if ( dRetTypes[1]!=SPH_ATTR_MAPARG )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 2 must be map", sFuncName );
+			m_sParserError.SetSprintf ( "%s() argument 2 must be map", sFuncName );
 			return -1;
 		}
 	}
@@ -10158,4 +10732,23 @@ ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr )
 {
 	return new Expr_JsonFieldConv_c ( pExpr );
+}
+
+
+void FetchAttrDependencies ( IntVec_t & dAttrIds, const ISphSchema & tSchema )
+{
+	for ( auto i : dAttrIds )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( !tAttr.m_pExpr )
+			continue;
+
+		int iOldLen = dAttrIds.GetLength();
+		tAttr.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dAttrIds );
+		for ( int iNewAttr = iOldLen; iNewAttr < dAttrIds.GetLength(); iNewAttr++ )
+			if ( dAttrIds[iNewAttr]==i )
+				dAttrIds.Remove(iNewAttr);
+	}
+
+	dAttrIds.Uniq();
 }

@@ -295,7 +295,8 @@ insert into table_multi1 (id,title,brand_id,j) values
 }
 </query>
 
-
+<!-- aggs.ranges with empty or open range -->
+<query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{}] } }} }</query>
 
 </queries>
 </test>

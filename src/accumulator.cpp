@@ -278,7 +278,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		const CSphColumnInfo* pBlobLoc = tSchema.GetAttr ( sphGetBlobLocatorName() );
 		assert ( pBlobLoc );
 
-		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush() );
+		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush().first );
 	}
 
 	// handle index_field_lengths

@@ -2058,7 +2058,7 @@ JsonObj_c JsonObj_c::GetChild ( const char * szName, CSphString & sError, bool b
 }
 
 
-cJSON * JsonObj_c::GetRoot()
+cJSON * JsonObj_c::GetRoot() const
 {
 	return m_pRoot;
 }

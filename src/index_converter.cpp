@@ -1076,10 +1076,8 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	while ( ( pRow = tConv.NextRow() )!=nullptr )
 	{
 		if ( pBlobLocatorAttr )
-		{
-			SphOffset_t tOffset = pBlobRowBuilder->Flush();
-			sphSetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator, tOffset );
-		}
+			sphSetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator, pBlobRowBuilder->Flush().first );
+
 		tMinMaxBuilder.Collect ( pRow );
 		tWriterSPA.PutBytes ( pRow, iStride*sizeof(CSphRowitem) );
 

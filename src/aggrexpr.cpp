@@ -430,6 +430,13 @@ static void FormatKeyDate ( const DateRangeSetting_t & tRange, int iNow, RangeKe
 
 void GetRangeKeyNames ( const AggrRangeSetting_t & tRanges, RangeNameHash_t & hRangeNames )
 {
+	if ( tRanges.GetLength()==1 && tRanges.m_bOpenLeft && tRanges.m_bOpenRight )
+	{
+		auto & tDesc = hRangeNames.AddUnique ( 0 );
+		tDesc.m_sKey = "*-*";
+		return;
+	}
+
 	ARRAY_FOREACH ( i, tRanges )
 	{
 		const auto & tSrc = tRanges[i];
@@ -437,7 +444,7 @@ void GetRangeKeyNames ( const AggrRangeSetting_t & tRanges, RangeNameHash_t & hR
 
 		bool bHasFrom = true;
 		bool bHasTo = true;
-		if ( i == 0 && tRanges.m_bOpenLeft )
+		if ( i==0 && tRanges.m_bOpenLeft )
 			bHasFrom = false;
 		else if ( i==tRanges.GetLength()-1 && tRanges.m_bOpenRight )
 			bHasTo = false;

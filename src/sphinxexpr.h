@@ -94,8 +94,13 @@ enum ESphExprCommand
 	SPH_EXPR_SET_COLUMNAR,
 	SPH_EXPR_SET_COLUMNAR_COL,
 	SPH_EXPR_GET_COLUMNAR_COL,
-	SPH_EXPR_SET_ITERATOR			///< set link between JsonIn expr and iterator
+	SPH_EXPR_SET_ITERATOR,			///< set link between JsonIn expr and iterator
+	SPH_EXPR_FORMAT_AS_TEXT,
+	SPH_EXPR_COLLECT_CONST_ARGS
 };
+
+class CSphFilterSettings;
+class SIContainer_c;
 
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
@@ -166,6 +171,9 @@ public:
 	virtual bool IsConst () const { return false; }
 
 	virtual bool IsJson ( bool & bConverted ) const { return false; }
+
+	/// setup a filter that works as this expression (if possible)
+	virtual bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const { return false; }
 
 	/// get expression hash (for query cache)
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) = 0;
@@ -351,10 +359,13 @@ struct JoinArgs_t
 };
 
 
+struct CommonFilterSettings_t;
 ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg );
-
+ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg );
+ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg );
+void FetchAttrDependencies ( IntVec_t & dAttrIds, const ISphSchema & tSchema );
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 
 /// provide mysql version string

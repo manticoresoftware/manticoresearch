@@ -5476,8 +5476,8 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_pHook = pHook;
 	tQS.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
 	tQS.m_bNeedDocids = m_bNeedDocIDs;	// need docids to merge results from indexes
-	tQS.m_fnGetCountDistinct	= [pIndex]( const CSphString & sAttr ){ return pIndex->GetCountDistinct(sAttr); };
-	tQS.m_fnGetCountFilter		= [pIndex]( const CSphFilterSettings & tFilter ){ return pIndex->GetCountFilter(tFilter); };
+	tQS.m_fnGetCountDistinct	= [pIndex]( const CSphString & sAttr, CSphString & sModifiedAttr ){ return pIndex->GetCountDistinct ( sAttr, sModifiedAttr ); };
+	tQS.m_fnGetCountFilter		= [pIndex]( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ){ return pIndex->GetCountFilter ( tFilter, sModifiedAttr ); };
 	tQS.m_fnGetCount			= [pIndex](){ return pIndex->GetCount(); };
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
@@ -5775,7 +5775,8 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 				continue;
 
 			auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
-			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct(sAttr);
+			CSphString sModifiedAttr;
+			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct ( sAttr, sModifiedAttr );
 		}
 	}
 }
@@ -7676,7 +7677,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill",
+	"show_settings", "alter_rebuild_si", "kill"
 };
 
 
@@ -10930,7 +10931,7 @@ bool AttributeConverter_c::SetFieldValue ( int iField, const SqlInsert_t & tVal,
 		return false;
 	}
 
-	const char * szFieldValue = tVal.m_sVal.cstr();
+	const char * szFieldValue = tVal.m_sVal.scstr();
 	if ( m_dFieldAttrs[iField] )
 	{
 		m_dTmpFieldStorage[iField] = szFieldValue;
@@ -11954,6 +11955,9 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 
 	if ( tAttr.IsIndexedKNN() )
 		sProps << "knn";
+
+	if ( tAttr.IsIndexedSI() )
+		sProps << "indexed";
 
 	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
 		sProps << "fast_fetch";
@@ -16497,23 +16501,28 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	int iSuffix = pRtIndex->GetChunkId();
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
+
 	// parse the options string to old-style config hash
-	IndexSettingsContainer_c tContainer;
-	tContainer.Populate ( dCreateTableStmts[0].m_tCreateTable );
+	std::unique_ptr<IndexSettingsContainer_i> pContainer { CreateIndexSettingsContainer() };
+	pContainer->Populate ( dCreateTableStmts[0].m_tCreateTable, false );
 
-	// force override for old options
-	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
-		tContainer.RemoveKeys ( i.m_sName );
-
+	// force override for old options options from alter should override currect options
 	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
 	{
-		// should be able to remove settings with the empty option
-		tContainer.AddOption ( i.m_sName, i.m_sValue );
+		pContainer->RemoveKeys ( i.m_sName );
 	}
 
-	if ( !tContainer.CheckPaths() )
+	// should be able to remove settings with the empty option or remove the prev options by the last empty option
+	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
 	{
-		tOut.Error ( tContainer.GetError().cstr() );
+		pContainer->AddOption ( i.m_sName, i.m_sValue, true );
+	}
+
+	if ( !pContainer->CheckPaths() )
+	{
+		tOut.Error ( pContainer->GetError().cstr() );
 		return;
 	}
 
@@ -16521,26 +16530,15 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	StrVec_t dOldFiles;
 	pRtIndex->GetIndexFiles ( dOldFiles, dOldFiles );
 
-	StrVec_t dCopiedFiles;
-	auto tCleanup = AtScopeExit ( [&dCopiedFiles] { dCopiedFiles.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
-
-	StrVec_t dNewFiles = tContainer.GetFiles();
-	if ( !tContainer.GetError().IsEmpty() )
+	if ( !pContainer->CopyExternalFiles ( sIndexPath, iSuffix ) )
 	{
-		tOut.Error ( tContainer.GetError().cstr () );
-		return;
-	}
-
-	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
-	if ( !CopyExternalIndexFiles ( dNewFiles, sIndexPath, dCopiedFiles, sError ) )
-	{
-		tOut.Error ( sError.cstr () );
+		tOut.Error ( pContainer->GetError().cstr () );
 		return;
 	}
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
-	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), tContainer.AsCfg(), tSettings, &dWarnings, sError ) )
+	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), pContainer->AsCfg(), tSettings, &dWarnings, sError ) )
 	{
 		tOut.Error ( sError.cstr () );
 		return;
@@ -16564,7 +16562,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	{
 		// all ok, delete old files
 		RemoveOutdatedFiles ( pRtIndex, dOldFiles );
-		dCopiedFiles.Reset();
+		pContainer->ResetCleanup();
 
 		tOut.Ok ( 0, dWarnings.GetLength() );
 	}
@@ -16892,6 +16890,7 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 		tOut.Ok ( iKilled );
 	}
 }
+
 
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {

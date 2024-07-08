@@ -146,6 +146,12 @@ index test_bool
 
 <query endpoint="search">{ "index": "test_bool", "query": { "match_all": {} }, "sort": [ { "id":"asc"} ] }</query>
 
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "201" } }
+{ "title" : null }
+
+</bulk>
+
 </httpqueries>
 
 </test>

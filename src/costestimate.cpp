@@ -14,7 +14,7 @@
 #include "sphinxint.h"
 #include "sphinxsort.h"
 #include "columnarfilter.h"
-#include "secondarylib.h"
+#include "secondaryindex.h"
 #include "geodist.h"
 #include <math.h>
 #include "std/sys.h"
@@ -434,14 +434,14 @@ float CostEstimate_c::CalcQueryCost()
 
 /////////////////////////////////////////////////////////////////////
 
-SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads )
+SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, const SIContainer_c & tSI, int iCutoff, int64_t iTotalDocs, int iThreads )
 	: m_tQuery ( tQuery )
 	, m_dFilters ( dFilters )
 	, m_tIndexSchema ( tIndexSchema )
 	, m_tSorterSchema ( tSorterSchema )
 	, m_pHistograms ( pHistograms )
 	, m_pColumnar ( pColumnar )
-	, m_pSI ( pSI )
+	, m_tSI ( tSI )
 	, m_iCutoff ( iCutoff )
 	, m_iTotalDocs ( iTotalDocs )
 	, m_iThreads ( iThreads )
@@ -450,29 +450,23 @@ SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphV
 
 bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) const
 {
-	if ( !m_pSI )
+	if ( m_tSI.IsEmpty() )
 		return false;
 
-	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE )
+	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE && tFilter.m_eType!=SPH_FILTER_NULL )
 		return false;
 
 	// all(mva\string) need to scan whole row
 	if ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL )
 		return false;
 
-	// need to handle only plain or columnar attr but not dynamic \ expressions
 	const CSphColumnInfo * pCol = m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pCol )
-		return false;
-
-	if ( pCol->m_pExpr.Ptr() && !pCol->IsColumnarExpr() )
-		return false;
 
 	// FIXME!!! warn in case force index used but index was skipped
-	if ( pCol->m_eAttrType==SPH_ATTR_STRING && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+	if ( pCol && ( pCol->m_eAttrType==SPH_ATTR_STRING && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT ) )
 		return false;
 
-	return m_pSI->IsEnabled( tFilter.m_sAttrName.cstr() );
+	return m_tSI.IsEnabled ( tFilter.m_sAttrName );
 }
 
 

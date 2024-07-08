@@ -318,7 +318,7 @@ public:
 	}
 
 	template<typename T>
-	void NamedVal ( const char* szName, T tValue )
+	void NamedVal ( const char* szName, const T & tValue )
 	{
 		Named ( szName );
 		*this << tValue;
@@ -523,7 +523,7 @@ public:
 	const char *	GetErrorPtr() const;
 	bool			GetError ( const char * szBuf, int iBufLen, CSphString & sError ) const;
 	bool			GetError ( const char* szBuf, int iBufLen ) const;
-	cJSON *			GetRoot();
+	cJSON *			GetRoot() const;
 	CSphString		AsString ( bool bFormat=false ) const;
 
 	JsonObj_c		begin() const;

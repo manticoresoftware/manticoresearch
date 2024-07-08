@@ -143,7 +143,7 @@ private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 	// NOTICE! meta version 10 was introduced in 2a6ea8f7 and rolled back to 9 in e1709760.
 	// if you need to upgrade - skip v10 and use v11.
-	static const DWORD				META_VERSION = 9; // next should be 11
+	static constexpr DWORD			META_VERSION = 9; // next should be 11
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -189,6 +189,8 @@ private:
 	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 	bool LoadMetaImpl ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 };
+
+// FIXME! Can't define it in the class because it fails to link on clang-15
 
 //////////////////////////////////////////////////////////////////////////
 // percolate functions

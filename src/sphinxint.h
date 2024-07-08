@@ -37,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 65;				///< added .spknn
+const DWORD		INDEX_FORMAT_VERSION		= 66;				///< added .spjidx
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -821,9 +821,6 @@ void			sphUnlinkIndex ( const char * sName, bool bForce );
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion );
 void			ReadSchemaJson ( bson::Bson_c tNode, CSphSchema & tSchema );
-void			SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
-void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
-void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings& tSettings, const FilenameBuilder_i* pFilenameBuilder, StrVec_t& dFiles );

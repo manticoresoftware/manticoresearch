@@ -1269,8 +1269,8 @@ hint_list:
 	;
 
 hint_attr_list:
-	ident
-	| hint_attr_list ',' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	json_field
+	| hint_attr_list ',' json_field {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
 hint_item:           

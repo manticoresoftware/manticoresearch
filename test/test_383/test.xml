@@ -167,6 +167,12 @@ ALTER CLUSTER test DROP rt1,rt2,rtc;
 ALTER CLUSTER test ADD rt1,rt2,rtc;
 </sphinxql>
 
+<sphinxql d="0">
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+ALTER CLUSTER test ADD rt1, rt2;
+</sphinxql>
+
+
 <!-- cleanup -->
 <sphinxql d="0">
 	ALTER CLUSTER test DROP rt1;

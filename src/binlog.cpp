@@ -1754,6 +1754,9 @@ bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, CSphString & sErr
 	if ( !g_pRtBinlog )
 		return true;
 
+	if ( *pTID==-1 )
+		return true;
+
 	return g_pRtBinlog->BinlogCommit ( pTID, szIndexName, std::move (fnSaver), sError );
 }
 

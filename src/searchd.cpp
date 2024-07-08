@@ -18672,6 +18672,10 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
 
+	auto bNeedBinlog = hIndex.GetBool ( "binlog" );
+	if ( !bNeedBinlog )
+		pIdx->m_iTID = -1;
+
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
 	pIdx->SetGlobalIDFPath ( pServed->m_sGlobalIDFPath );

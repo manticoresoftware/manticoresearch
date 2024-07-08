@@ -1315,7 +1315,7 @@ static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
 static void FixupIndexTID ( CSphIndex * pIdx, int64_t iTID )
 {
 	assert ( IsConfigless () );
-	if ( pIdx && ( pIdx->IsRT () || pIdx->IsPQ () ) )
+	if ( pIdx && ( pIdx->IsRT () || pIdx->IsPQ () ) && pIdx->m_iTID!=-1 )
 		pIdx->m_iTID = iTID;
 }
 

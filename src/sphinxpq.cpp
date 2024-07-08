@@ -2904,6 +2904,9 @@ bool PercolateIndex_c::Truncate ( CSphString & sError )
 	// FIXME!!! however it should be replicated to cluster maybe with TOI
 	SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
 
+	// allow binlog to unlink now-redundant data files
+	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, Binlog::ForceSave );
+
 	return true;
 }
 

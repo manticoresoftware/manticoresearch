@@ -139,7 +139,7 @@ enum class BinlogFileState_e
 {
 	OK,
 	ERROR_NON_READABLE, // if can't open binlog file
-	ERROR_EMPTY,		// if file is empty (0 bytes)
+	ERROR_EMPTY_0,		// if file is empty (0 bytes)
 	ERROR_WRONG_FILE,	// file is broken
 	ERROR_EMPTY_8,		// file is valid, but no txns
 	ERROR_ABANDONED		// file is valid, but only cache, no txns
@@ -1340,7 +1340,7 @@ BinlogFileState_e Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const 
 	if ( !iFileSize )
 	{
 		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr() );
-		return BinlogFileState_e::ERROR_EMPTY;
+		return BinlogFileState_e::ERROR_EMPTY_0;
 	}
 
 	if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC_SPBL )

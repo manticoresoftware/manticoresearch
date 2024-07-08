@@ -1762,12 +1762,12 @@ bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, bool bIncTID, CSp
 	return g_pRtBinlog->BinlogCommit ( pTID, szIndexName, bIncTID, std::move (fnSaver), sError );
 }
 
-void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, bool bShutdown, bool bForceSave )
+void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave )
 {
 	if ( !g_pRtBinlog )
 		return;
 
-	g_pRtBinlog->NotifyIndexFlush ( iTID, szIndexName, bShutdown, bForceSave );
+	g_pRtBinlog->NotifyIndexFlush ( iTID, szIndexName, (bool)eShutdown, (bool)eForceSave );
 }
 
 CSphString Binlog::GetPath()

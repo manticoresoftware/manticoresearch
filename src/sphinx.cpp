@@ -2629,7 +2629,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 	}
 
 	if ( m_bBinlog )
-		Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, false );
+		Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;

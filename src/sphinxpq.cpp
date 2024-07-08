@@ -2881,7 +2881,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), bShutdown, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), (Binlog::Shutdown_e)bShutdown, Binlog::NoSave );
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 }

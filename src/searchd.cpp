@@ -18218,7 +18218,7 @@ public:
 
 		// all went fine; swap them
 		sphLogDebug ( "all went fine; swap them" );
-		Binlog::NotifyIndexFlush ( pIdx->m_iTID, m_szIndex, false, false );
+		Binlog::NotifyIndexFlush ( pIdx->m_iTID, m_szIndex, Binlog::NoShutdown, Binlog::NoSave );
 		g_pLocalIndexes->AddOrReplace ( pNewServed, m_szIndex );
 		sphInfo ( "rotating table '%s': success", m_szIndex );
 
@@ -18308,7 +18308,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 
 	// all went fine; swap them
 	sphLogDebug ( "all went fine; swap them" );
-	Binlog::NotifyIndexFlush ( pNewIndex->m_iTID, sIndex.cstr(), false, false );
+	Binlog::NotifyIndexFlush ( pNewIndex->m_iTID, sIndex.cstr(), Binlog::NoShutdown, Binlog::NoSave );
 	g_pLocalIndexes->AddOrReplace ( pNewServed, sIndex );
 	sphInfo ( "rotating table '%s': success", sIndex.cstr() );
 	return true;

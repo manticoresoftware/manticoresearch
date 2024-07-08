@@ -1570,7 +1570,7 @@ RtIndex_c::~RtIndex_c ()
 		::close ( m_iLockFD );
 
 	if ( bValid )
-		Binlog::NotifyIndexFlush ( m_iTID, GetName(), sphInterrupted(), m_bIndexDeleted );
+		Binlog::NotifyIndexFlush ( m_iTID, GetName(), (Binlog::Shutdown_e)sphInterrupted(), (Binlog::ForceSave_e)m_bIndexDeleted );
 
 	if ( m_bIndexDeleted )
 	{
@@ -1692,7 +1692,7 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	SaveMeta();
 	auto pChunks = m_tRtChunks.DiskChunks();
 	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	int64_t iWasTID = m_iSavedTID;
 	int64_t tmDelta = sphMicroTimer() - m_tmSaved;
@@ -4259,7 +4259,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
-		Binlog::NotifyIndexFlush ( iTID, GetName(), false, false );
+		Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 		m_iSavedTID = iTID;
 
 		tNewSet.InitRamSegs ( RtWriter_c::empty );
@@ -8491,7 +8491,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	SaveMeta ();
 
 	// fixme: notify that it was ALTER that caused the flush
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	QcacheDeleteIndex ( GetIndexId() );
 }
@@ -8820,7 +8820,7 @@ bool RtIndex_c::Truncate ( CSphString& )
 	SaveMeta ( m_iTID, { nullptr, 0 } );
 
 	// allow binlog to unlink now-redundant data files
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), false, true );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::ForceSave );
 
 	// kill RAM chunk file
 	UnlinkRAMChunk ( "truncate" );

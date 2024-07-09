@@ -698,12 +698,15 @@ void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 			m_bJoinedGroupSort |= tAttr.IsJoined();
 			m_hExtra.Add ( tAttr.m_sName );
 
-			// check if dependent columns are joined
-			IntVec_t dCols;
-			dCols.Add ( dAttrs[i] );
-			FetchDependencyChains(dCols);
-			for ( auto iCol : dCols )
-				m_bJoinedGroupSort |= m_pSorterSchema->GetAttr(iCol).IsJoined();
+			if ( m_tSettings.m_bComputeItems )
+			{
+				// check if dependent columns are joined
+				IntVec_t dCols;
+				dCols.Add ( dAttrs[i] );
+				FetchDependencyChains(dCols);
+				for ( auto iCol : dCols )
+					m_bJoinedGroupSort |= m_pSorterSchema->GetAttr(iCol).IsJoined();
+			}
 		}
 }
 

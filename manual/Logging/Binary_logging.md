@@ -7,6 +7,8 @@ Binary logging serves as a recovery mechanism for [Real-Time](../Creating_a_tabl
 By default, binary logging is enabled. On Linux systems, the default location for `binlog.*` files is `/var/lib/manticore/data/`.
 In [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), binary logs are stored in the `data_dir` folder, unless specified otherwise.
 
+### Global scope
+
 To disable binary logging, set `binlog_path` to empty:
 
 ```ini
@@ -25,6 +27,34 @@ searchd {
     binlog_path = /var/data
 ...
 ```
+
+Notice, that disabling/enabling binary logging implies daemon's restart.
+
+### Per-table scope
+
+You can disable binary logging on table level, by set `binlog` param to '0'. That works specifically for real-time tables, and doesn't work for percolates.
+
+You can do it during table creation:
+
+```sql
+create table a (id bigint, s string attribute) binlog='0';
+```
+
+Also, you can disable binary logging for existing table:
+
+```sql
+alter table FOO binlog='0';
+```
+
+To enable binary logging, alter param `binlog` to '1':
+
+```sql
+alter table FOO binlog='1';
+```
+
+Notice, per-table enabling/disabling works only when global-scope binlogging (i.e. binlog path in the config) is enabled.
+When you change table's binlogging state, it will be forcibly saved (aka `flush rtindex...`), and then table's transaction ID will be set to -1 and stored in the table's meta.
+
 
 ## Operations
 

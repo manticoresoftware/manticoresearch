@@ -269,6 +269,7 @@ public:
 	Preprocessor_e	m_ePreprocessor = Preprocessor_e::NONE;
 
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
+	bool 			m_bBinlog = true;
 
 	bool			Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError );
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;

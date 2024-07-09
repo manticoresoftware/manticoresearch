@@ -18660,21 +18660,27 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	auto pServed = MakeServedIndex();
 	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
 	pServed->m_sIndexPath = hIndex["path"].strval();
+	auto bNeedBinlog = hIndex.GetBool ( "binlog" );
 
 	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
 		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit, bWordDict );
 		pServed->m_eType = IndexType_e::RT;
+		tSettings.m_bBinlog = bNeedBinlog;
+		if ( !bNeedBinlog )
+			pIdx->m_iTID = -1;
 	} else
 	{
+		if ( !bNeedBinlog )
+		{
+			sError.SetSprintf ( "table '%s': percolate without binlog not implemented", szIndexName );
+			return { ADD_ERROR, nullptr };
+		}
 		pIdx = CreateIndexPercolate ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ) );
 		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
 
-	auto bNeedBinlog = hIndex.GetBool ( "binlog" );
-	if ( !bNeedBinlog )
-		pIdx->m_iTID = -1;
 
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;

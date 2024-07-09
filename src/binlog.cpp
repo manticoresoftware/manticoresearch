@@ -1613,7 +1613,7 @@ bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c &
 	auto uSize = tReader.GetDword();
 
 	// skip txns of non-existent (deleted) indexes (skip blobs by size)
-	if ( !tIndex.m_pIndex || iTID<=tIndex.m_pIndex->m_iTID )
+	if ( !tIndex.m_pIndex || iTID<=tIndex.m_pIndex->m_iTID || tIndex.m_pIndex->m_iTID==-1 )
 	{
 		tIndex.m_iMinTID = Min ( tIndex.m_iMinTID, iTID );
 		tIndex.m_iFlushedTID = tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
@@ -1763,6 +1763,9 @@ bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, CSphString & sErr
 void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave )
 {
 	if ( !g_pRtBinlog )
+		return;
+
+	if ( iTID==-1 )
 		return;
 
 	g_pRtBinlog->NotifyIndexFlush ( iTID, szIndexName, (bool)eShutdown, (bool)eForceSave );

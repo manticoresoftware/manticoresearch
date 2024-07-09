@@ -1659,7 +1659,7 @@ void RtIndex_c::ProcessDiskChunkByID ( VecTraits_T<int> dChunkIDs, VISITOR&& fnV
 bool RtIndex_c::IsFlushNeed() const
 {
 	// m_iTID get managed by binlog that is why wo binlog there is no need to compare it 
-	if ( Binlog::IsActive() && m_iTID<=m_iSavedTID )
+	if ( Binlog::IsActive () && m_iTID>=0 && m_iTID<=m_iSavedTID )
 		return false;
 
 	return m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
@@ -4537,6 +4537,8 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	m_tStats.m_iTotalDocuments = Int ( tBson.ChildByName ( "total_documents" ) );
 	m_tStats.m_iTotalBytes = Int ( tBson.ChildByName ( "total_bytes" ) );
 	m_iTID = Int ( tBson.ChildByName ( "tid" ) );
+	if ( m_iTID<0 )
+		m_tSettings.m_bBinlog = false;
 
 	// tricky bit
 	// we started saving settings into .meta from v.4 and up only
@@ -5258,10 +5260,10 @@ int RtIndex_c::DebugCheck ( DebugCheckError_i& tReporter, FilenameBuilder_i * )
 
 	if ( m_iTID<-1 ) // -1 is valid value for 'no binlog'
 	{
-		tReporter.Fail ( "table TID < 0 (current=" INT64_FMT ")", m_iTID );
+		tReporter.Fail ( "table TID < -1 (current=" INT64_FMT ")", m_iTID );
 
-		if ( m_iSavedTID<0 )
-			tReporter.Fail ( "table saved TID < 0 (current=" INT64_FMT ")", m_iSavedTID );
+		if ( m_iSavedTID<-1 )
+			tReporter.Fail ( "table saved TID < -1 (current=" INT64_FMT ")", m_iSavedTID );
 
 		if ( m_iTID<m_iSavedTID )
 			tReporter.Fail ( "table TID < table saved TID (current=" INT64_FMT ", saved=" INT64_FMT ")", m_iTID, m_iSavedTID );
@@ -10194,7 +10196,9 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 		SetMemLimit ( m_tMutableSettings.m_iMemLimit );
 	}
 
+	bool bWasBinlog = m_tSettings.m_bBinlog;
 	Setup ( tSetup.m_tIndex );
+	bool bNewBinlog = m_tSettings.m_bBinlog;
 	SetTokenizer ( tSetup.m_pTokenizer );
 	SetDictionary ( tSetup.m_pDict );
 	SetFieldFilter ( std::move ( tSetup.m_pFieldFilter ) );
@@ -10208,6 +10212,13 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	AlterSave ( false );
 	RaiseAlterGeneration();
+
+	if ( bWasBinlog != bNewBinlog )
+	{
+		// AlterSave just performed flush
+		m_iSavedTID = m_iTID = bNewBinlog ? Binlog::LastTidFor ( GetName () ) : -1;
+		SaveMeta ();
+	}
 
 	return true;
 }
@@ -10245,6 +10256,8 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 		uFlags |= 1<<3;
 	if ( tSettings.m_bIndexSP )
 		uFlags |= 1<<4;
+	if ( tSettings.m_bBinlog )
+		uFlags |= 1<<5;
 	uHash = sphFNV64 ( &uFlags, sizeof(uFlags), uHash );
 
 	int iMinPrefixLen = tSettings.RawMinPrefixLen();

@@ -1228,6 +1228,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 		switch ( tSorterAttr.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:
 			sJoinExpr.SetSprintf ( "to_string(%s)", sJoinExpr.cstr() );
 			break;
 

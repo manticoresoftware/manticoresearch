@@ -3718,7 +3718,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 				tWriterDocs.ZipOffset ( tRowID - std::exchange ( tLastRowID, tRowID ) );
 				tWriterDocs.ZipInt ( pDoc->m_uHits );
-				if ( pDoc->m_uHits==1 )
+				if ( pDoc->m_uHits==1 && pWord->m_bHasHitlist )
 				{
 					tWriterDocs.ZipInt ( pDoc->m_uHit & 0x7FFFFFUL );
 					tWriterDocs.ZipInt ( pDoc->m_uHit >> 23 );

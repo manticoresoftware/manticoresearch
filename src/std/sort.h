@@ -14,12 +14,12 @@
 
 /// generic sort
 template<typename T, typename U, typename V>
-void sphSort ( T* pData, int iCount, U&& COMP, V&& ACC ) noexcept;
+void sphSort ( T* pData, int iCount, U&& COMP, V&& ACC );
 
 template<typename T, typename U>
-void sphSort ( T* pData, int iCount, U&& COMP ) noexcept;
+void sphSort ( T* pData, int iCount, U&& COMP );
 
 template<typename T>
-void sphSort ( T* pData, int iCount ) noexcept;
+void sphSort ( T* pData, int iCount );
 
 #include "sort_impl.h"

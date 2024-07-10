@@ -14,12 +14,7 @@
 
 //////////////////////////////////////////////////////////////////////////
 
-void DiskDictTraits_c::DictBegin ( CSphAutofile&, CSphAutofile& tDict, int iLimit )
-{
-	DiskDictTraits_c::SortedDictBegin ( tDict, iLimit, 0 );
-}
-
-void DiskDictTraits_c::SortedDictBegin ( CSphAutofile& tDict, int, int )
+void DiskDictTraits_c::DictBegin ( CSphAutofile&, CSphAutofile& tDict, int )
 {
 	m_wrDict.CloseFile();
 	m_wrDict.SetFile ( tDict, nullptr, m_sWriterError );

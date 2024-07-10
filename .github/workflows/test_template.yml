@@ -3,6 +3,9 @@ name: Test Template
 on:
   workflow_call:
     inputs:
+      CTEST_CONFIGURATION_TYPE:
+        required: true
+        type: string
       WITH_COVERAGE:
         required: false
         type: number
@@ -19,8 +22,9 @@ on:
         required: true
         type: string
       build_artifact_name:
-        required: true
+        required: false
         type: string
+        default: build_jammy_${{ inputs.CTEST_CONFIGURATION_TYPE }}_x86_64
       timeout:
         required: false
         type: number

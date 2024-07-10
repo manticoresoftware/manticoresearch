@@ -20,7 +20,6 @@
 #if _WIN32
 #include <boost/winapi/process.hpp>
 #endif
-#include "replication/portrange.h"
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
@@ -56,22 +55,10 @@ static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 
 static int g_iBuddyVersion = 2;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
-static CSphString g_sContainerName;
-
-// windows docker needs port XXX:9999 port mapping
-static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
-ScopedPort_c g_tBuddyPort;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir );
-static void BuddyStop ();
-
-#if _WIN32
-static CSphString g_sBuddyBind = "0.0.0.0:9999"; // It does not matter for docker
-#else
-static CSphString g_sBuddyBind = "127.0.0.1";
-#endif
+static CSphString BuddyGetPath ( const CSphString & sPath, bool bHasBuddyPath );
 
 #if _WIN32
 struct BuddyWindow_t : boost::process::detail::handler_base
@@ -249,9 +236,6 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 	}
 
 	// buddy really started and ready to serve queries
-#ifdef _WIN32
-	tListen.m_iPort = g_tBuddyPort;
-#endif
 	g_sUrlBuddy = GetUrl( tListen );
 	g_eBuddy = BuddyState_e::WORK;
 	g_iRestartCount = 0;
@@ -355,7 +339,7 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 		g_pIOS->stop();
 
 	g_pPipe.reset();
-	g_pIOS.reset();
+	g_pIOS.reset(); 
 
 	g_pIOS.reset ( new boost::asio::io_service );
 	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
@@ -387,38 +371,17 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 CSphString GetUrl ( const ListenerDesc_t & tDesc )
 {
-    CSphString sURI;
+	char sAddrBuf [ SPH_ADDRESS_SIZE ];
+	sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
+	
+	CSphString sURI;
+	sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
 
-#ifdef _WIN32
-    // Use the constant host for Windows
-    sURI.SetSprintf ("http://host.docker.internal:%d", tDesc.m_iPort);
-#else
-    // Original code for other systems
-    char sAddrBuf [ SPH_ADDRESS_SIZE ];
-    sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
-    sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
-#endif
-
-    return sURI;
+	return sURI;
 }
 
-static void SetContainerName ( const CSphString & sConfigPath )
-{
-	DWORD uName = sphCRC32 ( sConfigPath.cstr() );
-	g_sContainerName.SetSprintf ( "buddy_%u", uName );
-}
 
-static void BuddyStopContainer()
-{
-#ifdef _WIN32
-	CSphString sCmd;
-	sCmd.SetSprintf ( "docker kill %s", g_sContainerName.cstr() );
-	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles );
-	tStop.wait();
-#endif
-}
-
-void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
+void BuddyStart ( const CSphString & sConfigPath, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -430,15 +393,15 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
+	CSphString sPath = BuddyGetPath ( sConfigPath, bHasBuddyPath );
+	if ( sPath.IsEmpty() )
+		return;
+
 	ARRAY_FOREACH ( i, dListeners )
 	{
 		const ListenerDesc_t & tDesc = dListeners[i];
 		if ( tDesc.m_eProto==Proto_e::SPHINX || tDesc.m_eProto==Proto_e::HTTP )
 		{
-#ifdef _WIN32
-			g_pBuddyPortList.reset ( PortRange::Create ( "127.0.0.1", tDesc.m_iPort+100, 20 ) );
-			g_tBuddyPort = g_pBuddyPortList->AcquirePort();
-#endif
 			g_sListener4Buddy = GetUrl ( tDesc );
 			break;
 		}
@@ -455,23 +418,15 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	SetContainerName ( sConfigFilePath );
-	BuddyStopContainer();
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
-	if ( sPath.IsEmpty() )
-		return;
-
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s --bind=%s %s --threads=%d",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s --threads=%d",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
-		g_sBuddyBind.cstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
 		iThreads );
-
-	sphLogDebug ( "[BUDDY] start args: %s", g_sStartArgs.cstr() );
+		
 
 	CSphString sErorr;
 	BuddyState_e eBuddy = TryToStart ( g_sStartArgs.cstr(), sErorr );
@@ -490,40 +445,17 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 void BuddyStop ()
 {
-#if _WIN32
 	if ( g_pBuddy )
 	{
 		std::error_code tErrorCode;
 		g_pBuddy->terminate ( tErrorCode );
 		if ( tErrorCode )
 			sphWarning ( "[BUDDY] stopped, exit code: %d", tErrorCode.value() );
-		BuddyStopContainer();
 	}
-#else
-	if ( g_pBuddy )
-	{
-		// FIXME!!! migrate to boost::process::v2 and use
-		// proc.request_exit();
-		// proc.wait();
-		kill ( g_pBuddy->id(), SIGTERM );
-		std::error_code tErrorCode;
-		g_pBuddy->wait ( tErrorCode );
-		if ( tErrorCode )
-			sphLogDebug ( "[BUDDY] stopped, exit code: %d", tErrorCode.value() );
-	}
-#endif
 
 	g_eBuddy = BuddyState_e::STOPPED;
 	g_pBuddy.reset();
 }
-
-void BuddyShutdown ()
-{
-	BuddyStop();
-	g_tBuddyPort = ScopedPort_c();
-	g_pBuddyPortList.reset();
-}
-
 
 bool HasBuddy()
 {
@@ -562,7 +494,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
 
-bool IsBuddyQuery ( const OptionsHash_t & hOptions )
+static bool HasProhibitBuddy ( const OptionsHash_t & hOptions )
 {
 	CSphString * pProhibit = hOptions ( "user-agent" );
 	return pProhibit != nullptr && ( pProhibit->Begins ( "Manticore Buddy" ) );
@@ -626,7 +558,7 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 	return !( bson::IsNullNode ( tParsed.m_tType ) || bson::IsNullNode ( tParsed.m_tMessage ) );
 }
 
-static EHTTP_STATUS GetHttpStatusCode ( int iBuddyHttpCode, EHTTP_STATUS eReqHttpCode )
+static ESphHttpStatus GetHttpStatusCode ( int iBuddyHttpCode, ESphHttpStatus eReqHttpCode )
 {
 	return ( iBuddyHttpCode>0 ? HttpGetStatusCodes ( iBuddyHttpCode ) : eReqHttpCode );
 }
@@ -634,23 +566,20 @@ static EHTTP_STATUS GetHttpStatusCode ( int iBuddyHttpCode, EHTTP_STATUS eReqHtt
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || IsBuddyQuery ( hOptions ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_INDEX || HasProhibitBuddy ( hOptions ) )
 	{
-		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI )
+		if ( tRes.m_eEndpoint==SPH_HTTP_ENDPOINT_CLI )
 		{
 			if ( !HasBuddy() )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );
-			else if ( IsBuddyQuery ( hOptions ) )
+			else if ( HasProhibitBuddy ( hOptions ) )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint with User-Agent:Manticore Buddy" );
-			sphHttpErrorReply ( dResult, EHTTP_STATUS::_501, tRes.m_sError.cstr() );
+			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_501, tRes.m_sError.cstr() );
 		}
-
+		
 		assert ( dResult.GetLength()>0 );
 		return tRes.m_bOk;
 	}
-
-	myinfo::SetCommand ( sSrcQuery.first );
-	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
 	if ( !tReplyRaw.first )
@@ -674,7 +603,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	CSphString sDump;
 	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
-	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
+	ESphHttpStatus eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
@@ -747,11 +676,11 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 }
 
 #ifdef _WIN32
-static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
+static CSphString g_sDefaultBuddyName ( "manticore-buddy\\src\\main.php" );
 #else
 static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
 #endif
-static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
+static CSphString g_sDefaultBuddyExecName ( "manticore-executor.exe" );
 
 static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
 {
@@ -765,33 +694,22 @@ static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphStr
 #endif
 }
 
-#ifdef _WIN32
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
-{
-	if ( bHasBuddyPath )
-		return sConfigPath;
-
-	StringBuilder_c sCmd ( " " );
-	sCmd.Appendf ( "docker run --rm" ); // the head of the docker start command
-	sCmd.Appendf ( "-p %d:9999", iHostPort ); // port mapping
-	sCmd.Appendf ( "-v \"%s/%s\":/buddy", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() ); // volume for buddy modules
-	sCmd.Appendf ( "-v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore" ); // pesistent volume for buddy data
-	if ( !sDataDir.IsEmpty() ) // volume for data dir into container
-		sCmd.Appendf ( "-v \"%s\":/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
-	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
-	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
-	sCmd.Appendf ( "%s /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command
-
-	return CSphString ( sCmd );
-}
-#else
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & )
+CSphString BuddyGetPath ( const CSphString & sConfigPath, bool bHasBuddyPath )
 {
 	if ( bHasBuddyPath )
 		return sConfigPath;
 
 	CSphString sExecPath;
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
+	// check executor first
+#ifdef _WIN32
+	sExecPath.SetSprintf ( "%smanticore-executor\\%s", sPathToDaemon.cstr(), g_sDefaultBuddyExecName.cstr() );
+	if ( !sphFileExists ( sExecPath.cstr() ) )
+	{
+		sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyExecName.cstr(), sExecPath.cstr() );
+		return CSphString();
+	}
+#endif
 
 	CSphString sPathBuddy2Module;
 	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
@@ -805,6 +723,6 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 		return GetFullBuddyPath ( sExecPath, sPathBuddy2Cwd );
 
 	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
+
 	return CSphString();
 }
-#endif

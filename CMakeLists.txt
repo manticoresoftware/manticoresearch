@@ -323,9 +323,6 @@ configure_file ( "LICENSE" "${MANTICORE_BINARY_DIR}/LICENSE" COPYONLY )
 include ( ${MANTICORE_SOURCE_DIR}/sphinxrev.cmake )
 include ( CommonInfo )
 
-include( builds/VersionDeps )
-message("EXECUTOR image: manticoresearch/manticore-executor:${EXECUTOR_VERNUM}")
-
 # set final paths for build
 set ( only_set_paths ON )
 include ( SetBuildType )

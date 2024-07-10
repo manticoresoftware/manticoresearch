@@ -15,42 +15,25 @@
 #include "std/generics.h"
 #include "std/string.h"
 
-class FreePortList_i;
-
 // managed port got back into global ports list
 class ScopedPort_c : public ISphNoncopyable
 {
 	int m_iPort = -1;
-	FreePortList_i * m_pPortsList { nullptr };
 
 public:
-	ScopedPort_c() = default;
-	ScopedPort_c ( int iPort, FreePortList_i * pPortList );
+	explicit ScopedPort_c ( int iPort = -1 );
 	~ScopedPort_c();
 
 	ScopedPort_c ( ScopedPort_c&& rhs ) noexcept { Swap (rhs); }
 	ScopedPort_c& operator = ( ScopedPort_c&& rhs ) noexcept { Swap (rhs); return *this; }
-	void Swap ( ScopedPort_c& rhs ) noexcept { ::Swap ( m_iPort, rhs.m_iPort ); ::Swap ( m_pPortsList, rhs.m_pPortsList ); }
+	void Swap ( ScopedPort_c& rhs ) noexcept { ::Swap ( m_iPort, rhs.m_iPort ); }
 
 	operator int() const noexcept { return m_iPort; }
 	[[nodiscard]] bool IsValid() const noexcept { return m_iPort!=-1;}
 };
 
-class FreePortList_i
-{
-public:
-	FreePortList_i() = default;
-	virtual ~FreePortList_i() {};
-
-	virtual ScopedPort_c AcquirePort () = 0;
-	virtual void Free ( int iPort ) = 0;
-};
-
-namespace PortRange
-{
+namespace PortRange {
 	ScopedPort_c AcquirePort();
 	void AddPortsRange ( int iPort, int iCount );
-	void AddAddr ( const CSphString & sAddr );
-
-	FreePortList_i * Create ( const CSphString & sAddr, int iPort, int iCount );
+	void AddAddr ( const CSphString& sAddr );
 }

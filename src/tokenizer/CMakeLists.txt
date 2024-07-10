@@ -16,7 +16,6 @@ target_link_libraries ( lowercaser PRIVATE lextra )
 
 add_library ( tokenizer tokenizer.cpp tokenizer_bigram.cpp tokenizer_multiform.cpp tokenizer_plugin.cpp
 		tokenizer_utf8.cpp tokenizerbase.cpp tokenizerbase2.cpp exceptions_trie.cpp exceptions_trie.h
-		tokenizerbase_impl.h tokenizerbase2_impl.h multiform_container.h token_filter.h tokenizer.h
-		tok_internals.h )
+		tokenizerbase_impl.h tokenizerbase2_impl.h multiform_container.h token_filter.h tokenizer.h )
 target_link_libraries ( tokenizer PRIVATE lextra lowercaser )
 

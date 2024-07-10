@@ -409,7 +409,7 @@ public:
 	#endif
 								;
 
-		auto uPageSize = GetMemPageSize ();
+		auto uPageSize = getpagesize ();
 		auto uSize = this->GetLengthBytes();
 		auto uPages = ( uSize+uPageSize-1 ) / uPageSize;
 		CSphFixedVector<PAGETYPE> dMap ( uPages );

@@ -9,12 +9,10 @@
 //
 
 #include "columnarrt.h"
-
 #include "fileio.h"
 #include "memio.h"
 #include "attribute.h"
 #include "schema/schema.h"
-#include "columnarmisc.h"
 
 template <typename T>
 static std::pair<T,T> GetLengthOffset ( const CSphVector<T> & dLengths, RowID_t tRowID )
@@ -51,6 +49,7 @@ public:
 	virtual void	AddDoc ( const BYTE * pData, int iLength ) = 0;
 	virtual void	AddDoc ( const int64_t * pData, int iLength ) = 0;
 
+	virtual void	Kill ( const CSphVector<RowID_t> & dKilled ) = 0;
 	virtual void	Save ( MemoryWriter_c & tWriter ) const = 0;
 	virtual void	Save ( Writer_i & tWriter ) const = 0;
 	virtual void	Load ( MemoryReader_c & tReader ) = 0;
@@ -126,6 +125,7 @@ public:
 
 	void	AddDoc ( SphAttr_t tAttr ) override			{ m_dValues.Add ( ( (T)tAttr ) & m_uMask ); }
 
+	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
 	void	Save ( Writer_i & tWriter ) const override	{ SaveData(tWriter); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
@@ -152,6 +152,13 @@ ColumnarAttr_Int_T<T>::ColumnarAttr_Int_T ( ESphAttr eType, int iBits )
 	: ColumnarAttrRT_c(eType)
 	, m_uMask ( iBits==64 ? (T)0xFFFFFFFFFFFFFFFFULL : (T)( (1ULL<<iBits)-1 ) )
 {}
+
+template<typename T>
+void ColumnarAttr_Int_T<T>::Kill ( const CSphVector<RowID_t> & dKilled )
+{
+	for ( int i = dKilled.GetLength()-1; i>=0; i-- )
+		m_dValues.Remove(dKilled[i]);
+}
 
 template<typename T>
 template <typename WRITER>
@@ -226,6 +233,7 @@ public:
 
 	void	AddDoc ( const BYTE * pData, int iLength ) override;
 
+	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
 	void	Save ( Writer_i & tWriter ) const override	{ SaveData(tWriter); }
 	void	Load ( MemoryReader_c & tReader ) override	{ LoadData(tReader); }
@@ -252,6 +260,22 @@ void ColumnarAttr_String_c::AddDoc ( const BYTE * pData, int iLength )
 	m_iTotalLength += iLength;
 	m_dLengths.Add(m_iTotalLength);
 	m_dData.Append ( pData, iLength );
+}
+
+
+void ColumnarAttr_String_c::Kill ( const CSphVector<RowID_t> & dKilled )
+{
+	for ( int i = dKilled.GetLength()-1; i>=0; i-- )
+	{
+		RowID_t tRowID = dKilled[i];
+
+		int64_t iLength, iOffset;
+		std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
+		m_dData.Remove ( (int)iOffset, (int)iLength );
+
+		for ( RowID_t tNextRowID = tRowID+1; tNextRowID < (RowID_t)m_dLengths.GetLength(); tNextRowID++ )
+			m_dLengths[tNextRowID] -= iLength;
+	}
 }
 
 template <typename WRITER>
@@ -321,6 +345,7 @@ public:
 
 	void	AddDoc ( const int64_t * pData, int iLength ) override;
 
+	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) const override	{ SaveData(tWriter); }
 	void	Save ( Writer_i & tWriter ) const override	{ SaveData(tWriter); }
 	int64_t	AllocatedBytes() const override				{ return m_dData.GetLengthBytes64() + m_dLengths.GetLengthBytes64(); }
@@ -348,6 +373,22 @@ void ColumnarAttr_MVA_T<T>::AddDoc ( const int64_t * pData, int iLength )
 	m_dLengths.Add ( (int)m_iTotalLength );
 	for ( int i = 0; i < iLength; i++ )
 		m_dData.Add ( (T)pData[i] );
+}
+
+template <typename T>
+void ColumnarAttr_MVA_T<T>::Kill ( const CSphVector<RowID_t> & dKilled )
+{
+	for ( int i = dKilled.GetLength()-1; i>=0; i-- )
+	{
+		RowID_t tRowID = dKilled[i];
+
+		int iLength, iOffset;
+		std::tie(iLength, iOffset) = GetLengthOffset ( m_dLengths, tRowID );
+		m_dData.Remove ( iOffset, iLength );
+
+		for ( RowID_t tNextRowID = tRowID+1; tNextRowID < (RowID_t)m_dLengths.GetLength(); tNextRowID++ )
+			m_dLengths[tNextRowID] -= iLength;
+	}
 }
 
 template <typename T>
@@ -400,14 +441,15 @@ static std::unique_ptr<ColumnarAttrRT_i> CreateColumnarAttrRT ( ESphAttr eType, 
 class ColumnarBuilderRT_c : public ColumnarBuilderRT_i
 {
 public:
-	explicit ColumnarBuilderRT_c ( const CSphSchema & tSchema );
-	explicit ColumnarBuilderRT_c ( MemoryReader_c & tReader ) { Load(tReader); }
+			explicit ColumnarBuilderRT_c ( const CSphSchema& tSchema );
+			explicit ColumnarBuilderRT_c ( MemoryReader_c& tReader );
 
 	void	SetAttr ( int iAttr, int64_t tAttr ) override						{ m_dAttrs[iAttr]->AddDoc(tAttr); }
 	void	SetAttr ( int iAttr, const uint8_t * pData, int iLength ) override	{ m_dAttrs[iAttr]->AddDoc ( pData, iLength ); }
 	void	SetAttr ( int iAttr, const int64_t * pData, int iLength ) override	{ m_dAttrs[iAttr]->AddDoc ( pData, iLength ); }
 	bool	Done ( std::string & sError ) override { return true; }
 
+	void	Kill ( const CSphVector<RowID_t> & dKilled ) override;
 	void	Save ( MemoryWriter_c & tWriter ) override;
 	CSphVector<std::unique_ptr<ColumnarAttrRT_i>> & GetAttrs() override { return m_dAttrs; }
 	const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& GetAttrs() const override { return m_dAttrs; }
@@ -432,6 +474,18 @@ ColumnarBuilderRT_c::ColumnarBuilderRT_c ( const CSphSchema & tSchema )
 	}
 }
 
+ColumnarBuilderRT_c::ColumnarBuilderRT_c ( MemoryReader_c& tReader )
+{
+	Load ( tReader );
+}
+
+
+void ColumnarBuilderRT_c::Kill ( const CSphVector<RowID_t> & dKilled )
+{
+	for ( auto & i : m_dAttrs )
+		i->Kill(dKilled);
+}
+
 
 void ColumnarBuilderRT_c::Save ( MemoryWriter_c & tWriter )
 {
@@ -451,7 +505,7 @@ void ColumnarBuilderRT_c::Load ( MemoryReader_c & tReader )
 class ColumnarRT_c : public ColumnarRT_i
 {
 public:
-	explicit		ColumnarRT_c ( const CSphVector<std::unique_ptr<ColumnarAttrRT_i>> & dAttrs );
+					explicit ColumnarRT_c ( const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& dAttrs );
 
 	columnar::Iterator_i *					CreateIterator ( const std::string & sName, const columnar::IteratorHints_t & tHints, columnar::IteratorCapabilities_t * pCapabilities, std::string & sError ) const override;
 	std::vector<common::BlockIterator_i *>	CreateAnalyzerOrPrefilter ( const std::vector<common::Filter_t> & dFilters, std::vector<int> & dDeletedFilters, const columnar::BlockTester_i & tBlockTester ) const override { return {}; }
@@ -619,33 +673,4 @@ std::unique_ptr<ColumnarRT_i> CreateColumnarRT ( const CSphSchema & tSchema, CSp
 	}
 
 	return pColumnar;
-}
-
-
-void RemoveColumnarDuplicates ( std::unique_ptr<ColumnarBuilderRT_i> & pBuilder, const CSphFixedVector<RowID_t> & dRowMap, const CSphSchema & tSchema )
-{
-	if ( !pBuilder )
-		return;
-
-	if ( !dRowMap.any_of ( []( RowID_t tRowID ){ return tRowID==INVALID_ROWID; } ) )
-		return;
-
-	std::unique_ptr<ColumnarBuilderRT_i> pNewBuilder = CreateColumnarBuilderRT(tSchema);
-
-	{
-		std::unique_ptr<ColumnarRT_i> pColumnar = CreateLightColumnarRT ( tSchema, pBuilder.get() );
-		CSphVector<ScopedTypedIterator_t> dIterators = CreateAllColumnarIterators ( pColumnar.get(), tSchema );
-
-		CSphVector<int64_t> dTmpMVA;
-		for ( RowID_t tSrcRowID = 0; tSrcRowID < dRowMap.GetLength(); tSrcRowID++ )
-		{
-			if ( dRowMap[tSrcRowID]==INVALID_ROWID )
-				continue;
-
-			ARRAY_FOREACH ( iAttr, dIterators )
-				SetColumnarAttr ( iAttr, dIterators[iAttr].second, pNewBuilder.get(), dIterators[iAttr].first, tSrcRowID, dTmpMVA );
-		}
-	}
-
-	pBuilder = std::move(pNewBuilder);
 }

@@ -76,4 +76,8 @@ private:
 	int			ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos );
 };
 
+
+bool HasWildcards ( const char * sWord );
+
+
 #endif // _snippetindex_

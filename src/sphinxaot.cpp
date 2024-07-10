@@ -269,9 +269,9 @@ bool CMorphAutomat::LoadPak ( CSphReader & rd, int iCacheSize )
 
 #if !USE_LITTLE_ENDIAN
 	for ( int i=0; i< m_NodesCount; ++i )
-		FlipEndianness ( &m_pNodes[i].m_Data );
+		FlipEndianess ( &m_pNodes[i].m_Data );
 	for ( int i=0; i< m_RelationsCount; ++i )
-		FlipEndianness ( &m_pRelations[i].m_Data );
+		FlipEndianess ( &m_pRelations[i].m_Data );
 #endif
 
 	BuildChildrenCache ( iCacheSize );

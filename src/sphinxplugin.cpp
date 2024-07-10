@@ -124,45 +124,16 @@ const CSphString & PluginDesc_c::GetLibName() const
 
 //////////////////////////////////////////////////////////////////////////
 
-static bool SetPluginDir ( const char * sDir, CSphString & sPlugin )
-{
-	bool bEmpty = ( !sDir || !*sDir );
-	if ( !bEmpty )
-	{
-		if ( sphDirExists ( sDir, nullptr ) )
-		{
-			sPlugin = sDir;
-			return true;
-		}
-	}
-
-	if ( sphDirExists ( HARDCODED_PLUGIN_DIR, nullptr ) )
-	{
-		sPlugin = HARDCODED_PLUGIN_DIR;
-		return true;
-	} else
-	{
-#if _WIN32
-		CSphString sWinInstall = GetWinInstallDir();
-		if ( !sWinInstall.IsEmpty() )
-		{
-			CSphString sWinInstallPlugin;
-			sWinInstallPlugin.SetSprintf ( "%s/%s", sWinInstall.cstr(), HARDCODED_PLUGIN_DIR );
-			if ( sphDirExists ( sWinInstallPlugin, nullptr ) )
-			{
-				sPlugin = sWinInstallPlugin;
-				return true;
-			}
-		}
-#endif
-	}
-
-	return false;
-}
-
 void sphPluginInit ( const char * sDir )
 {
-	g_bPluginsEnabled = SetPluginDir ( sDir, g_sPluginDir );
+	if ( !sDir || !*sDir )
+	{
+		g_bPluginsEnabled = false;
+		return;
+	}
+
+	g_sPluginDir = sDir;
+	g_bPluginsEnabled = true;
 }
 
 const CSphString &  PluginGetDir()

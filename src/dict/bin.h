@@ -50,11 +50,11 @@ protected:
 	bool m_bError = false; // FIXME? sort of redundant, but states are a mess
 
 	AggregateHit_t m_tHit;				///< currently decoded hit
-	std::array<BYTE, MAX_KEYWORD_BYTES> m_sKeyword; ///< currently decoded hit keyword (in keywords dict mode)
+	BYTE m_sKeyword[MAX_KEYWORD_BYTES]; ///< currently decoded hit keyword (in keywords dict mode)
 
 #ifndef NDEBUG
 	SphWordID_t m_iLastWordID = 0;
-	std::array<BYTE, MAX_KEYWORD_BYTES> m_sLastKeyword;
+	BYTE m_sLastKeyword[MAX_KEYWORD_BYTES];
 #endif
 
 	int m_iFile = -1;				   ///< my file

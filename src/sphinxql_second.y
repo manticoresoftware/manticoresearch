@@ -130,11 +130,6 @@ identcol:
 	;
 //////////////////////////////////////////////////////////////////////////
 
-like_filter:
-	// empty
-	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ($2 ); }
-	;
-
 set_string_value:
 	ident_all
 	| TOK_QUOTED_STRING
@@ -432,7 +427,7 @@ delete_cluster:
 	;
 
 freeze_indexes:
-	TOK_FREEZE one_or_more_indexes like_filter
+	TOK_FREEZE one_or_more_indexes
 		{
 			pParser->m_pStmt->m_eStmt = STMT_FREEZE;
 		}

@@ -90,8 +90,6 @@ public:
 	virtual void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) = 0;
 
 	virtual void				DebugDump ( int iLevel ) = 0;
-	virtual bool				TimeExceeded() const = 0;
-	virtual int64_t				GetMaxTimeout() const = 0;
 };
 
 class RowidIterator_i;

@@ -669,47 +669,28 @@ ISphMatchSorter * CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tColl
 void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
 	pRows->HeadBegin ();
-	ARRAY_CONSTFOREACH ( i, dOrder )
+	for ( int i : dOrder )
 	{
-		const CSphColumnInfo& tCol = tSchema.GetAttr ( dOrder[i] );
+		const CSphColumnInfo& tCol = tSchema.GetAttr ( i );
 		if ( sphIsInternalAttr ( tCol ) )
 			continue;
-		if ( i == 0 )
-		{
-			assert (tCol.m_sName == "id");
-			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
-			continue;
-		}
-		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
+		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
 	}
 
 	pRows->HeadEnd ( false, 0 );
 }
 
-struct SqlQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' || c == '\t' ) ? 1 : 0;
-	}
-};
-
-using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
-
 void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
 	auto& dRows = *pRows;
-	ARRAY_CONSTFOREACH ( i, dOrder )
+	for ( int i : dOrder )
 	{
-		const CSphColumnInfo& dAttr = tSchema.GetAttr ( dOrder[i] );
+		const CSphColumnInfo& dAttr = tSchema.GetAttr ( i );
 		if ( sphIsInternalAttr ( dAttr ) )
 			continue;
 
 		CSphAttrLocator tLoc = dAttr.m_tLocator;
 		ESphAttr eAttrType = dAttr.m_eAttrType;
-
-		if ( i == 0 )
-			eAttrType = SPH_ATTR_UINT64;
 
 		switch ( eAttrType )
 		{
@@ -769,9 +750,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			{
 				StringBuilder_c dStr;
 				auto dMVA = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
-				dStr << "(";
 				sphMVA2Str ( dMVA, eAttrType == SPH_ATTR_INT64SET, dStr );
-				dStr << ")";
 				dRows.PutArray ( dStr, false );
 				break;
 			}
@@ -780,9 +759,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_UINT32SET_PTR:
 			{
 				StringBuilder_c dStr;
-				dStr << "(";
 				sphPackedMVA2Str ( (const BYTE*)tMatch.GetAttr ( tLoc ), eAttrType == SPH_ATTR_INT64SET_PTR, dStr );
-				dStr << ")";
 				dRows.PutArray ( dStr, false );
 				break;
 			}
@@ -791,9 +768,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			{
 				StringBuilder_c dStr;
 				auto dFloatVec = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
-				dStr << "(";
 				sphFloatVec2Str ( dFloatVec, dStr );
-				dStr << ")";
 				dRows.PutArray ( dStr, false );
 			}
 			break;
@@ -801,9 +776,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_FLOAT_VECTOR_PTR:
 			{
 				StringBuilder_c dStr;
-				dStr << "(";
 				sphPackedFloatVec2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
-				dStr << ")";
 				dRows.PutArray ( dStr, false );
 			}
 			break;
@@ -814,10 +787,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				JsonEscapedBuilder sTmp;
 				if ( pJson.second )
 					sphJsonFormat ( sTmp, pJson.first );
-				auto sJson = Str_t(sTmp);
-				SqlEscapedBuilder_c dEscaped;
-				dEscaped.FixupSpacedAndAppendEscapedNoQuotes ( sJson.first, sJson.second );
-				dRows.PutArray ( dEscaped, false );
+				dRows.PutArray ( sTmp );
 			}
 			break;
 		case SPH_ATTR_JSON_PTR:
@@ -829,10 +799,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 					auto dJson = sphUnpackPtrAttr ( pString );
 					sphJsonFormat ( sTmp, dJson.first );
 				}
-				auto sJson = Str_t ( sTmp );
-				SqlEscapedBuilder_c dEscaped;
-				dEscaped.FixupSpacedAndAppendEscapedNoQuotes ( sJson.first, sJson.second );
-				dRows.PutArray ( dEscaped, false );
+				dRows.PutArray ( sTmp );
 			}
 			break;
 
@@ -1154,6 +1121,29 @@ ISphMatchSorter * CreateSorter ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFun
 	return CreateGroupSorter ( eGroupFunc, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates, tPrecalc );
 }
 
+
+static bool ExprHasJoinPrefix ( const CSphString & sExpr, const JoinArgs_t * pArgs )
+{
+	if ( !pArgs )
+		return false;
+
+	CSphString sPrefix;
+	sPrefix.SetSprintf ( "%s.", pArgs->m_sIndex2.cstr() );
+
+	const char * szFound = strstr ( sExpr.cstr(), sPrefix.cstr() );
+	if ( !szFound )
+		return false;
+
+	if ( szFound > sExpr.cstr() )
+	{
+		char c = *(szFound-1);
+		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' )
+			return false;
+	}
+
+	return true;
+}
+
 /////////////////////////
 // SORTING QUEUE FACTORY
 /////////////////////////
@@ -1205,9 +1195,6 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 	// this is the same as checking the sorters for disabled cutoff
 	// but this works when sorters are not yet available (e.g. GetPseudoShardingMetric())
 	if ( HasImplicitGrouping ( tQuery ) )
-		return -1;
-
-	if ( !tQuery.m_sKNNAttr.IsEmpty() )
 		return -1;
 
 	bool bDisableCutoff = dSorters.any_of ( []( auto * pSorter ){ return pSorter->IsCutoffDisabled(); } );

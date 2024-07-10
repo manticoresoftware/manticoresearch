@@ -83,7 +83,7 @@ public:
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_extraparser ( YYSTYPE* lvalp, void* yyscanner, SqlExtraParser_c* pParser )
 
-#include "flexsphinxql_extra.c"
+#include "flexsphinxqlextra.c"
 
 static void yyerror ( SqlParserTraits_c* pParser, const char* szMessage )
 {

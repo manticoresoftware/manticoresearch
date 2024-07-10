@@ -64,7 +64,6 @@ public:
 public:
 	void	RemoveStaticAttr ( int iAttr );
 	void	ResetRsetSchema();
-	bool	IsRemovedAttr ( int iAttr ) const;
 
 public:
 	/// swap in a subset of current attributes, with not necessarily (!) unique names

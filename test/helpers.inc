@@ -874,16 +874,6 @@ function RemoveColumnarProperty ( $property )
 }
 
 
-if (!function_exists('array_key_first'))
-{
-	function array_key_first(array $arr)
-	{
-		foreach($arr as $key => $unused)
-			return $key;
-		return NULL;
-	 }
-}
-
 function CompareColumns ( $a, $b )
 {
 	return strcmp ( array_keys($a)[0], array_keys($b)[0] );
@@ -915,7 +905,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
 	}
 
-	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" || $set["http_endpoint"]=="cli_json" ) && isset ( $set["rows"] ) )
+	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" ) && isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
 		{
@@ -935,9 +925,6 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 						$entry["Properties"] = RemoveColumnarProperty ( $entry["Properties"] );
 				}
 			}
-
-			if ( isset ( $row["columns"] ) )
-				usort ( $row['columns'], function($a, $b) { return strcmp ( array_key_first($a), array_key_first($b) ); } );
 		}
 
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
@@ -2211,8 +2198,8 @@ class SphinxConfig
                     '/receiving failure .*$/', // linux (errno 111) and mac (errno 64)
                     '/end of file/', // fresh bison from homebrew emits 'end of file' instead of '$end',
                     '/(.* error: no AF_INET address found for:.*, error)(.*)/',
-                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/',
-                    '/(.*\: file not found\: )(.*)/'
+                    '/(.*)(; in \d* retries within [0-9]*[.][0-9]+ sec)/'
+
                 ],
                 [
                     "receiving failure (refused or timedout, substituted)",
@@ -2221,7 +2208,6 @@ class SphinxConfig
                     "\$end",
                     "$1: substituted",
                     "$1",
-                    "$1 substituted"
                 ], $s );
 		
 		return $s;

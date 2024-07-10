@@ -26,25 +26,22 @@ jobs:
     steps:
       - run: echo "All set to build packages"
 
-  pack_rhel:
-    name: RHEL packages
+  pack_debian_ubuntu:
+    name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
     needs: pack
     strategy:
       fail-fast: false
       matrix:
-        DISTR: [rhel7, rhel8, rhel9]
-        arch: [x86_64, aarch64]
+        DISTR: [bullseye]
+        arch: [x86_64]
     with:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      boost: boost_rhel_feb17
       cmake_command: |
-        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
-        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
         mkdir build
         cd build
         cmake -DPACK=1 ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
-      artifact_list: "build/manticore*rpm"
+      artifact_list: "build/manticore*deb"

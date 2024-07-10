@@ -416,6 +416,9 @@ To be put in the `searchd {}` section of the configuration file:
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Sets the time period between flushing updated attributes to disk
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
+  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Common binary log file for all tables
+  * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - Number of digits in a binlog file name
+  * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - Binlog flushing strategy
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - Binary log files path
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum time to wait between requests when using persistent connections
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale

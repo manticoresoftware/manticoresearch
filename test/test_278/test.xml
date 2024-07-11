@@ -2,7 +2,10 @@
 <test>
 <name>JOIN</name>
 
-<requires><force-rt/></requires>
+<requires>
+<force-rt/>
+<http/>
+</requires>
 
 <skip_indexer/>
 
@@ -348,7 +351,39 @@ select * from join1 left join join2 on join1.j.a = int(join2.j.a);
 
 <!-- type cast on non-json attr (error) -->
 select * from join1 left join join2 on join1.j.a = int(join2.id);
+</sphinxql>
 
+<query endpoint="json/search">
+{
+  "index": "join1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<sphinxql>
 <!-- cleanup -->
 drop table join1;
 drop table join2;

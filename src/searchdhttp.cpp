@@ -1820,7 +1820,7 @@ public:
 		// TODO!!! add parsing collation from the query
 		m_tParsed.m_tQuery.m_eCollation = session::GetCollation();
 
-		if ( !sphParseJsonQuery ( m_sQuery, &m_tParsed ) )
+		if ( !sphParseJsonQuery ( m_sQuery, m_tParsed ) )
 		{
 			ReportError ( TlsMsg::szError(), EHTTP_STATUS::_400 );
 			return nullptr;

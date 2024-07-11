@@ -1197,8 +1197,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	tParsedQuery.m_bProfile = false;
 	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
-
-	if ( !sphParseJsonQuery ( tMntReq, &tParsedQuery ) )
+	if ( !sphParseJsonQuery ( tMntReq, tParsedQuery ) )
 	{
 		const char * sError = TlsMsg::szError();
 		CompatWarning ( "%s at '%s' body '%s'", sError, sURL.cstr(), tQuery.m_sRawQuery.cstr() );

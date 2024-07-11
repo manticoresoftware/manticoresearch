@@ -376,6 +376,19 @@ SELECT name, COUNT(*) FROM customers INNER JOIN orders ON customers.id = orders.
 DROP TABLE customers;
 DROP TABLE orders;
 
+<!-- populate tables -->
+create table join1;
+create table join2(j json);
+insert into join1 values(1);
+insert into join2 values(1, '{"a": "a"}');
+
+<!-- filter by json=string comparison -->
+select * from join1 left join join2 on join1.id=join2.id where join2.j.a='a';
+
+<!-- cleanup -->
+drop table join1;
+drop table join2;
+
 </sphinxql>
 </queries>
 

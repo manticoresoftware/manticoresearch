@@ -32,7 +32,15 @@ docker exec kafka /opt/bitnami/kafka/bin/kafka-topics.sh --create --topic my-dat
 ––– output –––
 Created topic my-data.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='2' batch=50;CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi);CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka" > /dev/null 2>&1; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='2' batch=50;" > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi);" > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka"
 ––– output –––
 0
 ––– input –––
@@ -55,3 +63,62 @@ sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_k
 |    9 | You Can't Judge A Book By Its Cover  | ISO 56789:86420 | %{DATETIME} | 20,25,30 |
 |   10 | Two Heads Are Better Than One        | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
 +------+--------------------------------------+-----------------+---------------------+----------+
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "drop mv view_table;"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka;"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++----------+------+
+| Index    | Type |
++----------+------+
+| _sources | rt   |
+| _views   | rt   |
++----------+------+
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore2' num_consumers='1' batch=50;" > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi, lat float, lon float);" > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, location.lat as lat, location.lon as lon FROM kafka"
+––– output –––
+––– input –––
+docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh
+––– output –––
+––– input –––
+sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received_at, size, lat, lon, GEODIST(lat, lon, 49.0, 3.0) AS distance FROM destination_kafka;"
+––– output –––
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+-----------------+
+| id   | name                                        | short_name      | received_at         | size     | lat       | lon       | distance        |
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+-----------------+
+|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |        0.000000 |
+|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 | 50.000000 |  4.000000 |  7337256.000000 |
+|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 | 15240375.000000 |
+|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 | 17033656.000000 |
+|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 | 11272146.000000 |
+|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |  6946153.000000 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 | 17033656.000000 |
+|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |  1810203.500000 |
+|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |  5149151.000000 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 | 11272146.000000 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |  6946153.000000 |
+|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 | 13019480.000000 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |  1810203.500000 |
+|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |  5675506.500000 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |  5149151.000000 |
+|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |        0.000000 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 | 13019480.000000 |
+|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   | 50.000000 |  4.000000 |  7337256.000000 |
+|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 | 15240375.000000 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |  5675506.500000 |
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+-----------------+

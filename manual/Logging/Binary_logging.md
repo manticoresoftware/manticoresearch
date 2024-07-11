@@ -64,7 +64,7 @@ alter table FOO binlog='1';
 
 #### Important considerations:
 * **Dependency on global settings**: per-table binary logging settings only take effect if binary logging is globally enabled in the searchd configuration (`binlog_path` must not be empty).
-* **Forced flushing and transaction ID reset**: Modifying the binary logging status of a table forces an immediate [flush of the table](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE). This operation resets the table's transaction ID to `-1` and updates the table's metadata to reflect this change.
+* **Binary logging status and transaction ID insights**: Modifying the binary logging status of a table forces an immediate [flush of the table](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE). If you turn off binary logging for a table, its transaction ID (TID) changes to `-1`. This indicates that binary logging is not active, and no changes are being tracked. Conversely, if you start binary logging for a table, its transaction ID becomes a non-negative number (zero or higher). This indicates that the table's changes are now being recorded. You can check the transaction ID by using the command: `SHOW TABLE <name> STATUS`. The transaction ID reflects whether changes to the table are being recorded (non-negative number) or not (`-1`).
 
 ## Operations
 

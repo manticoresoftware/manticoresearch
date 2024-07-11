@@ -90,7 +90,7 @@ searchd {
 
 <!-- example binlog_filename_digits -->
 
-Each binlog file is named with a zero-padded number, like `binlog.0000`, `binlog.0001`, etc., typically showing four digits. You can change how many digits the number has with the setting `binlog_filename_digits`.
+Each binlog file is named with a zero-padded number, like `binlog.0000`, `binlog.0001`, etc., typically showing four digits. You can change how many digits the number has with the setting `binlog_filename_digits`. If you have more binlog files than the number of digits can accommodate, the number of digits will be automatically increased to fit all files.
 
 **Important**: To change the number of digits, you must first save all table data and properly shut down the system. Then, delete the old log files and restart the system.
 

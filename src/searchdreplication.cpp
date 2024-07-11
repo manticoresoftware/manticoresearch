@@ -821,9 +821,24 @@ static bool CheckIndexExists ( const CSphString & sIndex )
 		return TlsMsg::Err ( "wrong type of table '%s'", sIndex.cstr() );
 }
 
+static StrVec_t SplitIndexes ( const CSphString & sIndexes )
+{
+	const char * sIndexesNameDel = ",` ";
+	StrVec_t dRes;
+
+	sphSplitApply ( sIndexes.cstr(), sIndexes.Length(), sIndexesNameDel, [&dRes] ( const char * sTok, int iLen )
+	{
+		if ( !iLen )
+			return;
+		dRes.Add().SetBinary ( sTok, iLen );
+	});
+
+	return dRes;
+}
+
 static bool CheckIndexesExists ( const CSphString & sIndex )
 {
-	StrVec_t dIndexes = sphSplit ( sIndex.cstr(), "," );
+	StrVec_t dIndexes = SplitIndexes ( sIndex );
 	for ( const CSphString & sIndex : dIndexes )
 	{
 		if ( !CheckIndexExists ( sIndex ) )
@@ -976,7 +991,7 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 	{
 		if ( tCmdCluster.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD || tCmdCluster.m_eCommand==ReplCmd_e::CLUSTER_ALTER_DROP )
 		{
-			StrVec_t dIndexes = sphSplit ( tCmdCluster.m_sIndex.cstr(), "," );
+			StrVec_t dIndexes = SplitIndexes ( tCmdCluster.m_sIndex );
 			if ( !CheckClusterIndexes ( dIndexes, pCluster ) )
 				return false;
 		} else if ( !CheckClusterIndex ( tCmdCluster.m_sIndex, pCluster ) )
@@ -1140,7 +1155,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 	if ( !pCluster )
 		return false;
 
-	StrVec_t dIndexes = sphSplit ( tCmd.m_sIndex.cstr(), "," );
+	StrVec_t dIndexes = SplitIndexes ( tCmd.m_sIndex );
 
 	sphLogDebugRpl ( "SetIndexesClusterTOI '%s' for cluster '%s': indexes '%s' > '%s'", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), StrVec2Str ( pCluster->GetIndexes() ).cstr() );
 
@@ -1979,7 +1994,7 @@ static bool ClusterAddCheckDistLocals ( const StrVec_t & dLocals, const CSphStri
 // cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndexes, bool bAdd, CSphString & sError )
 {
-	StrVec_t dIndexes = sphSplit ( sIndexes.cstr(), "," );
+	StrVec_t dIndexes = SplitIndexes ( sIndexes );
 	dIndexes.Uniq();
 
 	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };

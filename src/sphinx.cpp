@@ -10526,7 +10526,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
-	QUERYINFO << "Started: " << ( sphMicroTimer()-iStart );
+	QUERYINFO << " Started: " << ( sphMicroTimer()-iStart ) << " index:" << szIndexName;
 
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -10545,22 +10545,23 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 
 		if ( !pSource->FetchTask ( iJob ) || CheckInterrupt() )
 		{
-			QUERYINFO << "Early finish parallel RunSplitQuery because of empty queue";
+			QUERYINFO << "Early finish parallel RunSplitQuery because of empty queue" << " index:" << szIndexName;
 			return; // already nothing to do, early finish.
 		}
 
 		auto tJobContext = tClonableCtx.CloneNewContext ( !iJob );
 		auto& tCtx = tJobContext.first;
-		auto Interrupt = [&bInterrupt, &tCtx] ( const char* szReason ) {
+		auto Interrupt = [&bInterrupt, &tCtx, &szIndexName] ( const char* szReason ) {
 			tCtx.m_tMeta.m_sWarning = szReason;
 			bInterrupt.store ( true, std::memory_order_relaxed );
+			QUERYINFO << "RunSplitQuery interrupted " << szReason << " index:" << szIndexName;
 		};
-		QUERYINFO << "RunSplitQuery cloned context " << tJobContext.second;
+		QUERYINFO << "RunSplitQuery cloned context " << tJobContext.second << " index:" << szIndexName;
 		tClonableCtx.SetJobOrder ( tJobContext.second, iJob );
 		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while ( !CheckInterrupt() ) // some earlier job met error; abort.
 		{
-			QUERYINFO << "RunSplitQuery " << tJobContext.second << ", job " << iJob;
+			QUERYINFO << "RunSplitQuery " << tJobContext.second << ", job " << iJob << " index:" << szIndexName;
 			myinfo::SetTaskInfo ( "%d ch %d:", Threads::Coro::NumOfRestarts(), iJob );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
@@ -10617,9 +10618,12 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			}
 		}
 	});
-	QUERYINFO << "RunSplitQuery processed in " << tClonableCtx.NumWorked() << " thread(s)";
+	QUERYINFO << "RunSplitQuery processed in " << tClonableCtx.NumWorked() << " thread(s)" << " index:" << szIndexName;
 	tClonableCtx.Finalize();
-	return !CheckInterrupt();
+	// can not fail query due to interruption or timeout
+	// that is valid result set with just warning
+	// parent sorters merge well in case of interruption or timeout
+	return ( tResult.m_sError.IsEmpty() );
 }
 
 template<typename RUN>
@@ -10635,16 +10639,13 @@ bool CSphIndex_VLN::SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const C
 	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iThreads ), 1 );
 	int64_t iTotalDocs = tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments;
 	bool bOk = RunSplitQuery ( tRun, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, GetName(), iSplit, tmMaxTimer );
-	if ( !bOk )
-		return false;
 
 	tResult.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.get();
 
 	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
-
-	return true;
+	return bOk;
 }
 
 
@@ -10721,13 +10722,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( pQueryParser->IsFullscan ( tQuery ) )
 	{
 		if ( tArgs.m_iThreads>1 )
+		{
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
 				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-
-		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		} else
+		{
+			return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		}
 	}
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
@@ -10758,13 +10762,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( pQueryParser->IsFullscan ( tParsed ) )
 	{
 		if ( tArgs.m_iThreads>1 )
+		{
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
 				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-
-		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		} else
+		{
+			return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		}
 	}
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
@@ -10799,13 +10806,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		return false;
 
 	if ( tArgs.m_iThreads>1 )
+	{
 		return SplitQuery (
 			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
 			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-
-	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	} else
+	{
+		return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	}
 }
 
 
@@ -11299,9 +11309,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tMeta.m_iQueryTime += (int)( tmWall/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
-#if 0
-	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs, tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, dSorters[0]->GetTotalCount() );
-#endif
+	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << tQueryStats.m_iFetchedDocs << ", " << tQueryStats.m_iFetchedHits << ", " << tQueryStats.m_iSkips << ", " << dSorters[0]->GetTotalCount();
 
 	SwitchProfile ( pProfile, eOldState );
 

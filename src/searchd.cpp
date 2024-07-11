@@ -6174,6 +6174,8 @@ void SearchHandler_c::RunLocalSearches ()
 				tMultiArgs.m_iTotalThreads = m_dPSInfo[iLocal].m_iMaxThreads;
 				tMultiArgs.m_bFinalizeSorters = !tGlobalSorters.NeedGlobalSorters();
 
+				LOCSEARCHINFO << "RunLocalSearches index:" << pIndex->GetName();
+
 				dNAggrResults.First().m_tIOStats.Start ();
 				if ( m_bMultiQueue )
 					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
@@ -6243,6 +6245,8 @@ void SearchHandler_c::RunLocalSearches ()
 			// cleanup sorters
 			for ( auto &pSorter : dSorters )
 				SafeDelete ( pSorter );
+
+			LOCSEARCHINFO << "RunLocalSearches result " << bResult << " index " << sLocal;
 
 			if ( !pSource->FetchTask ( iJob ) )
 				return; // all is done

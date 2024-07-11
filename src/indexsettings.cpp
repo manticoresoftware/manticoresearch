@@ -873,6 +873,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
 	m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
 	m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", DEFAULT_ATTR_UPDATE_RESERVE );
+	m_bBinlog = hIndex.GetBool ( "binlog", true );
 
 	if ( !m_tKlistTargets.Parse ( hIndex.GetStr ( "killlist_target" ), szIndexName, sError ) )
 		return false;
@@ -1089,6 +1090,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
+	tOut.Add ( "binlog",				m_bBinlog,		false );
 
 	if ( m_eHitless==SPH_HITLESS_ALL )
 	{
@@ -1879,6 +1881,8 @@ static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & 
 		pDict->GetSettings().Format ( tFormatter, pFilenameBuilder );
 
 	tIndex.GetMutableSettings().Format ( tFormatter, pFilenameBuilder );
+	if ( tIndex.m_iTID==-1 )
+		tFormatter.Add ( "binlog", "0", true );
 }
 
 

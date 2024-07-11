@@ -148,6 +148,21 @@ bool RtAccum_t::SetupDocstore ( const RtIndex_i& tIndex, CSphString& sError )
 	return m_pDocstore->CheckFieldsLoaded ( sError );
 }
 
+
+[[nodiscard]] bool RtAccum_t::IsClusterCommand() const noexcept
+{
+	return ( m_dCmd.GetLength () && !m_dCmd[0]->m_sCluster.IsEmpty () );
+}
+
+
+[[nodiscard]] bool RtAccum_t::IsUpdateCommand() const noexcept
+{
+	return ( m_dCmd.GetLength () &&
+			( m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_API
+					|| m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_QL
+					|| m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_JSON ) );
+}
+
 static void ResetTailHit ( CSphWordHit * pHit )
 {
 	if ( pHit->m_tRowID!=pHit[1].m_tRowID || pHit->m_uWordID!=pHit[1].m_uWordID )

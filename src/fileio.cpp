@@ -507,14 +507,25 @@ SphOffset_t CSphReader::GetOffset()
 CSphString CSphReader::GetString()
 {
 	CSphString sRes;
-
-	DWORD iLen = GetDword();
-	if ( iLen )
+	DWORD uLen = GetDword ();
+	if ( uLen )
 	{
-		char * sBuf = new char [ iLen ];
-		GetBytes ( sBuf, iLen );
-		sRes.SetBinary ( sBuf, iLen );
-		SafeDeleteArray ( sBuf );
+		sRes.Reserve ( uLen );
+		GetBytes ( (BYTE *) sRes.cstr (), uLen );
+	}
+
+	return sRes;
+}
+
+
+CSphString CSphReader::GetZString ()
+{
+	CSphString sRes;
+	auto uLen = UnzipOffset();
+	if ( uLen )
+	{
+		sRes.Reserve ( uLen );
+		GetBytes ( (BYTE *) sRes.cstr (), uLen );
 	}
 
 	return sRes;
@@ -740,6 +751,30 @@ void CSphWriter::Flush()
 }
 
 
+void CSphWriterNonThrottled::Flush ()
+{
+	if ( m_pSharedOffset && *m_pSharedOffset!=m_iDiskPos )
+	{
+		auto uMoved = sphSeek ( m_iFD, m_iDiskPos, SEEK_SET );
+		if ( uMoved!=m_iDiskPos )
+		{
+			m_bError = true;
+			return;
+		}
+	}
+
+	if ( !WriteNonThrottled ( m_iFD, m_pBuffer.get (), m_iPoolUsed, m_sName.cstr (), *m_pError ) )
+		m_bError = true;
+
+	m_iDiskPos += m_iPoolUsed;
+	m_iPoolUsed = 0;
+	m_pPool = m_pBuffer.get ();
+
+	if ( m_pSharedOffset )
+		*m_pSharedOffset = m_iDiskPos;
+}
+
+
 void CSphWriter::PutString ( const char * szString )
 {
 	int iLen = szString ? (int) strlen ( szString ) : 0;
@@ -755,6 +790,24 @@ void CSphWriter::PutString ( const CSphString & sString )
 	PutDword ( iLen );
 	if ( iLen )
 		PutBytes ( sString.cstr(), iLen );
+}
+
+
+void CSphWriter::PutZString ( const char * szString )
+{
+	int iLen = szString ? (int) strlen ( szString ) : 0;
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( szString, iLen );
+}
+
+
+void CSphWriter::PutZString ( const CSphString & sString )
+{
+	int iLen = sString.Length ();
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( sString.cstr (), iLen );
 }
 
 
@@ -838,14 +891,7 @@ static inline void ThrottleSleep()
 }
 
 
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
-{
-	WriteSize_fn fnChunkSize = []( int64_t iCount, int iChunkSize ) { return (int)Min ( iCount, iChunkSize ); };
-
-	return sphWriteThrottled ( iFD, pBuf, iCount, std::move( fnChunkSize ), sName, sError );
-}
-
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_fn && fnWriteSize, const char * sName, CSphString & sError )
+bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError )
 {
 	if ( iCount <= 0 )
 		return true;
@@ -858,6 +904,8 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_f
 		iChunkSize = Min ( iChunkSize, g_iMaxIOSize );
 
 	CSphIOStats* pIOStats = GetIOStats();
+	int64_t iTotalWritten = 0;
+	const int64_t iTotalCount = iCount;
 
 	// while there's data, write it chunk by chunk
 	auto* p = (const BYTE*)pBuf;
@@ -871,8 +919,8 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_f
 		if ( pIOStats )
 			tmTimer = sphMicroTimer();
 
-		int iToWrite = fnWriteSize ( iCount, iChunkSize );
-		int iWritten = ::write ( iFD, p, iToWrite );
+		auto iToWrite = (int)Min ( iCount, iChunkSize );
+		auto iWritten = (int)::write ( iFD, &p[iTotalWritten], iToWrite );
 
 		if ( pIOStats )
 		{
@@ -886,24 +934,71 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_f
 			return false;
 		}
 
-		// success? rinse, repeat
-		if ( iWritten == iToWrite )
+		// failure? report, bailout
+		if ( iWritten<0 )
 		{
-			iCount -= iToWrite;
-			p += iToWrite;
-			continue;
+			if ( iTotalWritten!=iTotalCount )
+				sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
+			else
+				sError.SetSprintf ( "%s: write error: %s; " INT64_FMT " of " INT64_FMT " bytes written", sName, strerrorm ( errno ), iTotalWritten, iTotalCount );
+			return false;
 		}
 
-		// failure? report, bailout
-		if ( iWritten < 0 )
-			sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
-		else
-			sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, iToWrite );
-		return false;
+		// success? rinse, repeat
+		iCount -= iWritten;
+		iTotalWritten += iWritten;
 	}
 	return true;
 }
 
+
+bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
+{
+	if ( iCount<=0 )
+		return true;
+
+	CSphIOStats * pIOStats = GetIOStats ();
+	int64_t iTotalWritten = 0;
+	const int64_t iTotalCount = iCount;
+
+	// while there's data, write it chunk by chunk
+	auto * p = (const BYTE *) pBuf;
+	while ( iCount )
+	{
+		int64_t tmTimer = 0;
+		if ( pIOStats )
+			tmTimer = sphMicroTimer ();
+
+		auto iToWrite = (int) Min ( iCount, 1UL << 30 );
+		auto iWritten = (int) ::write ( iFD, &p[iTotalWritten], iToWrite );
+
+		if ( pIOStats )
+		{
+			pIOStats->m_iWriteTime += sphMicroTimer ()-tmTimer;
+			pIOStats->m_iWriteOps++;
+			pIOStats->m_iWriteBytes += iWritten;
+		}
+		if ( sphInterrupted () && iWritten!=iToWrite )
+		{
+			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );
+			return false;
+		}
+		// failure? report, bailout
+		if ( iWritten<0 )
+		{
+			if ( iTotalWritten!=iTotalCount )
+				sError.SetSprintf ( "%s: write error: %s", sName, strerrorm ( errno ) );
+			else
+				sError.SetSprintf ( "%s: write error: %s; " INT64_FMT " of " INT64_FMT " bytes written", sName, strerrorm ( errno ), iTotalWritten, iTotalCount );
+			return false;
+		}
+
+		// success? rinse, repeat
+		iCount -= iWritten;
+		iTotalWritten += iWritten;
+	}
+	return true;
+}
 
 size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount )
 {

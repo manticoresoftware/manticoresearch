@@ -242,8 +242,8 @@ static auto&			g_bSeamlessRotate	= sphGetSeamlessRotate ();
 
 static bool				g_bIOStats		= false;
 static auto&			g_bCpuStats 	= sphGetbCpuStat ();
-static bool				g_bOptNoDetach	= false;
-static bool				g_bOptNoLock	= false;
+static bool				g_bOptNoDetach	= false; // whether to detach from console, or work in front
+static bool				g_bOptNoLock	= false; // whether to lock indexes (with .spl) or not
 static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 static bool				g_bCoreDump		= false;
@@ -801,7 +801,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	SHUTINFO << "Finish IO stats collecting ...";
 	sphDoneIOStats();
 
-	SHUTINFO << "Finish RT serving ...";
+	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
 
 	SHUTINFO << "Shutdown docstore ...";
@@ -18217,7 +18217,7 @@ public:
 
 		// all went fine; swap them
 		sphLogDebug ( "all went fine; swap them" );
-		Binlog::NotifyIndexFlush ( pIdx->m_iTID, { m_szIndex, pIdx->GetIndexId() }, false, false );
+		Binlog::NotifyIndexFlush ( pIdx->m_iTID, m_szIndex, Binlog::NoShutdown, Binlog::NoSave );
 		g_pLocalIndexes->AddOrReplace ( pNewServed, m_szIndex );
 		sphInfo ( "rotating table '%s': success", m_szIndex );
 
@@ -18307,7 +18307,7 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 
 	// all went fine; swap them
 	sphLogDebug ( "all went fine; swap them" );
-	Binlog::NotifyIndexFlush ( pNewIndex->m_iTID, { sIndex.cstr(), pNewIndex->GetIndexId() }, false, false );
+	Binlog::NotifyIndexFlush ( pNewIndex->m_iTID, sIndex.cstr(), Binlog::NoShutdown, Binlog::NoSave );
 	g_pLocalIndexes->AddOrReplace ( pNewServed, sIndex );
 	sphInfo ( "rotating table '%s': success", sIndex.cstr() );
 	return true;
@@ -18660,17 +18660,27 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	auto pServed = MakeServedIndex();
 	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
 	pServed->m_sIndexPath = hIndex["path"].strval();
+	auto bNeedBinlog = hIndex.GetBool ( "binlog" );
 
 	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
 		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit, bWordDict );
 		pServed->m_eType = IndexType_e::RT;
+		tSettings.m_bBinlog = bNeedBinlog;
+		if ( !bNeedBinlog )
+			pIdx->m_iTID = -1;
 	} else
 	{
+		if ( !bNeedBinlog )
+		{
+			sError.SetSprintf ( "table '%s': percolate without binlog not implemented", szIndexName );
+			return { ADD_ERROR, nullptr };
+		}
 		pIdx = CreateIndexPercolate ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ) );
 		pServed->m_eType = IndexType_e::PERCOLATE;
 	}
+
 
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
@@ -20475,43 +20485,38 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 
 static void SetUidShort ( bool bTestMode )
 {
-	const int iServerMask = 0x7f;
 	int iServerId = g_iServerID;
+
+	// need constant seed across all environments for tests
+	if ( bTestMode )
+		return UidShortSetup ( iServerId, 100000 );
+
+	const int iServerMask = 0x7f;
 	uint64_t uStartedSec = 0;
 
-	if ( !bTestMode )
+	// server id as high part of counter
+	if ( !iServerId )
 	{
-		// server id as high part of counter
-		if ( g_bServerID )
+		CSphString sMAC = GetMacAddress();
+		sphLogDebug ( "MAC address %s for uuid-short server_id", sMAC.cstr() );
+		if ( sMAC.IsEmpty() )
 		{
-			iServerId = g_iServerID;
-		} else
-		{
-			CSphString sMAC = GetMacAddress();
-			sphLogDebug ( "MAC address %s for uuid-short server_id", sMAC.cstr() );
-			if ( sMAC.IsEmpty() )
-			{
-				DWORD uSeed = sphRand();
-				sMAC.SetSprintf ( "%u", uSeed );
-				sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
-			}
-			// fold MAC into 1 byte
-			iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length() );
-			iServerId &= iServerMask;
+			DWORD uSeed = sphRand();
+			sMAC.SetSprintf ( "%u", uSeed );
+			sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
 		}
-
-		// start time Unix timestamp as middle part of counter
-		uStartedSec = sphMicroTimer() / 1000000;
-		// base timestamp is 01 May of 2019
-		const uint64_t uBaseSec = 1556668800;
-		if ( uStartedSec>uBaseSec )
-			uStartedSec -= uBaseSec;
-	} else
-	{
-		// need constant seed across all environments for tests
-		uStartedSec = 100000;
-		iServerId = g_iServerID;
+		// fold MAC into 1 byte
+		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length() );
+		iServerId &= iServerMask;
 	}
+
+	// start time Unix timestamp as middle part of counter
+	uStartedSec = sphMicroTimer() / 1000000;
+	// base timestamp is 01 May of 2019
+	const uint64_t uBaseSec = 1556668800;
+	if ( uStartedSec>uBaseSec )
+		uStartedSec -= uBaseSec;
+
 	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
@@ -20727,6 +20732,9 @@ static void LogTimeZoneStartup ( const CSphString & sWarning )
 	g_bLogStdout = bLogStdout;
 }
 
+#ifndef LOCALDATADIR
+#define LOCALDATADIR "."
+#endif
 
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
@@ -21125,8 +21133,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// init before workpool, as last checks binlog
 	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );
-	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
-
+	sphRTInit ( hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR ),
+		hSearchd.GetBool ( "binlog_common", val_from_env ( "MANTICORE_BINLOG_COMMON", false ) ),
+		hConf("common") ? hConf["common"]("common") : nullptr );
 	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();
 
@@ -21275,7 +21284,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
-	Binlog::Configure ( hSearchd, bTestMode, uReplayFlags, IsConfigless() );
+	Binlog::Configure ( hSearchd, uReplayFlags );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitSkipCache ( g_iSkipCache );

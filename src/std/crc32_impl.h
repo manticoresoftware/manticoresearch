@@ -94,3 +94,9 @@ inline void CRC32_step ( DWORD& uCRC, BYTE uByte )
 {
 	uCRC = CRC32_next ( uCRC, uByte );
 }
+
+template<typename T>
+inline DWORD sphCRC32 ( VecTraits_T<T> dData, DWORD uPrevCRC )
+{
+	return sphCRC32 ( dData.Begin (), dData.GetLengthBytes (), uPrevCRC );
+}

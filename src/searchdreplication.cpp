@@ -293,10 +293,6 @@ static bool CheckClusterIndex ( const CSphString & sIndex, ReplicationClusterRef
 // send local indexes to remote nodes via API
 static bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID );
 
-static bool IsClusterCommand ( const RtAccum_t & tAcc );
-
-static bool IsUpdateCommand ( const RtAccum_t & tAcc );
-
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd );
 
 static bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, NODES_E eUpdate );
@@ -606,7 +602,7 @@ DEFINE_RENDER ( RPLRep_t )
 
 // repl version
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c& tMonitor, bool bUpdate, bool bSharedKeys )
+static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c&& tMonitor, bool bUpdate, bool bSharedKeys )
 {
 	TRACE_CONN ( "conn", "Replicate" );
 
@@ -651,7 +647,7 @@ static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BY
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c & tMonitor )
+static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c && tMonitor )
 {
 	bool bOk = tWriteSet.ToExecuteStart ( dKeys, tQueries );
 	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, tWriteSet.LastSeqno() );
@@ -970,20 +966,10 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	return pIndex->Commit ( nullptr, &tAcc );
 }
 
-// single point there all commands passed these might be replicated, even if no cluster
-static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
+// single point there all commands passed these might be replicated to cluster
+static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonitor ) EXCLUDES ( g_tClustersLock )
 {
-	TlsMsg::ResetErr();
 	TRACE_CONN ( "conn", "HandleCmdReplicate" );
-	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
-
-	// without cluster path
-	if ( !IsClusterCommand ( tAcc ) )
-	{
-		if ( IsUpdateCommand ( tAcc ) )
-			return tMonitor.UpdateTOI ( );
-		return tMonitor.Commit ( );
-	}
 
 	// FIXME!!! for now only PQ add and PQ delete multiple commands supported
 	const ReplicationCommand_t & tCmdCluster = *tAcc.m_dCmd[0];
@@ -1124,9 +1110,24 @@ static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSph
 	Threads::ScopedCoroMutex_t tClusterLock { pCluster->m_tReplicationMutex };
 	END_CONN ( "conn" );
 
-	if ( !bTOI )
-		return Replicate ( dBufKeys, dBufQueries, *pWriteSet, tMonitor, bUpdate, tAcc.IsReplace() );
-	return ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, tMonitor );
+	if ( bTOI )
+		return ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ) );
+	return Replicate ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), bUpdate, tAcc.IsReplace () );
+}
+
+
+// single point there all commands passed these might be replicated, even if no cluster
+static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
+{
+	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
+
+	// with cluster path
+	if ( tAcc.IsClusterCommand () )
+		return HandleRealCmdReplicate ( tAcc, std::move ( tMonitor ) );
+
+	if ( tAcc.IsUpdateCommand () )
+		return tMonitor.UpdateTOI ();
+	return tMonitor.Commit ();
 }
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc )
@@ -1950,7 +1951,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const VecTraits_T<CSp
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, StrVec2Str ( dIndexes, "," ), sCluster );
 	pAddCmd->m_bCheckIndex = false;
 	
-	bAdded = HandleCmdReplicateImpl ( tAcc, nullptr, nullptr, nullptr );
+	bAdded = HandleCmdReplicate ( tAcc );
 	sphLogDebugRpl ( "alter '%s' %s index '%s'", pCluster->m_sName.cstr(), ( bAdded ? "added" : "failed to add" ), StrVec2Str ( dIndexes, "," ).cstr() );
 	return bAdded;
 }
@@ -2311,17 +2312,4 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 		bOk = SaveConfigInt ( sError );
 
 	return bOk;
-}
-
-bool IsClusterCommand ( const RtAccum_t & tAcc )
-{
-	return ( tAcc.m_dCmd.GetLength() && !tAcc.m_dCmd[0]->m_sCluster.IsEmpty() );
-}
-
-bool IsUpdateCommand ( const RtAccum_t & tAcc )
-{
-	return ( tAcc.m_dCmd.GetLength() &&
-		( tAcc.m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_API
-				 || tAcc.m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_QL
-				 || tAcc.m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_JSON ) );
 }

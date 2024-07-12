@@ -1309,7 +1309,7 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 		SqlInsert_t & tNewValue = dInsertValues.Add();
 		if ( tItem.IsStr() || tItem.IsNull() )
 		{
-			tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+			tNewValue.m_iType = ( tItem.IsStr() ? SqlInsert_t::QUOTED_STRING : SqlInsert_t::TOK_NULL );
 			tNewValue.m_sVal = tItem.StrVal();
 		} else if ( tItem.IsDbl() )
 		{

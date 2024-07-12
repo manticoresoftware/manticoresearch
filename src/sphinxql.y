@@ -22,6 +22,7 @@
 %token	TOK_CONST_FLOAT 261 "float"
 %token	TOK_CONST_MVA 262	// not a real token, only placeholder
 %token	TOK_QUOTED_STRING 263 "string"
+%token	TOK_NULL 473 "null"
 %token	TOK_USERVAR "@uservar"
 %token	TOK_SYSVAR "@@sysvar"
 %token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
@@ -114,7 +115,6 @@
 %token	TOK_MULTI64
 %token	TOK_NAMES
 %token	TOK_NOT
-%token	TOK_NULL
 %token	TOK_OFFSET
 %token	TOK_ON
 %token	TOK_OPTION

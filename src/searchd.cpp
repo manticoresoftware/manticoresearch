@@ -10844,6 +10844,10 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 
 bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
 {
+	// null fits all values as for now it sets default value for any type
+	if ( tVal.m_iType==SqlInsert_t::TOK_NULL )
+		return true;
+
 	if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING
 		&& tVal.m_iType!=SqlInsert_t::CONST_INT
 		&& tVal.m_iType!=SqlInsert_t::CONST_FLOAT
@@ -10916,8 +10920,10 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 			m_tDoc.SetAttr ( tLoc, tAttr );
 	}
 	else
+	{
 		if ( !sError.IsEmpty() )
 			return false;
+	}
 
 	if ( !CheckStrings ( tCol, tVal, iCol, iRow ) )	return false;
 	if ( !CheckJson ( tCol, tVal ) )				return false;
@@ -10929,7 +10935,7 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 
 bool AttributeConverter_c::SetFieldValue ( int iField, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
 {
-	if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+	if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING && tVal.m_iType!=SqlInsert_t::TOK_NULL )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: string expected", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;

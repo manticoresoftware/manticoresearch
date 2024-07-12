@@ -193,6 +193,7 @@ struct SqlInsert_t
 		QUOTED_STRING = 263,
 		CONST_STRINGS = 269,
 		TABLE = 378,
+		TOK_NULL = 473, // NULL is already reserved using TOK_NULL
 	};
 
 	int						m_iType = 0;

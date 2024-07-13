@@ -7826,7 +7826,8 @@ public:
 
 	bool SetupAsFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, const SIContainer_c & tSI ) const override
 	{
-		if ( !CanSetupAsFilter ( tFilter, tFilter.m_bExclude ) )
+		bool bExclude = tFilter.m_bExclude;
+		if ( !CanSetupAsFilter ( tFilter, bExclude ) )
 			return false;
 
 		if ( !m_dValues.GetLength() )
@@ -7840,7 +7841,8 @@ public:
 
 		if ( !tSI.IsEnabled ( tSchemaWithName.second ) )
 			return false;
-		
+
+		tFilter.m_bExclude = bExclude;
 		if ( m_dStrings.IsEmpty() )
 		{
 			tFilter.m_dValues.Resize(0);

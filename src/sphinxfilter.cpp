@@ -1756,7 +1756,9 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 			for ( const auto & tItem : dItems )
 				if ( tItem.m_sAlias==i.m_sAttrName && tItem.m_eAggrFunc==SPH_AGGR_NONE )
 				{
-					sTransformed = UnifyJsonFieldName ( tItem.m_sExpr );
+					sTransformed = tItem.m_sExpr;
+					if ( sphJsonNameSplit ( sTransformed.cstr() ) )
+						sTransformed = UnifyJsonFieldName ( sTransformed );
 					break;
 				}
 

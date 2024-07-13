@@ -72,6 +72,11 @@ select id from t where j.addresses.a1 is not null; show meta;
 select id from t where j.addresses.a1 is null; show meta;
 select id from t where j.tags['2'] is not null; show meta;
 
+show create table t;
+create table t1 like t;
+desc t1;
+
+drop table t1;
 drop table t;
 
 </sphinxql></queries>

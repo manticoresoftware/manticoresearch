@@ -383,6 +383,40 @@ select * from join1 left join join2 on join1.j.a = int(join2.id);
 }
 </query>
 
+<query endpoint="json/search">
+{
+  "index": "join1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+	  "query":
+	  {
+        "query_string": "title2"
+      },
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
 <sphinxql>
 <!-- cleanup -->
 drop table join1;

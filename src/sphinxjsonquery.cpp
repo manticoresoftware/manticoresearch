@@ -270,6 +270,7 @@ public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
 	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
+	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
 private:
 	XQNode_t *		ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const;
@@ -1253,6 +1254,10 @@ static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString 
 		if ( !tJoinItem.FetchStrItem ( tQuery.m_sJoinIdx, "table", sError ) )
 			return false;
 
+		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
+		if ( tMatchQuery )
+			tQuery.m_sJoinQuery = tMatchQuery.AsString();
+		
 		JsonObj_c tOn = tJoinItem.GetArrayItem ( "on", sError );
 		if ( !tOn )
 			return false;

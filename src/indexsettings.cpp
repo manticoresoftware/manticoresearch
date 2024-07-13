@@ -2111,6 +2111,13 @@ static void AddEngineSettings ( StringBuilder_c & sRes, const CSphColumnInfo & t
 }
 
 
+static void AddSISettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
+{
+	if ( tAttr.IsIndexedSI() )
+		sRes << " secondary_index='1'";
+}
+
+
 static bool IsDDLToken ( const CSphString & sTok )
 {
 	static const CSphString dTokens[] = 
@@ -2187,6 +2194,7 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 	AddStorageSettings ( sRes, tAttr, *pIndex, false, iNumColumnar );
 	AddEngineSettings ( sRes, tAttr );
 	AddKNNSettings ( sRes, tAttr );
+	AddSISettings ( sRes, tAttr );
 
 	return sRes.cstr();
 }

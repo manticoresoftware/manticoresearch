@@ -1940,12 +1940,24 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendString ( q.m_sJoinIdx.cstr() );
 	tOut.SendString ( q.m_sJoinQuery.cstr() );
 	tOut.SendInt ( q.m_dOnFilters.GetLength() );
-	for ( const auto & i : q.m_dOnFilters)
+	for ( const auto & i : q.m_dOnFilters )
 	{
 		tOut.SendString ( i.m_sIdx1.cstr() );
 		tOut.SendString ( i.m_sAttr1.cstr() );
 		tOut.SendString ( i.m_sIdx2.cstr() );
 		tOut.SendString ( i.m_sAttr2.cstr() );
+		tOut.SendInt ( (int)i.m_eTypeCast1 );
+		tOut.SendInt ( (int)i.m_eTypeCast2 );
+	}
+
+	tOut.SendString ( q.m_sKNNAttr.cstr() );
+	if ( !q.m_sKNNAttr.IsEmpty() )
+	{
+		tOut.SendInt ( q.m_iKNNK );
+		tOut.SendInt ( q.m_iKnnEf );
+		tOut.SendInt ( q.m_dKNNVec.GetLength() );
+		for ( const auto & i : q.m_dKNNVec )
+			tOut.SendFloat(i);
 	}
 }
 
@@ -2812,6 +2824,25 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			i.m_sAttr1	= tReq.GetString();
 			i.m_sIdx2	= tReq.GetString();
 			i.m_sAttr2	= tReq.GetString();
+
+			if ( uMasterVer>=22 )
+			{
+				i.m_eTypeCast1 = (ESphAttr)tReq.GetInt();
+				i.m_eTypeCast2 = (ESphAttr)tReq.GetInt();
+			}
+		}
+	}
+
+	if ( uMasterVer>=22 )
+	{
+		tQuery.m_sKNNAttr = tReq.GetString();
+		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		{
+			tQuery.m_iKNNK = tReq.GetInt();
+			tQuery.m_iKnnEf = tReq.GetInt();
+			tQuery.m_dKNNVec.Resize ( tReq.GetInt() );
+			for ( auto & i : tQuery.m_dKNNVec )
+				i = tReq.GetFloat();
 		}
 	}
 

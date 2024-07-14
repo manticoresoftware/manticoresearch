@@ -5059,6 +5059,9 @@ public:
 };
 
 
+struct LocalSearchRef_t;
+class GlobalSorters_c;
+
 class SearchHandler_c
 {
 public:
@@ -5161,6 +5164,8 @@ private:
 	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const;
 	int								CalcMaxThreadsPerIndex ( int iConcurrency ) const;
 	void							CalcThreadsPerIndex ( int iConcurrency );
+
+	bool							SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes );
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -6018,7 +6023,62 @@ CSphVector<const CSphIndex*> SearchHandler_c::GetRlockedJoinedIndexes ( const CS
 }
 
 
-void SearchHandler_c::RunLocalSearches ()
+bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes )
+{
+	auto & dNFailuresSet = tCtx.m_dFailuresSet;
+	auto & dNAggrResults = tCtx.m_dAggrResults;
+	auto & dNResults = tCtx.m_dResults;
+	int iNumQueries = m_dNQueries.GetLength();
+	const LocalIndex_t & tLocal = m_dLocal[iLocal];
+	const CSphString & sLocal = tLocal.m_sName;
+	const char * szParent = tLocal.m_sParentIndex.cstr();
+	int iOrderTag = tLocal.m_iOrderTag;
+	ISphMatchSorter * pSorter = dSorters[iQuery];
+
+	AggrResult_t & tNRes = dNAggrResults[iQuery];
+	int iQTimeForStats = tNRes.m_iQueryTime;
+	auto pDocstore = m_bMultiQueue ? tMqRes.m_pDocstore : dNResults[iQuery].m_pDocstore;
+
+	// multi-queue only returned one result set meta, so we need to replicate it
+	if ( m_bMultiQueue )
+	{
+		// these times will be overridden below, but let's be clean
+		iQTimeForStats = tMqMeta.m_iQueryTime / iNumQueries;
+		tNRes.m_iQueryTime += iQTimeForStats;
+		tNRes.MergeWordStats ( tMqMeta );
+		tNRes.m_iMultiplier = iNumQueries;
+		tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iNumQueries;
+		tNRes.m_bTotalMatchesApprox |= tMqMeta.m_bTotalMatchesApprox;
+
+		iCpuTime /= iNumQueries;
+	}
+	else if ( tNRes.m_iMultiplier==-1 ) // multiplier -1 means 'error'
+	{
+		dNFailuresSet[iQuery].Submit ( sLocal, szParent, tNRes.m_sError.cstr() );
+		return false;
+	}
+
+	++tNRes.m_iSuccesses;
+	tNRes.m_iCpuTime = iCpuTime;
+	tNRes.m_iTotalMatches += pSorter->GetTotalCount();
+	tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
+
+	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_iSuccesses = 1;
+	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_uQueryTime = iQTimeForStats;
+	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_uFoundRows = pSorter->GetTotalCount();
+
+	// extract matches from sorter
+	if ( !tGlobalSorters.StoreSorter ( iQuery, iLocal, dSorters[iQuery], pDocstore, iOrderTag ) )
+		tNRes.AddResultset ( pSorter, pDocstore, iOrderTag, m_dNQueries[iQuery].m_iCutoff );
+
+	if ( !tNRes.m_sWarning.IsEmpty() )
+		dNFailuresSet[iQuery].Submit ( sLocal, szParent, tNRes.m_sWarning.cstr() );
+
+	return true;
+}
+
+
+void SearchHandler_c::RunLocalSearches()
 {
 	int64_t tmLocal = sphMicroTimer ();
 
@@ -6120,7 +6180,6 @@ void SearchHandler_c::RunLocalSearches ()
 			const LocalIndex_t & dLocal = m_dLocal[iLocal];
 			const CSphString& sLocal = dLocal.m_sName;
 			const char * szParent = dLocal.m_sParentIndex.cstr ();
-			int iOrderTag = dLocal.m_iOrderTag;
 			int iIndexWeight = dLocal.m_iWeight;
 			auto& dNFailuresSet = tCtx.m_dFailuresSet;
 			auto& dNAggrResults = tCtx.m_dAggrResults;
@@ -6199,42 +6258,8 @@ void SearchHandler_c::RunLocalSearches ()
 					if ( !pSorter )
 						continue;
 
-					// this one seems OK
-					AggrResult_t & tNRes = dNAggrResults[i];
-					int iQTimeForStats = tNRes.m_iQueryTime;
-					auto pDocstore = m_bMultiQueue ? tMqRes.m_pDocstore : dNResults[i].m_pDocstore;
-					// multi-queue only returned one result set meta, so we need to replicate it
-					if ( m_bMultiQueue )
-					{
-						// these times will be overridden below, but let's be clean
-						iQTimeForStats = tMqMeta.m_iQueryTime / iQueries;
-						tNRes.m_iQueryTime += iQTimeForStats;
-						iCpuTime /= iQueries;
-						tNRes.MergeWordStats ( tMqMeta );
-						tNRes.m_iMultiplier = iQueries;
-						tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iQueries;
-					} else if ( tNRes.m_iMultiplier==-1 ) // multiplier -1 means 'error'
-					{
-						dNFailuresSet[i].Submit ( sLocal, szParent, tNRes.m_sError.cstr() );
-						continue;
-					}
-					++tNRes.m_iSuccesses;
-					tNRes.m_iCpuTime = iCpuTime;
-					tNRes.m_iTotalMatches += pSorter->GetTotalCount();
-					tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
-
-					m_dQueryIndexStats[iLocal].m_dStats[i].m_iSuccesses = 1;
-					m_dQueryIndexStats[iLocal].m_dStats[i].m_uQueryTime = iQTimeForStats;
-					m_dQueryIndexStats[iLocal].m_dStats[i].m_uFoundRows = pSorter->GetTotalCount();
-
-					iTotalSuccesses.fetch_add ( 1, std::memory_order_relaxed );
-
-					// extract matches from sorter
-					if ( !tGlobalSorters.StoreSorter ( i, iLocal, dSorters[i], pDocstore, iOrderTag ) )
-						tNRes.AddResultset( pSorter, pDocstore, iOrderTag, m_dNQueries[i].m_iCutoff );
-
-					if ( !tNRes.m_sWarning.IsEmpty () )
-						dNFailuresSet[i].Submit ( sLocal, szParent, tNRes.m_sWarning.cstr () );
+					if ( SubmitSuccess ( dSorters, tGlobalSorters, tCtx, iCpuTime, i, iLocal, tMqMeta, tMqRes ) )
+						iTotalSuccesses.fetch_add ( 1, std::memory_order_relaxed );
 				}
 			} else
 				// failed, submit local (if not empty) or global error string

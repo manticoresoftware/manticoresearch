@@ -1,6 +1,6 @@
 # Binary logging
 
-Binary logging serves as a recovery mechanism for [real-time](../Creating_a_table/Local_tables/Real-time_table.md) table data, as well as attribute updates for [plain tables](../Creating_a_table/Local_tables/Plain_table.md#Plain-table) that would otherwise only be stored in RAM until a flush occurs. When binary logs are enabled, `searchd` records each transaction to the binlog file and utilizes it for recovery following an unclean shutdown. During a clean shutdown, RAM chunks are saved to disk, and all binlog files are subsequently deleted.
+Binary logging serves as a recovery mechanism for [real-time](../Creating_a_table/Local_tables/Real-time_table.md) table data. When binary logs are enabled, `searchd` records each transaction to the binlog file and utilizes it for recovery following an unclean shutdown. During a clean shutdown, RAM chunks are saved to disk, and all binlog files are subsequently deleted.
 
 ## Enabling and disabling binary logging
 

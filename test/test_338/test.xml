@@ -512,6 +512,19 @@ index test_vec
 }
 </query>
 
+<!-- case insert unsigned int into bigint -->
+<query endpoint="insert">
+{
+	"index":"test_rt",
+	"id":10010,
+	"doc":
+	{
+		"bint_col" : 9223372036854775807
+	}
+}
+</query>
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "bint_col" ] }, "query": { "equals": { "id": 10010 } }, "sort": ["id"] }</query>
+
 </httpqueries>
 
 </test>

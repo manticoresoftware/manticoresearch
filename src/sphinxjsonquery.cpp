@@ -1218,7 +1218,7 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 		{
 			tNewValue.m_iType = SqlInsert_t::CONST_FLOAT;
 			tNewValue.m_fVal = tItem.FltVal();
-		} else if ( tItem.IsInt() || tItem.IsBool() )
+		} else if ( tItem.IsInt() || tItem.IsBool() || tItem.IsUint() )
 		{
 			tNewValue.m_iType = SqlInsert_t::CONST_INT;
 			tNewValue.SetValueInt ( tItem.IntVal() );

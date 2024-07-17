@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Secondary indexes on json attributes</name>
+
+<requires>
+<force-rt/>
+<secondary/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+	secondary_indexes = 1
+	pseudo_sharding = 0
+}
+</config>
+
+<queries><sphinxql>
+
+create table t ( j json secondary_index='1' );
+desc t;
+insert into t values (1,'{ "price": 10.0, "factor": 1, "addresses": { "a1": { "id": "id_of_address_a1", "name": "name_of_address_a1" }, "a2": { "id":   "id_of_address_a1", "name": "name_of_address_a2" } }, "tags": { "1": "data_of_tag_1" }, "arr":["val0","val1"], "int_arr":[1,2,3] }');
+insert into t values (2,'{ "price": 20.0, "factor": 2, "addresses": { "a3": { "id": "id_of_address_a3", "name": "name_of_address_a3" }, "a4": { "id":   "id_of_address_a4", "name": "name_of_address_a4" } }, "tags": { "2": "data_of_tag_2" }, "arr":["val1","val2"], "int_arr":[4,5,6] }');
+insert into t values (3,'{ "price": 30.0, "factor": 3, "addresses": { "a5": { "id": "id_of_address_a5", "name": "name_of_address_a5" }, "a6": { "id":   "id_of_address_a6", "name": "name_of_address_a6" } }, "tags": { "3": "data_of_tag_3" }, "arr":["val2","val3"], "int_arr":[7,8,9] }');
+flush ramchunk t;
+select * from t;
+
+select count(*) from t where j['factor']=1; show meta;
+select count(*) from t where j['factor']!=1; show meta;
+select count(*) from t where j.nonexistent=1; show meta;
+select id, j['factor'] a from t where a = 2; show meta;
+select id, in(j['factor'],2) a from t where a = 1; show meta;
+select id, in(j['factor'],2,3) a from t where a = 1; show meta;
+select id from t where j['addresses']['a5']['name'] in ('name_of_address_a5'); show meta;
+select id from t where j['addresses']['a1']['name'] in ('name_of_address_a5'); show meta;
+select id, in(j['addresses']['a5']['name'],'name_of_address_a5') a from t where a = 1; show meta;
+select id, any(x='val0' for x in j['arr']) a from t where a>0; show meta;
+select id, any(x='val0' or x='val3' for x in j['arr']) a from t where a>0; show meta;
+select id, any(x=1 or x=9 for x in j['int_arr']) a from t where a>0; show meta;
+select id, any(x=1 or x=9 for x in j['int_arr']) a from t where a>0 /*+ No_SecondaryIndex(j['int_arr']) */; show meta;
+select id, any(x>=4 and x&lt;=6 for x in j['int_arr']) a from t where a>0; show meta;
+select id, any(x>=1 and x&lt;=9 for x in j['int_arr']) a from t where a>0; show meta;
+select id, any(x&lt;=1 or x&gt;=9 for x in j['int_arr']) a from t where a>0; show meta;
+select id, any(x>=1 and x&lt;=9 for x in j['int_arr']) a from t where a>0 /*+ No_SecondaryIndex(j['int_arr']) */; show meta;
+
+select id,j.addresses.a1.id from t order by id asc;
+select count(*) from t where j.addresses.a1.id is null; show meta;
+select count(*) from t where j.addresses.a1.id is not null; show meta;
+select id from t where j.addresses.a1.id is null; show meta;
+select id from t where j.addresses.a1.id is not null; show meta;
+select id from t where j.price is null; show meta;
+select id from t where j.price is not null; show meta;
+select id from t where j.factor is null; show meta;
+select id from t where j.factor is not null; show meta;
+
+select id, in(j.arr, 'val0') a from t where a>0; show meta;
+select id, in(j.arr, 'val0') a from t where a&lt;1; show meta;
+select id, in(j.arr, 'val0') a from t where a=0; show meta;
+select id, in(j.arr, 'val0') a from t where a=1; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a>0; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a&lt;1; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a=0; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a=1; show meta;
+
+select id from t where j.addresses is not null; show meta;
+select id from t where j.addresses.a1 is not null; show meta;
+select id from t where j.addresses.a1 is null; show meta;
+select id from t where j.tags['2'] is not null; show meta;
+
+show create table t;
+create table t1 like t;
+desc t1;
+
+drop table t1;
+drop table t;
+
+</sphinxql></queries>
+
+</test>

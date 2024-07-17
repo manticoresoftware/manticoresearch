@@ -27,7 +27,6 @@ index test
 {
 	source			= test
 	path = <data_path/>/test
-	docinfo			= extern
 	dict = keywords
     charset_table = a..z
 }
@@ -105,6 +104,18 @@ select * from META:all where (s > 'b' and s &lt; 'e') and s != 'c';
 select * from META:all where (s > 'b' and s &lt; 'e') or s > 'eeee';
 select * from META:all where (s > 'b' and s &lt; 'e') and id &lt; 5;
 select * from META:all where (s > 'b' and s &lt; 'e') or id > 17;
-</sphinxql></queries>
+
+<!-- cases for string comparison simple and complex expressions -->
+select *, (s = 'w') as cnd1, if (cnd1, 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s = 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s != 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, (s &lt; 'w') as cnd1, if (cnd1, 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &lt; 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, (s &gt; 'w') as cnd1, if (cnd1, 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &gt; 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &lt;= 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &gt;= 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+</sphinxql>
+</queries>
 
 </test>

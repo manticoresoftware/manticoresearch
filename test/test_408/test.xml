@@ -80,6 +80,26 @@ index hit_1
 	hitless_words 	= <this_test/>/words3.txt
 }
 
+index some2
+{
+    type = rt    
+	rt_field = t1
+    rt_field = t2
+	path = <data_path/>/some2
+
+	hitless_words = <this_test/>/words1.txt
+}
+
+index all2
+{
+    type = rt    
+	rt_field = t1
+    rt_field = t2
+	path = <data_path/>/all2
+
+	hitless_words = all
+}
+
 </config>
 
 <queries><sphinxql>
@@ -248,6 +268,17 @@ insert into hit_1(id, title) values (1, 'protest, to teach, to feed, and'), (2, 
 	flush ramchunk all;
 	SELECT * FROM all WHERE MATCH(' tin woodman '); SHOW META;
 	SELECT * FROM all WHERE MATCH(' lowered '); SHOW META;
+
+    <!-- hitless word saved wrong into disk chunk producing false matches -->
+    insert into some2(id, t1, t2) values ( 101, 'the box', 'and the fox' );
+    insert into all2(id, t1, t2) values ( 101, 'the box', 'and the fox' );
+    SELECT * FROM some2 WHERE MATCH('@t1 and');
+    SELECT * FROM all2 WHERE MATCH('@t1 and');
+    flush ramchunk some2;
+    flush ramchunk all2;
+    SELECT * FROM some2 WHERE MATCH('@t1 and');
+    SELECT * FROM all2 WHERE MATCH('@t1 and');
+    
 </sphinxql></queries>
 
 </test>

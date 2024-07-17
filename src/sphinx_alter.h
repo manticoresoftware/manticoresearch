@@ -43,6 +43,7 @@ struct AttrAddRemoveCtx_t
 	int				m_iBits;
 	DWORD			m_uFlags;
 	AttrEngine_e	m_eEngine;
+	knn::IndexSettings_t m_tKNN;
 };
 
 // common add/remove attribute/field code for both RT and plain indexes

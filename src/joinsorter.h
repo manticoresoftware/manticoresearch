@@ -19,4 +19,4 @@ bool				NeedToMoveMixedJoinFilters ( const CSphQuery & tQuery, const ISphSchema 
 std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tSettings, const CSphAttrLocator & tNullMapLocator );
 
 ISphMatchSorter *	CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, bool bJoinedGroupSort, CSphString & sError );
-bool				CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, bool bJoinedGroupSort, CSphString & sError );
+bool				CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, CSphString & sError );

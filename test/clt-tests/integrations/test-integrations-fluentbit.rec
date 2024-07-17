@@ -1,0 +1,60 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mkdir -p /usr/share/fluentbit/fluentbit && cd /usr/share/fluentbit
+––– output –––
+––– input –––
+echo -e "[SERVICE]\n    flush        1\n    daemon       On\n    log_level    info\n\n[INPUT]\n    name tail\n    path /var/log/dpkg.log\n    inotify_watcher false\n    read_from_head true\n\n[OUTPUT]\n    name es\n    match *\n    host 127.0.0.1\n    port 9308\n    index dpkg_log" > /usr/share/fluentbit/fluentbit/fluentbit.conf
+––– output –––
+––– input –––
+bash -c "$(curl -s https://raw.githubusercontent.com/fluent/fluent-bit/master/install.sh)" > /dev/null 2>&1;echo $?
+––– output –––
+0
+––– input –––
+ln -s /opt/fluent-bit/bin/fluent-bit /usr/bin/fluent-bit
+––– output –––
+––– input –––
+fluent-bit --version | grep 'Fluent Bit'
+––– output –––
+Fluent Bit v#!/[0-9]{1}\.[0-9]{1}\.[0-9]{1}/!#
+––– input –––
+––– input –––
+echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
+––– output –––
+0
+––– input –––
+cat /var/log/dpkg.log | wc -l
+––– output –––
+5
+––– block: ../base/start-searchd –––
+––– input –––
+fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit.conf > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+sleep 3; curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"text","Properties":"indexed stored"}]
+––– input –––
+mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT log FROM dpkg_log\G;" | grep -v '^*'
+––– output –––
+dpkg_log
+rt
+5
+2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
+2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>
+2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>

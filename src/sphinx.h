@@ -475,6 +475,8 @@ struct OnFilter_t
 	CSphString	m_sAttr1;
 	CSphString	m_sIdx2;
 	CSphString	m_sAttr2;
+	ESphAttr	m_eTypeCast1 = SPH_ATTR_NONE;
+	ESphAttr	m_eTypeCast2 = SPH_ATTR_NONE;
 };
 
 enum class JoinType_e
@@ -776,6 +778,8 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 	}
 };
 
+void CommitUpdateAttributes ( int64_t * pTID, const char* szName, const CSphAttrUpdate & tUpd );
+
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
 /////////////////////////////////////////////////////////////////////////////
@@ -825,6 +829,7 @@ public:
 		PHASE_LOOKUP,				///< docid lookup construction
 		PHASE_MERGE,				///< index merging
 		PHASE_SI_BUILD,				///< secondary index build
+		PHASE_JSONSI_BUILD,			///< json secondary index build
 		PHASE_UNKNOWN,
 	};
 
@@ -1121,11 +1126,7 @@ struct CSphSourceStats;
 class DebugCheckError_i;
 struct AttrAddRemoveCtx_t;
 class Docstore_i;
-
-namespace SI
-{
-	class Index_i;
-}
+class SIContainer_c;
 
 enum ESphExt : BYTE;
 
@@ -1164,8 +1165,8 @@ public:
 
 	virtual std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const { return { 0, 0 }; }
 	virtual bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, bool bHasSI, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
-	virtual int64_t				GetCountDistinct ( const CSphString & sAttr ) const { return -1; }	// returns values if index has some meta on its attributes
-	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const { return -1; }	// returns values if index has some meta on its attributes
+	virtual int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
+	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCount() const { return -1; }
 
 public:
@@ -1230,7 +1231,9 @@ public:
 	/// update accumulating state
 	virtual int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& /*fnWatcher*/ ) = 0;
 
-	virtual Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e eOp, CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCheck ) = 0;
+	virtual Binlog::CheckTnxResult_t ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn&& fnCheck ) = 0;
+
+	Binlog::CheckTnxResult_t ReplayUpdate ( CSphReader &, CSphString &, Binlog::CheckTxn_fn && );
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes ( CSphString & sError ) const = 0;
@@ -1283,7 +1286,7 @@ public:
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
-	virtual SI::Index_i *		Debug_GetSI() const { return nullptr; }
+	virtual const SIContainer_c *	Debug_GetSI() const { return nullptr; }
 
 	virtual Docstore_i *			GetDocstore() const { return nullptr; }
 	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }
@@ -1362,7 +1365,7 @@ public:
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
 	int					CheckThenUpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString &, BlockerFn&& ) override { return -1; }
-	Binlog::CheckTnxResult_t ReplayTxn ( Binlog::Blop_e, CSphReader &, CSphString &, Binlog::CheckTxn_fn&& ) override { return {}; }
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader &, CSphString &, BYTE, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const AttrAddRemoveCtx_t & tCtx, CSphString & sError ) override { return true; }
@@ -1411,9 +1414,9 @@ struct SphQueueSettings_t
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
 	bool						m_bGrouped = false;	// are we going to push already grouped matches to it?
-	std::function<int64_t (const CSphString &)>			m_fnGetCountDistinct;
-	std::function<int64_t (const CSphFilterSettings &)>	m_fnGetCountFilter;
-	std::function<int64_t ()>							m_fnGetCount;
+	std::function<int64_t (const CSphString &, CSphString &)>			m_fnGetCountDistinct;
+	std::function<int64_t (const CSphFilterSettings &, CSphString &)>	m_fnGetCountFilter;
+	std::function<int64_t ()>	m_fnGetCount;
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
 	StrVec_t 					m_dCreateSchema;

@@ -24,6 +24,7 @@ REPLACE INTO table
     WHERE id = <id>
 ```
 Note, you can filter only by id in this mode.
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
 
@@ -81,7 +82,7 @@ Query OK, 1 row affected (0.00 sec)
 
 <!-- intro -->
 ##### REPLACE ... SET:
-<!-- request REPLACE ... SET -->
+<!-- request REPLACE SET -->
 
 ```sql
 REPLACE INTO products SET description='HUAWEI Matebook 15', price=10 WHERE id = 55;

@@ -11,6 +11,7 @@
 //
 
 #include "indexformat.h"
+
 #if WITH_RE2
 #include <string>
 #include <re2/re2.h>
@@ -785,4 +786,67 @@ void ExpandedMergeThdDocs ( int iDocs )
 void ExpandedMergeThdHits ( int iHits )
 {
 	g_iExpandMergeHits = iHits;
+}
+
+////////////////////////////////////////////////////////////////////
+
+void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict )
+{
+	auto _ = sJson.ObjectW();
+
+	// human-readable sugar
+	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+
+	// version
+	sJson.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+
+	// index stats - json (put here to be similar with .meta)
+	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );
+	sJson.NamedValNonDefault ( "total_bytes", tBuildHeader.m_iTotalBytes );
+
+	// schema
+	sJson.NamedVal ( "schema", *tWriteHeader.m_pSchema );
+
+	// index settings
+	sJson.NamedVal ( "index_settings", *tWriteHeader.m_pSettings );
+
+	// tokenizer info
+	assert ( tWriteHeader.m_pTokenizer );
+	sJson.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sJson, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+
+	// dictionary info
+	assert ( tWriteHeader.m_pDict );
+	sJson.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sJson, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
+
+	// wordlist checkpoints - json
+	sJson.NamedValNonDefault ( "dict_checkpoints_offset", tBuildHeader.m_iDictCheckpointsOffset );
+	sJson.NamedValNonDefault ( "dict_checkpoints", tBuildHeader.m_iDictCheckpoints );
+	sJson.NamedValNonDefault ( "infix_codepoint_bytes", tBuildHeader.m_iInfixCodepointBytes );
+	sJson.NamedValNonDefault ( "infix_blocks_offset", tBuildHeader.m_iInfixBlocksOffset );
+	sJson.NamedValNonDefault ( "infix_block_words_size", tBuildHeader.m_iInfixBlocksWordsSize );
+
+	sJson.NamedValNonDefault ( "docinfo", tBuildHeader.m_iDocinfo );
+	sJson.NamedValNonDefault ( "docinfo_index", tBuildHeader.m_iDocinfoIndex );
+	sJson.NamedValNonDefault ( "min_max_index", tBuildHeader.m_iMinMaxIndex );
+
+	// field filter info
+	CSphFieldFilterSettings tFieldFilterSettings;
+	if ( tWriteHeader.m_pFieldFilter )
+	{
+		tWriteHeader.m_pFieldFilter->GetSettings ( tFieldFilterSettings );
+		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	}
+
+	// average field lengths
+	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
+	{
+		sJson.Named ( "index_fields_lens" );
+		auto _ = sJson.Array();
+		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
+		{
+			sJson << tWriteHeader.m_pFieldLens[i];
+		}
+	}
 }

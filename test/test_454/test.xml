@@ -34,6 +34,17 @@ index test_bool
     rt_attr_uint = icol
     rt_attr_bool = bcol
 }
+
+index test1_all
+{
+    type = rt
+    path = <data_path/>/test1_all
+    rt_field = title
+    rt_attr_uint = int_col
+    rt_attr_string = s_col
+    rt_attr_multi = mva_col
+}
+
 </config>
 
 <httpqueries>
@@ -145,6 +156,25 @@ index test_bool
 </query>
 
 <query endpoint="search">{ "index": "test_bool", "query": { "match_all": {} }, "sort": [ { "id":"asc"} ] }</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "201" } }
+{ "title" : null }
+
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1_all", "_id" : "101" } }
+{ "s_col" : null }
+{ "index" : { "_index" : "test1_all", "_id" : "102" } }
+{ "int_col" : null }
+{ "index" : { "_index" : "test1_all", "_id" : "103" } }
+{ "mva_col" : null }
+{ "index" : { "_index" : "test1_all", "_id" : "105" } }
+{ "s_col" : "test", "mva_col" : [10, 20], "int_col" : 20 }
+
+</bulk>
+<query endpoint="search">{ "index": "test1_all", "query": { "match_all": {} } } }</query>
 
 </httpqueries>
 

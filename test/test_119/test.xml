@@ -151,7 +151,6 @@ INSERT INTO `test_table` VALUES
 	select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 as a from test where a>0;
 	select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 and ival&lt;>14 as a from test where a>0;
 	select *, ival&lt;>11 and ival&lt;>12 and ival&lt;>13 and ival&lt;>14 and id>=4 as a from test where a>0;
-
 </sphinxql>
 </queries>
 

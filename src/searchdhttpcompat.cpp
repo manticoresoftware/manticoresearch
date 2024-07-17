@@ -38,25 +38,14 @@ static RwLock_t g_tLockAlias;
 static RwLock_t g_tLockKbnTable;
 static nljson g_tKbnTable = "{}"_json;
 
-enum class CompatMode_e
-{
-	ON = 0,
-	OFF,
-	DASHBOARDS,
-
-	COUNT,
-	DEFAULT = ON
-};
-
-static CompatMode_e g_eMode = CompatMode_e::DEFAULT;
-static std::array<const char *, (int)CompatMode_e::COUNT> g_dModeNames = { "on", "off", "dashboards" };
+static bool g_bEnabled = true;
 
 static CSphString g_sKbnTableName = ".kibana";
 static CSphString g_sKbnTableAlias = ".kibana_1";
 static std::vector<CSphString> g_dKbnTablesNames { ".kibana_task_manager", ".apm-agent-configuration", g_sKbnTableName };
 
-static nljson::json_pointer g_tConfigTables ( "/es_compat/tables" );
-static nljson::json_pointer g_tMode ( "/es_compat/mode" );
+static nljson::json_pointer g_tConfigTables ( "/dashboards/tables" );
+static nljson::json_pointer g_tMode ( "/dashboards/mode" );
 
 static bool LOG_LEVEL_COMPAT = val_from_env ( "MANTICORE_LOG_ES_COMPAT", false ); // verbose logging compat events, ruled by this env variable
 #define LOG_COMPONENT_COMPATINFO ""
@@ -434,7 +423,7 @@ static void CatColumnsSetup();
 
 void SetupCompatHttp()
 {
-	if ( g_eMode!=CompatMode_e::DASHBOARDS )
+	if ( !IsLogManagementEnabled() )
 		return;
 
 	Threads::CallCoroutine ( [] { 
@@ -443,22 +432,6 @@ void SetupCompatHttp()
 	CreateScripts();
 	CatColumnsSetup();
 	} );
-}
-
-static CompatMode_e GetMode ( const std::string & sName, CSphString * pError=nullptr )
-{
-	auto tIt = std::find ( g_dModeNames.begin(), g_dModeNames.end(), sName );
-	if ( tIt!=g_dModeNames.end() )
-		return (CompatMode_e)( tIt - g_dModeNames.begin() );
-
-	if ( pError )
-		pError->SetSprintf ( "unknown mode %s (must be one of: on, off, dashboards)", sName.c_str() );
-	return CompatMode_e::DEFAULT;
-}
-
-static const char * GetModeName ( CompatMode_e eMode )
-{
-	return g_dModeNames[(int)eMode];
 }
 
 void LoadCompatHttp ( const char * sData )
@@ -474,26 +447,30 @@ void LoadCompatHttp ( const char * sData )
 	}
 
 	if ( tRaw.contains ( g_tMode ) )
-		g_eMode = GetMode ( tRaw[g_tMode].get<std::string>() );
+		g_bEnabled = tRaw[g_tMode].get<bool>();
 
-	COMPATINFO << "load compat http complete, loaded " << iLoadedItems << " items, mode " << GetModeName ( g_eMode );
+	COMPATINFO << "load compat http complete, loaded " << iLoadedItems << " items, mode " << g_bEnabled;
 }
 
-void SaveCompatHttp ( JsonObj_c & tRoot )
+void SaveCompatHttp ( JsonEscapedBuilder & tOut )
 {
-	if ( g_eMode!=CompatMode_e::DEFAULT )
+	if ( IsLogManagementEnabled() )
 	{
 		JsonObj_c tRaw ( false );
 		{
 			ScRL_t tLockTbl ( g_tLockKbnTable );
-			if ( g_tKbnTable.size() )
+			if ( !g_tKbnTable.size() )
+				return;
+
 			{
 				JsonObj_c tTable ( g_tKbnTable.dump().c_str() );
 				tRaw.AddItem ( g_tConfigTables.back().c_str(), tTable );
 			}
-			tRaw.AddStr ( g_tMode.back().c_str(), GetModeName ( g_eMode ) );
+			tRaw.AddBool ( g_tMode.back().c_str(), IsLogManagementEnabled() );
 		}
-		tRoot.AddItem ( g_tConfigTables.parent_pointer().back().c_str(), tRaw );
+
+		tOut.Named ( g_tConfigTables.parent_pointer().back().c_str() );
+		tOut.Appendf ( "%s", tRaw.AsString().cstr() );
 	}
 }
 
@@ -3621,14 +3598,10 @@ static void DropKbnTables()
 
 bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 {
-	CompatMode_e eMode = GetMode ( sVal.scstr(), &sError );
-	if ( !sError.IsEmpty() )
-		return false;
-
-	g_eMode = eMode;
+	g_bEnabled = ( sVal=="on" || sVal=="1" || sVal=="dashboards" );
 	DropKbnTables();
 
-	if ( g_eMode==CompatMode_e::DASHBOARDS )
+	if ( IsLogManagementEnabled() )
 	{
 		nljson tSys = GetSystemTable();
 		g_tKbnTable.update ( tSys );
@@ -3641,7 +3614,7 @@ bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 
 bool IsLogManagementEnabled ()
 {
-	return ( g_eMode!=CompatMode_e::OFF );
+	return g_bEnabled;
 }
 
 HttpCompatBaseHandler_c::HttpCompatBaseHandler_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )

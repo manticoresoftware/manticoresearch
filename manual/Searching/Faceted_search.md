@@ -1552,18 +1552,18 @@ POST /search -d '
       "buckets": [
         {
           "key": "*-99",
-          "to": "99",
+          "to": 99,
           "doc_count": 5
         },
         {
           "key": "99-550",
-          "from": "99",
-          "to": "550",
+          "from": 99,
+          "to": 550,
           "doc_count": 11
         },
         {
           "key": "550-*",
-          "from": "550",
+          "from": 550,
           "doc_count": 4
         }
       ]
@@ -1612,12 +1612,12 @@ POST /search -d '
     "price_range": {
       "buckets": {
         "100-399": {
-          "from": "100",
-          "to": "399",
+          "from": 100,
+          "to": 399,
           "doc_count": 6
         },
         "399-*": {
-          "from": "399",
+          "from": 399,
           "doc_count": 9
         }
       }

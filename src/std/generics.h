@@ -77,6 +77,8 @@ public:
 	ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
 };
 
+#define NONCOPYABLE( a ) a(const a&) = delete; a& operator= (const a&) = delete
+
 /// prevent move
 class ISphNonmovable
 {
@@ -85,6 +87,8 @@ public:
 	ISphNonmovable ( ISphNonmovable&& ) noexcept = delete;
 	ISphNonmovable& operator= ( ISphNonmovable&& ) noexcept = delete;
 };
+
+#define NONMOVABLE( a ) a(a&&) = delete; a& operator= (a&&) = delete
 
 /// prevent copy and move
 class ISphNonCopyMovable
@@ -95,6 +99,8 @@ public:
 	ISphNonCopyMovable ( ISphNonCopyMovable&& ) = delete;
 	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
 };
+
+#define NONCOPYMOVABLE( a ) a(const a&) = delete; a (a&&) = delete; a& operator= (const a&) = delete; a& operator= (a&&) = delete
 
 // implement moving ctr and moving= using swap-and-release
 #define MOVE_BYSWAP( class_c )								\

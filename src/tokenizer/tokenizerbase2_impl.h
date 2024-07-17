@@ -90,7 +90,7 @@ protected:
 	BYTE* GetBlendedVariant();
 	bool CheckException ( const BYTE* pStart, const BYTE* pCur, bool bQueryMode );
 
-	template<bool IS_QUERY, bool IS_BLEND>
+	template<bool IS_QUERY, bool IS_BLEND, bool IS_ESCAPE>
 	BYTE* DoGetToken()
 	{
 		// return pending blending variants
@@ -117,7 +117,7 @@ protected:
 			int iCode = GetLowercaser().ToLower ( iCodePoint );
 
 			// handle escaping
-			const bool bWasEscaped = ( IS_QUERY && iCodePoint == '\\' ); // whether current codepoint was escaped
+			const bool bWasEscaped = ( ( IS_QUERY || IS_ESCAPE ) && iCodePoint == '\\' ); // whether current codepoint was escaped
 			if ( bWasEscaped )
 			{
 				iCodePoint = GetCodepoint();

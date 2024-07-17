@@ -1,0 +1,6 @@
+a\> > abc
+\>b > bcd
+c\=\> => cde
+\=\>d => def
+\=\>a \> f \> => foo
+\~g => bar

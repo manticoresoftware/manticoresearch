@@ -298,8 +298,9 @@ private:
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
 	bool	AddJoinAttrs();
+	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
-	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 );
+	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast );
 	bool	AddNullBitmask();
 	bool	AddColumnarJoinOnFilter ( const CSphString & sAttr );
 	bool	CheckHavingConstraints() const;
@@ -621,6 +622,9 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return Err ( "group-by attribute '%s' not found", m_tQuery.m_sGroupBy.cstr() );
 
 	const CSphColumnInfo & tGroupByAttr = tSchema.GetAttr(iGroupBy);
+	if ( m_tSettings.m_bComputeItems && tGroupByAttr.m_pExpr && tGroupByAttr.m_pExpr->UsesDocstore() )
+		return Err ( "unable to group by stored field '%s'", m_tQuery.m_sGroupBy.cstr() );
+
 	ESphAttr eType = tGroupByAttr.m_eAttrType;
 	CSphAttrLocator tLoc = tGroupByAttr.m_tLocator;
 	m_bJoinedGroupSort |= IsJoinAttr ( tGroupByAttr.m_sName );
@@ -692,8 +696,18 @@ void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 		if ( dAttrs[i]>=0 )
 		{
 			const auto & tAttr = m_pSorterSchema->GetAttr ( dAttrs[i] );
-			m_bJoinedGroupSort |= IsJoinAttr ( tAttr.m_sName );
+			m_bJoinedGroupSort |= tAttr.IsJoined();
 			m_hExtra.Add ( tAttr.m_sName );
+
+			if ( m_tSettings.m_bComputeItems )
+			{
+				// check if dependent columns are joined
+				IntVec_t dCols;
+				dCols.Add ( dAttrs[i] );
+				FetchDependencyChains(dCols);
+				for ( auto iCol : dCols )
+					m_bJoinedGroupSort |= m_pSorterSchema->GetAttr(iCol).IsJoined();
+			}
 		}
 }
 
@@ -738,9 +752,17 @@ void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 
 		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
 
+		int iOldLen = dDependentCols.GetLength();
+
 		// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
 		if ( tCol.m_pExpr )
 			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+
+		// some expressions depend on the column they are attached to (json fast key)
+		// so filter out duplicates to avoid circular dependencies
+		for ( int iNewAttr = iOldLen; iNewAttr < dDependentCols.GetLength(); iNewAttr++ )
+			if ( dDependentCols[iNewAttr]==dDependentCols[i] )
+				dDependentCols.Remove(iNewAttr);
 	}
 
 	dDependentCols.Uniq();
@@ -1506,7 +1528,7 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 }
 
 
-bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 )
+bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast )
 {
 	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr1.cstr() );
 	if ( pAttr )
@@ -1538,15 +1560,25 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 	// convert JSON fields to join attr type
 	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 	{
-		auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
-		if ( !pJoinAttr )
+		// try to determine type if it was not explicitly specified
+		if ( eTypeCast==SPH_ATTR_NONE )
 		{
-			m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
-			return false;
+			auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
+			if ( !pJoinAttr )
+			{
+				if ( sphJsonNameSplit ( sAttr2.cstr() ) )
+					m_sError.SetSprintf ( "use implicit type conversion on join-on attribute '%s'", sAttr2.cstr() );
+				else
+					m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
+
+				return false;
+			}
+
+			eTypeCast = pJoinAttr->m_eAttrType;
 		}
 
 		CSphString sConverted;
-		switch ( pJoinAttr->m_eAttrType )
+		switch ( eTypeCast )
 		{
 		case SPH_ATTR_STRING:
 			sConverted.SetSprintf ( "TO_STRING(%s)", sAttr1.cstr() );
@@ -1644,6 +1676,21 @@ static ESphAttr FilterType2AttrType ( ESphFilter eFilter )
 }
 
 
+bool QueueCreator_c::CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast )
+{
+	if ( eTypeCast==SPH_ATTR_NONE )
+		return true;
+
+	if ( !sphJsonNameSplit ( sAttr.cstr() ) )
+	{
+		m_sError.SetSprintf ( "Explicit type conversion used on non-json attribute '%s.%s'", sIdx.cstr(), sAttr.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
 bool QueueCreator_c::AddJoinFilterAttrs()
 {
 	if ( !m_tSettings.m_pJoinArgs )
@@ -1653,16 +1700,21 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 	const CSphString & sRightIndex = m_tSettings.m_pJoinArgs->m_sIndex2;
 	for ( const auto & i : m_tQuery.m_dOnFilters )
 	{
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx1, i.m_sAttr1, i.m_eTypeCast1 ) ) return false;
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx2, i.m_sAttr2, i.m_eTypeCast2 ) ) return false;
+
+		ESphAttr eTypeCast = i.m_eTypeCast1!=SPH_ATTR_NONE ? i.m_eTypeCast1 : i.m_eTypeCast2;
+
 		if ( i.m_sIdx1==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )						return false;
 		}
 
 		if ( i.m_sIdx2==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )						return false;
 		}
 	}
 
@@ -1891,11 +1943,12 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
-		if ( dExtraExprs[i].m_tKey.m_sKey.IsEmpty() )
+		const CSphString & sKey = dExtraExprs[i].m_tKey.m_sKey;
+		if ( sKey.IsEmpty() )
 			continue;
 
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), dExtraExprs[i].m_tKey.m_sKey.cstr() );
+		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), sKey.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 )
@@ -1910,6 +1963,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_STRINGPTR );
 			SetupRemapColJson ( tRemapCol, tState, dExtraExprs, i );
 			iRemap = tSorterSchema.GetAttrsCount();
+			ModifyExprForJoin ( tRemapCol, sKey );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 		}
 
@@ -2220,7 +2274,8 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 	if ( iGroupbyAttr<0 )
 		return iMaxMatches;
 
-	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
+	CSphString sModifiedAttr;
+	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName, sModifiedAttr ) : -1;
 	if ( iCountDistinct > m_tQuery.m_iMaxMatchThresh )
 		return iMaxMatches;
 
@@ -2231,21 +2286,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
@@ -2256,11 +2311,11 @@ PrecalculatedSorterResults_t QueueCreator_c::FetchPrecalculatedValues() const
 	{
 		int iCountDistinctAttr = GetGroupDistinctAttrIndex();
 		if ( iCountDistinctAttr>0 && m_tSettings.m_bEnableFastDistinct )
-			tPrecalc.m_iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName ) : -1;
+			tPrecalc.m_iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName, tPrecalc.m_sAttr ) : -1;
 	}
 
 	if ( CanCalcFastCountFilter() )
-		tPrecalc.m_iCountFilter = m_tSettings.m_fnGetCountFilter ? m_tSettings.m_fnGetCountFilter ( m_tQuery.m_dFilters[0] ) : -1;
+		tPrecalc.m_iCountFilter = m_tSettings.m_fnGetCountFilter ? m_tSettings.m_fnGetCountFilter ( m_tQuery.m_dFilters[0], tPrecalc.m_sAttr ) : -1;
 
 	if ( CanCalcFastCount() )
 		tPrecalc.m_iCount = m_tSettings.m_fnGetCount ? m_tSettings.m_fnGetCount() : -1;

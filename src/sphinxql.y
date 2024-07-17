@@ -22,6 +22,7 @@
 %token	TOK_CONST_FLOAT 261 "float"
 %token	TOK_CONST_MVA 262	// not a real token, only placeholder
 %token	TOK_QUOTED_STRING 263 "string"
+%token	TOK_NULL 473 "null"
 %token	TOK_USERVAR "@uservar"
 %token	TOK_SYSVAR "@@sysvar"
 %token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
@@ -114,7 +115,6 @@
 %token	TOK_MULTI64
 %token	TOK_NAMES
 %token	TOK_NOT
-%token	TOK_NULL
 %token	TOK_OFFSET
 %token	TOK_ON
 %token	TOK_OPTION
@@ -689,8 +689,20 @@ on_clause_attr:
 	| on_clause_attr TOK_SUBKEY			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	;
 
+on_clause_type_cast:
+	TOK_INT			{ pParser->SetJoinOnCast(SPH_ATTR_INTEGER); }
+	| TOK_FLOAT		{ pParser->SetJoinOnCast(SPH_ATTR_FLOAT); }
+	| TOK_STRING	{ pParser->SetJoinOnCast(SPH_ATTR_STRING); }
+	;
+
+on_clause_equality:
+    idxname on_clause_attr '=' idxname on_clause_attr								{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
+	| on_clause_type_cast '(' idxname on_clause_attr ')' '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
+	| idxname on_clause_attr '=' on_clause_type_cast '(' idxname on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
+	;
+
 on_clause:
-	idxname on_clause_attr '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $1, $2, $4, $5 ); }
+	on_clause_equality
 	| on_clause TOK_AND on_clause
 	;
 
@@ -1257,8 +1269,8 @@ hint_list:
 	;
 
 hint_attr_list:
-	ident
-	| hint_attr_list ',' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	json_field
+	| hint_attr_list ',' json_field {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
 hint_item:           
@@ -1831,6 +1843,16 @@ subkey:
 streq:
 	expr '=' strval				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| strval '=' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_NE strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_NE expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '<' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '<' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '>' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '>' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_LTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_LTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_GTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_GTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 strval:

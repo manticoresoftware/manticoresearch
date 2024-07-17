@@ -1,0 +1,61 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mkdir /usr/share/logstash && cd $_
+––– output –––
+––– input –––
+wget -q https://artifacts.elastic.co/downloads/logstash/logstash-7.10.0-linux-x86_64.tar.gz
+––– output –––
+––– input –––
+tar -xvzf logstash-7.10.0-linux-x86_64.tar.gz > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+cd /usr/local/src
+––– output –––
+––– input –––
+ln -s /usr/share/logstash/logstash-7.10.0/bin/logstash /usr/bin/logstash
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+echo 'input { file { path => ["/var/log/dpkg.log"] start_position => "beginning" sincedb_path => "/dev/null" mode => "read" exit_after_read => true file_completed_action => "log" file_completed_log_path => "/dev/null" } } output { elasticsearch { index => "dpkg_log" hosts => ["http://localhost:9308"] ilm_enabled => false manage_template => false } }' > logstash.conf
+––– output –––
+––– input –––
+echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
+––– output –––
+0
+––– input –––
+cat /var/log/dpkg.log | wc -l
+––– output –––
+5
+––– input –––
+logstash -f logstash.conf > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
+––– input –––
+mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT message FROM dpkg_log\G;" | sort -r | grep -v '^[+*]'
+––– output –––
+rt
+dpkg_log
+5
+2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>
+2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>
+2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
+2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9

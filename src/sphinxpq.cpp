@@ -136,14 +136,14 @@ public:
 
 	int64_t				GetMemLimit() const final { return 0; }
 
-	Binlog::CheckTnxResult_t ReplayTxn(Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue) override; // cb from binlog
-	Binlog::CheckTnxResult_t ReplayAdd(CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue);
-	Binlog::CheckTnxResult_t ReplayDelete(CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue);
-	Binlog::CheckTnxResult_t ReplayInsertAndDelete ( CSphReader& tReader, CSphString& sError, Binlog::CheckTxn_fn&& fnCanContinue );
+
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn && fnCanContinue ) final; // cb from binlog
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 10;				///< META in json format
+	// NOTICE! meta version 10 was introduced in 2a6ea8f7 and rolled back to 9 in e1709760.
+	// if you need to upgrade - skip v10 and use v11.
+	static constexpr DWORD			META_VERSION = 9; // next should be 11
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -186,12 +186,11 @@ private:
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
 	SharedPQSlice_t GetStoredUnl () const REQUIRES_SHARED ( m_tLock );
 	bool IsSaveDisabled() const noexcept;
-
-	void BinlogReconfigure ( CSphReconfigureSetup & tSetup );
-
 	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 	bool LoadMetaImpl ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 };
+
+// FIXME! Can't define it in the class because it fails to link on clang-15
 
 //////////////////////////////////////////////////////////////////////////
 // percolate functions
@@ -1894,17 +1893,18 @@ template<typename READER>
 static void LoadInsertDeleteQueries_T ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, READER& tReader )
 {
 	dDeleteTags.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dDeleteTags )
-		dDeleteTags[i] = tReader.UnzipOffset();
+	for ( auto& tTag: dDeleteTags )
+		tTag = tReader.UnzipOffset();
 
 	dDeleteQueries.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dDeleteQueries )
-		dDeleteQueries[i] = tReader.UnzipOffset();
+	for ( auto& tQuery: dDeleteQueries )
+		tQuery = tReader.UnzipOffset();
 
 	dNewQueries.Resize ( tReader.UnzipInt() );
-	ARRAY_FOREACH ( i, dNewQueries )
-		LoadStoredQuery ( PQ_META_VERSION_MAX, dNewQueries[i], tReader );
+	for ( auto& tNewQuery: dNewQueries )
+		LoadStoredQuery ( PQ_META_VERSION_MAX, tNewQuery, tReader );
 }
+
 
 static void LoadInsertDeleteQueries ( CSphVector<StoredQueryDesc_t>& dNewQueries, CSphVector<int64_t>& dDeleteQueries, CSphVector<uint64_t>& dDeleteTags, CSphReader& tReader )
 {
@@ -1962,7 +1962,6 @@ CSphVector<StoredQuerySharedPtr_t> UniqAndWrapQueries ( const VecTraits_T<Stored
 	return dNewSharedQueries;
 }
 } // namespace
-
 
 int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock )
 {
@@ -2043,7 +2042,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		// insert/replace pass
 
-		// check whether we can insert fastest possible way, or need to modify snapshot and only then insert
+		// check whether we can insert the fastest possible way, or need to modify snapshot and only then insert
 		if ( !bWithFullClone )
 		{
 			for ( const auto& pQuery : dNewSharedQueries )
@@ -2097,7 +2096,9 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 		m_tStat.m_iTotalDocuments += iNewInserted - iDeleted;
 		CSphString sError;
-		Binlog::Commit ( Binlog::PQ_ADD_DELETE, &m_iTID, { GetName(), m_iIndexId }, true, sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
+		Binlog::Commit ( &m_iTID, GetName(), sError, [&dNewSharedQueries, dDeleteQueries, dDeleteTags] ( Writer_i & tWriter ) {
+			// my user op
+			tWriter.PutByte ( Binlog::PQ_ADD_DELETE );
 			SaveInsertDeleteQueries ( dNewSharedQueries, dDeleteQueries, dDeleteTags, tWriter );
 		} );
 
@@ -2149,84 +2150,23 @@ bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 	return true;
 }
 
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( Binlog::Blop_e eOp,CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
+Binlog::CheckTnxResult_t PercolateIndex_c::ReplayTxn ( CSphReader& tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn&& fnCanContinue )
 {
-	switch ( eOp )
-	{
-	case Binlog::PQ_ADD: return ReplayAdd(tReader, sError, std::move(fnCanContinue));
-	case Binlog::PQ_DELETE: return ReplayDelete(tReader, std::move(fnCanContinue));
-	case Binlog::PQ_ADD_DELETE: return ReplayInsertAndDelete(tReader, sError, std::move(fnCanContinue));
-	default: assert (false && "unknown op provided to replay");
-	}
-	return {};
-}
+	assert ( uOp == Binlog::PQ_ADD_DELETE );
 
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayAdd ( CSphReader& tReader, CSphString & sError, Binlog::CheckTxn_fn&& fnCanContinue )
-{
-	StoredQueryDesc_t tStored;
-	LoadStoredQuery ( PQ_META_VERSION_MAX, tStored, tReader );
-
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
-	if ( tRes.m_bValid && tRes.m_bApply )
-	{
-		PercolateQueryArgs_t tArgs ( tStored );
-		// at binlog query already passed replace checks
-		tArgs.m_bReplace = true;
-
-		// actually replay
-		auto pQuery = CreateQuery ( tArgs, sError );
-		if ( !pQuery )
-		{
-			sError.SetSprintf ( "apply error, %s", sError.cstr() );
-			tRes = Binlog::CheckTnxResult_t();
-			return tRes;
-		}
-
-		// actually replay
-		CSphVector<int64_t> dDeleteQueries;
-		CSphVector<uint64_t> dDeleteTags;
-		CSphVector<StoredQuery_i*> dNewQueries;
-		dNewQueries.Add ( pQuery.release() );
-		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
-	}
-	return tRes;
-}
-
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayDelete (CSphReader& tReader, Binlog::CheckTxn_fn&& fnCanContinue)
-{
-	CSphVector<int64_t> dQueries;
-	CSphString sTags;
-	LoadDeleteQuery ( dQueries, sTags, tReader );
-
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
-	if ( tRes.m_bValid && tRes.m_bApply )
-	{
-		CSphVector<StoredQuery_i*> dNewQueries;
-		CSphVector<uint64_t> dDeleteTags;
-		if ( dQueries.IsEmpty() )
-			PercolateAppendTags ( sTags, dDeleteTags );
-
-		// actually replay
-		ReplayInsertAndDeleteQueries ( dNewQueries, dQueries, dDeleteTags );
-	}
-	return tRes;
-}
-
-Binlog::CheckTnxResult_t PercolateIndex_c::ReplayInsertAndDelete ( CSphReader& tReader, CSphString& sError, Binlog::CheckTxn_fn&& fnCanContinue )
-{
 	CSphVector<StoredQueryDesc_t> dNewQueriesDescs;
 	CSphVector<int64_t> dDeleteQueries;
 	CSphVector<uint64_t> dDeleteTags;
 
-	LoadInsertDeleteQueries( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
+	LoadInsertDeleteQueries ( dNewQueriesDescs, dDeleteQueries, dDeleteTags, tReader );
 
-	Binlog::CheckTnxResult_t tRes = fnCanContinue();
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
 	if ( tRes.m_bValid && tRes.m_bApply )
 	{
-		CSphVector<StoredQuery_i*> dNewQueries; // not owned
-		dNewQueries.Reserve ( dNewQueries.GetLength() );
+		CSphVector<StoredQuery_i *> dNewQueries; // not owned
+		dNewQueries.Reserve ( dNewQueries.GetLength () );
 
-		for ( StoredQueryDesc_t& tDesc : dNewQueriesDescs )
+		for ( StoredQueryDesc_t & tDesc: dNewQueriesDescs )
 		{
 			PercolateQueryArgs_t tArgs ( tDesc );
 			// at binlog query already passed replace checks
@@ -2236,17 +2176,18 @@ Binlog::CheckTnxResult_t PercolateIndex_c::ReplayInsertAndDelete ( CSphReader& t
 			auto pQuery = CreateQuery ( tArgs, sError );
 			if ( !pQuery )
 			{
-				sError.SetSprintf ( "apply error, %s", sError.cstr() );
-				tRes = Binlog::CheckTnxResult_t();
-				for ( StoredQuery_i* pDelQuery : dNewQueries )
+				sError.SetSprintf ( "apply error, %s", sError.cstr () );
+				tRes = Binlog::CheckTnxResult_t ();
+				for ( StoredQuery_i * pDelQuery: dNewQueries )
 					SafeDelete ( pDelQuery );
 				return tRes;
 			}
-			dNewQueries.Add ( pQuery.release() );
+			dNewQueries.Add ( pQuery.release () );
 		}
 
 		// actually replay
 		ReplayInsertAndDeleteQueries ( dNewQueries, dDeleteQueries, dDeleteTags );
+		tRes.m_bApply = true;
 	}
 	return tRes;
 }
@@ -2693,6 +2634,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 
 	// version
 	DWORD uVersion = (DWORD)Int ( tBson.ChildByName ( "meta_version" ), 9 );
+	if ( uVersion == 10 ) uVersion = 9; // fixme! a little hack, m.b. deal another way? v10 is minor of v9
 	if ( uVersion == 0 || uVersion > META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sMeta.cstr(), uVersion, META_VERSION );
@@ -2911,8 +2853,6 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	sNewMeta.NamedVal ( "tid", m_iTID );
-	// meta v.10
-	sNewMeta.NamedVal ( "index_id", m_iIndexId );
 
 	{
 		sNewMeta.Named ( "pqs" );
@@ -2943,7 +2883,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, bShutdown, false );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), (Binlog::Shutdown_e)bShutdown, Binlog::NoSave );
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 }
@@ -2965,6 +2905,9 @@ bool PercolateIndex_c::Truncate ( CSphString & sError )
 	// current TID will be saved, so replay will properly skip preceding txns
 	// FIXME!!! however it should be replicated to cluster maybe with TOI
 	SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
+
+	// allow binlog to unlink now-redundant data files
+	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, Binlog::ForceSave );
 
 	return true;
 }
@@ -3048,27 +2991,8 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 
-// fixme? Retire this, then SaveIndexSettings/SaveTokenizersettings/SaveDictionarySettings for plain CSphWriter, only json left
-void PercolateIndex_c::BinlogReconfigure ( CSphReconfigureSetup & tSetup )
-{
-	CSphString sError;
-	Binlog::Commit ( Binlog::RECONFIGURE, &m_iTID, { GetName(), m_iIndexId }, false, sError, [&tSetup] ( Writer_i & tWriter ) {
-		// reconfigure data
-		SaveIndexSettings ( tWriter, tSetup.m_tIndex );
-		SaveTokenizerSettings ( tWriter, tSetup.m_pTokenizer, 0 );
-		SaveDictionarySettings ( tWriter, tSetup.m_pDict, false, 0 );
-
-		CSphFieldFilterSettings tFieldFilterSettings;
-		if ( tSetup.m_pFieldFilter )
-			tSetup.m_pFieldFilter->GetSettings(tFieldFilterSettings);
-		tFieldFilterSettings.Save(tWriter);
-	});
-}
-
 bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
-	BinlogReconfigure ( tSetup );
-
 	m_tSchema = tSetup.m_tSchema;
 
 	Setup ( tSetup.m_tIndex );
@@ -3118,7 +3042,7 @@ void PercolateIndex_c::ForceRamFlush ( const char * szReason )
 		return;
 
 	int64_t tmStart = sphMicroTimer();
-	int64_t iWasTID = m_iSavedTID;
+	int64_t iWasTID = std::exchange ( m_iSavedTID, m_iTID );
 	int64_t tmWas = m_tmSaved;
 	SaveMeta ();
 
@@ -3478,19 +3402,32 @@ void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader 
 }
 
 template<typename READER>
+inline CSphString GetZString ( READER & tReader )
+{
+	return tReader.GetZString();
+}
+
+// if implement GetZString in MemoryReader_c -> need to upgrade v of replication also
+template<>
+inline CSphString GetZString ( MemoryReader_c & tReader )
+{
+	return tReader.GetString ();
+}
+
+template<typename READER>
 void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tReader )
 {
 	assert ( uVersion>=7 );
 	tQuery.m_iQUID = tReader.UnzipOffset();
 	tQuery.m_bQL = ( tReader.UnzipInt()!=0 );
-	tQuery.m_sQuery = tReader.GetString();
-	tQuery.m_sTags = tReader.GetString();
+	tQuery.m_sQuery = GetZString ( tReader );
+	tQuery.m_sTags = GetZString ( tReader );
 
 	tQuery.m_dFilters.Reset ( tReader.UnzipInt() );
 	tQuery.m_dFilterTree.Reset ( tReader.UnzipInt() );
 	for ( auto& tFilter : tQuery.m_dFilters )
 	{
-		tFilter.m_sAttrName = tReader.GetString();
+		tFilter.m_sAttrName = GetZString ( tReader );
 		tFilter.m_bExclude = ( tReader.UnzipInt()!=0 );
 		tFilter.m_bHasEqualMin = ( tReader.UnzipInt()!=0 );
 		tFilter.m_bHasEqualMax = ( tReader.UnzipInt()!=0 );
@@ -3510,7 +3447,7 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 		for ( auto & dValue : dVals )
 			dValue = tReader.UnzipOffset ();
 		for ( auto & dString : dStrings )
-			dString = tReader.GetString ();
+			dString = GetZString ( tReader );
 
 		tFilter.m_dValues.AdoptData ( dVals.LeakData(), iValCount, iValCount );
 		tFilter.m_dStrings.AdoptData ( dStrings.LeakData(), iStrCount, iStrCount );
@@ -3524,19 +3461,31 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 	}
 }
 
+
+template<typename WRITER>
+inline void PutZString ( const CSphString& sVal, WRITER & tWriter )
+{
+	tWriter.PutZString ( sVal );
+}
+
+template<>
+inline void PutZString ( const CSphString & sVal, MemoryWriter_c & tWriter )
+{
+	tWriter.PutString ( sVal );
+}
+
 template<typename WRITER>
 void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 {
 	tWriter.ZipOffset ( tQuery.m_iQUID );
 	tWriter.ZipInt ( tQuery.m_bQL );
-	tWriter.PutString ( tQuery.m_sQuery );
-	tWriter.PutString ( tQuery.m_sTags );
+	PutZString ( tQuery.m_sQuery, tWriter );
+	PutZString ( tQuery.m_sTags, tWriter );
 	tWriter.ZipInt ( tQuery.m_dFilters.GetLength() );
 	tWriter.ZipInt ( tQuery.m_dFilterTree.GetLength() );
-	ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
+	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
 	{
-		const CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
-		tWriter.PutString ( tFilter.m_sAttrName );
+		PutZString ( tFilter.m_sAttrName, tWriter );
 		tWriter.ZipInt ( tFilter.m_bExclude );
 		tWriter.ZipInt ( tFilter.m_bHasEqualMin );
 		tWriter.ZipInt ( tFilter.m_bHasEqualMax );
@@ -3549,14 +3498,13 @@ void SaveStoredQueryImpl ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 		tWriter.ZipOffset ( tFilter.m_iMaxValue );
 		tWriter.ZipInt ( tFilter.m_dValues.GetLength() );
 		tWriter.ZipInt ( tFilter.m_dStrings.GetLength() );
-		ARRAY_FOREACH ( j, tFilter.m_dValues )
-			tWriter.ZipOffset ( tFilter.m_dValues[j] );
-		ARRAY_FOREACH ( j, tFilter.m_dStrings )
-			tWriter.PutString ( tFilter.m_dStrings[j] );
+		for ( const auto & tValue: tFilter.m_dValues )
+			tWriter.ZipOffset ( tValue );
+		for ( const auto & tString: tFilter.m_dStrings )
+			PutZString ( tString, tWriter );
 	}
-	ARRAY_FOREACH ( iTree, tQuery.m_dFilterTree )
+	for ( const FilterTreeItem_t & tItem: tQuery.m_dFilterTree )
 	{
-		const FilterTreeItem_t & tItem = tQuery.m_dFilterTree[iTree];
 		tWriter.ZipInt ( tItem.m_iLeft );
 		tWriter.ZipInt ( tItem.m_iRight );
 		tWriter.ZipInt ( tItem.m_iFilterItem );

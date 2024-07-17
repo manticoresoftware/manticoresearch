@@ -56,6 +56,8 @@ int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_501: return 501;
 	case EHTTP_STATUS::_503: return 503;
 	case EHTTP_STATUS::_526: return 526;
+
+	default: return 503;
 	};
 };
 
@@ -98,6 +100,8 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_501: return "501 Not Implemented";
 	case EHTTP_STATUS::_503: return "503 Service Unavailable";
 	case EHTTP_STATUS::_526: return "526 Invalid SSL Certificate";
+
+	default: return "503 Service Unavailable";
 	};
 }
 
@@ -1180,16 +1184,6 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 			tItem.m_sAlias = tBucket.m_sCol;
 			hAttrs.Add ( tBucket.m_sCol );
 		}
-
-		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
-		{
-			if ( tBucket.m_dNested[iNested].m_eAggrFunc==Aggr_e::NONE )
-				continue;
-
-			CSphQueryItem & tItem = tQuery.m_dItems.Add();
-			tItem.m_sExpr = tBucket.m_dNested[iNested].m_sCol;
-			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
-		}
 	}
 
 	tQuery.m_bFacetHead = true;
@@ -1259,16 +1253,6 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 		CSphQueryItem & tAggCountItem = tQuery.m_dRefItems.Add();
 		tAggCountItem.m_sExpr = "count(*)";
 		tAggCountItem.m_sAlias = "count(*)";
-		ARRAY_FOREACH ( iNested, tBucket.m_dNested )
-		{
-			if ( tBucket.m_dNested[iNested].m_eAggrFunc==Aggr_e::NONE )
-				continue;
-
-			CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
-			tItem.m_sExpr = tBucket.m_dNested[iNested].m_sCol;
-			tItem.m_sAlias = tBucket.m_dNested[iNested].GetAliasName();
-		}
-
 
 		switch ( tBucket.m_eAggrFunc )
 		{
@@ -3165,6 +3149,9 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 		tFilter.m_dValues.Add ( tDocId );
 		tFilter.m_sAttrName = "id";
 	}
+
+	// _bulk could have cluster:index format
+	SqlParser_SplitClusterIndex ( tStmt.m_sIndex, &tStmt.m_sCluster );
 
 	return true;
 }

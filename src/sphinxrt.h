@@ -180,6 +180,7 @@ public:
 	
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;
+	virtual int		GetChunkId () const { return 0; };
 
 protected:
 	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );
@@ -187,7 +188,7 @@ protected:
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
+void sphRTInit ( CSphString sBinlogPath, bool bCommonBinlog = false, const CSphConfigSection * pCommon = nullptr );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ );
 void sphRTSetTestMode ();
 

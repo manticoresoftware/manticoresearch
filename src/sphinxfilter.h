@@ -63,6 +63,7 @@ public:
 using UservarIntSetValues_c = CSphVector<SphAttr_t>;
 using UservarIntSet_c = SharedPtr_t<UservarIntSetValues_c>;
 class HistogramContainer_c;
+class SIContainer_c;
 
 struct CreateFilterContext_t
 {
@@ -81,7 +82,7 @@ struct CreateFilterContext_t
 	CSphVector<UservarIntSet_c>	m_dUserVals;
 
 	const HistogramContainer_c * m_pHistograms = nullptr;
-	const SI::Index_i *			m_pSI = nullptr;
+	const SIContainer_c *		m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
 	CSphString					m_sJoinIdx;
 
@@ -120,6 +121,33 @@ inline bool EvalRange ( T tValue, T tMin, T tMax )
 
 	auto bMinOk = HAS_EQUAL_MIN ? ( tValue>=tMin ) : ( tValue>tMin );
 	auto bMaxOk = HAS_EQUAL_MAX ? ( tValue<=tMax ) : ( tValue<tMax );
+
+	return bMinOk && bMaxOk;
+}
+
+template<typename T = SphAttr_t>
+inline bool EvalRange ( T tValue, const CommonFilterSettings_t & tFilter )
+{
+	T tMin, tMax;
+	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+	{
+		tMin = (T)tFilter.m_fMinValue;
+		tMax = (T)tFilter.m_fMaxValue;
+	}
+	else
+	{
+		tMin = (T)tFilter.m_iMinValue;
+		tMax = (T)tFilter.m_iMaxValue;
+	}
+
+	if ( tFilter.m_bOpenLeft )
+		return tFilter.m_bHasEqualMax ? ( tValue<=tMax ) : ( tValue<tMax );
+
+	if ( tFilter.m_bOpenRight )
+		return tFilter.m_bHasEqualMin ? ( tValue>=tMin ) : ( tValue>tMin );
+
+	auto bMinOk = tFilter.m_bHasEqualMin ? ( tValue>=tMin ) : ( tValue>tMin );
+	auto bMaxOk = tFilter.m_bHasEqualMax ? ( tValue<=tMax ) : ( tValue<tMax );
 
 	return bMinOk && bMaxOk;
 }
@@ -302,7 +330,7 @@ struct RowIdBoundaries_t
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
 bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
-bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError );
+bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, const CSphVector<CSphQueryItem> & dItems, CSphString & sError );
 int64_t	EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx );
 
 #endif // _sphinxfilter_

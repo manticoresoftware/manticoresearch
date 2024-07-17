@@ -117,3 +117,82 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | table4 | rt   |
 | table5 | rt   |
 +--------+------+
+––– input –––
+mysql -h0 -P9306 -e "freeze table5;" > /dev/null 2>&1
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table5; SHOW CREATE TABLE table5;"
+––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
+| table3 | rt   |
+| table4 | rt   |
+| table5 | rt   |
++--------+------+
++------+--------+------+
+| id   | title  | tag  |
++------+--------+------+
+|    1 | zxczxc |   77 |
++------+--------+------+
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                 |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table5 | CREATE TABLE table5 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table5/exceptions.txt' stopwords='/var/lib/manticore/table5/stopwords_0.txt' wordforms='/var/lib/manticore/table5/wordforms_0.txt' |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE table5 SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/table5/exceptions.txt
+stopwords = /var/lib/manticore/table5/stopwords_0.txt
+wordforms = /var/lib/manticore/table5/wordforms_0.txt
+––– input –––
+mysql -h0 -P9306 -e "import table table6 from '/var/lib/manticore/table5/table5'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "unfreeze table5;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table6; SHOW CREATE TABLE table6;"
+––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
+| table3 | rt   |
+| table4 | rt   |
+| table5 | rt   |
+| table6 | rt   |
++--------+------+
++------+--------+------+
+| id   | title  | tag  |
++------+--------+------+
+|    1 | zxczxc |   77 |
++------+--------+------+
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                 |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table6 | CREATE TABLE table6 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table6/exceptions.txt' stopwords='/var/lib/manticore/table6/stopwords_0.txt' wordforms='/var/lib/manticore/table6/wordforms_0.txt' |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CALL keywords('a 123', 'table6');"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | a         | b          |
+| 2    | 123       | 123        |
++------+-----------+------------+

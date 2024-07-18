@@ -113,7 +113,7 @@ SettingsFormatterState_t::SettingsFormatterState_t ( StringBuilder_c & tBuf )
 class SettingsFormatter_c
 {
 public:
-				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
+				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false, bool bEscapeValues = false );
 
 	template <typename T>
 	void		Add ( const char * szKey, T tVal, bool bCond );
@@ -122,23 +122,52 @@ public:
 	void		AddEmbedded ( const char * szKey, const VecTraits_T<T> & dEmbedded, bool bCond );
 
 private:
+	template <typename T>
+	CSphString FormatValue(T tVal);
+
 	SettingsFormatterState_t & m_tState;
 	CSphString			m_sPrefix;
 	CSphString			m_sEq;
 	CSphString			m_sPostfix;
 	CSphString			m_sSeparator;
 	bool				m_bIgnoreCond = false;
+	bool				m_bEscapeValues = false;
 };
 
 
-SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
-	: m_tState		( tState )
-	, m_sPrefix		( szPrefix )
-	, m_sEq			( szEq )
-	, m_sPostfix	( szPostfix )
-	, m_sSeparator	( szSeparator )
-	, m_bIgnoreCond	( bIgnoreCond )
+SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond, bool bEscapeValues )
+	: m_tState			( tState )
+	, m_sPrefix			( szPrefix )
+	, m_sEq				( szEq )
+	, m_sPostfix		( szPostfix )
+	, m_sSeparator		( szSeparator )
+	, m_bIgnoreCond		( bIgnoreCond )
+	, m_bEscapeValues	( bEscapeValues )
 {}
+
+using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
+
+template<typename T>
+CSphString SettingsFormatter_c::FormatValue(T tVal) {
+	SqlEscapedBuilder_c dEscaped;
+
+	// convert tVal to CSphString
+	CSphString sVal;
+	dEscaped << tVal;
+	dEscaped.MoveTo(sVal);
+
+	if (!m_bEscapeValues) {
+		// return plain string
+		return sVal;
+	}
+
+	// build escaped string
+	CSphString sRes;
+	dEscaped.AppendEscapedSkippingCommaNoQuotes(sVal.cstr());
+	dEscaped.MoveTo(sRes);
+
+	return sRes;
+}
 
 template <typename T>
 void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
@@ -151,7 +180,7 @@ void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
 		if ( !m_tState.m_bFirst )
 			(*m_tState.m_pBuf) << m_sSeparator;
 
-		(*m_tState.m_pBuf) << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+		(*m_tState.m_pBuf) << m_sPrefix << szKey << m_sEq << FormatValue(tVal) << m_sPostfix;
 	}
 
 	if ( m_tState.m_pFile )
@@ -160,7 +189,7 @@ void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
 		if ( !m_tState.m_bFirst )
 			tBuilder << m_sSeparator;
 
-		tBuilder << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+		tBuilder << m_sPrefix << szKey << m_sEq << FormatValue(tVal) << m_sPostfix;
 		fputs ( tBuilder.cstr(), m_tState.m_pFile );
 	}
 
@@ -1934,7 +1963,7 @@ void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * 
 static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
 	SettingsFormatterState_t tState(tBuf);
-	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " " );
+	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " ", false, true );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 

@@ -120,7 +120,7 @@ void MultiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf, NetConnection_t tConn,
 		case Proto_e::MYSQL41: return SqlServe ( std::move ( pBuf ) );
 		case Proto_e::SPHINXSE: eMultiProto = Proto_e::SPHINXSE; break; // force sphinx SE
 		default:
-			eMultiProto = pBuf->Probe ( false );
+			eMultiProto = pBuf->Probe();
 	}
 
 	switch ( eMultiProto )

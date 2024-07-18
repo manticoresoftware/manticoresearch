@@ -3310,10 +3310,10 @@ bool HttpHandlerEsBulk_c::Process()
 	return bOk;
 }
 
-static const JsonObj_c g_tShards ( "{ \"total\": 1, \"successful\": 1, \"failed\": 0 }" );
-
 static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
+	const JsonObj_c tRefShards ( "{ \"total\": 1, \"successful\": 1, \"failed\": 0 }" );
+
 	char sBuf[70];
 	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
 	const char * sActionRes = "created";
@@ -3321,7 +3321,7 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 		sActionRes = "deleted";
 	else if ( tDoc.m_sAction=="update" )
 		sActionRes = "updated";
-	JsonObj_c tShard ( g_tShards.Clone() );
+	JsonObj_c tShard ( tRefShards.Clone() );
 
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );

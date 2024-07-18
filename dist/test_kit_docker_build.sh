@@ -13,7 +13,7 @@ get_semver_suffix() {
 	local version="$1"
 	last_digit=$(echo "$version" | awk -F. '{print $NF}')
 	if [ $(( last_digit % 2 )) -eq 0 ]; then
-		echo ""
+		echo "_release_candidate"
 	else
 		echo "_dev"
 	fi

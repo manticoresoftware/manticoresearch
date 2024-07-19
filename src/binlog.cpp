@@ -171,6 +171,9 @@ public:
 	void OpenNewLog ( BinlogFileState_e eState = BinlogFileState_e::OK ) REQUIRES ( m_tWriteAccess );
 	int64_t LastTidFor ( const CSphString & sIndex ) const noexcept EXCLUDES ( m_tWriteAccess );
 
+	void LockWriter () ACQUIRE ( m_tWriteAccess );
+	void UnlockWriter () RELEASE ( m_tWriteAccess );
+
 private:
 	void RemoveLastEmptyLog () REQUIRES ( m_tWriteAccess );
 	int GetWriteIndexID ( const char * szIndexName, int64_t iTID ) REQUIRES ( m_tWriteAccess );
@@ -725,6 +728,17 @@ int64_t SingleBinlog_c::LastTidFor ( const CSphString & sIndex ) const noexcept
 }
 
 
+void SingleBinlog_c::LockWriter ()
+{
+	m_tWriteAccess.Lock();
+}
+
+void SingleBinlog_c::UnlockWriter ()
+{
+	m_tWriteAccess.Unlock();
+}
+
+
 void SingleBinlog_c::RemoveLastEmptyLog ()
 {
 	assert ( !m_dLogFiles.IsEmpty () && m_dLogFiles.Last ().m_dIndexInfos.IsEmpty () );
@@ -870,6 +884,8 @@ SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bO
 	}
 	if ( pVal )
 		return pVal->get();
+
+	bool bLocked = false;
 	{
 		Threads::SccWL_t tLock ( m_tHashAccess );
 		pVal = m_hBinlogs ( szIndexName );
@@ -878,10 +894,20 @@ SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bO
 
 		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> (this), szIndexName );
 		pVal = m_hBinlogs ( szIndexName );
+		if ( bOpenNewLog )
+		{
+			pVal->get ()->LockWriter ();
+			bLocked = true;
+		}
 	}
 	assert ( pVal );
+	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
 	if ( bOpenNewLog )
-		pVal->get()->OpenNewLog();
+		pVal->get ()->OpenNewLog ();
+
+	if ( bLocked )
+		pVal->get ()->UnlockWriter ();
+
 	return pVal->get ();
 }
 
@@ -899,6 +925,8 @@ SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THR
 	}
 	if ( pVal )
 		return pVal->get ();
+
+	bool bLocked = false;
 	{
 		Threads::SccWL_t tLock ( m_tHashAccess );
 		auto Iter = m_hBinlogs.begin ();
@@ -910,11 +938,20 @@ SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THR
 
 		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> ( this ), "common" );
 		pVal = &m_hBinlogs.begin ()->second;
+		if ( bOpenNewLog )
+		{
+			pVal->get()->LockWriter();
+			bLocked = true;
+		}
 	}
 	assert ( pVal );
 	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
 	if ( bOpenNewLog )
 		pVal->get ()->OpenNewLog ();
+
+	if ( bLocked )
+		pVal->get ()->UnlockWriter();
+
 	return pVal->get ();
 }
 

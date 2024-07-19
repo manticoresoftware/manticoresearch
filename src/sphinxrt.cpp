@@ -8143,6 +8143,7 @@ CSphFixedVector<RowsToUpdateData_t> Update_CollectRowPtrs ( UpdateContext_t & tC
 // updates (as it might happen be more than one update during the operation)
 void RtSegment_t::MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const UpdateContext_t& tCtx )
 {
+	TRACE_CORO ( "rt", "IndexSegment_c::Update_UpdateAttributes");
 	if ( !m_bAttrsBusy.load ( std::memory_order_acquire ) )
 		return;
 
@@ -8167,6 +8168,7 @@ void RtSegment_t::MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const U
 
 bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
+	TRACE_CORO ( "rt", "RtIndex_c::Update_DiskChunks" );
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 	bool bCritical = false;
 	CSphString sWarning;
@@ -8191,7 +8193,9 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 			break;
 
 		// acquire fine-grain lock
+		BEGIN_CORO ( "wait", "disk-chunk w-lock");
 		SccWL_t wLock ( pDiskChunk->m_tLock );
+		END_CORO ( "wait" );
 
 		int iRes = pDiskChunk->CastIdx().CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning, bNeedWait ? fnBlock : nullptr );
 
@@ -8241,6 +8245,7 @@ bool RtSegment_t::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, 
 // FIXME! might be inconsistent in case disk chunk update fails
 int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
 {
+	TRACE_CORO ( "rt", "CheckThenUpdateAttributes" );
 	const auto& tUpdc = *tUpd.m_pUpdate;
 	assert ( tUpdc.m_dRowOffset.IsEmpty() || tUpdc.m_dDocids.GetLength()==tUpdc.m_dRowOffset.GetLength() );
 
@@ -8265,7 +8270,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard.m_dRamSegs );
 
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "UpdateAttributes" );
+	TRACE_CORO ( "rt", "UpdateAttributes_serial" );
 	ARRAY_CONSTFOREACH ( i, dRamUpdateSets )
 	{
 		if ( dRamUpdateSets[i].IsEmpty() )
@@ -8275,7 +8280,9 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 			return -1;
 
 		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*)tGuard.m_dRamSegs[i] );
+		BEGIN_CORO ( "wait", "ram-seg-wlock");
 		SccWL_t wLock ( pSeg->m_tLock );
+		END_CORO ( "wait" );
 
 		assert ( pSeg->GetStride() == m_tSchema.GetRowSize() );
 
@@ -9155,6 +9162,7 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 // perform merge, preload result, rename to final chunk and return preallocated result scheduled to dispose
 ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters )
 {
+	TRACE_CORO ( "rt", "RtIndex_c::MergeDiskChunks" );
 	CSphString sError;
 
 	const CSphIndex& tChunkA = pChunkA->Cidx();
@@ -9212,7 +9220,7 @@ bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, con
 
 bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<bool ( int, DiskChunkVec_c& )>&& fnPusher ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
-	TRACE_SCHED ( "rt", "PublishMergedChunks" );
+	TRACE_CORO ( "rt", "PublishMergedChunks" );
 	bool bReplaced = false;
 	auto tChangeset = RtWriter();
 	tChangeset.InitDiskChunks ( RtWriter_c::empty );
@@ -9417,7 +9425,7 @@ bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckA
 
 bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 {
-	TRACE_SCHED ( "rt", "RtIndex_c::CompressOneChunk" );
+	TRACE_CORO ( "rt", "RtIndex_c::CompressOneChunk" );
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
 	{
@@ -9453,7 +9461,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 
 	// going to modify list of chunks; so fall into serial fiber
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "CompressOneChunk.serial" );
+	TRACE_CORO ( "rt", "CompressOneChunk.serial" );
 
 	// reset kill hook explicitly to override default order of destruction
 	SetKillHookFor ( nullptr, iChunkID );
@@ -9487,7 +9495,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 
 bool RtIndex_c::DedupOneChunk ( int iChunkID, int* pAffected )
 {
-	TRACE_SCHED ( "rt", "RtIndex_c::DedupOneChunk" );
+	TRACE_CORO ( "rt", "RtIndex_c::DedupOneChunk" );
 	auto pVictim = m_tRtChunks.DiskChunkByID ( iChunkID );
 	if ( !pVictim )
 	{
@@ -9501,7 +9509,7 @@ bool RtIndex_c::DedupOneChunk ( int iChunkID, int* pAffected )
 	sphLogDebug ( "dedup %d (%d docs)", iChunkID, (int)tVictim.GetCount() );
 
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "DedupOneChunk.serial" );
+	TRACE_CORO ( "rt", "DedupOneChunk.serial" );
 
 	// and also apply already collected kills
 	int iKilled = pVictim->CastIdx().KillDupes();
@@ -9565,7 +9573,7 @@ bool RtIndex_c::SplitOneChunkFast ( int iChunkID, const char* szUvarFilter, bool
 // then replace original chunk with one of pieces, and insert second piece just after the first.
 bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAffected )
 {
-	TRACE_SCHED ( "rt", "RtIndex_c::SplitOneChunk" );
+	TRACE_CORO ( "rt", "RtIndex_c::SplitOneChunk" );
 	bool bResult;
 	if ( SplitOneChunkFast ( iChunkID, szUvarFilter, bResult, pAffected ) )
 		return bResult;
@@ -9642,7 +9650,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 
 	// going to modify list of chunks; so fall into serial fiber
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "SplitOneChunk" );
+	TRACE_CORO ( "rt", "SplitOneChunk" );
 
 	// reset kill hook explicitly to override default order of destruction
 	SetKillHookFor ( nullptr, iChunkID );
@@ -9690,7 +9698,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 
 bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 {
-	TRACE_SCHED ( "rt", "RtIndex_c::MergeTwoChunks" );
+	TRACE_CORO ( "rt", "RtIndex_c::MergeTwoChunks" );
 
 	auto pA = m_tRtChunks.DiskChunkByID ( iAID );
 	if ( !pA )
@@ -9739,8 +9747,10 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 	CSphIndex& tMerged = pMerged->CastIdx(); // const breakage is ok since we don't yet published the index
 
 	// going to modify list of chunks; so fall into serial fiber
+	TRACE_CORO ( "rt", "RtIndex_c::MergeTwoChunks_workserial" );
+	BEGIN_CORO ( "wait", "RtIndex_c::acquire serial fiber" );
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "MergeTwoChunks" );
+	END_CORO ("wait" );
 
 	// reset kill hook explicitly to override default order of destruction
 	SetKillHookFor ( nullptr, iAID );
@@ -9842,7 +9852,7 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 
 void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 {
-	TRACE_SCHED ( "rt", "RtIndex_c::Optimize" );
+	TRACE_CORO ( "rt", "RtIndex_c::Optimize" );
 	RTDLOG << "Optimize invoked with " << tTask;
 	if ( !CheckValidateOptimizeParams ( tTask ) )
 		return;
@@ -9901,7 +9911,7 @@ static int GetCutOff ( const MutableIndexSettings_c & tSettings )
 
 int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 {
-	TRACE_SCHED ( "rt", "RtIndex_c::ProgressiveOptimize" );
+	TRACE_CORO ( "rt", "RtIndex_c::ProgressiveOptimize" );
 
 	int iAffected = 0;
 	if ( !iCutoff )
@@ -9955,6 +9965,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 int RtIndex_c::CommonOptimize ( OptimizeTask_t tTask )
 {
+	TRACE_CORO ( "rt", "RtIndex_c::CommonOptimize" );
 	bool bProgressive = g_bProgressiveMerge;
 	int iChunks = 0;
 

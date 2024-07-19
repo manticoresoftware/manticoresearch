@@ -8731,6 +8731,8 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sCluster, const char * sDistributed, AttrUpdateSharedPtr_t pUpd,
 	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails )
 {
+	TRACE_CORO ( "rt", "DoCommandUpdate" );
+
 	int iUpd = 0;
 	CSphString sWarning;
 	RtAccum_t tAcc;
@@ -13005,6 +13007,8 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
+	TRACE_CORO ( "rt", "DoExtendedUpdate" );
+
 	TlsMsg::ResetErr();
 	// checks
 	if ( !pServed )
@@ -13057,6 +13061,7 @@ DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& p
 
 static void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, CSphIndex * pIndex )
 {
+	TRACE_CORO ( "rt", "DoUpdate" );
 	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
 	while ( tCollector.GetValuesChunk ( pUpdate->m_dDocids, tArgs.m_pQuery->m_iMaxMatches ) )
 	{
@@ -13068,16 +13073,22 @@ static void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, CSphIn
 
 void UpdateWlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated )
 {
+	TRACE_CORO ( "sph", "UpdateWlocked" );
 	// short-living r-lock m.b. acquired and released by collector when running query
 	auto tCollector = InitUpdate ( tArgs, pDesc );
+	BEGIN_CORO ( "wait", "take w-lock" );
 	WIdx_c wLocked { pDesc }; // exclusive lock for process of update. Note, between collecting and updating m.b. race! To eliminate it, need to trace index generation and recollect if it changed.
+	END_CORO ( "wait" );
 	DoUpdate ( tCollector, tArgs, wLocked );
 }
 
 void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated)
 {
+	TRACE_CORO ( "sph", "UpdateRlocked" );
 	// wide r-lock over whole update. r-locks acquired by collector should be re-enterable.
+	BEGIN_CORO ( "wait", "take r-lock" );
 	RWIdx_c rLocked { pDesc };
+	END_CORO ( "wait" );
 	auto tCollector = InitUpdate ( tArgs, pDesc );
 	DoUpdate ( tCollector, tArgs, rLocked );
 }
@@ -13085,11 +13096,13 @@ void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, i
 
 void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bNeedWlock )
 {
+	TRACE_CORO ( "sph", "HandleMySqlExtendedUpdate" );
 	return bNeedWlock ? UpdateWlocked ( tArgs, pDesc, iUpdated ) : UpdateRlocked ( tArgs, pDesc, iUpdated );
 }
 
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery )
 {
+	TRACE_CORO ( "sph", "sphHandleMysqlUpdate" );
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 

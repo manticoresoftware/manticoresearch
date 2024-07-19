@@ -20,6 +20,7 @@
 #include "knnmisc.h"
 #include "jsonsi.h"
 #include "attrindex_merge.h"
+#include "tracer.h"
 
 class AttrMerger_c::Impl_c
 {
@@ -370,16 +371,19 @@ AttrMerger_c::~AttrMerger_c() = default;
 
 bool AttrMerger_c::Prepare ( const CSphIndex* pSrcIndex, const CSphIndex* pDstIndex )
 {
+	TRACE_CORO ( "sph", "AttrMerger_c::Prepare" );
 	return m_pImpl->Prepare ( pSrcIndex, pDstIndex );
 }
 
 bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
 {
+	TRACE_CORO ( "sph", "AttrMerger_c::CopyAttributes" );
 	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
 }
 
 bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
 {
+	TRACE_CORO ( "sph", "AttrMerger_c::FinishMergeAttributes" );
 	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
 	m_pImpl->AddCreatedFiles ( pDstIndex, pCreatedFiles );
 	return bOk;

@@ -79,7 +79,7 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 mysql -h0 -P9306 -e 'CREATE TABLE `table3` LIKE `table2` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table3; SHOW CREATE TABLE table3;"
 ––– output –––
 +--------+------+
 | Index  | Type |
@@ -88,11 +88,25 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | table2 | rt   |
 | table3 | rt   |
 +--------+------+
++------+--------+------+
+| id   | title  | tag  |
++------+--------+------+
+|    1 | zxczxc |   77 |
++------+--------+------+
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                 |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table3 | CREATE TABLE table3 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table3/exceptions.txt' stopwords='/var/lib/manticore/table3/stopwords_0.txt' wordforms='/var/lib/manticore/table3/wordforms_0.txt' |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e 'CREATE TABLE `table4` LIKE `table1` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table4; SHOW CREATE TABLE table4;"
 ––– output –––
 +--------+------+
 | Index  | Type |
@@ -102,23 +116,17 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | table3 | rt   |
 | table4 | rt   |
 +--------+------+
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                 |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table4 | CREATE TABLE table4 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table4/exceptions.txt' stopwords='/var/lib/manticore/table4/stopwords_0.txt' wordforms='/var/lib/manticore/table4/wordforms_0.txt' |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e 'CREATE TABLE `table5` LIKE `table3` WITH DATA;'
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES;"
-––– output –––
-+--------+------+
-| Index  | Type |
-+--------+------+
-| table1 | rt   |
-| table2 | rt   |
-| table3 | rt   |
-| table4 | rt   |
-| table5 | rt   |
-+--------+------+
-––– input –––
-mysql -h0 -P9306 -e "freeze table5;" > /dev/null 2>&1
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table5; SHOW CREATE TABLE table5;"
@@ -147,18 +155,7 @@ tag integer
 ) exceptions='/var/lib/manticore/table5/exceptions.txt' stopwords='/var/lib/manticore/table5/stopwords_0.txt' wordforms='/var/lib/manticore/table5/wordforms_0.txt' |
 +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE table5 SETTINGS\G"
-––– output –––
-*************************** 1. row ***************************
-Variable_name: settings
-Value: exceptions = /var/lib/manticore/table5/exceptions.txt
-stopwords = /var/lib/manticore/table5/stopwords_0.txt
-wordforms = /var/lib/manticore/table5/wordforms_0.txt
-––– input –––
-mysql -h0 -P9306 -e "import table table6 from '/var/lib/manticore/table5/table5'"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "unfreeze table5;"
+mysql -h0 -P9306 -e 'create table `table7` like `table4` with data;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table6; SHOW CREATE TABLE table6;"
@@ -171,28 +168,58 @@ mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table6; SHOW CREATE TABLE table6
 | table3 | rt   |
 | table4 | rt   |
 | table5 | rt   |
-| table6 | rt   |
+| table7 | rt   |
 +--------+------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table7; SHOW CREATE TABLE table7;"
+––– output –––
++--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
+| table2 | rt   |
+| table3 | rt   |
+| table4 | rt   |
+| table5 | rt   |
+| table7 | rt   |
++--------+------+
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                 |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table7 | CREATE TABLE table7 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table7/exceptions.txt' stopwords='/var/lib/manticore/table7/stopwords_0.txt' wordforms='/var/lib/manticore/table7/wordforms_0.txt' |
++--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `table_5` LIKE `table3` WITH DATA;'
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table_5; SHOW CREATE TABLE table_5;"
+––– output –––
++---------+------+
+| Index   | Type |
++---------+------+
+| table1  | rt   |
+| table2  | rt   |
+| table3  | rt   |
+| table4  | rt   |
+| table5  | rt   |
+| table7  | rt   |
+| table_5 | rt   |
++---------+------+
 +------+--------+------+
 | id   | title  | tag  |
 +------+--------+------+
 |    1 | zxczxc |   77 |
 +------+--------+------+
-+--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table  | Create Table                                                                                                                                                                                                                 |
-+--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| table6 | CREATE TABLE table6 (
++---------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table   | Create Table                                                                                                                                                                                                                     |
++---------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table_5 | CREATE TABLE table_5 (
 id bigint,
 title text,
 tag integer
-) exceptions='/var/lib/manticore/table6/exceptions.txt' stopwords='/var/lib/manticore/table6/stopwords_0.txt' wordforms='/var/lib/manticore/table6/wordforms_0.txt' |
-+--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-––– input –––
-mysql -h0 -P9306 -e "CALL keywords('a 123', 'table6');"
-––– output –––
-+------+-----------+------------+
-| qpos | tokenized | normalized |
-+------+-----------+------------+
-| 1    | a         | b          |
-| 2    | 123       | 123        |
-+------+-----------+------------+
+) exceptions='/var/lib/manticore/table_5/exceptions.txt' stopwords='/var/lib/manticore/table_5/stopwords_0.txt' wordforms='/var/lib/manticore/table_5/wordforms_0.txt' |
++---------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

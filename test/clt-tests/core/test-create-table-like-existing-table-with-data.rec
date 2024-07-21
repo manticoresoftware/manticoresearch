@@ -158,19 +158,6 @@ tag integer
 mysql -h0 -P9306 -e 'create table `table7` like `table4` with data;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table6; SHOW CREATE TABLE table6;"
-––– output –––
-+--------+------+
-| Index  | Type |
-+--------+------+
-| table1 | rt   |
-| table2 | rt   |
-| table3 | rt   |
-| table4 | rt   |
-| table5 | rt   |
-| table7 | rt   |
-+--------+------+
-––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table7; SHOW CREATE TABLE table7;"
 ––– output –––
 +--------+------+

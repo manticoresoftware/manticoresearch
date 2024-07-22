@@ -25,6 +25,7 @@
 #include "tracer.h"
 #include "searchdbuddy.h"
 #include "aggrexpr.h"
+#include "compressed_http.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
@@ -52,6 +53,7 @@ int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_405: return 405;
 	case EHTTP_STATUS::_409: return 409;
 	case EHTTP_STATUS::_413: return 413;
+	case EHTTP_STATUS::_415: return 415;
 	case EHTTP_STATUS::_500: return 500;
 	case EHTTP_STATUS::_501: return 501;
 	case EHTTP_STATUS::_503: return 503;
@@ -74,6 +76,7 @@ EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept
 	case 405: return EHTTP_STATUS::_405;
 	case 409: return EHTTP_STATUS::_409;
 	case 413: return EHTTP_STATUS::_413;
+	case 415: return EHTTP_STATUS::_415;
 	case 500: return EHTTP_STATUS::_500;
 	case 501: return EHTTP_STATUS::_501;
 	case 503: return EHTTP_STATUS::_503;
@@ -96,6 +99,7 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_405: return "405 Method Not Allowed";
 	case EHTTP_STATUS::_409: return "409 Conflict";
 	case EHTTP_STATUS::_413: return "413 Request Entity Too Large";
+	case EHTTP_STATUS::_415: return "415 Unsupported Media Type";
 	case EHTTP_STATUS::_500: return "500 Internal Server Error";
 	case EHTTP_STATUS::_501: return "501 Not Implemented";
 	case EHTTP_STATUS::_503: return "503 Service Unavailable";
@@ -231,11 +235,14 @@ class RawSocketStream_c final : public CharStream_c
 	int m_iContentLength;
 	bool m_bTerminated = false;
 	BYTE m_uOldTerminator = 0;
+	CSphVector<BYTE> m_dUnpacked;
+	bool m_bCompressed = false;
 
 public:
-	RawSocketStream_c ( AsyncNetInputBuffer_c * pIn, int iContentLength )
+	RawSocketStream_c ( AsyncNetInputBuffer_c * pIn, int iContentLength, bool bCompressed )
 		: CharStream_c ( pIn )
 		, m_iContentLength ( iContentLength )
+		, m_bCompressed ( bCompressed )
 	{
 		assert ( pIn );
 		m_bDone = !m_iContentLength;
@@ -273,7 +280,7 @@ public:
 			m_bTerminated = true;
 		}
 
-		return B2S ( m_pIn->PopTail ( iChunk ) );
+		return Decompress ( m_pIn->PopTail ( iChunk ) );
 	}
 
 	Str_t ReadAll() final
@@ -292,8 +299,21 @@ public:
 		}
 
 		m_uOldTerminator = m_pIn->Terminate ( m_iContentLength, '\0' );
-		m_bTerminated = true;
-		return B2S ( m_pIn->PopTail ( m_iContentLength ) );
+		return Decompress ( m_pIn->PopTail ( m_iContentLength ) );
+	}
+
+	Str_t Decompress ( const ByteBlob_t & tIn )
+	{
+		if ( !m_bCompressed )
+			return B2S ( tIn );
+
+		m_dUnpacked.Resize ( 0 );
+		if ( !GzipDecompress ( tIn, m_dUnpacked, m_sError ) )
+		{
+			m_bDone = true;
+			return dEmptyStr;
+		}
+		return Str_t ( m_dUnpacked );
 	}
 };
 
@@ -2564,10 +2584,20 @@ void sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, HTTP_GET );
 }
 
+static bool IsCompressed ( const OptionsHash_t & hOptions )
+{
+	const CSphString * pEncoding = hOptions ( "content-encoding" );
+	if ( !pEncoding )
+		return false;
+
+	return ( *pEncoding=="gzip" );
+}
+
 bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVector<BYTE>& dResult )
 {
 	assert ( !m_szError );
 	std::unique_ptr<CharStream_c> pSource;
+	bool bCompressed = IsCompressed ( m_hOptions );
 
 	if ( m_tParser.flags & F_CHUNKED )
 	{
@@ -2577,15 +2607,35 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		// for non-chunked - need to throw out beginning of the packet (with header). Only body rest in the buffer.
 		tIn.PopTail ( m_iLastParsed - ParsedBodyLength() );
 		int iFullLength = ParsedBodyLength() + ( (int)m_tParser.content_length > 0 ? (int)m_tParser.content_length : 0 );
-		pSource = std::make_unique<RawSocketStream_c> ( &tIn, iFullLength );
+		pSource = std::make_unique<RawSocketStream_c> ( &tIn, iFullLength, bCompressed );
 	}
 
 	EHTTP_ENDPOINT eEndpoint = StrToHttpEndpoint ( m_sEndpoint );
 	if ( IsLogManagementEnabled() && eEndpoint==EHTTP_ENDPOINT::TOTAL && m_sEndpoint.Ends ( "_bulk" ) )
 		eEndpoint = EHTTP_ENDPOINT::ES_BULK;
 
+	HttpProcessResult_t tRes;
 	Str_t sSrcQuery;
-	HttpProcessResult_t tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
+
+	if ( bCompressed && !HasGzip() )
+	{
+		// 14.11 Content-Encoding
+		// If the content-coding of an entity in a request message is not acceptable to the origin server, the server SHOULD respond with a status code of 415 (Unsupported Media Type)
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_415;
+		tRes.m_bOk = false;
+		tRes.m_sError = "gzip error: unpack is not supported, rebuild with zlib";
+
+	} else if ( bCompressed && ( m_tParser.flags & F_CHUNKED ) )
+	{
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_415;
+		tRes.m_bOk = false;
+		tRes.m_sError = "can not process chunked transfer-coding along with gzip";
+
+	} else
+	{
+		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
+	}
+
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 

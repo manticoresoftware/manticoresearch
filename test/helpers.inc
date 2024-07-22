@@ -1273,7 +1273,7 @@ function RunCurl ( $curl_desc, &$rows )
 	return $http_code;
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl )
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
 {
 	global $agents;
 
@@ -1304,6 +1304,22 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
 
 	if ( $http_content!==NULL )
 		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
+        
+    if ( $use_gzip && $http_method=="POST" ) 
+    {
+        $cfile = file_get_contents( $testdir . "/" . $http_query );
+        $curl_desc[CURLOPT_ENCODING] = 'gzip';
+        $curl_desc[CURLOPT_POSTFIELDS] = $cfile;
+        
+        $http_headers = array("Content-Encoding:gzip");
+        if ( $http_content!==NULL )
+            $http_headers[] = "Content-Type: ".$http_content;
+        
+        $curl_desc[CURLOPT_HTTPHEADER] = $http_headers;
+        
+        //$curl_desc[CURLOPT_VERBOSE] = 1;
+        //var_dump ( $curl_desc );
+    }
 
 	$rows = "";
 	$http_code = RunCurl( $curl_desc, $rows );
@@ -2334,6 +2350,7 @@ class SphinxConfig
         $http_method=ArrVal ($attrs, "method", "POST");
         $http_content=ArrVal ($attrs, "content", NULL);
         $use_agent = ArrVal ($attrs, "d", 0);
+        $use_gzip = ArrVal ($attrs, "gzip", 0);
 
 
 		if ( !is_array($query) || !$attrs )
@@ -2351,7 +2368,7 @@ class SphinxConfig
             return false;
         }
 
-		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
+		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https"), $use_gzip, $this->_testdir );
 
 		if ( $use_agent>0 )
 			$query_result['agent'] = $use_agent;

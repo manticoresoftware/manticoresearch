@@ -177,6 +177,10 @@ index test2
 { "insert" : { "index" : "test_rt", "id" : 210, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
 </query>
 
+<query endpoint="json/bulk" content="application/x-ndjson" gzip="1">bulk339_1.gz</query>
+<query endpoint="json/replace" content="application/json" gzip="1">replace339_1.gz</query>
+<query endpoint="json/search" content="application/json" gzip="1">search339_1.gz</query>
+
 </httpqueries>
 
 </test>

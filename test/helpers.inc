@@ -1329,14 +1329,14 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
 // these two used from custom tests
 function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
-    $res = HttpQueryCurl ( "GET", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl );
+    $res = HttpQueryCurl ( "GET", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl, false, '' );
     unset ( $res['http'] );
     return $res;
 }
 
 function HttpQueryPost ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
-    $res = HttpQueryCurl ( "POST", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl );
+    $res = HttpQueryCurl ( "POST", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl, false, '' );
     unset ( $res['http'] );
     return $res;
 }

@@ -8,9 +8,11 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include <zlib.h>
-
 #include "compressed_http.h"
+
+#if WITH_ZLIB
+#include <zlib.h>
+#endif
 
 bool GzipDecompress ( const ByteBlob_t sIn, CSphVector<BYTE> & dRes, CSphString & sError )
 {

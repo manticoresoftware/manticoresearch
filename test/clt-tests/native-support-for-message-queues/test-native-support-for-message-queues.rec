@@ -201,32 +201,47 @@ sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_k
 |   26 | Better Late Than Never                      | ISO 86420:97531 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev text, GlossDef json, timestamp_field text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_ts TO destination_kafka_ts AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, timestamp_field FROM kafka_ts WHERE STR_TO_DATE(timestamp_field, '%Y-%m-%dT%H:%i:%sZ') > '2023-07-10 12:00:00';" > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka_ts (id bigint, name text, short_name text, received_at text, size multi, timestamp_field text);"
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka_ts (id bigint, name text, short_name text, received_at text, size multi, timestamp_field text);" > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_ts TO destination_kafka_ts AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, timestamp_field FROM kafka_ts WHERE timestamp_field > '2023-07-10T12:00:00Z';"
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_ts TO destination_kafka_ts AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, timestamp_field FROM kafka_ts WHERE STR_TO_DATE(timestamp_field, '%Y-%m-%dT%H:%i:%sZ') > '2023-07-10 12:00:00';" > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
-docker exec kafka ./import.sh
+docker exec kafka ./import.sh > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
 sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts;"
 ––– output –––
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_large_numbers (id bigint, term text, abbrev text, GlossDef json, views bigint) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_large_numbers' num_consumers='1' batch=50;"
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_large_numbers (id bigint, term text, abbrev text, GlossDef json, views bigint) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_large_numbers' num_consumers='1' batch=50;" > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka_large_numbers (id bigint, name text, short_name text, received_at text, size multi, views bigint);"
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka_large_numbers (id bigint, name text, short_name text, received_at text, size multi, views bigint);" > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_large_numbers TO destination_kafka_large_numbers AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, metadata.views as views FROM kafka_large_numbers WHERE views > 1000;"
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_large_numbers TO destination_kafka_large_numbers AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, metadata.views as views FROM kafka_large_numbers WHERE views > 1000;" > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
-docker exec kafka ./import.sh
+docker exec kafka ./import.sh > /dev/null 2>&1; echo $?
 ––– output –––
 ––– input –––
 sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_large_numbers;"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev text, GlossDef json, location json, metadata json, tags json, timestamp_combined text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;" > /dev/null 2>&1; echo $?
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka_combined (id bigint, name text, short_name text, received_at text, size multi, lat float, lon float, views int, info text, tags multi, timestamp_combined text);" > /dev/null 2>&1; echo $?
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_combined TO destination_kafka_combined AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, location.lat as lat, location.lon as lon, metadata.views as views, metadata.info as info, tags, timestamp_combined FROM kafka_combined WHERE metadata.views > 1000 AND tags IN ('item1', 'item2') AND GEODIST(location.lat, location.lon, 49.0, 3.0) < 1000000 AND STR_TO_DATE(timestamp_combined, '%Y-%m-%dT%H:%i:%sZ') > '2023-07-10 12:00:00';" > /dev/null 2>&1; echo $?
+––– output –––
+––– input –––
+docker exec kafka ./import.sh > /dev/null 2>&1; echo $?
+––– output –––
+––– input –––
+sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined;"
 ––– output –––

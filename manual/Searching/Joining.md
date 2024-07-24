@@ -1,18 +1,81 @@
-# Joining
+# Joining in Manticore Search
 
 **WARNING: This functionality is in beta stage. Use it with caution.**
 
-The JOIN SQL statement in Manticore Search allows combining rows from two tables based on a related column between them.
+Joining in Manticore Search allows you to combine rows from two tables based on a related column between them. This feature enables more complex queries and data retrieval across multiple indexes.
+
+## Syntax
+
+### SQL
+
+```sql
+SELECT
+	select_expr [, select_expr] ...
+	FROM tbl_name
+	{INNER | LEFT} JOIN tbl2_name
+	ON join_condition
+	[...other select options]
+```
+
+You can find other select options in [SELECT](../Searching/Intro.md#SQL) section.
+
+### JSON
+
+```json
+POST /search
+{
+  "index": "index_name",
+  "query": {
+    ...
+  },
+  "join": [
+    {
+      "type": "inner" | "left",
+      "table": "joined_table_name",
+      "query": {
+        ...
+      },
+      "on": [
+        {
+          "left": {
+            "table": "left_table_name",
+            "field": "field_name",
+            "type": "field_type"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "right_table_name",
+            "field": "field_name"
+          }
+        }
+      ]
+    }
+  ],
+  "options": {
+    ...
+  }
+}
+```
+
+## Types of Joins
+
+Manticore Search supports two types of joins:
+
+1. **INNER JOIN**: Returns only the rows where there is a match in both tables.
+2. **LEFT JOIN**: Returns all rows from the left table and the matched rows from the right table. If there's no match, NULL values are returned for the right table's columns.
 
 ## Examples
 
+### Left Join
+
 <!-- example left_basic -->
 
-This query retrieves all products from the `orders` table along with the corresponding `email`, `name`, and `address` of customers from the `customers` table. It performs a `LEFT JOIN`, ensuring that all records from the `orders` table are included even if there is no matching customer. The query also filters the results to include only those customers whose data matches the term 'maple' in the joined `customers` table. The results are ordered by the `email` address of the customers in ascending order.
+This query retrieves all products from the `orders` table along with the corresponding `email`, `name`, and `address` of customers from the `customers` table using a LEFT JOIN.
 
-<!-- request Example -->
+<!-- request SQL -->
 ```sql
-SELECT product, customers.email, customers.name, customers.address
+SELECT
+product, customers.email, customers.name, customers.address
 FROM orders
 LEFT JOIN customers
 ON customers.id = orders.customer_id
@@ -20,7 +83,42 @@ WHERE MATCH('maple', customers)
 ORDER BY customers.email ASC;
 ```
 
-<!-- response Example -->
+<!-- request JSON -->
+```json
+POST /search
+{
+  "index": "orders",
+  "query": {
+    "match": {
+      "customers": "maple"
+    }
+  },
+  "join": [
+    {
+      "type": "left",
+      "table": "customers",
+      "on": [
+        {
+          "left": {
+            "table": "orders",
+            "field": "customer_id",
+            "type": "int"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "customers",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ],
+  "select": ["product", "customers.email", "customers.name", "customers.address"],
+  "sort": [{"customers.email": "asc"}]
+}
+```
+
+<!-- response -->
 ```
 +----------+-------------------+----------------+-------------------+
 | product  | customers.email   | customers.name | customers.address |
@@ -36,21 +134,58 @@ ORDER BY customers.email ASC;
 
 <!-- end -->
 
+### Inner Join
+
 <!-- example inner_basic -->
 
-This query does the same as the previous one, but it performs an `INNER JOIN`, which means only the orders with matching customers are included in the result.
+This query performs an INNER JOIN between the `orders` and `customers` tables, including only the orders with matching customers.
 
-<!-- request Example -->
+<!-- request SQL -->
 ```sql
 SELECT product, customers.email, customers.name, customers.address
 FROM orders
 INNER JOIN customers
 ON customers.id = orders.customer_id
 WHERE MATCH('maple', customers)
-ORDER BY customers.email asc;
+ORDER BY customers.email ASC;
 ```
 
-<!-- response Example -->
+<!-- request JSON -->
+```json
+POST /search
+{
+  "index": "orders",
+  "query": {
+    "match": {
+      "customers": "maple"
+    }
+  },
+  "join": [
+    {
+      "type": "inner",
+      "table": "customers",
+      "on": [
+        {
+          "left": {
+            "table": "orders",
+            "field": "customer_id",
+            "type": "int"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "customers",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ],
+  "select": ["product", "customers.email", "customers.name", "customers.address"],
+  "sort": [{"customers.email": "asc"}]
+}
+```
+
+<!-- response -->
 ```
 +---------+-------------------+----------------+-------------------+
 | product | customers.email   | customers.name | customers.address |
@@ -62,11 +197,13 @@ ORDER BY customers.email asc;
 ```
 <!-- end -->
 
+### Complex Join with Faceting
+
 <!-- example basic_complex -->
 
-This query retrieves products, customer names, product prices, and product tags from the `orders` table and `customers` table. It performs a `LEFT JOIN`, ensuring all customers are included even if they have not made an order. The query filters to include only those orders with a price greater than `500` and matches the products to the terms 'laptop', 'phone', or 'monitor'. The results are ordered by the `id` of the orders in ascending order. Additionally, the query facets the results based on the `warranty details` from the JSON attributes of the joined `orders` table.
+This example demonstrates a more complex LEFT JOIN with filtering, ordering, and faceting.
 
-<!-- request Example -->
+<!-- request SQL -->
 ```sql
 SELECT orders.product, name, orders.details.price, orders.tags
 FROM customers
@@ -78,7 +215,50 @@ ORDER BY orders.id ASC
 FACET orders.details.warranty;
 ```
 
-<!-- response Example -->
+<!-- request JSON -->
+```json
+POST /search
+{
+  "index": "customers",
+  "join": [
+    {
+      "type": "left",
+      "table": "orders",
+      "on": [
+        {
+          "left": {
+            "table": "customers",
+            "field": "id",
+            "type": "int"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "orders",
+            "field": "customer_id"
+          }
+        }
+      ],
+      "query": {
+        "range": {
+          "details.price": {
+            "gt": 500
+          }
+        },
+        "match": {
+          "*": "laptop|phone|monitor"
+        }
+      }
+    }
+  ],
+  "select": ["orders.product", "name", "orders.details.price", "orders.tags"],
+  "sort": [{"orders.id": "asc"}],
+  "facet": {
+    "orders.details.warranty": {}
+  }
+}
+```
+
+<!-- response -->
 ```
 +----------------+---------------+----------------------+-------------+
 | orders.product | name          | orders.details.price | orders.tags |
@@ -99,16 +279,34 @@ FACET orders.details.warranty;
 ```
 <!-- end -->
 
-## Caveates
+## Caveats and Best Practices
 
-* **Field selection**: When selecting fields from two tables in a `JOIN`, you must not prefix fields from the left table but must prefix fields from the right table. Correct usage is `SELECT field_name, right_table.field_name FROM ...`, not `SELECT left_table.field_name, right_table.field_name FROM ...`.
-* **JOIN conditions**: Always explicitly specify the table names in your `JOIN` conditions. Use the format `JOIN ON table_name.some_field = another_table_name.some_field`. Omitting table names from the join condition is not supported.
-* **Using expressions with JOINs**: When using expressions that combine fields from both joined tables, you must alias the result of the expression. For instance, instead of `SELECT *, (nums2.n + 3) * n FROM nums LEFT JOIN nums2 ON nums2.id = nums.num2_id`, you should write `SELECT *, (nums2.n + 3) AS x, x * n FROM nums LEFT JOIN nums2 ON nums2.id = nums.num2_id`.
-* **Filtering on aliased expressions**: When you alias an expression involving fields from **both tables** (e.g., `expr(field_from_left_table, field_from_right_table) AS some_alias`), note that you cannot use this alias for filtering in the `WHERE` clause.
-* **Using ANY with MVA**: The `ANY()` function with multi-valued attributes requires specific handling when used with JOINs. Direct filtering on multi-valued attributes in a WHERE clause is not supported when performing a JOIN. Instead, you must alias the multi-valued attribute from the joined table and use this alias for the `ANY()` condition. For example:
-  ```sql
-  SELECT *, t2.m AS alias
-  FROM t
-  LEFT JOIN t2 ON t.id = t2.t_id
-  WHERE ANY(alias) IN (3, 5)
-  ```
+When using JOINs in Manticore Search, keep the following points in mind:
+
+1. **Field selection**: When selecting fields from two tables in a JOIN, do not prefix fields from the left table, but do prefix fields from the right table. For example:
+   ```sql
+   SELECT field_name, right_table.field_name FROM ...
+   ```
+
+2. **JOIN conditions**: Always explicitly specify the table names in your JOIN conditions:
+   ```sql
+   JOIN ON table_name.some_field = another_table_name.some_field
+   ```
+
+3. **Expressions with JOINs**: When using expressions that combine fields from both joined tables, alias the result of the expression:
+   ```sql
+   SELECT *, (nums2.n + 3) AS x, x * n FROM nums LEFT JOIN nums2 ON nums2.id = nums.num2_id
+   ```
+
+4. **Filtering on aliased expressions**: You cannot use aliases for expressions involving fields from both tables in the WHERE clause.
+
+5. **Using ANY with MVA**: When using the `ANY()` function with multi-valued attributes in JOINs, alias the multi-valued attribute from the joined table:
+   ```sql
+   SELECT *, t2.m AS alias
+   FROM t
+   LEFT JOIN t2 ON t.id = t2.t_id
+   WHERE ANY(alias) IN (3, 5)
+   ```
+
+By following these guidelines, you can effectively use JOINs in Manticore Search to combine data from multiple indexes and perform complex queries.
+

@@ -1,0 +1,47 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE products (id bigint, name TEXT);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (1, 'hello'), (2, 'halo'), (3, 'help'), (4, 'hero'), (5, 'hell');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=0;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=2;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=wrong_option;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('') OPTION fuzzy=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'products', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);"
+––– output –––
+––– input –––
+for i in {6..1005}; do mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES ($i, 'product_$i');"; done
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (1006, 'he@llo'), (1007, 'he#llo'), (1008, 'he%llo');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('he@llo') OPTION fuzzy=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('he#llo') OPTION fuzzy=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('he%llo') OPTION fuzzy=1;"
+––– output –––

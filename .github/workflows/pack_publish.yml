@@ -8,7 +8,6 @@ on:
     types: [ completed ]
     branches: [ master ]
   pull_request:
-    branches: [ master ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths-ignore:
       - 'manual/**'

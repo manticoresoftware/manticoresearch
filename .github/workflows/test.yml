@@ -13,7 +13,6 @@ on:
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:
-    branches: [ master ]
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
@@ -410,7 +409,7 @@ jobs:
               test/clt-tests/core/
               test/clt-tests/expected-errors/
           - name: Logstash
-            test_prefix: test/clt-tests/logstash/logstash- 
+            test_prefix: test/clt-tests/logstash/logstash-
           - name: mysqldump
             test_prefix: |-
               test/clt-tests/mysqldump/mysql/

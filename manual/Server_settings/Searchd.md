@@ -708,7 +708,7 @@ max_open_files = max
 ### max_packet_size
 
 <!-- example conf max_packet_size -->
-Maximum allowed network packet size. This setting limits both query packets from clients and response packets from remote agents in a distributed environment. Only used for internal sanity checks, it does not directly affect RAM usage or performance. Optional, the default is 8M.
+Maximum allowed network packet size. This setting limits both query packets from clients and response packets from remote agents in a distributed environment. Only used for internal sanity checks, it does not directly affect RAM usage or performance. Optional, the default is 128M.
 
 
 <!-- intro -->

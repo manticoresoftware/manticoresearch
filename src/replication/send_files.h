@@ -55,7 +55,7 @@ struct SyncSrc_t
 	int64_t m_tmTimeout = 0;	 // millisecond it took to read and hash all files, used for calc agent query timeout later
 	int64_t m_tmTimeoutFile = 0; // max millisecond to read or hash files, used for calc agent query timeout later
 
-	int m_iBufferSize = 0;
+	int64_t m_iBufferSize = 0;
 
 public:
 	SyncSrc_t() = default;

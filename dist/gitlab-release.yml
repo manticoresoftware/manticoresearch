@@ -121,7 +121,7 @@ windows:
   extends: [ .build ]
   variables:
     arch: x64
-    sysroot: roots_apr12
+    sysroot: roots_jul24
     DISTR: windows
 
 # windows build with native clang flavour

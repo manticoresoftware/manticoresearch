@@ -1,58 +1,83 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE products (id bigint, name TEXT);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (1, 'hello'), (2, 'halo'), (3, 'help'), (4, 'hero'), (5, 'hell'); INSERT INTO products (id, name) VALUES (7, NULL); INSERT INTO products (id, name) VALUES (8, 'he@llo'), (9, 'he#llo'), (10, 'he%llo');"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') OPTION fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (11, '$(head -c 1000 < /dev/urandom | tr -dc 'a-zA-Z0-9')');"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') OPTION fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (12, 'h');"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('ANT') OPTION fuzzy=0;"
 ––– output –––
 ––– input –––
-for i in {13..1012}; do mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES ($i, 'product_$i');"; done
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') OPTION fuzzy=2;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'name', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=1;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy=0;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=0;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=2;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') OPTION fuzzy=2;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'products', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') OPTION fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'products', 1 AS fuzziness, 'en' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION unknown_option=1;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us,ru' AS layouts);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'products', 1 AS fuzziness, 'ru,en' AS unknown_param);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION unknown_option=1;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append, 1 AS prepend);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'products', 1 AS fuzziness, 'ru,en' AS unknown_param);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness, 'us,ru' AS layouts, 1 AS append, 1 AS prepend);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 2 AS fuzziness, 'us,ru' AS layouts, 1 AS append, 1 AS prepend, 2 AS expansion_len);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append, 1 AS prepend);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us' AS layouts);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'ru' AS layouts);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us,ru' AS layouts);"
 ––– output –––

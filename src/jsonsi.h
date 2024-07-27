@@ -22,9 +22,6 @@ public:
 };
 
 
-bool BuildJsonSI ( const CSphString & sAttribute, const CSphRowitem * pPool, int64_t iNumRows, const ISphSchema & tSchema, const BYTE * pBlobPool, const CSphString & sFile, const CSphString & sTmpFile, CSphString & sError );
-bool DropJsonSI ( const CSphString & sFile, CSphString & sError );
-
 std::unique_ptr<JsonSIBuilder_i> CreateJsonSIBuilder ( const ISphSchema & tSchema, const CSphString & sSPB, const CSphString & sSIFile, CSphString & sError );
 CSphString UnifyJsonFieldName ( const CSphString & sName );
 CSphString GetFixedJsonSIAttrName();

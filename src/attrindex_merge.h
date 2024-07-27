@@ -31,5 +31,4 @@ public:
 	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader, StrVec_t* pCreatedFiles );
 };
 
-bool SiRecreate ( MergeCb_c & tMonitor, const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, CSphString & sFile, CSphString & sError );
-
+bool SiRecreate ( MergeCb_c & tMonitor, const CSphIndex & tIndex, int64_t iNumDocs, StrVec_t & dOldFiles, StrVec_t & dNewFiles, CSphString & sError );

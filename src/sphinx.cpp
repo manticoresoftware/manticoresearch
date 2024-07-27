@@ -11625,44 +11625,42 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	}
 
 	MergeCb_c tMonitor;
-	CSphFixedVector<RowID_t> dDeadRows {0}, dTmpRows{0};
-	CreateRowMapsAndCountTotalDocs ( this, this, dTmpRows, dDeadRows, nullptr, false, tMonitor );
-
-	CSphString sFileNew;
-	if ( !SiRecreate ( tMonitor, *this, dDeadRows, sFileNew, sError ) )
+	StrVec_t dCurFiles, dNewFiles;
+	if ( !SiRecreate ( tMonitor, *this, m_iDocinfo, dCurFiles, dNewFiles, sError ) )
 		return false;
 
-	const CSphString sFileCur = GetFilename ( SPH_EXT_SPIDX );
-	if ( !m_tSI.Drop ( sFileCur, sError ) )
-		return false;
-
-	CSphString sFileOld;
-	sFileOld.SetSprintf ( "%s.old", sFileCur.cstr() );
-	StrVec_t dFilesFrom ( 1 );
-	StrVec_t dFilesTo ( 1 );
-
-	bool bCurExists = sphFileExists ( sFileCur.cstr() );
-
-	if ( bCurExists )
+	ARRAY_FOREACH ( i, dCurFiles )
 	{
-		dFilesFrom[0] = sFileCur;
-		dFilesTo[0] = sFileOld;
+		StrVec_t dFilesFrom(1);
+		StrVec_t dFilesTo(1);
+		CSphString sFileOld;
+		bool bCurExists = sphFileExists ( dCurFiles[i].cstr() );
+		if ( bCurExists )
+		{
+			sFileOld.SetSprintf ( "%s.old", dCurFiles[i].cstr() );
+
+			dFilesFrom[0] = dCurFiles[i];
+			dFilesTo[0] = sFileOld;
+
+			if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
+				return false;
+
+			if ( !m_tSI.Drop ( dCurFiles[i], sError ) )
+				return false;
+		}
+
+		dFilesFrom[0] = dNewFiles[i];
+		dFilesTo[0] = dCurFiles[i];
 
 		if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
 			return false;
+
+		if ( !m_tSI.Load ( dCurFiles[i].cstr(), sError ) )
+			return false;
+
+		if ( bCurExists )
+			::unlink ( sFileOld.cstr() );
 	}
-
-	dFilesFrom[0] = sFileNew;
-	dFilesTo[0] = sFileCur;
-
-	if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
-		return false;
-
-	if ( !m_tSI.Load ( sFileCur.cstr(), sError ) )
-		return false;
-
-	if ( bCurExists )
-		::unlink ( sFileOld.cstr() );
 
 	return true;
 }

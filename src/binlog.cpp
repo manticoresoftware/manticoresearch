@@ -13,6 +13,7 @@
 #include "binlog.h"
 #include "sphinxrt.h"
 #include "memio.h"
+#include "coroutine.h"
 
 static constexpr int BINLOG_WRITE_BUFFER = 256*1024;
 static constexpr int64_t BINLOG_AUTO_FLUSH = 1000000; // 1 sec
@@ -80,15 +81,20 @@ public:
 					~BinlogWriter_c() final { CloseFile(); }
 
 	bool			Write ( bool bRemoveUnsuccessful = true );
-	bool			Fsync();
+	bool			WriteAndFsync();
+	bool			Fsync ( int iFD = -1 );
+
 	int64_t			GetFilePos() const noexcept			{ return m_iLastFilePos; }
 
 	bool			OpenFile ( const CSphString & sFile, CSphString & sError );
 	void			CloseFile();
+	int				LeakFD();
+	int				GetFD () const noexcept;
+	CSphString		GetFilename() const noexcept;
 	const CSphString & GetError() const			{ return m_sError; }
 
 	bool			HasUnwrittenData () const	{ return !m_dBuf.IsEmpty(); }
-	bool			HasUnsyncedData () const	{ return m_iLastFsyncPos!=m_iLastFilePos; }
+	bool			HasUnsyncedData () const	{ return m_iLastFsyncPos.load(std::memory_order_relaxed)!=m_iLastFilePos; }
 
 	bool			IsOpen() const noexcept { return ( m_tFile.GetFD()!=-1 ); }
 
@@ -107,7 +113,7 @@ private:
 	CSphString		m_sError;
 
 	int64_t			m_iLastFilePos = 0;
-	int64_t			m_iLastFsyncPos = 0;
+	std::atomic<int64_t> m_iLastFsyncPos { 0 };
 	int				m_iLastTransactionStartPos = 0;
 };
 
@@ -145,13 +151,17 @@ enum class BinlogFileState_e
 	ERROR_ABANDONED		// file is valid, but only cache, no txns
 };
 
+using BinlogMutex_t = Threads::Coro::Mutex_c;
+using ScopedBinlogMutex_t = Threads::ScopedCoroMutex_t;
+
 class SingleBinlog_c final
 {
 	Binlog_c * m_pOwner;
 
-	mutable Threads::Coro::Mutex_c m_tWriteAccess;      // serialize ops
+	mutable BinlogMutex_t m_tWriteAccess;      // serialize ops
 	BinlogWriter_c m_tWriter GUARDED_BY ( m_tWriteAccess );
 	CSphVector<BinlogFileDesc_t> m_dLogFiles GUARDED_BY ( m_tWriteAccess ); // active log files
+	Threads::Coro::Waitable_T<int> m_tFlushRunning { 0 };
 
 public:
 	NONCOPYMOVABLE( SingleBinlog_c );
@@ -390,7 +400,23 @@ int fsync ( int iFD )
 #endif
 
 
-bool BinlogWriter_c::Fsync()
+bool BinlogWriter_c::Fsync (int iFD)
+{
+	if ( iFD==-1 )
+		iFD = m_tFile.GetFD ();
+
+	if ( fsync ( iFD )!=0 )
+	{
+		m_sError.SetSprintf ( "failed to sync %s: %s", m_tFile.GetFilename (), strerrorm ( errno ) );
+		return false;
+	}
+
+	if ( m_iLastFsyncPos<m_iLastFilePos )
+		m_iLastFsyncPos.store ( m_iLastFilePos, std::memory_order_relaxed );
+	return true;
+}
+
+bool BinlogWriter_c::WriteAndFsync()
 {
 	if ( HasUnwrittenData() && !Write() )
 		return false;
@@ -398,14 +424,7 @@ bool BinlogWriter_c::Fsync()
 	if ( !HasUnsyncedData() )
 		return true;
 
-	if ( fsync ( m_tFile.GetFD() )!=0 )
-	{
-		m_sError.SetSprintf ( "failed to sync %s: %s" , m_tFile.GetFilename(), strerrorm(errno) );
-		return false;
-	}
-
-	m_iLastFsyncPos = m_iLastFilePos;
-	return true;
+	return Fsync();
 }
 
 
@@ -422,7 +441,28 @@ void BinlogWriter_c::CloseFile()
 		Write();
 
 	m_tFile.Close();
-	m_iLastFsyncPos = m_iLastFilePos = 0;
+	m_iLastFsyncPos.store ( m_iLastFilePos = 0, std::memory_order_relaxed ); // that is =, not ==
+}
+
+int BinlogWriter_c::LeakFD()
+{
+	if ( HasUnwrittenData () )
+		Write ();
+
+	m_iLastFsyncPos.store ( m_iLastFilePos = 0, std::memory_order_relaxed ); // that is =, not ==
+	return m_tFile.LeakID ();
+}
+
+
+int BinlogWriter_c::GetFD () const noexcept
+{
+	return m_tFile.GetFD();
+}
+
+
+CSphString BinlogWriter_c::GetFilename () const noexcept
+{
+	return m_tFile.GetFilename();
 }
 
 
@@ -500,7 +540,10 @@ void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
 
 	// could be already closed and meta saved on shutdown
 	if ( m_tWriter.IsOpen () )
+	{
 		DoCacheWrite ();
+		m_tWriter.WriteAndFsync ();
+	}
 	m_tWriter.CloseFile ();
 
 	// should remove last binlog if no tnx was writen
@@ -515,15 +558,26 @@ void SingleBinlog_c::DoFlush ( OnCommitAction_e eAction )
 {
 	MEMORY ( MEM_BINLOG );
 
-	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
-	if ( eAction==ACTION_NONE || m_tWriter.HasUnwrittenData () )
+	int iSyncFd = -1;
 	{
-		if ( !m_tWriter.Write () )
-			return;
-	}
+		ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+		if ( eAction==ACTION_NONE || m_tWriter.HasUnwrittenData () )
+		{
+			if ( !m_tWriter.Write () )
+				return;
+		}
+		if ( m_tWriter.HasUnsyncedData () )
+		{
+			iSyncFd = m_tWriter.GetFD();
+			m_tFlushRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+		}
+	} // leave lock
+	AtScopeExit ( [this] () { m_tFlushRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } ); } );
 
-	if ( m_tWriter.HasUnsyncedData () && !m_tWriter.Fsync () )
+	if ( iSyncFd==-1 )
 		return;
+
+	m_tWriter.Fsync ( iSyncFd );
 }
 
 
@@ -537,7 +591,7 @@ void SingleBinlog_c::CollectBinlogFiles ( CSphVector<int> & tOutput ) const noex
 bool SingleBinlog_c::BinlogCommit ( int64_t * pTID, const char * szIndexName, FnWriteCommit fnSaver, CSphString & sError )
 {
 	MEMORY ( MEM_BINLOG );
-	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
+	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
 
 	int64_t iTID = ++( *pTID );
 	const int uIndex = GetWriteIndexID ( szIndexName, iTID );
@@ -570,7 +624,8 @@ bool SingleBinlog_c::BinlogCommit ( int64_t * pTID, const char * szIndexName, Fn
 void SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char * szFlushedIndexName, bool bShutdown, bool bForceSave )
 {
 	MEMORY ( MEM_BINLOG );
-	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
+	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+
 	assert ( bShutdown || m_dLogFiles.GetLength () );
 
 	bool bCurrentLogAbandoned = false;
@@ -694,14 +749,12 @@ void SingleBinlog_c::OpenNewLog ( BinlogFileState_e eState )
 	// create file
 	CSphString sLog = m_pOwner->MakeBinlogName ( iExt );
 
-	if ( eState!=BinlogFileState_e::OK
-			&& eState!=BinlogFileState_e::ERROR_NON_READABLE ) // reuse the last binlog since it is empty or useless.
+	if ( eState!=BinlogFileState_e::OK && eState!=BinlogFileState_e::ERROR_NON_READABLE ) // reuse the last binlog since it is empty or useless.
 		::unlink ( sLog.cstr () );
 
 	CSphString sError;
 	if ( !m_tWriter.OpenFile ( sLog, sError ) )
-		sphDie ( "failed to create %s: %s errno=%d, error=%s", sLog.cstr (), sError.cstr (), errno,
-				 strerrorm ( errno ) );
+		sphDie ( "failed to create %s: %s errno=%d, error=%s", sLog.cstr (), sError.cstr (), errno, strerrorm ( errno ) );
 
 	// emit header
 	m_tWriter.PutDword ( BINLOG_HEADER_MAGIC_SPBL );
@@ -712,7 +765,7 @@ void SingleBinlog_c::OpenNewLog ( BinlogFileState_e eState )
 int64_t SingleBinlog_c::LastTidFor ( const CSphString & sIndex ) const noexcept
 {
 	int64_t iTID = 0;
-	Threads::ScopedCoroMutex_t tLock ( m_tWriteAccess );
+	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
 	if ( m_dLogFiles.IsEmpty () )
 		return iTID;
 
@@ -813,6 +866,7 @@ void SingleBinlog_c::DoCacheWrite ()
 		m_tWriter.ZipOffset ( tIndex.m_iMaxTID );
 		m_tWriter.ZipOffset ( tIndex.m_iFlushedTID );
 	}
+	m_tWriter.Write ();
 }
 
 
@@ -825,8 +879,17 @@ void SingleBinlog_c::CheckDoRestart ()
 	MEMORY ( MEM_BINLOG );
 	assert ( !m_dLogFiles.IsEmpty () );
 	DoCacheWrite ();
-	m_tWriter.CloseFile ();
+
+	auto sName = m_tWriter.GetFilename();
+	int iFD = m_tWriter.LeakFD();
 	OpenNewLog ();
+
+	Threads::Coro::Go ( [this, iFD, sName] {
+		m_tFlushRunning.Wait ( [] ( int iVal ) { return iVal<1; } );
+		if ( fsync ( iFD )!=0 )
+			sphWarning ( "failed to sync %s: %d (%s)", sName.cstr(), errno, strerrorm ( errno ) );
+		::close ( iFD );
+	}, Threads::Coro::CurrentScheduler () );
 }
 
 
@@ -843,10 +906,7 @@ bool SingleBinlog_c::CheckDoFlush ()
 		break;
 
 	case ACTION_FSYNC:
-		if ( !m_tWriter.Write () )
-			return false;
-
-		if ( !m_tWriter.Fsync () )
+		if ( !m_tWriter.WriteAndFsync () )
 			return false;
 		break;
 

@@ -48,7 +48,7 @@ job_mirror:
   needs: [ ]
   tags:
     - docker-free
-  image: manticoresearch/external_toolchain:clang15_cmake3263
+  image: manticoresearch/external_toolchain:clang16_cmake3263
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever

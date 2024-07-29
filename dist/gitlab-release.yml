@@ -23,7 +23,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: manticoresearch/external_toolchain:clang15_cmake3263
+  image: manticoresearch/external_toolchain:clang16_cmake3263
   variables:
     CACHEB: "../cache"
     arch: x86_64

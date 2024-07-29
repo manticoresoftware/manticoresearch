@@ -1,47 +1,42 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE products (id bigint, name TEXT);"
+php -d memory_limit=-1 ./test/clt-tests/comparison-overhead-json-sql/load_us_names.php 10000 10 1000000 1 > /dev/null
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (1, 'hello'), (2, 'halo'), (3, 'help'), (4, 'hero'), (5, 'hell');"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') OPTION fuzzy=-1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=1;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') OPTION fuzzy=10;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=0;"
+mysql -h0 -P9306 -e "select * from name where match('ANT') option fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=2;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') OPTION FUZZY=2;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('helo') OPTION fuzzy=wrong_option;"
-––– output –––
-ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('') OPTION fuzzy=1;"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'name', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'products', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy=`0`;"
 ––– output –––
 ––– input –––
-for i in {6..1005}; do mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES ($i, 'product_$i');"; done
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy="1";"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') OPTION fuzzy='2';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') OPTION fuzzy=a;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO products (id, name) VALUES (1006, 'he@llo'), (1007, 'he#llo'), (1008, 'he%llo');"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('he@llo') OPTION fuzzy=1;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('he#llo') OPTION fuzzy=1;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE MATCH('he%llo') OPTION fuzzy=1;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=@;"
 ––– output –––

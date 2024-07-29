@@ -157,7 +157,9 @@ win_build:
   variables:
     DISTR: windows
     arch: x64
-    sysroot: roots_jul24
+    # use roots_mysql83_jul29 for another (non-gitlab) tests
+    sysroot: roots_jul29
+    boost: boost80_zstd_zlib
     CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
     CTEST_CONFIGURATION_TYPE: Debug
   artifacts:

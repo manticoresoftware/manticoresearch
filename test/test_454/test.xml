@@ -176,6 +176,10 @@ index test1_all
 </bulk>
 <query endpoint="search">{ "index": "test1_all", "query": { "match_all": {} } } }</query>
 
+<!-- crash on update with bad arguments -->
+<query endpoint="test1_all/_update/1234" method="POST">{ "doc": { "test2: 2 } }</query>
+
+
 </httpqueries>
 
 </test>

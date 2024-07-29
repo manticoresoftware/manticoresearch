@@ -120,7 +120,7 @@ function CacheGuesses ()
     if ( $g_secondary_loaded ) $text .= "global \$g_secondary_loaded; \$g_secondary_loaded = true;\n";
     if ( $g_knn_loaded ) $text .= "global \$g_knn_loaded; \$g_knn_loaded = true;\n";
     if ( $g_tzdata_loaded ) $text .= "global \g_tzdata_loaded; \$g_tzdata_loaded = true;\n";
-    if ( $g_zlib ) $text .= "global \g_zlib; \$g_zlib = true;\n";
+    if ( $g_zlib ) $text .= "global \$g_zlib; \$g_zlib = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }

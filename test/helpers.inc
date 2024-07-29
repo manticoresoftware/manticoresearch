@@ -4481,6 +4481,12 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
+	if ( $config->Requires("non-secondary") && $g_secondary_loaded )
+	{
+        printf ( "SKIPPING %s, %s - explicitly non-secondary test skipped in secondary mode\n", $path, $config->Name () );
+		return false;
+	}
+
 	if ( $config->Requires("re2") && !$g_re2 )
 	{
 		printf ( "SKIPPING %s, %s - compile with regexp support to run this test\n", $path, $config->Name () );

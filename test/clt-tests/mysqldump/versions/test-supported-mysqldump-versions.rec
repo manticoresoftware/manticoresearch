@@ -38,7 +38,6 @@ docker exec manticore bash -c "curl -s https://hub.docker.com/v2/repositories/li
 ––– output –––
 5.7
 8.0
-8.1
 8.2
 8.3
 8.4

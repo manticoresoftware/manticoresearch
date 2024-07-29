@@ -192,7 +192,7 @@ private:
 	int					LerpCounter ( int iBucket, T tVal ) const;
 	HSBucketTrait_t		GetBucket ( T tValue ) const;
 
-	HistogramRset_t		EstimateValues ( const VecTraits_T<SphAttr_t>& dValues ) const;
+	HistogramRset_t		EstimateValues ( bool bExclude, const VecTraits_T<SphAttr_t>& dValues ) const;
 	HistogramRset_t		EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const;
 	T					Saturate ( T tVal ) const;
 	HistogramRset_t		EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const;
@@ -531,7 +531,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 	if ( !m_iSize )
 		return false;
 
-	tEstimate.m_iTotal = tEstimate.m_iCount = GetNumValues();
+	tEstimate.m_iTotal = GetNumValues();
 
 	CommonFilterSettings_t tFS = tFilter;
 	ESphAttr eAttrType;
@@ -548,11 +548,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 	{
 	case SPH_FILTER_VALUES:
 		assert ( TYPE==HISTOGRAM_STREAMED_UINT32 || TYPE==HISTOGRAM_STREAMED_INT64 );
-
-		if ( tFS.m_bExclude )
-			return false;
-
-		tEstimate = EstimateValues ( tFilter.GetValues() );
+		tEstimate = EstimateValues ( tFS.m_bExclude, tFilter.GetValues() );
 		return true;
 
 	case SPH_FILTER_RANGE:
@@ -568,9 +564,6 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 	case SPH_FILTER_STRING:
 	case SPH_FILTER_STRING_LIST:
 	{
-		if ( tFS.m_bExclude )
-			return false;
-
 		int iItemsCount = Max ( tFilter.m_dStrings.GetLength(), tFilter.GetNumValues() );
 		CSphFixedVector<SphAttr_t> dHashes ( iItemsCount );
 		for ( int i=0; i<iItemsCount; i++ )
@@ -584,7 +577,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 		dHashes.Sort();
 		int iHashesCount = sphUniq ( dHashes.Begin(), dHashes.GetLength() );
 
-		tEstimate = EstimateValues ( dHashes.Slice ( 0, iHashesCount ) );
+		tEstimate = EstimateValues ( tFS.m_bExclude, dHashes.Slice ( 0, iHashesCount ) );
 	}
 	return true;
 
@@ -596,7 +589,7 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 }
 
 template<typename T>
-HistogramRset_t HistogramStreamed_T<T>::EstimateValues ( const VecTraits_T<SphAttr_t>& dValues ) const
+HistogramRset_t HistogramStreamed_T<T>::EstimateValues ( bool bExclude, const VecTraits_T<SphAttr_t> & dValues ) const
 {
 	HistogramRset_t tRes;
 	int iPrevBucket = INT_MIN;
@@ -606,22 +599,21 @@ HistogramRset_t HistogramStreamed_T<T>::EstimateValues ( const VecTraits_T<SphAt
 		if ( tItem.m_iBucket!=iPrevBucket )
 		{
 			tRes.m_iTotal += tItem.m_iCount;
-			tRes.m_iCount++;
 			iPrevBucket = tItem.m_iBucket;
 		}
 	}
 
+	if ( bExclude )
+		tRes.m_iTotal = m_uValues - tRes.m_iTotal;
+
 	return tRes;
 }
+
 
 static HistogramRset_t operator+ ( const HistogramRset_t & tA, HistogramRset_t & tB )
 {
-	HistogramRset_t tRes;
-	tRes.m_iTotal = tA.m_iTotal + tB.m_iTotal;
-	tRes.m_iCount = tA.m_iCount + tB.m_iCount;
-	return tRes;
+	return { tA.m_iTotal + tB.m_iTotal };
 }
-
 
 template<typename T>
 HistogramRset_t HistogramStreamed_T<T>::EstimateRangeFilter ( bool bExclude, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight, T tMinValue, T tMaxValue ) const
@@ -690,7 +682,6 @@ HistogramRset_t HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool 
 			break;
 
 		tEstimate.m_iTotal += tBucket.m_iCount;
-		tEstimate.m_iCount++;
 		iChecked++;
 
 		tRangeMin = Min ( tRangeMin, tBucket.m_tCentroid );
@@ -700,7 +691,6 @@ HistogramRset_t HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool 
 	if ( !iChecked ) // interval inside single bucket
 	{
 		tEstimate.m_iTotal = m_dBuckets[iStartBucket].m_iCount;
-		tEstimate.m_iCount = 1;
 		tRangeMin = m_dBuckets[iStartBucket].m_tCentroid;
 		tRangeMax = m_dBuckets[iStartBucket].m_tCentroid;
 
@@ -715,19 +705,9 @@ HistogramRset_t HistogramStreamed_T<T>::EstimateInterval ( T tMin, T tMax, bool 
 			if ( uMinCount || uMaxCount )
 				tEstimate.m_iTotal = Max ( uMinCount, uMaxCount );
 		}
-	} else // count head bucket interval
-	{
-		tEstimate.m_iCount++;
-		if ( bOpenLeft )
-			tEstimate.m_iTotal += m_dBuckets[iStartBucket].m_iCount;
-		else
-			tEstimate.m_iTotal += LerpCounter ( iStartBucket, tMin );
 	}
-
-	T tDelta = m_tMaxValue - m_tMinValue;
-	T tRangeDelta = tRangeMax - tRangeMin;
-	if ( fabs ( tDelta )>FLT_EPSILON )
-		tEstimate.m_fRangeSize = tRangeDelta / tDelta;
+	else // count head bucket interval
+		tEstimate.m_iTotal += bOpenLeft ? m_dBuckets[iStartBucket].m_iCount : LerpCounter ( iStartBucket, tMin );
 
 	return tEstimate;
 }

@@ -128,16 +128,17 @@ public:
 		bson::Bson_c tBson ( { (BYTE*)pJson, 1 } );
 		ProcessJsonObj ( sAttr, tBson, [this]( const CSphString & sAttrName, const bson::NodeHandle_t & tNode )
 			{
-				std::pair<ESphJsonType,int> * pStored = (*m_pTypes)(sAttrName);
-				ESphJsonType eType = pStored ? pStored->first : JSON_EOF;
-
-				if ( !DetermineNodeType ( eType, tNode.second ) )
-					return;
-
+				StoredType_t * pStored = (*m_pTypes)(sAttrName);
+				ESphJsonType eType = pStored ? pStored->m_eType : JSON_EOF;
+				
+				bool bTypeOk = DetermineNodeType ( eType, tNode );
 				if ( pStored )
-					*pStored = { eType, 0 };
+				{
+					bool bOldTypeOk = pStored->m_bTypeOk;
+					*pStored = { eType, 0, bOldTypeOk && bTypeOk };
+				}
 				else
-					m_pTypes->Add ( { eType, 0 }, sAttrName );
+					m_pTypes->Add ( { eType, 0, bTypeOk }, sAttrName );
 			} );
 	}
 
@@ -146,10 +147,13 @@ public:
 		m_tSchema.resize(0);
 		for ( auto & i : *m_pTypes )
 		{
-			i.second.second = m_tSchema.size();
+			if ( !i.second.m_bTypeOk )
+				continue;
+
+			i.second.m_iAttr = m_tSchema.size();
 
 			common::StringHash_fn fnStringCalcHash = nullptr;
-			common::AttrType_e eColumnarType = ToColumnarType ( i.second.first );
+			common::AttrType_e eColumnarType = ToColumnarType ( i.second.m_eType );
 
 			// fixme! make default collation configurable
 			if ( eColumnarType==common::AttrType_e::STRING )
@@ -171,14 +175,21 @@ public:
 		bson::Bson_c tBson ( { (BYTE*)pJson, 1 } );
 		ProcessJsonObj ( sAttr, tBson, [this]( const CSphString & sAttrName, const bson::NodeHandle_t & tNode )
 		{
-			std::pair<ESphJsonType,int> * pStored = (*m_pTypes)(sAttrName);
-			if ( pStored )
-				ConvertAndStore ( tNode, pStored->first, pStored->second );
+			StoredType_t * pStored = (*m_pTypes)(sAttrName);
+			if ( pStored && pStored->m_bTypeOk )
+				ConvertAndStore ( tNode, pStored->m_eType, pStored->m_iAttr );
 		} );
 	}
 
 private:
-	using AttrHash_c = CSphOrderedHash<std::pair<ESphJsonType,int>, CSphString, CSphStrHashFunc, 16384>;
+	struct StoredType_t
+	{
+		ESphJsonType	m_eType = JSON_EOF;
+		int				m_iAttr = 0;
+		bool			m_bTypeOk = true;
+	};
+
+	using AttrHash_c = CSphOrderedHash<StoredType_t, CSphString, CSphStrHashFunc, 16384>;
 
 	std::unique_ptr<AttrHash_c>	m_pTypes { std::make_unique<AttrHash_c>() };
 	common::Schema_t			m_tSchema;
@@ -318,6 +329,9 @@ private:
 			ConvertAndStore ( int64_t(1), eType, iAttr );
 			break;
 
+		case JSON_MIXED_VECTOR:
+			break; // assume 0-length
+
 		default:
 			assert ( 0 && "Internal error: unsupported json type" );
 			break;
@@ -344,8 +358,9 @@ private:
 		return Max ( ePrevType, eNodeType );
 	}
 
-	static bool DetermineNodeType ( ESphJsonType & eType, ESphJsonType eNodeType )
+	static bool DetermineNodeType ( ESphJsonType & eType, const bson::NodeHandle_t & tNode )
 	{
+		ESphJsonType eNodeType = tNode.second;
 		switch ( eNodeType )
 		{
 		case JSON_INT32:
@@ -382,7 +397,16 @@ private:
 			break;
 
 		case JSON_MIXED_VECTOR:
-			return false;
+		{
+			const BYTE * p = tNode.first;
+			sphJsonUnpackInt(&p);	// total len
+			if ( sphJsonUnpackInt(&p) )
+				return false;
+
+			// 0-length mixed vectors are supported
+			eType = ToWidestType ( eType, JSON_INT32 );
+		}
+		break;
 
 		default:
 			break;
@@ -532,19 +556,6 @@ bool BuildJsonSI ( const CSphString & sAttribute, const CSphRowitem * pPool, int
 	{
 		return std::make_unique<JsonRowIterator_c> ( pPool, iNumRows, iStride, pBlobPool );
 	}, sError );
-}
-
-
-bool DropJsonSI ( const CSphString & sFile, CSphString & sError )
-{
-	if ( !sphFileExists(sFile) )
-	{
-		sError.SetSprintf ( "file '%s' does not exists", sFile.cstr() );
-		return false;
-	}
-
-	::unlink ( sFile.cstr() );
-	return true;
 }
 
 

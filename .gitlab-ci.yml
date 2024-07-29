@@ -157,7 +157,7 @@ win_build:
   variables:
     DISTR: windows
     arch: x64
-    sysroot: roots_jul24
+    sysroot: roots_apr12
     CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
     CTEST_CONFIGURATION_TYPE: Debug
   artifacts:

@@ -246,8 +246,7 @@ trace ( OpenSSL::Crypto )
 
 # Support for ZLIB
 with_menu ( ZLIB "zlib" "for compressed data and networking" )
-dl_package ( ZLIB "zlib" )
-win_install ( ZLIB daemon )
+win_install ( ZLIB common )
 
 with_menu ( ZSTD "libzstd" "for compressed networking" )
 dl_package ( ZSTD "zstd" )

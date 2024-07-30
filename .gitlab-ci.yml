@@ -48,7 +48,7 @@ job_mirror:
   needs: [ ]
   tags:
     - docker-free
-  image: manticoresearch/external_toolchain:clang15_cmake3263
+  image: manticoresearch/external_toolchain:clang16_cmake3263
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
@@ -157,7 +157,9 @@ win_build:
   variables:
     DISTR: windows
     arch: x64
-    sysroot: roots_apr12
+    # use roots_mysql83_jul29 for another (non-gitlab) tests
+    sysroot: roots_jul29
+    boost: boost80_zstd_zlib
     CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
     CTEST_CONFIGURATION_TYPE: Debug
   artifacts:
@@ -166,7 +168,9 @@ win_build:
       - build/src/$CTEST_CONFIGURATION_TYPE/indexer.exe
       - build/src/$CTEST_CONFIGURATION_TYPE/searchd.exe
       - build/src/$CTEST_CONFIGURATION_TYPE/tests.exe
+      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/gmanticoretest.exe
+      - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/usr
 # Commented out usually need, but not on our dev where everything is installed into system
 #      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll

@@ -201,7 +201,7 @@ POST /search
 
 <!-- example basic_complex -->
 
-This example demonstrates a more complex LEFT JOIN with filtering, ordering, and faceting.
+This query retrieves products, customer names, product prices, and product tags from the `orders` table and `customers` table. It performs a `LEFT JOIN`, ensuring all customers are included even if they have not made an order. The query filters to include only those orders with a price greater than `500` and matches the products to the terms 'laptop', 'phone', or 'monitor'. The results are ordered by the `id` of the orders in ascending order. Additionally, the query facets the results based on the `warranty details` from the JSON attributes of the joined `orders` table.
 
 <!-- request SQL -->
 ```sql
@@ -309,4 +309,5 @@ When using JOINs in Manticore Search, keep the following points in mind:
    ```
 
 By following these guidelines, you can effectively use JOINs in Manticore Search to combine data from multiple indexes and perform complex queries.
+
 

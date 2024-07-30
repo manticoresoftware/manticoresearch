@@ -998,6 +998,8 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
 
+It's important to note that `bigram_index` works only at the tokenization level and doesn't account for transformations like `morphology`, `wordforms` or `stopwords`. This means the tokens it creates are very straightforward, which makes searching phrases more exact and strict. While this can improve the accuracy of phrase matching, it also makes the system less able to recognize different forms of words or variations in how words appear.
+
 <!-- request SQL -->
 
 ```sql

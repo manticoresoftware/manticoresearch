@@ -468,7 +468,7 @@ Using `blend_mode` with the example `@dude!` string above, the setting `blend_mo
 Default behavior is to index the entire token, equivalent to `blend_mode = trim_none`.
 
 Be aware that using blend modes limits your search, even with the default mode `trim_none` if you assume `.` is a blended character:
-* `.dog.` will become `dog. dog` during indexing
+* `.dog.` will become `.dog. dog` during indexing
 * and you won't be able to find it by `dog.`.
 
 Using more modes increases the chance your keyword will match something.

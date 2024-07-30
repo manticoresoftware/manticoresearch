@@ -14,22 +14,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') OPTION fuzzy=-1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') OPTION fuzzy=10;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "select * from name where match('ANT') option fuzzy=1;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') OPTION FUZZY=2;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('he', 'name', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);"
-––– output –––
-––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy=`0`;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy="1";"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') OPTION fuzzy='2';"
@@ -39,4 +24,7 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') OPTION fuzzy=a;"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=@;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name');"
 ––– output –––

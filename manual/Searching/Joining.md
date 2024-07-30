@@ -24,7 +24,7 @@ You can find other select options in [SELECT](../Searching/Intro.md#SQL) section
 ```json
 POST /search
 {
-  "index": "index_name",
+  "index": "table_name",
   "query": {
     ...
   },

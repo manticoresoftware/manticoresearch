@@ -687,6 +687,3 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('pa', 'name', 'us' AS layouts);"
 | palmer   |
 | pat      |
 +----------+
-––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ri', 'name', 2 AS fuzziness, 'us,ru' AS layouts, 1 AS append, 1 AS prepend, 2 AS expansion_len);"
-––– output –––

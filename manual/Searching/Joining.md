@@ -21,6 +21,7 @@ You can find other select options in [SELECT](../Searching/Intro.md#SQL) section
 
 ### JSON
 
+
 ```json
 POST /search
 {
@@ -56,6 +57,26 @@ POST /search
   }
 }
 ```
+The need for specifying left and right values in join conditions:
+
+1. Clarity in multiple table joins
+2. Field disambiguation when names are similar
+3. Defining join types (inner, left, right, full)
+4. Aiding query optimization
+5. Handling complex join conditions
+6. Flexibility in modifying join criteria
+7. Enabling cross-database joins
+8. Improving query readability and maintenance
+
+Explicit left and right operands ensure accurate joins, prevent ambiguity, and support efficient query execution across various scenarios.
+
+There is `type` field in the `left` operand section that serves two important purposes:
+
+1. **Full-Text Match Joins**: Enables the creation of full-text match joins by including a nested `query` in the `join` object array. This query should contain only full-text items (not filters) and specify the type as "string".
+
+2. **Explicit Type Specification**: Allows for precise type specification of matching fields when using JSON for joining, as there's no syntax for explicit type conversion of JSON fields in the ON clause.
+
+These features enhance the flexibility of joining operations and address specific edge cases in data matching scenarios.
 
 ## Types of Joins
 
@@ -133,6 +154,14 @@ POST /search
 ```
 
 <!-- end -->
+
+The `table.field` syntax is used in database queries for clarity and precision. It's essential for:
+
+1. Disambiguating field names when working with joined tables
+2. Making queries more readable and explicit
+3. Avoiding conflicts when tables have fields with identical names
+
+This syntax is particularly important in the `select` and `sort` sections of queries. It helps specify exactly which field from which table is being referenced, preventing misinterpretation and ensuring the correct data is retrieved or sorted.
 
 ### Inner Join
 

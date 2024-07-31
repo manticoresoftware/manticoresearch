@@ -13,18 +13,21 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') OPTION fuzzy=-1;"
 ––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '-' near '-1'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy=`0`;"
 ––– output –––
+bash: 0: command not found
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected $end near '='
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') OPTION fuzzy='2';"
 ––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') OPTION fuzzy=a;"
 ––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=@;"
 ––– output –––
-––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name');"
-––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'

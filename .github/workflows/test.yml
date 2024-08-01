@@ -88,6 +88,10 @@ jobs:
         run: |
           wget https://repo.manticoresearch.com/repository/sysroots/boost80_zstd_zlib/boost_windows_x64.tar.xz
           tar -xf boost_windows_x64.tar.xz
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls           
 
   build_linux_debug:
     if: needs.changes.outputs.source == 'true'

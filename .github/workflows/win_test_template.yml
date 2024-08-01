@@ -46,6 +46,27 @@ jobs:
             boost80_zstd_zlib
           enableCrossOsArchive: true
           key: win_bundle
+      - name: dir content
+        run: |
+          ls 
+      - name: dir content
+        run: |
+          ls ..
+      - name: dir content
+        run: |
+          ls build
+      - name: dir content
+        run: |
+          ls bundle
+      - name: dir content
+        run: |
+          ls cache
+      - name: dir content
+        run: |
+          ls ../boost80_zstd_zlib
+      - name: dir content
+        run: |
+          ls boost80_zstd_zlib
       - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks
         run: rm C:\tools\zstd\zstd.exe
       - name: Check out cache

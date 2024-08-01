@@ -1189,10 +1189,10 @@ void MatchingWorkAction ( const StoredQuery_t * pStored, PercolateMatchContext_t
 
 	// setup filters
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &pStored->m_dFilters;
-	tFlx.m_pFilterTree = &pStored->m_dFilterTree;
-	tFlx.m_pSchema = &tMatchCtx.m_tSchema;
-	tFlx.m_pBlobPool = pBlobs;
+	tFlx.m_pFilters		= &pStored->m_dFilters;
+	tFlx.m_pFilterTree	= &pStored->m_dFilterTree;
+	tFlx.m_pMatchSchema	= &tMatchCtx.m_tSchema;
+	tFlx.m_pBlobPool	= pBlobs;
 
 	bool bRes = tMatchCtx.m_pCtx->CreateFilters ( tFlx, sError, sWarning );
 	tMatchCtx.m_dMsg.Err ( sError );
@@ -2259,7 +2259,8 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
 	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
-	tFlx.m_pSchema = &tMaxSorterSchema;
+	tFlx.m_pMatchSchema = &tMaxSorterSchema;
+	tFlx.m_pIndexSchema = &m_tSchema;
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = true;
 

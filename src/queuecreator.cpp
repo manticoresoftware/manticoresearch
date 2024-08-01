@@ -329,8 +329,8 @@ private:
 	bool	AddColumnarAttributeExpressions();
 	void	CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo & tGroupByAttr, bool & bGrouperUsesAttrs );
 	void	SelectStageForColumnarExpr ( CSphColumnInfo & tExprCol );
-	void	FetchDependencyChains ( IntVec_t & dDependentCols );
-	void	PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & dDependentCols );
+	void	FetchDependencyChains ( StrVec_t & dDependentCols );
+	void	PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & dDependentCols );
 	bool	SetupDistinctAttr();
 	bool	PredictAggregates() const;
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
@@ -659,33 +659,32 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 	assert ( pAttrs );
 	assert ( m_pSorterSchema );
 
-	CSphVector<int> dCur;
+	StrVec_t dCur;
 
 	// add valid attributes to processing list
 	for ( int i=0; i<iAttrCount; ++i )
 		if ( pAttrs[i]>=0 )
-			dCur.Add ( pAttrs[i] );
+			dCur.Add ( m_pSorterSchema->GetAttr ( pAttrs[i] ).m_sName );
 
 	// collect columns which affect current expressions
-	for ( int i=0; i<dCur.GetLength(); ++i )
+	ARRAY_FOREACH ( i, dCur )
 	{
-		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dCur[i] );
-		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr )
-			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+		const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( dCur[i].cstr() );
+		assert(pCol);
+		if ( pCol->m_eStage>SPH_EVAL_PRESORT && pCol->m_pExpr )
+			pCol->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 	}
 
 	// get rid of dupes
 	dCur.Uniq();
 
 	// fix up of attributes stages
-	for ( int iAttr : dCur )
+	for ( const auto & sAttr : dCur )
 	{
-		if ( iAttr<0 )
-			continue;
-
-		auto & tCol = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( iAttr ) );
-		if ( tCol.m_eStage==SPH_EVAL_FINAL )
-			tCol.m_eStage = SPH_EVAL_PRESORT;
+		auto pCol = const_cast<CSphColumnInfo *>( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		assert(pCol);
+		if ( pCol->m_eStage==SPH_EVAL_FINAL )
+			pCol->m_eStage = SPH_EVAL_PRESORT;
 	}
 }
 
@@ -702,11 +701,15 @@ void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 			if ( m_tSettings.m_bComputeItems )
 			{
 				// check if dependent columns are joined
-				IntVec_t dCols;
-				dCols.Add ( dAttrs[i] );
+				StrVec_t dCols;
+				dCols.Add ( tAttr.m_sName );
 				FetchDependencyChains(dCols);
-				for ( auto iCol : dCols )
-					m_bJoinedGroupSort |= m_pSorterSchema->GetAttr(iCol).IsJoined();
+				for ( const auto & sAttr : dCols )
+				{
+					const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+					assert(pAttr);
+					m_bJoinedGroupSort |= pAttr->IsJoined();
+				}
 			}
 		}
 }
@@ -743,14 +746,18 @@ void QueueCreator_c::SelectStageForColumnarExpr ( CSphColumnInfo & tExprCol )
 }
 
 
-void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
+void QueueCreator_c::FetchDependencyChains ( StrVec_t & dDependentCols )
 {
 	ARRAY_FOREACH ( i, dDependentCols )
 	{
-		if ( m_pSorterSchema->IsRemovedAttr ( dDependentCols[i] ) )
+		const CSphString & sAttr = dDependentCols[i];
+		int iAttr = m_pSorterSchema->GetAttrIndex ( sAttr.cstr() );
+		assert ( iAttr>=0 );
+
+		if ( m_pSorterSchema->IsRemovedAttr(iAttr) )
 			continue;
 
-		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
+		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr(iAttr);
 
 		int iOldLen = dDependentCols.GetLength();
 
@@ -769,13 +776,14 @@ void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
 }
 
 
-void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & dDependentCols )
+void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & dDependentCols )
 {
 	bool bWeight = false;
-	for ( auto i : dDependentCols )
+	for ( const auto & sAttr : dDependentCols )
 	{
-		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr(i);
-		bWeight |= tCol.m_bWeight;
+		const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+		assert(pCol);
+		bWeight |= pCol->m_bWeight;
 	}
 
 	if ( bWeight )
@@ -784,11 +792,11 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & 
 		tExprCol.m_bWeight = true;
 	}
 
-	for ( auto i : dDependentCols )
+	for ( const auto & sAttr : dDependentCols )
 	{
-		auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr(i) );
-		if ( tDep.m_eStage > tExprCol.m_eStage )
-			tDep.m_eStage = tExprCol.m_eStage;
+		auto pDep = const_cast<CSphColumnInfo *> ( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		if ( pDep->m_eStage > tExprCol.m_eStage )
+			pDep->m_eStage = tExprCol.m_eStage;
 	}
 }
 
@@ -838,16 +846,22 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 
 bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 {
-	CSphVector<int> dDependentCols;
+	StrVec_t dDependentCols;
 	tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
-	FetchDependencyChains ( dDependentCols );
+	FetchDependencyChains(dDependentCols);
 
 	if ( !dDependentCols.GetLength() )
 		return tExprCol.IsColumnarExpr();
 
-	if ( dDependentCols.GetLength()==1 && !m_pSorterSchema->IsRemovedAttr ( dDependentCols[0] ) )
+	if ( dDependentCols.GetLength()==1 )
 	{
-		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr ( dDependentCols[0] );
+		int iAttr = m_pSorterSchema->GetAttrIndex ( dDependentCols[0].cstr() );
+		assert ( iAttr>=0 );
+
+		if ( m_pSorterSchema->IsRemovedAttr(iAttr) )
+			return false;
+
+		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr(iAttr);
 		if ( tColumnarAttr.IsColumnarExpr() )
 		{
 			CSphString sColumnarCol;
@@ -867,15 +881,17 @@ bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
 {
 	/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
-	CSphVector<int> dDependentCols;
+	StrVec_t dDependentCols;
 	tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
 	FetchDependencyChains ( dDependentCols );
-	ARRAY_FOREACH ( j, dDependentCols )
+	for ( const auto & sAttr : dDependentCols )
 	{
-		auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( dDependentCols[j] ) );
-		bool bJoinedAttr = ExprHasJoinPrefix ( tDep.m_sName, m_tSettings.m_pJoinArgs.get() ) && tDep.m_eStage==SPH_EVAL_SORTER && tDep.m_tLocator.m_bDynamic && !tDep.m_pExpr;
-		if ( tDep.m_eStage>tExprCol.m_eStage && !bJoinedAttr )
-			tDep.m_eStage = tExprCol.m_eStage;
+		auto pDep = const_cast<CSphColumnInfo *>( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		assert(pDep);
+
+		bool bJoinedAttr = ExprHasJoinPrefix ( pDep->m_sName, m_tSettings.m_pJoinArgs.get() ) && pDep->m_eStage==SPH_EVAL_SORTER && pDep->m_tLocator.m_bDynamic && !pDep->m_pExpr;
+		if ( pDep->m_eStage>tExprCol.m_eStage && !bJoinedAttr )
+			pDep->m_eStage = tExprCol.m_eStage;
 	}
 }
 
@@ -936,7 +952,7 @@ void QueueCreator_c::SelectExprEvalStage ( CSphColumnInfo & tExprCol )
 			// so we are about to add a filter condition,
 			// but it might depend on some preceding columns (e.g. SELECT 1+attr f1 ... WHERE f1>5)
 			// lets detect those and move them to prefilter \ presort phase too
-			CSphVector<int> dDependentCols;
+			StrVec_t dDependentCols;
 			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
 
 			SelectStageForColumnarExpr(tExprCol);
@@ -1116,21 +1132,23 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	// need to add all dependent columns for post limit expressions
 	if ( tExprCol.m_eStage==SPH_EVAL_POSTLIMIT && tExprCol.m_pExpr )
 	{
-		CSphVector<int> dCur;
+		StrVec_t dCur;
 		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 
 		ARRAY_FOREACH ( j, dCur )
 		{
-			const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dCur[j] );
-			if ( tCol.m_pExpr )
-				tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+			const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( dCur[j].cstr() );
+			if ( pCol && pCol->m_pExpr )
+				pCol->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 		}
-		dCur.Uniq ();
 
-		ARRAY_FOREACH ( j, dCur )
+		dCur.Uniq();
+
+		for ( const auto & sAttr : dCur )
 		{
-			const CSphColumnInfo & tDep = m_pSorterSchema->GetAttr ( dCur[j] );
-			m_hQueryColumns.Add ( tDep.m_sName );
+			const CSphColumnInfo * pDep = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+			assert(pDep);
+			m_hQueryColumns.Add ( pDep->m_sName );
 		}
 	}
 

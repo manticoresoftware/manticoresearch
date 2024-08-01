@@ -252,7 +252,8 @@ class FilterCreationMeasureStack_c : public StackMeasurer_c
 			CreateFilterContext_t tFCtx;
 			tFCtx.m_pFilters = &tQuery.m_dFilters;
 			tFCtx.m_pFilterTree = &tQuery.m_dFilterTree;
-			tFCtx.m_pSchema = &tParams.m_tSchema;
+			tFCtx.m_pMatchSchema = &tParams.m_tSchema;
+			tFCtx.m_pIndexSchema = &tParams.m_tSchema;
 			tFCtx.m_bScan = true;
 
 			CSphString sWarning;

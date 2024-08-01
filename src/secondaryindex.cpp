@@ -810,7 +810,8 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 
 			CreateFilterContext_t tCFCtx;
 			tCFCtx.m_pFilters	= &dFilter;
-			tCFCtx.m_pSchema	= &tCtx.m_tIndexSchema;
+			tCFCtx.m_pMatchSchema = &tCtx.m_tSorterSchema;
+			tCFCtx.m_pIndexSchema = &tCtx.m_tIndexSchema;
 			tCFCtx.m_pColumnar	= tCtx.m_pColumnar;
 			tCFCtx.m_eCollation	= tCtx.m_tQuery.m_eCollation;
 			tCFCtx.m_bScan		= true;

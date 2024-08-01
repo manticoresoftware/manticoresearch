@@ -59,9 +59,9 @@ jobs:
           cp bundle/mysql-x64/lib/libmysql* build/src/Debug/
           cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
           cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
-          ls  ..
-          ls ../boost80_zstd_zlib
           ls 
+          ls ..
+          ls ../boost80_zstd_zlib
           ls boost80_zstd_zlib
       - name: Setup Flex and Bison
         run: Install-ChocoPackage winflexbison

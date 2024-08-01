@@ -22,7 +22,7 @@ jobs:
     env:
       CACHEB: "../cache"
       LIBS_BUNDLE: "../bundle"
-      BOOST_ROOT: "../boost_1_75_0"
+      BOOST_ROOT: "../boost80_zstd_zlib"
       CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: ${{ inputs.CTEST_START }}
@@ -43,7 +43,7 @@ jobs:
         with:
           path: |
             bundle
-            boost_1_75_0
+            boost80_zstd_zlib
           enableCrossOsArchive: true
           key: win_bundle
       - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks

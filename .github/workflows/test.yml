@@ -80,14 +80,14 @@ jobs:
       - name: Extract Windows bundle from Windows sysroot
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/sysroots/roots_apr15/sysroot_windows_x64.tar.xz
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_jul29/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
           mv diskc/winbundle bundle
       - name: Extract Boost to put it to the cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
-          tar -xf boost_1_75_0.tgz
+          wget https://repo.manticoresearch.com/repository/sysroots/boost80_zstd_zlib/boost_windows_x64.tar.xz
+          tar -xf boost_windows_x64.tar.xz
 
   build_linux_debug:
     if: needs.changes.outputs.source == 'true'
@@ -582,11 +582,12 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_apr15
+      sysroot: roots_jul29
+      boost: boost80_zstd_zlib
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
-      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr build/src/Debug/*.dll build/src/gtests/Debug/*.dll"
 
   test_windows:
     name: Windows tests

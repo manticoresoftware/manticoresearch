@@ -142,7 +142,7 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_jul29
+      sysroot: roots_mysql83_jul29
       boost: boost80_zstd_zlib
       cmake_command: |
         mkdir build

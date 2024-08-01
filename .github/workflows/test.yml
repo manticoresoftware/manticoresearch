@@ -73,7 +73,7 @@ jobs:
         with:
           path: |
             bundle
-            boost80_zstd_zlib
+            boost_1_80_0
           enableCrossOsArchive: true
           key: win_bundle
           lookup-only: true

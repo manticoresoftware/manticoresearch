@@ -22,7 +22,7 @@ jobs:
     env:
       CACHEB: "../cache"
       LIBS_BUNDLE: "../bundle"
-      BOOST_ROOT: "../boost80_zstd_zlib"
+      BOOST_ROOT: "../boost_1_80_0"
       CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: ${{ inputs.CTEST_START }}
@@ -43,7 +43,7 @@ jobs:
         with:
           path: |
             bundle
-            boost80_zstd_zlib
+            boost_1_80_0
           enableCrossOsArchive: true
           key: win_bundle
       - name: dir content
@@ -73,6 +73,10 @@ jobs:
       - name: dir content
         continue-on-error: true
         run: |
+          ls ../cache          
+      - name: dir content
+        continue-on-error: true
+        run: |
           ls ../boost80_zstd_zlib
       - name: dir content
         continue-on-error: true
@@ -91,10 +95,6 @@ jobs:
           cp bundle/mysql-x64/lib/libmysql* build/src/Debug/
           cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
           cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
-          ls 
-          ls ..
-          ls ../boost80_zstd_zlib
-          ls boost80_zstd_zlib
       - name: Setup Flex and Bison
         run: Install-ChocoPackage winflexbison
       - name: Run mysql

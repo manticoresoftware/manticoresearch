@@ -65,6 +65,7 @@ $surnames = file('./test/clt-tests/comparison-overhead-json-sql/surnames.txt', F
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";
+srand(1);
 $error = false;
 $cache_file_name = '/tmp/'.md5($query_start).'_'.$argv[1].'_'.$argv[3];
 $c = 0;

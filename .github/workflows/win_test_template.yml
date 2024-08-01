@@ -54,6 +54,9 @@ jobs:
           ls ..
       - name: dir content
         run: |
+          ls ../..
+      - name: dir content
+        run: |
           ls build
       - name: dir content
         run: |

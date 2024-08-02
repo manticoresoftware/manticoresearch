@@ -1251,8 +1251,6 @@ This option enables/disables the use of secondary indexes for search queries. It
 * `1`: Enable the use of secondary indexes on search. They can be disabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
 * `force`: Same as enable, but any errors during the loading of secondary indexes will be reported, and the whole index will not be loaded into the daemon.
 
-Note that secondary indexes are not effective for full-text queries.
-
 <!-- intro -->
 ##### Example:
 

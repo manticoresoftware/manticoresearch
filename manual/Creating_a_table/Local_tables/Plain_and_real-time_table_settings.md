@@ -65,6 +65,83 @@ table <table name> {
 
 ### Common plain and real-time tables settings
 
+#### json_secondary_indexes
+
+```ini
+json_secondary_indexes = json_attr
+```
+
+<!-- example json_secondary_indexes -->
+
+By default, secondary indexes are generated for all attributes except JSON attributes. However, secondary indexes for JSON attributes can be explicitly generated using the `json_secondary_indexes` setting.
+When a JSON attribute is included in this option, its contents will be flattened into multiple secondary indexes that can be used by the query optimizer to speed up queries.
+
+Value: A comma-separated list of JSON attributes for which secondary indexes should be generated.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, j json secondary_index='1')
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, j json secondary_index='1')"
+```
+
+<!-- request PHP -->
+
+```php
+```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('CREATE TABLE products(title text, j json secondary_index='1')')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index='1')');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  json_secondary_indexes = j
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_json = j
+}
+```
+<!-- end -->
+
+
 #### type
 
 ```ini

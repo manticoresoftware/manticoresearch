@@ -33,6 +33,10 @@ The primary method for implementing autocomplete in Manticore is the `CALL AUTOC
 
 Before you proceed, ensure that the table you try to use for autocomplete has [infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled.
 
+*Attention:*
+
+We employ smart autochecking for `min_infix_len` in table options, with results cached for 30 seconds. After altering your table, a brief delay may occur (usually unnoticeable). Note that we only cache positive results, so issues may arise when removing or dropping min_infix_len.
+
 ### Syntax
 
 ```sql

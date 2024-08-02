@@ -87,8 +87,8 @@ enum ESphExprCommand
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
-	SPH_EXPR_UPDATE_DEPENDENT_COLS,
 	SPH_EXPR_GET_GEODIST_SETTINGS,
+	SPH_EXPR_GET_POLY2D_BBOX,
 	SPH_EXPR_GET_UDF,
 	SPH_EXPR_GET_STATEFUL_UDF,
 	SPH_EXPR_SET_COLUMNAR,
@@ -365,7 +365,8 @@ ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg );
 ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg );
-void FetchAttrDependencies ( IntVec_t & dAttrIds, const ISphSchema & tSchema );
+void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema );
+bool CanAliasedExprSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bExclude );
 void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
 
 /// provide mysql version string

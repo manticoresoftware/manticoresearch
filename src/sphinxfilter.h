@@ -70,7 +70,8 @@ struct CreateFilterContext_t
 	const VecTraits_T<CSphFilterSettings> * m_pFilters = nullptr;
 	const VecTraits_T<FilterTreeItem_t> * m_pFilterTree = nullptr;
 
-	const ISphSchema *			m_pSchema = nullptr;
+	const ISphSchema *			m_pMatchSchema = nullptr;
+	const ISphSchema *			m_pIndexSchema = nullptr;
 	const BYTE *				m_pBlobPool = nullptr;
 	const columnar::Columnar_i * m_pColumnar = nullptr;
 
@@ -85,9 +86,6 @@ struct CreateFilterContext_t
 	const SIContainer_c *		m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
 	CSphString					m_sJoinIdx;
-
-	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
-		: m_pSchema ( pSchema ) {}
 };
 
 std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);

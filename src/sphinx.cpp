@@ -3138,14 +3138,15 @@ bool CSphIndex_VLN::IsQueryFast ( const CSphQuery & tQuery, const CSphVector<Sec
 }
 
 
-static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tSchema )
+static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tIndexSchema )
 {
 	for ( auto & tFilter : tQuery.m_dFilters )
 	{
 		CommonFilterSettings_t tFixedSettings;
 		CSphString sError;
 		CreateFilterContext_t tCtx;
-		tCtx.m_pSchema = &tSchema;
+		tCtx.m_pMatchSchema = &tIndexSchema;
+		tCtx.m_pIndexSchema = &tIndexSchema;
 		if ( !FixupFilterSettings ( tFilter, tFixedSettings, tCtx, tFilter.m_sAttrName, sError ) )
 			return false;
 	}
@@ -6281,7 +6282,8 @@ std::unique_ptr<ISphFilter> CSphIndex_VLN::CreateMergeFilters ( const VecTraits_
 	CSphString sError, sWarning;
 	std::unique_ptr<ISphFilter> pResult;
 	CreateFilterContext_t tCtx;
-	tCtx.m_pSchema = &m_tSchema;
+	tCtx.m_pMatchSchema = &m_tSchema;
+	tCtx.m_pIndexSchema = &m_tSchema;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 
 	for ( const auto& dSetting : dSettings )
@@ -8055,7 +8057,8 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	// setup filters
 	tFlx.m_pFilters		= &tQuery.m_dFilters;
 	tFlx.m_pFilterTree	= &tQuery.m_dFilterTree;
-	tFlx.m_pSchema		= pMaxSorterSchema;
+	tFlx.m_pMatchSchema	= pMaxSorterSchema;
+	tFlx.m_pIndexSchema	= &m_tSchema;
 	tFlx.m_pBlobPool	= m_tBlobAttrs.GetReadPtr();
 	tFlx.m_pColumnar	= m_pColumnar.get();
 	tFlx.m_eCollation	= tQuery.m_eCollation;

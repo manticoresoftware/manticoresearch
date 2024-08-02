@@ -29,8 +29,19 @@ struct GeoDistSettings_t
 	float		m_fScale = 1.0f;
 	float		m_fAnchorLat = 0.0f;
 	float		m_fAnchorLon = 0.0f;
-	int			m_iAttrLat = -1;
-	int			m_iAttrLon = -1;
+	CSphString	m_sAttrLat;
+	CSphString	m_sAttrLon;
+};
+
+struct Poly2dBBox_t
+{
+	float		m_fMinX = 0.0f;
+	float		m_fMinY = 0.0f;
+	float		m_fMaxX = 0.0f;
+	float		m_fMaxY = 0.0f;
+	int			m_iNumPoints = 0;
+	CSphString	m_sAttrLat;
+	CSphString	m_sAttrLon;
 };
 
 Geofunc_fn	GetGeodistFn ( GeoFunc_e eFunc, bool bDeg );

@@ -229,7 +229,7 @@ public:
 protected:
 	CSphRefcountedPtr<ISphExpr>		m_pArgs;
 	CSphRefcountedPtr<ISphExpr>		m_pText;
-	int								m_iTextLocator = -1;
+	CSphString						m_sTextAttr;
 	CSphVector<int>					m_dRequestedFieldIds;
 	const CSphIndex *				m_pIndex = nullptr;
 	QueryProfile_c *				m_pProfiler = nullptr;
@@ -279,12 +279,11 @@ void Expr_HighlightTraits_c::FixupLocator ( const ISphSchema * pOldSchema, const
 		return;
 	}
 
-	CSphString sColumnarCol;
-	m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
-	m_iTextLocator = pNewSchema->GetAttrIndex ( sColumnarCol.cstr() );
-	assert ( m_iTextLocator!=0 );
+	m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &m_sTextAttr );
+	const CSphColumnInfo * pAttr = pNewSchema->GetAttr ( m_sTextAttr.cstr() );
+	assert(pAttr);
 
-	m_pText = pNewSchema->GetAttr(m_iTextLocator).m_pExpr;
+	m_pText = pAttr->m_pExpr;
 }
 
 
@@ -298,12 +297,9 @@ void Expr_HighlightTraits_c::Command ( ESphExprCommand eCmd, void * pArg )
 
 	if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_pText && m_pText->IsColumnar() )
 	{
-		assert ( m_iTextLocator>=0 );
-		static_cast < CSphVector<int>* >(pArg)->Add ( m_iTextLocator );
+		assert ( !m_sTextAttr.IsEmpty() );
+		static_cast<StrVec_t*>(pArg)->Add(m_sTextAttr);
 	}
-
-	if ( eCmd==SPH_EXPR_UPDATE_DEPENDENT_COLS && m_iTextLocator>=*static_cast<int*>(pArg) )
-		m_iTextLocator--;
 
 	if ( QueryExprTraits_c::Command ( eCmd, pArg ) )
 	{
@@ -327,11 +323,7 @@ void Expr_HighlightTraits_c::SetTextExpr ( ISphExpr * pExpr, const ISphSchema * 
 	SafeAddRef(m_pText);
 
 	if ( m_pText && m_pText->IsColumnar() )
-	{
-		CSphString sColumnarCol;
-		m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarCol );
-		m_iTextLocator = pRsetSchema->GetAttrIndex ( sColumnarCol.cstr() ); 
-	}
+		m_pText->Command ( SPH_EXPR_GET_COLUMNAR_COL, &m_sTextAttr );
 }
 
 //////////////////////////////////////////////////////////////////////////

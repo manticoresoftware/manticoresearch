@@ -2043,7 +2043,7 @@ static VecTraits_T<CSphMatch> GetResultMatches ( const VecTraits_T<CSphMatch> & 
 	CSphString sError;
 	CreateFilterContext_t tCtx;
 	tCtx.m_pFilters = &tAggr.m_dCompositeAfterKey;
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 	tCtx.m_bScan = true;
 	if ( !sphCreateFilters ( tCtx, sError, sError ) || !sError.IsEmpty() )
 	{

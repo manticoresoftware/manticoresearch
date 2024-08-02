@@ -1,5 +1,15 @@
 # Changelog
 
+# Version 6.3.6
+Released: August 2nd 2024
+
+Version 6.3.6 continues the 6.3 series and includes only bug fixes.
+
+### Bug fixes
+
+* [Issue #2477](https://github.com/manticoresoftware/manticoresearch/issues/2477) Fixed a crash introduced in version 6.3.4, which could occur when dealing with expressions and distributed or multiple tables.
+* [Issue #2352](https://github.com/manticoresoftware/manticoresearch/issues/2352) Fixed a daemon crash or internal error upon early exit caused by `max_query_time` when querying multiple indexes.
+
 # Version 6.3.4
 Released: July 31st 2024
 

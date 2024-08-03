@@ -152,21 +152,21 @@ CSphString SettingsFormatter_c::FormatValue(T tVal) {
 	SqlEscapedBuilder_c dEscaped;
 
 	// convert tVal to CSphString
-	CSphString s_Val;
+	CSphString sVal;
 	dEscaped << tVal;
-	dEscaped.MoveTo(s_Val);
+	dEscaped.MoveTo(sVal);
 
 	if (!m_bEscapeValues) {
 		// return plain string
-		return s_Val;
+		return sVal;
 	}
 
 	// build escaped string
-	CSphString res;
-	dEscaped.AppendEscapedSkippingCommaNoQuotes(s_Val.cstr());
-	dEscaped.MoveTo(res);
+	CSphString sRes;
+	dEscaped.AppendEscapedSkippingCommaNoQuotes(sVal.cstr());
+	dEscaped.MoveTo( sRes);
 
-	return res;
+	return sRes;
 }
 
 template <typename T>

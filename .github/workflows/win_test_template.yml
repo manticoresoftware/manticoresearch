@@ -104,8 +104,8 @@ jobs:
           net start mysql
           mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
       # TODO: Uncomment the below if there's no more OpenSSL in the runner like it happened in Sep 2023 (https://github.com/actions/runner-images/issues/8344)
-       - name: Install OpenSSL
-         run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1
+      # - name: Install OpenSSL
+      #   run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1
       - name: Setup PHP and mysqli
         uses: shivammathur/setup-php@v2
         with:

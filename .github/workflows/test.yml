@@ -83,14 +83,6 @@ jobs:
           wget https://repo.manticoresearch.com/repository/sysroots/roots_mysql83_jul29/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
           mv diskc/winbundle bundle
-          mv diskc/curl-7.85.0_1-win64-mingw bundle/
-          mv diskc/CURLConfig.cmake bundle/
-          mv diskc/OpenSSL-Win64 bundle/
-          mv diskc/OpenSSLConfig.cmake bundle/
-          mv diskc/zlib-v1.3.1-win64 bundle/
-          mv diskc/ZLIBConfig.cmake bundle/
-          mv diskc/zstd-v1.5.2-win64 bundle/
-          mv diskc/ZSTDConfig.cmake bundle/
       - name: Extract Boost to put it to the cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: |

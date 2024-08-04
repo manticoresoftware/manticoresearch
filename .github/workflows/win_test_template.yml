@@ -22,7 +22,7 @@ jobs:
     env:
       CACHEB: "../cache"
       LIBS_BUNDLE: "../bundle"
-      BOOST_ROOT: "../boost_1_75_0"
+      BOOST_ROOT: "../boost_1_80_0"
       CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: ${{ inputs.CTEST_START }}
@@ -43,9 +43,45 @@ jobs:
         with:
           path: |
             bundle
-            boost_1_75_0
+            boost_1_80_0
           enableCrossOsArchive: true
           key: win_bundle
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls 
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls ..
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls ../..
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls build
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls bundle
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls cache
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls ../cache          
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls ../boost80_zstd_zlib
+      - name: dir content
+        continue-on-error: true
+        run: |
+          ls boost80_zstd_zlib
       - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks
         run: rm C:\tools\zstd\zstd.exe
       - name: Check out cache
@@ -79,7 +115,7 @@ jobs:
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status
         if: always()

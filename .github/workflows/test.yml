@@ -495,7 +495,7 @@ jobs:
       DISTR: windows
       arch: x64
       sysroot: roots_jul29
-      boost: boost80_zstd_zlib
+      boost: boost_1_80_0
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64

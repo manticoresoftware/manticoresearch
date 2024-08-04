@@ -87,7 +87,6 @@ jobs:
           mv diskc/winbundle bundle
           mv diskc/boost_1_80_0 boost_1_80_0
           mv diskc/* bundle
-          rm bundle/OpenSSLConfig.cmake
       - name: dir content
         continue-on-error: true
         run: |

@@ -91,6 +91,8 @@ jobs:
         continue-on-error: true
         run: |
           ls           
+          ls bundle   
+          ls boost_1_80_0
 
   build_linux_debug:
     if: needs.changes.outputs.source == 'true'

@@ -73,7 +73,7 @@ jobs:
         with:
           path: |
             bundle
-            boost_1_80_0
+            boost_1_75_0
           enableCrossOsArchive: true
           key: win_bundle
           lookup-only: true
@@ -86,8 +86,8 @@ jobs:
       - name: Extract Boost to put it to the cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/sysroots/boost80_zstd_zlib/boost_windows_x64.tar.xz
-          tar -xf boost_windows_x64.tar.xz
+          wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
+          tar -xf boost_1_75_0.tgz
       - name: dir content
         continue-on-error: true
         run: |
@@ -494,8 +494,7 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_jul29
-      boost: boost_1_80_0
+      sysroot: roots_apr15
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64

@@ -82,13 +82,11 @@ jobs:
         run: |
           wget https://repo.manticoresearch.com/repository/sysroots/roots_mysql83_jul29/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
-          mv diskc/winbundle bundle
-      - name: Extract Boost to put it to the cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
           wget https://repo.manticoresearch.com/repository/sysroots/boost80_zstd_zlib/boost_windows_x64.tar.xz
           tar -xf boost_windows_x64.tar.xz
+          mv diskc/winbundle bundle
           mv diskc/boost_1_80_0 boost_1_80_0
+          mv diskc/* bundle
       - name: dir content
         continue-on-error: true
         run: |

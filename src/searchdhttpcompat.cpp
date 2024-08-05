@@ -694,8 +694,10 @@ private:
 
 			nljson tShouldObj;
 			tShouldObj["should"] = tExistVec;
+			nljson tBoolObj;
+			tBoolObj["bool"] = tShouldObj;
 			nljson::json_pointer tParent = tIt.parent_pointer();
-			tFullQuery[tParent] = tShouldObj;
+			tFullQuery[tParent] = tBoolObj;
 
 			//std::cout << tParent << " : " << tFullQuery[tParent] << "\n";
 		}

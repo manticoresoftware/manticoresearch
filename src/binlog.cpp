@@ -134,11 +134,12 @@ private:
 using namespace Binlog;
 class Binlog_c;
 
-enum OnCommitAction_e
+enum class FlushAction_e : int
 {
-	ACTION_NONE,
-	ACTION_FSYNC,
-	ACTION_WRITE
+	ACTION_NONE = 0,
+	ACTION_FSYNC = 1,
+	ACTION_WRITE = 2,
+	ACTION_FSYNC_ON_CLOSE = 3,
 };
 
 enum class BinlogFileState_e
@@ -172,7 +173,7 @@ public:
 	~SingleBinlog_c ();
 	void Deinit();
 
-	void DoFlush ( OnCommitAction_e eAction ) EXCLUDES ( m_tWriteAccess );
+	void DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
 	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES ( m_tWriteAccess );
 	bool BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess );
 	void NotifyIndexFlush ( int64_t iFlushedTID, const char * szIndexName, bool bShutdown, bool bForceSave ) EXCLUDES ( m_tWriteAccess );
@@ -224,7 +225,7 @@ private:
 	std::atomic<int64_t>	m_iLastFlushed {0};
 	int64_t					m_iFlushPeriod = BINLOG_AUTO_FLUSH;
 
-	OnCommitAction_e		m_eOnCommit { ACTION_NONE };
+	FlushAction_e			m_eFlushFlavour = FlushAction_e::ACTION_NONE;
 
 	mutable Threads::Coro::RWLock_c m_tHashAccess;
 	SmallStringHash_T<SingleBinlogPtr> m_hBinlogs GUARDED_BY ( m_tHashAccess );
@@ -554,14 +555,14 @@ void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
 }
 
 
-void SingleBinlog_c::DoFlush ( OnCommitAction_e eAction )
+void SingleBinlog_c::DoFlush ( FlushAction_e eAction )
 {
 	MEMORY ( MEM_BINLOG );
 
 	int iSyncFd = -1;
 	{
 		ScopedBinlogMutex_t tLock ( m_tWriteAccess );
-		if ( eAction==ACTION_NONE || m_tWriter.HasUnwrittenData () )
+		if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
 		{
 			if ( !m_tWriter.Write () )
 				return;
@@ -597,7 +598,7 @@ bool SingleBinlog_c::BinlogCommit ( int64_t * pTID, const char * szIndexName, Fn
 	const int uIndex = GetWriteIndexID ( szIndexName, iTID );
 
 	{
-		BinlogTransactionGuard_c tGuard ( m_tWriter, m_pOwner->m_eOnCommit==ACTION_NONE );
+		BinlogTransactionGuard_c tGuard ( m_tWriter, m_pOwner->m_eFlushFlavour==FlushAction_e::ACTION_NONE );
 
 		// header
 		m_tWriter.PutByte ( Blop_e::ADD_TXN );
@@ -882,11 +883,12 @@ void SingleBinlog_c::CheckDoRestart ()
 
 	auto sName = m_tWriter.GetFilename();
 	int iFD = m_tWriter.LeakFD();
+	bool bFsyncOnClose = m_pOwner->m_eFlushFlavour==FlushAction_e::ACTION_FSYNC_ON_CLOSE;
 	OpenNewLog ();
 
-	Threads::Coro::Go ( [this, iFD, sName] {
+	Threads::Coro::Go ( [this, iFD, bFsyncOnClose, sName] {
 		m_tFlushRunning.Wait ( [] ( int iVal ) { return iVal<1; } );
-		if ( fsync ( iFD )!=0 )
+		if ( bFsyncOnClose && fsync ( iFD )!=0 )
 			sphWarning ( "failed to sync %s: %d (%s)", sName.cstr(), errno, strerrorm ( errno ) );
 		::close ( iFD );
 	}, Threads::Coro::CurrentScheduler () );
@@ -895,17 +897,18 @@ void SingleBinlog_c::CheckDoRestart ()
 
 bool SingleBinlog_c::CheckDoFlush ()
 {
-	switch ( m_pOwner->m_eOnCommit )
+	switch ( m_pOwner->m_eFlushFlavour )
 	{
-	case ACTION_NONE:
+	case FlushAction_e::ACTION_NONE:
 		break;
 
-	case ACTION_WRITE:
+	case FlushAction_e::ACTION_WRITE:
+	case FlushAction_e::ACTION_FSYNC_ON_CLOSE:
 		if ( !m_tWriter.Write () )
 			return false;
 		break;
 
-	case ACTION_FSYNC:
+	case FlushAction_e::ACTION_FSYNC:
 		if ( !m_tWriter.WriteAndFsync () )
 			return false;
 		break;
@@ -1095,10 +1098,11 @@ void Binlog_c::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlag
 	const int iMode = hSearchd.GetInt ( "binlog_flush", 2 );
 	switch ( iMode )
 	{
-		case 0:		m_eOnCommit = ACTION_NONE; break;
-		case 1:		m_eOnCommit = ACTION_FSYNC; break;
-		case 2:		m_eOnCommit = ACTION_WRITE; break;
-		default:	sphDie ( "unknown binlog flush mode %d (must be 0, 1, or 2)\n", iMode );
+	case 0: m_eFlushFlavour = FlushAction_e::ACTION_NONE; break;
+	case 1: m_eFlushFlavour = FlushAction_e::ACTION_FSYNC; break;
+	case 2: m_eFlushFlavour = FlushAction_e::ACTION_WRITE; break;
+	case 3: m_eFlushFlavour = FlushAction_e::ACTION_FSYNC_ON_CLOSE; break;
+		default:	sphDie ( "unknown binlog flush mode %d (must be 0, 1, 2, or 3)\n", iMode );
 	}
 
 	m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
@@ -1124,7 +1128,7 @@ void Binlog_c::SetCommon ( bool bCommonBinlog )
 
 bool Binlog_c::IsFlushingEnabled () const
 {
-	return !m_bDisabled && m_eOnCommit!=ACTION_FSYNC;
+	return !m_bDisabled && m_eFlushFlavour!=FlushAction_e::ACTION_FSYNC;
 }
 
 
@@ -1139,7 +1143,7 @@ void Binlog_c::DoFlush ()
 
 	Threads::SccRL_t tLock ( m_tHashAccess );
 	for ( auto& tBinlog : m_hBinlogs )
-		tBinlog.second->DoFlush ( m_eOnCommit );
+		tBinlog.second->DoFlush ( m_eFlushFlavour );
 
 	m_iLastFlushed.store ( sphMicroTimer (), std::memory_order_relaxed );
 }

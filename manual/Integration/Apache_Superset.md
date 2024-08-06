@@ -2,14 +2,14 @@
 
 [Apache Superset](https://superset.apache.org/) is a modern data exploration and visualization platform. Manticore Search can be integrated with Apache Superset, allowing users to harness the full potential of Manticore Search for data analysis and visualization.
 
-**Note: This integration works only with Apache Superset 3.x branch and is not yet available for version 4.**
+**Note: This integration works only with Apache Superset 3.x branch and is not yet available for version 4 or newer.**
 
 ## Prerequisites
 
 Before integrating Manticore Search with Apache Superset, ensure that:
 
 1. Manticore Search (version 6.2.0 or later) is properly installed and configured on your server. Refer to the [official Manticore Search installation guide](https://manual.manticoresearch.com/Installation/Installation) for assistance.
-2. Apache Superset is set up on your system. Follow the [official Apache Superset installation guide](https://superset.apache.org/docs/installation/installing-superset-from-scratch/) for installation instructions.
+2. Apache Superset is set up on your system. Follow the [official Apache Superset installation guide](https://superset.apache.org/docs/quickstart) for installation instructions.
 
 ## Connecting Manticore Search to Apache Superset
 
@@ -62,4 +62,3 @@ By following these steps and guidelines, you can effectively integrate Manticore
 ## References
 Please refer to the following resources for more information on Apache Superset and Manticore Search:
 - [Apache Superset Integration](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
-

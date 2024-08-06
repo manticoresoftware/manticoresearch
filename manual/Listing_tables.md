@@ -229,7 +229,7 @@ utilsApi.Sql("SHOW TABLES LIKE 'pro%'")
 ## DESCRIBE
 
 ```sql
-{DESC | DESCRIBE} table [ LIKE pattern ]
+{DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
 The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
@@ -290,7 +290,7 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE name
+SHOW CREATE TABLE table_name
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.

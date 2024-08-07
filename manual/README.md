@@ -176,7 +176,6 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
-    * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)

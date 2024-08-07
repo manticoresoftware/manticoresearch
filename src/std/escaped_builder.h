@@ -29,6 +29,14 @@ struct EscapeQuotator_t
 	}
 };
 
+struct SqlQuotator_t
+{
+	static constexpr BYTE EscapingSpace ( BYTE c )
+	{
+		return ( c == '\\' || c == '\'' || c == '\t' ) ? 1 : 0;
+	}
+};
+
 struct FixupSpace_t
 {
 	// replaces \t, \n, \r into spaces

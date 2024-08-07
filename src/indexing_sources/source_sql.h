@@ -26,14 +26,6 @@ enum ESphUnpackFormat
 	SPH_UNPACK_MYSQL_COMPRESS	= 2
 };
 
-struct SqlQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' || c == '\t' ) ? 1 : 0;
-	}
-};
-
 using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
 
 struct CSphUnpackInfo

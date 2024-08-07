@@ -123,20 +123,20 @@ searchd {
 ### Binary flushing strategies
 
 <!-- Example binlog_flush -->
-There are 4 different binlog flushing strategies, controlled by the `binlog_flush` directive:
+There are four different binlog flushing strategies, controlled by the `binlog_flush` directive:
 
-* `0` - Flush and sync every second. This provides the best performance, but up to 1 second's worth of committed transactions may be lost in the event of a server crash or an OS/hardware crash.
-* `1` - Flush and sync every transaction. This has the worst performance, but guarantees that every committed transaction's data is saved.
-* `2` - Flush every transaction and sync every second. This offers good performance, and every committed transaction is guaranteed to be saved in the case of a server crash. However, up to 1 second's worth of committed transactions may be lost in the event of an OS/hardware crash.
-* `3` - same as `2`, but also finally flush current binlog file before closing, when it exceeded `binlog_max_log_size`.
+* `0` - Data is written to disk (flushed) every second, and Manticore initiates making it secure on the disk ([syncing](https://linux.die.net/man/8/sync)) right after flushing. This method is the fastest, but if the server or computer crashes suddenly, some recently written data that hasn't been secured may be lost.
+* `1` - Data is written to the binlog and synced immediately after each transaction. This method is the safest as it ensures that each change is immediately preserved, but it slows down writing.
+* `2` - Data is written after each transaction, and a sync is initiated every second. This approach offers a balance, writing data regularly and quickly. However, if the computer fails, some of the data that was being secured might not finish saving. Also, syncing may take longer than one second depending on the disk.
+* `3` - Similar to `2`, but it also ensures the binlog file is synced before it is closed due to exceeding `binlog_max_log_size`.
 
-The default mode is to flush every transaction and sync every second (mode `2`).
+The default mode is `2`, which writes data after each transaction and starts syncing it every second, balancing speed and safety.
 
 <!-- request Example -->
 ```ini
 searchd {
 ...
-    binlog_flush = 1 # ultimate safety, low speed
+    binlog_flush = 1 # ultimate safety, low write speed
 ...
 }
 ```
@@ -164,4 +164,3 @@ searchd {
 <!-- end -->
 
 It's important to note that `rt_flush_period` only controls the frequency at which checks occur. There are no guarantees that a specific RAM chunk will be saved. For example, it doesn't make sense to regularly re-save a large RAM chunk that only receives a few rows worth of updates. Manticore automatically determines whether to perform the flush using a few heuristics.
-

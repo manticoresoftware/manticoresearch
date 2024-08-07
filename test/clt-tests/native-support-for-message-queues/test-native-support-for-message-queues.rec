@@ -48,7 +48,15 @@ docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka LIMIT 10;"
+EXPECTED_COUNT=56
+––– output –––
+––– input –––
+timeout 60 bash -c 'COUNT=$(docker exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-data --from-beginning --timeout-ms 5000 --max-messages '"$EXPECTED_COUNT"' | wc -l); [ "$COUNT" -ge '"$EXPECTED_COUNT"' ] && echo "Download completed." || echo "Download failed."'
+––– output –––
+Processed a total of 56 messages
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka LIMIT 10;"
 ––– output –––
 +------+--------------------------------------+-----------------+---------------------+----------+
 | id   | name                                 | short_name      | received_at         | size     |
@@ -64,70 +72,6 @@ sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_k
 |    9 | You Can't Judge A Book By Its Cover  | ISO 56789:86420 | %{DATETIME} | 20,25,30 |
 |   10 | Two Heads Are Better Than One        | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
 +------+--------------------------------------+-----------------+---------------------+----------+
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "drop mv view_table;"; echo $?
-––– output –––
-0
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka;"; echo $?
-––– output –––
-0
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"; echo $?
-––– output –––
-0
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
-––– output –––
-+----------+------+
-| Index    | Type |
-+----------+------+
-| _sources | rt   |
-| _views   | rt   |
-+----------+------+
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore2' num_consumers='1' batch=50;"; echo $?
-––– output –––
-0
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi, lat float, lon float, distance float);"; echo $?
-––– output –––
-0
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, location.lat as lat, location.lon as lon, GEODIST(lat, lon, 49.0, 3.0) AS distance FROM kafka"; echo $?
-––– output –––
-0
-––– input –––
-docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received_at, size, lat, lon AS distance FROM destination_kafka;"
-––– output –––
-+------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
-| id   | name                                        | short_name      | received_at         | size     | lat       | distance  |
-+------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
-|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |
-|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 | 50.000000 |  4.000000 |
-|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |
-|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |
-|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |
-|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |
-|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |
-|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |
-|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |
-|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |
-|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |
-|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |
-|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |
-|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |
-|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |
-|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |
-|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |
-|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   | 50.000000 |  4.000000 |
-|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |
-|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |
-+------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -145,30 +89,38 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metadata;"
+EXPECTED_COUNT=56
+––– output –––
+––– input –––
+timeout 60 bash -c 'COUNT=$(docker exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-data --from-beginning --timeout-ms 5000 --max-messages '"$EXPECTED_COUNT"' | wc -l); [ "$COUNT" -ge '"$EXPECTED_COUNT"' ] && echo "Download completed." || echo "Download failed."'
+––– output –––
+Processed a total of 56 messages
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metadata ORDER BY id ASC;;"
 ––– output –––
 +------+---------------------------------------------+-----------------+---------------------+------------------------+----------+-------+
 | id   | name                                        | short_name      | received_at         | info                   | size     | views |
 +------+---------------------------------------------+-----------------+---------------------+------------------------+----------+-------+
-|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | Extra data for item 17 | 20,25,30 |  1700 |
-|   24 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | Extra data for item 24 | 20,25,30 |  2400 |
-|   57 |                                             | ISO 13579:86420 | %{DATETIME} | Extra data for item 57 | 20,25,30 |  5700 |
-|   25 | When In Rome, Do As The Romans Do           | ISO 56789:12345 | %{DATETIME} | Extra data for item 25 | 20,25,30 |  2500 |
-|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | Extra data for item 18 | 20,25,30 |  1800 |
 |   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | Extra data for item 11 | 20,25,30 |  1100 |
-|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | Extra data for item 19 | 20,25,30 |  1900 |
 |   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | Extra data for item 12 | 2,3,20   |  1200 |
-|   26 | Better Late Than Never                      | ISO 86420:97531 | %{DATETIME} | Extra data for item 26 | 20,25,30 |  2600 |
-|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | Extra data for item 20 | 20,25,30 |  2000 |
 |   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | Extra data for item 13 | 20,25,30 |  1300 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | Extra data for item 14 | 20,25,30 |  1400 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | Extra data for item 15 | 20,25,30 |  1500 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | Extra data for item 16 | 20,25,30 |  1600 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | Extra data for item 17 | 20,25,30 |  1700 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | Extra data for item 18 | 20,25,30 |  1800 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | Extra data for item 19 | 20,25,30 |  1900 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | Extra data for item 20 | 20,25,30 |  2000 |
+|   21 | Ignorance Is Bliss                          | ISO 97531:86420 | %{DATETIME} | Extra data for item 21 | 20,25,30 |  2100 |
+|   22 | The Best Things In Life Are Free            | ISO 24680:1357  | %{DATETIME} | Extra data for item 22 | 20,25,30 |  2200 |
+|   23 | Money Doesn't Grow On Trees                 | ISO 97531:86420 | %{DATETIME} | Extra data for item 23 | 20,25,30 |  2300 |
+|   24 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | Extra data for item 24 | 20,25,30 |  2400 |
+|   25 | When In Rome, Do As The Romans Do           | ISO 56789:12345 | %{DATETIME} | Extra data for item 25 | 20,25,30 |  2500 |
+|   26 | Better Late Than Never                      | ISO 86420:97531 | %{DATETIME} | Extra data for item 26 | 20,25,30 |  2600 |
 |   27 | All's Well That Ends Well                   | ISO 13579:86420 | %{DATETIME} | Extra data for item 27 | 20,25,30 |  2700 |
 |   28 | Cutting Corners                             | ISO 97531:24680 | %{DATETIME} | Extra data for item 28 | 20,25,30 |  2800 |
-|   21 | Ignorance Is Bliss                          | ISO 97531:86420 | %{DATETIME} | Extra data for item 21 | 20,25,30 |  2100 |
-|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | Extra data for item 14 | 20,25,30 |  1400 |
 |   29 | Barking Up The Wrong Tree                   | ISO 56789:86420 | %{DATETIME} | Extra data for item 29 | 20,25,30 |  2900 |
-|   22 | The Best Things In Life Are Free            | ISO 24680:1357  | %{DATETIME} | Extra data for item 22 | 20,25,30 |  2200 |
-|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | Extra data for item 15 | 20,25,30 |  1500 |
-|   23 | Money Doesn't Grow On Trees                 | ISO 97531:86420 | %{DATETIME} | Extra data for item 23 | 20,25,30 |  2300 |
 |   30 | Rome Wasn't Built In A Day                  | ISO 86420:97531 | %{DATETIME} | Extra data for item 30 | 20,25,30 |  3000 |
 +------+---------------------------------------------+-----------------+---------------------+------------------------+----------+-------+
 ––– input –––
@@ -188,19 +140,19 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags;"
+EXPECTED_COUNT=56
+––– output –––
+––– input –––
+timeout 60 bash -c 'COUNT=$(docker exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-data --from-beginning --timeout-ms 5000 --max-messages '"$EXPECTED_COUNT"' | wc -l); [ "$COUNT" -ge '"$EXPECTED_COUNT"' ] && echo "Download completed." || echo "Download failed."'
+––– output –––
+Processed a total of 56 messages
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags ORDER BY id ASC;;"
 ––– output –––
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 | id   | name                                        | short_name      | received_at         | size     | tags                    |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
-|   31 | Don't Put All Your Eggs In One Basket       | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   32 | A Bird In The Hand Is Worth Two In The Bush | ISO 24680:1357  | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
-|   36 | A Penny For Your Thoughts                   | ISO 86420:97531 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   37 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
-|   41 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   42 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
-|   46 | Money Doesn't Grow On "Trees                | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
 |    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
@@ -210,9 +162,17 @@ sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_k
 |   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
 |   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |   21 | Ignorance Is Bliss                          | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   27 | All's Well That Ends Well                   | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |   22 | The Best Things In Life Are Free            | ISO 24680:1357  | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |   26 | Better Late Than Never                      | ISO 86420:97531 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
+|   27 | All's Well That Ends Well                   | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
+|   31 | Don't Put All Your Eggs In One Basket       | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
+|   32 | A Bird In The Hand Is Worth Two In The Bush | ISO 24680:1357  | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
+|   36 | A Penny For Your Thoughts                   | ISO 86420:97531 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
+|   37 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
+|   41 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
+|   42 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
+|   46 | Money Doesn't Grow On "Trees                | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
+|   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_large_numbers (id bigint, term text, abbrev text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_large_numbers' num_consumers='1' batch=50;"; echo $?
@@ -231,32 +191,40 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_large_numbers;"
+EXPECTED_COUNT=56
 ––– output –––
-+------+-----------------------------------------------+-----------------+---------------------+----------+-------+
-| id   | name                                          | short_name      | received_at         | size     | views |
-+------+-----------------------------------------------+-----------------+---------------------+----------+-------+
-|   57 |                                               | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  5700 |
-|   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  5000 |
-|   17 | Curiosity Killed The Cat                      | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  1700 |
-|   18 | Don't Count Your Chickens Before They Hatch   | ISO 97531:24680 | %{DATETIME} | 20,25,30 |  1800 |
-|   11 | The Early Bird Catches The Worm               | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  1100 |
-|   51 | Cutting Corners                               | ISO 97531:24680 | %{DATETIME} | 20,25,30 |  5100 |
-|   52 | Barking Up The Wrong Tree                     | ISO 56789:86420 | %{DATETIME} | 20,25,30 |  5200 |
-|   19 | Every Dog Has His Day                         | ISO 56789:86420 | %{DATETIME} | 20,25,30 |  1900 |
-|   12 | All That Glitters Is Not Gold                 | ISO 24680:1357  | %{DATETIME} | 2,3,20   |  1200 |
-|   13 | A Penny For Your Thoughts                     | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  1300 |
-|   20 | Haste Makes Waste                             | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  2000 |
-|   53 | Rome Wasn't Built In A Day                    | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  5300 |
-|   21 | Ignorance Is Bliss                            | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  2100 |
-|   54 | Don't Put All Your Eggs In One Basket         | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  5400 |
-|   14 | Bite The Bullet                               | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  1400 |
-|   15 | Break A Leg                                   | ISO 56789:12345 | %{DATETIME} | 20,25,30 |  1500 |
-|   22 | The Best Things In Life Are Free              | ISO 24680:1357  | %{DATETIME} | 20,25,30 |  2200 |
-|   55 | A Bird In The Hand Is Worth Two In The Bush   | ISO 24680:1357  | %{DATETIME} | 20,25,30 |  5500 |
-|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  5600 |
-|   16 | A Picture Is Worth A Thousand Words           | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  1600 |
-+------+-----------------------------------------------+-----------------+---------------------+----------+-------+
+––– input –––
+timeout 60 bash -c 'COUNT=$(docker exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-data --from-beginning --timeout-ms 5000 --max-messages '"$EXPECTED_COUNT"' | wc -l); [ "$COUNT" -ge '"$EXPECTED_COUNT"' ] && echo "Download completed." || echo "Download failed."'
+––– output –––
+Processed a total of 56 messages
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_large_numbers ORDER BY id ASC;;"
+––– output –––
++------+---------------------------------------------+-----------------+---------------------+----------+-------+
+| id   | name                                        | short_name      | received_at         | size     | views |
++------+---------------------------------------------+-----------------+---------------------+----------+-------+
+|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  1100 |
+|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   |  1200 |
+|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  1300 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  1400 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 |  1500 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  1600 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  1700 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 |  1800 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 |  1900 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  2000 |
+|   21 | Ignorance Is Bliss                          | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  2100 |
+|   22 | The Best Things In Life Are Free            | ISO 24680:1357  | %{DATETIME} | 20,25,30 |  2200 |
+|   23 | Money Doesn't Grow On Trees                 | ISO 97531:86420 | %{DATETIME} | 20,25,30 |  2300 |
+|   24 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  2400 |
+|   25 | When In Rome, Do As The Romans Do           | ISO 56789:12345 | %{DATETIME} | 20,25,30 |  2500 |
+|   26 | Better Late Than Never                      | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  2600 |
+|   27 | All's Well That Ends Well                   | ISO 13579:86420 | %{DATETIME} | 20,25,30 |  2700 |
+|   28 | Cutting Corners                             | ISO 97531:24680 | %{DATETIME} | 20,25,30 |  2800 |
+|   29 | Barking Up The Wrong Tree                   | ISO 56789:86420 | %{DATETIME} | 20,25,30 |  2900 |
+|   30 | Rome Wasn't Built In A Day                  | ISO 86420:97531 | %{DATETIME} | 20,25,30 |  3000 |
++------+---------------------------------------------+-----------------+---------------------+----------+-------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -274,7 +242,15 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts;"
+EXPECTED_COUNT=56
+––– output –––
+––– input –––
+timeout 60 bash -c 'COUNT=$(docker exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-data --from-beginning --timeout-ms 5000 --max-messages '"$EXPECTED_COUNT"' | wc -l); [ "$COUNT" -ge '"$EXPECTED_COUNT"' ] && echo "Download completed." || echo "Download failed."'
+––– output –––
+Processed a total of 56 messages
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts ORDER BY id ASC;;"
 ––– output –––
 +------+-----------------------------------------------+-----------------+---------------------+----------+-----------------+
 | id   | name                                          | short_name      | received_at         | size     | timestamp_field |
@@ -292,13 +268,13 @@ sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_k
 |   41 | Don't Count Your Chickens Before They Hatch   | ISO 97531:24680 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   42 | Every Dog Has His Day                         | ISO 56789:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   43 | Haste Makes Waste                             | ISO 86420:97531 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   57 |                                               | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   51 | Cutting Corners                               | ISO 97531:24680 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   52 | Barking Up The Wrong Tree                     | ISO 56789:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   53 | Rome Wasn't Built In A Day                    | ISO 86420:97531 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   54 | Don't Put All Your Eggs In One Basket         | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   55 | A Bird In The Hand Is Worth Two In The Bush   | ISO 24680:1357  | %{DATETIME} | 20,25,30 |      1690761600 |
-|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   44 | Ignorance Is Bliss                            | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   45 | The Best Things In Life Are Free              | ISO 24680:1357  | %{DATETIME} | 20,25,30 |      1690761600 |
+|   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   48 | When In Rome, Do As The Romans Do             | ISO 56789:12345 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   49 | Better Late Than Never                        | ISO 86420:97531 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+----------+-----------------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
@@ -309,9 +285,28 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka_combin
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_combined TO destination_kafka_combined AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, location.lat as lat, location.lon as lon, metadata.views as views, metadata.info as info, tags, timestamp_unix as timestamp_combined FROM kafka_combined WHERE views > 1000 AND tags IN ('item1', 'item2') AND GEODIST(lat, lon, 49.0, 3.0) < 1000000 AND timestamp_unix >= 1690761600;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_combined TO destination_kafka_combined AS SELECT id, term AS name, abbrev AS short_name, UTC_TIMESTAMP() AS received_at, GlossDef.size AS size, location.lat AS lat, location.lon AS lon, metadata.views AS views, metadata.info AS info, tags, timestamp_unix AS timestamp_combined FROM kafka_combined WHERE metadata.views > 1000 AND JSON_CONTAINS(tags, '\"item1\"') ORDER BY id ASC;"; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 20; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined;"
+docker exec kafka ./import.sh; echo $?
 ––– output –––
+0
+––– input –––
+EXPECTED_COUNT=56
+––– output –––
+––– input –––
+timeout 60 bash -c 'COUNT=$(docker exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-data --from-beginning --timeout-ms 5000 --max-messages '"$EXPECTED_COUNT"' | wc -l); [ "$COUNT" -ge '"$EXPECTED_COUNT"' ] && echo "Download completed." || echo "Download failed."'
+––– output –––
+Processed a total of 56 messages
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined WHERE views > 1000 AND tags = 'item1' ORDER BY id ASC;"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined ORDER BY id ASC;"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined WHERE views > 1000 AND tags IN ('item1', 'item2') ORDER BY id ASC;"
+––– output –––
+Download completed.

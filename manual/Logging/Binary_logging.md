@@ -164,3 +164,5 @@ searchd {
 <!-- end -->
 
 It's important to note that `rt_flush_period` only controls the frequency at which checks occur. There are no guarantees that a specific RAM chunk will be saved. For example, it doesn't make sense to regularly re-save a large RAM chunk that only receives a few rows worth of updates. Manticore automatically determines whether to perform the flush using a few heuristics.
+
+<!-- proofread -->

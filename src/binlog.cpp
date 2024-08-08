@@ -173,9 +173,8 @@ public:
 	~SingleBinlog_c ();
 	void Deinit();
 
-	std::pair<int, SingleBinlog_c*> DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
-	void DoFsync ( int iFd );
-	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES_SHARED ( m_tWriteAccess );
+	void DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
+	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES ( m_tWriteAccess );
 	bool BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess );
 	void NotifyIndexFlush ( int64_t iFlushedTID, const char * szIndexName, bool bShutdown, bool bForceSave ) EXCLUDES ( m_tWriteAccess );
 	void AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx ) REQUIRES ( m_tWriteAccess );
@@ -556,30 +555,30 @@ void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
 }
 
 
-std::pair<int, SingleBinlog_c*> SingleBinlog_c::DoFlush ( FlushAction_e eAction )
+void SingleBinlog_c::DoFlush ( FlushAction_e eAction )
 {
 	MEMORY ( MEM_BINLOG );
 
-	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
-	if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
+	int iSyncFd = -1;
 	{
-		if ( !m_tWriter.Write () )
-			return { -1, this };
-	}
-	if ( m_tWriter.HasUnsyncedData () )
-	{
-		m_tFlushRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
-		return { m_tWriter.GetFD (), this };
-	}
-	return { -1, this };
-}
+		ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+		if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
+		{
+			if ( !m_tWriter.Write () )
+				return;
+		}
+		if ( m_tWriter.HasUnsyncedData () )
+		{
+			iSyncFd = m_tWriter.GetFD();
+			m_tFlushRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+		}
+	} // leave lock
+	AtScopeExit ( [this] () { m_tFlushRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } ); } );
 
+	if ( iSyncFd==-1 )
+		return;
 
-void SingleBinlog_c::DoFsync ( int iSyncFd ) NO_THREAD_SAFETY_ANALYSIS
-{
-	if ( iSyncFd!=-1 )
-		m_tWriter.Fsync ( iSyncFd );
-	m_tFlushRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } );
+	m_tWriter.Fsync ( iSyncFd );
 }
 
 
@@ -1142,14 +1141,9 @@ void Binlog_c::DoFlush ()
 	if ( sphInterrupted () )
 		return;
 
-	CSphVector<std::pair<int, SingleBinlog_c *>> dToFsync;
-	{
-		Threads::SccRL_t tLock ( m_tHashAccess );
-		for ( auto& tBinlog : m_hBinlogs )
-			dToFsync.Add ( tBinlog.second->DoFlush ( m_eFlushFlavour ) );
-	}
-	for ( auto& tSync : dToFsync)
-		tSync.second->DoFsync ( tSync.first );
+	Threads::SccRL_t tLock ( m_tHashAccess );
+	for ( auto& tBinlog : m_hBinlogs )
+		tBinlog.second->DoFlush ( m_eFlushFlavour );
 
 	m_iLastFlushed.store ( sphMicroTimer (), std::memory_order_relaxed );
 }

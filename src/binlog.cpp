@@ -173,9 +173,8 @@ public:
 	~SingleBinlog_c ();
 	void Deinit();
 
-	std::pair<int, SingleBinlog_c*> DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
-	void DoFsync ( int iFd );
-	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES_SHARED ( m_tWriteAccess );
+	void DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
+	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES ( m_tWriteAccess );
 	bool BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess );
 	void NotifyIndexFlush ( int64_t iFlushedTID, const char * szIndexName, bool bShutdown, bool bForceSave ) EXCLUDES ( m_tWriteAccess );
 	void AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx ) REQUIRES ( m_tWriteAccess );
@@ -235,10 +234,7 @@ private:
 
 	CSphString				m_sLogPath;
 
-	IntVec_t		 		m_dSavedFiles;
-
-	mutable Threads::Coro::RWLock_c m_tCurrentFilesAccess;
-	IntVec_t				m_dCurrentFiles GUARDED_BY ( m_tCurrentFilesAccess );
+	CSphVector<int> 		m_dSavedFiles;
 
 	bool					m_bReplayMode = false; // replay mode indicator
 	bool					m_bDisabled = true;
@@ -260,11 +256,7 @@ private:
 
 
 	void					LoadMeta ();
-	void					SaveMeta () EXCLUDES ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
-
-	IntVec_t				CollectBinlogFiles() EXCLUDES ( m_tHashAccess );
-	bool					CompareCurrentFiles ( const IntVec_t & dFiles ) EXCLUDES ( m_tCurrentFilesAccess );
-
+	void					SaveMeta () EXCLUDES ( m_tHashAccess );
 	void					LockBinlog ();
 	void					UnlockBinlog ();
 	void					RemoveFile ( int iExt );
@@ -563,30 +555,30 @@ void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
 }
 
 
-std::pair<int, SingleBinlog_c*> SingleBinlog_c::DoFlush ( FlushAction_e eAction )
+void SingleBinlog_c::DoFlush ( FlushAction_e eAction )
 {
 	MEMORY ( MEM_BINLOG );
 
-	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
-	if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
+	int iSyncFd = -1;
 	{
-		if ( !m_tWriter.Write () )
-			return { -1, this };
-	}
-	if ( m_tWriter.HasUnsyncedData () )
-	{
-		m_tFlushRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
-		return { m_tWriter.GetFD (), this };
-	}
-	return { -1, this };
-}
+		ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+		if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
+		{
+			if ( !m_tWriter.Write () )
+				return;
+		}
+		if ( m_tWriter.HasUnsyncedData () )
+		{
+			iSyncFd = m_tWriter.GetFD();
+			m_tFlushRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+		}
+	} // leave lock
+	AtScopeExit ( [this] () { m_tFlushRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } ); } );
 
+	if ( iSyncFd==-1 )
+		return;
 
-void SingleBinlog_c::DoFsync ( int iSyncFd ) NO_THREAD_SAFETY_ANALYSIS
-{
-	if ( iSyncFd!=-1 )
-		m_tWriter.Fsync ( iSyncFd );
-	m_tFlushRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } );
+	m_tWriter.Fsync ( iSyncFd );
 }
 
 
@@ -1149,14 +1141,9 @@ void Binlog_c::DoFlush ()
 	if ( sphInterrupted () )
 		return;
 
-	CSphVector<std::pair<int, SingleBinlog_c *>> dToFsync;
-	{
-		Threads::SccRL_t tLock ( m_tHashAccess );
-		for ( auto& tBinlog : m_hBinlogs )
-			dToFsync.Add ( tBinlog.second->DoFlush ( m_eFlushFlavour ) );
-	}
-	for ( auto& tSync : dToFsync)
-		tSync.second->DoFsync ( tSync.first );
+	Threads::SccRL_t tLock ( m_tHashAccess );
+	for ( auto& tBinlog : m_hBinlogs )
+		tBinlog.second->DoFlush ( m_eFlushFlavour );
 
 	m_iLastFlushed.store ( sphMicroTimer (), std::memory_order_relaxed );
 }
@@ -1187,9 +1174,6 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 	MEMORY ( MEM_BINLOG );
 
 	// opened and locked, lets write
-	auto dFiles = CollectBinlogFiles();
-	if ( CompareCurrentFiles (dFiles) )
-		return; // files are same as stored; no need to rewrite meta
 
 	CSphVector<BYTE> dMeta;
 	MemoryWriter2_c wrMeta ( dMeta );
@@ -1197,24 +1181,30 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 	wrMeta.PutDword ( BINLOG_VERSION );
 	wrMeta.PutByte ( m_iBinlogFileDigits );
 
-//	StringBuilder_c sMetaLog;
-//	sMetaLog << "SaveMeta: " << m_bReplayMode << " " << dFiles.GetLength () << ": ";
-//	sMetaLog.StartBlock ();
+	// save list of active log files
+	CSphVector<int> dFiles;
+	{
+		Threads::SccRL_t rLock { m_tHashAccess };
+		for ( auto & tBinlog: m_hBinlogs )
+			tBinlog.second->CollectBinlogFiles ( dFiles );
+	}
+
+	// append not yet processed saved files
+	for ( int i = m_dSavedFiles.GetLength ()-1; i>=0; --i )
+		dFiles.Add ( m_dSavedFiles[i] );
+
+	StringBuilder_c sMetaLog;
+	sMetaLog << "SaveMeta: " << m_bReplayMode << " " << dFiles.GetLength () << ": ";
+	sMetaLog.StartBlock ();
 	m_iNumFiles.store ( dFiles.GetLength (), std::memory_order_relaxed );
 	wrMeta.ZipInt ( dFiles.GetLength () );
 	for ( const auto & iExt: dFiles )
 	{
 		wrMeta.ZipInt ( iExt ); // everything else is saved in logs themselves
-//		sMetaLog << iExt;
+		sMetaLog << iExt;
 	}
 
 	// sphWarning ( "%s", sMetaLog.cstr() );
-
-	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
-	if ( m_dCurrentFiles==dFiles )
-		return;
-
-	m_dCurrentFiles.SwapData (dFiles);
 
 	if ( dFiles.IsEmpty() )
 		m_iNextBinlog.store ( 0, std::memory_order_release );
@@ -1258,30 +1248,6 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 		} else break;
 	}
 	sphLogDebug ( "Binlog::SaveMeta: Done (%s)", sMetaNew.cstr() );
-}
-
-
-IntVec_t Binlog_c::CollectBinlogFiles ()
-{
-	IntVec_t dFiles;
-	{
-		Threads::SccRL_t rLock { m_tHashAccess };
-		for ( auto & tBinlog: m_hBinlogs )
-			tBinlog.second->CollectBinlogFiles ( dFiles );
-	}
-
-	// append not yet processed saved files
-	for ( int i = m_dSavedFiles.GetLength ()-1; i>=0; --i )
-		dFiles.Add ( m_dSavedFiles[i] );
-
-	return dFiles;
-}
-
-
-bool Binlog_c::CompareCurrentFiles ( const IntVec_t & dFiles )
-{
-	Threads::SccRL_t rLock { m_tCurrentFilesAccess };
-	return m_dCurrentFiles==dFiles;
 }
 
 void Binlog_c::LockBinlog ()
